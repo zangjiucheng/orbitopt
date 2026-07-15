@@ -57,8 +57,14 @@ src/orbitopt/
     solar_system.py    exports the whole solar system as a SceneData document
     mission_timeline.py exports the Artemis II free-return mission as a
                         scrubbable SceneData document
-    pv_viewer.py        general-purpose interactive 3D viewer (PyVista/VTK) --
-                        renders any SceneData document; no HTML/CSS/JS anywhere
+    scene_renderer.py  populates a PyVista plotter from a SceneData document --
+                        shared by both viewers below, so there's one place
+                        that knows how to draw {bodies, orbits, trails}
+    pv_viewer.py        minimal single-scene viewer/scripting API (PyVista/VTK)
+    theme.py            Qt stylesheet for the app below (dark "tracking station" look)
+    app.py               Mission Control: the persistent, general-purpose desktop
+                        app (PySide6 + pyvistaqt) -- mission list, time-warp
+                        strip, per-body info cards; see "Mission Control" below
 ```
 
 The cislunar pieces (`dynamics/nbody_gpu.py`, `problems/free_return.py`,
@@ -187,10 +193,51 @@ what an upstream (imprecise, automated) stage will actually hand it.
   also compute it live).
 - `examples/07_mission_timeline_data.py` -- regenerate the Artemis II
   mission SceneData JSON, same caveat.
-- `examples/08_pyvista_viewer.py` -- open the interactive 3D viewer (see
-  below) on either built-in scenario or any scene JSON file.
+- `examples/08_pyvista_viewer.py` -- open the lightweight single-scene 3D
+  viewer (see below) on either built-in scenario or any scene JSON file.
+- `examples/09_mission_control_app.py` -- launch **Mission Control**, the
+  persistent multi-scene desktop app (see below) -- this is the one to
+  reach for day to day; `08_pyvista_viewer.py` is the minimal scripting API.
 
-## Interactive 3D viewer (PyVista)
+## Mission Control (general-purpose desktop app)
+
+```
+python examples/09_mission_control_app.py
+```
+
+A persistent app, not a script that renders one scene and exits: a mission
+list sidebar (Solar System, Artemis II, plus `File > Open scene file...`
+for any `SceneData` JSON) you switch between without relaunching, a 3D view
+in the middle, live per-body orbit-info cards on the right (distance,
+period, eccentricity, inclination -- whatever `info` rows that scene's
+exporter attached), and a time-warp control strip at the bottom for scenes
+with a timeline (0.15x through 100x, plus direct scrubbing). Built with
+PySide6 + pyvistaqt: the 3D content is the exact same PyVista/VTK renderer
+as the single-scene viewer below (`orbitopt/viz/scene_renderer.py`, shared
+by both -- see it for the split between "rebuild everything" on mission
+switch vs. "just move points and swap the trail actor" on every timeline
+tick), the surrounding chrome is real Qt widgets styled after a dark
+"tracking station" look (`orbitopt/viz/theme.py`) -- KSP's map view was the
+reference point for what that chrome should *do* (a vessel list you switch
+between, a time-warp strip, per-body info readouts), not a literal skin to
+copy.
+
+Clicking a body card also focuses the camera on it, same idea as KSP's
+tracking-station vessel list.
+
+**Testing this needed a real window, and that surfaced a real "which
+screenshot API" gotcha:** grabbing the Qt widget itself (`QWidget.grab()`)
+comes back solid black for the embedded 3D view -- Qt's generic widget
+compositor doesn't reliably capture the native OpenGL surface pyvistaqt
+renders into. `plotter.screenshot()` (PyVista's own capture path) shows the
+real content; this is a testing/screenshotting quirk, not a rendering bug
+-- the view displays correctly on screen either way. Also, VTK's native
+Win32 OpenGL context fails outright under Qt's `offscreen` platform plugin
+(`QT_QPA_PLATFORM=offscreen`), so `tests/test_app.py` runs against a real
+(if briefly-shown) window rather than a headless one, unlike this
+project's other `off_screen=True` PyVista tests.
+
+## Single-scene 3D viewer (PyVista, no app chrome)
 
 ```
 python examples/08_pyvista_viewer.py solar-system

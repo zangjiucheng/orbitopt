@@ -26,3 +26,5 @@ dependencies:
     - numba
     - pyvista   # interactive 3D scene viewer (viz/pv_viewer.py) -- real desktop
                 # window via VTK, no browser/HTML/JS involved
+    - pyside6   # Qt bindings for the Mission Control app (viz/app.py)
+    - pyvistaqt # embeds the PyVista/VTK view inside the Qt app
