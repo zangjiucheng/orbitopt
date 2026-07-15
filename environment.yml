@@ -1,0 +1,26 @@
+name: orbitopt
+channels:
+  - conda-forge
+  - tudat-team
+dependencies:
+  - python=3.10
+  - tudatpy
+  - pykep
+  - pygmo
+  - numpy<2.0.0  # tudatpy's own pin; drifts to numpy 2.x anyway once the pip
+                 # deps below resolve (harmless -- verified pykep/pygmo/tudatpy
+                 # all import and run fine under numpy 2.2 in this repo)
+  - scipy>=1.11,<1.14  # pykep.trajopt still calls scipy.interpolate.interp2d,
+                       # removed in scipy 1.14; conda-forge's pykep build hasn't
+                       # caught up yet
+  - matplotlib=3.9.2
+  - pandas
+  - astropy
+  - spiceypy
+  - tqdm
+  - notebook
+  - pytest
+  - pip
+  - pip:
+    - cupy-cuda13x
+    - numba

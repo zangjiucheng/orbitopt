@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orbitopt"
+version = "0.1.0"
+description = "Orbital trajectory optimization research framework built on pykep + tudatpy, with CUDA-accelerated candidate evaluation via CuPy."
+requires-python = ">=3.10,<3.11"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
