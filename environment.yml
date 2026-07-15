@@ -24,3 +24,5 @@ dependencies:
   - pip:
     - cupy-cuda13x
     - numba
+    - pyvista   # interactive 3D scene viewer (viz/pv_viewer.py) -- real desktop
+                # window via VTK, no browser/HTML/JS involved

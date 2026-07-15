@@ -1,21 +1,27 @@
-"""Regenerate the orbital dataset behind the interactive Solar System
-Explorer (an HTML/Canvas artifact, not part of this repo -- it embeds this
-script's JSON output directly). Re-run this whenever you want the explorer
-at a different reference epoch.
+"""Cache the "Solar System" SceneData JSON to disk, so
+`orbitopt.viz.pv_viewer.load_scene` can open it later without recomputing
+(cheap for this scene, but this is also the pattern for any scene that
+isn't: see examples/07_mission_timeline_data.py). Re-run to change the
+reference epoch.
 
-Run: python examples/06_solar_system_explorer_data.py > solar_system.json
+Run: python examples/06_solar_system_explorer_data.py
+Then view it with: python examples/08_pyvista_viewer.py scenes/solar-system.json
 """
 from __future__ import annotations
 
 import json
-import sys
+from pathlib import Path
 
 from orbitopt.viz.solar_system import export_solar_system_data
+
+OUTPUT_PATH = Path(__file__).resolve().parent.parent / "scenes" / "solar-system.json"
 
 
 def main():
     data = export_solar_system_data(n_samples=180)
-    json.dump(data, sys.stdout, separators=(",", ":"))
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT_PATH.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
+    print(f"wrote {OUTPUT_PATH}")
 
 
 if __name__ == "__main__":

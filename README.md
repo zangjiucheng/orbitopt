@@ -52,6 +52,13 @@ src/orbitopt/
                         refines a coarse TLI guess into a precise lunar-flyby distance
   viz/
     porkchop.py        GPU-batched porkchop grid + plotting
+    scene.py           shared SceneData document schema (bodies/orbits/trails/timeline)
+                        every viewer-facing exporter below builds through
+    solar_system.py    exports the whole solar system as a SceneData document
+    mission_timeline.py exports the Artemis II free-return mission as a
+                        scrubbable SceneData document
+    pv_viewer.py        general-purpose interactive 3D viewer (PyVista/VTK) --
+                        renders any SceneData document; no HTML/CSS/JS anywhere
 ```
 
 The cislunar pieces (`dynamics/nbody_gpu.py`, `problems/free_return.py`,
@@ -175,56 +182,68 @@ what an upstream (imprecise, automated) stage will actually hand it.
   tudatpy-refined Earth-Moon free-return trajectory targeting the real
   Artemis II perilune altitude (see the "Cislunar / Artemis II" section
   below for what this does and does not claim to reproduce).
-- `examples/06_solar_system_explorer_data.py` -- regenerate the orbital
-  dataset behind the interactive Solar System Explorer artifact (see below).
-- `examples/07_mission_timeline_data.py` -- regenerate the time-series
-  dataset behind the Artemis II Mission Timeline artifact (see below).
+- `examples/06_solar_system_explorer_data.py` -- regenerate the solar-system
+  SceneData JSON (only needed if you want to cache it; the viewer below can
+  also compute it live).
+- `examples/07_mission_timeline_data.py` -- regenerate the Artemis II
+  mission SceneData JSON, same caveat.
+- `examples/08_pyvista_viewer.py` -- open the interactive 3D viewer (see
+  below) on either built-in scenario or any scene JSON file.
 
-## Artemis II Mission Timeline (interactive visualization)
+## Interactive 3D viewer (PyVista)
 
-Open `artemis2_mission_timeline.html` directly in a browser -- same
-self-contained, no-server deal as the Solar System Explorer, but zoomed into
-the Earth-Moon system and focused on the mission itself rather than
-planetary orbits: a scrubbable timeline (drag it, or hit play) steps through
-the ~9.6-day free-return trajectory from TLI burn to closest lunar approach
-to trans-Earth coast, with Earth, Moon, and spacecraft positions all
-updating live, plus a distance/phase readout and marked mission events.
+```
+python examples/08_pyvista_viewer.py solar-system
+python examples/08_pyvista_viewer.py artemis2
+python examples/08_pyvista_viewer.py path/to/some_scene.json
+```
 
-`src/orbitopt/viz/mission_timeline.py` re-solves the same free-return
-targeting problem as `examples/05_artemis2_free_return.py` (Lambert seed +
-`verify.differential_correction.target_lunar_flyby`, skipping the GPU
-coarse-screening stage since a hand-verified Lambert guess already
-converges directly) and propagates the full mission at a 60s step -- not
-a coarser, animation-friendlier step, because a first attempt at 900s
-produced a spacecraft distance range of ~1,100 km to ~19,400,000 km for
-this exact trajectory: an inside-the-Earth minimum and an escape-trajectory
-maximum, both numerical artifacts of the same RK4-near-a-close-flyby
-sensitivity documented below, not real dynamics. The fine-resolution
-propagation is decimated to ~700 points for the exported animation *after*
-integrating correctly, preserving the exact closest-approach sample. All
-positions are projected onto the trajectory's own orbital plane (not the
-ecliptic) for a clean 2D view; the Moon's plotted point may deviate very
-slightly from a perfect path since its true motion isn't confined to that
-plane, but its reported distance is always the true 3D distance, never a
-projected one.
+A real desktop window (PyVista/VTK -- no browser, no HTML/CSS/JS anywhere
+in this package): drag to orbit the camera, scroll/pinch to zoom, click a
+body for its info panel. Scenes with a `timeline` (currently just the
+Artemis II mission) get a scrubber slider at the bottom -- dragging it
+moves the spacecraft/Moon to their position at that mission time, redraws
+the "traveled so far" trail, and updates the live distance readout.
 
-## Solar System Explorer (interactive visualization)
+Every scene the viewer can open is the same `SceneData` dict (see
+`orbitopt/viz/scene.py`): `{title, distanceUnit, bodies: [{id, name, color,
+kind, radiusDisplay, orbit?, position?, trail?, info?}], timeline?}`. The
+viewer (`orbitopt/viz/pv_viewer.py`) has exactly one render path for that
+shape -- adding a new scene (a Lambert transfer, an MGA sequence, anything
+else this framework computes) means writing another small exporter that
+builds a `SceneData` document through `viz.scene`'s helpers, not touching
+the viewer. `load_scene(path)` reads one from disk; `show_scene(scene)`
+opens it -- both are plain functions you can call from a script or a
+notebook, e.g.:
 
-Open `solar_system_explorer.html` directly in a browser (double-click it, or
-drag it into a browser window) -- it's fully self-contained, no server or
-internet connection needed.
+```python
+from orbitopt.viz.pv_viewer import show_scene
+from orbitopt.viz.solar_system import export_solar_system_data
+show_scene(export_solar_system_data())
+```
 
-`src/orbitopt/viz/solar_system.py` exports real pykep-derived planetary
-orbits (traced analytically from each planet's osculating elements, since
-outer-planet periods run well past pykep's low-precision ephemeris range)
-plus current positions, as plain JSON. That data backs a standalone HTML/
-Canvas page -- pan and zoom (mouse wheel, drag, or pinch on touch) from
-the whole solar system down to inner-planet detail, with true-to-scale
-orbits, per-planet hover tooltips (distance, period, speed, eccentricity,
-inclination), and preset "Whole System" / "Inner Planets" / "Outer Planets"
-views. It's a separate deliverable from the Python package (self-contained
-HTML, no build step) -- regenerate its embedded dataset with
-`examples/06_solar_system_explorer_data.py` for a different reference epoch.
+**Marker sizing, and a bug this sidesteps entirely:** body markers render
+via VTK's `render_points_as_spheres` point rendering, which draws at a
+constant *screen-pixel* size regardless of camera distance. An earlier,
+now-removed browser/Three.js iteration of this viewer hand-rolled that same
+"constant apparent size" behavior (recomputing world-space marker scale
+from distance-to-camera every frame) and got the scale factor wrong: the
+Sun's marker stayed large enough in world-space to visually swallow
+Mercury's entire orbit even fully zoomed in. Letting VTK's own point
+rendering handle it avoids that whole class of bug for free -- one more
+reason (on top of "no HTML/CSS/JS to hand-write") this landed on a
+Python-native 3D toolkit instead of a from-scratch web renderer.
+
+**Slider gotcha that cost real debugging time:** PyVista's
+`add_slider_widget` defaults to `interaction_event='end'` -- the callback
+only fires on mouse-*release*, not while dragging. A naive test that
+manually invoked VTK's `'InteractionEvent'` to simulate a drag therefore
+silently did nothing (right event name, wrong one for the widget's actual
+default), which looked exactly like the scene simply not updating. Fixed
+by passing `interaction_event='always'` explicitly, both for correctness
+(this test) and because live feedback while dragging is the UX you
+actually want from a timeline scrubber.  Covered by
+`tests/test_pv_viewer.py::test_mission_timeline_slider_updates_spacecraft_position`.
 
 ## Cislunar / Artemis II free-return pipeline
 

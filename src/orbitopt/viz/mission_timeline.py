@@ -1,18 +1,14 @@
-"""Export a time-series dataset of the Artemis-II-like free-return mission
-(see orbitopt.verify.differential_correction / examples/05_artemis2_free_return.py)
-for an interactive, scrubbable timeline visualization -- as opposed to
-viz.solar_system, which is a static heliocentric snapshot.
+"""Export a time-series SceneData document (see orbitopt.viz.scene) for the
+Artemis-II-like free-return mission (verify.differential_correction /
+examples/05_artemis2_free_return.py), for the general-purpose 3D viewer in
+viewer/ -- not a bespoke mission-specific format.
 
-Positions are projected onto the trajectory's own orbital plane (the plane
-containing the initial post-TLI-burn position and velocity), not the
-ecliptic: the parking orbit is deliberately plane-aligned toward the Moon's
-arrival direction (see the module-level docstring in
-verify/differential_correction.py's example usage), so this plane captures
-essentially all of the spacecraft's spatial extent. The Moon's true position
-is projected onto the same plane for a consistent 2D picture, but its
-reported *distance* from Earth in the exported data is always the true 3D
-distance, not a distance measured within the projection -- the projection is
-a display simplification, the physics underneath it is not.
+Positions are exported in true 3D, Earth-centered ECLIPJ2000 km -- earlier
+iterations of this module projected onto the trajectory's own orbital plane
+for a 2D canvas view; that projection is gone now that rendering is
+genuinely 3D, so the real (non-trivial, ~30-40 degree) inclination of this
+particular free-return trajectory relative to the ecliptic is visible
+directly instead of being flattened away.
 """
 from __future__ import annotations
 
@@ -23,6 +19,7 @@ from orbitopt.bodies import mjd2000_from_date, mjd2000_to_ephemeris_seconds, moo
 from orbitopt.lambert.cpu import solve_lambert_single
 from orbitopt.verify.differential_correction import target_lunar_flyby
 from orbitopt.verify.tudat_propagate import body_position_at_absolute_epoch, propagate_multi_arc
+from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, body_entry, scene_document
 
 EARTH_RADIUS_KM = 6378.0
 MOON_RADIUS_KM = 1737.4
@@ -45,19 +42,6 @@ def _plane_aligned_parking_orbit(r_moon_arrival, altitude_km, mu_earth):
     return r0, v0
 
 
-def _trajectory_plane_basis(r0, v0):
-    h = np.cross(r0, v0)
-    e1 = r0 / np.linalg.norm(r0)
-    e2 = np.cross(h, e1)
-    e2 = e2 / np.linalg.norm(e2)
-    return e1, e2
-
-
-def _project(points_m, e1, e2):
-    points_m = np.asarray(points_m)
-    return np.stack([points_m @ e1, points_m @ e2], axis=-1) / 1000.0
-
-
 def compute_and_export_mission(
     departure_mjd2000=None,
     coast_days_guess=4.5,
@@ -70,19 +54,18 @@ def compute_and_export_mission(
     approach as examples/05_artemis2_free_return.py, without the GPU
     coarse-screening stage -- a hand-verified Lambert guess is already
     close enough that the targeter converges directly) and export the
-    resulting trajectory as a scrubbable, plane-projected time series.
+    resulting trajectory as a scrubbable SceneData document.
 
     ``step_seconds`` defaults to 60s, not a coarser animation-friendly
-    value, for the same reason ``verify.differential_correction`` does:
-    a 900s step produced a spacecraft distance range of roughly 1,100 km
-    to 19,400,000 km for this exact trajectory on a first attempt -- an
-    inside-the-Earth minimum and an escape-trajectory-scale maximum, both
-    numerical artifacts of a fixed-step RK4 too coarse for the curvature
-    near the lunar flyby, not real dynamics (see README's RK4 step-size
-    gotcha). The full-resolution propagation is then decimated to
-    ``max_output_points`` for export -- correctness comes from the step
-    size used during integration, not from how many of those already-
-    correct points get kept for the animation.
+    value, for the same reason ``verify.differential_correction`` does: a
+    900s step produced a spacecraft distance range of roughly 1,100 km to
+    19,400,000 km for this exact trajectory -- an inside-the-Earth minimum
+    and an escape-trajectory-scale maximum, both numerical artifacts of a
+    fixed-step RK4 too coarse for the curvature near the lunar flyby, not
+    real dynamics (see README's RK4 step-size gotcha). The full-resolution
+    propagation is then decimated to ``max_output_points`` for export --
+    correctness comes from the step size used during integration, not from
+    how many of those already-correct points get kept for the animation.
     """
     if departure_mjd2000 is None:
         departure_mjd2000 = mjd2000_from_date(2026, 8, 1)
@@ -116,8 +99,6 @@ def compute_and_export_mission(
         perturbing_bodies=("Earth", "Moon", "Sun"), step_size=step_seconds,
     )
 
-    e1, e2 = _trajectory_plane_basis(r0, v0)
-
     perilune_day = round(targeting.coast_duration / 86400.0, 4)
     perilune_idx_fine = int(np.argmin(np.abs(full.epochs - targeting.coast_duration)))
 
@@ -129,41 +110,56 @@ def compute_and_export_mission(
         keep = np.arange(n_fine)
 
     epochs = full.epochs[keep]
-    perilune_idx = int(np.searchsorted(keep, perilune_idx_fine))
-
-    spacecraft_2d = _project(full.states[keep, :3], e1, e2)
-    spacecraft_distance_km = np.linalg.norm(full.states[keep, :3], axis=1) / 1000.0
-
-    moon_positions_m = np.array([
-        body_position_at_absolute_epoch("Moon", reference_et + t) for t in epochs
-    ])
-    moon_2d = _project(moon_positions_m, e1, e2)
-    moon_distance_km = np.linalg.norm(moon_positions_m, axis=1) / 1000.0
-
     days = (epochs / 86400.0).round(4).tolist()
 
+    spacecraft_km = (full.states[keep, :3] / 1000.0).round(1)
+    spacecraft_distance_km = np.linalg.norm(full.states[keep, :3], axis=1) / 1000.0
+
+    moon_positions_km = np.array([
+        body_position_at_absolute_epoch("Moon", reference_et + t) for t in epochs
+    ]) / 1000.0
+    moon_distance_km = np.linalg.norm(moon_positions_km, axis=1)
+
     events = [
-        {"label": "TLI burn", "day": 0.0, "note": f"delta-v {np.linalg.norm(targeting.delta_v):.0f} m/s"},
+        {"label": "TLI burn", "time": 0.0, "note": f"delta-v {np.linalg.norm(targeting.delta_v):.0f} m/s"},
         {
             "label": "Closest approach to Moon",
-            "day": perilune_day,
+            "time": perilune_day,
             "note": f"{targeting.final_distance_km:.0f} km from Moon center "
                     f"({targeting.final_distance_km - MOON_RADIUS_KM:.0f} km altitude)",
         },
     ]
 
-    return {
-        "reference_epoch_ephemeris_seconds": reference_et,
-        "departure_mjd2000": departure_mjd2000,
-        "target_perilune_km": target_distance_km,
-        "achieved_perilune_km": targeting.final_distance_km,
-        "perilune_day": perilune_day,
-        "perilune_index": perilune_idx,
-        "delta_v_m_s": targeting.delta_v.tolist(),
-        "events": events,
-        "days": days,
-        "spacecraft_xy_km": spacecraft_2d.round(1).tolist(),
-        "spacecraft_distance_km": spacecraft_distance_km.round(1).tolist(),
-        "moon_xy_km": moon_2d.round(1).tolist(),
-        "moon_distance_km": moon_distance_km.round(1).tolist(),
-    }
+    bodies = [
+        body_entry("earth", "Earth", COLOR["earth"], "planet", radius_display=RADIUS_DISPLAY["earth"], position=[0.0, 0.0, 0.0]),
+        body_entry(
+            "moon", "Moon", COLOR["moon"], "moon", radius_display=RADIUS_DISPLAY["moon"],
+            trail={"times": days, "positions": moon_positions_km.round(1).tolist()},
+            info=[{"label": "Distance from Earth", "value": f"{moon_distance_km[0]:,.0f} km (varies over mission)"}],
+        ),
+        body_entry(
+            "spacecraft", "Orion", COLOR["spacecraft"], "spacecraft", radius_display=RADIUS_DISPLAY["spacecraft"],
+            trail={"times": days, "positions": spacecraft_km.tolist()},
+            info=[
+                {"label": "TLI delta-v", "value": f"{np.linalg.norm(targeting.delta_v):.0f} m/s"},
+                {"label": "Achieved perilune", "value": f"{targeting.final_distance_km:,.0f} km from Moon center"},
+            ],
+        ),
+    ]
+
+    return scene_document(
+        scene_id="artemis2-mission",
+        title="Artemis II — Free Return",
+        subtitle="Independently re-solved trajectory targeting the real Artemis II perilune altitude.\n"
+                  "Not a reproduction of the flown mission -- NASA hasn't published navigation-grade state vectors.",
+        distance_unit="km",
+        central_body_id="earth",
+        bodies=bodies,
+        timeline={
+            "unitLabel": "days",
+            "min": 0.0,
+            "max": days[-1],
+            "events": events,
+            "referenceEpochEt": reference_et,
+        },
+    )

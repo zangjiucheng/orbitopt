@@ -5,3 +5,4 @@ __pycache__/
 *.png
 .ipynb_checkpoints/
 .claude/
+/scenes/
