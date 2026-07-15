@@ -39,12 +39,57 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from pyvistaqt import QtInteractor
+from vtkmodules.vtkRenderingCore import vtkRenderWindow
 
 from orbitopt.viz.pv_viewer import load_scene
 from orbitopt.viz.scene_renderer import SceneRenderer
 from orbitopt.viz.theme import BG_VOID, STYLESHEET
 
 SPEED_PRESETS = [0.15, 0.5, 1.0, 5.0, 20.0, 100.0]
+
+
+class DebouncedInteractor(QtInteractor):
+    """QtInteractor renders synchronously on *every* resizeEvent (see
+    pyvistaqt.rwi.QVTKRenderWindowInteractor.resizeEvent -> self.update() ->
+    paintEvent -> Iren.Render()). On Windows, a live edge-drag delivers
+    resizeEvent for every intermediate size through the OS's own native
+    modal message loop (WM_ENTERSIZEMOVE..WM_EXITSIZEMOVE), which won't hand
+    control back to the rest of the app until each repaint finishes -- so a
+    scene with anti-aliasing, orbit trails and point labels compounds into
+    the whole window reading as frozen for the length of the drag. Measured
+    ~45ms/intermediate-size even with anti-aliasing off, which isn't the
+    render cost itself (that dropped from ~20ms to ~2ms) but Qt/VTK resize
+    bookkeeping run on every single one of dozens of events during a drag.
+    Fix: keep the VTK render window's size/DPI in sync on every event
+    (cheap), but defer the actual repaint until resizing has been idle for a
+    short settle period -- the 3D view visually lags slightly behind the
+    window edge during the drag itself, but the app never stops responding.
+    """
+
+    _RESIZE_SETTLE_MS = 120
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._resize_settle_timer = QTimer(self)
+        self._resize_settle_timer.setSingleShot(True)
+        self._resize_settle_timer.setInterval(self._RESIZE_SETTLE_MS)
+        self._resize_settle_timer.timeout.connect(self._render_after_resize_settles)
+
+    def resizeEvent(self, event):  # noqa: N802 -- Qt override signature
+        if self._RenderWindow is None:
+            return
+        scale = self._getPixelRatio()
+        w = int(round(scale * self.width()))
+        h = int(round(scale * self.height()))
+        self._RenderWindow.SetDPI(int(round(72 * scale)))
+        vtkRenderWindow.SetSize(self._RenderWindow, w, h)
+        self._Iren.SetSize(w, h)
+        self._Iren.ConfigureEvent()
+        self._resize_settle_timer.start()
+
+    def _render_after_resize_settles(self):
+        if self._Iren is not None:
+            self._Iren.Render()
 
 
 class SceneLoader(QObject):
@@ -157,7 +202,7 @@ class MissionControlWindow(QMainWindow):
         center_layout.setSpacing(0)
         center_layout.addWidget(self._build_title_bar())
 
-        self.plotter = QtInteractor(center)
+        self.plotter = DebouncedInteractor(center)
         self.plotter.set_background(BG_VOID)
         self.plotter.enable_anti_aliasing()
         self.renderer = SceneRenderer(self.plotter)
