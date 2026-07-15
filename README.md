@@ -180,11 +180,15 @@ what an upstream (imprecise, automated) stage will actually hand it.
 
 ## Solar System Explorer (interactive visualization)
 
+Open `solar_system_explorer.html` directly in a browser (double-click it, or
+drag it into a browser window) -- it's fully self-contained, no server or
+internet connection needed.
+
 `src/orbitopt/viz/solar_system.py` exports real pykep-derived planetary
 orbits (traced analytically from each planet's osculating elements, since
 outer-planet periods run well past pykep's low-precision ephemeris range)
 plus current positions, as plain JSON. That data backs a standalone HTML/
-Canvas artifact -- pan and zoom (mouse wheel, drag, or pinch on touch) from
+Canvas page -- pan and zoom (mouse wheel, drag, or pinch on touch) from
 the whole solar system down to inner-planet detail, with true-to-scale
 orbits, per-planet hover tooltips (distance, period, speed, eccentricity,
 inclination), and preset "Whole System" / "Inner Planets" / "Outer Planets"
