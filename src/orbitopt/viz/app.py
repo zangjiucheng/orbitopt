@@ -19,7 +19,8 @@ import sys
 
 os.environ.setdefault("QT_API", "pyside6")
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -44,6 +45,49 @@ from orbitopt.viz.scene_renderer import SceneRenderer
 from orbitopt.viz.theme import BG_VOID, STYLESHEET
 
 SPEED_PRESETS = [0.15, 0.5, 1.0, 5.0, 20.0, 100.0]
+
+
+class SceneLoader(QObject):
+    """Runs a scene loader (e.g. compute_and_export_mission, ~10s of pure
+    Python/numpy/tudatpy work) on a background QThread so it can't block
+    the UI event loop -- moveToThread + signals is the standard PySide
+    pattern for this, not a raw threading.Thread, because Qt needs the
+    result handed back via a queued signal/slot connection to land safely
+    on the main thread rather than touching any Qt/VTK objects directly
+    from the worker thread (which isn't thread-safe). The loader itself
+    must stay pure-Python -- it must never touch self.plotter/self.renderer,
+    both of which live on the main thread.
+    """
+
+    # (name, scene) rather than just (scene): the name has to travel with the
+    # signal itself, not via a Python closure. A `lambda scene: cb(name, scene)`
+    # connected to a cross-thread signal is invoked *directly on the emitting
+    # (worker) thread* -- PySide can only infer "this needs to be queued to
+    # the receiver's thread" when the receiver is a bound method of a QObject;
+    # a plain lambda has no thread affinity of its own, so AutoConnection
+    # silently falls back to a direct call. That let _on_scene_loaded (which
+    # touches self.renderer/self.plotter, i.e. VTK's OpenGL context) run on
+    # the background thread, fighting the main thread for the same Win32 GL
+    # context -- observed as `wglMakeCurrent failed ... resource in use` and
+    # the whole app hanging. Emitting (name, scene) and connecting straight to
+    # the bound method (no lambda) lets Qt detect the correct thread and queue
+    # the call properly; the connections below also pass QueuedConnection
+    # explicitly so this doesn't regress silently if a lambda creeps back in.
+    finished = Signal(str, object)
+    failed = Signal(str, str)
+
+    def __init__(self, name, loader):
+        super().__init__()
+        self._name = name
+        self._loader = loader
+
+    def run(self):
+        try:
+            scene = self._loader()
+        except Exception as exc:  # noqa: BLE001 -- reported to the user via the failed signal
+            self.failed.emit(self._name, str(exc))
+            return
+        self.finished.emit(self._name, scene)
 
 
 def _builtin_missions():
@@ -83,6 +127,10 @@ class MissionControlWindow(QMainWindow):
         self._current_time = 0.0
         self._speed = SPEED_PRESETS[2]
         self._playing = False
+
+        self._loading = False
+        self._load_thread: QThread | None = None
+        self._load_worker: SceneLoader | None = None
 
         self._timer = QTimer(self)
         self._timer.setInterval(33)
@@ -144,9 +192,9 @@ class MissionControlWindow(QMainWindow):
         self.mission_list.currentRowChanged.connect(self._on_mission_selected)
         layout.addWidget(self.mission_list, stretch=1)
 
-        open_btn = QPushButton("Open scene file…")
-        open_btn.clicked.connect(self._open_file)
-        layout.addWidget(open_btn)
+        self._open_file_btn = QPushButton("Open scene file…")
+        self._open_file_btn.clicked.connect(self._open_file)
+        layout.addWidget(self._open_file_btn)
         layout.setContentsMargins(8, 10, 8, 10)
 
         return sidebar
@@ -250,6 +298,8 @@ class MissionControlWindow(QMainWindow):
             self.mission_list.setCurrentRow(0)
 
     def _open_file(self):
+        if self._loading:
+            return
         path, _ = QFileDialog.getOpenFileName(self, "Open scene JSON", "", "Scene files (*.json)")
         if not path:
             return
@@ -259,7 +309,7 @@ class MissionControlWindow(QMainWindow):
         self.mission_list.setCurrentRow(self.mission_list.count() - 1)
 
     def _on_mission_selected(self, row: int):
-        if row < 0:
+        if row < 0 or self._loading:
             return
         name = self.mission_list.item(row).text()
         self._set_playing(False)
@@ -268,16 +318,61 @@ class MissionControlWindow(QMainWindow):
             self._apply_scene(self._scene_cache[name])
             return
 
+        self._start_loading(name)
+
+    def _start_loading(self, name: str):
+        """Runs self._loaders[name]() on a background QThread instead of
+        the UI thread -- compute_and_export_mission() alone is ~10s of
+        Lambert-solve + differential-correction + tudatpy propagation, and
+        running that inline (as an earlier version of this app did) froze
+        the whole window -- no repaints, no input, Windows marks it "Not
+        Responding" -- for the entire computation. The sidebar/open-file
+        button stay disabled and the cursor shows busy for the same reason
+        the mission list itself is guarded above: re-entering this while a
+        load is already in flight would leak a second thread/worker pair.
+        """
+        self._loading = True
+        self.mission_list.setEnabled(False)
+        self._open_file_btn.setEnabled(False)
+        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
         self.statusBar().showMessage(f"Computing {name}…")
-        QApplication.processEvents()
-        try:
-            scene = self._loaders[name]()
-        except Exception as exc:  # noqa: BLE001 -- surfaced to the user, not swallowed
-            QMessageBox.critical(self, "Failed to load scene", str(exc))
-            self.statusBar().showMessage("Ready")
-            return
+
+        thread = QThread(self)
+        worker = SceneLoader(name, self._loaders[name])
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        # QueuedConnection explicitly, not AutoConnection -- see the comment
+        # on SceneLoader.finished/failed for why this matters here.
+        worker.finished.connect(self._on_scene_loaded, Qt.ConnectionType.QueuedConnection)
+        worker.failed.connect(self._on_scene_load_failed, Qt.ConnectionType.QueuedConnection)
+        worker.finished.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        thread.finished.connect(self._on_load_thread_finished)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        # Keep references alive for the thread's lifetime -- PySide doesn't
+        # keep a Python-side owner of these alive on its own, and a
+        # garbage-collected QThread/QObject mid-run is a crash, not a
+        # graceful cancellation.
+        self._load_thread = thread
+        self._load_worker = worker
+        thread.start()
+
+    def _on_load_thread_finished(self):
+        self._loading = False
+        self.mission_list.setEnabled(True)
+        self._open_file_btn.setEnabled(True)
+        QApplication.restoreOverrideCursor()
+        self._load_thread = None
+        self._load_worker = None
+
+    def _on_scene_loaded(self, name: str, scene: dict):
         self._scene_cache[name] = scene
         self._apply_scene(scene)
+        self.statusBar().showMessage("Ready")
+
+    def _on_scene_load_failed(self, name: str, error_msg: str):
+        QMessageBox.critical(self, f"Failed to load {name}", error_msg)
         self.statusBar().showMessage("Ready")
 
     def _apply_scene(self, scene: dict):
