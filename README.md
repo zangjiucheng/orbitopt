@@ -175,6 +175,22 @@ what an upstream (imprecise, automated) stage will actually hand it.
   tudatpy-refined Earth-Moon free-return trajectory targeting the real
   Artemis II perilune altitude (see the "Cislunar / Artemis II" section
   below for what this does and does not claim to reproduce).
+- `examples/06_solar_system_explorer_data.py` -- regenerate the orbital
+  dataset behind the interactive Solar System Explorer artifact (see below).
+
+## Solar System Explorer (interactive visualization)
+
+`src/orbitopt/viz/solar_system.py` exports real pykep-derived planetary
+orbits (traced analytically from each planet's osculating elements, since
+outer-planet periods run well past pykep's low-precision ephemeris range)
+plus current positions, as plain JSON. That data backs a standalone HTML/
+Canvas artifact -- pan and zoom (mouse wheel, drag, or pinch on touch) from
+the whole solar system down to inner-planet detail, with true-to-scale
+orbits, per-planet hover tooltips (distance, period, speed, eccentricity,
+inclination), and preset "Whole System" / "Inner Planets" / "Outer Planets"
+views. It's a separate deliverable from the Python package (self-contained
+HTML, no build step) -- regenerate its embedded dataset with
+`examples/06_solar_system_explorer_data.py` for a different reference epoch.
 
 ## Cislunar / Artemis II free-return pipeline
 
