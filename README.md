@@ -177,6 +177,36 @@ what an upstream (imprecise, automated) stage will actually hand it.
   below for what this does and does not claim to reproduce).
 - `examples/06_solar_system_explorer_data.py` -- regenerate the orbital
   dataset behind the interactive Solar System Explorer artifact (see below).
+- `examples/07_mission_timeline_data.py` -- regenerate the time-series
+  dataset behind the Artemis II Mission Timeline artifact (see below).
+
+## Artemis II Mission Timeline (interactive visualization)
+
+Open `artemis2_mission_timeline.html` directly in a browser -- same
+self-contained, no-server deal as the Solar System Explorer, but zoomed into
+the Earth-Moon system and focused on the mission itself rather than
+planetary orbits: a scrubbable timeline (drag it, or hit play) steps through
+the ~9.6-day free-return trajectory from TLI burn to closest lunar approach
+to trans-Earth coast, with Earth, Moon, and spacecraft positions all
+updating live, plus a distance/phase readout and marked mission events.
+
+`src/orbitopt/viz/mission_timeline.py` re-solves the same free-return
+targeting problem as `examples/05_artemis2_free_return.py` (Lambert seed +
+`verify.differential_correction.target_lunar_flyby`, skipping the GPU
+coarse-screening stage since a hand-verified Lambert guess already
+converges directly) and propagates the full mission at a 60s step -- not
+a coarser, animation-friendlier step, because a first attempt at 900s
+produced a spacecraft distance range of ~1,100 km to ~19,400,000 km for
+this exact trajectory: an inside-the-Earth minimum and an escape-trajectory
+maximum, both numerical artifacts of the same RK4-near-a-close-flyby
+sensitivity documented below, not real dynamics. The fine-resolution
+propagation is decimated to ~700 points for the exported animation *after*
+integrating correctly, preserving the exact closest-approach sample. All
+positions are projected onto the trajectory's own orbital plane (not the
+ecliptic) for a clean 2D view; the Moon's plotted point may deviate very
+slightly from a perfect path since its true motion isn't confined to that
+plane, but its reported distance is always the true 3D distance, never a
+projected one.
 
 ## Solar System Explorer (interactive visualization)
 
