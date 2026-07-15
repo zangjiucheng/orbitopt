@@ -14,3 +14,4 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["slow: multi-second tests that run a real tudatpy propagation or optimization loop"]

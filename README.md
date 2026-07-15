@@ -31,19 +31,38 @@ src/orbitopt/
     gpu_batch.py      batched 0-rev Lambert solver (universal-variable / Vallado),
                        vectorized -- the framework's core CUDA-acceleration point
     cpu.py             thin wrapper around pykep's reference Izzo solver (multi-rev capable)
-  bodies.py            pykep.planet ephemeris + epoch helpers
+  bodies.py            pykep.planet ephemeris + epoch helpers + real Moon state (via tudatpy/SPICE)
+  dynamics/
+    nbody_gpu.py       GPU-batched, simplified Earth-Moon(-Sun) coarse propagator
+                        (two-body Kepler batch solve + osculating Moon/Sun ephemeris +
+                        fixed-step RK4) for screening cislunar TLI candidates
   problems/
     transfer_2body.py  single Lambert-leg transfer UDP, with a real batch_fitness()
     mga.py             wraps pykep.trajopt.mga_1dsm; GPU-screens launch windows first
+    free_return.py     GPU-batched TLI-burn screening UDP (orbitopt.dynamics.nbody_gpu-backed)
   optimize/
     gpu_bfe.py         custom pygmo UDBFE that dispatches to a problem's batch_fitness()
     runner.py          drives pygmo algorithms (pso_gen/cmaes/nsga2) through the GPU bfe
   verify/
     tudat_propagate.py numerically propagate a candidate leg and diff vs. the
-                        pykep patched-conic prediction
+                        pykep patched-conic prediction; also multi-arc propagation
+                        (coast/impulsive-burn sequences) + post-hoc closest-approach
+                        and altitude-crossing event detection
+    differential_correction.py  fixed-time Newton-Raphson shooting targeter that
+                        refines a coarse TLI guess into a precise lunar-flyby distance
   viz/
     porkchop.py        GPU-batched porkchop grid + plotting
 ```
+
+The cislunar pieces (`dynamics/nbody_gpu.py`, `problems/free_return.py`,
+`verify/differential_correction.py`, plus the Moon ephemeris in `bodies.py`
+and the multi-arc extension in `verify/tudat_propagate.py`) implement the
+same two-stage pattern as the rest of the framework, applied to an
+Artemis-II-like Earth-Moon free-return trajectory: `examples/05_artemis2_free_return.py`
+Lambert-seeds a parking-orbit-aligned TLI guess, GPU-batch-screens the burn
+vector against a simplified osculating Moon model, then refines the winner
+in tudatpy to hit the real Artemis II perilune altitude (6,545 km) to
+within ~10 km.
 
 Extending the framework with a new problem type means writing a new
 `orbitopt.core.problem.OrbitOptProblem` subclass; if its per-candidate work is
@@ -90,6 +109,56 @@ some algorithms support it at all: `pg.pso_gen`, `pg.cmaes`, `pg.nsga2` do;
 `pg.sga`, `pg.sade`, `pg.de` do not (pygmo 2.19.7). `orbitopt.optimize.runner`
 handles this correctly; see its docstring.
 
+**SPICE frame gotcha:** SPICE's `"J2000"` (mean equator/equinox) and
+`"ECLIPJ2000"` (ecliptic-and-equinox) frames are related by a ~23.4-degree
+rotation (Earth's obliquity) and are NOT interchangeable -- mixing states
+queried in one against the other silently produces errors of hundreds of
+thousands of km, not a small correction. Every module that touches
+Earth/Moon/Sun ephemerides in this codebase uses `ECLIPJ2000` consistently;
+if you add a new one, match it.
+
+**RK4 step-size gotcha for close encounters:** a fixed step size that's
+perfectly fine for a multi-day interplanetary coast (300-600s) is NOT fine
+near a close lunar flyby -- an empirical convergence check found step_size=600s
+reporting an 81,733 km closest approach for a trajectory whose true
+(step_size<=15s converged) closest approach was 4,379 km. Local trajectory
+curvature near a several-thousand-km-altitude flyby is far sharper than
+during a plain coast; `verify.differential_correction` defaults to a 60s
+step for exactly this reason. If you extend this code to closer flybys
+(hundreds of km altitude or less), re-run the convergence check -- 60s may
+no longer be fine enough.
+
+**GPU is not always faster -- measured, not assumed:** `nbody_gpu.propagate_spacecraft_batch`
+is GPU-*slower* than CPU below roughly N~20,000 candidates (N=2000, n_steps=300:
+CPU 20.2s vs GPU 107.8s), the opposite of the Lambert solver's crossover.
+The RK4 wrapper issues 4*n_steps small CuPy kernel launches per call (one
+Newton-solved Moon/Sun position lookup per RK4 substage), and per-launch
+overhead dominates until the batch is large enough to amortize it -- unlike
+`lambert.gpu_batch`, which has no per-step Python loop calling it repeatedly.
+`problems/free_return.py` and `examples/05_artemis2_free_return.py` default
+to `use_gpu=False` for this reason; don't assume GPU is the right choice for
+a new batched routine without measuring at your actual batch size.
+
+**Undamped Newton diverges on real (imprecise) inputs, not just in theory:**
+wiring the full pipeline together end-to-end -- not just testing each stage
+in isolation -- surfaced a case where a GPU-coarse-screened TLI guess, only
+slightly different from a hand-verified working one, sent
+`differential_correction.target_lunar_flyby`'s plain Newton step into a
+runaway divergence (residual growing to tens of millions of km within a few
+iterations). Root cause: the coarse two-body Moon model's own
+closest-approach-time estimate was off by more than two days for that
+candidate, which anchored the fixed-time targeter to a time with no nearby
+feasible solution. Fixed with two changes that are cheap to skip and easy to
+regret skipping: (1) sanity-check the refined coast duration against the
+caller's own guess before trusting it, falling back to the guess if the
+"closest approach" found is implausibly far away in time or distance; (2)
+cap and backtrack the Newton step (classic damped Newton) instead of always
+taking the full linearized step. Both are exercised by
+`tests/test_cislunar.py::test_target_lunar_flyby_converges_from_an_imprecise_gpu_screened_guess`,
+using the exact delta-v that used to diverge -- a reminder that a solver
+validated only on its own best-case hand-picked input isn't validated for
+what an upstream (imprecise, automated) stage will actually hand it.
+
 ## Examples
 
 - `examples/01_earth_mars_lambert_gpu.py` -- optimize (t0, tof) for an
@@ -102,6 +171,53 @@ handles this correctly; see its docstring.
   prediction.
 - `examples/04_porkchop_gpu.py` -- generate and plot a full Earth->Mars
   porkchop grid from one batched GPU call.
+- `examples/05_artemis2_free_return.py` -- Lambert-seeded, GPU-screened,
+  tudatpy-refined Earth-Moon free-return trajectory targeting the real
+  Artemis II perilune altitude (see the "Cislunar / Artemis II" section
+  below for what this does and does not claim to reproduce).
+
+## Cislunar / Artemis II free-return pipeline
+
+`examples/05_artemis2_free_return.py` chains every layer of the framework:
+
+1. **Patched-conic seed**: an Earth-only 2-body Lambert arc (`lambert.cpu`)
+   from a parking-orbit position to the Moon's real position (`bodies.moon_state`,
+   sourced from tudatpy/SPICE, not pykep -- pykep's `jpl_lp` has no Moon) at
+   the coast time, giving a plane- and energy-appropriate initial TLI burn
+   guess instead of an arbitrary kick. (An arbitrarily-oriented parking
+   orbit needs a wildly unrealistic 11+ km/s "TLI" burn to reach a
+   misaligned Moon position in the allotted time -- this isn't a solver
+   bug, it's what happens when the launch geometry doesn't match the
+   target, exactly as it constrains real launch windows.)
+2. **GPU coarse screening** (`problems.free_return.FreeReturnScreeningProblem`):
+   a pygmo population of candidate burns around that seed, batch-evaluated
+   through `dynamics.nbody_gpu`'s simplified propagator, searching for the
+   burn whose coarse closest-approach to the Moon matches the target
+   distance.
+3. **tudatpy differential correction** (`verify.differential_correction.target_lunar_flyby`):
+   Newton-Raphson refinement of the winning candidate against the real
+   SPICE-based Earth+Moon+Sun n-body model, converging to the actual
+   Artemis II perilune altitude (6,545 km above the lunar surface) to
+   within ~10 km in 3 iterations / a few seconds.
+4. **Independent fine-resolution verification**: re-propagate the converged
+   solution at a finer step than the corrector used and re-measure closest
+   approach from scratch, so the reported number isn't just "what the
+   corrector's own residual said" (see the RK4 step-size gotcha above --
+   this distinction mattered here in practice, not just in principle).
+
+**What this does not claim:** NASA hasn't published Artemis II's
+navigation-grade state vectors or SPICE kernels, so there is no ground
+truth to fit against -- this independently re-solves the same free-return
+boundary-value problem and lands on a trajectory of the same class and
+comparable magnitudes, not a reproduction of the actual flown mission.
+It also targets flyby *distance* only, in whatever direction the Lambert
+seed happens to miss by; a genuine unpowered free return additionally needs
+the B-plane crossing aimed so gravity alone bends the outbound trajectory
+back through Earth's atmosphere, which is a 2-parameter aim-point targeting
+problem this example doesn't attempt -- expect the example's post-flyby
+trajectory to *not* re-enter on its own within the propagated window. Adding
+that targeting (vary the B-plane aim point, not just distance, as the
+Newton unknowns) is the natural next extension of `differential_correction.py`.
 
 ## Known limitations / extension points
 
@@ -114,3 +230,10 @@ handles this correctly; see its docstring.
 - Low-thrust (continuous-thrust) trajectories aren't modelled yet; pykep's
   `sims_flanagan`/shape-based modules would plug in the same way `mga.py`
   wraps `mga_1dsm`.
+- `dynamics.nbody_gpu`'s Moon/Sun ephemeris is a pure two-body osculating
+  orbit seeded once from a real SPICE state at J2000 -- accurate to a few
+  thousand km over a several-day coast (validated), but not re-seeded for
+  epochs far from J2000 or spans much longer than ~10 days.
+- The free-return targeter is distance-only / fixed-time (see above); no
+  B-plane aim-point control, no multi-point (outbound + return) targeting,
+  no trajectory-correction-burn modelling.

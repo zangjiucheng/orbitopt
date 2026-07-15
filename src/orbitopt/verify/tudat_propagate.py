@@ -217,7 +217,7 @@ class ClosestApproachResult:
     spacecraft_state: np.ndarray  # (6,)
 
 
-def _body_position_at_absolute_epoch(body_name, absolute_epoch, central_body="Earth", frame="ECLIPJ2000"):
+def body_position_at_absolute_epoch(body_name, absolute_epoch, central_body="Earth", frame="ECLIPJ2000"):
     _ensure_spice_loaded()
     position = spice.get_body_cartesian_position_at_epoch(
         body_name, central_body, frame, "NONE", float(absolute_epoch),
@@ -246,7 +246,7 @@ def find_closest_approach(
     """
     absolute_epochs = reference_epoch_ephemeris_seconds + prop_result.epochs
     body_positions = np.array([
-        _body_position_at_absolute_epoch(body_name, t, central_body=central_body)
+        body_position_at_absolute_epoch(body_name, t, central_body=central_body)
         for t in absolute_epochs
     ])
     spacecraft_positions = prop_result.states[:, :3]
