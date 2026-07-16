@@ -94,8 +94,12 @@ class DebouncedInteractor(QtInteractor):
         self._resize_settle_timer.start()
 
     def _render_after_resize_settles(self):
-        if self._Iren is not None:
-            self._Iren.Render()
+        # Guard against firing after the widget is closed: pyvistaqt swaps _Iren
+        # for a stub with no Render() during teardown, so a still-pending settle
+        # timer would otherwise raise on quit (Cmd+Q).
+        iren = self._Iren
+        if iren is not None and hasattr(iren, "Render"):
+            iren.Render()
 
 
 class SceneLoader(QObject):
@@ -553,12 +557,14 @@ class MissionControlWindow(QMainWindow):
         speed_row.setSpacing(4)
         self.speed_group = QButtonGroup(self)
         self.speed_group.setExclusive(True)
+        self._speed_buttons = {}
         for i, s in enumerate(SPEED_PRESETS):
             btn = QPushButton(f"{s:g}x")
             btn.setCheckable(True)
             btn.setChecked(s == self._speed)
             btn.clicked.connect(lambda _checked, s=s: self._set_speed(s))
             self.speed_group.addButton(btn)
+            self._speed_buttons[s] = btn
             speed_row.addWidget(btn)
         speed_col = QVBoxLayout()
         speed_col.addWidget(QLabel("TIME WARP"))
@@ -672,7 +678,18 @@ class MissionControlWindow(QMainWindow):
         open_action = file_menu.addAction("Open scene file…")
         open_action.triggered.connect(self._open_file)
         quit_action = file_menu.addAction("Quit")
+        quit_action.setShortcut(QKeySequence.StandardKey.Quit)  # Cmd+Q / Ctrl+Q
         quit_action.triggered.connect(self.close)
+
+        play_menu = self.menuBar().addMenu("&Playback")
+        self.play_action = play_menu.addAction("Play / Pause", self._toggle_play)
+        self.play_action.setShortcut(QKeySequence(Qt.Key_Space))
+        play_menu.addAction("Step forward", lambda: self._step_time(+1)).setShortcut(QKeySequence(Qt.Key_Right))
+        play_menu.addAction("Step back", lambda: self._step_time(-1)).setShortcut(QKeySequence(Qt.Key_Left))
+        play_menu.addAction("Restart", self._restart_timeline).setShortcut(QKeySequence(Qt.Key_Home))
+        play_menu.addSeparator()
+        play_menu.addAction("Faster", lambda: self._cycle_speed(+1)).setShortcut(QKeySequence("]"))
+        play_menu.addAction("Slower", lambda: self._cycle_speed(-1)).setShortcut(QKeySequence("["))
 
         view_menu = self.menuBar().addMenu("&View")
         view_menu.addAction("Top view", self._view_top)
@@ -1184,8 +1201,38 @@ class MissionControlWindow(QMainWindow):
 
     def _set_speed(self, speed: float):
         self._speed = speed
+        btn = self._speed_buttons.get(speed)
+        if btn is not None and not btn.isChecked():
+            btn.setChecked(True)
+
+    def _cycle_speed(self, direction: int):
+        """Step to the next/previous time-warp preset (the ] / [ shortcuts)."""
+        try:
+            idx = SPEED_PRESETS.index(self._speed)
+        except ValueError:
+            idx = SPEED_PRESETS.index(1.0)
+        idx = max(0, min(len(SPEED_PRESETS) - 1, idx + direction))
+        self._set_speed(SPEED_PRESETS[idx])
+
+    def _step_time(self, direction: int):
+        """Nudge the scrubber one step (2% of the span) forward/back."""
+        if not (self._current_scene and self._current_scene.get("timeline")):
+            return
+        self._set_playing(False)
+        step = max(1, int(round(0.02 * self.time_slider.maximum())))
+        self.time_slider.setValue(
+            max(0, min(self.time_slider.maximum(), self.time_slider.value() + direction * step))
+        )
+
+    def _restart_timeline(self):
+        if not (self._current_scene and self._current_scene.get("timeline")):
+            return
+        self._set_playing(False)
+        self.time_slider.setValue(0)
 
     def _toggle_play(self):
+        if not (self._current_scene and self._current_scene.get("timeline")):
+            return
         self._set_playing(not self._playing)
 
     def _set_playing(self, playing: bool):
@@ -1224,6 +1271,26 @@ class MissionControlWindow(QMainWindow):
         self._refresh_readouts(self.renderer.set_time(self._current_time))
         self._update_tracking()
         self._update_measure()
+
+    def closeEvent(self, event):  # noqa: N802 -- Qt override signature
+        """Tear down cleanly on quit (incl. Cmd+Q). The embedded VTK render
+        window has to release its native OpenGL context *before* Qt destroys the
+        widget under it -- otherwise VTK finalizes a context Qt has already torn
+        down and prints errors on the way out (the same reason tests call
+        plotter.close() before window.close()). Also stop the animation timer and
+        any in-flight scene-loading thread so nothing fires mid-teardown."""
+        self._set_playing(False)
+        self._timer.stop()
+        self.plotter._resize_settle_timer.stop()  # so it can't fire post-teardown
+        thread = self._load_thread
+        if thread is not None:
+            thread.quit()
+            thread.wait(2000)
+        try:
+            self.plotter.close()
+        except Exception:  # noqa: BLE001 -- best-effort teardown, never block quit
+            pass
+        super().closeEvent(event)
 
 
 def _epoch_to_date_string(reference_et: float, day_offset: float) -> str:
