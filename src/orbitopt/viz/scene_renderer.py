@@ -20,6 +20,8 @@ import pyvista as pv
 _MARKER_BASE_SIZE = 8.0
 _MARKER_WEIGHT_SIZE = 1.1
 
+MANEUVER_COLOR = "#ff5a3c"  # burn / delta-v arrows (distinct from amber trails)
+
 
 def marker_size(body: dict) -> float:
     return _MARKER_BASE_SIZE + _MARKER_WEIGHT_SIZE * body.get("radiusDisplay", 4.0)
@@ -176,6 +178,29 @@ class SceneRenderer:
 
     def clear_measure_line(self) -> None:
         self.plotter.remove_actor("measure-line", render=True)
+
+    def set_maneuver_vector(self, position_km, delta_v, length_km: float) -> None:
+        """Draw an arrow at ``position_km`` along the ``delta_v`` direction with a
+        (screen-visible) length of ``length_km`` -- a maneuver's burn vector.
+        Physical delta-v (m/s) is tiny next to orbit radii (km), so the length is
+        a caller-chosen display scale, not the true magnitude; only the direction
+        is physical. Reuses one named actor so successive burns replace it."""
+        pos = np.asarray(position_km, dtype=float)
+        dv = np.asarray(delta_v, dtype=float)
+        mag = float(np.linalg.norm(dv))
+        if mag < 1e-12 or length_km <= 0.0:
+            self.clear_maneuver_vector()
+            return
+        arrow = pv.Arrow(
+            start=pos, direction=dv / mag, scale=float(length_km),
+            tip_length=0.28, tip_radius=0.09, shaft_radius=0.032,
+        )
+        self.plotter.add_mesh(arrow, color=MANEUVER_COLOR, name="maneuver-vector",
+                              pickable=False, specular=0.3)
+        self.plotter.render()
+
+    def clear_maneuver_vector(self) -> None:
+        self.plotter.remove_actor("maneuver-vector", render=True)
 
     def track_body(self, body_id: str, t: float) -> None:
         """Center ``body_id`` by *translating* the camera to it, preserving the

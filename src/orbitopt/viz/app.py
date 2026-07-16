@@ -20,7 +20,7 @@ import sys
 os.environ.setdefault("QT_API", "pyside6")
 
 from PySide6.QtCore import QObject, QRectF, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QCursor, QKeySequence, QPainter, QPen
+from PySide6.QtGui import QColor, QCursor, QKeySequence, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -38,6 +38,8 @@ from PySide6.QtWidgets import (
     QSlider,
     QSplitter,
     QStackedWidget,
+    QStyle,
+    QStyleOptionSlider,
     QVBoxLayout,
     QWidget,
 )
@@ -151,9 +153,14 @@ def _builtin_missions():
         from orbitopt.viz.mission_timeline import compute_and_export_mission
         return compute_and_export_mission()
 
+    def load_geo_raising():
+        from orbitopt.viz.geo_raising import compute_and_export_geo_mission
+        return compute_and_export_geo_mission()
+
     return [
         ("Solar System", load_solar_system),
         ("Artemis II — Free Return", load_artemis2),
+        ("GOES — GTO to GEO", load_geo_raising),
     ]
 
 
@@ -161,6 +168,10 @@ def _format_distance(value: float, unit: str) -> str:
     if unit == "AU":
         return f"{value:,.3f} AU"
     return f"{value:,.0f} km"
+
+
+def _norm3(v) -> float:
+    return (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) ** 0.5
 
 
 class SpinnerWidget(QWidget):
@@ -212,6 +223,76 @@ class SpinnerWidget(QWidget):
         painter.drawArc(rect, -self._angle * 16, 100 * 16)
 
 
+class EventSlider(QSlider):
+    """The timeline scrubber, with a marker painted over the groove at each
+    mission event (burns, flybys, insertions). Hovering a marker shows the
+    event's label + note; clicking one seeks straight to it. Falls back to a
+    plain slider when the scene has no timeline events."""
+
+    def __init__(self, parent=None):
+        super().__init__(Qt.Horizontal, parent)
+        self._events = []  # list of (slider_value:int, label:str, note:str)
+        self.setMouseTracking(True)
+
+    def set_events(self, events, t_min, t_max):
+        self._events = []
+        span = (t_max - t_min) or 1.0
+        lo, hi = self.minimum(), self.maximum()
+        for e in events:
+            frac = min(1.0, max(0.0, (e.get("time", t_min) - t_min) / span))
+            self._events.append((int(round(lo + frac * (hi - lo))),
+                                 e.get("label", ""), e.get("note", "")))
+        self.update()
+
+    def _groove(self):
+        opt = QStyleOptionSlider()
+        self.initStyleOption(opt)
+        return self.style().subControlRect(QStyle.CC_Slider, opt, QStyle.SC_SliderGroove, self)
+
+    def _value_to_x(self, value):
+        groove = self._groove()
+        span = (self.maximum() - self.minimum()) or 1
+        return groove.left() + int((value - self.minimum()) / span * groove.width())
+
+    def _event_near(self, x, tol=6):
+        for ev in self._events:
+            if abs(self._value_to_x(ev[0]) - x) <= tol:
+                return ev
+        return None
+
+    def paintEvent(self, event):  # noqa: N802
+        super().paintEvent(event)
+        if not self._events:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(QPen(QColor(ACCENT), 1.4))
+        painter.setBrush(QColor(ACCENT))
+        cy = self.height() // 2
+        for value, _label, _note in self._events:
+            x = self._value_to_x(value)
+            painter.drawLine(x, 7, x, cy + 2)
+            tri = QPainterPath()
+            tri.moveTo(x - 3.0, 1.0)
+            tri.lineTo(x + 3.0, 1.0)
+            tri.lineTo(x, 7.0)
+            tri.closeSubpath()
+            painter.drawPath(tri)
+        painter.end()
+
+    def mouseMoveEvent(self, event):  # noqa: N802
+        ev = self._event_near(int(event.position().x()))
+        self.setToolTip(f"{ev[1]}\n{ev[2]}".strip() if ev else "")
+        super().mouseMoveEvent(event)
+
+    def mousePressEvent(self, event):  # noqa: N802
+        ev = self._event_near(int(event.position().x()))
+        if ev is not None:
+            self.setValue(ev[0])  # snap to the event
+            return
+        super().mousePressEvent(event)
+
+
 class MissionControlWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -234,6 +315,10 @@ class MissionControlWindow(QMainWindow):
         self._selected_body_id: str | None = None
         self._measure_body_id: str | None = None
         self._tracking = False
+        self._events: list[dict] = []
+        self._maneuver_base_len = 0.0
+        self._maneuver_max_dv = 1.0
+        self._maneuver_window = 0.0
 
         self._timer = QTimer(self)
         self._timer.setInterval(33)
@@ -487,12 +572,15 @@ class MissionControlWindow(QMainWindow):
         self.met_label.setObjectName("metReadout")
         self.date_label = QLabel("")
         self.date_label.setObjectName("dateReadout")
+        self.event_label = QLabel("")
+        self.event_label.setObjectName("eventReadout")
         readout_row.addWidget(self.met_label)
         readout_row.addWidget(self.date_label)
         readout_row.addStretch(1)
+        readout_row.addWidget(self.event_label)
         slider_col.addLayout(readout_row)
 
-        self.time_slider = QSlider(Qt.Horizontal)
+        self.time_slider = EventSlider()
         self.time_slider.setRange(0, 10000)
         self.time_slider.valueChanged.connect(self._on_slider_moved)
         slider_col.addWidget(self.time_slider)
@@ -882,13 +970,34 @@ class MissionControlWindow(QMainWindow):
 
         timeline = scene.get("timeline")
         self.timeline_bar.setVisible(timeline is not None)
+        self._events = timeline.get("events", []) if timeline else []
         if timeline:
             self._current_time = timeline["min"]
             self.time_slider.blockSignals(True)
             self.time_slider.setValue(0)
+            self.time_slider.set_events(self._events, timeline["min"], timeline["max"])
             self.time_slider.blockSignals(False)
         else:
             self._current_time = 0.0
+            self.time_slider.set_events([], 0.0, 1.0)
+        self.event_label.setText("")
+
+        # Precompute the maneuver-arrow display scale: physical delta-v (m/s) is
+        # invisible next to orbit radii (km), so arrows are drawn at a fraction of
+        # the burn-site radius, lengthened in proportion to |delta-v|. The arrow
+        # only appears while the scrubber is within _maneuver_window of a burn, so
+        # it flashes past each maneuver instead of hanging on screen the whole time.
+        vectors = [e["vector"] for e in self._events if "vector" in e]
+        if vectors:
+            self._maneuver_max_dv = max(_norm3(v["deltaV"]) for v in vectors) or 1.0
+            self._maneuver_base_len = 0.22 * max(_norm3(v["position"]) for v in vectors)
+        else:
+            self._maneuver_max_dv, self._maneuver_base_len = 1.0, 0.0
+        if timeline:
+            self._maneuver_window = 0.05 * ((timeline["max"] - timeline["min"]) or 1.0)
+        else:
+            self._maneuver_window = 0.0
+        self.renderer.clear_maneuver_vector()
 
         self._rebuild_body_cards(scene)
         self._refresh_readouts(self.renderer.set_time(self._current_time))
@@ -899,9 +1008,32 @@ class MissionControlWindow(QMainWindow):
         for card in self._body_cards.values():
             card["frame"].deleteLater()
         self._body_cards = {}
+        for widget in getattr(self, "_event_widgets", []):
+            widget.deleteLater()
+        self._event_widgets = []
+        self._event_rows = []
 
         stretch_item = self.info_layout.takeAt(self.info_layout.count() - 1)
         del stretch_item
+
+        timeline = scene.get("timeline")
+        events = timeline.get("events", []) if timeline else []
+        if events:
+            header = QLabel("MANEUVERS")
+            header.setObjectName("sectionHeader")
+            self.info_layout.addWidget(header)
+            self._event_widgets.append(header)
+            unit = timeline.get("unitLabel", "")
+            for e in events:
+                row = self._make_maneuver_row(e, unit)
+                self.info_layout.addWidget(row)
+                self._event_widgets.append(row)
+                self._event_rows.append((e, row))
+
+            bodies_header = QLabel("BODIES")
+            bodies_header.setObjectName("sectionHeader")
+            self.info_layout.addWidget(bodies_header)
+            self._event_widgets.append(bodies_header)
 
         for body in scene["bodies"]:
             frame = QFrame()
@@ -954,6 +1086,35 @@ class MissionControlWindow(QMainWindow):
 
         self.info_layout.addStretch(1)
 
+    def _make_maneuver_row(self, event: dict, unit: str) -> QFrame:
+        row = QFrame()
+        row.setObjectName("maneuverRow")
+        row.setProperty("active", False)
+        v = QVBoxLayout(row)
+        v.setContentsMargins(9, 6, 9, 6)
+        v.setSpacing(2)
+
+        top = QHBoxLayout()
+        name = QLabel(event.get("label", ""))
+        name.setObjectName("maneuverName")
+        time_label = QLabel(f"T+{event.get('time', 0.0):.2f} {unit}")
+        time_label.setObjectName("maneuverTime")
+        top.addWidget(name)
+        top.addStretch(1)
+        top.addWidget(time_label)
+        v.addLayout(top)
+
+        note = event.get("note")
+        if note:
+            note_label = QLabel(note)
+            note_label.setObjectName("maneuverNote")
+            note_label.setWordWrap(True)
+            v.addWidget(note_label)
+
+        row.setToolTip("Jump to this event")
+        row.mousePressEvent = lambda _e, t=event.get("time", 0.0): self._seek_to_time(t)
+        return row
+
     def _refresh_readouts(self, distances: dict[str, float]):
         for body_id, card in self._body_cards.items():
             if body_id in distances:
@@ -965,6 +1126,50 @@ class MissionControlWindow(QMainWindow):
             ref_et = timeline.get("referenceEpochEt")
             if ref_et is not None:
                 self.date_label.setText(_epoch_to_date_string(ref_et, self._current_time))
+            self._refresh_active_event()
+
+    def _refresh_active_event(self):
+        """Name the most recent event at or before the current time, so the
+        readout says which maneuver the spacecraft is on (e.g. just after a
+        burn). Highlights that event's row in the maneuver list too."""
+        current = None
+        for e in self._events:
+            if e.get("time", 0.0) <= self._current_time + 1e-9:
+                current = e
+        self.event_label.setText(f"▸ {current['label']}" if current else "")
+        active_id = id(current) if current else None
+        for e, row in getattr(self, "_event_rows", []):
+            row.setProperty("active", id(e) == active_id)
+            row.style().unpolish(row)
+            row.style().polish(row)
+
+        # Draw a maneuver's delta-v vector only while the scrubber is close (in
+        # time) to that burn -- the nearest one within _maneuver_window -- so the
+        # arrow flashes past each maneuver rather than hanging on the whole time.
+        maneuver, nearest_dt = None, None
+        for e in self._events:
+            if "vector" not in e:
+                continue
+            dt = abs(e.get("time", 0.0) - self._current_time)
+            if nearest_dt is None or dt < nearest_dt:
+                maneuver, nearest_dt = e, dt
+        if (maneuver is not None and self._maneuver_base_len > 0.0
+                and nearest_dt <= self._maneuver_window):
+            vec = maneuver["vector"]
+            length = self._maneuver_base_len * (_norm3(vec["deltaV"]) / self._maneuver_max_dv)
+            self.renderer.set_maneuver_vector(vec["position"], vec["deltaV"], length)
+        else:
+            self.renderer.clear_maneuver_vector()
+
+    def _seek_to_time(self, day: float):
+        """Move the scrubber to a specific timeline time (used by the maneuver
+        list rows)."""
+        timeline = self._current_scene.get("timeline") if self._current_scene else None
+        if not timeline:
+            return
+        span = (timeline["max"] - timeline["min"]) or 1.0
+        frac = min(1.0, max(0.0, (day - timeline["min"]) / span))
+        self.time_slider.setValue(int(round(frac * self.time_slider.maximum())))
 
     # -------------------------------------------------------------- Timing
     def _on_slider_moved(self, value: int):

@@ -245,6 +245,39 @@ QLabel#metReadout {{
     font-size: 13px;
     color: {INK_PRIMARY};
 }}
+QLabel#eventReadout {{
+    font-size: 11px;
+    font-weight: 650;
+    color: {ACCENT};
+}}
+
+QFrame#maneuverRow {{
+    background: {PANEL_RAISED};
+    border: 1px solid {HAIRLINE};
+    border-left: 3px solid {ACCENT_DIM};
+    border-radius: 6px;
+}}
+QFrame#maneuverRow:hover {{
+    border-color: {ACCENT};
+}}
+QFrame#maneuverRow[active="true"] {{
+    border-left: 3px solid {ACCENT};
+    background: {ACCENT_DIM};
+}}
+QLabel#maneuverName {{
+    font-size: 11.5px;
+    font-weight: 650;
+    color: {INK_PRIMARY};
+}}
+QLabel#maneuverTime {{
+    font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 10px;
+    color: {ACCENT};
+}}
+QLabel#maneuverNote {{
+    font-size: 10px;
+    color: {INK_SECONDARY};
+}}
 QLabel#dateReadout {{
     font-family: "Cascadia Code", "Consolas", monospace;
     font-size: 10.5px;
