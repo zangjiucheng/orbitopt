@@ -46,6 +46,7 @@ from PySide6.QtWidgets import (
 from pyvistaqt import QtInteractor
 from vtkmodules.vtkRenderingCore import vtkRenderWindow
 
+from orbitopt.missions import list_missions
 from orbitopt.viz.icon import app_icon
 from orbitopt.viz.pv_viewer import load_scene
 from orbitopt.viz.scene_renderer import SceneRenderer
@@ -147,29 +148,6 @@ class SceneLoader(QObject):
             self.failed.emit(self._name, str(exc))
             return
         self.finished.emit(self._name, scene)
-
-
-def _builtin_missions():
-    """(display name, zero-arg loader) pairs -- computed lazily, only when
-    first selected, and cached after that (see MissionControlWindow._scene_cache)."""
-
-    def load_solar_system():
-        from orbitopt.viz.solar_system import export_solar_system_data
-        return export_solar_system_data()
-
-    def load_artemis2():
-        from orbitopt.viz.mission_timeline import compute_and_export_mission
-        return compute_and_export_mission()
-
-    def load_geo_raising():
-        from orbitopt.viz.geo_raising import compute_and_export_geo_mission
-        return compute_and_export_geo_mission()
-
-    return [
-        ("Solar System", load_solar_system),
-        ("Artemis II — Free Return", load_artemis2),
-        ("GOES — GTO to GEO", load_geo_raising),
-    ]
 
 
 def _format_distance(value: float, unit: str) -> str:
@@ -844,9 +822,12 @@ class MissionControlWindow(QMainWindow):
 
     # ------------------------------------------------------------- Missions
     def _populate_builtin_missions(self):
-        for name, loader in _builtin_missions():
-            self._loaders[name] = loader
-            self.mission_list.addItem(QListWidgetItem(name))
+        # Sourced from orbitopt.missions -- the registry shared with the CLI,
+        # so a mission (built-in or a third-party plugin) added there shows up
+        # here with no separate list to keep in sync.
+        for mission in list_missions():
+            self._loaders[mission.title] = mission.load
+            self.mission_list.addItem(QListWidgetItem(mission.title))
         if self.mission_list.count():
             self.mission_list.setCurrentRow(0)
 

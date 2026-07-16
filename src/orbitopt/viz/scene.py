@@ -1,17 +1,28 @@
-"""Shared "scene" document schema for the general-purpose 3D viewer in
-viewer/ (React + three.js via @react-three/fiber). Every orbitopt.viz.*
-exporter (solar_system.py, mission_timeline.py, and any future one) builds
-its output through these helpers so the viewer's TypeScript SceneData type
-(viewer/src/types.ts) has exactly one shape to render, regardless of
-whether the scene is a static heliocentric snapshot or a scrubbable
-mission timeline -- the distinction is just whether ``timeline`` /
-``trail`` fields are present, not a different document format.
+"""Internal builder helpers over orbitopt's public scene file format
+(orbitopt.scene_format / orbitopt/schemas/scene-1.0.json). Every
+orbitopt.viz.* exporter (solar_system.py, mission_timeline.py,
+geo_raising.py, and any future one) builds its output through
+``body_entry``/``scene_document`` so every exporter produces the exact same
+document shape -- the distinction between a static heliocentric snapshot and
+a scrubbable mission timeline is just whether ``timeline``/``trail`` fields
+are present, not a different document format.
+
+This module is orbitopt's own *producer* convenience layer; it is not the
+format's definition. The format itself -- what makes a document valid, and
+what stays stable release to release -- lives in orbitopt.scene_format and
+the JSON Schema it validates against, independent of whatever helpers this
+module happens to offer. ``scene_document()`` stamps every document with the
+current ``schemaVersion`` and validates it before returning, so a bug that
+drifts one of orbitopt's own exporters out of sync with the published schema
+fails immediately here, not silently in some downstream reader.
 
 Colors are the same validated-categorical set used across every orbitopt
 visualization (see the project README's dataviz notes): run
 dataviz's scripts/validate_palette.js against any change here.
 """
 from __future__ import annotations
+
+from orbitopt.scene_format import SCHEMA_VERSION, validate_scene
 
 COLOR = {
     "sun": "#fff4d6",
@@ -70,6 +81,7 @@ def body_entry(
 
 def scene_document(scene_id, title, bodies, distance_unit="AU", subtitle=None, central_body_id=None, timeline=None):
     doc = {
+        "schemaVersion": SCHEMA_VERSION,
         "id": scene_id,
         "title": title,
         "distanceUnit": distance_unit,
@@ -81,4 +93,5 @@ def scene_document(scene_id, title, bodies, distance_unit="AU", subtitle=None, c
         doc["centralBodyId"] = central_body_id
     if timeline is not None:
         doc["timeline"] = timeline
+    validate_scene(doc)  # every orbitopt exporter stays honest against the published schema
     return doc

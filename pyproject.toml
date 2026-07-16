@@ -6,8 +6,46 @@ build-backend = "setuptools.build_meta"
 name = "orbitopt"
 version = "0.1.0"
 description = "Orbital trajectory optimization research framework built on pykep + tudatpy, with CUDA-accelerated candidate evaluation via CuPy."
+readme = "README.md"
 requires-python = ">=3.10,<3.11"
-dependencies = []
+license = { file = "LICENSE" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Physics",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+]
+# jsonschema is the only base dependency: it's what orbitopt.scene_format
+# (the scene file format's read/write/validate surface) needs, and nothing
+# else in the base package requires numpy/pyvista/pykep/etc. -- see the
+# [project.optional-dependencies] note below for why the compute stack
+# (pykep/pygmo/tudatpy) is deliberately absent from this file entirely.
+dependencies = [
+    "jsonschema>=4.26",
+]
+
+[project.urls]
+Repository = "https://github.com/zangjiucheng/orbitopt"
+
+[project.optional-dependencies]
+# The pip-installable subset: read/validate/view any SceneData scene file
+# (orbitopt.scene_format, orbitopt.viz.pv_viewer, Mission Control) -- no conda
+# needed. `pip install orbitopt[viewer]` gets exactly this.
+viewer = [
+    "numpy>=1.26",
+    "pyvista>=0.48",
+    "pyside6>=6.11",
+    "pyvistaqt>=0.12",
+]
+# Deliberately no "compute" extras group here: pykep, pygmo, and tudatpy
+# (needed by orbitopt.problems / orbitopt.verify / the mission-*computing*
+# viz exporters) ship only on conda-forge/tudat-team and do not exist on
+# PyPI at all -- listing them in optional-dependencies would make
+# `pip install orbitopt[compute]` fail outright, not degrade gracefully.
+# Building the compute stack means a conda environment; see environment.yml
+# and this README's Setup section.
 
 [project.scripts]
 orbitopt = "orbitopt.cli:main"
@@ -15,6 +53,12 @@ orbitopt-app = "orbitopt.viz.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+# The scene-format JSON Schema(s) must ship inside the wheel/sdist -- by
+# default setuptools only includes .py files, and orbitopt.scene_format
+# loads these at runtime via importlib.resources.
+orbitopt = ["schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

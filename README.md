@@ -24,6 +24,13 @@ batch candidate evaluation** via CuPy.
 
 ```
 src/orbitopt/
+  scene_format.py    the scene file format's entire read/write/validate surface --
+                      zero heavy deps (stdlib + jsonschema only); see "Packaging" below
+  schemas/
+    scene-1.0.json   the versioned JSON Schema that IS the scene file format
+  missions.py        named-mission registry (id -> loader) shared by the app + CLI,
+                      with third-party plugin discovery via entry points
+  cli.py             the `orbitopt` console command (app / view / export / missions)
   core/
     gpu.py          numpy/cupy array-module abstraction (the GPU on/off switch)
     problem.py       OrbitOptProblem base class: pygmo UDP + optional batch_fitness()
@@ -52,8 +59,9 @@ src/orbitopt/
                         refines a coarse TLI guess into a precise lunar-flyby distance
   viz/
     porkchop.py        GPU-batched porkchop grid + plotting
-    scene.py           shared SceneData document schema (bodies/orbits/trails/timeline)
-                        every viewer-facing exporter below builds through
+    scene.py           orbitopt's own exporter-side builder helpers (body_entry,
+                        scene_document) over the public scene_format/schema above --
+                        every exporter below builds through this, not the format directly
     solar_system.py    exports the whole solar system as a SceneData document
     mission_timeline.py exports the Artemis II free-return mission as a
                         scrubbable SceneData document
@@ -84,6 +92,76 @@ vectorizable, give it a real `batch_fitness()` and it gets GPU accel through
 compiled UDPs, as `problems/mga.py` does), it still works, just CPU-bound --
 GPU pre-screening of the search space (see `problems.mga.screen_departure_windows`)
 is the fallback acceleration point for that case.
+
+## Packaging: scene files, the viewer, and the compute stack
+
+pykep/pygmo/tudatpy ship only on conda-forge/tudat-team -- they don't exist on
+PyPI at all, so "just `pip install orbitopt` and compute a trajectory" is not
+achievable in a plain pip environment; that half genuinely needs a conda
+environment (see Setup below). But *reading, validating, and viewing* a scene
+someone already computed doesn't need any of that, and the package is split
+into three layers so that's true in practice, not just in principle:
+
+1. **Scene file format** (`orbitopt.scene_format`, `orbitopt/schemas/scene-1.0.json`)
+   -- the base package. Depends on nothing but the standard library +
+   `jsonschema`. `pip install orbitopt` gets you `read_scene`/`write_scene`/
+   `validate_scene` against a versioned, independent JSON Schema: a scene file
+   produced by any orbitopt release validates against the schema version it
+   declares (`schemaVersion`), regardless of what orbitopt's own code looks
+   like by the time you read it. Adding an optional field to the format is not
+   a breaking change (unknown fields are always allowed, GeoJSON-style);
+   removing/renaming/narrowing one is, and gets a new `scene-2.0.json` etc.
+   with its own `schemaVersion` so old and new documents both keep validating
+   against whichever schema they were written for.
+2. **Viewer** (`orbitopt[viewer]`: `orbitopt.viz.pv_viewer`, `.scene_renderer`,
+   `.app`) -- `pip install orbitopt[viewer]` adds numpy/pyvista/pyside6/
+   pyvistaqt, all real PyPI wheels, no conda needed. This is enough to load
+   any scene file (yours, a colleague's, one shipped by a different orbitopt
+   version) and open it in the single-scene viewer or Mission Control.
+3. **Compute** (`orbitopt.problems`, `orbitopt.verify`, `orbitopt.dynamics`,
+   and the mission-*computing* viz exporters -- `solar_system.py`,
+   `mission_timeline.py`, `geo_raising.py`, `porkchop.py`) -- needs pykep/
+   pygmo/tudatpy from conda-forge. There is deliberately no `orbitopt[compute]`
+   extras group in `pyproject.toml`: declaring conda-only packages as a pip
+   extras would make `pip install orbitopt[compute]` fail outright instead of
+   degrading gracefully. Build this layer via `environment.yml` (see Setup).
+
+### Named missions + third-party plugins
+
+`orbitopt.missions` is a small registry -- `(id, title, loader)` -- shared by
+Mission Control and the CLI, so both list the same missions without
+maintaining separate copies. Built-ins (`solar-system`, `artemis2`, `goes`)
+register themselves lazily: importing `orbitopt.missions` costs nothing beyond
+`scene_format`, and a loader's own heavy imports only run when its mission is
+actually selected/computed.
+
+A separate, independently pip-installed package can add its own mission with
+no orbitopt source changes, via a setuptools entry point in the
+`orbitopt.missions` group:
+
+```toml
+# your_package's pyproject.toml
+[project.entry-points."orbitopt.missions"]
+my-mission = "your_package.missions:my_mission"
+```
+
+```python
+# your_package/missions.py
+from orbitopt.missions import Mission
+
+def my_mission() -> Mission:
+    return Mission("my-mission", "My Mission", _load)
+
+def _load() -> dict:
+    ...  # build (or orbitopt.scene_format.read_scene a bundled file) and
+    ...  # return a SceneData dict
+    return scene
+```
+
+Once `your_package` is installed alongside orbitopt, `my-mission` shows up in
+`orbitopt missions`, `orbitopt view my-mission`, and Mission Control's sidebar
+-- discovered at runtime via `importlib.metadata.entry_points`, isolated so a
+broken plugin is a warning, not a crash for every other mission.
 
 ## Setup
 
@@ -360,3 +438,8 @@ Newton unknowns) is the natural next extension of `differential_correction.py`.
 - The free-return targeter is distance-only / fixed-time (see above); no
   B-plane aim-point control, no multi-point (outbound + return) targeting,
   no trajectory-correction-burn modelling.
+
+## License
+
+GPL-3.0-or-later -- see [`LICENSE`](LICENSE) for the full text. Copyright (C)
+2026 Jiucheng Zang.

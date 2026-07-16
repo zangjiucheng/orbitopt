@@ -25,11 +25,10 @@ class of bug for free.
 """
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import numpy as np
 import pyvista as pv
+
+from orbitopt.scene_format import read_scene
 
 BACKGROUND = "#06050c"
 INK_PRIMARY = "#f4f2ea"
@@ -41,9 +40,11 @@ _MARKER_WEIGHT_SIZE = 1.1
 
 
 def load_scene(path) -> dict:
-    """Read a SceneData JSON document (as produced by any orbitopt.viz.*
-    exporter) from disk."""
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    """Read + validate a SceneData JSON document (as produced by any
+    orbitopt.viz.* exporter) from disk. A thin, viewer-side name for
+    orbitopt.scene_format.read_scene -- kept so existing callers importing
+    load_scene from here don't need to change."""
+    return read_scene(path)
 
 
 def _position_at_time(body: dict, t: float) -> np.ndarray:

@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zangjiucheng/orbitopt/schemas/scene-1.0.json",
+  "title": "orbitopt SceneData v1.0",
+  "description": "A 3D scene (bodies, orbits, trails, an optional scrubbable timeline) consumed by orbitopt's viewer (orbitopt.viz.pv_viewer / Mission Control) and independent of orbitopt's compute code. This is a stable, versioned data contract: a scene file that validates against this schema today will still validate against it in any future orbitopt release. Unknown top-level or body-level fields are permitted (forward-compatible 'foreign members', GeoJSON-style) -- adding a new OPTIONAL field is not a breaking change and does not require a schemaVersion bump; removing, renaming, or narrowing an existing field's type does, and gets a new schema file (scene-2.0.json, etc.) with `schemaVersion` distinguishing which one a document was written against.",
+  "type": "object",
+  "required": ["schemaVersion", "id", "title", "distanceUnit", "bodies"],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0",
+      "description": "Which version of this schema the document was written against."
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable slug identifying this scene, e.g. 'solar-system', 'goes-gto-geo'."
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "subtitle": {
+      "type": "string",
+      "description": "Optional multi-line (\\n-separated) descriptive subtitle."
+    },
+    "distanceUnit": {
+      "type": "string",
+      "description": "Unit every position/orbit/trail coordinate and info-row distance is expressed in, e.g. 'AU' or 'km'. Not restricted to a fixed enum -- any unit a viewer/reader agrees on with the producer is valid."
+    },
+    "centralBodyId": {
+      "type": "string",
+      "description": "id of the body this scene's coordinates are centered on (e.g. 'sun', 'earth'), if any."
+    },
+    "bodies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/body" }
+    },
+    "timeline": { "$ref": "#/$defs/timeline" }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "vec3": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "body": {
+      "type": "object",
+      "required": ["id", "name", "color", "kind", "radiusDisplay"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "Hex RGB color, e.g. '#4c8eff'."
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Free-form category label for this body (orbitopt's own exporters use 'sun', 'planet', 'moon', 'spacecraft', 'reference'). Not a closed enum: the reference renderer treats it as display metadata only, so third-party producers/consumers may define their own kinds."
+        },
+        "radiusDisplay": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Marker size in the viewer's display units (screen-relative, not physical radius)."
+        },
+        "orbit": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/vec3" },
+          "minItems": 2,
+          "description": "A static closed orbit polyline (the renderer connects the last point back to the first)."
+        },
+        "orbitDashed": {
+          "type": "boolean",
+          "description": "Render the orbit polyline at reduced opacity (used for reference orbits, e.g. a GEO ring)."
+        },
+        "position": {
+          "$ref": "#/$defs/vec3",
+          "description": "A fixed (non-animated) position. Mutually exclusive in practice with `trail`, though both are optional and independent."
+        },
+        "trail": { "$ref": "#/$defs/trail" },
+        "info": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/infoRow" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "trail": {
+      "type": "object",
+      "required": ["times", "positions"],
+      "properties": {
+        "times": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "Strictly non-decreasing timeline coordinates, same unit as timeline.unitLabel."
+        },
+        "positions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/vec3" },
+          "description": "Position at each corresponding `times` entry -- same length as `times`."
+        }
+      },
+      "additionalProperties": true
+    },
+    "infoRow": {
+      "type": "object",
+      "required": ["label", "value"],
+      "properties": {
+        "label": { "type": "string" },
+        "value": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "timeline": {
+      "type": "object",
+      "required": ["unitLabel", "min", "max"],
+      "properties": {
+        "unitLabel": { "type": "string", "description": "e.g. 'days'." },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "referenceEpochEt": {
+          "type": "number",
+          "description": "SPICE ephemeris seconds (TDB, seconds past J2000) that timeline time 0 corresponds to, if the timeline maps to a real calendar date."
+        },
+        "events": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/event" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "event": {
+      "type": "object",
+      "required": ["label", "time"],
+      "properties": {
+        "label": { "type": "string" },
+        "time": { "type": "number" },
+        "note": { "type": "string" },
+        "vector": { "$ref": "#/$defs/maneuverVector" }
+      },
+      "additionalProperties": true
+    },
+    "maneuverVector": {
+      "type": "object",
+      "required": ["position", "deltaV"],
+      "properties": {
+        "position": { "$ref": "#/$defs/vec3" },
+        "deltaV": {
+          "$ref": "#/$defs/vec3",
+          "description": "Delta-v vector in m/s; only its direction is physically meaningful for display (viewers draw it at a display-chosen arrow length)."
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}
