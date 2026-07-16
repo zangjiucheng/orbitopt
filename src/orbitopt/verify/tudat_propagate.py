@@ -146,6 +146,7 @@ def propagate_multi_arc(
     central_body="Earth",
     perturbing_bodies=("Earth", "Moon", "Sun"),
     step_size=60.0,
+    earth_spherical_harmonic=None,
 ) -> PropagationResult:
     """Propagate a spacecraft through a sequence of ``arcs`` -- coasts and
     instantaneous impulsive burns -- meant for a multi-phase mission like
@@ -159,6 +160,15 @@ def propagate_multi_arc(
     PropagationResult concatenates every coast arc's history into one
     continuous timeline; epochs remain relative to ``initial_epoch`` (i.e.
     epoch 0.0 corresponds to ``initial_epoch``, not J2000).
+
+    ``earth_spherical_harmonic``: pass ``(degree, order)`` (e.g. ``(2, 2)`` for
+    J2 + the J22 tesseral triaxiality) to model the *central* body's gravity
+    with a spherical-harmonic field instead of a point mass -- the README's
+    named extension point, and the perturbation that drives GEO station-keeping
+    (J2 -> orbit-plane precession; J22 -> east-west libration toward the stable
+    longitudes). Third bodies in ``perturbing_bodies`` stay point masses (the
+    dominant one for GEO is the Sun+Moon N-S inclination drift). ``None`` keeps
+    the point-mass-only default (back-compatible with the free-return callers).
     """
     _ensure_spice_loaded()
 
@@ -168,10 +178,13 @@ def propagate_multi_arc(
     bodies = environment_setup.create_system_of_bodies(body_settings)
     bodies.create_empty_body("Spacecraft")
 
-    acceleration_settings_on_spacecraft = {
-        body: [propagation_setup.acceleration.point_mass_gravity()]
-        for body in perturbing_bodies
-    }
+    def _gravity_for(body):
+        if body == central_body and earth_spherical_harmonic is not None:
+            degree, order = earth_spherical_harmonic
+            return propagation_setup.acceleration.spherical_harmonic_gravity(int(degree), int(order))
+        return propagation_setup.acceleration.point_mass_gravity()
+
+    acceleration_settings_on_spacecraft = {body: [_gravity_for(body)] for body in perturbing_bodies}
     acceleration_settings = {"Spacecraft": acceleration_settings_on_spacecraft}
     acceleration_models = propagation_setup.create_acceleration_models(
         bodies, acceleration_settings, ["Spacecraft"], [central_body],
