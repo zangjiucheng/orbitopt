@@ -26,7 +26,7 @@ from orbitopt.problems.geo_raising import (
     MU_EARTH_KM3_S2,
     single_impulse_geo_insertion_ms,
 )
-from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, TEXTURE, body_entry, scene_document
+from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, ROTATION_PERIOD_HOURS, TEXTURE, body_entry, scene_document
 
 # gto_apogee_km only feeds single_impulse_geo_insertion_ms's closed form below --
 # GeoRaisingProblem always models the shared burn apogee at r_geo (see the
@@ -153,7 +153,8 @@ def compute_and_export_geo_mission(points_per_orbit=110, seed=1):
     bodies = [
         body_entry("earth", "Earth", COLOR["earth"], "planet",
                    radius_display=RADIUS_DISPLAY["earth"], position=[0.0, 0.0, 0.0],
-                   texture=TEXTURE["earth"], radius=EARTH_RADIUS_KM),
+                   texture=TEXTURE["earth"], radius=EARTH_RADIUS_KM,
+                   rotation_period_hours=ROTATION_PERIOD_HOURS["earth"]),
         body_entry("geo", "GEO ring", "#2fa97a", "reference", radius_display=2.4,
                    orbit=_geo_ring(r_geo).round(1).tolist(), orbit_dashed=True,
                    position=[float(r_geo), 0.0, 0.0],

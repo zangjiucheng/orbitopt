@@ -19,7 +19,7 @@ from orbitopt.bodies import mjd2000_from_date, mjd2000_to_ephemeris_seconds, moo
 from orbitopt.lambert.cpu import solve_lambert_single
 from orbitopt.verify.differential_correction import target_lunar_flyby
 from orbitopt.verify.tudat_propagate import body_position_at_absolute_epoch, propagate_multi_arc
-from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, TEXTURE, body_entry, scene_document
+from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, ROTATION_PERIOD_HOURS, TEXTURE, body_entry, scene_document
 
 EARTH_RADIUS_KM = 6378.0
 MOON_RADIUS_KM = 1737.4
@@ -134,12 +134,14 @@ def compute_and_export_mission(
         body_entry(
             "earth", "Earth", COLOR["earth"], "planet", radius_display=RADIUS_DISPLAY["earth"],
             position=[0.0, 0.0, 0.0], texture=TEXTURE["earth"], radius=EARTH_RADIUS_KM,
+            rotation_period_hours=ROTATION_PERIOD_HOURS["earth"],
         ),
         body_entry(
             "moon", "Moon", COLOR["moon"], "moon", radius_display=RADIUS_DISPLAY["moon"],
             trail={"times": days, "positions": moon_positions_km.round(1).tolist()},
             info=[{"label": "Distance from Earth", "value": f"{moon_distance_km[0]:,.0f} km (varies over mission)"}],
             texture=TEXTURE["moon"], radius=MOON_RADIUS_KM,
+            rotation_period_hours=ROTATION_PERIOD_HOURS["moon"],
         ),
         body_entry(
             "spacecraft", "Orion", COLOR["spacecraft"], "spacecraft", radius_display=RADIUS_DISPLAY["spacecraft"],

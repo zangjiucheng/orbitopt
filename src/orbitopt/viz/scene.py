@@ -67,6 +67,28 @@ TEXTURE = {
     "moon": "moon.jpg",
 }
 
+# Real sidereal rotation period (hours) -- one full 360-degree spin relative
+# to the stars, not the (longer, for a prograde rotator) solar day. Negative
+# = retrograde (spins backward relative to its orbit -- Venus and Uranus are
+# the two real ones here; Uranus is additionally tipped ~98 degrees on its
+# side, not modelled by this single scalar). The Sun's is its equatorial
+# rate (it doesn't rotate as a rigid body -- differential rotation makes any
+# single number a simplification, equatorial is the conventional one to
+# quote). The Moon's equals its own orbital period around Earth (tidal
+# locking -- same face always points at Earth), not an independent value.
+ROTATION_PERIOD_HOURS = {
+    "sun": 587.28,
+    "mercury": 1407.6,
+    "venus": -5832.6,
+    "earth": 23.9345,
+    "mars": 24.6229,
+    "jupiter": 9.9250,
+    "saturn": 10.656,
+    "uranus": -17.24,
+    "neptune": 16.11,
+    "moon": 655.728,
+}
+
 
 def body_entry(
     body_id,
@@ -81,6 +103,7 @@ def body_entry(
     info=None,
     texture=None,
     radius=None,
+    rotation_period_hours=None,
 ):
     """One entry in SceneData.bodies. ``orbit``/``position``/``trail`` are
     all optional and independent: a static planet has orbit+position, a
@@ -93,6 +116,10 @@ def body_entry(
     orbitopt.viz.scene_renderer) instead of the default point marker;
     passing only one of the two still renders as a point marker (see the
     schema's own description of these fields for why).
+
+    ``rotation_period_hours`` only has a visible effect together with
+    texture/radius (there's no marker-rendering equivalent of "spin") --
+    see ROTATION_PERIOD_HOURS and scene_renderer.SceneRenderer.advance_rotation.
     """
     entry = {"id": body_id, "name": name, "color": color, "kind": kind, "radiusDisplay": radius_display}
     if orbit is not None:
@@ -109,6 +136,8 @@ def body_entry(
         entry["texture"] = texture
     if radius is not None:
         entry["radius"] = radius
+    if rotation_period_hours is not None:
+        entry["rotationPeriodHours"] = rotation_period_hours
     return entry
 
 

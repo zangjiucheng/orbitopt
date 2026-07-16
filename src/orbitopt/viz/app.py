@@ -58,6 +58,17 @@ SPEED_MIN = 0.1
 SPEED_MAX = 1000.0
 SPEED_SLIDER_STEPS = 1000
 
+# Axial rotation (see SceneRenderer.advance_rotation) is driven by a
+# continuous wall-clock timer, independent of the mission time-warp control
+# -- it's ambient motion, not trajectory playback, so it keeps running even
+# while a mission is paused or has no timeline at all (e.g. the Solar
+# System view). 1 simulated hour per real second is a chosen, clearly-
+# labelled acceleration (real-time rotation would be imperceptibly slow
+# over a normal viewing session): Earth completes a visible spin in ~24s,
+# Jupiter (fastest real rotator, ~10h) in ~10s, Venus/the Moon (both
+# 500-6000h) stay visually still, same as they really would.
+ROTATION_SIM_HOURS_PER_REAL_SECOND = 1.0
+
 
 class DebouncedInteractor(QtInteractor):
     """QtInteractor renders synchronously on *every* resizeEvent (see
@@ -310,6 +321,15 @@ class MissionControlWindow(QMainWindow):
         self._timer.setInterval(33)
         self._timer.timeout.connect(self._on_tick)
         self._last_tick_ms = None
+
+        # Always-on (not gated by _playing/timeline presence, see
+        # ROTATION_SIM_HOURS_PER_REAL_SECOND) -- started once here, stopped
+        # only in closeEvent.
+        self._rotation_timer = QTimer(self)
+        self._rotation_timer.setInterval(33)
+        self._rotation_timer.timeout.connect(self._on_rotation_tick)
+        self._last_rotation_tick_ms = None
+        self._rotation_timer.start()
 
         self._build_ui()
         self._populate_builtin_missions()
@@ -1297,6 +1317,19 @@ class MissionControlWindow(QMainWindow):
         self._update_tracking()
         self._update_measure()
 
+    def _on_rotation_tick(self):
+        import time as _time
+
+        now_ms = _time.monotonic() * 1000.0
+        if self._last_rotation_tick_ms is None:
+            self._last_rotation_tick_ms = now_ms
+            return
+        dt = (now_ms - self._last_rotation_tick_ms) / 1000.0
+        self._last_rotation_tick_ms = now_ms
+
+        if self._current_scene is not None:
+            self.renderer.advance_rotation(dt * ROTATION_SIM_HOURS_PER_REAL_SECOND)
+
     def closeEvent(self, event):  # noqa: N802 -- Qt override signature
         """Tear down cleanly on quit (incl. Cmd+Q). The embedded VTK render
         window has to release its native OpenGL context *before* Qt destroys the
@@ -1306,6 +1339,7 @@ class MissionControlWindow(QMainWindow):
         any in-flight scene-loading thread so nothing fires mid-teardown."""
         self._set_playing(False)
         self._timer.stop()
+        self._rotation_timer.stop()
         self._spinner._timer.stop()  # the spinner has its own QTimer, independent of self._timer
         self.plotter._resize_settle_timer.stop()  # so it can't fire post-teardown
         thread = self._load_thread

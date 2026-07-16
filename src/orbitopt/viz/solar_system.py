@@ -21,7 +21,7 @@ import numpy as np
 import pykep as pk
 
 from orbitopt.bodies import planet
-from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, TEXTURE, body_entry, scene_document
+from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, ROTATION_PERIOD_HOURS, TEXTURE, body_entry, scene_document
 
 _JPL_LP_BODIES = (
     "mercury", "venus", "earth", "mars", "jupiter",
@@ -89,6 +89,7 @@ def export_solar_system_data(epoch_mjd2000=None, n_samples=240):
             "sun", "Sun", COLOR["sun"], "star",
             radius_display=RADIUS_DISPLAY["sun"], position=[0.0, 0.0, 0.0],
             texture=TEXTURE["sun"], radius=_au_radius("sun"),
+            rotation_period_hours=ROTATION_PERIOD_HOURS["sun"],
         )
     ]
 
@@ -117,6 +118,7 @@ def export_solar_system_data(epoch_mjd2000=None, n_samples=240):
                 {"label": "Inclination", "value": f"{np.degrees(i):.2f}°"},
             ],
             texture=TEXTURE.get(name), radius=_au_radius(name),
+            rotation_period_hours=ROTATION_PERIOD_HOURS.get(name),
         ))
 
     return scene_document(

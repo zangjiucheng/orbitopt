@@ -151,12 +151,16 @@ class SceneRenderer:
         self.scene: dict | None = None
         self._moving: dict[str, dict] = {}
         self._static_positions: dict[str, np.ndarray] = {}
+        self._rotating: list[dict] = []
+        self._rotation_elapsed_hours = 0.0
 
     def load(self, scene: dict) -> None:
         self.plotter.clear()
         self.scene = scene
         self._moving = {}
         self._static_positions = {}
+        self._rotating = []
+        self._rotation_elapsed_hours = 0.0
 
         for body in scene["bodies"]:
             color = body["color"]
@@ -177,6 +181,7 @@ class SceneRenderer:
                 point_poly = None
                 if sphere_actor is not None:
                     sphere_actor.position = tuple(float(c) for c in pos0)
+                    self._register_rotation(body, sphere_actor)
                 else:
                     point_poly = pv.PolyData(pos0.reshape(1, 3))
                     self.plotter.add_mesh(
@@ -208,6 +213,7 @@ class SceneRenderer:
                 sphere_actor = _sphere_actor(self.plotter, body, name=f"marker-{body['id']}")
                 if sphere_actor is not None:
                     sphere_actor.position = tuple(float(c) for c in pos)
+                    self._register_rotation(body, sphere_actor)
                 else:
                     marker = pv.PolyData(pos.reshape(1, 3))
                     self.plotter.add_mesh(
@@ -223,6 +229,37 @@ class SceneRenderer:
         self.set_time(timeline["min"] if timeline else 0.0)
         self.plotter.camera_position = "iso"
         self.plotter.reset_camera()
+
+    def _register_rotation(self, body: dict, sphere_actor) -> None:
+        period_hours = body.get("rotationPeriodHours")
+        if period_hours:  # excludes None and 0 (a real period is never exactly 0)
+            self._rotating.append({"actor": sphere_actor, "period_hours": float(period_hours)})
+
+    def advance_rotation(self, delta_hours: float) -> None:
+        """Spin every real-sphere body with a rotationPeriodHours by
+        ``delta_hours`` of simulated time, around its own local Z (polar)
+        axis -- the same axis pv.Sphere()'s default direction=(0,0,1) uses,
+        so this is a "spin in place" transform independent of the sphere's
+        position. Axial tilt isn't modelled (every body spins upright, not
+        at its real tilt) -- a reasonable simplification for what's meant
+        to convey relative rotation *rates*, not a fully accurate globe.
+
+        Driven by a continuous wall-clock timer (see app.py), not any
+        scene's own mission timeline -- axial rotation is a physically
+        separate process from trajectory progress, so bodies keep spinning
+        even while mission playback is paused. A negative period_hours
+        (Venus, Uranus -- real retrograde rotators) naturally spins the
+        wrong way through this same formula: Python's ``%`` follows the
+        sign of its (positive) divisor, so the angle still wraps cleanly
+        into [0, 360) either way.
+        """
+        if not self._rotating:
+            return
+        self._rotation_elapsed_hours += delta_hours
+        for entry in self._rotating:
+            angle_deg = (self._rotation_elapsed_hours / entry["period_hours"] * 360.0) % 360.0
+            entry["actor"].orientation = (0.0, 0.0, angle_deg)
+        self.plotter.render()
 
     def set_time(self, t: float) -> dict[str, float]:
         """Move every trailed body to its position at time ``t``, regrow
