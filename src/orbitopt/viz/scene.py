@@ -46,6 +46,27 @@ RADIUS_DISPLAY = {
     "moon": 3.4, "spacecraft": 3.0,
 }
 
+# Packaged texture filenames (see orbitopt/viz/assets/textures/, and
+# scene_renderer._load_texture which resolves these) -- 2K equirectangular
+# JPGs sourced from Solar System Scope (solarsystemscope.com/textures,
+# themselves based on NASA imagery/elevation data), CC BY 4.0. No entry for
+# pluto or spacecraft: pluto has no readily available free texture of this
+# kind, and spacecraft is a synthetic marker with no real imagery to show --
+# both fall back to the renderer's point-marker rendering, same as any body
+# with no `texture` at all.
+TEXTURE = {
+    "sun": "sun.jpg",
+    "mercury": "mercury.jpg",
+    "venus": "venus_surface.jpg",
+    "earth": "earth_daymap.jpg",
+    "mars": "mars.jpg",
+    "jupiter": "jupiter.jpg",
+    "saturn": "saturn.jpg",
+    "uranus": "uranus.jpg",
+    "neptune": "neptune.jpg",
+    "moon": "moon.jpg",
+}
+
 
 def body_entry(
     body_id,
@@ -58,12 +79,20 @@ def body_entry(
     position=None,
     trail=None,
     info=None,
+    texture=None,
+    radius=None,
 ):
     """One entry in SceneData.bodies. ``orbit``/``position``/``trail`` are
     all optional and independent: a static planet has orbit+position, a
     time-animated spacecraft has trail (and usually no fixed position), a
     fixed reference body like the Sun or Earth-as-frame-origin has just
     position=[0,0,0].
+
+    ``texture``/``radius`` are also optional and independent of the above --
+    they ask the renderer for a real textured 3D sphere (see
+    orbitopt.viz.scene_renderer) instead of the default point marker;
+    passing only one of the two still renders as a point marker (see the
+    schema's own description of these fields for why).
     """
     entry = {"id": body_id, "name": name, "color": color, "kind": kind, "radiusDisplay": radius_display}
     if orbit is not None:
@@ -76,6 +105,10 @@ def body_entry(
         entry["trail"] = trail
     if info is not None:
         entry["info"] = info
+    if texture is not None:
+        entry["texture"] = texture
+    if radius is not None:
+        entry["radius"] = radius
     return entry
 
 

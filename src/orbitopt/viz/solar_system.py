@@ -21,7 +21,7 @@ import numpy as np
 import pykep as pk
 
 from orbitopt.bodies import planet
-from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, body_entry, scene_document
+from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, TEXTURE, body_entry, scene_document
 
 _JPL_LP_BODIES = (
     "mercury", "venus", "earth", "mars", "jupiter",
@@ -29,6 +29,21 @@ _JPL_LP_BODIES = (
 )
 
 AU_M = pk.AU
+
+# Real sphere radius (AU) for the textured-sphere render path, proportional
+# to (not a physically exact conversion of) the existing RADIUS_DISPLAY
+# scale -- true physical radii here (Sun ~0.00465 AU, Earth ~0.0000426 AU)
+# would be sub-pixel at whole-solar-system zoom next to orbits spanning
+# 0.4-39 AU. This factor keeps the Sun a clearly visible ~0.08 AU sphere
+# while staying well inside Mercury's own 0.39 AU orbit (a past bug in an
+# earlier hand-rolled renderer had the Sun's marker swallow Mercury's orbit
+# entirely -- this is the same failure mode, avoided the same way: keep the
+# body small relative to its neighbors' orbital scale, not to-scale with it).
+_AU_RADIUS_SCALE = 0.008
+
+
+def _au_radius(body_id: str) -> float:
+    return RADIUS_DISPLAY.get(body_id, 4.0) * _AU_RADIUS_SCALE
 
 
 def _eccentric_anomaly(mean_anomaly, e, maxiter=50, tol=1e-12):
@@ -73,6 +88,7 @@ def export_solar_system_data(epoch_mjd2000=None, n_samples=240):
         body_entry(
             "sun", "Sun", COLOR["sun"], "star",
             radius_display=RADIUS_DISPLAY["sun"], position=[0.0, 0.0, 0.0],
+            texture=TEXTURE["sun"], radius=_au_radius("sun"),
         )
     ]
 
@@ -100,6 +116,7 @@ def export_solar_system_data(epoch_mjd2000=None, n_samples=240):
                 {"label": "Eccentricity", "value": f"{e:.3f}"},
                 {"label": "Inclination", "value": f"{np.degrees(i):.2f}°"},
             ],
+            texture=TEXTURE.get(name), radius=_au_radius(name),
         ))
 
     return scene_document(

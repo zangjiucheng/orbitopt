@@ -61,7 +61,17 @@
         "radiusDisplay": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "Marker size in the viewer's display units (screen-relative, not physical radius)."
+          "description": "Marker size in the viewer's display units (screen-relative, not physical radius) -- used for the point-marker fallback when `texture`/`radius` are absent, or a body's texture fails to load."
+        },
+        "texture": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Filename of a packaged texture image (see orbitopt.viz.scene_renderer's texture asset directory) to render this body as a real, textured 3D sphere instead of a flat point marker. Requires `radius` to also be set; a body with one but not the other falls back to the point marker."
+        },
+        "radius": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Physical sphere radius, in the document's `distanceUnit`, used together with `texture` to render a real 3D sphere. Not required to be true-to-scale (a producer may deliberately exaggerate it for visibility, as orbitopt's own solar-system exporter does) -- only that it's a real spatial length in scene coordinates, unlike `radiusDisplay`."
         },
         "orbit": {
           "type": "array",

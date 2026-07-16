@@ -58,10 +58,11 @@ orbitopt-app = "orbitopt.viz.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-# The scene-format JSON Schema(s) must ship inside the wheel/sdist -- by
-# default setuptools only includes .py files, and orbitopt.scene_format
-# loads these at runtime via importlib.resources.
-orbitopt = ["schemas/*.json"]
+# The scene-format JSON Schema(s) and the planet/moon/sun texture images
+# must ship inside the wheel/sdist -- by default setuptools only includes
+# .py files, and both orbitopt.scene_format and orbitopt.viz.scene_renderer
+# load these at runtime via importlib.resources.
+orbitopt = ["schemas/*.json", "viz/assets/textures/*.jpg", "viz/assets/textures/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

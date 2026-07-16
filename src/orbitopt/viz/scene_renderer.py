@@ -14,17 +14,70 @@ module's job stops at the 3D content and a small data API
 """
 from __future__ import annotations
 
+from functools import lru_cache
+from importlib import resources
+
 import numpy as np
 import pyvista as pv
 
 _MARKER_BASE_SIZE = 8.0
 _MARKER_WEIGHT_SIZE = 1.1
+_SPHERE_RESOLUTION = 48  # theta/phi mesh resolution -- smooth enough for a close-up, cheap at ~10 bodies
 
 MANEUVER_COLOR = "#ff5a3c"  # burn / delta-v arrows (distinct from amber trails)
 
 
 def marker_size(body: dict) -> float:
     return _MARKER_BASE_SIZE + _MARKER_WEIGHT_SIZE * body.get("radiusDisplay", 4.0)
+
+
+@lru_cache(maxsize=None)
+def _load_texture(filename: str) -> pv.Texture | None:
+    """Load and cache a packaged texture image by filename (see
+    orbitopt.viz.scene.TEXTURE) from orbitopt/viz/assets/textures/.
+
+    Returns None -- never raises -- if the asset is missing or fails to
+    decode, so a body whose `texture` field doesn't resolve falls back to
+    the point-marker rendering (see _sphere_actor) instead of taking down
+    the whole scene load over one bad/missing image.
+    """
+    try:
+        traversable = resources.files("orbitopt").joinpath("viz", "assets", "textures", filename)
+        with resources.as_file(traversable) as path:
+            return pv.Texture(str(path))
+    except Exception:  # noqa: BLE001 -- any load/decode failure just means "no texture"
+        return None
+
+
+def _sphere_actor(plotter, body: dict, name: str):
+    """Build and add a real, textured 3D sphere for `body`, centered at the
+    origin with the actor's own position transform left at (0,0,0) -- the
+    caller (SceneRenderer.load/set_time) moves it via `actor.position`,
+    which is a cheap rigid-body transform update, not a per-frame mesh
+    rebuild. Returns None (not a raised exception) if `body` has no
+    texture/radius or the texture fails to load, so the caller can fall
+    back to the point-marker rendering used for every other body kind.
+    """
+    texture_name = body.get("texture")
+    radius = body.get("radius")
+    if texture_name is None or radius is None:
+        return None
+    texture = _load_texture(texture_name)
+    if texture is None:
+        return None
+
+    sphere = pv.Sphere(
+        radius=float(radius), theta_resolution=_SPHERE_RESOLUTION, phi_resolution=_SPHERE_RESOLUTION,
+    ).texture_map_to_sphere()
+    # A star is its own light source -- lighting=False renders its raw
+    # texture colors with no shading falloff, so it reads as uniformly
+    # bright regardless of viewing angle instead of having an implausible
+    # "dark side" like a lit planet.
+    is_self_lit = body.get("kind") == "star"
+    return plotter.add_mesh(
+        sphere, texture=texture, name=name, pickable=False,
+        lighting=not is_self_lit, smooth_shading=True,
+    )
 
 
 def _validated_trail(body: dict) -> tuple[list, list]:
@@ -120,11 +173,16 @@ class SceneRenderer:
                 t0 = scene.get("timeline", {}).get("min", trail_times[0])
                 pos0 = position_at_time(body, t0)
 
-                point_poly = pv.PolyData(pos0.reshape(1, 3))
-                self.plotter.add_mesh(
-                    point_poly, color=color, point_size=marker_size(body),
-                    render_points_as_spheres=True, name=f"marker-{body['id']}",
-                )
+                sphere_actor = _sphere_actor(self.plotter, body, name=f"marker-{body['id']}")
+                point_poly = None
+                if sphere_actor is not None:
+                    sphere_actor.position = tuple(float(c) for c in pos0)
+                else:
+                    point_poly = pv.PolyData(pos0.reshape(1, 3))
+                    self.plotter.add_mesh(
+                        point_poly, color=color, point_size=marker_size(body),
+                        render_points_as_spheres=True, name=f"marker-{body['id']}",
+                    )
 
                 full_positions = np.asarray(trail_positions, dtype=float)
                 full_poly = pv.MultipleLines(full_positions)
@@ -139,6 +197,7 @@ class SceneRenderer:
                 self._moving[body["id"]] = {
                     "body": body,
                     "point_poly": point_poly,
+                    "sphere_actor": sphere_actor,
                     "past_actor_name": f"past-{body['id']}",
                     "full_positions": full_positions,
                     "color": color,
@@ -146,11 +205,15 @@ class SceneRenderer:
             else:
                 pos = np.asarray(body.get("position", [0.0, 0.0, 0.0]), dtype=float)
                 self._static_positions[body["id"]] = pos
-                marker = pv.PolyData(pos.reshape(1, 3))
-                self.plotter.add_mesh(
-                    marker, color=color, point_size=marker_size(body),
-                    render_points_as_spheres=True, name=f"marker-{body['id']}",
-                )
+                sphere_actor = _sphere_actor(self.plotter, body, name=f"marker-{body['id']}")
+                if sphere_actor is not None:
+                    sphere_actor.position = tuple(float(c) for c in pos)
+                else:
+                    marker = pv.PolyData(pos.reshape(1, 3))
+                    self.plotter.add_mesh(
+                        marker, color=color, point_size=marker_size(body),
+                        render_points_as_spheres=True, name=f"marker-{body['id']}",
+                    )
                 self.plotter.add_point_labels(
                     pos.reshape(1, 3), [body["name"]], font_size=12, text_color=color,
                     shape=None, always_visible=True, show_points=False,
@@ -171,7 +234,10 @@ class SceneRenderer:
         for body_id, entry in self._moving.items():
             body = entry["body"]
             pos = position_at_time(body, t)
-            entry["point_poly"].points = pos.reshape(1, 3)
+            if entry["sphere_actor"] is not None:
+                entry["sphere_actor"].position = tuple(float(c) for c in pos)
+            else:
+                entry["point_poly"].points = pos.reshape(1, 3)
 
             idx = trail_index_at_time(body, t)
             past_pts = np.vstack([entry["full_positions"][: max(idx, 1)], pos.reshape(1, 3)])

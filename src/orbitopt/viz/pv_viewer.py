@@ -14,29 +14,35 @@ or, to view something you just computed without writing it to disk first:
     from orbitopt.viz.solar_system import export_solar_system_data
     show_scene(export_solar_system_data())
 
-Marker sizes are rendered as VTK point sprites (`render_points_as_spheres`),
-which VTK draws at a constant *screen-pixel* size regardless of camera
-distance -- this is what a hand-rolled "constant apparent size" scheme in
-a from-scratch 3D renderer has to reimplement (and, in an earlier
-Three.js-based iteration of this viewer, got wrong: the Sun's marker
-stayed large enough in world-space to swallow Mercury's entire orbit even
-fully zoomed in). Using VTK's own point rendering sidesteps that whole
+A body with `texture`+`radius` set (see orbitopt.viz.scene.TEXTURE and
+scene_renderer._sphere_actor) renders as a real, textured 3D sphere instead
+of a marker. Everything else renders as a VTK point sprite
+(`render_points_as_spheres`), which VTK draws at a constant *screen-pixel*
+size regardless of camera distance -- this is what a hand-rolled "constant
+apparent size" scheme in a from-scratch 3D renderer has to reimplement (and,
+in an earlier Three.js-based iteration of this viewer, got wrong: the Sun's
+marker stayed large enough in world-space to swallow Mercury's entire orbit
+even fully zoomed in). Using VTK's own point rendering sidesteps that whole
 class of bug for free.
+
+The 3D content itself (orbits, trails, markers/spheres, set_time) is
+SceneRenderer's job, not reimplemented here -- see scene_renderer.py's own
+docstring. This module's job is the VTK 2D-overlay chrome around that
+content (title/subtitle text, legend, timeline slider, per-body distance
+readout) that a script-based viewer wants and the Qt-based Mission Control
+app (app.py) builds with real Qt widgets instead.
 """
 from __future__ import annotations
 
-import numpy as np
 import pyvista as pv
 
 from orbitopt.scene_format import read_scene
+from orbitopt.viz.scene_renderer import SceneRenderer
 
 BACKGROUND = "#06050c"
 INK_PRIMARY = "#f4f2ea"
 INK_SECONDARY = "#a9a6bb"
 ACCENT = "#e8a23e"
-
-_MARKER_BASE_SIZE = 8.0
-_MARKER_WEIGHT_SIZE = 1.1
 
 
 def load_scene(path) -> dict:
@@ -45,33 +51,6 @@ def load_scene(path) -> dict:
     orbitopt.scene_format.read_scene -- kept so existing callers importing
     load_scene from here don't need to change."""
     return read_scene(path)
-
-
-def _position_at_time(body: dict, t: float) -> np.ndarray:
-    if "trail" not in body:
-        return np.asarray(body.get("position", [0.0, 0.0, 0.0]), dtype=float)
-    times = body["trail"]["times"]
-    positions = body["trail"]["positions"]
-    if t <= times[0]:
-        return np.asarray(positions[0], dtype=float)
-    if t >= times[-1]:
-        return np.asarray(positions[-1], dtype=float)
-    idx = int(np.searchsorted(times, t))
-    idx = max(1, min(idx, len(times) - 1))
-    t0, t1 = times[idx - 1], times[idx]
-    frac = (t - t0) / (t1 - t0) if t1 > t0 else 0.0
-    p0 = np.asarray(positions[idx - 1], dtype=float)
-    p1 = np.asarray(positions[idx], dtype=float)
-    return p0 + frac * (p1 - p0)
-
-
-def _trail_index_at_time(body: dict, t: float) -> int:
-    times = body["trail"]["times"]
-    return int(np.searchsorted(times, t))
-
-
-def _marker_size(body: dict) -> float:
-    return _MARKER_BASE_SIZE + _MARKER_WEIGHT_SIZE * body.get("radiusDisplay", 4.0)
 
 
 def show_scene(scene: dict, window_size=(1400, 900), off_screen: bool = False):
@@ -95,59 +74,15 @@ def show_scene(scene: dict, window_size=(1400, 900), off_screen: bool = False):
             position=(20, window_size[1] - 62 - 14 * (n_subtitle_lines - 1)),
         )
 
-    legend_entries = []
-    moving_bodies = {}  # id -> dict of live handles updated by the timeline callback
+    # The 3D content (orbits, trails, textured-sphere or point-marker
+    # bodies) is SceneRenderer's job -- same renderer the Qt app uses, see
+    # this module's docstring -- this function only adds the VTK 2D-overlay
+    # chrome (title, legend, slider, info text) around it.
+    renderer = SceneRenderer(plotter)
+    renderer.load(scene)
 
-    for body in scene["bodies"]:
-        color = body["color"]
-        legend_entries.append([body["name"], color])
-
-        if "orbit" in body:
-            pts = np.asarray(body["orbit"], dtype=float)
-            pts = np.vstack([pts, pts[0]])
-            orbit_mesh = pv.MultipleLines(pts)
-            opacity = 0.32 if body.get("orbitDashed") else 0.5
-            plotter.add_mesh(orbit_mesh, color=color, opacity=opacity, line_width=1, pickable=False)
-
-        if "trail" in body:
-            t0 = scene.get("timeline", {}).get("min", body["trail"]["times"][0])
-            pos0 = _position_at_time(body, t0)
-
-            point_poly = pv.PolyData(pos0.reshape(1, 3))
-            point_poly.point_data["name"] = [body["id"]]
-            plotter.add_mesh(
-                point_poly, color=color, point_size=_marker_size(body),
-                render_points_as_spheres=True, name=f"marker-{body['id']}",
-            )
-
-            full_positions = np.asarray(body["trail"]["positions"], dtype=float)
-
-            # Full path, always visible at low opacity, so the shape of the
-            # whole trajectory reads at a glance -- without this, a body at
-            # its start-of-timeline position (little or no "traveled so
-            # far" path yet) looks like an isolated dot with no indication
-            # of where it's headed.
-            full_poly = pv.MultipleLines(full_positions)
-            plotter.add_mesh(full_poly, color=color, line_width=1.1, opacity=0.3, pickable=False)
-
-            past_poly = pv.MultipleLines(np.vstack([full_positions[0], pos0]))
-            plotter.add_mesh(past_poly, color=color, line_width=2.6, opacity=0.95, name=f"past-{body['id']}", pickable=False)
-
-            moving_bodies[body["id"]] = {
-                "body": body,
-                "point_poly": point_poly,
-                "past_actor_name": f"past-{body['id']}",
-                "full_positions": full_positions,
-                "color": color,
-            }
-        else:
-            pos = np.asarray(body.get("position", [0.0, 0.0, 0.0]), dtype=float)
-            marker = pv.PolyData(pos.reshape(1, 3))
-            plotter.add_mesh(marker, color=color, point_size=_marker_size(body), render_points_as_spheres=True, name=f"marker-{body['id']}")
-            plotter.add_point_labels(
-                pos.reshape(1, 3), [body["name"]], font_size=12, text_color=color,
-                shape=None, always_visible=True, show_points=False,
-            )
+    legend_entries = [[body["name"], body["color"]] for body in scene["bodies"]]
+    moving_body_ids = [body["id"] for body in scene["bodies"] if "trail" in body]
 
     if legend_entries:
         plotter.add_legend(
@@ -156,34 +91,21 @@ def show_scene(scene: dict, window_size=(1400, 900), off_screen: bool = False):
         )
 
     info_text_actor = plotter.add_text("", font_size=9, color=INK_PRIMARY, position="upper_right")
+    body_names = {body["id"]: body["name"] for body in scene["bodies"]}
 
-    def _update_info(t):
+    def _update_info(t, distances):
         lines = []
         timeline = scene.get("timeline")
         if timeline:
             lines.append(f"T+{t:.2f} {timeline['unitLabel']}")
-        for entry in moving_bodies.values():
-            body = entry["body"]
-            pos = _position_at_time(body, t)
-            dist = float(np.linalg.norm(pos))
-            unit = scene["distanceUnit"]
-            lines.append(f"{body['name']}: {dist:,.1f} {unit}")
+        unit = scene["distanceUnit"]
+        for body_id in moving_body_ids:
+            lines.append(f"{body_names[body_id]}: {distances[body_id]:,.1f} {unit}")
         info_text_actor.set_text("upper_right", "\n".join(lines))
 
     def _on_time_change(t):
-        for entry in moving_bodies.values():
-            body = entry["body"]
-            pos = _position_at_time(body, t)
-            entry["point_poly"].points = pos.reshape(1, 3)
-
-            idx = _trail_index_at_time(body, t)
-            past_pts = np.vstack([entry["full_positions"][: max(idx, 1)], pos.reshape(1, 3)])
-            new_past_poly = pv.MultipleLines(past_pts) if len(past_pts) > 1 else pv.MultipleLines(np.vstack([pos, pos]))
-            plotter.add_mesh(
-                new_past_poly, color=entry["color"], line_width=2.4, opacity=0.9,
-                name=entry["past_actor_name"], pickable=False,
-            )
-        _update_info(t)
+        distances = renderer.set_time(t)  # moves every trailed body + regrows its trail
+        _update_info(t, distances)
         plotter.render()
 
     timeline = scene.get("timeline")

@@ -26,7 +26,7 @@ from orbitopt.problems.geo_raising import (
     MU_EARTH_KM3_S2,
     single_impulse_geo_insertion_ms,
 )
-from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, body_entry, scene_document
+from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, TEXTURE, body_entry, scene_document
 
 # gto_apogee_km only feeds single_impulse_geo_insertion_ms's closed form below --
 # GeoRaisingProblem always models the shared burn apogee at r_geo (see the
@@ -35,6 +35,7 @@ from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, body_entry, scene_document
 GOES_GTO = dict(gto_perigee_km=8108.0, gto_apogee_km=35286.0, gto_inclination_deg=10.6)
 GEO_RAISING_KWARGS = {k: v for k, v in GOES_GTO.items() if k != "gto_apogee_km"}
 APOGEE_DWELL_S = 41 * 60
+EARTH_RADIUS_KM = 6378.0
 
 
 def _kepler_arc(rp_km, ra_km, incl_rad, e_start, e_end, n_pts, mu, t0_s):
@@ -151,7 +152,8 @@ def compute_and_export_geo_mission(points_per_orbit=110, seed=1):
 
     bodies = [
         body_entry("earth", "Earth", COLOR["earth"], "planet",
-                   radius_display=RADIUS_DISPLAY["earth"], position=[0.0, 0.0, 0.0]),
+                   radius_display=RADIUS_DISPLAY["earth"], position=[0.0, 0.0, 0.0],
+                   texture=TEXTURE["earth"], radius=EARTH_RADIUS_KM),
         body_entry("geo", "GEO ring", "#2fa97a", "reference", radius_display=2.4,
                    orbit=_geo_ring(r_geo).round(1).tolist(), orbit_dashed=True,
                    position=[float(r_geo), 0.0, 0.0],
