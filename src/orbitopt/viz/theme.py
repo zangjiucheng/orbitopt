@@ -250,6 +250,12 @@ QLabel#eventReadout {{
     font-weight: 650;
     color: {ACCENT};
 }}
+QLabel#speedValue {{
+    font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+    font-weight: 650;
+    color: {ACCENT};
+}}
 
 QFrame#maneuverRow {{
     background: {PANEL_RAISED};

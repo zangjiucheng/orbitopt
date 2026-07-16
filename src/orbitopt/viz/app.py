@@ -14,6 +14,7 @@ Run: orbitopt  (or orbitopt-app / python -m orbitopt); main() is the entry point
 """
 from __future__ import annotations
 
+import math
 import os
 import sys
 
@@ -23,7 +24,6 @@ from PySide6.QtCore import QObject, QRectF, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QKeySequence, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QApplication,
-    QButtonGroup,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -51,7 +51,11 @@ from orbitopt.viz.pv_viewer import load_scene
 from orbitopt.viz.scene_renderer import SceneRenderer
 from orbitopt.viz.theme import ACCENT, BG_VOID, INK_SECONDARY, STYLESHEET
 
-SPEED_PRESETS = [0.15, 0.5, 1.0, 5.0, 20.0, 100.0]
+# Time-warp speed is a continuous log-scale control (0.1x .. 1000x), not fixed
+# presets, so it can be fine-tuned to any rate.
+SPEED_MIN = 0.1
+SPEED_MAX = 1000.0
+SPEED_SLIDER_STEPS = 1000
 
 
 class DebouncedInteractor(QtInteractor):
@@ -309,7 +313,7 @@ class MissionControlWindow(QMainWindow):
         self._loaders: dict[str, callable] = {}
         self._current_scene: dict | None = None
         self._current_time = 0.0
-        self._speed = SPEED_PRESETS[2]
+        self._speed = 1.0
         self._playing = False
 
         self._loading = False
@@ -553,22 +557,23 @@ class MissionControlWindow(QMainWindow):
         self.play_btn.clicked.connect(self._toggle_play)
         layout.addWidget(self.play_btn)
 
-        speed_row = QHBoxLayout()
-        speed_row.setSpacing(4)
-        self.speed_group = QButtonGroup(self)
-        self.speed_group.setExclusive(True)
-        self._speed_buttons = {}
-        for i, s in enumerate(SPEED_PRESETS):
-            btn = QPushButton(f"{s:g}x")
-            btn.setCheckable(True)
-            btn.setChecked(s == self._speed)
-            btn.clicked.connect(lambda _checked, s=s: self._set_speed(s))
-            self.speed_group.addButton(btn)
-            self._speed_buttons[s] = btn
-            speed_row.addWidget(btn)
         speed_col = QVBoxLayout()
-        speed_col.addWidget(QLabel("TIME WARP"))
-        speed_col.addLayout(speed_row)
+        speed_col.setSpacing(2)
+        speed_header = QHBoxLayout()
+        speed_header.addWidget(QLabel("TIME WARP"))
+        speed_header.addStretch(1)
+        self.speed_value_label = QLabel(self._format_speed(self._speed))
+        self.speed_value_label.setObjectName("speedValue")
+        speed_header.addWidget(self.speed_value_label)
+        speed_col.addLayout(speed_header)
+
+        self.speed_slider = QSlider(Qt.Horizontal)
+        self.speed_slider.setObjectName("speedSlider")
+        self.speed_slider.setRange(0, SPEED_SLIDER_STEPS)
+        self.speed_slider.setValue(self._slider_from_speed(self._speed))
+        self.speed_slider.setFixedWidth(150)
+        self.speed_slider.valueChanged.connect(self._on_speed_slider)
+        speed_col.addWidget(self.speed_slider)
         layout.addLayout(speed_col)
 
         slider_col = QVBoxLayout()
@@ -1199,20 +1204,39 @@ class MissionControlWindow(QMainWindow):
         self._update_tracking()
         self._update_measure()
 
+    @staticmethod
+    def _format_speed(speed: float) -> str:
+        if speed >= 10:
+            return f"{speed:.0f}×"
+        if speed >= 1:
+            return f"{speed:.1f}×"
+        return f"{speed:.2f}×"
+
+    def _speed_from_slider(self, value: int) -> float:
+        frac = value / SPEED_SLIDER_STEPS
+        return SPEED_MIN * (SPEED_MAX / SPEED_MIN) ** frac
+
+    def _slider_from_speed(self, speed: float) -> int:
+        speed = min(SPEED_MAX, max(SPEED_MIN, speed))
+        frac = math.log(speed / SPEED_MIN) / math.log(SPEED_MAX / SPEED_MIN)
+        return int(round(frac * SPEED_SLIDER_STEPS))
+
+    def _on_speed_slider(self, value: int):
+        self._speed = self._speed_from_slider(value)
+        self.speed_value_label.setText(self._format_speed(self._speed))
+
     def _set_speed(self, speed: float):
-        self._speed = speed
-        btn = self._speed_buttons.get(speed)
-        if btn is not None and not btn.isChecked():
-            btn.setChecked(True)
+        self._speed = min(SPEED_MAX, max(SPEED_MIN, float(speed)))
+        if hasattr(self, "speed_slider"):
+            self.speed_slider.blockSignals(True)
+            self.speed_slider.setValue(self._slider_from_speed(self._speed))
+            self.speed_slider.blockSignals(False)
+            self.speed_value_label.setText(self._format_speed(self._speed))
 
     def _cycle_speed(self, direction: int):
-        """Step to the next/previous time-warp preset (the ] / [ shortcuts)."""
-        try:
-            idx = SPEED_PRESETS.index(self._speed)
-        except ValueError:
-            idx = SPEED_PRESETS.index(1.0)
-        idx = max(0, min(len(SPEED_PRESETS) - 1, idx + direction))
-        self._set_speed(SPEED_PRESETS[idx])
+        """Fine multiplicative nudge of the time-warp rate (the [ / ] shortcuts);
+        a continuous log step, not a jump between fixed presets."""
+        self._set_speed(self._speed * (1.25 ** direction))
 
     def _step_time(self, direction: int):
         """Nudge the scrubber one step (2% of the span) forward/back."""
