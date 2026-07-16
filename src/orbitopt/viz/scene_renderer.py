@@ -159,3 +159,37 @@ class SceneRenderer:
         pos = self.body_world_position(body_id, t)
         self.plotter.camera.focal_point = tuple(pos)
         self.plotter.render()
+
+    def measure_line(self, id_a: str, id_b: str, t: float, color: str = "#5ec8ff") -> float:
+        """Draw (or redraw) a straight line between two bodies at time ``t`` and
+        return the distance between them. Reuses a single named actor so it
+        follows the bodies as the timeline advances, the same update-in-place
+        trick set_time uses for the trails."""
+        a = self.body_world_position(id_a, t)
+        b = self.body_world_position(id_b, t)
+        self.plotter.add_mesh(
+            pv.Line(a, b), color=color, line_width=2.4,
+            name="measure-line", pickable=False,
+        )
+        self.plotter.render()
+        return float(np.linalg.norm(a - b))
+
+    def clear_measure_line(self) -> None:
+        self.plotter.remove_actor("measure-line", render=True)
+
+    def track_body(self, body_id: str, t: float) -> None:
+        """Center ``body_id`` by *translating* the camera to it, preserving the
+        current view offset (direction + distance) -- so the body holds its
+        apparent size and framing rather than the camera just swiveling to face
+        it. Reading the offset live each call means the user can still orbit and
+        zoom while tracking, KSP-tracking-station style. Called once to focus a
+        selection and every timeline tick when tracking is on.
+        """
+        pos = self.body_world_position(body_id, t)
+        cam = self.plotter.camera
+        focal = np.asarray(cam.focal_point, dtype=float)
+        position = np.asarray(cam.position, dtype=float)
+        offset = position - focal
+        cam.focal_point = tuple(pos)
+        cam.position = tuple(pos + offset)
+        self.plotter.render()

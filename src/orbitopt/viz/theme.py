@@ -14,6 +14,8 @@ INK_SECONDARY = "#a9a6bb"
 INK_MUTED = "#6f6c85"
 ACCENT = "#e8a23e"
 ACCENT_DIM = "#4a3a1c"
+MEASURE = "#5ec8ff"      # distance-measurement line + readout (cool, to contrast the amber)
+MEASURE_DIM = "#173040"
 
 STYLESHEET = f"""
 * {{
@@ -120,6 +122,63 @@ QPushButton#playButton {{
     padding: 0;
 }}
 
+QPushButton#panelCollapse {{
+    min-width: 20px;
+    max-width: 20px;
+    min-height: 20px;
+    max-height: 20px;
+    padding: 0;
+    font-size: 11px;
+    background: transparent;
+    border: none;
+    color: {INK_MUTED};
+}}
+QPushButton#panelCollapse:hover {{
+    color: {ACCENT};
+    background: {PANEL_RAISED};
+}}
+
+QWidget#railBar {{
+    background: {PANEL};
+}}
+QPushButton#railButton {{
+    min-width: 22px;
+    max-width: 22px;
+    min-height: 30px;
+    padding: 2px 0;
+    font-size: 12px;
+    color: {INK_SECONDARY};
+}}
+QPushButton#railButton:hover {{
+    color: {ACCENT};
+    border-color: {ACCENT};
+}}
+
+QSplitter#mainSplitter::handle {{
+    background: {HAIRLINE};
+}}
+QSplitter#mainSplitter::handle:hover {{
+    background: {ACCENT};
+}}
+
+QLabel#viewLabel {{
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: {INK_MUTED};
+    padding-right: 2px;
+}}
+QPushButton#viewButton {{
+    padding: 4px 9px;
+    font-size: 10.5px;
+    min-height: 0;
+}}
+QFrame#viewSep {{
+    color: {HAIRLINE};
+    max-width: 1px;
+    margin: 3px 2px;
+}}
+
 QSlider::groove:horizontal {{
     height: 4px;
     background: {HAIRLINE};
@@ -142,6 +201,30 @@ QFrame#bodyCard {{
     background: {PANEL_RAISED};
     border-radius: 8px;
     border: 1px solid {HAIRLINE};
+}}
+QFrame#bodyCard[selected="true"] {{
+    border: 1px solid {ACCENT};
+    background: {ACCENT_DIM};
+}}
+QFrame#bodyCard[measure="true"] {{
+    border: 1px solid {MEASURE};
+    background: {MEASURE_DIM};
+}}
+
+QFrame#measureCard {{
+    background: {MEASURE_DIM};
+    border: 1px solid {MEASURE};
+    border-radius: 8px;
+}}
+QLabel#measurePair {{
+    font-size: 11px;
+    font-weight: 650;
+    color: {MEASURE};
+}}
+QLabel#measureDist {{
+    font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 13px;
+    color: {INK_PRIMARY};
 }}
 QLabel#bodyName {{
     font-size: 12.5px;

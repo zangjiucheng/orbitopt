@@ -20,7 +20,7 @@ import sys
 os.environ.setdefault("QT_API", "pyside6")
 
 from PySide6.QtCore import QObject, QRectF, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QCursor, QPainter, QPen
+from PySide6.QtGui import QColor, QCursor, QKeySequence, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSlider,
+    QSplitter,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -230,6 +231,10 @@ class MissionControlWindow(QMainWindow):
         self._load_thread: QThread | None = None
         self._load_worker: SceneLoader | None = None
 
+        self._selected_body_id: str | None = None
+        self._measure_body_id: str | None = None
+        self._tracking = False
+
         self._timer = QTimer(self)
         self._timer.setInterval(33)
         self._timer.timeout.connect(self._on_tick)
@@ -262,6 +267,10 @@ class MissionControlWindow(QMainWindow):
         )
 
     # ------------------------------------------------------------------ UI
+    _RAIL_W = 30          # width of a collapsed panel's rail strip
+    _LEFT_MIN = 170       # min drag width of the missions panel
+    _RIGHT_MIN = 200      # min drag width of the body-info panel
+
     def _build_ui(self):
         central = QWidget()
         central.setObjectName("centralWidget")
@@ -270,7 +279,23 @@ class MissionControlWindow(QMainWindow):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        root.addWidget(self._build_sidebar())
+        # A splitter (not a fixed HBox) makes both side panels drag-resizable.
+        # Each side is a QStackedWidget that flips between the full panel and a
+        # thin rail carrying an expand button -- so the collapse/expand control
+        # lives on the panel itself, and a collapsed panel still leaves a
+        # handle to bring it back.
+        self.splitter = QSplitter(Qt.Horizontal)
+        self.splitter.setObjectName("mainSplitter")
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.setHandleWidth(4)
+
+        self.sidebar = self._build_sidebar()
+        self.left_rail = self._build_rail("»", self._toggle_sidebar, "Show missions")
+        self.left_stack = QStackedWidget()
+        self.left_stack.addWidget(self.sidebar)
+        self.left_stack.addWidget(self.left_rail)
+        self.left_stack.setMinimumWidth(self._LEFT_MIN)
+        self.splitter.addWidget(self.left_stack)
 
         center = QWidget()
         center_layout = QVBoxLayout(center)
@@ -296,28 +321,66 @@ class MissionControlWindow(QMainWindow):
 
         self.timeline_bar = self._build_timeline_bar()
         center_layout.addWidget(self.timeline_bar)
-        root.addWidget(center, stretch=1)
+        self.splitter.addWidget(center)
 
-        root.addWidget(self._build_info_panel())
+        self.info_panel = self._build_info_panel()
+        self.right_rail = self._build_rail("«", self._toggle_info_panel, "Show body info")
+        self.right_stack = QStackedWidget()
+        self.right_stack.addWidget(self.info_panel)
+        self.right_stack.addWidget(self.right_rail)
+        self.right_stack.setMinimumWidth(self._RIGHT_MIN)
+        self.splitter.addWidget(self.right_stack)
 
+        # Only the center grows when the window resizes; the panels keep width.
+        self.splitter.setStretchFactor(0, 0)
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setStretchFactor(2, 0)
+        self.splitter.setSizes([220, 900, 260])
+        self._left_w = 220
+        self._right_w = 260
+
+        root.addWidget(self.splitter)
         self._build_menu()
         self.statusBar().showMessage("Ready")
+
+    def _build_rail(self, glyph: str, handler, tip: str) -> QWidget:
+        """A thin vertical strip shown when a panel is collapsed: just an expand
+        button, so the panel can be summoned back from its own edge."""
+        rail = QWidget()
+        rail.setObjectName("railBar")
+        layout = QVBoxLayout(rail)
+        layout.setContentsMargins(3, 9, 3, 9)
+        layout.setSpacing(0)
+        btn = QPushButton(glyph)
+        btn.setObjectName("railButton")
+        btn.setToolTip(tip)
+        btn.clicked.connect(handler)
+        layout.addWidget(btn, alignment=Qt.AlignHCenter | Qt.AlignTop)
+        layout.addStretch(1)
+        return rail
 
     def _build_sidebar(self) -> QWidget:
         sidebar = QWidget()
         sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(220)
         layout = QVBoxLayout(sidebar)
-        layout.setContentsMargins(0, 10, 0, 10)
+        layout.setContentsMargins(8, 10, 8, 10)
         layout.setSpacing(0)
 
         title = QLabel("ORBITOPT MISSION CONTROL")
         title.setObjectName("appTitle")
         layout.addWidget(title)
 
+        header_row = QHBoxLayout()
         header = QLabel("MISSIONS")
         header.setObjectName("sectionHeader")
-        layout.addWidget(header)
+        self.sidebar_collapse = QPushButton("❮")
+        self.sidebar_collapse.setObjectName("panelCollapse")
+        self.sidebar_collapse.setToolTip("Collapse missions panel")
+        self.sidebar_collapse.clicked.connect(self._toggle_sidebar)
+        header_row.addWidget(header)
+        header_row.addStretch(1)
+        header_row.addWidget(self.sidebar_collapse)
+        layout.addLayout(header_row)
 
         self.mission_list = QListWidget()
         self.mission_list.currentRowChanged.connect(self._on_mission_selected)
@@ -326,24 +389,67 @@ class MissionControlWindow(QMainWindow):
         self._open_file_btn = QPushButton("Open scene file…")
         self._open_file_btn.clicked.connect(self._open_file)
         layout.addWidget(self._open_file_btn)
-        layout.setContentsMargins(8, 10, 8, 10)
 
         return sidebar
 
     def _build_title_bar(self) -> QWidget:
         bar = QWidget()
         bar.setObjectName("titleBar")
-        layout = QVBoxLayout(bar)
-        layout.setContentsMargins(16, 10, 16, 10)
-        layout.setSpacing(2)
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(16, 8, 12, 8)
+        layout.setSpacing(10)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(2)
         self.scene_title_label = QLabel("Select a mission")
         self.scene_title_label.setObjectName("sceneTitle")
         self.scene_subtitle_label = QLabel("")
         self.scene_subtitle_label.setObjectName("sceneSubtitle")
         self.scene_subtitle_label.setWordWrap(True)
-        layout.addWidget(self.scene_title_label)
-        layout.addWidget(self.scene_subtitle_label)
+        title_col.addWidget(self.scene_title_label)
+        title_col.addWidget(self.scene_subtitle_label)
+        layout.addLayout(title_col, stretch=1)
+
+        layout.addWidget(self._build_view_controls(), alignment=Qt.AlignVCenter)
+
         return bar
+
+    def _build_view_controls(self) -> QWidget:
+        """KSP-style camera view presets -- snap the camera to a fixed
+        orthographic angle without hunting for it by dragging."""
+        box = QWidget()
+        row = QHBoxLayout(box)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(4)
+
+        label = QLabel("VIEW")
+        label.setObjectName("viewLabel")
+        row.addWidget(label)
+
+        for text, handler, tip in (
+            ("Top", self._view_top, "Top-down (look along −Z)"),
+            ("Front", self._view_front, "Front (look along −Y)"),
+            ("Side", self._view_side, "Side (look along −X)"),
+            ("Iso", self._view_iso, "Isometric"),
+        ):
+            btn = QPushButton(text)
+            btn.setObjectName("viewButton")
+            btn.setToolTip(tip)
+            btn.clicked.connect(handler)
+            row.addWidget(btn)
+
+        sep = QFrame()
+        sep.setObjectName("viewSep")
+        sep.setFrameShape(QFrame.VLine)
+        row.addWidget(sep)
+
+        self.track_btn = QPushButton("Track")
+        self.track_btn.setObjectName("viewButton")
+        self.track_btn.setCheckable(True)
+        self.track_btn.setToolTip("Keep the selected body centered as time advances (T)")
+        self.track_btn.toggled.connect(self._set_tracking)
+        row.addWidget(self.track_btn)
+        return box
 
     def _build_timeline_bar(self) -> QWidget:
         bar = QWidget()
@@ -397,14 +503,36 @@ class MissionControlWindow(QMainWindow):
     def _build_info_panel(self) -> QWidget:
         panel = QWidget()
         panel.setObjectName("infoPanel")
-        panel.setFixedWidth(260)
         outer = QVBoxLayout(panel)
         outer.setContentsMargins(10, 10, 10, 10)
         outer.setSpacing(8)
 
+        header_row = QHBoxLayout()
+        self.info_collapse = QPushButton("❯")
+        self.info_collapse.setObjectName("panelCollapse")
+        self.info_collapse.setToolTip("Collapse body-info panel")
+        self.info_collapse.clicked.connect(self._toggle_info_panel)
         header = QLabel("BODIES")
         header.setObjectName("sectionHeader")
-        outer.addWidget(header)
+        header_row.addWidget(self.info_collapse)
+        header_row.addWidget(header)
+        header_row.addStretch(1)
+        outer.addLayout(header_row)
+
+        # Distance-between-two-bodies readout, shown only while measuring.
+        self.measure_card = QFrame()
+        self.measure_card.setObjectName("measureCard")
+        mlay = QVBoxLayout(self.measure_card)
+        mlay.setContentsMargins(10, 7, 10, 7)
+        mlay.setSpacing(2)
+        self.measure_pair_label = QLabel("")
+        self.measure_pair_label.setObjectName("measurePair")
+        self.measure_dist_label = QLabel("")
+        self.measure_dist_label.setObjectName("measureDist")
+        mlay.addWidget(self.measure_pair_label)
+        mlay.addWidget(self.measure_dist_label)
+        self.measure_card.setVisible(False)
+        outer.addWidget(self.measure_card)
 
         # The body cards go in a scroll area, not straight into the panel: a
         # scene with ~10 bodies stacks that many fixed-height cards, and without
@@ -459,8 +587,150 @@ class MissionControlWindow(QMainWindow):
         quit_action.triggered.connect(self.close)
 
         view_menu = self.menuBar().addMenu("&View")
+        view_menu.addAction("Top view", self._view_top)
+        view_menu.addAction("Front view", self._view_front)
+        view_menu.addAction("Side view", self._view_side)
+        view_menu.addAction("Isometric view", self._view_iso)
         reset_action = view_menu.addAction("Reset camera")
         reset_action.triggered.connect(lambda: (self.plotter.reset_camera(), self.plotter.render()))
+        view_menu.addSeparator()
+        focus_action = view_menu.addAction("Focus selected body", self._focus_selected)
+        focus_action.setShortcut(QKeySequence("M"))
+        self.track_action = view_menu.addAction("Track selected body")
+        self.track_action.setCheckable(True)
+        self.track_action.setShortcut(QKeySequence("T"))
+        self.track_action.toggled.connect(self._set_tracking)
+        view_menu.addSeparator()
+        view_menu.addAction("Toggle missions panel", self._toggle_sidebar)
+        view_menu.addAction("Toggle body-info panel", self._toggle_info_panel)
+
+    # -------------------------------------------------------- Panels / camera
+    def _toggle_sidebar(self):
+        self._toggle_side(self.left_stack, "_left_w", 0, self._LEFT_MIN)
+
+    def _toggle_info_panel(self):
+        self._toggle_side(self.right_stack, "_right_w", 2, self._RIGHT_MIN)
+
+    def _toggle_side(self, stack: QStackedWidget, width_attr: str, index: int, min_w: int):
+        """Collapse a splitter side to its rail, or expand it back. Collapsing
+        remembers the current drag width; expanding restores it and takes the
+        space back from the center view."""
+        if stack.currentIndex() == 0:
+            sizes = self.splitter.sizes()
+            setattr(self, width_attr, max(sizes[index], min_w))
+            stack.setCurrentIndex(1)
+            stack.setFixedWidth(self._RAIL_W)
+            # QSplitter won't reflow just because a child's max width changed --
+            # hand the freed space to the center view explicitly.
+            sizes[1] += sizes[index] - self._RAIL_W
+            sizes[index] = self._RAIL_W
+            self.splitter.setSizes(sizes)
+        else:
+            stack.setMaximumWidth(16777215)
+            stack.setMinimumWidth(min_w)
+            stack.setCurrentIndex(0)
+            sizes = self.splitter.sizes()
+            target = getattr(self, width_attr)
+            sizes[1] = max(200, sizes[1] - (target - sizes[index]))
+            sizes[index] = target
+            self.splitter.setSizes(sizes)
+
+    def _view_top(self):
+        self.plotter.view_xy()
+        self.plotter.render()
+
+    def _view_front(self):
+        self.plotter.view_xz()
+        self.plotter.render()
+
+    def _view_side(self):
+        self.plotter.view_yz()
+        self.plotter.render()
+
+    def _view_iso(self):
+        self.plotter.view_isometric()
+        self.plotter.render()
+
+    def _on_card_clicked(self, event, body_id: str):
+        """Plain click selects (focus/track anchor); ⌘/Ctrl-click picks the
+        second body to measure a distance to."""
+        if event.modifiers() & (Qt.ControlModifier | Qt.MetaModifier):
+            self._set_measure_partner(body_id)
+        else:
+            self._select_body(body_id)
+
+    def _select_body(self, body_id: str):
+        """Select a body (clicking its card): highlight the card, remember it as
+        the focus/track target, and center the camera on it once. A plain select
+        also clears any pending distance measurement."""
+        self._selected_body_id = body_id
+        self._measure_body_id = None
+        self._refresh_card_highlights()
+        self.renderer.track_body(body_id, self._current_time)
+        self._update_measure()
+        self.statusBar().showMessage(
+            f"Focused {self._body_cards[body_id]['name']} — ⌘/Ctrl-click another to measure"
+        )
+
+    def _set_measure_partner(self, body_id: str):
+        """Pick (or unpick) the second body for a distance measurement."""
+        if body_id == self._selected_body_id:
+            return  # can't measure a body against itself
+        self._measure_body_id = None if body_id == self._measure_body_id else body_id
+        self._refresh_card_highlights()
+        self._update_measure()
+
+    def _refresh_card_highlights(self):
+        for bid, card in self._body_cards.items():
+            frame = card["frame"]
+            frame.setProperty("selected", bid == self._selected_body_id)
+            frame.setProperty("measure", bid == self._measure_body_id)
+            frame.style().unpolish(frame)
+            frame.style().polish(frame)
+
+    def _update_measure(self):
+        """Redraw the measurement line + readout for the current (A, B) pair, or
+        clear it if a full pair isn't selected. Called on selection changes and
+        every timeline step so the distance tracks the bodies as they move."""
+        a, b = self._selected_body_id, self._measure_body_id
+        cards = self._body_cards
+        if a and b and a in cards and b in cards:
+            dist = self.renderer.measure_line(a, b, self._current_time)
+            self.measure_pair_label.setText(f"{cards[a]['name']}  ↔  {cards[b]['name']}")
+            self.measure_dist_label.setText(_format_distance(dist, cards[a]["unit"]))
+            self.measure_card.setVisible(True)
+        else:
+            self.renderer.clear_measure_line()
+            self.measure_card.setVisible(False)
+
+    def _focus_selected(self):
+        """Re-center the camera on the selected body (the M shortcut)."""
+        if self._selected_body_id and self._selected_body_id in self._body_cards:
+            self.renderer.track_body(self._selected_body_id, self._current_time)
+        else:
+            self.statusBar().showMessage("Select a body first — click its card")
+
+    def _set_tracking(self, on: bool):
+        """Turn continuous tracking on/off, keeping the button and menu item in
+        sync (either can drive this)."""
+        self._tracking = bool(on)
+        for w in (self.track_btn, self.track_action):
+            w.blockSignals(True)
+            w.setChecked(self._tracking)
+            w.blockSignals(False)
+        if self._tracking:
+            if self._selected_body_id and self._selected_body_id in self._body_cards:
+                self.renderer.track_body(self._selected_body_id, self._current_time)
+                self.statusBar().showMessage(f"Tracking {self._body_cards[self._selected_body_id]['name']}")
+            else:
+                self.statusBar().showMessage("Select a body to track — click its card")
+        else:
+            self.statusBar().showMessage("Tracking off")
+
+    def _update_tracking(self):
+        """Follow the tracked body after a timeline change, if tracking is on."""
+        if self._tracking and self._selected_body_id and self._selected_body_id in self._body_cards:
+            self.renderer.track_body(self._selected_body_id, self._current_time)
 
     # ------------------------------------------------------------- Missions
     def _populate_builtin_missions(self):
@@ -598,6 +868,15 @@ class MissionControlWindow(QMainWindow):
         self._current_scene = scene
         self.renderer.load(scene)
 
+        # A new scene has different bodies -- drop the old selection/measurement
+        # and stop tracking so we never chase a body id that no longer exists.
+        # (renderer.load already cleared the measure line via plotter.clear.)
+        self._selected_body_id = None
+        self._measure_body_id = None
+        self.measure_card.setVisible(False)
+        if self._tracking:
+            self._set_tracking(False)
+
         self.scene_title_label.setText(scene["title"])
         self.scene_subtitle_label.setText(scene.get("subtitle", "").replace("\n", "  "))
 
@@ -662,15 +941,18 @@ class MissionControlWindow(QMainWindow):
                 r.addWidget(val)
                 v.addLayout(r)
 
-            frame.mousePressEvent = lambda _e, bid=body["id"]: self._focus_body(bid)
+            frame.setToolTip("Click to focus · ⌘/Ctrl-click to measure distance")
+            frame.mousePressEvent = lambda e, bid=body["id"]: self._on_card_clicked(e, bid)
 
             self.info_layout.addWidget(frame)
-            self._body_cards[body["id"]] = {"frame": frame, "dist_val": dist_val, "unit": scene["distanceUnit"]}
+            self._body_cards[body["id"]] = {
+                "frame": frame,
+                "dist_val": dist_val,
+                "unit": scene["distanceUnit"],
+                "name": body["name"],
+            }
 
         self.info_layout.addStretch(1)
-
-    def _focus_body(self, body_id: str):
-        self.renderer.focus_on(body_id, self._current_time)
 
     def _refresh_readouts(self, distances: dict[str, float]):
         for body_id, card in self._body_cards.items():
@@ -692,6 +974,8 @@ class MissionControlWindow(QMainWindow):
         frac = value / self.time_slider.maximum()
         self._current_time = timeline["min"] + frac * (timeline["max"] - timeline["min"])
         self._refresh_readouts(self.renderer.set_time(self._current_time))
+        self._update_tracking()
+        self._update_measure()
 
     def _set_speed(self, speed: float):
         self._speed = speed
@@ -733,6 +1017,8 @@ class MissionControlWindow(QMainWindow):
         self.time_slider.setValue(int(frac * self.time_slider.maximum()))
         self.time_slider.blockSignals(False)
         self._refresh_readouts(self.renderer.set_time(self._current_time))
+        self._update_tracking()
+        self._update_measure()
 
 
 def _epoch_to_date_string(reference_et: float, day_offset: float) -> str:
