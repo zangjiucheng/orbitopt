@@ -19,8 +19,8 @@ import sys
 
 os.environ.setdefault("QT_API", "pyside6")
 
-from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QCursor
+from PySide6.QtCore import QObject, QRectF, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QColor, QCursor, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -33,17 +33,20 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSlider,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 from pyvistaqt import QtInteractor
 from vtkmodules.vtkRenderingCore import vtkRenderWindow
 
+from orbitopt.viz.icon import app_icon
 from orbitopt.viz.pv_viewer import load_scene
 from orbitopt.viz.scene_renderer import SceneRenderer
-from orbitopt.viz.theme import BG_VOID, STYLESHEET
+from orbitopt.viz.theme import ACCENT, BG_VOID, INK_SECONDARY, STYLESHEET
 
 SPEED_PRESETS = [0.15, 0.5, 1.0, 5.0, 20.0, 100.0]
 
@@ -159,11 +162,61 @@ def _format_distance(value: float, unit: str) -> str:
     return f"{value:,.0f} km"
 
 
+class SpinnerWidget(QWidget):
+    """A rotating-arc spinner painted with QPainter and driven by a QTimer.
+
+    It animates while the Qt event loop is free -- i.e. throughout the ~10s
+    background scene *computation* (which runs on a QThread, see SceneLoader)
+    -- and simply holds its last painted frame during the short synchronous
+    VTK scene rebuild that follows (SceneRenderer.load has to run on the main
+    thread). That rebuild is the brief stutter the user reported; showing this
+    over the view for the whole switch is the "loading effect" that makes the
+    stutter read as deliberate progress rather than a freeze.
+    """
+
+    def __init__(self, parent=None, diameter: int = 64, color: str = ACCENT):
+        super().__init__(parent)
+        self._angle = 0
+        self._color = QColor(color)
+        self.setFixedSize(diameter, diameter)
+        self._timer = QTimer(self)
+        self._timer.setInterval(33)
+        self._timer.timeout.connect(self._advance)
+
+    def start(self):
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self):
+        self._timer.stop()
+
+    def _advance(self):
+        self._angle = (self._angle + 12) % 360
+        self.update()
+
+    def paintEvent(self, event):  # noqa: N802 -- Qt override signature
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        margin = 5
+        rect = QRectF(margin, margin, self.width() - 2 * margin, self.height() - 2 * margin)
+
+        track = QPen(QColor(self._color.red(), self._color.green(), self._color.blue(), 40), 4)
+        track.setCapStyle(Qt.RoundCap)
+        painter.setPen(track)
+        painter.drawArc(rect, 0, 360 * 16)
+
+        arc = QPen(self._color, 4)
+        arc.setCapStyle(Qt.RoundCap)
+        painter.setPen(arc)
+        painter.drawArc(rect, -self._angle * 16, 100 * 16)
+
+
 class MissionControlWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Mission Control — orbitopt")
-        self.resize(1500, 950)
+        self.setWindowIcon(app_icon())
+        self._size_to_screen()
         self.setStyleSheet(STYLESHEET)
 
         self._scene_cache: dict[str, dict] = {}
@@ -184,6 +237,29 @@ class MissionControlWindow(QMainWindow):
 
         self._build_ui()
         self._populate_builtin_missions()
+
+    def _size_to_screen(self):
+        """Open at a comfortable size that always fits the current display.
+
+        The old hard-coded 1500x950 was taller than a laptop's usable height
+        (menu bar + Dock eat into it), so the window opened partly off-screen.
+        availableGeometry() already excludes the macOS menu bar and Dock, so
+        clamping to a fraction of it -- and centering within it -- keeps the
+        whole window on screen on any monitor while still preferring a roomy
+        default on large ones.
+        """
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            self.resize(1360, 820)
+            return
+        avail = screen.availableGeometry()
+        width = min(1500, int(avail.width() * 0.9))
+        height = min(900, int(avail.height() * 0.9))
+        self.resize(width, height)
+        self.move(
+            avail.x() + (avail.width() - width) // 2,
+            avail.y() + (avail.height() - height) // 2,
+        )
 
     # ------------------------------------------------------------------ UI
     def _build_ui(self):
@@ -206,7 +282,17 @@ class MissionControlWindow(QMainWindow):
         self.plotter.set_background(BG_VOID)
         self.plotter.enable_anti_aliasing()
         self.renderer = SceneRenderer(self.plotter)
-        center_layout.addWidget(self.plotter, stretch=1)
+
+        # The 3D view and a loading page share one slot. We swap to the loading
+        # page (rather than overlaying a Qt widget on top of the view) because
+        # the embedded VTK surface is a native GL context Qt's compositor
+        # doesn't reliably draw sibling widgets over -- the same reason
+        # QWidget.grab() comes back black for it (see README). A QStackedWidget
+        # swap composites cleanly.
+        self.center_stack = QStackedWidget()
+        self.center_stack.addWidget(self.plotter)
+        self.center_stack.addWidget(self._build_loading_page())
+        center_layout.addWidget(self.center_stack, stretch=1)
 
         self.timeline_bar = self._build_timeline_bar()
         center_layout.addWidget(self.timeline_bar)
@@ -312,16 +398,58 @@ class MissionControlWindow(QMainWindow):
         panel = QWidget()
         panel.setObjectName("infoPanel")
         panel.setFixedWidth(260)
-        self.info_layout = QVBoxLayout(panel)
-        self.info_layout.setContentsMargins(10, 10, 10, 10)
-        self.info_layout.setSpacing(8)
+        outer = QVBoxLayout(panel)
+        outer.setContentsMargins(10, 10, 10, 10)
+        outer.setSpacing(8)
 
         header = QLabel("BODIES")
         header.setObjectName("sectionHeader")
-        self.info_layout.addWidget(header)
+        outer.addWidget(header)
+
+        # The body cards go in a scroll area, not straight into the panel: a
+        # scene with ~10 bodies stacks that many fixed-height cards, and without
+        # this the panel's minimum height is the sum of all of them -- which
+        # forced the whole window's minimum height taller than the screen (so it
+        # opened oversized and couldn't be shrunk). Scrolling keeps the panel's
+        # minimum height bounded so the window stays freely resizable.
+        scroll = QScrollArea()
+        scroll.setObjectName("infoScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        cards_host = QWidget()
+        cards_host.setObjectName("infoCards")
+        self.info_layout = QVBoxLayout(cards_host)
+        self.info_layout.setContentsMargins(0, 0, 0, 0)
+        self.info_layout.setSpacing(8)
         self.info_layout.addStretch(1)
+        scroll.setWidget(cards_host)
+        outer.addWidget(scroll, stretch=1)
+
         self._body_cards: dict[str, dict] = {}
         return panel
+
+    def _build_loading_page(self) -> QWidget:
+        page = QWidget()
+        page.setObjectName("loadingPage")
+        layout = QVBoxLayout(page)
+        layout.addStretch(1)
+
+        spinner_row = QHBoxLayout()
+        spinner_row.addStretch(1)
+        self._spinner = SpinnerWidget(diameter=68)
+        spinner_row.addWidget(self._spinner)
+        spinner_row.addStretch(1)
+        layout.addLayout(spinner_row)
+
+        self._loading_label = QLabel("Loading…")
+        self._loading_label.setObjectName("loadingLabel")
+        self._loading_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self._loading_label)
+
+        layout.addStretch(1)
+        return page
 
     def _build_menu(self):
         file_menu = self.menuBar().addMenu("&File")
@@ -360,10 +488,58 @@ class MissionControlWindow(QMainWindow):
         self._set_playing(False)
 
         if name in self._scene_cache:
-            self._apply_scene(self._scene_cache[name])
+            # A cached scene skips the ~10s compute but still stutters: applying
+            # it runs SceneRenderer.load, which tears down and rebuilds every
+            # VTK actor synchronously on the main thread. Show the loading page
+            # first, then apply on the next event-loop turn so the page actually
+            # paints before that blocking rebuild -- otherwise the swap and the
+            # freeze happen in the same turn and the user sees only the freeze.
+            self._begin_switch(f"Loading {name}…")
+            scene = self._scene_cache[name]
+            QTimer.singleShot(0, lambda: self._finish_cached(scene))
             return
 
         self._start_loading(name)
+
+    def _begin_switch(self, message: str):
+        self._loading = True
+        self.mission_list.setEnabled(False)
+        self._open_file_btn.setEnabled(False)
+        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
+        self._show_loading(message)
+        self.statusBar().showMessage(message)
+
+    def _end_switch(self):
+        self._hide_loading()
+        QApplication.restoreOverrideCursor()
+        self.mission_list.setEnabled(True)
+        self._open_file_btn.setEnabled(True)
+        self._loading = False
+        self.statusBar().showMessage("Ready")
+
+    def _show_loading(self, message: str):
+        self._loading_label.setText(message)
+        self._spinner.start()
+        self.center_stack.setCurrentIndex(1)
+
+    def _hide_loading(self):
+        self._spinner.stop()
+        self.center_stack.setCurrentIndex(0)
+        # The scene was built while the view was hidden, so SceneRenderer.load's
+        # reset_camera() fit the camera to a stale/zero viewport (most visibly
+        # on the very first load, when the view had never been shown). Re-fit on
+        # the next event-loop turn, once the show/resize events have given the
+        # view its real size -- the "iso" orientation load() set is preserved.
+        QTimer.singleShot(0, self._refit_camera)
+
+    def _refit_camera(self):
+        if self._current_scene is not None:
+            self.plotter.reset_camera()
+            self.plotter.render()
+
+    def _finish_cached(self, scene: dict):
+        self._apply_scene(scene)
+        self._end_switch()
 
     def _start_loading(self, name: str):
         """Runs self._loaders[name]() on a background QThread instead of
@@ -375,12 +551,12 @@ class MissionControlWindow(QMainWindow):
         button stay disabled and the cursor shows busy for the same reason
         the mission list itself is guarded above: re-entering this while a
         load is already in flight would leak a second thread/worker pair.
+
+        The loading page (with its spinner) is shown for the whole switch --
+        it animates during this background compute, then holds while the
+        finished scene is applied on the main thread.
         """
-        self._loading = True
-        self.mission_list.setEnabled(False)
-        self._open_file_btn.setEnabled(False)
-        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
-        self.statusBar().showMessage(f"Computing {name}…")
+        self._begin_switch(f"Computing {name}…")
 
         thread = QThread(self)
         worker = SceneLoader(name, self._loaders[name])
@@ -404,17 +580,15 @@ class MissionControlWindow(QMainWindow):
         thread.start()
 
     def _on_load_thread_finished(self):
-        self._loading = False
-        self.mission_list.setEnabled(True)
-        self._open_file_btn.setEnabled(True)
-        QApplication.restoreOverrideCursor()
+        self._end_switch()
         self._load_thread = None
         self._load_worker = None
 
     def _on_scene_loaded(self, name: str, scene: dict):
         self._scene_cache[name] = scene
+        # Applied while the loading page is still up (plotter hidden); the swap
+        # back to the view happens in _on_load_thread_finished -> _end_switch.
         self._apply_scene(scene)
-        self.statusBar().showMessage("Ready")
 
     def _on_scene_load_failed(self, name: str, error_msg: str):
         QMessageBox.critical(self, f"Failed to load {name}", error_msg)
@@ -571,6 +745,9 @@ def _epoch_to_date_string(reference_et: float, day_offset: float) -> str:
 
 def main():
     app = QApplication(sys.argv)
+    # App-level icon drives the macOS Dock tile / taskbar entry; the window
+    # inherits it for its title bar too.
+    app.setWindowIcon(app_icon())
     window = MissionControlWindow()
     window.show()
     sys.exit(app.exec())

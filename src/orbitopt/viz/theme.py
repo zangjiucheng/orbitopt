@@ -194,6 +194,28 @@ QStatusBar {{
     font-size: 10.5px;
 }}
 
+QScrollArea#infoScroll {{
+    background: transparent;
+    border: none;
+}}
+QScrollArea#infoScroll > QWidget > QWidget {{
+    background: transparent;
+}}
+QWidget#infoCards {{
+    background: transparent;
+}}
+
+QWidget#loadingPage {{
+    background: {BG_VOID};
+}}
+QLabel#loadingLabel {{
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: {INK_SECONDARY};
+    padding-top: 16px;
+}}
+
 QScrollBar:vertical {{
     background: transparent;
     width: 8px;
