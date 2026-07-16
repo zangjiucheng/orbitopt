@@ -10,7 +10,7 @@ map view was the reference point for what that chrome should *do*
 (a vessel/mission list you switch between, a time-warp control strip, a
 per-body info readout), not a literal skin to imitate.
 
-Run: python examples/09_mission_control_app.py
+Run: orbitopt  (or orbitopt-app / python -m orbitopt); main() is the entry point.
 """
 from __future__ import annotations
 

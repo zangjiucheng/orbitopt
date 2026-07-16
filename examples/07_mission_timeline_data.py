@@ -5,7 +5,8 @@ takes a few seconds, mostly the tudatpy propagation at a 60s step). Re-run
 this to change the departure date or mission length.
 
 Run: python examples/07_mission_timeline_data.py
-Then view it with: python examples/08_pyvista_viewer.py scenes/artemis2-mission.json
+Then view it with: orbitopt view scenes/artemis2-mission.json
+(or just `orbitopt view artemis2` to compute it live.)
 """
 from __future__ import annotations
 

@@ -193,12 +193,6 @@ what an upstream (imprecise, automated) stage will actually hand it.
   also compute it live).
 - `examples/07_mission_timeline_data.py` -- regenerate the Artemis II
   mission SceneData JSON, same caveat.
-- `examples/08_pyvista_viewer.py` -- open the lightweight single-scene 3D
-  viewer (see below) on either built-in scenario or any scene JSON file.
-- `examples/09_mission_control_app.py` -- launch **Mission Control**, the
-  persistent multi-scene desktop app (see below) -- this is the one to
-  reach for day to day; `08_pyvista_viewer.py` is the minimal scripting API.
-  (Day to day, just run the `orbitopt` console command instead of either.)
 - `examples/10_gto_geo_orbit_raising.py` -- optimize a GOES-style GTO->GEO
   orbit-raising campaign (min finite-burn-feasible apogee-burn schedule) with
   the GPU-batched screening optimizer, then verify + refine the final burn to

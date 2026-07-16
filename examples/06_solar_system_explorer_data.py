@@ -5,7 +5,8 @@ isn't: see examples/07_mission_timeline_data.py). Re-run to change the
 reference epoch.
 
 Run: python examples/06_solar_system_explorer_data.py
-Then view it with: python examples/08_pyvista_viewer.py scenes/solar-system.json
+Then view it with: orbitopt view scenes/solar-system.json
+(or just `orbitopt view solar-system` to compute it live.)
 """
 from __future__ import annotations
 
