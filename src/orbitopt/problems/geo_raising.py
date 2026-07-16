@@ -30,6 +30,12 @@ Assumption / known floor (from the mission-plan critic): the real GOES injection
 apogee sits ~500 km *below* GEO, so modelling the shared apogee at ``r_geo``
 makes the total dv a slight *lower bound*. Fine for a global screening seed; the
 tudatpy stage (see verify/) closes the gap with the real geometry + perturbations.
+Because the model always treats the shared burn apogee as ``r_geo`` (never the
+injection orbit's real apogee radius), the injection apogee is intentionally
+*not* one of ``GeoRaisingProblem``'s constructor parameters -- only the
+injection perigee and inclination feed the burn schedule. It remains a
+parameter of the standalone ``single_impulse_geo_insertion_ms`` helper only for
+API symmetry with the GTO's other two elements.
 
 Units: km and km/s internally (matching dynamics/nbody_gpu); the fitness
 objective is total delta-v (+ any penalty) in **m/s**. Hand off to the
@@ -90,7 +96,6 @@ class GeoRaisingProblem(OrbitOptProblem):
     def __init__(
         self,
         gto_perigee_km: float,
-        gto_apogee_km: float,
         gto_inclination_deg: float,
         n_burns: int,
         wet_mass_kg: float = 5192.0,
@@ -113,7 +118,6 @@ class GeoRaisingProblem(OrbitOptProblem):
         self.mu = float(mu_km3_s2)
         self.r_geo = geostationary_radius_km(self.mu)
         self.rp0 = R_EARTH_KM + float(gto_perigee_km)
-        self.ra_injection = R_EARTH_KM + float(gto_apogee_km)
         self.r_burn = self.r_geo  # model: shared apogee taken at GEO radius
         self.i0 = np.radians(float(gto_inclination_deg))
         self.wet_mass_kg = float(wet_mass_kg)
@@ -183,7 +187,15 @@ class GeoRaisingProblem(OrbitOptProblem):
     def decode(self, dv):
         """Expand one decision vector into the per-burn maneuver schedule and
         the intermediate osculating orbit after each burn. Pure numpy (single
-        candidate)."""
+        candidate).
+
+        The returned schedule doesn't depend on ``target_longitude_deg`` (this
+        impulsive-burn model doesn't simulate the drift/phasing needed to
+        acquire a specific longitude slot on the GEO ring), but the requested
+        station longitude is carried through into the result under
+        ``"target_longitude_deg"`` so callers (examples, verify, viz) can
+        report which slot the terminal orbit is meant for without reaching
+        back into the problem object."""
         n = self.n_burns
         dv = np.asarray(dv, dtype=float).ravel()
         frac_i = dv[: n - 1]
@@ -228,6 +240,7 @@ class GeoRaisingProblem(OrbitOptProblem):
             "dv_total_ms": float(dvk_ms.sum()),
             "max_burn_ms": float(dvk_ms.max()),
             "feasible": bool(cap is None or dvk_ms.max() <= cap + 1e-6),
+            "target_longitude_deg": self.target_longitude_deg,
         }
 
     def delta_v_total_ms(self, dv) -> float:

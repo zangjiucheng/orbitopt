@@ -42,8 +42,16 @@ def _miss_vector_m(
     r0, v0_pre_burn, initial_epoch, delta_v, coast_duration,
     reference_epoch_ephemeris_seconds, perturbing_bodies, step_size,
 ):
+    # propagate_multi_arc feeds its initial_epoch straight into tudatpy,
+    # which uses it as the absolute SPICE ephemeris epoch for every
+    # Earth/Moon/Sun point-mass gravity lookup during integration -- so it
+    # must be the real mission epoch, not the caller's arbitrary local
+    # clock (initial_epoch, e.g. 0.0), or the dynamics get integrated
+    # through a J2000 gravity field while the miss vector below is judged
+    # against the Moon's real position at reference_epoch_ephemeris_seconds.
+    absolute_initial_epoch = reference_epoch_ephemeris_seconds + initial_epoch
     result = propagate_multi_arc(
-        r0, v0_pre_burn, initial_epoch,
+        r0, v0_pre_burn, absolute_initial_epoch,
         arcs=[
             {"type": "impulsive_burn", "delta_v": delta_v},
             {"type": "coast", "duration": coast_duration},
@@ -76,8 +84,13 @@ def _refine_coast_duration(
     in practice, not a rare corner case.
     """
     window = max(1.5 * coast_duration_guess, coast_duration_guess + 2.0 * 86400.0)
+    # Same real-epoch requirement as _miss_vector_m: propagate_multi_arc's
+    # initial_epoch drives tudatpy's SPICE-backed gravity environment
+    # directly, so it must be the absolute mission epoch, not the caller's
+    # arbitrary local clock.
+    absolute_initial_epoch = reference_epoch_ephemeris_seconds + initial_epoch
     result = propagate_multi_arc(
-        r0, v0_pre_burn, initial_epoch,
+        r0, v0_pre_burn, absolute_initial_epoch,
         arcs=[
             {"type": "impulsive_burn", "delta_v": dv_guess},
             {"type": "coast", "duration": window},
@@ -135,6 +148,17 @@ def target_lunar_flyby(
     coast_duration_guess: seconds, rough estimate of time-to-closest-approach
         for dv_guess -- refined internally via one exploratory propagation
         + find_closest_approach before the fixed-time Newton loop starts.
+
+    Note: this targets a *fixed Cartesian miss-vector direction* (the initial
+    guess's own miss direction, rescaled to the target distance) -- a good
+    approximation as long as the initial guess's own miss is already large
+    compared to the Moon's local curvature scale (a few hundred km or more).
+    For an initial guess whose *uncorrected* trajectory already passes very
+    close to (or through) the Moon, that direction is poorly conditioned and
+    this targeter may not converge; callers with that failure mode should
+    adjust their coarse guess (e.g. departure epoch / coast time) to produce
+    a less degenerate starting miss, rather than rely on this function to
+    recover from it.
     """
     dv_guess = np.asarray(dv_guess, dtype=float)
 
@@ -161,6 +185,7 @@ def target_lunar_flyby(
     residual_history_km = []
     converged = False
     iterations = 0
+    stall_count = 0
 
     for iterations in range(1, maxiter + 1):
         current_miss = miss(dv)
@@ -192,17 +217,36 @@ def target_lunar_flyby(
         # backtracking step (classic damped Newton / Armijo-style
         # sufficient-decrease check) trades a few extra iterations for
         # actually converging instead of running away.
+        #
+        # If every backtracking halving still fails to improve on the
+        # current residual (observed near a close lunar encounter, where
+        # the linearization breaks down well before the capped step size),
+        # the step must NOT be taken anyway -- silently committing to the
+        # smallest-but-still-worse trial (the previous behavior here) walks
+        # the solution slightly further from the target on *every* such
+        # iteration, which reads as slow divergence rather than a stall.
+        # Hold dv unchanged for this iteration instead; a run of consecutive
+        # stalls means the local Jacobian genuinely has no improving
+        # direction at this point (recomputing it at the same dv would just
+        # reproduce the same result), so give up rather than burn the rest
+        # of maxiter doing nothing.
         step_scale = min(1.0, max_step_m_s / max(np.linalg.norm(delta_dv), 1e-9))
-        for _ in range(6):
+        improved = False
+        for _ in range(12):
             trial_dv = dv + step_scale * delta_dv
             trial_residual_km = np.linalg.norm(miss(trial_dv) - target_vector_m) / 1000.0
             if trial_residual_km < residual_km:
+                dv = trial_dv
+                improved = True
                 break
             step_scale *= 0.5
-        else:
-            trial_dv = dv + step_scale * delta_dv
 
-        dv = trial_dv
+        if improved:
+            stall_count = 0
+        else:
+            stall_count += 1
+            if stall_count >= 3:
+                break
 
     final_miss_m = miss(dv)
     return TargetingResult(

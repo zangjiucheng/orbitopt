@@ -28,7 +28,12 @@ from orbitopt.problems.geo_raising import (
 )
 from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, body_entry, scene_document
 
+# gto_apogee_km only feeds single_impulse_geo_insertion_ms's closed form below --
+# GeoRaisingProblem always models the shared burn apogee at r_geo (see the
+# "known floor" note in problems/geo_raising.py), so it isn't a constructor
+# parameter of the problem itself.
 GOES_GTO = dict(gto_perigee_km=8108.0, gto_apogee_km=35286.0, gto_inclination_deg=10.6)
+GEO_RAISING_KWARGS = {k: v for k, v in GOES_GTO.items() if k != "gto_apogee_km"}
 APOGEE_DWELL_S = 41 * 60
 
 
@@ -61,11 +66,11 @@ def compute_and_export_geo_mission(points_per_orbit=110, seed=1):
     """Optimize a GOES-like GTO->GEO raising campaign (minimum finite-burn-
     feasible burn count) and export it as a SceneData document."""
     mu = MU_EARTH_KM3_S2
-    cap = GeoRaisingProblem(n_burns=2, **GOES_GTO).max_dv_per_pass_ms(APOGEE_DWELL_S)
+    cap = GeoRaisingProblem(n_burns=2, **GEO_RAISING_KWARGS).max_dv_per_pass_ms(APOGEE_DWELL_S)
 
     champion = None
     for n_burns in range(2, 7):
-        problem = GeoRaisingProblem(n_burns=n_burns, max_dv_per_burn_ms=cap, **GOES_GTO)
+        problem = GeoRaisingProblem(n_burns=n_burns, max_dv_per_burn_ms=cap, **GEO_RAISING_KWARGS)
         x, _, _ = run_optimization(problem, pop_size=160, generations=150, seed=seed, verbose=False)
         d = problem.decode(x)
         if d["feasible"]:

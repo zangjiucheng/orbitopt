@@ -23,14 +23,19 @@ from orbitopt.problems.geo_raising import (
 )
 
 # GOES-16-like injection delivered by Atlas V 541 (rounded published elements).
+# gto_apogee_km only feeds single_impulse_geo_insertion_ms's closed form below --
+# GeoRaisingProblem always models the shared burn apogee at r_geo (see the
+# "known floor" note in problems/geo_raising.py), so it isn't a constructor
+# parameter of the problem itself.
 GOES_GTO = dict(gto_perigee_km=8108.0, gto_apogee_km=35286.0, gto_inclination_deg=10.6)
+GEO_RAISING_KWARGS = {k: v for k, v in GOES_GTO.items() if k != "gto_apogee_km"}
 APOGEE_DWELL_S = 41 * 60  # GOES-16 held each LAE burn to < 41 min
 
 
 def main():
-    r_geo = GeoRaisingProblem(n_burns=2, **GOES_GTO).r_geo
-    cap = GeoRaisingProblem(n_burns=2, **GOES_GTO).max_dv_per_pass_ms(APOGEE_DWELL_S)
-    capacity = GeoRaisingProblem(n_burns=2, **GOES_GTO).tsiolkovsky_capacity_ms()
+    r_geo = GeoRaisingProblem(n_burns=2, **GEO_RAISING_KWARGS).r_geo
+    cap = GeoRaisingProblem(n_burns=2, **GEO_RAISING_KWARGS).max_dv_per_pass_ms(APOGEE_DWELL_S)
+    capacity = GeoRaisingProblem(n_burns=2, **GEO_RAISING_KWARGS).tsiolkovsky_capacity_ms()
     single = single_impulse_geo_insertion_ms(**GOES_GTO)
 
     print("GOES GTO -> GEO orbit raising")
@@ -46,7 +51,7 @@ def main():
     print("-" * 44)
     champion = None
     for n_burns in range(2, 7):
-        problem = GeoRaisingProblem(n_burns=n_burns, max_dv_per_burn_ms=cap, **GOES_GTO)
+        problem = GeoRaisingProblem(n_burns=n_burns, max_dv_per_burn_ms=cap, **GEO_RAISING_KWARGS)
         x, _, _ = run_optimization(problem, pop_size=160, generations=150, seed=1, verbose=False)
         d = problem.decode(x)
         flag = "yes" if d["feasible"] else "no"
@@ -70,7 +75,7 @@ def main():
               f"{d['perigee_after_km'][k]:>11.0f} km | "
               f"{d['inclination_after_deg'][k]:>7.2f} deg")
     print(f"\nterminal orbit: a = {d['r_geo_km']:.1f} km circular, e ~ 0, i ~ 0 deg "
-          f"(GEO, station {problem.target_longitude_deg:.1f} deg lon)")
+          f"(GEO, station {d['target_longitude_deg']:.1f} deg lon)")
     print("Screening model only (impulsive, apogee at GEO radius -- a slight dv floor).")
 
     _verify_in_tudatpy(problem, x)

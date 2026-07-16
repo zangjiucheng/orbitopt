@@ -5,13 +5,16 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "orbitopt"
 version = "0.1.0"
-description = "Orbital trajectory optimization research framework built on pykep + tudatpy, with CUDA-accelerated candidate evaluation via CuPy."
+description = "Scene-format read/write/validate and a PyVista/PySide6 3D viewer for orbital trajectory data; the full research framework additionally layers in pykep + tudatpy and CUDA-accelerated (CuPy) candidate evaluation via a conda environment."
 readme = "README.md"
-requires-python = ">=3.10,<3.11"
+requires-python = ">=3.10"
 license = { file = "LICENSE" }
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Astronomy",
     "Topic :: Scientific/Engineering :: Physics",

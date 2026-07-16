@@ -130,7 +130,29 @@ def solve_lambert_batch(
     # clipping each Newton step to a wider-but-finite range keeps a
     # transiently-diverging candidate from overflowing cosh/sinh while it's
     # still being iterated on (it will simply fail the convergence check).
-    z_lo, z_hi = -(4.0 * xp.pi) ** 2, (2.0 * xp.pi) ** 2
+    #
+    # z = (2*pi)**2 is a *removable* singularity of the y(z) formula: both
+    # C(z) and (z*S(z) - 1) analytically vanish there, and the ratio tends
+    # to a finite limit (sqrt(2)). But evaluated literally in floating
+    # point, both numerator and denominator round to exactly 0.0 right at
+    # that point, so the ratio comes out 0.0/0.0 = NaN instead of its true
+    # limit. Clamping z_hi exactly to that boundary meant any candidate
+    # that wanted to push z that high got stuck evaluating the singular
+    # point on every remaining Newton iteration and never recovered.
+    #
+    # Nudging z_hi strictly below the boundary keeps every evaluation on
+    # the smooth, well-conditioned side of the singularity -- but the
+    # nudge has to clear more than just the exact 0/0 point: C(z) and
+    # (z*S(z) - 1) are each computed from a catastrophically-cancelling
+    # difference (1 - cos(...), sqrt(z) - sin(...)) whose true magnitude
+    # falls below float64's noise floor within roughly the last 1e-3 to
+    # 1e-4 of z below the boundary, so a too-small margin still lands on
+    # numerically-garbage C/y values (empirically confirmed to still
+    # stall the solver in a divergent 2-cycle against z_lo even once the
+    # literal NaN is gone). 1e-2 clears that ill-conditioned neighborhood
+    # with margin while being negligible against the ~40-wide z domain.
+    z_hi_eps = 1e-2
+    z_lo, z_hi = -(4.0 * xp.pi) ** 2, (2.0 * xp.pi) ** 2 - z_hi_eps
     z = xp.zeros(n, dtype=xp.float64)
     for _ in range(maxiter):
         f, _, _ = _tof_of_z(z, r1, r2, A, mu, xp)

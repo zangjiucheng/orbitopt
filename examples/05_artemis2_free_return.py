@@ -83,7 +83,14 @@ def plane_aligned_parking_orbit(r_moon_arrival, altitude_km, mu_earth):
 
 def main():
     departure_mjd2000 = mjd2000_from_date(2026, 8, 1)
-    coast_days_guess = 4.5
+    # 5.5, not the seemingly-more-natural 4.5: at 4.5 (and several other
+    # nearby coast times), the dead-center Lambert guess's uncorrected miss
+    # is small enough that target_lunar_flyby's fixed miss-vector-direction
+    # approach gets stuck at a nearby local point instead of the true
+    # target (see that function's docstring). Confirmed by sweeping ~20
+    # nearby (departure date, coast time) combinations for one that
+    # converges cleanly.
+    coast_days_guess = 5.5
     reference_et = mjd2000_to_ephemeris_seconds(departure_mjd2000)
     mu_earth = pk.MU_EARTH
 

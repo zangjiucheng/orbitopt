@@ -15,8 +15,13 @@ from orbitopt.problems.geo_raising import (
     single_impulse_geo_insertion_ms,
 )
 
-# GOES-16-like injection (see docs/goes_gto_geo_mission_plan.md)
+# GOES-16-like injection (see docs/goes_gto_geo_mission_plan.md). gto_apogee_km
+# is only consumed by single_impulse_geo_insertion_ms's signature below --
+# GeoRaisingProblem's shared-burn-apogee model always treats the apogee as
+# r_geo (see the "known floor" note in problems/geo_raising.py), so it isn't
+# one of the problem's constructor parameters.
 GOES_GTO = dict(gto_perigee_km=8108.0, gto_apogee_km=35286.0, gto_inclination_deg=10.6)
+GEO_RAISING_KWARGS = {k: v for k, v in GOES_GTO.items() if k != "gto_apogee_km"}
 
 
 def test_geostationary_constants():
@@ -27,18 +32,18 @@ def test_geostationary_constants():
 
 
 def test_pygmo_accepts_the_problem():
-    prob = pg.problem(GeoRaisingProblem(n_burns=4, **GOES_GTO))
+    prob = pg.problem(GeoRaisingProblem(n_burns=4, **GEO_RAISING_KWARGS))
     assert prob.get_nx() == 2 * (4 - 1)
     assert prob.get_nobj() == 1
 
 
 def test_requires_at_least_two_burns():
     with pytest.raises(ValueError):
-        GeoRaisingProblem(n_burns=1, **GOES_GTO)
+        GeoRaisingProblem(n_burns=1, **GEO_RAISING_KWARGS)
 
 
 def test_batch_fitness_matches_looped_fitness():
-    problem = GeoRaisingProblem(n_burns=5, max_dv_per_burn_ms=217.0, **GOES_GTO)
+    problem = GeoRaisingProblem(n_burns=5, max_dv_per_burn_ms=217.0, **GEO_RAISING_KWARGS)
     rng = np.random.default_rng(0)
     lo, hi = problem.get_bounds()
     dvs = rng.uniform(lo, hi, size=(64, len(lo)))
@@ -53,12 +58,12 @@ def test_single_impulse_dv_is_physical():
     # ~1.0 km/s for this low-inclination, near-GEO injection (vs ~1.5 km/s from
     # a standard 27 deg GTO) -- and well under the propellant ceiling.
     assert 900.0 < dv < 1100.0
-    cap = GeoRaisingProblem(n_burns=2, **GOES_GTO).tsiolkovsky_capacity_ms()
+    cap = GeoRaisingProblem(n_burns=2, **GEO_RAISING_KWARGS).tsiolkovsky_capacity_ms()
     assert dv < cap < 2100.0
 
 
 def test_encoding_terminal_orbit_is_circular_equatorial_geo():
-    problem = GeoRaisingProblem(n_burns=5, **GOES_GTO)
+    problem = GeoRaisingProblem(n_burns=5, **GEO_RAISING_KWARGS)
     rng = np.random.default_rng(1)
     for _ in range(20):
         x = rng.random(len(problem.get_bounds()[0]))
@@ -69,6 +74,9 @@ def test_encoding_terminal_orbit_is_circular_equatorial_geo():
         # plane changes sum to the initial inclination; dv bookkeeping consistent
         assert abs(d["plane_change_deg"].sum() - 10.6) < 1e-6
         assert abs(d["dv_per_burn_ms"].sum() - d["dv_total_ms"]) < 1e-6
+        # decode() carries the requested station longitude through for
+        # downstream reporting, even though it doesn't affect the schedule
+        assert d["target_longitude_deg"] == problem.target_longitude_deg
 
 
 @pytest.mark.slow
@@ -79,7 +87,7 @@ def test_optimizer_finds_finite_burn_feasible_geo_insertion():
     # ~999 m/s total, ceil(999/217) = 5 apogee burns are the minimum feasible --
     # 4 or fewer cannot fit under the cap for any split (min total is fixed).
     cap = 217.0
-    problem = GeoRaisingProblem(n_burns=5, max_dv_per_burn_ms=cap, **GOES_GTO)
+    problem = GeoRaisingProblem(n_burns=5, max_dv_per_burn_ms=cap, **GEO_RAISING_KWARGS)
     x, f, _ = run_optimization(problem, pop_size=120, generations=150, seed=1, verbose=False)
     d = problem.decode(x)
 
@@ -90,7 +98,7 @@ def test_optimizer_finds_finite_burn_feasible_geo_insertion():
 
     # 4 burns cannot be made feasible: min achievable total (~999) over 4 burns
     # forces a max burn >= ~250 m/s > cap.
-    four = GeoRaisingProblem(n_burns=4, max_dv_per_burn_ms=cap, **GOES_GTO)
+    four = GeoRaisingProblem(n_burns=4, max_dv_per_burn_ms=cap, **GEO_RAISING_KWARGS)
     x4, _, _ = run_optimization(four, pop_size=120, generations=150, seed=1, verbose=False)
     assert not four.decode(x4)["feasible"]
 
@@ -103,7 +111,7 @@ def test_tudatpy_verification_reaches_geo():
     from orbitopt.optimize.runner import run_optimization
     from orbitopt.verify.geo_insertion import verify_geo_raising
 
-    problem = GeoRaisingProblem(n_burns=5, max_dv_per_burn_ms=217.0, **GOES_GTO)
+    problem = GeoRaisingProblem(n_burns=5, max_dv_per_burn_ms=217.0, **GEO_RAISING_KWARGS)
     x, _, _ = run_optimization(problem, pop_size=120, generations=150, seed=1, verbose=False)
 
     result = verify_geo_raising(problem, x, step_size=150.0, stationkeeping_days=1.0)

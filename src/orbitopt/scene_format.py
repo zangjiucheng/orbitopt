@@ -59,7 +59,18 @@ def validate_scene(scene: dict) -> None:
     """Validate ``scene`` against its own ``schemaVersion`` field's JSON
     Schema. Raises ``jsonschema.ValidationError`` on a mismatch, or
     ``ValueError`` if ``schemaVersion`` is missing or names a version this
-    orbitopt install doesn't have a schema for."""
+    orbitopt install doesn't have a schema for, or if a body's ``trail`` has
+    empty/mismatched-length ``times``/``positions`` arrays.
+
+    That last check is deliberately not expressible in the packaged JSON
+    Schema (draft 2020-12 has no clean "these two array properties must be
+    the same length" constraint), but every renderer that walks a trail
+    (orbitopt.viz.scene_renderer, orbitopt.viz.pv_viewer) indexes
+    times[0]/positions[0]/times[-1]/... unconditionally, so a schema-valid
+    document with an empty or ragged trail would otherwise pass validation
+    and then crash deep in a renderer as an uncaught IndexError instead of
+    surfacing as a normal, catchable load error here.
+    """
     version = scene.get("schemaVersion")
     if version is None:
         raise ValueError(
@@ -68,6 +79,28 @@ def validate_scene(scene: dict) -> None:
             f"set schemaVersion={SCHEMA_VERSION!r} (see orbitopt.scene_format.SCHEMA_VERSION)."
         )
     jsonschema.validate(instance=scene, schema=_schema(version))
+
+    for body in scene.get("bodies", []):
+        trail = body.get("trail")
+        if trail is None:
+            continue
+        times = trail.get("times", [])
+        positions = trail.get("positions", [])
+        body_id = body.get("id", "<unknown>")
+        if len(times) == 0 or len(positions) == 0:
+            raise ValueError(
+                f"scene document is invalid: body {body_id!r} has an empty "
+                f"trail (times has {len(times)} entries, positions has "
+                f"{len(positions)}) -- a trail needs at least one "
+                "times/positions pair for the renderer to place the body."
+            )
+        if len(times) != len(positions):
+            raise ValueError(
+                f"scene document is invalid: body {body_id!r} has a "
+                f"mismatched trail -- times has {len(times)} entries but "
+                f"positions has {len(positions)}; they must be the same "
+                "length (one position per timestamp)."
+            )
 
 
 def is_valid_scene(scene: dict) -> bool:

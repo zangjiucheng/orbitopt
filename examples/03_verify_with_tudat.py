@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 import pykep as pk
 
-from orbitopt.bodies import mjd2000_from_date, planet
+from orbitopt.bodies import mjd2000_from_date, mjd2000_to_ephemeris_seconds, planet
 from orbitopt.lambert.cpu import solve_lambert_single
 from orbitopt.verify.tudat_propagate import (
     compare_to_lambert_prediction,
@@ -44,6 +44,7 @@ def main():
         perturbing_bodies=("Sun", "Earth", "Mars", "Jupiter"),
         central_body="Sun",
         step_size=3600.0,
+        departure_epoch_ephemeris_seconds=mjd2000_to_ephemeris_seconds(t0),
     )
 
     diff = compare_to_lambert_prediction(result, r2, v2)

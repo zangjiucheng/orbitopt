@@ -827,7 +827,9 @@ class MissionControlWindow(QMainWindow):
         # here with no separate list to keep in sync.
         for mission in list_missions():
             self._loaders[mission.title] = mission.load
-            self.mission_list.addItem(QListWidgetItem(mission.title))
+            item = QListWidgetItem(mission.title)
+            item.setData(Qt.UserRole, mission.title)
+            self.mission_list.addItem(item)
         if self.mission_list.count():
             self.mission_list.setCurrentRow(0)
 
@@ -837,30 +839,41 @@ class MissionControlWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, "Open scene JSON", "", "Scene files (*.json)")
         if not path:
             return
-        name = os.path.basename(path)
-        self._loaders[name] = (lambda p=path: load_scene(p))
-        self.mission_list.addItem(QListWidgetItem(name))
+        # Keyed by the full absolute path, not just the basename: two different
+        # scene files that happen to share a filename (e.g. from different
+        # folders) would otherwise collide in _loaders/_scene_cache, with the
+        # second load silently overwriting the first's cache entry. The list
+        # item's *displayed* text stays the short filename -- only the lookup
+        # key (stashed on the item via Qt.UserRole) is the full path.
+        key = os.path.abspath(path)
+        label = os.path.basename(path)
+        self._loaders[key] = (lambda p=path: load_scene(p))
+        item = QListWidgetItem(label)
+        item.setData(Qt.UserRole, key)
+        self.mission_list.addItem(item)
         self.mission_list.setCurrentRow(self.mission_list.count() - 1)
 
     def _on_mission_selected(self, row: int):
         if row < 0 or self._loading:
             return
-        name = self.mission_list.item(row).text()
+        item = self.mission_list.item(row)
+        key = item.data(Qt.UserRole)
+        label = item.text()
         self._set_playing(False)
 
-        if name in self._scene_cache:
+        if key in self._scene_cache:
             # A cached scene skips the ~10s compute but still stutters: applying
             # it runs SceneRenderer.load, which tears down and rebuilds every
             # VTK actor synchronously on the main thread. Show the loading page
             # first, then apply on the next event-loop turn so the page actually
             # paints before that blocking rebuild -- otherwise the swap and the
             # freeze happen in the same turn and the user sees only the freeze.
-            self._begin_switch(f"Loading {name}…")
-            scene = self._scene_cache[name]
+            self._begin_switch(f"Loading {label}…")
+            scene = self._scene_cache[key]
             QTimer.singleShot(0, lambda: self._finish_cached(scene))
             return
 
-        self._start_loading(name)
+        self._start_loading(key, label)
 
     def _begin_switch(self, message: str):
         self._loading = True
@@ -899,10 +912,16 @@ class MissionControlWindow(QMainWindow):
             self.plotter.render()
 
     def _finish_cached(self, scene: dict):
-        self._apply_scene(scene)
-        self._end_switch()
+        # try/finally: if applying the scene raises (e.g. a malformed cached
+        # scene dict), _end_switch must still run -- otherwise self._loading
+        # stays True forever and the mission list / open-file button stay
+        # disabled, requiring an app restart to recover.
+        try:
+            self._apply_scene(scene)
+        finally:
+            self._end_switch()
 
-    def _start_loading(self, name: str):
+    def _start_loading(self, key: str, label: str | None = None):
         """Runs self._loaders[name]() on a background QThread instead of
         the UI thread -- compute_and_export_mission() alone is ~10s of
         Lambert-solve + differential-correction + tudatpy propagation, and
@@ -917,10 +936,11 @@ class MissionControlWindow(QMainWindow):
         it animates during this background compute, then holds while the
         finished scene is applied on the main thread.
         """
-        self._begin_switch(f"Computing {name}…")
+        label = label if label is not None else key
+        self._begin_switch(f"Computing {label}…")
 
         thread = QThread(self)
-        worker = SceneLoader(name, self._loaders[name])
+        worker = SceneLoader(key, self._loaders[key])
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         # QueuedConnection explicitly, not AutoConnection -- see the comment
@@ -1286,11 +1306,32 @@ class MissionControlWindow(QMainWindow):
         any in-flight scene-loading thread so nothing fires mid-teardown."""
         self._set_playing(False)
         self._timer.stop()
+        self._spinner._timer.stop()  # the spinner has its own QTimer, independent of self._timer
         self.plotter._resize_settle_timer.stop()  # so it can't fire post-teardown
         thread = self._load_thread
+        worker = self._load_worker
         if thread is not None:
             thread.quit()
-            thread.wait(2000)
+            if not thread.wait(2000):
+                # Scene loading (e.g. compute_and_export_mission) can take ~10s,
+                # far longer than this timeout -- the thread is very likely still
+                # running. If we let teardown proceed anyway, its result signal
+                # (finished/failed) fires later and drives _on_scene_loaded /
+                # _on_scene_load_failed, which touch self.renderer/self.plotter
+                # -- a use-after-close on the VTK plotter we're about to tear
+                # down below. Disconnect those signals first so a late-arriving
+                # result can't reach either slot, then wait out the thread for
+                # real so we don't destroy Python/Qt objects it still holds.
+                if worker is not None:
+                    try:
+                        worker.finished.disconnect(self._on_scene_loaded)
+                    except (RuntimeError, TypeError):
+                        pass
+                    try:
+                        worker.failed.disconnect(self._on_scene_load_failed)
+                    except (RuntimeError, TypeError):
+                        pass
+                thread.wait()
         try:
             self.plotter.close()
         except Exception:  # noqa: BLE001 -- best-effort teardown, never block quit

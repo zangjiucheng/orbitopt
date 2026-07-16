@@ -27,11 +27,45 @@ def marker_size(body: dict) -> float:
     return _MARKER_BASE_SIZE + _MARKER_WEIGHT_SIZE * body.get("radiusDisplay", 4.0)
 
 
+def _validated_trail(body: dict) -> tuple[list, list]:
+    """Return (times, positions) for ``body["trail"]``, raising a clear,
+    catchable ``ValueError`` instead of letting an empty or ragged trail
+    reach the indexing below as an uncaught ``IndexError``.
+
+    A scene document can be schema-valid (orbitopt/schemas/scene-1.0.json
+    only requires ``times``/``positions`` to exist, not that they're
+    non-empty or the same length -- draft 2020-12 has no clean way to
+    express "same length as this other property") and still have an empty
+    or mismatched trail, e.g. a producer bug that emits ``times: []``. Every
+    trail consumer below (position_at_time, trail_index_at_time, load())
+    goes through this so that case fails loudly here, at the one place that
+    knows what a trail is supposed to look like, rather than as an
+    IndexError several stack frames later that bypasses the app's normal
+    QMessageBox error-dialog path.
+    """
+    trail = body["trail"]
+    times = trail.get("times", [])
+    positions = trail.get("positions", [])
+    body_id = body.get("id", "<unknown>")
+    if len(times) == 0 or len(positions) == 0:
+        raise ValueError(
+            f"body {body_id!r} has an empty trail (times has {len(times)} "
+            f"entries, positions has {len(positions)}) -- a trail needs at "
+            "least one times/positions pair to be rendered."
+        )
+    if len(times) != len(positions):
+        raise ValueError(
+            f"body {body_id!r} has a mismatched trail -- times has "
+            f"{len(times)} entries but positions has {len(positions)}; "
+            "they must be the same length (one position per timestamp)."
+        )
+    return times, positions
+
+
 def position_at_time(body: dict, t: float) -> np.ndarray:
     if "trail" not in body:
         return np.asarray(body.get("position", [0.0, 0.0, 0.0]), dtype=float)
-    times = body["trail"]["times"]
-    positions = body["trail"]["positions"]
+    times, positions = _validated_trail(body)
     if t <= times[0]:
         return np.asarray(positions[0], dtype=float)
     if t >= times[-1]:
@@ -46,7 +80,8 @@ def position_at_time(body: dict, t: float) -> np.ndarray:
 
 
 def trail_index_at_time(body: dict, t: float) -> int:
-    return int(np.searchsorted(body["trail"]["times"], t))
+    times, _positions = _validated_trail(body)
+    return int(np.searchsorted(times, t))
 
 
 class SceneRenderer:
@@ -81,7 +116,8 @@ class SceneRenderer:
                 self.plotter.add_mesh(orbit_mesh, color=color, opacity=opacity, line_width=1, pickable=False)
 
             if "trail" in body:
-                t0 = scene.get("timeline", {}).get("min", body["trail"]["times"][0])
+                trail_times, trail_positions = _validated_trail(body)
+                t0 = scene.get("timeline", {}).get("min", trail_times[0])
                 pos0 = position_at_time(body, t0)
 
                 point_poly = pv.PolyData(pos0.reshape(1, 3))
@@ -90,7 +126,7 @@ class SceneRenderer:
                     render_points_as_spheres=True, name=f"marker-{body['id']}",
                 )
 
-                full_positions = np.asarray(body["trail"]["positions"], dtype=float)
+                full_positions = np.asarray(trail_positions, dtype=float)
                 full_poly = pv.MultipleLines(full_positions)
                 self.plotter.add_mesh(full_poly, color=color, line_width=1.1, opacity=0.3, pickable=False)
 

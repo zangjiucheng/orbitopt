@@ -228,9 +228,16 @@ def get_sun_state0(seed_epoch_ephemeris_seconds=0.0):
     return _SUN_STATE0_KM[key][0].copy(), _SUN_STATE0_KM[key][1].copy()
 
 
-def _moon_state_core(dt, xp, mu_earth, maxiter, seed_epoch_ephemeris_seconds=0.0):
+def _moon_state_core(dt, xp, mu_earth, maxiter, seed_epoch_ephemeris_seconds=0.0, mu_moon=MU_MOON_KM3_S2):
     r0, v0 = get_moon_state0(seed_epoch_ephemeris_seconds)
-    return _propagate_kepler_core(xp.asarray(r0), xp.asarray(v0), dt, mu_earth, xp, maxiter)
+    # The Moon's *relative* orbit about Earth's center obeys
+    # r'' = -G(M_earth + M_moon) r / |r|^3 -- the two-body relative-motion
+    # mu is the sum of both bodies' GM, not just the primary's (unlike the
+    # Earth-Sun case in _sun_state_core, where mu_earth/mu_sun ~ 3e-6 is
+    # genuinely negligible and dropping it is a deliberate, documented
+    # approximation). mu_moon/(mu_earth+mu_moon) ~ 1.2%, which is not
+    # negligible against this module's own precision budget.
+    return _propagate_kepler_core(xp.asarray(r0), xp.asarray(v0), dt, mu_earth + mu_moon, xp, maxiter)
 
 
 def _sun_state_core(dt, xp, mu_sun, maxiter, seed_epoch_ephemeris_seconds=0.0):
@@ -238,7 +245,7 @@ def _sun_state_core(dt, xp, mu_sun, maxiter, seed_epoch_ephemeris_seconds=0.0):
     return _propagate_kepler_core(xp.asarray(r0), xp.asarray(v0), dt, mu_sun, xp, maxiter)
 
 
-def moon_state_batch(dt, use_gpu=None, mu_earth=MU_EARTH_KM3_S2, maxiter=20, seed_epoch_ephemeris_seconds=0.0):
+def moon_state_batch(dt, use_gpu=None, mu_earth=MU_EARTH_KM3_S2, maxiter=20, seed_epoch_ephemeris_seconds=0.0, mu_moon=MU_MOON_KM3_S2):
     """Moon (r, v) relative to Earth at an array of times ``dt`` (seconds
     *since* ``seed_epoch_ephemeris_seconds``, default J2000), by propagating
     the single real SPICE-sampled state from ``get_moon_state0`` forward
@@ -251,6 +258,11 @@ def moon_state_batch(dt, use_gpu=None, mu_earth=MU_EARTH_KM3_S2, maxiter=20, see
     time), don't pass a ``dt`` of "epoch since J2000" directly -- see
     ``get_moon_state0``'s docstring for why that silently produces
     hundred-thousand-km errors instead of an exception.
+
+    The propagation uses ``mu_earth + mu_moon`` as the two-body gravitational
+    parameter, since this models the Moon's *relative* orbit about Earth's
+    center (r'' = -G(M_earth+M_moon) r/|r|^3), not a test-particle orbit
+    around a fixed Earth -- see ``_moon_state_core``.
 
     ``maxiter`` defaults lower than ``propagate_kepler_batch``'s own default
     (empirically the near-circular, mildly-eccentric Earth-Moon two-body
@@ -265,7 +277,7 @@ def moon_state_batch(dt, use_gpu=None, mu_earth=MU_EARTH_KM3_S2, maxiter=20, see
     (r, v) : each (N, 3) numpy arrays, km and km/s.
     """
     xp = get_array_module(use_gpu)
-    r, v = _moon_state_core(dt, xp, mu_earth, maxiter, seed_epoch_ephemeris_seconds)
+    r, v = _moon_state_core(dt, xp, mu_earth, maxiter, seed_epoch_ephemeris_seconds, mu_moon)
     return to_numpy(r), to_numpy(v)
 
 
@@ -369,7 +381,9 @@ def propagate_spacecraft_batch(
         a = -mu_earth * r / rn[:, None] ** 3
 
         t_since_seed = t_abs - moon_seed_epoch_ephemeris_seconds
-        r_moon, _ = _moon_state_core(t_since_seed, xp, mu_earth, kepler_maxiter, moon_seed_epoch_ephemeris_seconds)
+        r_moon, _ = _moon_state_core(
+            t_since_seed, xp, mu_earth, kepler_maxiter, moon_seed_epoch_ephemeris_seconds, mu_moon
+        )
         d = r_moon - r
         dn = xp.linalg.norm(d, axis=-1)
         rmoon_n = xp.linalg.norm(r_moon, axis=-1)

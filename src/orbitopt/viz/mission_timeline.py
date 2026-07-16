@@ -44,7 +44,7 @@ def _plane_aligned_parking_orbit(r_moon_arrival, altitude_km, mu_earth):
 
 def compute_and_export_mission(
     departure_mjd2000=None,
-    coast_days_guess=4.5,
+    coast_days_guess=5.5,
     total_days=9.6,
     step_seconds=60.0,
     parking_altitude_km=185.0,
@@ -76,11 +76,11 @@ def compute_and_export_mission(
     r_moon_arrival, _ = moon_state(departure_mjd2000 + coast_days_guess)
     r_moon_arrival = np.asarray(r_moon_arrival)
 
+    target_distance_km = ARTEMIS_II_PERILUNE_ALTITUDE_KM + MOON_RADIUS_KM
+
     r0, v0 = _plane_aligned_parking_orbit(r_moon_arrival, parking_altitude_km, mu_earth)
     (v1, _v2), = solve_lambert_single(r0, r_moon_arrival, coast_days_guess * 86400.0, mu=mu_earth, max_revs=0)[:1]
     dv_guess = v1 - v0
-
-    target_distance_km = ARTEMIS_II_PERILUNE_ALTITUDE_KM + MOON_RADIUS_KM
     targeting = target_lunar_flyby(
         r0=r0, v0_pre_burn=v0, initial_epoch=0.0,
         dv_guess=dv_guess, coast_duration_guess=coast_days_guess * 86400.0,

@@ -43,12 +43,22 @@ def propagate_two_body_leg(
     central_body="Sun",
     step_size=3600.0,
     save_history=True,
+    departure_epoch_ephemeris_seconds=0.0,
 ) -> PropagationResult:
     """Numerically propagate an initial Cartesian state [r1, v1] for
     ``tof_seconds`` under point-mass gravity from every body in
     ``perturbing_bodies`` (central_body's own point mass is always included),
     using a fixed-step RK4 integrator. Meant to verify a single pykep Lambert
     leg: pass pykep's departure r1 and its solved v1 as the initial state.
+
+    ``departure_epoch_ephemeris_seconds`` is the mission's real departure
+    epoch, in SPICE ephemeris seconds since J2000 (2000-01-01 12:00:00 TDB) --
+    e.g. via ``orbitopt.bodies.mjd2000_to_ephemeris_seconds``. It anchors the
+    propagation's absolute time so perturbing-body SPICE positions (Earth,
+    Mars, Jupiter, ...) are sampled at the actual mission date throughout the
+    propagation window, not at the J2000 placeholder; leaving it at the
+    default of 0.0 places the whole leg at J2000 and can put a perturbing
+    body hundreds of millions to over a billion km from its real position.
     """
     _ensure_spice_loaded()
 
@@ -70,8 +80,8 @@ def propagate_two_body_leg(
 
     initial_state = np.concatenate([np.asarray(r1, dtype=float), np.asarray(v1, dtype=float)])
 
-    initial_epoch = 0.0
-    final_epoch = float(tof_seconds)
+    initial_epoch = float(departure_epoch_ephemeris_seconds)
+    final_epoch = initial_epoch + float(tof_seconds)
 
     integrator_settings = propagation_setup.integrator.runge_kutta_fixed_step(
         step_size, propagation_setup.integrator.CoefficientSets.rk_4,
@@ -236,6 +246,30 @@ def body_position_at_absolute_epoch(body_name, absolute_epoch, central_body="Ear
         body_name, central_body, frame, "NONE", float(absolute_epoch),
     )
     return np.asarray(position, dtype=float).reshape(3)
+
+
+def body_velocity_at_absolute_epoch(body_name, absolute_epoch, central_body="Earth", frame="ECLIPJ2000"):
+    """Same convention as ``body_position_at_absolute_epoch`` but returns the (3,) m/s
+    velocity instead -- needed to build a relative (spacecraft - body) velocity, e.g. for
+    B-plane flyby targeting (``verify.differential_correction``), where the encounter's
+    incoming-asymptote direction depends on the Moon's own motion, not just its position.
+    """
+    _ensure_spice_loaded()
+    state = spice.get_body_cartesian_state_at_epoch(
+        target_body_name=body_name, observer_body_name=central_body,
+        reference_frame_name=frame, aberration_corrections="NONE",
+        ephemeris_time=float(absolute_epoch),
+    )
+    return np.asarray(state[3:], dtype=float).reshape(3)
+
+
+def body_gravitational_parameter(body_name):
+    """SPICE-reported GM (m^3/s^2) for ``body_name`` -- e.g. for computing the osculating
+    two-body orbital elements of a spacecraft's motion relative to that body near a close
+    encounter (B-plane targeting).
+    """
+    _ensure_spice_loaded()
+    return float(spice.get_body_gravitational_parameter(body_name))
 
 
 def find_closest_approach(

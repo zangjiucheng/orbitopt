@@ -27,6 +27,7 @@ import numpy as np
 from tudatpy.astro import element_conversion
 from tudatpy.interface import spice
 
+from orbitopt.bodies import mjd2000_from_date, mjd2000_to_ephemeris_seconds
 from orbitopt.verify.tudat_propagate import propagate_multi_arc
 
 GEO_PERTURBATIONS = dict(
@@ -74,6 +75,7 @@ class GeoInsertionResult:
     achieved_uncorrected: dict           # osculating a/e/i applying the ideal burn under perturbations
     achieved_corrected: dict             # osculating a/e/i after the targeter
     stationkeeping: dict                 # drift of the corrected GEO over stationkeeping_days
+    epoch_mjd2000: float                 # real mission epoch (first-apogee/injection date) used throughout
     residual_history: list = field(default_factory=list)
 
 
@@ -151,11 +153,30 @@ def target_geo_insertion(pre_burn_state, dv_guess, mu, target_radius_m,
     return best_dv, converged, len(history) - 1, history
 
 
-def verify_geo_raising(problem, decision_vector, step_size=120.0, stationkeeping_days=3.0) -> GeoInsertionResult:
+def verify_geo_raising(problem, decision_vector, step_size=120.0, stationkeeping_days=3.0,
+                       epoch_mjd2000: float | None = None) -> GeoInsertionResult:
     """Re-fly ``problem``'s optimized schedule under J2+J22+Sun+Moon and refine
     the final burn to true GEO. ``problem`` is an
     orbitopt.problems.geo_raising.GeoRaisingProblem, ``decision_vector`` its
-    optimized champion."""
+    optimized champion.
+
+    ``epoch_mjd2000`` is the real mission epoch (the first-apogee / injection
+    date) as MJD2000. It anchors *both* the raising propagation and the
+    stationkeeping propagation that follows it, in SPICE ephemeris seconds via
+    ``orbitopt.bodies.mjd2000_to_ephemeris_seconds`` -- the same pattern
+    ``verify.differential_correction`` / ``viz.mission_timeline`` use for the
+    lunar-flyby case -- so the J2/J22 field orientation and Sun/Moon third-body
+    geometry (which drive the station-keeping drift this function reports)
+    correspond to an actual calendar date instead of the J2000 placeholder
+    (2000-01-01 12:00 TDB). Unlike the lunar-flyby targeter, nothing here
+    iterates the epoch back toward consistency, so leaving it at the J2000
+    default silently reports drift/libration for a date with no relation to
+    the mission. Defaults to 2026-08-01 absent a published GOES-like launch
+    date (matching ``viz.mission_timeline``'s Artemis II placeholder)."""
+    if epoch_mjd2000 is None:
+        epoch_mjd2000 = mjd2000_from_date(2026, 8, 1)
+    reference_epoch_s = mjd2000_to_ephemeris_seconds(epoch_mjd2000)
+
     mu = _mu_earth()
     r_geo = geostationary_radius_m(mu)
     sched = problem.decode(decision_vector)
@@ -178,12 +199,20 @@ def verify_geo_raising(problem, decision_vector, step_size=120.0, stationkeeping
         period = orbital_period(orbits[k + 1][0], r_geo, mu)
         arcs.append({"type": "coast", "duration": period})
     if arcs:
-        pre_final = propagate_multi_arc(
-            states[0][:3], states[0][3:], 0.0, arcs=arcs,
+        raising = propagate_multi_arc(
+            states[0][:3], states[0][3:], reference_epoch_s, arcs=arcs,
             step_size=step_size, **GEO_PERTURBATIONS,
-        ).final_state
+        )
+        pre_final = raising.final_state
+        # propagate_multi_arc reports epochs relative to the initial_epoch it
+        # was given (here reference_epoch_s), so this is the real elapsed
+        # raising time -- the epoch stationkeeping must continue from below,
+        # not the mission epoch itself (the final burn is instantaneous, so
+        # pre_final/corrected_state share this same epoch).
+        elapsed_to_pre_final_s = float(raising.epochs[-1])
     else:
         pre_final = states[0]
+        elapsed_to_pre_final_s = 0.0
 
     ideal_burn = burns[n - 1]
     uncorrected_state = pre_final.copy()
@@ -200,7 +229,7 @@ def verify_geo_raising(problem, decision_vector, step_size=120.0, stationkeeping
     # Station-keeping drift: fly the corrected GEO forward and measure how far
     # the osculating elements wander (Sun/Moon -> N-S inclination, J22 -> e).
     sk = propagate_multi_arc(
-        corrected_state[:3], corrected_state[3:], 0.0,
+        corrected_state[:3], corrected_state[3:], reference_epoch_s + elapsed_to_pre_final_s,
         arcs=[{"type": "coast", "duration": stationkeeping_days * 86400.0}],
         step_size=step_size, **GEO_PERTURBATIONS,
     )
@@ -221,5 +250,6 @@ def verify_geo_raising(problem, decision_vector, step_size=120.0, stationkeeping
         achieved_uncorrected=achieved_uncorrected,
         achieved_corrected=achieved_corrected,
         stationkeeping=stationkeeping,
+        epoch_mjd2000=epoch_mjd2000,
         residual_history=history,
     )

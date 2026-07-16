@@ -15,8 +15,6 @@ dependencies:
                        # caught up yet
   - matplotlib=3.9.2
   - pandas
-  - astropy
-  - spiceypy
   - tqdm
   - notebook
   - pytest

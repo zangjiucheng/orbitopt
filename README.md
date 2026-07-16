@@ -5,6 +5,11 @@ Orbital trajectory optimization research framework built on **pykep**
 **tudatpy** (high-fidelity numerical propagation), with **CUDA-accelerated
 batch candidate evaluation** via CuPy.
 
+A plain `pip install orbitopt` (or the `viewer` extra) only gets the
+scene-format read/write/validate surface and the PyVista/PySide6 3D viewer --
+pykep, tudatpy, pygmo, and CuPy are conda-only (see environment.yml) and are
+required for the trajectory optimization/propagation pieces described below.
+
 ## Why this split
 
 - **pykep + pygmo**: cheap, analytic/patched-conic trajectory models
@@ -24,6 +29,7 @@ batch candidate evaluation** via CuPy.
 
 ```
 src/orbitopt/
+  __main__.py        `python -m orbitopt` entry point, delegates to cli.py
   scene_format.py    the scene file format's entire read/write/validate surface --
                       zero heavy deps (stdlib + jsonschema only); see "Packaging" below
   schemas/
@@ -47,6 +53,7 @@ src/orbitopt/
     transfer_2body.py  single Lambert-leg transfer UDP, with a real batch_fitness()
     mga.py             wraps pykep.trajopt.mga_1dsm; GPU-screens launch windows first
     free_return.py     GPU-batched TLI-burn screening UDP (orbitopt.dynamics.nbody_gpu-backed)
+    geo_raising.py     GPU-batched GEO orbit-raising burn-sequence UDP
   optimize/
     gpu_bfe.py         custom pygmo UDBFE that dispatches to a problem's batch_fitness()
     runner.py          drives pygmo algorithms (pso_gen/cmaes/nsga2) through the GPU bfe
@@ -57,6 +64,8 @@ src/orbitopt/
                         and altitude-crossing event detection
     differential_correction.py  fixed-time Newton-Raphson shooting targeter that
                         refines a coarse TLI guess into a precise lunar-flyby distance
+    geo_insertion.py   verifies a GEO-raising candidate in tudatpy (numerical
+                        propagation of the burn sequence vs. the GPU-screened prediction)
   viz/
     porkchop.py        GPU-batched porkchop grid + plotting
     scene.py           orbitopt's own exporter-side builder helpers (body_entry,
@@ -65,11 +74,13 @@ src/orbitopt/
     solar_system.py    exports the whole solar system as a SceneData document
     mission_timeline.py exports the Artemis II free-return mission as a
                         scrubbable SceneData document
+    geo_raising.py     exports the GEO orbit-raising mission as a SceneData document
     scene_renderer.py  populates a PyVista plotter from a SceneData document --
                         shared by both viewers below, so there's one place
                         that knows how to draw {bodies, orbits, trails}
     pv_viewer.py        minimal single-scene viewer/scripting API (PyVista/VTK)
     theme.py            Qt stylesheet for the app below (dark "tracking station" look)
+    icon.py             generates the app's window/taskbar icon programmatically
     app.py               Mission Control: the persistent, general-purpose desktop
                         app (PySide6 + pyvistaqt) -- mission list, time-warp
                         strip, per-body info cards; see "Mission Control" below
