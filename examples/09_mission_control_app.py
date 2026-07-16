@@ -2,7 +2,9 @@
 for browsing every scene this framework can produce, with a mission list
 sidebar, a time-warp control strip, and live per-body orbit-info cards.
 
-Run: python examples/09_mission_control_app.py
+Prefer the installed console command: ``orbitopt`` (or ``orbitopt-app``).
+This script is a thin reference kept for the examples set; it just calls
+``orbitopt.viz.app.main``.
 """
 from __future__ import annotations
 

@@ -9,6 +9,10 @@ description = "Orbital trajectory optimization research framework built on pykep
 requires-python = ">=3.10,<3.11"
 dependencies = []
 
+[project.scripts]
+orbitopt = "orbitopt.cli:main"
+orbitopt-app = "orbitopt.viz.app:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

@@ -198,12 +198,24 @@ what an upstream (imprecise, automated) stage will actually hand it.
 - `examples/09_mission_control_app.py` -- launch **Mission Control**, the
   persistent multi-scene desktop app (see below) -- this is the one to
   reach for day to day; `08_pyvista_viewer.py` is the minimal scripting API.
+  (Day to day, just run the `orbitopt` console command instead of either.)
+- `examples/10_gto_geo_orbit_raising.py` -- optimize a GOES-style GTO->GEO
+  orbit-raising campaign (min finite-burn-feasible apogee-burn schedule) with
+  the GPU-batched screening optimizer, then verify + refine the final burn to
+  true GEO in tudatpy (J2/J22 + Sun/Moon); see `docs/goes_gto_geo_mission_plan.md`
+  and the "GOES — GTO to GEO" Mission Control scene.
 
 ## Mission Control (general-purpose desktop app)
 
 ```
-python examples/09_mission_control_app.py
+orbitopt            # or: orbitopt-app  /  python -m orbitopt  /  python -m orbitopt app
 ```
+
+`pip install -e .` puts the `orbitopt` and `orbitopt-app` console scripts on
+PATH (see `orbitopt.cli` for the `app` / `view` / `export` subcommands); the
+`examples/` scripts are annotated references, not the way to start the app.
+Keyboard shortcuts inside the app: Space play/pause, ←/→ step, Home restart,
+`[` / `]` change time-warp, ⌘Q/Ctrl+Q quit.
 
 A persistent app, not a script that renders one scene and exits: a mission
 list sidebar (Solar System, Artemis II, plus `File > Open scene file...`
@@ -240,9 +252,10 @@ project's other `off_screen=True` PyVista tests.
 ## Single-scene 3D viewer (PyVista, no app chrome)
 
 ```
-python examples/08_pyvista_viewer.py solar-system
-python examples/08_pyvista_viewer.py artemis2
-python examples/08_pyvista_viewer.py path/to/some_scene.json
+orbitopt view solar-system
+orbitopt view artemis2
+orbitopt view goes
+orbitopt view path/to/some_scene.json
 ```
 
 A real desktop window (PyVista/VTK -- no browser, no HTML/CSS/JS anywhere
