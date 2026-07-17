@@ -6,9 +6,11 @@ viewer/ -- not a bespoke mission-specific format.
 Positions are exported in true 3D, Earth-centered ECLIPJ2000 km -- earlier
 iterations of this module projected onto the trajectory's own orbital plane
 for a 2D canvas view; that projection is gone now that rendering is
-genuinely 3D, so the real (non-trivial, ~30-40 degree) inclination of this
-particular free-return trajectory relative to the ecliptic is visible
-directly instead of being flattened away.
+genuinely 3D, so the real inclination of this particular free-return
+trajectory relative to the ecliptic is visible directly instead of being
+flattened away. See _plane_aligned_parking_orbit for how that inclination is
+chosen -- close to the Moon's own orbital plane (a few degrees), the natural
+minimal-plane-change choice, not an arbitrary or forced value.
 """
 from __future__ import annotations
 
@@ -18,19 +20,47 @@ import pykep as pk
 from orbitopt.bodies import mjd2000_from_date, mjd2000_to_ephemeris_seconds, moon_state
 from orbitopt.lambert.cpu import solve_lambert_single
 from orbitopt.verify.differential_correction import target_lunar_flyby
-from orbitopt.verify.tudat_propagate import body_position_at_absolute_epoch, propagate_multi_arc
+from orbitopt.verify.tudat_propagate import (
+    PropagationResult,
+    body_position_at_absolute_epoch,
+    find_altitude_crossing,
+    propagate_multi_arc,
+)
 from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, ROTATION_PERIOD_HOURS, TEXTURE, body_entry, scene_document
 
 EARTH_RADIUS_KM = 6378.0
 MOON_RADIUS_KM = 1737.4
 ARTEMIS_II_PERILUNE_ALTITUDE_KM = 6545.0
+EARTH_ENTRY_INTERFACE_ALTITUDE_KM = 121.92  # 400,000 ft, the conventional atmospheric entry interface
 
 
-def _plane_aligned_parking_orbit(r_moon_arrival, altitude_km, mu_earth):
+def _plane_aligned_parking_orbit(r_moon_arrival, v_moon_arrival, altitude_km, mu_earth):
+    """Choose a parking-orbit orientation whose plane contains the Moon's
+    arrival direction, at a 150-degree transfer angle behind it, oriented so
+    the plane also contains the Moon's own velocity at arrival -- i.e. (up
+    to the ~5 degree lunar-orbit-vs-ecliptic tilt) the Moon's own orbital
+    plane, the natural minimal-plane-change choice for a lunar transfer.
+
+    An earlier version of this used the ecliptic pole (Z) as the reference
+    vector for the second in-plane basis direction instead of the Moon's
+    velocity. That's a real bug, not a style choice: for any reference
+    vector R and unit vector u, the plane spanned by {u, R-(R.u)u} always
+    has normal u x (R-(R.u)u) = u x R, which is *exactly* perpendicular to R
+    by construction (cross products are always perpendicular to both
+    inputs) -- so using R=Z forced the resulting transfer plane to be
+    *exactly* 90 degrees inclined to the ecliptic, always, regardless of
+    where the Moon actually is. That's a near-polar departure, not the
+    "~30-40 degree" inclination this module's own docstring describes, and
+    it produced a visibly wrong-looking, unrealistically-oriented trajectory
+    (confirmed: 86-89 degrees measured on the actual exported trajectory).
+    Using the Moon's velocity as the reference instead gives a genuinely
+    moderate, physically-motivated inclination (~5 degrees, matching the
+    Moon's real orbit) rather than an accidental fixed 90.
+    """
     u = r_moon_arrival / np.linalg.norm(r_moon_arrival)
-    reference = np.array([0.0, 0.0, 1.0])
+    reference = v_moon_arrival / np.linalg.norm(v_moon_arrival)
     if abs(np.dot(u, reference)) > 0.9:
-        reference = np.array([1.0, 0.0, 0.0])
+        reference = np.array([0.0, 0.0, 1.0])
     e2 = reference - np.dot(reference, u) * u
     e2 /= np.linalg.norm(e2)
     e1 = u
@@ -44,8 +74,8 @@ def _plane_aligned_parking_orbit(r_moon_arrival, altitude_km, mu_earth):
 
 def compute_and_export_mission(
     departure_mjd2000=None,
-    coast_days_guess=5.5,
-    total_days=9.6,
+    coast_days_guess=4.5,
+    total_days=12.0,
     step_seconds=60.0,
     parking_altitude_km=185.0,
     max_output_points=700,
@@ -73,12 +103,13 @@ def compute_and_export_mission(
     reference_et = mjd2000_to_ephemeris_seconds(departure_mjd2000)
     mu_earth = pk.MU_EARTH
 
-    r_moon_arrival, _ = moon_state(departure_mjd2000 + coast_days_guess)
+    r_moon_arrival, v_moon_arrival = moon_state(departure_mjd2000 + coast_days_guess)
     r_moon_arrival = np.asarray(r_moon_arrival)
+    v_moon_arrival = np.asarray(v_moon_arrival)
 
     target_distance_km = ARTEMIS_II_PERILUNE_ALTITUDE_KM + MOON_RADIUS_KM
 
-    r0, v0 = _plane_aligned_parking_orbit(r_moon_arrival, parking_altitude_km, mu_earth)
+    r0, v0 = _plane_aligned_parking_orbit(r_moon_arrival, v_moon_arrival, parking_altitude_km, mu_earth)
     (v1, _v2), = solve_lambert_single(r0, r_moon_arrival, coast_days_guess * 86400.0, mu=mu_earth, max_revs=0)[:1]
     dv_guess = v1 - v0
     targeting = target_lunar_flyby(
@@ -98,6 +129,44 @@ def compute_and_export_mission(
         ],
         perturbing_bodies=("Earth", "Moon", "Sun"), step_size=step_seconds,
     )
+
+    # This targeter (see target_lunar_flyby) only aims the lunar-flyby
+    # distance, not a B-plane aim point -- so whether the resulting return
+    # leg happens to cross the atmospheric entry interface on its own is
+    # incidental, not guaranteed by construction. Either way, this
+    # propagator has no solid Earth or atmosphere model, so past the
+    # trajectory's own closest return approach it doesn't stop -- it just
+    # keeps going (through the massless-surface Earth if the perigee is low
+    # enough, or straight back out if it isn't) and swings back out on
+    # another multi-day arc, which is not what a real mission does and reads
+    # as an obviously broken shape (the spacecraft appears to pass through
+    # or bounce off the planet and loop back out) in the 3D view. Truncate
+    # at the genuine end of the free-return leg -- the entry-interface
+    # crossing if it reaches one, otherwise the return leg's own closest
+    # approach to Earth -- rather than exporting that unphysical tail.
+    entry = find_altitude_crossing(
+        full, central_body_radius_km=EARTH_RADIUS_KM, threshold_altitude_km=EARTH_ENTRY_INTERFACE_ALTITUDE_KM,
+    )
+    return_perigee = None
+    if entry is not None:
+        cutoff_epoch, cutoff_state = entry.epoch, entry.spacecraft_state
+    else:
+        after_perilune = full.epochs > targeting.coast_duration
+        if after_perilune.any():
+            radii_km = np.linalg.norm(full.states[:, :3], axis=1) / 1000.0
+            idx = int(np.argmin(np.where(after_perilune, radii_km, np.inf)))
+            cutoff_epoch, cutoff_state = float(full.epochs[idx]), full.states[idx]
+            return_perigee = {"distance_km": radii_km[idx]}
+        else:
+            cutoff_epoch = None
+
+    if cutoff_epoch is not None:
+        keep_before_cutoff = full.epochs <= cutoff_epoch
+        full = PropagationResult(
+            epochs=np.append(full.epochs[keep_before_cutoff], cutoff_epoch),
+            states=np.vstack([full.states[keep_before_cutoff], cutoff_state]),
+            final_state=cutoff_state,
+        )
 
     perilune_day = round(targeting.coast_duration / 86400.0, 4)
     perilune_idx_fine = int(np.argmin(np.abs(full.epochs - targeting.coast_duration)))
@@ -129,6 +198,21 @@ def compute_and_export_mission(
                     f"({targeting.final_distance_km - MOON_RADIUS_KM:.0f} km altitude)",
         },
     ]
+    if entry is not None:
+        events.append({
+            "label": "Earth entry interface",
+            "time": round(entry.epoch / 86400.0, 4),
+            "note": f"free return -- {EARTH_ENTRY_INTERFACE_ALTITUDE_KM:.0f} km altitude reached "
+                    "with no further burns",
+        })
+    elif return_perigee is not None:
+        events.append({
+            "label": "Closest approach to Earth (return leg)",
+            "time": round(cutoff_epoch / 86400.0, 4),
+            "note": f"{return_perigee['distance_km']:.0f} km from Earth center "
+                    f"({return_perigee['distance_km'] - EARTH_RADIUS_KM:.0f} km altitude) -- "
+                    "doesn't quite reach the atmosphere on its own",
+        })
 
     bodies = [
         body_entry(

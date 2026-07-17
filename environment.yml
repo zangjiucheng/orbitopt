@@ -14,14 +14,11 @@ dependencies:
                        # removed in scipy 1.14; conda-forge's pykep build hasn't
                        # caught up yet
   - matplotlib=3.9.2
-  - pandas
-  - tqdm
   - notebook
   - pytest
   - pip
   - pip:
     - cupy-cuda13x
-    - numba
     - pyvista   # interactive 3D scene viewer (viz/pv_viewer.py) -- real desktop
                 # window via VTK, no browser/HTML/JS involved
     - pyside6   # Qt bindings for the Mission Control app (viz/app.py)

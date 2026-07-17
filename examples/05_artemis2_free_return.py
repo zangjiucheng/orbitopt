@@ -56,17 +56,27 @@ def lambert_seeded_initial_guess(r0, v0_circular, r_moon_arrival, coast_seconds,
     return v1 - v0_circular
 
 
-def plane_aligned_parking_orbit(r_moon_arrival, altitude_km, mu_earth):
+def plane_aligned_parking_orbit(r_moon_arrival, v_moon_arrival, altitude_km, mu_earth):
     """Choose a parking-orbit orientation whose plane contains the Moon's
     arrival direction, at a 150-degree transfer angle behind it -- without
     this, an arbitrarily-oriented parking orbit forces the Lambert arc
     through a huge, unrealistic plane change (see the project's research
     notes: an unaligned first attempt needed an 11+ km/s "TLI" burn).
+
+    Oriented so the plane also contains the Moon's own velocity at arrival
+    (i.e. close to the Moon's own orbital plane, up to its ~5 degree tilt
+    from the ecliptic) rather than an ecliptic-pole reference: for any
+    reference vector R, the plane spanned by {u, R-(R.u)u} always has normal
+    u x R, which is *exactly* perpendicular to R by construction -- using
+    R=ecliptic-Z (an earlier version of this function did) therefore always
+    forced an exactly-90-degree-inclined, near-polar transfer, regardless of
+    where the Moon actually is. Using the Moon's own velocity avoids that
+    trap and gives a genuinely moderate, physically-motivated inclination.
     """
     u = r_moon_arrival / np.linalg.norm(r_moon_arrival)
-    reference = np.array([0.0, 0.0, 1.0])
+    reference = v_moon_arrival / np.linalg.norm(v_moon_arrival)
     if abs(np.dot(u, reference)) > 0.9:
-        reference = np.array([1.0, 0.0, 0.0])
+        reference = np.array([0.0, 0.0, 1.0])
     e2 = reference - np.dot(reference, u) * u
     e2 /= np.linalg.norm(e2)
     e1 = u
@@ -83,21 +93,22 @@ def plane_aligned_parking_orbit(r_moon_arrival, altitude_km, mu_earth):
 
 def main():
     departure_mjd2000 = mjd2000_from_date(2026, 8, 1)
-    # 5.5, not the seemingly-more-natural 4.5: at 4.5 (and several other
-    # nearby coast times), the dead-center Lambert guess's uncorrected miss
-    # is small enough that target_lunar_flyby's fixed miss-vector-direction
-    # approach gets stuck at a nearby local point instead of the true
-    # target (see that function's docstring). Confirmed by sweeping ~20
-    # nearby (departure date, coast time) combinations for one that
-    # converges cleanly.
-    coast_days_guess = 5.5
+    # 4.5 days: with plane_aligned_parking_orbit aligned to the Moon's own
+    # orbital plane (see that function's docstring for why this replaced an
+    # earlier, buggy ecliptic-pole-referenced version that always forced a
+    # near-polar transfer), this is the nearby coast time that converges
+    # cleanly -- confirmed by sweeping nearby coast times at this departure
+    # date for one where target_lunar_flyby's fixed miss-vector-direction
+    # approach (see that function's docstring) actually converges.
+    coast_days_guess = 4.5
     reference_et = mjd2000_to_ephemeris_seconds(departure_mjd2000)
     mu_earth = pk.MU_EARTH
 
-    r_moon_arrival, _ = moon_state(departure_mjd2000 + coast_days_guess)
+    r_moon_arrival, v_moon_arrival = moon_state(departure_mjd2000 + coast_days_guess)
     r_moon_arrival = np.asarray(r_moon_arrival)
+    v_moon_arrival = np.asarray(v_moon_arrival)
 
-    r0, v0 = plane_aligned_parking_orbit(r_moon_arrival, altitude_km=185.0, mu_earth=mu_earth)
+    r0, v0 = plane_aligned_parking_orbit(r_moon_arrival, v_moon_arrival, altitude_km=185.0, mu_earth=mu_earth)
     dv_lambert_guess = lambert_seeded_initial_guess(
         r0, v0, r_moon_arrival, coast_days_guess * 86400.0, mu_earth,
     )

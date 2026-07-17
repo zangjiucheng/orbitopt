@@ -186,9 +186,9 @@ conda activate orbitopt
 pytest tests/ -v
 ```
 
-GPU packages (`cupy-cuda13x`, `numba`) are pip-installed inside the conda env;
-adjust the `cupy-cudaXXx` package name in `environment.yml` to match your
-CUDA driver version (`nvidia-smi`) if not CUDA 13.
+The GPU package (`cupy-cuda13x`) is pip-installed inside the conda env; adjust
+the `cupy-cudaXXx` package name in `environment.yml` to match your CUDA driver
+version (`nvidia-smi`) if not CUDA 13.
 
 ## Measured results (RTX A3000 Laptop, 6 GB, this machine)
 

@@ -153,6 +153,7 @@ class SceneRenderer:
         self._static_positions: dict[str, np.ndarray] = {}
         self._rotating: list[dict] = []
         self._rotation_elapsed_hours = 0.0
+        self._has_timeline = False
 
     def load(self, scene: dict) -> None:
         self.plotter.clear()
@@ -161,6 +162,14 @@ class SceneRenderer:
         self._static_positions = {}
         self._rotating = []
         self._rotation_elapsed_hours = 0.0
+        # A scene with a timeline (a mission) has its own notion of "current
+        # time" (scrubbable, playable at any warp speed) that axial rotation
+        # should track exactly -- see _apply_rotation_for_time, driven from
+        # set_time() below, not advance_rotation's independent wall-clock
+        # accumulator (which stays reserved for the timeline-less case, e.g.
+        # the static Solar System view, where there's no "current time" for
+        # rotation to be in or out of sync with).
+        self._has_timeline = bool(scene.get("timeline"))
 
         for body in scene["bodies"]:
             color = body["color"]
@@ -237,29 +246,52 @@ class SceneRenderer:
 
     def advance_rotation(self, delta_hours: float) -> None:
         """Spin every real-sphere body with a rotationPeriodHours by
-        ``delta_hours`` of simulated time, around its own local Z (polar)
-        axis -- the same axis pv.Sphere()'s default direction=(0,0,1) uses,
-        so this is a "spin in place" transform independent of the sphere's
-        position. Axial tilt isn't modelled (every body spins upright, not
-        at its real tilt) -- a reasonable simplification for what's meant
-        to convey relative rotation *rates*, not a fully accurate globe.
+        ``delta_hours`` of wall-clock-driven time, around its own local Z
+        (polar) axis -- the same axis pv.Sphere()'s default direction=(0,0,1)
+        uses, so this is a "spin in place" transform independent of the
+        sphere's position. Axial tilt isn't modelled (every body spins
+        upright, not at its real tilt) -- a reasonable simplification for
+        what's meant to convey relative rotation *rates*, not a fully
+        accurate globe.
 
-        Driven by a continuous wall-clock timer (see app.py), not any
-        scene's own mission timeline -- axial rotation is a physically
-        separate process from trajectory progress, so bodies keep spinning
-        even while mission playback is paused. A negative period_hours
+        A no-op for a scene with its own timeline: rotation there tracks the
+        mission's actual current time exactly (see _apply_rotation_for_time,
+        driven from set_time()), so this wall-clock accumulator -- which
+        would otherwise drift out of sync with pausing, scrubbing, or
+        playback speed -- only applies to a timeline-less scene (the static
+        Solar System view), where continuous ambient motion is the only
+        sensible notion of "current" rotation. A negative period_hours
         (Venus, Uranus -- real retrograde rotators) naturally spins the
         wrong way through this same formula: Python's ``%`` follows the
         sign of its (positive) divisor, so the angle still wraps cleanly
         into [0, 360) either way.
         """
-        if not self._rotating:
+        if self._has_timeline or not self._rotating:
             return
         self._rotation_elapsed_hours += delta_hours
         for entry in self._rotating:
             angle_deg = (self._rotation_elapsed_hours / entry["period_hours"] * 360.0) % 360.0
             entry["actor"].orientation = (0.0, 0.0, angle_deg)
         self.plotter.render()
+
+    def _apply_rotation_for_time(self, t: float) -> None:
+        """Spin every real-sphere body to its orientation at mission time
+        ``t`` (days, same units/origin as the scene's timeline), computed
+        directly as a function of ``t`` rather than accumulated tick-by-tick
+        -- see advance_rotation's docstring for the shared spin-in-place
+        mechanics and simplifications. Deterministic and idempotent in
+        ``t``, unlike advance_rotation's wall-clock accumulator, so scrubbing
+        the timeline to the same point always yields the same orientation,
+        pausing playback holds it exactly still, and any playback speed
+        (see app.py's time-warp control) speeds up or slows down rotation in
+        exact lockstep, because it's *t* driving the angle, not real time.
+        """
+        if not self._rotating:
+            return
+        absolute_hours = t * 24.0
+        for entry in self._rotating:
+            angle_deg = (absolute_hours / entry["period_hours"] * 360.0) % 360.0
+            entry["actor"].orientation = (0.0, 0.0, angle_deg)
 
     def set_time(self, t: float) -> dict[str, float]:
         """Move every trailed body to its position at time ``t``, regrow
@@ -287,6 +319,9 @@ class SceneRenderer:
 
         for body_id, pos in self._static_positions.items():
             distances[body_id] = float(np.linalg.norm(pos))
+
+        if self._has_timeline:
+            self._apply_rotation_for_time(t)
 
         self.plotter.render()
         return distances
@@ -356,4 +391,26 @@ class SceneRenderer:
         offset = position - focal
         cam.focal_point = tuple(pos)
         cam.position = tuple(pos + offset)
+        self.plotter.render()
+
+    def zoom_to_body(self, body_id: str, t: float, distance_factor: float = 0.2) -> None:
+        """Like track_body, but *dolly in* rather than preserve distance --
+        the same direction/up as whatever the camera's current framing is,
+        scaled down to ``distance_factor`` of the current camera-to-focal-
+        point distance, so the KSP-style M-key focus (see app.py's
+        _focus_selected) visibly zooms in on the target instead of just
+        recentering on it. Relative to the *current* distance rather than an
+        absolute one, so it zooms in sensibly regardless of a scene's
+        distance scale (AU for the Solar System, km for a mission) or how
+        far away the camera already happened to be.
+        """
+        pos = self.body_world_position(body_id, t)
+        cam = self.plotter.camera
+        focal = np.asarray(cam.focal_point, dtype=float)
+        position = np.asarray(cam.position, dtype=float)
+        offset = position - focal
+        distance = float(np.linalg.norm(offset))
+        direction = offset / distance if distance > 1e-12 else np.array([0.0, 0.0, 1.0])
+        cam.focal_point = tuple(pos)
+        cam.position = tuple(pos + direction * (distance * distance_factor))
         self.plotter.render()

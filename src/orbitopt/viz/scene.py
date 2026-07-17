@@ -119,7 +119,9 @@ def body_entry(
 
     ``rotation_period_hours`` only has a visible effect together with
     texture/radius (there's no marker-rendering equivalent of "spin") --
-    see ROTATION_PERIOD_HOURS and scene_renderer.SceneRenderer.advance_rotation.
+    see ROTATION_PERIOD_HOURS and scene_renderer.SceneRenderer.advance_rotation
+    (timeline-less scenes) / SceneRenderer._apply_rotation_for_time (scenes
+    with a timeline).
     """
     entry = {"id": body_id, "name": name, "color": color, "kind": kind, "radiusDisplay": radius_display}
     if orbit is not None:

@@ -52,17 +52,26 @@ from orbitopt.viz.pv_viewer import load_scene
 from orbitopt.viz.scene_renderer import SceneRenderer
 from orbitopt.viz.theme import ACCENT, BG_VOID, INK_SECONDARY, STYLESHEET
 
-# Time-warp speed is a continuous log-scale control (0.1x .. 1000x), not fixed
-# presets, so it can be fine-tuned to any rate.
-SPEED_MIN = 0.1
+# Time-warp speed is a continuous log-scale control (0.001x .. 1000x), not
+# fixed presets, so it can be fine-tuned to any rate. self._speed is in
+# simulated *days* per real second (see _on_tick), so even the old floor of
+# 0.1x still meant 1 simulated hour flew by in under half a real second --
+# too fast to watch a close lunar flyby unfold. At the current floor,
+# 0.001x, 1 simulated hour takes ~41.7 real seconds and 1 simulated minute
+# takes <1 real second, actually slow enough to watch closely.
+SPEED_MIN = 0.001
 SPEED_MAX = 1000.0
 SPEED_SLIDER_STEPS = 1000
 
-# Axial rotation (see SceneRenderer.advance_rotation) is driven by a
-# continuous wall-clock timer, independent of the mission time-warp control
-# -- it's ambient motion, not trajectory playback, so it keeps running even
-# while a mission is paused or has no timeline at all (e.g. the Solar
-# System view). 1 simulated hour per real second is a chosen, clearly-
+# Axial rotation is ambient motion for a scene with no timeline of its own
+# (the Solar System view) -- driven by this continuous wall-clock timer (see
+# SceneRenderer.advance_rotation), since there's no mission "current time"
+# for it to track otherwise. A scene *with* a timeline (a mission) instead
+# gets its rotation driven exactly by the mission's own current time (see
+# SceneRenderer._apply_rotation_for_time, called from set_time()), so it
+# stays in lockstep with scrubbing/pausing/time-warp speed instead of this
+# constant rate; this timer's ticks are then a no-op for such a scene (see
+# advance_rotation). 1 simulated hour per real second is a chosen, clearly-
 # labelled acceleration (real-time rotation would be imperceptibly slow
 # over a normal viewing session): Earth completes a visible spin in ~24s,
 # Jupiter (fastest real rotator, ~10h) in ~10s, Venus/the Moon (both
@@ -308,10 +317,15 @@ class MissionControlWindow(QMainWindow):
         self._loading = False
         self._load_thread: QThread | None = None
         self._load_worker: SceneLoader | None = None
+        self._closing = False
 
         self._selected_body_id: str | None = None
         self._measure_body_id: str | None = None
         self._tracking = False
+        self._view_axis: str | None = None
+        self._view_negative = False
+        self._focus_zoomed = False
+        self._pre_focus_camera: tuple | None = None
         self._events: list[dict] = []
         self._maneuver_base_len = 0.0
         self._maneuver_max_dv = 1.0
@@ -507,7 +521,9 @@ class MissionControlWindow(QMainWindow):
 
     def _build_view_controls(self) -> QWidget:
         """KSP-style camera view presets -- snap the camera to a fixed
-        orthographic angle without hunting for it by dragging."""
+        orthographic angle without hunting for it by dragging. Pressing the
+        same preset a second time flips it to the opposite side (see
+        _apply_axis_view) -- Top a second time looks up from below, etc."""
         box = QWidget()
         row = QHBoxLayout(box)
         row.setContentsMargins(0, 0, 0, 0)
@@ -518,10 +534,10 @@ class MissionControlWindow(QMainWindow):
         row.addWidget(label)
 
         for text, handler, tip in (
-            ("Top", self._view_top, "Top-down (look along −Z)"),
-            ("Front", self._view_front, "Front (look along −Y)"),
-            ("Side", self._view_side, "Side (look along −X)"),
-            ("Iso", self._view_iso, "Isometric"),
+            ("Top", self._view_top, "Top-down (look along −Z); press again to flip to bottom-up"),
+            ("Front", self._view_front, "Front (look along −Y); press again to flip to back"),
+            ("Side", self._view_side, "Side (look along −X); press again to flip to the other side"),
+            ("Iso", self._view_iso, "Isometric; press again to flip to the opposite corner"),
         ):
             btn = QPushButton(text)
             btn.setObjectName("viewButton")
@@ -744,19 +760,38 @@ class MissionControlWindow(QMainWindow):
             self.splitter.setSizes(sizes)
 
     def _view_top(self):
-        self.plotter.view_xy()
-        self.plotter.render()
+        self._apply_axis_view("xy")
 
     def _view_front(self):
-        self.plotter.view_xz()
-        self.plotter.render()
+        self._apply_axis_view("xz")
 
     def _view_side(self):
-        self.plotter.view_yz()
-        self.plotter.render()
+        self._apply_axis_view("yz")
 
     def _view_iso(self):
-        self.plotter.view_isometric()
+        self._apply_axis_view("isometric")
+
+    def _apply_axis_view(self, axis: str):
+        """Snap to a canonical camera preset along ``axis`` (one of the
+        pyvista Plotter.view_{xy,xz,yz,isometric} names) -- each of those
+        only ever looks from one fixed direction (e.g. Top is always
+        look-down-from-above), so on its own there's no way to see the
+        opposite side (e.g. a look-up-from-below "Bottom" view) short of
+        manually dragging there. Pressing the *same* preset again instead
+        flips to its negative direction (pyvista's own `negative=` param on
+        each view_* method) -- Top/Top flips between above and below,
+        Front/Front between front and back, Side/Side between the two
+        sides, Iso/Iso between the two isometric corners -- so every preset
+        button doubles as its own up-down/front-back/left-right flip.
+        Picking a *different* preset always starts from its canonical
+        (non-flipped) side, regardless of whatever was flipped before.
+        """
+        if self._view_axis == axis:
+            self._view_negative = not self._view_negative
+        else:
+            self._view_axis = axis
+            self._view_negative = False
+        getattr(self.plotter, f"view_{axis}")(negative=self._view_negative)
         self.plotter.render()
 
     def _on_card_clicked(self, event, body_id: str):
@@ -773,6 +808,12 @@ class MissionControlWindow(QMainWindow):
         also clears any pending distance measurement."""
         self._selected_body_id = body_id
         self._measure_body_id = None
+        # A plain select recenters but doesn't zoom (that's what M is for) --
+        # if a previous M-zoom is still active for a different body, drop it
+        # rather than leave a stale "press M to restore" state pointing at
+        # a camera position framed for a body that's no longer selected.
+        self._focus_zoomed = False
+        self._pre_focus_camera = None
         self._refresh_card_highlights()
         self.renderer.track_body(body_id, self._current_time)
         self._update_measure()
@@ -812,11 +853,31 @@ class MissionControlWindow(QMainWindow):
             self.measure_card.setVisible(False)
 
     def _focus_selected(self):
-        """Re-center the camera on the selected body (the M shortcut)."""
-        if self._selected_body_id and self._selected_body_id in self._body_cards:
-            self.renderer.track_body(self._selected_body_id, self._current_time)
-        else:
+        """KSP-style focus (the M shortcut): the first press zooms the camera
+        in on the selected body, remembering exactly where the camera was so
+        a second press zooms back out to that same view -- not a fixed
+        reset, an actual toggle. Selecting a different body (see
+        _select_body) or loading a new scene (see _apply_scene) drops the
+        saved state, so M always starts a fresh zoom-in on whatever's
+        currently selected rather than "restoring" an unrelated old view."""
+        if not (self._selected_body_id and self._selected_body_id in self._body_cards):
             self.statusBar().showMessage("Select a body first — click its card")
+            return
+        if self._focus_zoomed:
+            if self._pre_focus_camera is not None:
+                position, focal_point, up = self._pre_focus_camera
+                cam = self.plotter.camera
+                cam.position = position
+                cam.focal_point = focal_point
+                cam.up = up
+                self.plotter.render()
+            self._focus_zoomed = False
+            self._pre_focus_camera = None
+        else:
+            cam = self.plotter.camera
+            self._pre_focus_camera = (tuple(cam.position), tuple(cam.focal_point), tuple(cam.up))
+            self.renderer.zoom_to_body(self._selected_body_id, self._current_time)
+            self._focus_zoomed = True
 
     def _set_tracking(self, on: bool):
         """Turn continuous tracking on/off, keeping the button and menu item in
@@ -986,12 +1047,22 @@ class MissionControlWindow(QMainWindow):
         self._load_worker = None
 
     def _on_scene_loaded(self, name: str, scene: dict):
+        if self._closing:
+            # A finished signal that was already queued (posted to this
+            # thread's event queue) by the time closeEvent disconnected it
+            # still gets delivered once the event loop resumes -- Qt doesn't
+            # retroactively cancel an already-posted call. This flag is the
+            # real guard against touching self.plotter/self.renderer after
+            # closeEvent has closed them; the disconnect there is just hygiene.
+            return
         self._scene_cache[name] = scene
         # Applied while the loading page is still up (plotter hidden); the swap
         # back to the view happens in _on_load_thread_finished -> _end_switch.
         self._apply_scene(scene)
 
     def _on_scene_load_failed(self, name: str, error_msg: str):
+        if self._closing:
+            return
         QMessageBox.critical(self, f"Failed to load {name}", error_msg)
         self.statusBar().showMessage("Ready")
 
@@ -1007,6 +1078,11 @@ class MissionControlWindow(QMainWindow):
         self.measure_card.setVisible(False)
         if self._tracking:
             self._set_tracking(False)
+        # Same reasoning for the M-key focus-zoom toggle: a saved "pre-focus"
+        # camera state from the old scene means nothing once the bodies (and
+        # their positions) it was framing are gone.
+        self._focus_zoomed = False
+        self._pre_focus_camera = None
 
         self.scene_title_label.setText(scene["title"])
         self.scene_subtitle_label.setText(scene.get("subtitle", "").replace("\n", "  "))
@@ -1231,7 +1307,13 @@ class MissionControlWindow(QMainWindow):
             return f"{speed:.0f}×"
         if speed >= 1:
             return f"{speed:.1f}×"
-        return f"{speed:.2f}×"
+        # Below 1x: a fixed 2 decimals (the old behavior) reads fine down to
+        # SPEED_MIN's old floor of 0.1, but prints as "0.00×" for anything
+        # under 0.005 -- indistinguishable from stopped now that SPEED_MIN
+        # goes as low as 0.001. Scale the decimal count to keep ~2
+        # significant figures visible at any speed below 1x instead.
+        decimals = max(2, -int(math.floor(math.log10(speed))) + 1)
+        return f"{speed:.{decimals}f}×"
 
     def _speed_from_slider(self, value: int) -> float:
         frac = value / SPEED_SLIDER_STEPS
@@ -1342,30 +1424,39 @@ class MissionControlWindow(QMainWindow):
         self._rotation_timer.stop()
         self._spinner._timer.stop()  # the spinner has its own QTimer, independent of self._timer
         self.plotter._resize_settle_timer.stop()  # so it can't fire post-teardown
+        # Set *before* touching the load thread, unconditionally -- not just on
+        # a wait() timeout. disconnect() below is best-effort hygiene, not the
+        # real guard: SceneLoader.run() emits finished/failed as its very last
+        # statement, so a fast-finishing load can have that call already queued
+        # to this thread's event loop before we ever get to disconnect it, and
+        # Qt does not retroactively cancel an already-posted queued call. This
+        # flag is what _on_scene_loaded/_on_scene_load_failed actually check to
+        # refuse to touch self.plotter/self.renderer once we're closing.
+        self._closing = True
         thread = self._load_thread
         worker = self._load_worker
         if thread is not None:
+            if worker is not None:
+                for signal, slot in (
+                    (worker.finished, self._on_scene_loaded),
+                    (worker.failed, self._on_scene_load_failed),
+                ):
+                    try:
+                        signal.disconnect(slot)
+                    except (RuntimeError, TypeError):
+                        pass
             thread.quit()
-            if not thread.wait(2000):
-                # Scene loading (e.g. compute_and_export_mission) can take ~10s,
-                # far longer than this timeout -- the thread is very likely still
-                # running. If we let teardown proceed anyway, its result signal
-                # (finished/failed) fires later and drives _on_scene_loaded /
-                # _on_scene_load_failed, which touch self.renderer/self.plotter
-                # -- a use-after-close on the VTK plotter we're about to tear
-                # down below. Disconnect those signals first so a late-arriving
-                # result can't reach either slot, then wait out the thread for
-                # real so we don't destroy Python/Qt objects it still holds.
-                if worker is not None:
-                    try:
-                        worker.finished.disconnect(self._on_scene_loaded)
-                    except (RuntimeError, TypeError):
-                        pass
-                    try:
-                        worker.failed.disconnect(self._on_scene_load_failed)
-                    except (RuntimeError, TypeError):
-                        pass
-                thread.wait()
+            # Scene loading (e.g. compute_and_export_mission) can take ~10s --
+            # give it generous room to finish before tearing down the plotter
+            # below. Bounded, not indefinite: self._closing above already
+            # makes proceeding safe even if the thread is still running, so a
+            # genuinely hung loader can't block quit forever.
+            if not thread.wait(2000) and not thread.wait(15000):
+                print(
+                    "orbitopt: scene-loading thread still running ~17s after "
+                    "quit was requested; not waiting further.",
+                    file=sys.stderr,
+                )
         try:
             self.plotter.close()
         except Exception:  # noqa: BLE001 -- best-effort teardown, never block quit
