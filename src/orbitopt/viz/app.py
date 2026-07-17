@@ -63,6 +63,19 @@ SPEED_MIN = 0.001
 SPEED_MAX = 1000.0
 SPEED_SLIDER_STEPS = 1000
 
+# Auto-slow near a timeline event (TLI burn, closest approach, entry interface,
+# ...) so fast-forwarding through a mission doesn't blow past the moments that
+# actually matter -- the window is a *fraction* of the mission's own timeline
+# span (matching _maneuver_window's existing precedent, see _apply_scene),
+# not a fixed day count, since a short and a long mission should each get a
+# proportionally-sized "slow down here" zone. EVENT_SLOWDOWN_MIN_SCALE is how
+# slow playback gets exactly at an event (never fully stopped -- 0 would trap
+# playback in place if two events happen to land at the same time); the
+# smoothstep ramp back to full speed avoids an audible/visible speed "snap"
+# at the window boundary.
+EVENT_SLOWDOWN_WINDOW_FRACTION = 0.05
+EVENT_SLOWDOWN_MIN_SCALE = 0.15
+
 # Axial rotation is ambient motion for a scene with no timeline of its own
 # (the Solar System view) -- driven by this continuous wall-clock timer (see
 # SceneRenderer.advance_rotation), since there's no mission "current time"
@@ -1371,6 +1384,29 @@ class MissionControlWindow(QMainWindow):
         else:
             self._timer.stop()
 
+    def _event_proximity_speed_scale(self, timeline) -> float:
+        """Multiplier on self._speed, smoothly dipping to EVENT_SLOWDOWN_MIN_SCALE
+        right at the nearest timeline event and ramping back to 1.0 over
+        EVENT_SLOWDOWN_WINDOW_FRACTION of the mission's own span -- so
+        fast-forwarding through a mission (this app's speed control goes up
+        to 1000x) doesn't blow straight past the TLI burn, closest approach,
+        or entry interface. A smoothstep (3t^2-2t^3) ramp, not a linear one,
+        so the slowdown/speedup transition itself doesn't read as an abrupt
+        speed "snap" at the window boundary.
+        """
+        if not self._events:
+            return 1.0
+        span = (timeline["max"] - timeline["min"]) or 1.0
+        window = EVENT_SLOWDOWN_WINDOW_FRACTION * span
+        if window <= 0.0:
+            return 1.0
+        nearest_dt = min(abs(e.get("time", 0.0) - self._current_time) for e in self._events)
+        if nearest_dt >= window:
+            return 1.0
+        t = nearest_dt / window
+        smoothstep = t * t * (3.0 - 2.0 * t)
+        return EVENT_SLOWDOWN_MIN_SCALE + (1.0 - EVENT_SLOWDOWN_MIN_SCALE) * smoothstep
+
     def _on_tick(self):
         import time as _time
 
@@ -1386,7 +1422,8 @@ class MissionControlWindow(QMainWindow):
             self._set_playing(False)
             return
 
-        self._current_time += dt * self._speed
+        effective_speed = self._speed * self._event_proximity_speed_scale(timeline)
+        self._current_time += dt * effective_speed
         if self._current_time >= timeline["max"]:
             self._current_time = timeline["max"]
             self._set_playing(False)
