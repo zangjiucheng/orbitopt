@@ -34,12 +34,44 @@ ARTEMIS_II_PERILUNE_ALTITUDE_KM = 6545.0
 EARTH_ENTRY_INTERFACE_ALTITUDE_KM = 121.92  # 400,000 ft, the conventional atmospheric entry interface
 
 
-def _plane_aligned_parking_orbit(r_moon_arrival, v_moon_arrival, altitude_km, mu_earth):
+DEFAULT_TRANSFER_THETA_DEG = 134.0
+"""Parking-orbit transfer angle behind the Moon's arrival direction (see
+_plane_aligned_parking_orbit) -- also, incidentally, the free variable that
+determines which side of the Moon the flyby passes on, and so whether the
+post-flyby return leg bends back toward Earth or swings wide of it (the
+actual "free return" part of a free-return trajectory; target_lunar_flyby's
+own targeting is lunar flyby *distance* only, see its docstring). Found via
+orbitopt.verify.free_return_search's B-plane-informed outer search over
+this angle, driving the return leg's closest approach to Earth toward the
+atmospheric entry interface.
+
+Not a genuine (zero-correction-burn) free return -- the return leg still
+falls ~585 km short of the entry interface (was 1283 km short at the
+previous, plain "geometrically nice" 150 degrees). It's also not a smooth
+local optimum: a 1-degree-resolution sweep either side (131-137) found
+every neighbor except 137 fails to converge at all, and 137 itself
+converges to a *worse* result (800 km short) -- this differential
+corrector's feasible region is a fragmented scatter of isolated points
+for this geometry, not a smooth landscape a search can descend, confirmed
+by direct search rather than assumed. Closing the remaining gap for real
+needs either a genuine 2-DOF B-plane targeter (jointly solving for both
+the lunar approach *and* the Earth return condition, rather than this 1D
+search layered on target_lunar_flyby's single-condition inner solve) or
+also varying coast_days_guess as a second free search dimension -- both
+real follow-ups, not attempted here. See free_return_search.py's own
+module docstring for why this search's free variable is this angle and
+not B-plane coordinates directly.
+"""
+
+
+def _plane_aligned_parking_orbit(r_moon_arrival, v_moon_arrival, altitude_km, mu_earth, theta_deg=DEFAULT_TRANSFER_THETA_DEG):
     """Choose a parking-orbit orientation whose plane contains the Moon's
-    arrival direction, at a 150-degree transfer angle behind it, oriented so
-    the plane also contains the Moon's own velocity at arrival -- i.e. (up
-    to the ~5 degree lunar-orbit-vs-ecliptic tilt) the Moon's own orbital
-    plane, the natural minimal-plane-change choice for a lunar transfer.
+    arrival direction, at a ``theta_deg`` transfer angle behind it, oriented
+    so the plane also contains the Moon's own velocity at arrival -- i.e.
+    (up to the ~5 degree lunar-orbit-vs-ecliptic tilt) the Moon's own
+    orbital plane, the natural minimal-plane-change choice for a lunar
+    transfer. See DEFAULT_TRANSFER_THETA_DEG for what the angle itself
+    controls and how its default value was chosen.
 
     An earlier version of this used the ecliptic pole (Z) as the reference
     vector for the second in-plane basis direction instead of the Moon's
@@ -64,25 +96,7 @@ def _plane_aligned_parking_orbit(r_moon_arrival, v_moon_arrival, altitude_km, mu
     e2 = reference - np.dot(reference, u) * u
     e2 /= np.linalg.norm(e2)
     e1 = u
-    # 134 degrees, not the geometrically-nicer-looking 150: this transfer
-    # angle is also what sets which side of the Moon the flyby passes on,
-    # which in turn determines whether the post-flyby return leg bends back
-    # toward Earth or swings wide of it -- the actual "free return" part of
-    # a free-return trajectory, which target_lunar_flyby's own targeting
-    # (lunar flyby *distance* only, see its docstring) doesn't control at
-    # all. Swept theta in 15-degree steps, then finer around the best
-    # region, tracking each candidate's return-leg closest approach to
-    # Earth: most values either don't converge or converge to an unrealistic
-    # multi-km/s "wrong branch" delta-v (a real instability in this
-    # differential corrector, not a search bug -- rejected any dv over
-    # 5000 m/s as implausible for this direct-injection profile). Of the
-    # surviving, physically-sane candidates, 134 gets the return leg to
-    # within 586 km altitude of Earth's atmospheric entry interface (150
-    # was 1283 km short) -- real progress, but still not a genuine
-    # (zero-correction-burn) free return; see find_altitude_crossing's
-    # caller below for how that shortfall is handled honestly rather than
-    # exported as a fake success.
-    theta = np.radians(134.0)
+    theta = np.radians(theta_deg)
     r0_hat = np.cos(theta) * e1 - np.sin(theta) * e2
     tangent_hat = np.sin(theta) * e1 + np.cos(theta) * e2
     r0 = (EARTH_RADIUS_KM + altitude_km) * 1000.0 * r0_hat
