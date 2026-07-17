@@ -68,13 +68,23 @@ SPEED_SLIDER_STEPS = 1000
 # actually matter -- the window is a *fraction* of the mission's own timeline
 # span (matching _maneuver_window's existing precedent, see _apply_scene),
 # not a fixed day count, since a short and a long mission should each get a
-# proportionally-sized "slow down here" zone. EVENT_SLOWDOWN_MIN_SCALE is how
-# slow playback gets exactly at an event (never fully stopped -- 0 would trap
-# playback in place if two events happen to land at the same time); the
-# smoothstep ramp back to full speed avoids an audible/visible speed "snap"
-# at the window boundary.
+# proportionally-sized "slow down here" zone.
+#
+# This has to clamp to an ABSOLUTE speed near the event, not just scale the
+# current speed down by a fixed ratio -- a first version did the latter
+# (effective = self._speed * 0.15) and it was imperceptible at any real
+# fast-forward rate: 15% of 1000x is still 150x, which crosses a sub-day
+# window in a few milliseconds of real time, i.e. no visible slowdown at
+# exactly the speeds where this feature matters. EVENT_SLOWDOWN_TARGET_SPEED
+# is a comfortably-watchable absolute pace (simulated days per real second,
+# same units as self._speed) that playback eases toward as the scrubber
+# nears an event, regardless of how high self._speed itself is -- but never
+# *speeds up* a deliberately slower self._speed (see the min() in
+# _event_proximity_effective_speed), so a user who already set 0.01x doesn't
+# get sped up just for approaching an event. The smoothstep ramp (not linear)
+# avoids an audible/visible speed "snap" at the window boundary.
 EVENT_SLOWDOWN_WINDOW_FRACTION = 0.05
-EVENT_SLOWDOWN_MIN_SCALE = 0.15
+EVENT_SLOWDOWN_TARGET_SPEED = 0.02
 
 # Axial rotation is ambient motion for a scene with no timeline of its own
 # (the Solar System view) -- driven by this continuous wall-clock timer (see
@@ -1384,28 +1394,27 @@ class MissionControlWindow(QMainWindow):
         else:
             self._timer.stop()
 
-    def _event_proximity_speed_scale(self, timeline) -> float:
-        """Multiplier on self._speed, smoothly dipping to EVENT_SLOWDOWN_MIN_SCALE
-        right at the nearest timeline event and ramping back to 1.0 over
-        EVENT_SLOWDOWN_WINDOW_FRACTION of the mission's own span -- so
-        fast-forwarding through a mission (this app's speed control goes up
-        to 1000x) doesn't blow straight past the TLI burn, closest approach,
-        or entry interface. A smoothstep (3t^2-2t^3) ramp, not a linear one,
-        so the slowdown/speedup transition itself doesn't read as an abrupt
-        speed "snap" at the window boundary.
+    def _event_proximity_effective_speed(self, timeline) -> float:
+        """self._speed, eased toward EVENT_SLOWDOWN_TARGET_SPEED (an absolute
+        days-per-real-second pace, not a ratio of self._speed -- see that
+        constant's comment for why a ratio doesn't work) as the scrubber
+        nears the closest timeline event, over EVENT_SLOWDOWN_WINDOW_FRACTION
+        of the mission's own span. min() means this only ever slows playback
+        down, never speeds it up past whatever the user actually chose.
         """
         if not self._events:
-            return 1.0
+            return self._speed
         span = (timeline["max"] - timeline["min"]) or 1.0
         window = EVENT_SLOWDOWN_WINDOW_FRACTION * span
         if window <= 0.0:
-            return 1.0
+            return self._speed
         nearest_dt = min(abs(e.get("time", 0.0) - self._current_time) for e in self._events)
         if nearest_dt >= window:
-            return 1.0
+            return self._speed
+        near_speed = min(self._speed, EVENT_SLOWDOWN_TARGET_SPEED)
         t = nearest_dt / window
         smoothstep = t * t * (3.0 - 2.0 * t)
-        return EVENT_SLOWDOWN_MIN_SCALE + (1.0 - EVENT_SLOWDOWN_MIN_SCALE) * smoothstep
+        return near_speed + (self._speed - near_speed) * smoothstep
 
     def _on_tick(self):
         import time as _time
@@ -1422,7 +1431,7 @@ class MissionControlWindow(QMainWindow):
             self._set_playing(False)
             return
 
-        effective_speed = self._speed * self._event_proximity_speed_scale(timeline)
+        effective_speed = self._event_proximity_effective_speed(timeline)
         self._current_time += dt * effective_speed
         if self._current_time >= timeline["max"]:
             self._current_time = timeline["max"]
