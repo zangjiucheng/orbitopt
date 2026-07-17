@@ -34,42 +34,74 @@ ARTEMIS_II_PERILUNE_ALTITUDE_KM = 6545.0
 EARTH_ENTRY_INTERFACE_ALTITUDE_KM = 121.92  # 400,000 ft, the conventional atmospheric entry interface
 
 
-DEFAULT_TRANSFER_THETA_DEG = 130.0
+DEFAULT_TRANSFER_THETA_DEG = 142.0
 """Parking-orbit transfer angle behind the Moon's arrival direction (see
 _plane_aligned_parking_orbit) -- also, incidentally, the free variable that
 determines which side of the Moon the flyby passes on, and so whether the
 post-flyby return leg bends back toward Earth or swings wide of it (the
 actual "free return" part of a free-return trajectory; target_lunar_flyby's
-own targeting is lunar flyby *distance* only, see its docstring). Found via
-orbitopt.verify.free_return_search's B-plane-informed outer search over
-this angle jointly with ``coast_days_guess`` (see that parameter on
-compute_and_export_mission) -- a 2-degree/half-day grid over both
-dimensions, then a targeted 2-degree scan near this point's own neighbors
--- driving the return leg's closest approach to Earth toward the
-atmospheric entry interface.
+own targeting is lunar flyby *distance* only, see its docstring).
 
-Not a genuine (zero-correction-burn) free return -- the return leg still
-falls ~415 km short of the entry interface. That's a real improvement
-over the previous defaults (134 degrees / 4.5-day coast, 585 km short;
-150 degrees / 4.5-day coast before that, 1283 km short), found by
-searching coast_days_guess as a second free dimension alongside theta as
-this docstring's own previous revision flagged as a real follow-up. It is
-still not a smooth local optimum: theta=129 and theta=131 at this same
-4.0-day coast both fail to converge at all -- this differential
-corrector's feasible region remains a fragmented scatter of isolated
-points, confirmed by direct search rather than assumed, just as it was
-at the previous 134-degree/4.5-day point. A coarse global grid over
-(theta, coast_days) at 6-degree/1-day resolution found nothing better
-than the old 134/4.5 point (best: 1170 km short) -- these isolated
-basins are narrow enough that only a search concentrated near an
-already-known-good point reliably lands inside one. Closing the
-remaining ~415 km gap for real still needs a genuine 2-DOF B-plane
-targeter (jointly solving for both the lunar approach *and* the Earth
-return condition, rather than two 1D dimensions layered on
-target_lunar_flyby's single-condition inner solve) -- a real follow-up,
-not attempted here. See free_return_search.py's own module docstring for
-why this search's free variables are this angle and the coast duration,
-not B-plane coordinates directly.
+IMPORTANT CONTEXT: every (theta, coast_days) search run before this value
+was found ran on a real bug, not real physics -- the full post-flyby
+propagation here and in free_return_search.evaluate_theta was called with
+``initial_epoch=0.0`` instead of the real mission epoch
+(``reference_et``), so propagate_multi_arc's Moon/Sun point-mass gravity
+was sourced from SPICE at dates ~26 years off from the actual 2026
+mission (target_lunar_flyby's own internal Newton iteration was NOT
+affected -- it always offset by reference_et correctly -- so the TLI
+delta-v and targeted perilune distance were fine; only the subsequent
+free-flight propagation used for the exported trajectory shape and the
+return-leg/entry analysis was wrong). Symptom: the Moon's gravity was
+still being computed (real magnitude, ~real distance), but pulling in a
+direction uncorrelated with the correctly-rendered Moon body, so the
+exported trajectory visibly failed to react to the Moon it flies past.
+Now fixed (initial_epoch=reference_et) in this function,
+free_return_search.evaluate_theta, and examples/05_artemis2_free_return.py.
+
+Re-scoring every previously-converged (theta, coast_days) point from this
+project's search history under the corrected physics changed the ranking
+completely -- e.g. the pre-fix "best" point (130 degrees / 4.0-day coast,
+believed to fall 415 km short of the entry interface) actually falls
+~3,331 km short under real physics, and the point before that (134
+degrees / 4.5-day coast, believed 585 km short) is actually ~22,419 km
+short. Two of the eight previously-converged points, though, turned out
+to be genuine (zero-correction-burn) free returns once correctly
+evaluated: 142 degrees (this default) and 162 degrees (both at a 3.5-day
+coast) both naturally reach the atmospheric entry interface around day
+6.6-6.7 with no further burns.
+
+Still not a *safe* free return, despite reaching the interface: this
+angle's entry flight-path angle is -32.7 degrees, far steeper than a real
+lunar-return entry corridor (Artemis-class capsules fly a shallow ~-6 to
+-6.5 degree skip-entry angle; anything much steeper than roughly -7 to -8
+degrees means unsurvivable deceleration loads, even though the ~11.0 km/s
+entry speed itself matches the real mission closely). A subsequent
+1-degree/0.5-degree local scan around this neighborhood (138-168 degrees
+at 3.5-day coast) found one materially better entry angle, 161 degrees
+(-21.6 degrees) -- still not close to survivable, and a worse trade
+overall: target_lunar_flyby's Newton-Raphson needs 12 iterations to
+converge there (~29s) vs. 6 for this default (~8.5s) or for 162 degrees
+(~8.1s), which is slow enough to blow past this project's GUI-load test
+timeout (test_app.py's 30s budget). That extra cost buys an entry angle
+that's still just as unsurvivable, so it isn't worth it -- if a future
+change closes the gap to a genuinely safe corridor, revisit this
+tradeoff, since a slow-but-safe point would clearly be worth the cost
+that a slow-and-still-unsafe one isn't. This also isn't a
+search-resolution fluke: entry angle swings wildly over fractions of a
+degree in this neighborhood (161.5 degrees, half a degree from 161, gives
+-42.7) -- the same fragmented, chaotic feasible-region structure
+documented for flyby-distance convergence elsewhere in this project, now
+showing up in the entry angle too. The root cause is unchanged from every
+previous revision of this docstring: target_lunar_flyby only targets
+lunar flyby *distance*, not a B-plane aim point, so which entry angle a
+genuine return happens to hit is incidental, not controlled. Actually
+landing in the safe corridor needs a real 2-DOF B-plane targeter (jointly
+solving the lunar approach *and* the Earth return/entry-angle condition)
+-- still not attempted here; see free_return_search.py's own module
+docstring for why the search built so far uses this angle (and
+coast_days_guess) as its free variables instead of B-plane coordinates
+directly.
 """
 
 
@@ -115,7 +147,7 @@ def _plane_aligned_parking_orbit(r_moon_arrival, v_moon_arrival, altitude_km, mu
 
 def compute_and_export_mission(
     departure_mjd2000=None,
-    coast_days_guess=4.0,
+    coast_days_guess=3.5,
     total_days=12.0,
     step_seconds=60.0,
     parking_altitude_km=185.0,
@@ -163,7 +195,7 @@ def compute_and_export_mission(
         raise RuntimeError("Differential correction did not converge; adjust departure_mjd2000 or coast_days_guess.")
 
     full = propagate_multi_arc(
-        r0, v0, 0.0,
+        r0, v0, reference_et,
         arcs=[
             {"type": "impulsive_burn", "delta_v": targeting.delta_v},
             {"type": "coast", "duration": total_days * 86400.0},
@@ -240,11 +272,31 @@ def compute_and_export_mission(
         },
     ]
     if entry is not None:
+        entry_r = entry.spacecraft_state[:3]
+        entry_v = entry.spacecraft_state[3:]
+        entry_speed = np.linalg.norm(entry_v)
+        entry_flight_path_angle_deg = np.degrees(np.arcsin(
+            np.dot(entry_v, entry_r / np.linalg.norm(entry_r)) / entry_speed
+        ))
+        # A real lunar-return entry flies a shallow ~-6 to -6.5 degree
+        # skip-entry corridor (this targeter's ~11 km/s entry speed does
+        # match the real mission -- it's set by orbital energy, not by
+        # the untargeted B-plane angle). target_lunar_flyby only targets
+        # flyby distance, not a B-plane aim point, so whatever entry angle
+        # a genuine return happens to hit is incidental -- flag plainly
+        # when it's well outside a survivable corridor rather than
+        # silently reporting "free return" as if this were mission-ready.
+        corridor_note = (
+            "within the real skip-entry corridor" if abs(entry_flight_path_angle_deg) <= 8.0
+            else f"NOT a survivable entry angle -- {abs(entry_flight_path_angle_deg):.0f} degrees is far "
+                 "steeper than the real ~6-6.5 degree skip-entry corridor (untargeted B-plane angle)"
+        )
         events.append({
             "label": "Earth entry interface",
             "time": round(entry.epoch / 86400.0, 4),
             "note": f"free return -- {EARTH_ENTRY_INTERFACE_ALTITUDE_KM:.0f} km altitude reached "
-                    "with no further burns",
+                    f"with no further burns, entry speed {entry_speed:.0f} m/s, "
+                    f"flight path angle {entry_flight_path_angle_deg:.1f} degrees ({corridor_note})",
         })
     elif return_perigee is not None:
         events.append({

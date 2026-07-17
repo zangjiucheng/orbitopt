@@ -123,7 +123,7 @@ def evaluate_theta(
                                     rejection_reason=f"converged to implausible dv={dv_final:.0f}m/s (wrong branch)")
 
     full = propagate_multi_arc(
-        r0, v0, 0.0,
+        r0, v0, reference_et,
         arcs=[
             {"type": "impulsive_burn", "delta_v": targeting.delta_v},
             {"type": "coast", "duration": search_window_days * 86400.0},

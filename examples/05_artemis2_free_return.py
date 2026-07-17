@@ -172,7 +172,7 @@ def main():
 
     print("\nIndependent fine-resolution verification + free-return check (9.5-day coast)...")
     full = propagate_multi_arc(
-        r0, v0, 0.0,
+        r0, v0, reference_et,
         arcs=[
             {"type": "impulsive_burn", "delta_v": result.delta_v},
             {"type": "coast", "duration": 9.5 * 86400.0},
