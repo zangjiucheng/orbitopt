@@ -34,7 +34,7 @@ ARTEMIS_II_PERILUNE_ALTITUDE_KM = 6545.0
 EARTH_ENTRY_INTERFACE_ALTITUDE_KM = 121.92  # 400,000 ft, the conventional atmospheric entry interface
 
 
-DEFAULT_TRANSFER_THETA_DEG = 134.0
+DEFAULT_TRANSFER_THETA_DEG = 130.0
 """Parking-orbit transfer angle behind the Moon's arrival direction (see
 _plane_aligned_parking_orbit) -- also, incidentally, the free variable that
 determines which side of the Moon the flyby passes on, and so whether the
@@ -42,24 +42,33 @@ post-flyby return leg bends back toward Earth or swings wide of it (the
 actual "free return" part of a free-return trajectory; target_lunar_flyby's
 own targeting is lunar flyby *distance* only, see its docstring). Found via
 orbitopt.verify.free_return_search's B-plane-informed outer search over
-this angle, driving the return leg's closest approach to Earth toward the
+this angle jointly with ``coast_days_guess`` (see that parameter on
+compute_and_export_mission) -- a 2-degree/half-day grid over both
+dimensions, then a targeted 2-degree scan near this point's own neighbors
+-- driving the return leg's closest approach to Earth toward the
 atmospheric entry interface.
 
 Not a genuine (zero-correction-burn) free return -- the return leg still
-falls ~585 km short of the entry interface (was 1283 km short at the
-previous, plain "geometrically nice" 150 degrees). It's also not a smooth
-local optimum: a 1-degree-resolution sweep either side (131-137) found
-every neighbor except 137 fails to converge at all, and 137 itself
-converges to a *worse* result (800 km short) -- this differential
-corrector's feasible region is a fragmented scatter of isolated points
-for this geometry, not a smooth landscape a search can descend, confirmed
-by direct search rather than assumed. Closing the remaining gap for real
-needs either a genuine 2-DOF B-plane targeter (jointly solving for both
-the lunar approach *and* the Earth return condition, rather than this 1D
-search layered on target_lunar_flyby's single-condition inner solve) or
-also varying coast_days_guess as a second free search dimension -- both
-real follow-ups, not attempted here. See free_return_search.py's own
-module docstring for why this search's free variable is this angle and
+falls ~415 km short of the entry interface. That's a real improvement
+over the previous defaults (134 degrees / 4.5-day coast, 585 km short;
+150 degrees / 4.5-day coast before that, 1283 km short), found by
+searching coast_days_guess as a second free dimension alongside theta as
+this docstring's own previous revision flagged as a real follow-up. It is
+still not a smooth local optimum: theta=129 and theta=131 at this same
+4.0-day coast both fail to converge at all -- this differential
+corrector's feasible region remains a fragmented scatter of isolated
+points, confirmed by direct search rather than assumed, just as it was
+at the previous 134-degree/4.5-day point. A coarse global grid over
+(theta, coast_days) at 6-degree/1-day resolution found nothing better
+than the old 134/4.5 point (best: 1170 km short) -- these isolated
+basins are narrow enough that only a search concentrated near an
+already-known-good point reliably lands inside one. Closing the
+remaining ~415 km gap for real still needs a genuine 2-DOF B-plane
+targeter (jointly solving for both the lunar approach *and* the Earth
+return condition, rather than two 1D dimensions layered on
+target_lunar_flyby's single-condition inner solve) -- a real follow-up,
+not attempted here. See free_return_search.py's own module docstring for
+why this search's free variables are this angle and the coast duration,
 not B-plane coordinates directly.
 """
 
@@ -106,7 +115,7 @@ def _plane_aligned_parking_orbit(r_moon_arrival, v_moon_arrival, altitude_km, mu
 
 def compute_and_export_mission(
     departure_mjd2000=None,
-    coast_days_guess=4.5,
+    coast_days_guess=4.0,
     total_days=12.0,
     step_seconds=60.0,
     parking_altitude_km=185.0,
