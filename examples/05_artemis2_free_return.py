@@ -81,7 +81,13 @@ def plane_aligned_parking_orbit(r_moon_arrival, v_moon_arrival, altitude_km, mu_
     e2 /= np.linalg.norm(e2)
     e1 = u
 
-    theta = np.radians(150.0)
+    # 134 degrees: the transfer angle also sets which side of the Moon the
+    # flyby passes on, which determines whether the return leg bends back
+    # toward Earth or swings wide of it -- see
+    # orbitopt.viz.mission_timeline._plane_aligned_parking_orbit's docstring
+    # for how this value was found (a swept search over candidates, picking
+    # the closest-to-genuine-free-return one with a physically sane delta-v).
+    theta = np.radians(134.0)
     r0_hat = np.cos(theta) * e1 - np.sin(theta) * e2
     tangent_hat = np.sin(theta) * e1 + np.cos(theta) * e2
 

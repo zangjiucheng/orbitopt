@@ -64,7 +64,25 @@ def _plane_aligned_parking_orbit(r_moon_arrival, v_moon_arrival, altitude_km, mu
     e2 = reference - np.dot(reference, u) * u
     e2 /= np.linalg.norm(e2)
     e1 = u
-    theta = np.radians(150.0)
+    # 134 degrees, not the geometrically-nicer-looking 150: this transfer
+    # angle is also what sets which side of the Moon the flyby passes on,
+    # which in turn determines whether the post-flyby return leg bends back
+    # toward Earth or swings wide of it -- the actual "free return" part of
+    # a free-return trajectory, which target_lunar_flyby's own targeting
+    # (lunar flyby *distance* only, see its docstring) doesn't control at
+    # all. Swept theta in 15-degree steps, then finer around the best
+    # region, tracking each candidate's return-leg closest approach to
+    # Earth: most values either don't converge or converge to an unrealistic
+    # multi-km/s "wrong branch" delta-v (a real instability in this
+    # differential corrector, not a search bug -- rejected any dv over
+    # 5000 m/s as implausible for this direct-injection profile). Of the
+    # surviving, physically-sane candidates, 134 gets the return leg to
+    # within 586 km altitude of Earth's atmospheric entry interface (150
+    # was 1283 km short) -- real progress, but still not a genuine
+    # (zero-correction-burn) free return; see find_altitude_crossing's
+    # caller below for how that shortfall is handled honestly rather than
+    # exported as a fake success.
+    theta = np.radians(134.0)
     r0_hat = np.cos(theta) * e1 - np.sin(theta) * e2
     tangent_hat = np.sin(theta) * e1 + np.cos(theta) * e2
     r0 = (EARTH_RADIUS_KM + altitude_km) * 1000.0 * r0_hat
