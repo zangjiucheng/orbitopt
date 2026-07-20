@@ -69,6 +69,18 @@ def _sphere_actor(plotter, body: dict, name: str):
     sphere = pv.Sphere(
         radius=float(radius), theta_resolution=_SPHERE_RESOLUTION, phi_resolution=_SPHERE_RESOLUTION,
     ).texture_map_to_sphere()
+    # texture_map_to_sphere()'s default V coordinate puts row 0 of the image
+    # (north, by the near-universal equirectangular convention every texture
+    # here follows) at the sphere's -Z pole, not +Z -- confirmed by direct
+    # render, not assumed: with this flip omitted, looking down +Z (this
+    # app's rotation axis, see advance_rotation) at Earth's texture showed
+    # Antarctica, and -Z showed the Arctic. Flipping V here (not the image
+    # files, and not the rotation axis) fixes every body through this one
+    # shared code path at once, including the ones with no obvious surface
+    # features to notice the same flip by eye (Moon, other planets).
+    tcoords = sphere.active_texture_coordinates
+    tcoords[:, 1] = 1.0 - tcoords[:, 1]
+    sphere.active_texture_coordinates = tcoords
     # A star is its own light source -- lighting=False renders its raw
     # texture colors with no shading falloff, so it reads as uniformly
     # bright regardless of viewing angle instead of having an implausible
