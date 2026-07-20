@@ -179,16 +179,43 @@ def compute_and_export_geo_mission(points_per_orbit=110, seed=1):
                 "From here the apogee-raising campaign below idealizes the shared burn apogee as "
                 "already at the geostationary radius (see GeoRaisingProblem's own docstring) rather "
                 "than this real ~35,286 km injection apogee -- a deliberate screening-model "
-                "simplification, not an error. This is also the biggest visible position jump in "
-                "the trail: burn 3 fires near the transfer orbit's apogee (~39,000 km out), but the "
-                "existing apogee-raising campaign's own arcs (unmodified below) always start their "
-                "very first pass at the *injection perigee* -- the two ends land on the same side of "
-                "Earth (no flight-through-the-planet discontinuity) but at very different radii, since "
-                "an accurate coast connecting them isn't drawn.",
+                "simplification, not an error. The visible position step right at this event is "
+                "real too, not a rendering bug: burn 3's 15.1-degree plane cut (25.68 -> 10.6 deg) "
+                "isn't itself interpolated, so the same point at the same radius sits on two "
+                "different orbital planes just before/after it, same as every other instantaneous "
+                "burn in this scene.",
     })
 
+    # Position doesn't change at the instant of an impulsive burn -- only
+    # velocity does -- so right after burn 3 the spacecraft is still at the
+    # transfer orbit's own apogee radius (~39,094 km), which is a point
+    # partway along the *injection* ellipse (rp0, r_geo), not that ellipse's
+    # own perigee. Solving Kepler's r(E) for the eccentric anomaly on the
+    # injection ellipse with this same radius, then coasting forward from
+    # there (through the injection ellipse's own true apogee, then down to
+    # perigee) is what actually happens physically. The transfer-orbit arc
+    # above ends at -X (see its own comment); the injection ellipse's r=
+    # 39,094 km point sits close to its *apogee*, which is at +X unflipped
+    # -- so this bridging arc (and everything downstream: the injection
+    # ellipse's own first pass and the whole LAE campaign, all sharing this
+    # one apogee) needs the same negation to land its own apogee at -X too,
+    # matching where the transfer arc left off, rather than leaving the
+    # apogee-raising campaign the only un-rotated piece of the chain.
+    # burn_position below is updated to match. The residual gap where the
+    # transfer arc ends is real, not a bug: the two ellipses' inclinations
+    # differ by 15 degrees, so a point at the same radius isn't at quite the
+    # same 3D position on each.
+    a_inj = 0.5 * (rp0 + r_geo)
+    e_inj = (r_geo - rp0) / (r_geo + rp0)
+    cos_e_burn3 = np.clip((1.0 - transfer_ra / a_inj) / e_inj, -1.0, 1.0)
+    e_burn3 = float(np.arccos(cos_e_burn3))
+    pos, tt = _kepler_arc(rp0, r_geo, i0, e_burn3, 2.0 * np.pi, points_per_orbit, mu, t_cursor)
+    positions.append(-pos)
+    times.append(tt)
+    t_cursor = tt[-1]
+
     pos, tt = _kepler_arc(rp0, r_geo, i0, 0.0, np.pi, points_per_orbit, mu, t_cursor)
-    positions.append(pos[1:])
+    positions.append(-pos[1:])
     times.append(tt[1:])
     t_cursor = tt[-1]
     apogee_times.append(t_cursor)  # burn 0 fires here (first apogee)
@@ -196,7 +223,7 @@ def compute_and_export_geo_mission(points_per_orbit=110, seed=1):
     for k in range(n_burns):
         pos, tt = _kepler_arc(rp_after[k], r_geo, incl_after[k], np.pi, 3.0 * np.pi,
                               points_per_orbit, mu, t_cursor)
-        positions.append(pos[1:])   # drop duplicate apogee point shared with previous arc
+        positions.append(-pos[1:])   # drop duplicate apogee point shared with previous arc
         times.append(tt[1:])
         t_cursor = tt[-1]
         if k < n_burns - 1:
@@ -211,18 +238,26 @@ def compute_and_export_geo_mission(points_per_orbit=110, seed=1):
     spacecraft_days = days.round(4).tolist()
 
     # 3D delta-v vector of each burn: the difference of apogee velocity vectors
-    # (all burns at the shared apogee on +X, velocity direction (0, cos i, -sin i)
-    # in this frame), for drawing the maneuver arrow. Units: m/s; position km.
+    # (all burns at the shared apogee, velocity direction (0, cos i, -sin i) in
+    # this frame before accounting for the launch segment's negation below),
+    # for drawing the maneuver arrow. Units: m/s; position km.
     def _apogee_velocity(perigee_km, incl_rad):
         a = 0.5 * (perigee_km + r_geo)
         v = np.sqrt(mu * (2.0 / r_geo - 1.0 / a))
         return v * np.array([0.0, np.cos(incl_rad), -np.sin(incl_rad)])
 
-    burn_position = [float(r_geo), 0.0, 0.0]
-    v_before = _apogee_velocity(rp0, i0)
+    # The apogee-raising campaign's own arcs are drawn negated (positions.
+    # append(-pos) above) to land their shared apogee at -X, matching where
+    # the prepended launch segment left off -- position and velocity are
+    # both ordinary vectors under a 180-degree rotation, so burn_position
+    # and every velocity/delta-v vector below get the same negation, or the
+    # drawn maneuver arrows would point exactly backwards relative to the
+    # (correctly, now-rotated) trajectory they're anchored to.
+    burn_position = [-float(r_geo), 0.0, 0.0]
+    v_before = -_apogee_velocity(rp0, i0)
     burn_vectors = []
     for k in range(n_burns):
-        v_after = _apogee_velocity(rp_after[k], incl_after[k])
+        v_after = -_apogee_velocity(rp_after[k], incl_after[k])
         burn_vectors.append(((v_after - v_before) * 1000.0))  # km/s -> m/s
         v_before = v_after
 
