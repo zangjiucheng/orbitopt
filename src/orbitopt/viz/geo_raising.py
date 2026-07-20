@@ -153,7 +153,20 @@ def compute_and_export_geo_mission(points_per_orbit=110, seed=1):
         "note": f"Centaur burn 2 (~5 min 36 s) -- {TRANSFER_ORBIT['perigee_km']:.0f} x "
                 f"{TRANSFER_ORBIT['apogee_km']:.0f} km, {TRANSFER_ORBIT['inclination_deg']:.2f} deg",
     })
+    # _kepler_arc always places perigee at -X, apogee at +X, regardless of the
+    # arc's own (rp, ra) -- fine for the LAE campaign below, where every burn
+    # shares one fixed apogee, but chaining differently-sized arcs at ecc 0->pi
+    # each time joins each pair on OPPOSITE sides of Earth (previous arc's +X
+    # apogee to this arc's -X perigee), reading as the trail flying straight
+    # through the planet. Negating this arc's positions (a 180-degree rotation
+    # about the origin, not a shape change) swaps which side its own perigee
+    # and apogee land on, so it starts at +X -- matching where the parking-
+    # orbit arc just ended -- and, as a bonus, puts burn 2 (an apogee-raising
+    # burn) at this arc's perigee and burn 3 (a perigee-raising burn) at its
+    # apogee, both the physically expected firing point, not just visually
+    # continuous by coincidence.
     pos, tt = _kepler_arc(transfer_rp, transfer_ra, transfer_i, 0.0, np.pi, points_per_orbit, mu, t_cursor)
+    pos = -pos
     positions.append(pos[1:])
     times.append(tt[1:])
     t_cursor = tt[-1]
@@ -166,7 +179,12 @@ def compute_and_export_geo_mission(points_per_orbit=110, seed=1):
                 "From here the apogee-raising campaign below idealizes the shared burn apogee as "
                 "already at the geostationary radius (see GeoRaisingProblem's own docstring) rather "
                 "than this real ~35,286 km injection apogee -- a deliberate screening-model "
-                "simplification, not an error.",
+                "simplification, not an error. This is also the biggest visible position jump in "
+                "the trail: burn 3 fires near the transfer orbit's apogee (~39,000 km out), but the "
+                "existing apogee-raising campaign's own arcs (unmodified below) always start their "
+                "very first pass at the *injection perigee* -- the two ends land on the same side of "
+                "Earth (no flight-through-the-planet discontinuity) but at very different radii, since "
+                "an accurate coast connecting them isn't drawn.",
     })
 
     pos, tt = _kepler_arc(rp0, r_geo, i0, 0.0, np.pi, points_per_orbit, mu, t_cursor)
