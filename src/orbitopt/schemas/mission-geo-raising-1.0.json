@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zangjiucheng/orbitopt/schemas/mission-geo-raising-1.0.json",
+  "title": "orbitopt GEO-raising mission config v1.0",
+  "description": "A user-editable YAML/JSON config for the GTO->GEO orbit-raising mission (orbitopt.viz.geo_raising.build_from_config), letting a user tune orbit elements, spacecraft parameters, and the optimizer/propagation/verification knobs without touching source. Unlike scene-1.0.json (which deliberately allows unknown 'foreign member' fields for forward compatibility), this schema is deliberately strict (additionalProperties: false everywhere) -- catching a typo'd field name here, before any compute runs, is the entire point of `orbitopt validate`. Every section besides `mission` and `output` is optional; an omitted section (or omitted leaf field within a present section) falls back to orbitopt's own built-in defaults -- the same values the 'goes' built-in mission already uses -- so the minimal valid config just re-derives that mission exactly.",
+  "type": "object",
+  "required": ["schemaVersion", "mission", "output"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0",
+      "description": "Which version of this mission-config schema the document was written against."
+    },
+    "mission": {
+      "type": "object",
+      "required": ["id", "title", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Stable slug for the produced scene, e.g. 'goes-gto-geo'." },
+        "title": { "type": "string", "minLength": 1 },
+        "kind": { "const": "geo-raising", "description": "Selects the geo-raising adapter (orbitopt.viz.geo_raising.build_from_config)." }
+      }
+    },
+    "launch_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The real Atlas V 541 / GOES-16 launch-to-GTO profile this mission starts its trail from (already in orbit, not at the pad). Defaults to the real GOES-16 numbers if omitted.",
+      "properties": {
+        "parking_orbit": { "$ref": "#/$defs/orbitElements" },
+        "transfer_orbit": {
+          "type": "object",
+          "required": ["apogee_km", "inclination_deg"],
+          "additionalProperties": false,
+          "properties": {
+            "apogee_km": { "type": "number", "exclusiveMinimum": 0 },
+            "inclination_deg": { "type": "number", "minimum": 0, "maximum": 180 }
+          }
+        },
+        "injection_orbit": { "$ref": "#/$defs/orbitElements" },
+        "apogee_dwell_minutes": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "How long the trail dwells at apogee before the first LAE burn (illustrative pacing, not a physical constraint)."
+        }
+      }
+    },
+    "spacecraft": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Defaults to a GOES-16-like spacecraft if omitted.",
+      "properties": {
+        "wet_mass_kg": { "type": "number", "exclusiveMinimum": 0 },
+        "dry_mass_kg": { "type": "number", "exclusiveMinimum": 0 },
+        "isp_s": { "type": "number", "exclusiveMinimum": 0 },
+        "thrust_n": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "geostationary_longitude_deg": { "type": "number", "minimum": -180, "maximum": 180 },
+        "penalty_weight": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Optimizer penalty weight for missing the finite-burn-feasible delta-v cap."
+        }
+      }
+    },
+    "campaign_search": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How the optimizer searches for the minimum feasible number of apogee-raising burns.",
+      "properties": {
+        "n_burns": {
+          "type": "object",
+          "required": ["min", "max"],
+          "additionalProperties": false,
+          "properties": {
+            "min": {
+              "type": "integer",
+              "minimum": 2,
+              "description": "GeoRaisingProblem requires n_burns >= 2 (n_burns == 1 is fully determined, not a search)."
+            },
+            "max": { "type": "integer", "minimum": 2 }
+          }
+        },
+        "optimizer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "population": { "type": "integer", "exclusiveMinimum": 0 },
+            "generations": { "type": "integer", "exclusiveMinimum": 0 },
+            "seed": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "propagation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "See viz.geo_raising.compute_and_export_geo_mission's docstring for the step_size_s precision-vs-runtime tradeoff (60s->~575km terminal drift, 2s->~24km).",
+      "properties": {
+        "step_size_s": { "type": "number", "exclusiveMinimum": 0 },
+        "points_per_arc": { "type": "integer", "exclusiveMinimum": 0 },
+        "max_output_points": { "type": "integer", "exclusiveMinimum": 0 }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The high-fidelity (tudatpy, J2+J22+Sun/Moon) re-fly + final-burn targeter (orbitopt.verify.geo_insertion.verify_geo_raising) that checks the optimizer's schedule actually reaches true GEO. Runs by default; `orbitopt run --skip-verify` (or enabled: false here) skips it for faster iteration.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "step_size_s": { "type": "number", "exclusiveMinimum": 0 },
+        "stationkeeping_days": { "type": "number", "minimum": 0 },
+        "epoch_mjd2000": {
+          "type": "number",
+          "description": "Real mission epoch (first-apogee/injection date) as MJD2000. Defaults to 2026-08-01 if omitted."
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "required": ["scene_file"],
+      "additionalProperties": false,
+      "properties": {
+        "scene_file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where `orbitopt run` writes the produced scene-1.0.json document; overridable with --out."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "orbitElements": {
+      "type": "object",
+      "required": ["perigee_km", "apogee_km", "inclination_deg"],
+      "additionalProperties": false,
+      "properties": {
+        "perigee_km": { "type": "number", "exclusiveMinimum": 0 },
+        "apogee_km": { "type": "number", "exclusiveMinimum": 0 },
+        "inclination_deg": { "type": "number", "minimum": 0, "maximum": 180 }
+      }
+    }
+  }
+}

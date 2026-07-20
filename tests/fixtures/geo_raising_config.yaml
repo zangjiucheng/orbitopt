@@ -1,0 +1,21 @@
+# A deliberately fast-to-run geo-raising mission config for tests / manual
+# `orbitopt validate` and `orbitopt run` smoke checks -- small optimizer
+# population/generations (not the "goes" built-in mission's tuned defaults),
+# so an end-to-end run finishes in a few seconds instead of ~a minute.
+# verification is left enabled by default; pass --skip-verify to skip it.
+schemaVersion: "1.0"
+
+mission:
+  id: geo-raising-fixture
+  title: "GEO-raising config fixture (fast settings, not tuned for realism)"
+  kind: geo-raising
+
+campaign_search:
+  n_burns: { min: 2, max: 6 }
+  optimizer:
+    population: 80
+    generations: 60
+    seed: 5
+
+output:
+  scene_file: scenes/geo-raising-fixture.json

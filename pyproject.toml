@@ -20,13 +20,18 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
 ]
-# jsonschema is the only base dependency: it's what orbitopt.scene_format
-# (the scene file format's read/write/validate surface) needs, and nothing
-# else in the base package requires numpy/pyvista/pykep/etc. -- see the
-# [project.optional-dependencies] note below for why the compute stack
-# (pykep/pygmo/tudatpy) is deliberately absent from this file entirely.
+# jsonschema + pyyaml are the only base dependencies: they're what
+# orbitopt.scene_format (the scene file format's read/write/validate surface)
+# and orbitopt.mission_config (the YAML mission-config read/validate surface)
+# need, and nothing else in the base package requires numpy/pyvista/pykep/etc.
+# -- see the [project.optional-dependencies] note below for why the compute
+# stack (pykep/pygmo/tudatpy) is deliberately absent from this file entirely.
+# `orbitopt run` still needs that compute stack (it actually optimizes/
+# propagates), same as the "goes"/"artemis2" built-in missions already do --
+# `orbitopt validate` alone works with just these two.
 dependencies = [
     "jsonschema>=4.26",
+    "pyyaml>=6.0",
 ]
 
 [project.urls]

@@ -7,6 +7,8 @@ the single-scene 3D viewer directly, without going through examples/.
     orbitopt view artemis2      # a built-in mission (see `orbitopt view --help`)
     orbitopt view scene.json    # any exported SceneData JSON file
     orbitopt export goes -o goes.json   # cache a built-in mission's scene JSON
+    orbitopt validate my_mission.yaml   # schema-check a mission config (no compute)
+    orbitopt run my_mission.yaml        # run a mission config, write + verify its scene
 
 The same commands work as ``python -m orbitopt ...``. Installed as the
 ``orbitopt`` and ``orbitopt-app`` console scripts (see pyproject.toml), so
@@ -62,6 +64,51 @@ def _cmd_missions(_args):
         print(f"{mission.id:<16} {mission.title}")
 
 
+def _load_and_validate_config(path):
+    """Shared by `validate`/`run`: parse+validate a mission config, printing
+    a clean one-line error (not a traceback) on a schema/format mismatch --
+    unlike the rest of this file, which lets exceptions surface raw, a
+    readable pass/fail is the entire point of these two commands."""
+    import jsonschema
+
+    from orbitopt.mission_config import load_mission_config
+
+    try:
+        return load_mission_config(path)
+    except (jsonschema.ValidationError, ValueError) as exc:
+        print(f"INVALID: {path}\n  {exc}")
+        raise SystemExit(1) from None
+
+
+def _cmd_validate(args):
+    config = _load_and_validate_config(args.config)
+    mission = config["mission"]
+    print(f"OK: {mission['id']} (kind: {mission['kind']})")
+
+
+def _cmd_run(args):
+    from orbitopt.mission_config import build_scene_from_config
+    from orbitopt.scene_format import write_scene
+
+    config = _load_and_validate_config(args.config)
+    if args.skip_verify:
+        config.setdefault("verification", {})["enabled"] = False
+
+    mission = config["mission"]
+    print(f"Running {mission['id']!r} (kind: {mission['kind']})...")
+    scene = build_scene_from_config(config)
+
+    out = args.out or config["output"]["scene_file"]
+    write_scene(scene, out)
+    print(f"wrote {out} ({len(scene.get('bodies', []))} bodies)")
+    # build_from_config appends its verification summary as trailing
+    # subtitle lines -- surface it here too, so a non-convergence WARNING
+    # is visible in the terminal, not just in the scene the UI shows later.
+    for line in scene.get("subtitle", "").splitlines():
+        if line.startswith("High-fidelity verification"):
+            print(("WARNING: " if "DID NOT CONVERGE" in line else "") + line)
+
+
 def build_parser() -> argparse.ArgumentParser:
     mission_ids = ", ".join(m.id for m in list_missions())
 
@@ -82,6 +129,15 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("-o", "--output", help="output path (default: <scene>.json)")
 
     sub.add_parser("missions", help="list every registered mission id (built-in + plugins)")
+
+    validate = sub.add_parser("validate", help="schema-check a mission config file (no compute)")
+    validate.add_argument("config", help="path to a mission config YAML/JSON file")
+
+    run = sub.add_parser("run", help="validate, run, and export a mission config to a scene file")
+    run.add_argument("config", help="path to a mission config YAML/JSON file")
+    run.add_argument("-o", "--out", help="output scene path (default: the config's output.scene_file)")
+    run.add_argument("--skip-verify", action="store_true",
+                     help="skip the high-fidelity result verification (faster, less trustworthy)")
     return parser
 
 
@@ -95,6 +151,10 @@ def main(argv=None):
         _cmd_export(args)
     elif args.command == "missions":
         _cmd_missions(args)
+    elif args.command == "validate":
+        _cmd_validate(args)
+    elif args.command == "run":
+        _cmd_run(args)
 
 
 if __name__ == "__main__":

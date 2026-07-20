@@ -122,3 +122,33 @@ def test_tudatpy_verification_reaches_geo():
     assert result.achieved_corrected["i_deg"] < 0.5  # residual plane error is small
     # the high-fidelity refinement of the final burn is a small nudge, not a resolve
     assert np.linalg.norm(result.corrected_final_burn_ms - result.ideal_final_burn_ms) < 30.0
+
+
+@pytest.mark.slow
+def test_compute_and_export_geo_mission_zero_arg_call_is_unchanged():
+    """compute_and_export_geo_mission() grew a large set of optional
+    parameters (see orbitopt.mission_config's config-driven path) so a user
+    can override the GOES-16 numbers this module has always used from a YAML
+    file -- but every one of them defaults to None/today's value, so the
+    zero-argument call (the "goes" built-in mission, missions.py) must keep
+    producing the exact same scene. This guards that against silent drift
+    from the refactor."""
+    from orbitopt.scene_format import validate_scene
+    from orbitopt.viz.geo_raising import compute_and_export_geo_mission
+
+    scene = compute_and_export_geo_mission()
+    validate_scene(scene)
+
+    assert scene["id"] == "goes-gto-geo"
+    assert scene["title"] == "GOES — GTO to GEO Raising"
+    assert [b["id"] for b in scene["bodies"]] == ["earth", "geo", "spacecraft"]
+
+    spacecraft = scene["bodies"][-1]
+    injection = next(row["value"] for row in spacecraft["info"] if row["label"] == "Injection")
+    assert injection == "8108x35286 km, 10.6 deg"  # real GOES-16 injection, unchanged
+
+    events = scene["timeline"]["events"]
+    assert [e["label"] for e in events][:3] == [
+        "Liftoff", "Parking-orbit insertion", "Transfer-orbit injection",
+    ]
+    assert events[-1]["label"] == "GEO insertion"

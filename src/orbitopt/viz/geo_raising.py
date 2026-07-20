@@ -60,6 +60,7 @@ from orbitopt.problems.geo_raising import (
     MU_EARTH_KM3_S2,
     single_impulse_geo_insertion_ms,
 )
+from orbitopt.verify.geo_insertion import verify_geo_raising
 from orbitopt.verify.tudat_propagate import propagate_multi_arc
 from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, ROTATION_PERIOD_HOURS, TEXTURE, body_entry, scene_document
 
@@ -164,34 +165,111 @@ def _geo_ring(r_geo_km, n=180):
     return np.stack([r_geo_km * np.cos(theta), r_geo_km * np.sin(theta), np.zeros_like(theta)], axis=1)
 
 
-def compute_and_export_geo_mission(seed=1, step_size_s=2.0, max_output_points=2500):
-    """Optimize a GOES-like GTO->GEO raising campaign (minimum finite-burn-
-    feasible burn count), fly the real Atlas V launch-to-GTO profile plus
-    that campaign as one continuously-propagated trajectory, and export it
-    as a SceneData document.
+def _search_feasible_schedule(
+    n_burns_min, n_burns_max, pop_size, generations, seed,
+    gto_perigee_km, gto_inclination_deg, apogee_dwell_s,
+    wet_mass_kg, dry_mass_kg, isp_s, thrust_n,
+    target_longitude_deg, penalty_weight,
+):
+    """Search n_burns in [n_burns_min, n_burns_max] for the smallest burn
+    count GeoRaisingProblem can satisfy within its own finite-burn delta-v
+    cap, returning (problem, decision_vector, decoded_schedule) for the
+    first feasible one. Factored out of _build_geo_mission so
+    build_from_config (below) can also get at the raw problem/decision
+    vector, which orbitopt.verify.geo_insertion.verify_geo_raising needs
+    and a plain scene dict doesn't carry.
 
-    step_size_s=2.0 is an empirically-checked tradeoff, not a round-number
-    guess: at 60s (tudat_propagate's usual default), the terminal GEO
-    state's own fixed-step RK4 drift alone put it ~575 km off both its
-    target radius and the equatorial plane -- large enough to be visibly
-    wrong for a "circular, equatorial" ending. 10s got that down to ~84 km;
-    2s to ~24 km (0.03% of r_geo, i.e. visually exact) for ~15s of total
-    compute, the point this stopped being worth spending more time on.
+    wet_mass_kg/dry_mass_kg/isp_s/thrust_n/target_longitude_deg/
+    penalty_weight are None-able: a None is simply omitted from the
+    GeoRaisingProblem kwargs, so its own constructor defaults apply --
+    single source of truth for those numbers instead of duplicating them
+    here.
+    """
+    kwargs = dict(gto_perigee_km=gto_perigee_km, gto_inclination_deg=gto_inclination_deg)
+    for key, value in (
+        ("wet_mass_kg", wet_mass_kg), ("dry_mass_kg", dry_mass_kg),
+        ("isp_s", isp_s), ("thrust_n", thrust_n),
+        ("target_longitude_deg", target_longitude_deg), ("penalty_weight", penalty_weight),
+    ):
+        if value is not None:
+            kwargs[key] = value
+
+    cap = GeoRaisingProblem(n_burns=2, **kwargs).max_dv_per_pass_ms(apogee_dwell_s)
+    for n_burns in range(n_burns_min, n_burns_max + 1):
+        problem = GeoRaisingProblem(n_burns=n_burns, max_dv_per_burn_ms=cap, **kwargs)
+        x, _, _ = run_optimization(problem, pop_size=pop_size, generations=generations, seed=seed, verbose=False)
+        sched = problem.decode(x)
+        if sched["feasible"]:
+            return problem, x, sched
+    raise RuntimeError(
+        f"No finite-burn-feasible GTO->GEO schedule within n_burns in [{n_burns_min}, {n_burns_max}]."
+    )
+
+
+def _build_geo_mission(
+    seed=1,
+    step_size_s=2.0,
+    max_output_points=2500,
+    *,
+    scene_id="goes-gto-geo",
+    title="GOES — GTO to GEO Raising",
+    parking_orbit=None,
+    transfer_orbit_apogee_km=None,
+    transfer_orbit_inclination_deg=None,
+    injection_orbit=None,
+    apogee_dwell_s=None,
+    wet_mass_kg=None,
+    dry_mass_kg=None,
+    isp_s=None,
+    thrust_n=None,
+    target_longitude_deg=None,
+    penalty_weight=None,
+    n_burns_min=2,
+    n_burns_max=6,
+    pop_size=160,
+    generations=150,
+    points_per_arc=150,
+):
+    """Does the actual work for compute_and_export_geo_mission (see that
+    function's docstring), additionally returning (problem, decision_vector,
+    decoded_schedule) alongside the scene dict -- build_from_config (below)
+    needs those for verify_geo_raising; compute_and_export_geo_mission
+    itself just discards them to keep its own return type a plain scene
+    dict, for missions.py compatibility.
+
+    Every keyword-only parameter besides scene_id/title/n_burns_*/pop_size/
+    generations/points_per_arc defaults to None and falls back to the real
+    GOES-16 numbers this module has always used (PARKING_ORBIT, GOES_GTO,
+    etc.) -- so the zero-argument call is unchanged. These parameters exist
+    so orbitopt.mission_config's config-driven path can override any of them
+    from a user-edited YAML file instead of editing this source.
     """
     mu = MU_EARTH_KM3_S2
-    cap = GeoRaisingProblem(n_burns=2, **GEO_RAISING_KWARGS).max_dv_per_pass_ms(APOGEE_DWELL_S)
+    parking_orbit = dict(PARKING_ORBIT if parking_orbit is None else parking_orbit)
+    transfer_apogee = TRANSFER_ORBIT_APOGEE_KM if transfer_orbit_apogee_km is None else transfer_orbit_apogee_km
+    transfer_incl_deg = (
+        TRANSFER_ORBIT_INCLINATION_DEG if transfer_orbit_inclination_deg is None else transfer_orbit_inclination_deg
+    )
+    injection_orbit = dict(
+        {
+            "perigee_km": GOES_GTO["gto_perigee_km"],
+            "apogee_km": GOES_GTO["gto_apogee_km"],
+            "inclination_deg": GOES_GTO["gto_inclination_deg"],
+        }
+        if injection_orbit is None else injection_orbit
+    )
+    apogee_dwell_s = APOGEE_DWELL_S if apogee_dwell_s is None else apogee_dwell_s
 
-    champion = None
-    for n_burns in range(2, 7):
-        problem = GeoRaisingProblem(n_burns=n_burns, max_dv_per_burn_ms=cap, **GEO_RAISING_KWARGS)
-        x, _, _ = run_optimization(problem, pop_size=160, generations=150, seed=seed, verbose=False)
-        d = problem.decode(x)
-        if d["feasible"]:
-            champion = (problem, d)
-            break
-    if champion is None:
-        raise RuntimeError("No finite-burn-feasible GTO->GEO schedule within n_burns <= 6.")
-    problem, sched = champion
+    problem, x, sched = _search_feasible_schedule(
+        n_burns_min=n_burns_min, n_burns_max=n_burns_max,
+        pop_size=pop_size, generations=generations, seed=seed,
+        gto_perigee_km=injection_orbit["perigee_km"],
+        gto_inclination_deg=injection_orbit["inclination_deg"],
+        apogee_dwell_s=apogee_dwell_s,
+        wet_mass_kg=wet_mass_kg, dry_mass_kg=dry_mass_kg,
+        isp_s=isp_s, thrust_n=thrust_n,
+        target_longitude_deg=target_longitude_deg, penalty_weight=penalty_weight,
+    )
 
     r_geo = problem.r_geo
     rp0 = problem.rp0
@@ -206,7 +284,7 @@ def compute_and_export_geo_mission(seed=1, step_size_s=2.0, max_output_points=25
     burn_events = []
     t_cursor = 0.0
 
-    def _propagate(r_km, v_km_s, duration_s, points_per_arc=150):
+    def _propagate(r_km, v_km_s, duration_s):
         nonlocal t_cursor
         result = propagate_multi_arc(
             r_km * 1000.0, v_km_s * 1000.0, 0.0,
@@ -243,14 +321,14 @@ def compute_and_export_geo_mission(seed=1, step_size_s=2.0, max_output_points=25
                 "orbit, same as the Artemis II scene.",
     })
 
-    parking_rp = EARTH_RADIUS_KM + PARKING_ORBIT["perigee_km"]
-    parking_ra = EARTH_RADIUS_KM + PARKING_ORBIT["apogee_km"]
-    parking_i = np.radians(PARKING_ORBIT["inclination_deg"])
+    parking_rp = EARTH_RADIUS_KM + parking_orbit["perigee_km"]
+    parking_ra = EARTH_RADIUS_KM + parking_orbit["apogee_km"]
+    parking_i = np.radians(parking_orbit["inclination_deg"])
     r_km, v_km_s = _apsis_state_km(parking_rp, parking_i, parking_ra, sign=+1.0, mu=mu)
     events.append({
         "label": "Parking-orbit insertion", "time": 0.0,
-        "note": f"Centaur burn 1 (~7 min 38 s) -- {PARKING_ORBIT['perigee_km']:.0f} x "
-                f"{PARKING_ORBIT['apogee_km']:.0f} km, {PARKING_ORBIT['inclination_deg']:.2f} deg",
+        "note": f"Centaur burn 1 (~7 min 38 s) -- {parking_orbit['perigee_km']:.0f} x "
+                f"{parking_orbit['apogee_km']:.0f} km, {parking_orbit['inclination_deg']:.2f} deg",
     })
 
     # Burn 2 (apsis-preserving, at parking perigee): raise apogee toward the
@@ -260,15 +338,15 @@ def compute_and_export_geo_mission(seed=1, step_size_s=2.0, max_output_points=25
     # downstream -- on a real node (see module docstring), a tradeoff for
     # a ~20 km perigee difference from the sourced figure.
     r_km, v_km_s = _propagate(r_km, v_km_s, _kepler_period_s(0.5 * (parking_rp + parking_ra), mu))
-    transfer_ra = EARTH_RADIUS_KM + TRANSFER_ORBIT_APOGEE_KM
-    transfer_i = np.radians(TRANSFER_ORBIT_INCLINATION_DEG)
+    transfer_ra = EARTH_RADIUS_KM + transfer_apogee
+    transfer_i = np.radians(transfer_incl_deg)
     v_after = _apsis_burn_km_s(r_km, v_km_s, transfer_ra, transfer_i, mu=mu)
     burn_events.append((t_cursor, "Transfer-orbit injection",
                         f"Centaur burn 2 (~5 min 36 s) -- apsis-preserving: perigee stays "
-                        f"{PARKING_ORBIT['perigee_km']:.0f} km (real burn 2 also nudges it to ~187 km; "
+                        f"{parking_orbit['perigee_km']:.0f} km (real burn 2 also nudges it to ~187 km; "
                         "kept fixed here so it -- and every later burn -- still fires at a real "
-                        f"equatorial node, see module docstring), apogee -> {TRANSFER_ORBIT_APOGEE_KM:.0f} km, "
-                        f"{TRANSFER_ORBIT_INCLINATION_DEG:.2f} deg",
+                        f"equatorial node, see module docstring), apogee -> {transfer_apogee:.0f} km, "
+                        f"{transfer_incl_deg:.2f} deg",
                         r_km.tolist(), ((v_after - v_km_s) * 1000.0).tolist()))
     v_km_s = v_after
 
@@ -290,8 +368,8 @@ def compute_and_export_geo_mission(seed=1, step_size_s=2.0, max_output_points=25
     v_after = _apsis_burn_km_s(r_km, v_km_s, rp0, i0, mu=mu)
     burn_events.append((t_cursor, "Apogee raise + plane cut (3a) / separation",
                         f"Centaur burn 3, part 1 of 2 -- apsis-preserving: apogee stays "
-                        f"{TRANSFER_ORBIT_APOGEE_KM:.0f} km, perigee -> {GOES_GTO['gto_perigee_km']:.0f} km "
-                        f"(matches the real GOES-16 injection exactly), {GOES_GTO['gto_inclination_deg']:.1f} deg "
+                        f"{transfer_apogee:.0f} km, perigee -> {injection_orbit['perigee_km']:.0f} km "
+                        f"(matches the real GOES-16 injection exactly), {injection_orbit['inclination_deg']:.1f} deg "
                         "(the full plane cut happens here, in one step); spacecraft separates ~3.5 h "
                         "after liftoff.",
                         r_km.tolist(), ((v_after - v_km_s) * 1000.0).tolist()))
@@ -301,7 +379,7 @@ def compute_and_export_geo_mission(seed=1, step_size_s=2.0, max_output_points=25
     v_after = _apsis_burn_km_s(r_km, v_km_s, r_geo, i0, mu=mu)
     burn_events.append((t_cursor, "Apogee raise (3b)",
                         f"Centaur-equivalent, part 2 of 2 -- apsis-preserving: perigee stays "
-                        f"{GOES_GTO['gto_perigee_km']:.0f} km, apogee -> {r_geo - EARTH_RADIUS_KM:,.0f} km "
+                        f"{injection_orbit['perigee_km']:.0f} km, apogee -> {r_geo - EARTH_RADIUS_KM:,.0f} km "
                         "(the geostationary radius -- vs. the real mission's own ~35,286 km injection "
                         "apogee, which then grows gradually across the first few LAE burns; this is "
                         "GeoRaisingProblem's own \"shared r_geo apogee\" screening-model idealization, "
@@ -352,7 +430,11 @@ def compute_and_export_geo_mission(seed=1, step_size_s=2.0, max_output_points=25
         spacecraft_days = days.round(4).tolist()
 
     geo_period_h = 2.0 * np.pi * np.sqrt(r_geo ** 3 / mu) / 3600.0
-    single = single_impulse_geo_insertion_ms(**GOES_GTO)
+    single = single_impulse_geo_insertion_ms(
+        gto_perigee_km=injection_orbit["perigee_km"],
+        gto_apogee_km=injection_orbit["apogee_km"],
+        gto_inclination_deg=injection_orbit["inclination_deg"],
+    )
 
     bodies = [
         body_entry("earth", "Earth", COLOR["earth"], "planet",
@@ -375,16 +457,16 @@ def compute_and_export_geo_mission(seed=1, step_size_s=2.0, max_output_points=25
                 {"label": "Apogee burns", "value": f"{n_burns} (min feasible)"},
                 {"label": "Total delta-v (campaign)", "value": f"{sched['dv_total_ms']:.0f} m/s"},
                 {"label": "1-impulse ideal (campaign)", "value": f"{single:.0f} m/s"},
-                {"label": "Injection", "value": f"{GOES_GTO['gto_perigee_km']:.0f}x"
-                                                 f"{GOES_GTO['gto_apogee_km']:.0f} km, "
-                                                 f"{GOES_GTO['gto_inclination_deg']:.1f} deg"},
+                {"label": "Injection", "value": f"{injection_orbit['perigee_km']:.0f}x"
+                                                 f"{injection_orbit['apogee_km']:.0f} km, "
+                                                 f"{injection_orbit['inclination_deg']:.1f} deg"},
             ],
         ),
     ]
 
-    return scene_document(
-        scene_id="goes-gto-geo",
-        title="GOES — GTO to GEO Raising",
+    scene = scene_document(
+        scene_id=scene_id,
+        title=title,
         subtitle="Real Atlas V/Centaur launch-to-transfer-orbit profile (GOES-16), continuously\n"
                  "propagated (Earth two-body, matching the campaign's own idealized physics) into an\n"
                  "optimized minimum finite-burn-feasible apogee-burn campaign to geostationary orbit.\n"
@@ -402,3 +484,112 @@ def compute_and_export_geo_mission(seed=1, step_size_s=2.0, max_output_points=25
             "events": events,
         },
     )
+    return scene, problem, x, sched
+
+
+def compute_and_export_geo_mission(seed=1, step_size_s=2.0, max_output_points=2500, **kwargs) -> dict:
+    """Optimize a GOES-like GTO->GEO raising campaign (minimum finite-burn-
+    feasible burn count), fly the real Atlas V launch-to-GTO profile plus
+    that campaign as one continuously-propagated trajectory, and export it
+    as a SceneData document.
+
+    Every keyword-only parameter besides seed/step_size_s/max_output_points
+    (see _build_geo_mission) defaults to None (or, for the burn-count/
+    optimizer/points knobs, to today's already-tuned values) and falls back
+    to the real GOES-16 numbers this module has always used -- so the
+    zero-argument call (the "goes" built-in mission, see missions.py) is
+    unchanged. These parameters exist so orbitopt.mission_config's
+    config-driven path (see build_from_config below) can override any of
+    them from a user-edited YAML file instead of editing this source.
+
+    step_size_s=2.0 is an empirically-checked tradeoff, not a round-number
+    guess: at 60s (tudat_propagate's usual default), the terminal GEO
+    state's own fixed-step RK4 drift alone put it ~575 km off both its
+    target radius and the equatorial plane -- large enough to be visibly
+    wrong for a "circular, equatorial" ending. 10s got that down to ~84 km;
+    2s to ~24 km (0.03% of r_geo, i.e. visually exact) for ~15s of total
+    compute, the point this stopped being worth spending more time on.
+    """
+    scene, _problem, _x, _sched = _build_geo_mission(
+        seed=seed, step_size_s=step_size_s, max_output_points=max_output_points, **kwargs
+    )
+    return scene
+
+
+def build_from_config(config: dict) -> dict:
+    """orbitopt.mission_config adapter for mission.kind == "geo-raising":
+    unpack a validated config dict into _build_geo_mission's parameters, run
+    it, and -- unless verification.enabled is explicitly False -- re-fly the
+    winning schedule through orbitopt.verify.geo_insertion.verify_geo_raising's
+    high-fidelity (tudatpy, J2+J22+Sun/Moon) re-fly + final-burn targeter,
+    appending a one-line pass/fail summary to the scene's subtitle. That's
+    the "give the user a way to verify the result, not just the config"
+    half of the config-driven mission workflow; the schema-validation half
+    already happened before this function is ever called (see
+    mission_config.build_scene_from_config).
+
+    Reuses verify_geo_raising as-is rather than duplicating its physics --
+    it already returns exactly the achieved-vs-target report a user would
+    need to trust (or distrust) the optimizer's answer without reading any
+    source code."""
+    mission = config["mission"]
+    launch = config.get("launch_profile", {})
+    spacecraft = config.get("spacecraft", {})
+    target = config.get("target", {})
+    search = config.get("campaign_search", {})
+    n_burns = search.get("n_burns", {})
+    optimizer = search.get("optimizer", {})
+    propagation = config.get("propagation", {})
+    verification = config.get("verification", {})
+
+    kwargs = dict(scene_id=mission["id"], title=mission["title"])
+    if "parking_orbit" in launch:
+        kwargs["parking_orbit"] = launch["parking_orbit"]
+    if "transfer_orbit" in launch:
+        kwargs["transfer_orbit_apogee_km"] = launch["transfer_orbit"]["apogee_km"]
+        kwargs["transfer_orbit_inclination_deg"] = launch["transfer_orbit"]["inclination_deg"]
+    if "injection_orbit" in launch:
+        kwargs["injection_orbit"] = launch["injection_orbit"]
+    if "apogee_dwell_minutes" in launch:
+        kwargs["apogee_dwell_s"] = launch["apogee_dwell_minutes"] * 60.0
+    for key in ("wet_mass_kg", "dry_mass_kg", "isp_s", "thrust_n"):
+        if key in spacecraft:
+            kwargs[key] = spacecraft[key]
+    if "geostationary_longitude_deg" in target:
+        kwargs["target_longitude_deg"] = target["geostationary_longitude_deg"]
+    if "penalty_weight" in target:
+        kwargs["penalty_weight"] = target["penalty_weight"]
+    if "min" in n_burns:
+        kwargs["n_burns_min"] = n_burns["min"]
+    if "max" in n_burns:
+        kwargs["n_burns_max"] = n_burns["max"]
+    if "population" in optimizer:
+        kwargs["pop_size"] = optimizer["population"]
+    if "generations" in optimizer:
+        kwargs["generations"] = optimizer["generations"]
+    seed = optimizer.get("seed", 1)
+    step_size_s = propagation.get("step_size_s", 2.0)
+    max_output_points = propagation.get("max_output_points", 2500)
+    if "points_per_arc" in propagation:
+        kwargs["points_per_arc"] = propagation["points_per_arc"]
+
+    scene, problem, x, _sched = _build_geo_mission(
+        seed=seed, step_size_s=step_size_s, max_output_points=max_output_points, **kwargs
+    )
+
+    if verification.get("enabled", True):
+        result = verify_geo_raising(
+            problem, x,
+            step_size=verification.get("step_size_s", 120.0),
+            stationkeeping_days=verification.get("stationkeeping_days", 3.0),
+            epoch_mjd2000=verification.get("epoch_mjd2000"),
+        )
+        achieved = result.achieved_corrected
+        summary = (
+            f"High-fidelity verification (tudatpy, J2+J22+Sun/Moon): "
+            f"{'CONVERGED' if result.converged else 'DID NOT CONVERGE'} -- achieved "
+            f"a={achieved['a_km']:,.0f} km, e={achieved['e']:.4f}, i={achieved['i_deg']:.2f} deg "
+            f"after {result.iterations} targeter iterations."
+        )
+        scene["subtitle"] = scene.get("subtitle", "") + "\n" + summary
+    return scene
