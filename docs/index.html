@@ -1,0 +1,835 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>orbitopt — screen fast, verify exactly</title>
+<meta name="description" content="orbitopt pairs pykep + pygmo's population-based search with tudatpy's high-fidelity propagation, CUDA-batched where it counts, to find and confirm real orbital trajectories." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2306050c'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='6' fill='none' stroke='%23e8a23e' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='%235ec8ff'/%3E%3Ccircle cx='27' cy='16' r='2.2' fill='%23e8a23e'/%3E%3C/svg%3E" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<style>
+  /* ---------------------------------------------------------------------
+     Palette: pulled directly from orbitopt's own code, not invented --
+     src/orbitopt/viz/theme.py (the Mission Control app's QSS) supplies the
+     void/panel/hairline/ink/accent tokens, and src/orbitopt/viz/scene.py's
+     COLOR dict supplies --burn / --verify / --earth / --mars / --saturn
+     (the actual maneuver-arrow, measure-line, and per-body colors the app
+     renders with). This page deliberately commits to one dark "tracking
+     station" world, the same one Mission Control itself uses -- no
+     light-mode variant, by choice, not omission.
+  ------------------------------------------------------------------------ */
+  :root {
+    --void: #06050c;
+    --panel: #0c0a17;
+    --panel-raised: #14111f;
+    --card: #171425;
+    --hairline: #2a273f;
+    --hairline-soft: #201d30;
+    --ink: #f4f2ea;
+    --ink-2: #a9a6bb;
+    --ink-muted: #6f6c85;
+    --accent: #e8a23e;       /* Mission Control ACCENT / spacecraft color */
+    --accent-dim: #4a3a1c;
+    --verify: #5ec8ff;        /* measure-line cyan */
+    --burn: #ff5a3c;          /* maneuver-vector orange-red */
+    --earth: #4c8eff;
+    --mars: #e14b3d;
+    --saturn: #2fa97a;
+    --sun: #fff4d6;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --maxw: 1120px;
+    --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+    --font-body: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "Cascadia Code", "IBM Plex Mono", "Consolas", ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+  body {
+    margin: 0;
+    background: var(--void);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  img { max-width: 100%; display: block; }
+  a { color: inherit; }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 28px; }
+
+  ::selection { background: var(--accent-dim); color: var(--accent); }
+
+  /* --------------------------------------------------------------- Nav */
+  .nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(6, 5, 12, 0.86);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--hairline-soft);
+  }
+  .nav .wrap {
+    display: flex; align-items: center; gap: 28px;
+    height: 64px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; text-decoration: none; }
+  .brand svg { width: 26px; height: 26px; flex: none; }
+  .brand-word { font-family: var(--font-mono); font-weight: 600; font-size: 17px; letter-spacing: 0.01em; color: var(--ink); }
+  .navlinks { display: flex; gap: 22px; }
+  .navlinks a {
+    font-size: 12.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-muted); text-decoration: none; transition: color .15s ease;
+  }
+  .navlinks a:hover { color: var(--accent); }
+  .nav-gh {
+    display: flex; align-items: center; gap: 7px;
+    padding: 7px 13px; border: 1px solid var(--hairline); border-radius: 999px;
+    font-size: 12.5px; font-weight: 600; text-decoration: none; color: var(--ink-2);
+    transition: border-color .15s ease, color .15s ease;
+  }
+  .nav-gh:hover { border-color: var(--accent); color: var(--accent); }
+  .nav-gh svg { width: 15px; height: 15px; }
+  @media (max-width: 760px) { .navlinks { display: none; } }
+
+  /* -------------------------------------------------------------- Hero */
+  .hero {
+    position: relative;
+    padding: 84px 0 96px;
+    overflow: hidden;
+    border-bottom: 1px solid var(--hairline-soft);
+  }
+  .hero::before {
+    content: ""; position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 78% 18%, rgba(232, 162, 62, 0.10), transparent 42%),
+      radial-gradient(circle at 15% 85%, rgba(94, 200, 255, 0.07), transparent 40%);
+    pointer-events: none;
+  }
+  #stars { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.7; }
+  .hero .wrap { position: relative; display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 40px; align-items: center; }
+  @media (max-width: 900px) { .hero .wrap { grid-template-columns: 1fr; } }
+
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent);
+    display: flex; align-items: center; gap: 9px; margin-bottom: 18px;
+  }
+  .eyebrow::before { content: ""; width: 22px; height: 1px; background: var(--accent); opacity: 0.7; }
+
+  h1 {
+    font-family: var(--font-display); font-weight: 700; text-transform: uppercase;
+    font-size: clamp(40px, 6vw, 68px); line-height: 0.98; letter-spacing: 0.005em;
+    margin: 0 0 22px; text-wrap: balance;
+  }
+  h1 .accent { color: var(--accent); }
+  h1 .verify-word { color: var(--verify); }
+
+  .lede {
+    font-size: 17.5px; color: var(--ink-2); max-width: 54ch; margin: 0 0 30px;
+  }
+  .lede code { font-family: var(--font-mono); color: var(--ink); background: var(--panel-raised); padding: 0.1em 0.4em; border-radius: 4px; font-size: 0.92em; }
+
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 20px; border-radius: 9px; font-weight: 600; font-size: 14.5px;
+    text-decoration: none; border: 1px solid transparent; cursor: pointer;
+    transition: transform .12s ease, border-color .15s ease, background .15s ease;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--accent); color: #1c1204; }
+  .btn-primary:hover { background: #f2ad48; }
+  .btn-primary svg { width: 16px; height: 16px; }
+  .btn-ghost {
+    background: var(--panel-raised); border-color: var(--hairline); color: var(--ink-2);
+    font-family: var(--font-mono); font-size: 13.5px;
+  }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  .hero-stage {
+    position: relative; aspect-ratio: 1 / 1; max-height: 440px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #orbit-canvas { width: 100%; height: 100%; }
+  .hero-caption {
+    position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted);
+    letter-spacing: 0.03em; white-space: nowrap;
+  }
+  .hero-caption b { color: var(--ink-2); font-weight: 500; }
+
+  /* ----------------------------------------------------------- Sections */
+  section { padding: 88px 0; border-bottom: 1px solid var(--hairline-soft); }
+  section:last-of-type { border-bottom: none; }
+  .section-head { max-width: 62ch; margin-bottom: 46px; }
+  h2 {
+    font-family: var(--font-display); font-weight: 700; text-transform: uppercase;
+    font-size: clamp(28px, 3.6vw, 40px); line-height: 1.02; margin: 0 0 14px; text-wrap: balance;
+  }
+  .section-sub { color: var(--ink-2); font-size: 16px; max-width: 58ch; }
+
+  /* --------------------------------------------------------- Pattern grid */
+  .pattern-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  @media (max-width: 860px) { .pattern-grid { grid-template-columns: 1fr; } }
+  .pcard {
+    background: var(--card); border: 1px solid var(--hairline); border-radius: var(--radius);
+    padding: 26px 24px; position: relative; overflow: hidden;
+  }
+  .pcard::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--stripe, var(--accent));
+  }
+  .pcard .tag {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--stripe, var(--accent)); margin-bottom: 12px; display: block;
+  }
+  .pcard h3 { font-family: var(--font-body); font-size: 18px; font-weight: 600; margin: 0 0 10px; }
+  .pcard p { color: var(--ink-2); font-size: 14.5px; margin: 0; }
+  .pcard code { font-family: var(--font-mono); font-size: 0.9em; color: var(--ink); }
+  .pcard.verify { --stripe: var(--verify); }
+  .pcard.batch { --stripe: var(--earth); }
+
+  .pattern-arrows {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-top: 22px; font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted);
+    letter-spacing: 0.04em; flex-wrap: wrap;
+  }
+  .pattern-arrows .arw { color: var(--hairline); }
+
+  /* -------------------------------------------------------------- Missions */
+  .mission-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+  @media (max-width: 760px) { .mission-grid { grid-template-columns: 1fr; } }
+  .mcard {
+    background: var(--card); border: 1px solid var(--hairline); border-radius: var(--radius);
+    padding: 24px;
+  }
+  .mcard .mhead { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 10px 1px currentColor; }
+  .mcard h3 { font-size: 17px; font-weight: 600; margin: 0; }
+  .mcard .newpill {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+    color: var(--void); background: var(--verify); padding: 2px 7px; border-radius: 999px; margin-left: auto;
+  }
+  .mcard p { color: var(--ink-2); font-size: 14.5px; margin: 0 0 12px; }
+  .mcard .fact {
+    font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-muted);
+    border-top: 1px solid var(--hairline-soft); padding-top: 12px;
+  }
+  .mcard .fact b { color: var(--accent); font-weight: 600; }
+
+  /* --------------------------------------------------------------- Results */
+  .results-layout { display: grid; grid-template-columns: 1fr 1.15fr; gap: 34px; align-items: start; }
+  @media (max-width: 900px) { .results-layout { grid-template-columns: 1fr; } }
+  table.bench { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.bench caption { text-align: left; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-muted); margin-bottom: 10px; letter-spacing: 0.04em; }
+  table.bench th, table.bench td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--hairline-soft); }
+  table.bench th { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); font-weight: 600; }
+  table.bench td { font-family: var(--font-mono); font-size: 13.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  table.bench td.workload { font-family: var(--font-body); color: var(--ink); font-size: 14px; }
+  table.bench td.speedup { color: var(--accent); font-weight: 600; }
+  .figure { background: var(--card); border: 1px solid var(--hairline); border-radius: var(--radius); overflow: hidden; }
+  .figure img { width: 100%; }
+  .figure figcaption { padding: 14px 18px; font-size: 13px; color: var(--ink-muted); border-top: 1px solid var(--hairline-soft); }
+  .figure figcaption code { font-family: var(--font-mono); color: var(--ink-2); }
+  .rig-note { font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted); margin-top: 16px; }
+
+  /* ---------------------------------------------------------- Architecture */
+  .arch-layout { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 34px; align-items: start; }
+  @media (max-width: 900px) { .arch-layout { grid-template-columns: 1fr; } }
+  .layer-list { display: flex; flex-direction: column; gap: 14px; }
+  .layer {
+    background: var(--card); border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+    padding: 16px 18px;
+  }
+  .layer .lnum { font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted); }
+  .layer h4 { margin: 4px 0 6px; font-size: 15px; font-weight: 600; }
+  .layer p { margin: 0; font-size: 13.5px; color: var(--ink-2); }
+  .layer code { font-family: var(--font-mono); font-size: 0.9em; color: var(--accent); }
+  pre.tree {
+    background: var(--panel-raised); border: 1px solid var(--hairline); border-radius: var(--radius);
+    padding: 20px 22px; overflow-x: auto; font-family: var(--font-mono); font-size: 12.6px;
+    line-height: 1.65; color: var(--ink-2); margin: 0;
+  }
+  pre.tree .path { color: var(--ink); }
+  pre.tree .comment { color: var(--ink-muted); }
+
+  /* --------------------------------------------------------------- Lessons */
+  .lesson-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  @media (max-width: 900px) { .lesson-grid { grid-template-columns: 1fr; } }
+  .lcard {
+    background: var(--card); border: 1px solid var(--hairline); border-radius: var(--radius);
+    padding: 22px;
+  }
+  .lcard .lesson-tag {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--burn); margin-bottom: 10px; display: block;
+  }
+  .lcard p { font-size: 13.8px; color: var(--ink-2); margin: 0; }
+  .lcard p b { color: var(--ink); font-weight: 600; }
+  .lcard code { font-family: var(--font-mono); font-size: 0.92em; color: var(--verify); }
+
+  /* ---------------------------------------------------------------- Start */
+  .start-layout { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+  @media (max-width: 860px) { .start-layout { grid-template-columns: 1fr; } }
+  .code-card {
+    background: var(--panel-raised); border: 1px solid var(--hairline); border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .code-card .code-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid var(--hairline-soft);
+  }
+  .code-card .code-head span { font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted); letter-spacing: 0.04em; }
+  .copy-btn {
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted); background: none;
+    border: 1px solid var(--hairline); border-radius: 6px; padding: 3px 9px; cursor: pointer;
+    transition: border-color .15s ease, color .15s ease;
+  }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .copy-btn.copied { border-color: var(--verify); color: var(--verify); }
+  pre.code {
+    margin: 0; padding: 18px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px;
+    line-height: 1.7; color: var(--ink-2);
+  }
+  pre.code .k { color: var(--verify); }
+  pre.code .c { color: var(--ink-muted); }
+  pre.code .s { color: var(--accent); }
+  .start-note { grid-column: 1 / -1; font-size: 13.5px; color: var(--ink-muted); margin-top: -2px; }
+  .start-note a { color: var(--verify); text-decoration: none; border-bottom: 1px dotted currentColor; }
+
+  /* --------------------------------------------------------------- Footer */
+  footer { padding: 46px 0 60px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; justify-content: space-between; }
+  footer .fbrand { display: flex; align-items: center; gap: 10px; }
+  footer .fbrand svg { width: 20px; height: 20px; }
+  footer .fmeta { font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted); }
+  footer .flinks { display: flex; gap: 18px; }
+  footer .flinks a { font-size: 13px; color: var(--ink-2); text-decoration: none; }
+  footer .flinks a:hover { color: var(--accent); }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <svg viewBox="0 0 32 32" fill="none"><ellipse cx="16" cy="16" rx="12.5" ry="6.5" stroke="#e8a23e" stroke-width="2"/><circle cx="16" cy="16" r="2.6" fill="#5ec8ff"/><circle cx="27.3" cy="16" r="2.1" fill="#e8a23e"/></svg>
+      <span class="brand-word">orbitopt</span>
+    </a>
+    <div class="navlinks">
+      <a href="#pattern">Approach</a>
+      <a href="#missions">Missions</a>
+      <a href="#results">Results</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#start">Get started</a>
+    </div>
+    <a class="nav-gh" href="https://github.com/zangjiucheng/orbitopt" target="_blank" rel="noopener">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <canvas id="stars"></canvas>
+  <div class="wrap">
+    <div>
+      <div class="eyebrow">Open-source · orbital trajectory optimization</div>
+      <h1>Screen fast.<br><span class="accent">Verify</span> <span class="verify-word">exactly.</span></h1>
+      <p class="lede">
+        orbitopt pairs <code>pykep</code> + <code>pygmo</code>'s cheap, population-based search
+        with <code>tudatpy</code>'s high-fidelity numerical propagation — CUDA-batched
+        where it counts — to find <em>and confirm</em> real trajectories, from a single
+        Lambert transfer to a GTO&nbsp;→&nbsp;GEO orbit-raising campaign.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/zangjiucheng/orbitopt" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          View on GitHub
+        </a>
+        <a class="btn btn-ghost" href="#start">$ pip install orbitopt[viewer]</a>
+      </div>
+    </div>
+    <div class="hero-stage">
+      <canvas id="orbit-canvas" width="440" height="440" aria-hidden="true"></canvas>
+      <div class="hero-caption"><b>live simulation</b> — real two-body Kepler propagation, GTO → GEO</div>
+    </div>
+  </div>
+</header>
+
+<section id="pattern">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">The core idea</div>
+      <h2>Every mission runs the same two stages</h2>
+      <p class="section-sub">
+        A screening optimizer explores a huge search space cheaply; a numerical
+        verifier re-flies only the winner under real physics. Neither stage does
+        the other's job.
+      </p>
+    </div>
+    <div class="pattern-grid">
+      <div class="pcard">
+        <span class="tag">Stage 1 — Screen</span>
+        <h3>pykep + pygmo</h3>
+        <p>Cheap, analytic patched-conic models — Lambert arcs, multi-gravity-assist
+          sequences — searched with population-based global optimizers
+          (<code>pso_gen</code>, <code>cmaes</code>, <code>nsga2</code>). Fast enough
+          to sweep a huge search space; blind to perturbations.</p>
+      </div>
+      <div class="pcard verify">
+        <span class="tag">Stage 2 — Verify</span>
+        <h3>tudatpy</h3>
+        <p>Numerical, N-body-capable propagation confirms a screened solution
+          actually holds once Earth/Moon/Sun gravity — J2+J22 for GEO — is
+          included. Expensive per call, so it only ever re-checks the winner,
+          never searches the space.</p>
+      </div>
+      <div class="pcard batch">
+        <span class="tag">Throughout — Batch</span>
+        <h3>CUDA via CuPy</h3>
+        <p>Population-based search evaluates thousands to millions of
+          <em>independent</em> candidates per run. Batched into vectorized array
+          ops — GPU when available, numpy otherwise — the same code path either
+          way (<code>orbitopt.core.gpu</code>).</p>
+      </div>
+    </div>
+    <div class="pattern-arrows">
+      <span>seed guess</span><span class="arw">→</span><span>GPU-batched screen</span><span class="arw">→</span><span>tudatpy verify</span><span class="arw">→</span><span>scene file</span><span class="arw">→</span><span>Mission Control</span>
+    </div>
+  </div>
+</section>
+
+<section id="missions">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">What it's built</div>
+      <h2>Four real missions, one viewer</h2>
+      <p class="section-sub">
+        Every mission — built-in or your own — is the same <code style="font-family:var(--font-mono)">SceneData</code>
+        JSON document, opened by the same PyVista/PySide6 renderer: Mission Control.
+      </p>
+    </div>
+    <div class="mission-grid">
+      <div class="mcard">
+        <div class="mhead"><span class="dot" style="color:#4c8eff;background:#4c8eff"></span><h3>Solar System</h3></div>
+        <p>Live heliocentric snapshot of the Sun and eight planets — real 2K textures,
+          true sidereal spin rates, positions from pykep ephemerides.</p>
+        <div class="fact"><b>orbitopt view solar-system</b></div>
+      </div>
+      <div class="mcard">
+        <div class="mhead"><span class="dot" style="color:#e8a23e;background:#e8a23e"></span><h3>Artemis II Free Return</h3></div>
+        <p>Lambert-seeded, GPU-screened, tudatpy-refined Earth–Moon free return.
+          Independently re-solved, not fit to unpublished flight data.</p>
+        <div class="fact">perilune target 6,545&nbsp;km — converges within <b>~10&nbsp;km</b> in 3 Newton iterations</div>
+      </div>
+      <div class="mcard">
+        <div class="mhead"><span class="dot" style="color:#2fa97a;background:#2fa97a"></span><h3>GOES — GTO to GEO</h3></div>
+        <p>Real Atlas&nbsp;V/Centaur launch-to-GTO profile, continuously propagated
+          through an optimized minimum-burn-count apogee-raising campaign to
+          geostationary orbit — every burn fires exactly at an apsis.</p>
+        <div class="fact">min. <b>finite-burn-feasible</b> schedule, verified under J2+J22+Sun/Moon</div>
+      </div>
+      <div class="mcard">
+        <div class="mhead"><span class="dot" style="color:#5ec8ff;background:#5ec8ff"></span><h3>Config-driven runs</h3><span class="newpill">NEW</span></div>
+        <p><code>orbitopt validate</code> / <code>orbitopt run</code>: describe a mission
+          in YAML, get a schema-checked, physically-verified scene file back —
+          no source edits.</p>
+        <div class="fact">strict JSON-Schema config + the same <b>verify_geo_raising</b> tudatpy pass</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="results">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">Measured, not assumed</div>
+      <h2>GPU batching, benchmarked on real hardware</h2>
+      <p class="section-sub">
+        Speedup grows with batch size — GPU kernel-launch overhead dominates at
+        small N, so a batched routine is only worth it once the batch is large
+        enough to amortize it. That threshold is measured per-routine, not assumed.
+      </p>
+    </div>
+    <div class="results-layout">
+      <div>
+        <table class="bench">
+          <caption>RTX A3000 Laptop, 6&nbsp;GB — this machine</caption>
+          <thead><tr><th>Workload</th><th>CPU</th><th>GPU</th><th>Speedup</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="workload">2,000,000 independent Lambert solves</td>
+              <td>82.8&nbsp;s <span style="color:var(--ink-muted)">(24.2k/s)</span></td>
+              <td>17.7&nbsp;s <span style="color:var(--ink-muted)">(112.8k/s)</span></td>
+              <td class="speedup">4.7×</td>
+            </tr>
+            <tr>
+              <td class="workload">90,000-cell Earth–Mars porkchop grid</td>
+              <td>—</td>
+              <td>1.08&nbsp;s <span style="color:var(--ink-muted)">(83.2k/s)</span></td>
+              <td class="speedup">—</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="rig-note"># at 200k candidates the Lambert speedup was ~2.5×; at 2M it's 4.7×</p>
+      </div>
+      <figure class="figure">
+        <img src="assets/porkchop_earth_mars.png" alt="Earth to Mars porkchop plot: departure date vs. arrival date contour grid of total delta-v, generated from one batched GPU call" loading="lazy" />
+        <figcaption>A full Earth→Mars porkchop grid from one batched GPU call — <code>examples/04_porkchop_gpu.py</code>.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="architecture">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">How it's organized</div>
+      <h2>Three layers, one scene format</h2>
+      <p class="section-sub">
+        Reading and viewing a scene someone already computed doesn't need pykep,
+        pygmo, or tudatpy — the package is split so that's true in practice, not
+        just in principle.
+      </p>
+    </div>
+    <div class="arch-layout">
+      <div class="layer-list">
+        <div class="layer">
+          <span class="lnum">01 · base install</span>
+          <h4>Scene format</h4>
+          <p><code>pip install orbitopt</code> — stdlib + <code>jsonschema</code> only.
+            <code>read_scene</code> / <code>write_scene</code> / <code>validate_scene</code>
+            against a versioned, independent JSON Schema.</p>
+        </div>
+        <div class="layer">
+          <span class="lnum">02 · +viewer extra</span>
+          <h4>3D viewer + Mission Control</h4>
+          <p><code>pip install orbitopt[viewer]</code> — real PyPI wheels (numpy,
+            PyVista, PySide6). Opens any scene file, yours or a colleague's.</p>
+        </div>
+        <div class="layer">
+          <span class="lnum">03 · conda environment</span>
+          <h4>Compute stack</h4>
+          <p>pykep + pygmo + tudatpy ship only on conda-forge/tudat-team.
+            <code>environment.yml</code> builds the layer that actually
+            optimizes and verifies trajectories.</p>
+        </div>
+      </div>
+      <pre class="tree"><span class="comment"># src/orbitopt/</span>
+<span class="path">core/</span>        gpu.py, problem.py        <span class="comment"># numpy/cupy switch, pygmo UDP base</span>
+<span class="path">lambert/</span>     gpu_batch.py, cpu.py      <span class="comment"># batched + reference Izzo solvers</span>
+<span class="path">dynamics/</span>    nbody_gpu.py              <span class="comment"># GPU-batched coarse Earth-Moon propagator</span>
+<span class="path">problems/</span>    transfer_2body.py, mga.py
+             free_return.py, geo_raising.py
+<span class="path">optimize/</span>    gpu_bfe.py, runner.py     <span class="comment"># pygmo + custom batch fitness evaluator</span>
+<span class="path">verify/</span>      tudat_propagate.py
+             differential_correction.py
+             geo_insertion.py          <span class="comment"># tudatpy-based, high-fidelity checks</span>
+<span class="path">viz/</span>         scene_renderer.py         <span class="comment"># one PyVista draw path, every scene</span>
+             app.py                    <span class="comment"># Mission Control (PySide6 + pyvistaqt)</span>
+             solar_system.py, mission_timeline.py, geo_raising.py
+<span class="path">mission_config.py</span>              <span class="comment"># YAML config -> validated -> built scene</span>
+<span class="path">missions.py</span>                    <span class="comment"># named-mission registry + plugin entry points</span>
+<span class="path">scene_format.py</span>                <span class="comment"># the format's entire read/write/validate surface</span></pre>
+    </div>
+  </div>
+</section>
+
+<section id="lessons">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">Field notes</div>
+      <h2>Bugs that cost real debugging time</h2>
+      <p class="section-sub">
+        Kept in the README on purpose — the framework's gotchas, measured and
+        root-caused, not smoothed over.
+      </p>
+    </div>
+    <div class="lesson-grid">
+      <div class="lcard">
+        <span class="lesson-tag">pygmo</span>
+        <p><b>Attach <code>bfe</code> before wrapping.</b> It has to go on the raw UDA
+          (<code>uda.set_bfe(bfe)</code>) <em>before</em> <code>pg.algorithm(uda)</code>.
+          Attaching it after silently falls back to evaluating one candidate at a
+          time — ~15× slower, no error.</p>
+      </div>
+      <div class="lcard">
+        <span class="lesson-tag">SPICE frames</span>
+        <p><b><code>J2000</code> ≠ <code>ECLIPJ2000</code>.</b> They're related by Earth's
+          ~23.4° obliquity and aren't interchangeable — mixing states queried in
+          one against the other silently produces errors of hundreds of
+          thousands of km.</p>
+      </div>
+      <div class="lcard">
+        <span class="lesson-tag">RK4 step size</span>
+        <p><b>Fine for a coast, not for a flyby.</b> A 600s step reported an
+          81,733&nbsp;km closest lunar approach for a trajectory whose true,
+          converged (≤15s step) closest approach was 4,379&nbsp;km.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">Get started</div>
+      <h2>From a YAML file to a verified mission</h2>
+      <p class="section-sub">
+        No source edits: describe a mission's orbit elements, spacecraft, and
+        optimizer settings, then validate and run it from the command line.
+      </p>
+    </div>
+    <div class="start-layout">
+      <div class="code-card">
+        <div class="code-head"><span>view any scene — no conda needed</span><button class="copy-btn" data-copy="pip install orbitopt[viewer]&#10;orbitopt view solar-system">copy</button></div>
+        <pre class="code"><span class="c"># real PyPI wheels only</span>
+<span class="k">pip install</span> orbitopt[viewer]
+<span class="k">orbitopt view</span> solar-system</pre>
+      </div>
+      <div class="code-card">
+        <div class="code-head"><span>the compute stack — pykep + pygmo + tudatpy</span><button class="copy-btn" data-copy="./scripts/setup_env.ps1&#10;conda activate orbitopt&#10;orbitopt">copy</button></div>
+        <pre class="code"><span class="c"># conda-forge / tudat-team only</span>
+.\scripts\setup_env.ps1
+conda activate orbitopt
+<span class="k">orbitopt</span>  <span class="c"># launches Mission Control</span></pre>
+      </div>
+      <div class="code-card">
+        <div class="code-head"><span>my_mission.yaml</span><button class="copy-btn" data-copy="mission:&#10;  id: my-geo-mission&#10;  title: My GEO raising campaign&#10;  kind: geo-raising&#10;target:&#10;  geostationary_longitude_deg: -101.0&#10;campaign_search:&#10;  n_burns: { min: 2, max: 6 }&#10;output:&#10;  scene_file: scenes/my-geo-mission.json">copy</button></div>
+        <pre class="code"><span class="c">mission:</span>
+  id: <span class="s">my-geo-mission</span>
+  title: <span class="s">My GEO raising campaign</span>
+  kind: <span class="s">geo-raising</span>
+<span class="c">target:</span>
+  geostationary_longitude_deg: <span class="s">-101.0</span>
+<span class="c">campaign_search:</span>
+  n_burns: { min: <span class="s">2</span>, max: <span class="s">6</span> }
+<span class="c">output:</span>
+  scene_file: <span class="s">scenes/my-geo-mission.json</span></pre>
+      </div>
+      <div class="code-card">
+        <div class="code-head"><span>validate, then run</span><button class="copy-btn" data-copy="orbitopt validate my_mission.yaml&#10;orbitopt run my_mission.yaml&#10;orbitopt view scenes/my-geo-mission.json">copy</button></div>
+        <pre class="code"><span class="k">orbitopt validate</span> my_mission.yaml   <span class="c"># schema-only, no compute</span>
+<span class="k">orbitopt run</span> my_mission.yaml        <span class="c"># optimize + tudatpy-verify + write</span>
+<span class="k">orbitopt view</span> scenes/my-geo-mission.json</pre>
+      </div>
+      <p class="start-note">Every field falls back to the real GOES-16 numbers if omitted — the minimal config just re-derives the built-in mission. See <a href="https://github.com/zangjiucheng/orbitopt/blob/main/src/orbitopt/schemas/mission-geo-raising-1.0.json" target="_blank" rel="noopener">the full config schema</a> on GitHub.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="fbrand">
+      <svg viewBox="0 0 32 32" fill="none"><ellipse cx="16" cy="16" rx="12.5" ry="6.5" stroke="#e8a23e" stroke-width="2"/><circle cx="16" cy="16" r="2.6" fill="#5ec8ff"/><circle cx="27.3" cy="16" r="2.1" fill="#e8a23e"/></svg>
+      <span class="fmeta">orbitopt · GPL-3.0-or-later · © 2026 Jiucheng Zang</span>
+    </div>
+    <div class="flinks">
+      <a href="https://github.com/zangjiucheng/orbitopt" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/zangjiucheng/orbitopt/blob/main/README.md" target="_blank" rel="noopener">README</a>
+      <a href="https://github.com/zangjiucheng/orbitopt/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---- ambient starfield (hero background) ---- */
+  var starCanvas = document.getElementById("stars");
+  var sctx = starCanvas.getContext("2d");
+  var stars = [];
+  function sizeStars() {
+    var hero = starCanvas.parentElement;
+    var w = hero.clientWidth, h = hero.clientHeight;
+    starCanvas.width = w * devicePixelRatio;
+    starCanvas.height = h * devicePixelRatio;
+    starCanvas.style.width = w + "px";
+    starCanvas.style.height = h + "px";
+    var n = Math.round((w * h) / 9000);
+    stars = [];
+    for (var i = 0; i < n; i++) {
+      stars.push({
+        x: Math.random() * w * devicePixelRatio,
+        y: Math.random() * h * devicePixelRatio,
+        r: (Math.random() * 1.1 + 0.3) * devicePixelRatio,
+        a: Math.random() * 0.6 + 0.15,
+        tw: Math.random() * Math.PI * 2,
+      });
+    }
+  }
+  function drawStars(t) {
+    sctx.clearRect(0, 0, starCanvas.width, starCanvas.height);
+    for (var i = 0; i < stars.length; i++) {
+      var s = stars[i];
+      var flicker = reduceMotion ? s.a : s.a * (0.7 + 0.3 * Math.sin(t / 900 + s.tw));
+      sctx.beginPath();
+      sctx.fillStyle = "rgba(244,242,234," + flicker.toFixed(3) + ")";
+      sctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      sctx.fill();
+    }
+  }
+  window.addEventListener("resize", sizeStars);
+  sizeStars();
+
+  /* ---- hero: real two-body Kepler propagation, GTO -> GEO raising ---- */
+  var oc = document.getElementById("orbit-canvas");
+  var ox = oc.getContext("2d");
+  var DPR = Math.min(devicePixelRatio || 1, 2);
+
+  function fitOrbitCanvas() {
+    var box = oc.parentElement.getBoundingClientRect();
+    var size = Math.min(box.width, box.height);
+    oc.width = size * DPR;
+    oc.height = size * DPR;
+    oc.style.width = size + "px";
+    oc.style.height = size + "px";
+  }
+  fitOrbitCanvas();
+  window.addEventListener("resize", fitOrbitCanvas);
+
+  // Orbit-raising sequence: (rp, ra) in normalized units, Earth at radius REARTH.
+  // Solved with real Kepler mechanics (mean anomaly -> eccentric anomaly via
+  // Newton iteration -> perifocal position), not a cosmetic parametric ellipse.
+  var REARTH = 0.09;
+  var LEGS = [
+    { rp: 0.20, ra: 0.34, periodMs: 2600, holds: 1.0 },
+    { rp: 0.20, ra: 0.62, periodMs: 3400, holds: 1.0 },
+    { rp: 0.46, ra: 0.62, periodMs: 3050, holds: 1.0 },
+    { rp: 0.62, ra: 0.62, periodMs: 3800, holds: 1.6 },
+  ];
+  var BURN_FLASH_MS = 420;
+
+  function keplerE(M, e) {
+    var E = M;
+    for (var i = 0; i < 6; i++) {
+      E = E - (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+    }
+    return E;
+  }
+  // perifocal position for leg at fraction f in [0,1) of its period, apogee on -X
+  function legPosition(leg, f) {
+    var a = (leg.rp + leg.ra) / 2;
+    var e = leg.ra > leg.rp ? (leg.ra - leg.rp) / (leg.ra + leg.rp) : 0;
+    var M = f * Math.PI * 2;
+    var E = keplerE(M, e);
+    var x = a * (Math.cos(E) - e);
+    var y = a * Math.sqrt(Math.max(0, 1 - e * e)) * Math.sin(E);
+    return { x: x, y: y, a: a, e: e }; // perigee at +X
+  }
+
+  var legIndex = 0, legStart = performance.now(), burnFlashUntil = 0;
+
+  function drawOrbitPath(cx, cy, scale, leg) {
+    var a = (leg.rp + leg.ra) / 2;
+    var e = leg.ra > leg.rp ? (leg.ra - leg.rp) / (leg.ra + leg.rp) : 0;
+    ox.beginPath();
+    for (var k = 0; k <= 120; k++) {
+      var E = (k / 120) * Math.PI * 2;
+      var x = a * (Math.cos(E) - e);
+      var y = a * Math.sqrt(Math.max(0, 1 - e * e)) * Math.sin(E);
+      var px = cx + x * scale, py = cy + y * scale;
+      if (k === 0) ox.moveTo(px, py); else ox.lineTo(px, py);
+    }
+    ox.closePath();
+    ox.strokeStyle = "rgba(169,166,187,0.28)";
+    ox.lineWidth = 1 * DPR;
+    ox.stroke();
+  }
+
+  function frame(t) {
+    var w = oc.width, h = oc.height;
+    ox.clearRect(0, 0, w, h);
+    var cx = w / 2, cy = h / 2;
+    var scale = (w * 0.42);
+
+    var leg = LEGS[legIndex];
+    var elapsed = t - legStart;
+    var period = reduceMotion ? leg.periodMs * 0.001 : leg.periodMs;
+    var f = (elapsed / period) % 1;
+    var doneHolding = elapsed > period * leg.holds;
+
+    if (doneHolding) {
+      burnFlashUntil = t + BURN_FLASH_MS;
+      legIndex = (legIndex + 1) % LEGS.length;
+      legStart = t;
+      leg = LEGS[legIndex];
+      f = 0;
+    }
+
+    // orbit paths so far (faint), current leg emphasized
+    for (var i = 0; i <= legIndex; i++) {
+      ox.save();
+      if (i !== legIndex) ox.globalAlpha = 0.35;
+      drawOrbitPath(cx, cy, scale, LEGS[i]);
+      ox.restore();
+    }
+
+    // GEO target ring
+    ox.beginPath();
+    ox.arc(cx, cy, 0.62 * scale, 0, Math.PI * 2);
+    ox.strokeStyle = "rgba(94,200,255,0.22)";
+    ox.setLineDash([2 * DPR, 5 * DPR]);
+    ox.lineWidth = 1 * DPR;
+    ox.stroke();
+    ox.setLineDash([]);
+
+    // Earth
+    var earthR = REARTH * scale;
+    var grad = ox.createRadialGradient(cx - earthR * 0.3, cy - earthR * 0.3, earthR * 0.1, cx, cy, earthR);
+    grad.addColorStop(0, "#7fb0ff");
+    grad.addColorStop(1, "#2a4fa0");
+    ox.beginPath();
+    ox.fillStyle = grad;
+    ox.arc(cx, cy, earthR, 0, Math.PI * 2);
+    ox.fill();
+
+    // spacecraft position (real Kepler propagation on this leg)
+    var pos = legPosition(leg, f);
+    var sx = cx + pos.x * scale, sy = cy + pos.y * scale;
+
+    var flashing = t < burnFlashUntil;
+    ox.beginPath();
+    ox.fillStyle = flashing ? "#ff5a3c" : "#e8a23e";
+    ox.shadowColor = flashing ? "#ff5a3c" : "#e8a23e";
+    ox.shadowBlur = (flashing ? 18 : 8) * DPR;
+    ox.arc(sx, sy, (flashing ? 5.5 : 3.6) * DPR, 0, Math.PI * 2);
+    ox.fill();
+    ox.shadowBlur = 0;
+
+    if (!reduceMotion) requestAnimationFrame(frame);
+    drawStars(t);
+  }
+  requestAnimationFrame(frame);
+  if (reduceMotion) {
+    // still render one settled frame plus a slow star flicker loop
+    setInterval(function () { frame(performance.now()); }, 1200);
+  }
+
+  /* ---- copy-to-clipboard for code cards ---- */
+  document.querySelectorAll(".copy-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var text = (btn.getAttribute("data-copy") || "").replace(/&#10;/g, "\n");
+      navigator.clipboard && navigator.clipboard.writeText(text).then(function () {
+        btn.textContent = "copied";
+        btn.classList.add("copied");
+        setTimeout(function () { btn.textContent = "copy"; btn.classList.remove("copied"); }, 1400);
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>
