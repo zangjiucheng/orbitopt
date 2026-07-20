@@ -164,7 +164,7 @@ def _geo_ring(r_geo_km, n=180):
     return np.stack([r_geo_km * np.cos(theta), r_geo_km * np.sin(theta), np.zeros_like(theta)], axis=1)
 
 
-def compute_and_export_geo_mission(seed=1, step_size_s=2.0, max_output_points=900):
+def compute_and_export_geo_mission(seed=1, step_size_s=2.0, max_output_points=2500):
     """Optimize a GOES-like GTO->GEO raising campaign (minimum finite-burn-
     feasible burn count), fly the real Atlas V launch-to-GTO profile plus
     that campaign as one continuously-propagated trajectory, and export it
@@ -206,15 +206,32 @@ def compute_and_export_geo_mission(seed=1, step_size_s=2.0, max_output_points=90
     burn_events = []
     t_cursor = 0.0
 
-    def _propagate(r_km, v_km_s, duration_s):
+    def _propagate(r_km, v_km_s, duration_s, points_per_arc=150):
         nonlocal t_cursor
         result = propagate_multi_arc(
             r_km * 1000.0, v_km_s * 1000.0, 0.0,
             arcs=[{"type": "coast", "duration": duration_s}],
             central_body="Earth", perturbing_bodies=("Earth",), step_size=step_size_s,
         )
-        states_km.append(result.states / 1000.0)
-        epochs_s.append(result.epochs + t_cursor)
+        # step_size_s is fine (see the docstring's own precision note), so a
+        # single arc can carry thousands of raw samples -- decimating each
+        # arc to a FIXED point count here, not a shared budget divided
+        # across the whole mission at the end, is what keeps a short-period
+        # orbit (e.g. the ~91.6-minute parking orbit) visually smooth: a
+        # single global end-of-mission decimation allocates points roughly
+        # by each arc's raw SAMPLE COUNT, which scales with its *period*,
+        # not its visual complexity -- so the near-GEO-period final arcs
+        # would soak up most of a shared budget and the short, fast, small
+        # early orbits would be left options-short enough to render as
+        # visibly straight-line facets instead of a smooth curve.
+        states = result.states
+        epochs = result.epochs
+        if len(states) > points_per_arc:
+            keep = np.unique(np.linspace(0, len(states) - 1, points_per_arc).round().astype(int))
+            states = states[keep]
+            epochs = epochs[keep]
+        states_km.append(states / 1000.0)
+        epochs_s.append(epochs + t_cursor)
         t_cursor += float(result.epochs[-1])
         final = result.states[-1] / 1000.0
         return final[:3], final[3:]
