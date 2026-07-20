@@ -24,6 +24,7 @@ from PySide6.QtCore import QObject, QRectF, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QKeySequence, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -345,11 +346,13 @@ class MissionControlWindow(QMainWindow):
         self._selected_body_id: str | None = None
         self._measure_body_id: str | None = None
         self._tracking = False
+        self._lock_reference_body_id: str | None = None
         self._view_axis: str | None = None
         self._view_negative = False
         self._focus_zoomed = False
         self._pre_focus_camera: tuple | None = None
         self._events: list[dict] = []
+        self._event_slowdown_enabled = True
         self._maneuver_base_len = 0.0
         self._maneuver_max_dv = 1.0
         self._maneuver_window = 0.0
@@ -579,6 +582,22 @@ class MissionControlWindow(QMainWindow):
         self.track_btn.setToolTip("Keep the selected body centered as time advances (T)")
         self.track_btn.toggled.connect(self._set_tracking)
         row.addWidget(self.track_btn)
+
+        face_label = QLabel("FACE")
+        face_label.setObjectName("viewLabel")
+        row.addWidget(face_label)
+
+        self.lock_combo = QComboBox()
+        self.lock_combo.setObjectName("lockCombo")
+        self.lock_combo.setToolTip(
+            "While tracking, keep this body lined up behind the tracked body "
+            "instead of an arbitrary offset direction -- e.g. track a "
+            "spacecraft, lock to Earth, and Earth stays framed as the "
+            "spacecraft moves"
+        )
+        self.lock_combo.addItem("None", None)
+        self.lock_combo.currentIndexChanged.connect(self._on_lock_reference_changed)
+        row.addWidget(self.lock_combo)
         return box
 
     def _build_timeline_bar(self) -> QWidget:
@@ -598,6 +617,16 @@ class MissionControlWindow(QMainWindow):
         speed_col.setSpacing(2)
         speed_header = QHBoxLayout()
         speed_header.addWidget(QLabel("TIME WARP"))
+        self.auto_slow_btn = QPushButton("⏱")
+        self.auto_slow_btn.setObjectName("autoSlowButton")
+        self.auto_slow_btn.setCheckable(True)
+        self.auto_slow_btn.setChecked(True)
+        self.auto_slow_btn.setToolTip(
+            "Auto-slow near timeline events (on by default) -- click to play "
+            "through events at full speed instead"
+        )
+        self.auto_slow_btn.toggled.connect(self._set_event_slowdown_enabled)
+        speed_header.addWidget(self.auto_slow_btn)
         speed_header.addStretch(1)
         self.speed_value_label = QLabel(self._format_speed(self._speed))
         self.speed_value_label.setObjectName("speedValue")
@@ -838,7 +867,7 @@ class MissionControlWindow(QMainWindow):
         self._focus_zoomed = False
         self._pre_focus_camera = None
         self._refresh_card_highlights()
-        self.renderer.track_body(body_id, self._current_time)
+        self.renderer.track_body(body_id, self._current_time, reference_body_id=self._lock_reference_body_id)
         self._update_measure()
         self.statusBar().showMessage(
             f"Focused {self._body_cards[body_id]['name']} — ⌘/Ctrl-click another to measure"
@@ -860,19 +889,21 @@ class MissionControlWindow(QMainWindow):
             frame.style().unpolish(frame)
             frame.style().polish(frame)
 
-    def _update_measure(self):
+    def _update_measure(self, render: bool = True):
         """Redraw the measurement line + readout for the current (A, B) pair, or
         clear it if a full pair isn't selected. Called on selection changes and
-        every timeline step so the distance tracks the bodies as they move."""
+        every timeline step so the distance tracks the bodies as they move.
+        ``render=False`` for the hot playback-tick path -- see _on_tick, which
+        batches its scene mutations into one render instead of one each."""
         a, b = self._selected_body_id, self._measure_body_id
         cards = self._body_cards
         if a and b and a in cards and b in cards:
-            dist = self.renderer.measure_line(a, b, self._current_time)
+            dist = self.renderer.measure_line(a, b, self._current_time, render=render)
             self.measure_pair_label.setText(f"{cards[a]['name']}  ↔  {cards[b]['name']}")
             self.measure_dist_label.setText(_format_distance(dist, cards[a]["unit"]))
             self.measure_card.setVisible(True)
         else:
-            self.renderer.clear_measure_line()
+            self.renderer.clear_measure_line(render=render)
             self.measure_card.setVisible(False)
 
     def _focus_selected(self):
@@ -912,17 +943,37 @@ class MissionControlWindow(QMainWindow):
             w.blockSignals(False)
         if self._tracking:
             if self._selected_body_id and self._selected_body_id in self._body_cards:
-                self.renderer.track_body(self._selected_body_id, self._current_time)
+                self.renderer.track_body(
+                    self._selected_body_id, self._current_time, reference_body_id=self._lock_reference_body_id
+                )
                 self.statusBar().showMessage(f"Tracking {self._body_cards[self._selected_body_id]['name']}")
             else:
                 self.statusBar().showMessage("Select a body to track — click its card")
         else:
             self.statusBar().showMessage("Tracking off")
 
-    def _update_tracking(self):
-        """Follow the tracked body after a timeline change, if tracking is on."""
+    def _on_lock_reference_changed(self, _index: int):
+        """The FACE dropdown: lock the camera's offset direction so this body
+        stays lined up behind whatever's selected (see SceneRenderer.track_body).
+        Applies immediately -- once, to the current selection -- whether or not
+        continuous Track is on, so e.g. picking "Earth" here re-orients an
+        already M-zoomed view right away."""
+        self._lock_reference_body_id = self.lock_combo.currentData()
+        if self._selected_body_id and self._selected_body_id in self._body_cards:
+            self.renderer.track_body(
+                self._selected_body_id, self._current_time, reference_body_id=self._lock_reference_body_id
+            )
+
+    def _update_tracking(self, dt: float | None = None, render: bool = True):
+        """Follow the tracked body after a timeline change, if tracking is on.
+        ``dt`` is passed through for smoothing on continuous playback ticks;
+        omitted (snaps instantly) for a manual slider drag. ``render=False``
+        for the hot playback-tick path -- see _on_tick."""
         if self._tracking and self._selected_body_id and self._selected_body_id in self._body_cards:
-            self.renderer.track_body(self._selected_body_id, self._current_time)
+            self.renderer.track_body(
+                self._selected_body_id, self._current_time, dt=dt,
+                reference_body_id=self._lock_reference_body_id, render=render,
+            )
 
     # ------------------------------------------------------------- Missions
     def _populate_builtin_missions(self):
@@ -1101,6 +1152,7 @@ class MissionControlWindow(QMainWindow):
         self.measure_card.setVisible(False)
         if self._tracking:
             self._set_tracking(False)
+        self._lock_reference_body_id = None
         # Same reasoning for the M-key focus-zoom toggle: a saved "pre-focus"
         # camera state from the old scene means nothing once the bodies (and
         # their positions) it was framing are gone.
@@ -1150,6 +1202,14 @@ class MissionControlWindow(QMainWindow):
         for card in self._body_cards.values():
             card["frame"].deleteLater()
         self._body_cards = {}
+
+        self.lock_combo.blockSignals(True)
+        self.lock_combo.clear()
+        self.lock_combo.addItem("None", None)
+        for body in scene["bodies"]:
+            self.lock_combo.addItem(body["name"], body["id"])
+        self.lock_combo.setCurrentIndex(0)
+        self.lock_combo.blockSignals(False)
         for widget in getattr(self, "_event_widgets", []):
             widget.deleteLater()
         self._event_widgets = []
@@ -1349,7 +1409,7 @@ class MissionControlWindow(QMainWindow):
 
     def _on_speed_slider(self, value: int):
         self._speed = self._speed_from_slider(value)
-        self.speed_value_label.setText(self._format_speed(self._speed))
+        self._sync_speed_readout(self._speed)
 
     def _set_speed(self, speed: float):
         self._speed = min(SPEED_MAX, max(SPEED_MIN, float(speed)))
@@ -1357,7 +1417,7 @@ class MissionControlWindow(QMainWindow):
             self.speed_slider.blockSignals(True)
             self.speed_slider.setValue(self._slider_from_speed(self._speed))
             self.speed_slider.blockSignals(False)
-            self.speed_value_label.setText(self._format_speed(self._speed))
+            self._sync_speed_readout(self._speed)
 
     def _cycle_speed(self, direction: int):
         """Fine multiplicative nudge of the time-warp rate (the [ / ] shortcuts);
@@ -1393,6 +1453,15 @@ class MissionControlWindow(QMainWindow):
             self._timer.start()
         else:
             self._timer.stop()
+            self._sync_speed_readout(self._speed)  # drop any leftover "eased" display
+
+    def _set_event_slowdown_enabled(self, on: bool):
+        self._event_slowdown_enabled = bool(on)
+        if not self._playing:
+            self._sync_speed_readout(self._speed)
+        self.statusBar().showMessage(
+            "Auto-slow near events: on" if self._event_slowdown_enabled else "Auto-slow near events: off"
+        )
 
     def _event_proximity_effective_speed(self, timeline) -> float:
         """self._speed, eased toward EVENT_SLOWDOWN_TARGET_SPEED (an absolute
@@ -1401,8 +1470,10 @@ class MissionControlWindow(QMainWindow):
         nears the closest timeline event, over EVENT_SLOWDOWN_WINDOW_FRACTION
         of the mission's own span. min() means this only ever slows playback
         down, never speeds it up past whatever the user actually chose.
+        Returns self._speed unchanged (no easing) if there are no events or
+        the user has switched auto-slow off via the timeline bar's toggle.
         """
-        if not self._events:
+        if not self._events or not self._event_slowdown_enabled:
             return self._speed
         span = (timeline["max"] - timeline["min"]) or 1.0
         window = EVENT_SLOWDOWN_WINDOW_FRACTION * span
@@ -1425,6 +1496,11 @@ class MissionControlWindow(QMainWindow):
             return
         dt = (now_ms - self._last_tick_ms) / 1000.0
         self._last_tick_ms = now_ms
+        # Cap dt so a single stalled frame (GC pause, texture/mesh rebuild,
+        # window drag) can't advance sim time by one big visible jump -- the
+        # timer's nominal interval is 33ms, so anything past ~3x that is
+        # treated as a hitch to smooth over rather than catch up on exactly.
+        dt = min(dt, 0.1)
 
         timeline = self._current_scene.get("timeline") if self._current_scene else None
         if not timeline:
@@ -1432,6 +1508,7 @@ class MissionControlWindow(QMainWindow):
             return
 
         effective_speed = self._event_proximity_effective_speed(timeline)
+        self._sync_speed_readout(effective_speed)
         self._current_time += dt * effective_speed
         if self._current_time >= timeline["max"]:
             self._current_time = timeline["max"]
@@ -1441,9 +1518,26 @@ class MissionControlWindow(QMainWindow):
         self.time_slider.blockSignals(True)
         self.time_slider.setValue(int(frac * self.time_slider.maximum()))
         self.time_slider.blockSignals(False)
-        self._refresh_readouts(self.renderer.set_time(self._current_time))
-        self._update_tracking()
-        self._update_measure()
+        # Batched into a single render at the end instead of one render per
+        # call (set_time/track_body/measure_line each used to render on their
+        # own) -- three separate GPU submits every 33ms tick made per-tick
+        # cost noisy enough to read as playback jitter/stutter.
+        self._refresh_readouts(self.renderer.set_time(self._current_time, render=False))
+        self._update_tracking(dt=dt, render=False)
+        self._update_measure(render=False)
+        self.plotter.render()
+
+    def _sync_speed_readout(self, effective_speed: float):
+        """Keep the TIME WARP label showing what's *actually* playing back,
+        not just the slider-set self._speed -- without this the label kept
+        reading (e.g.) "10x" while auto-slow had actually eased playback down
+        to 0.02x near an event, which looked like the readout and the real
+        playback rate had drifted out of sync with each other."""
+        eased = effective_speed < self._speed - 1e-9
+        self.speed_value_label.setText(self._format_speed(effective_speed))
+        self.speed_value_label.setProperty("eased", eased)
+        self.speed_value_label.style().unpolish(self.speed_value_label)
+        self.speed_value_label.style().polish(self.speed_value_label)
 
     def _on_rotation_tick(self):
         import time as _time

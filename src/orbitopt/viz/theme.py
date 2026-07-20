@@ -179,6 +179,33 @@ QFrame#viewSep {{
     margin: 3px 2px;
 }}
 
+QComboBox#lockCombo {{
+    background: {PANEL_RAISED};
+    border: 1px solid {HAIRLINE};
+    border-radius: 7px;
+    padding: 4px 8px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: {INK_SECONDARY};
+    min-width: 76px;
+}}
+QComboBox#lockCombo:hover {{
+    color: {INK_PRIMARY};
+    border-color: {ACCENT};
+}}
+QComboBox#lockCombo::drop-down {{
+    border: none;
+    width: 16px;
+}}
+QComboBox#lockCombo QAbstractItemView {{
+    background: {PANEL_RAISED};
+    border: 1px solid {HAIRLINE};
+    color: {INK_SECONDARY};
+    selection-background-color: {ACCENT_DIM};
+    selection-color: {ACCENT};
+    outline: none;
+}}
+
 QSlider::groove:horizontal {{
     height: 4px;
     background: {HAIRLINE};
@@ -254,7 +281,31 @@ QLabel#speedValue {{
     font-family: "Cascadia Code", "Consolas", monospace;
     font-size: 11px;
     font-weight: 650;
+    color: {INK_PRIMARY};
+}}
+QLabel#speedValue[eased="true"] {{
     color: {ACCENT};
+}}
+
+QPushButton#autoSlowButton {{
+    min-width: 20px;
+    max-width: 20px;
+    min-height: 20px;
+    max-height: 20px;
+    padding: 0;
+    margin-left: 6px;
+    font-size: 11px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: {INK_MUTED};
+}}
+QPushButton#autoSlowButton:checked {{
+    color: {ACCENT};
+    border-color: {HAIRLINE};
+    background: {ACCENT_DIM};
+}}
+QPushButton#autoSlowButton:hover {{
+    color: {INK_PRIMARY};
 }}
 
 QFrame#maneuverRow {{

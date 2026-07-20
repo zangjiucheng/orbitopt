@@ -305,11 +305,18 @@ class SceneRenderer:
             angle_deg = (absolute_hours / entry["period_hours"] * 360.0) % 360.0
             entry["actor"].orientation = (0.0, 0.0, angle_deg)
 
-    def set_time(self, t: float) -> dict[str, float]:
+    def set_time(self, t: float, render: bool = True) -> dict[str, float]:
         """Move every trailed body to its position at time ``t``, regrow
         its "traveled so far" trail, and return {body_id: distance from
         origin} for every body (moving or static) -- the HUD's job to
         display, not this class's.
+
+        ``render=False`` skips the final redraw so a caller that's about to
+        make more scene changes this same tick (track_body, measure_line) can
+        batch them into a single render -- see app.py's _on_tick, which used
+        to trigger up to three separate renders per tick (one from each of
+        these methods), inflating and destabilizing per-tick render cost
+        enough to read as playback jitter/stutter.
         """
         distances = {}
         for body_id, entry in self._moving.items():
@@ -335,7 +342,8 @@ class SceneRenderer:
         if self._has_timeline:
             self._apply_rotation_for_time(t)
 
-        self.plotter.render()
+        if render:
+            self.plotter.render()
         return distances
 
     def body_world_position(self, body_id: str, t: float) -> np.ndarray:
@@ -348,7 +356,7 @@ class SceneRenderer:
         self.plotter.camera.focal_point = tuple(pos)
         self.plotter.render()
 
-    def measure_line(self, id_a: str, id_b: str, t: float, color: str = "#5ec8ff") -> float:
+    def measure_line(self, id_a: str, id_b: str, t: float, color: str = "#5ec8ff", render: bool = True) -> float:
         """Draw (or redraw) a straight line between two bodies at time ``t`` and
         return the distance between them. Reuses a single named actor so it
         follows the bodies as the timeline advances, the same update-in-place
@@ -359,11 +367,12 @@ class SceneRenderer:
             pv.Line(a, b), color=color, line_width=2.4,
             name="measure-line", pickable=False,
         )
-        self.plotter.render()
+        if render:
+            self.plotter.render()
         return float(np.linalg.norm(a - b))
 
-    def clear_measure_line(self) -> None:
-        self.plotter.remove_actor("measure-line", render=True)
+    def clear_measure_line(self, render: bool = True) -> None:
+        self.plotter.remove_actor("measure-line", render=render)
 
     def set_maneuver_vector(self, position_km, delta_v, length_km: float) -> None:
         """Draw an arrow at ``position_km`` along the ``delta_v`` direction with a
@@ -388,22 +397,72 @@ class SceneRenderer:
     def clear_maneuver_vector(self) -> None:
         self.plotter.remove_actor("maneuver-vector", render=True)
 
-    def track_body(self, body_id: str, t: float) -> None:
+    # Camera-follow smoothing rate (1/s) applied when track_body is called
+    # with a ``dt`` -- i.e. every timeline tick during playback. Hard-snapping
+    # the camera to a freshly computed position every tick made playback look
+    # jittery, because _on_tick's dt is wall-clock-measured (see app.py) and
+    # varies frame to frame with OS scheduler/render-cost noise, so each snap
+    # was a slightly different size; exponential smoothing (independent of
+    # dt's own jitter, since the decay is expressed per unit time) turns that
+    # noisy step sequence into continuous motion. A manual jump -- selecting a
+    # body, scrubbing the slider -- calls this with dt=None and still snaps
+    # instantly, so only continuous playback is smoothed, not user input.
+    _TRACK_SMOOTHING_RATE_HZ = 10.0
+
+    def track_body(
+        self,
+        body_id: str,
+        t: float,
+        dt: float | None = None,
+        reference_body_id: str | None = None,
+        render: bool = True,
+    ) -> None:
         """Center ``body_id`` by *translating* the camera to it, preserving the
         current view offset (direction + distance) -- so the body holds its
         apparent size and framing rather than the camera just swiveling to face
         it. Reading the offset live each call means the user can still orbit and
         zoom while tracking, KSP-tracking-station style. Called once to focus a
         selection and every timeline tick when tracking is on.
+
+        ``reference_body_id``, if given (and different from ``body_id``), locks
+        the *direction* of that offset instead of leaving it as whatever the
+        user last dragged it to: the camera is kept on the side of ``body_id``
+        opposite ``reference_body_id``, so the reference body stays lined up
+        behind the tracked one in the camera's forward view -- e.g. tracking a
+        spacecraft while locked to Earth keeps Earth framed in the background
+        as the spacecraft moves, instead of it drifting out of frame. Only the
+        direction is overridden; the existing offset *distance* (i.e. the
+        current zoom level) is preserved, so scroll-zooming still works.
+
+        ``dt`` (seconds since the last call) enables smoothing -- see
+        _TRACK_SMOOTHING_RATE_HZ -- and is omitted for one-shot jumps.
         """
         pos = self.body_world_position(body_id, t)
         cam = self.plotter.camera
         focal = np.asarray(cam.focal_point, dtype=float)
         position = np.asarray(cam.position, dtype=float)
         offset = position - focal
-        cam.focal_point = tuple(pos)
-        cam.position = tuple(pos + offset)
-        self.plotter.render()
+        distance = float(np.linalg.norm(offset))
+
+        if reference_body_id is not None and reference_body_id != body_id:
+            ref_pos = self.body_world_position(reference_body_id, t)
+            away = pos - ref_pos
+            away_norm = float(np.linalg.norm(away))
+            if away_norm > 1e-9 and distance > 1e-9:
+                offset = (away / away_norm) * distance
+
+        target_focal = pos
+        target_position = pos + offset
+
+        if dt is not None and dt > 0.0:
+            alpha = 1.0 - np.exp(-self._TRACK_SMOOTHING_RATE_HZ * dt)
+            target_focal = focal + (target_focal - focal) * alpha
+            target_position = position + (target_position - position) * alpha
+
+        cam.focal_point = tuple(target_focal)
+        cam.position = tuple(target_position)
+        if render:
+            self.plotter.render()
 
     def zoom_to_body(self, body_id: str, t: float, distance_factor: float = 0.2) -> None:
         """Like track_body, but *dolly in* rather than preserve distance --
