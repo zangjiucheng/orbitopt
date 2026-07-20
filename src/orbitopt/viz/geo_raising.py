@@ -1,5 +1,7 @@
 """Export a scrubbable SceneData document (see orbitopt.viz.scene) for the
-GOES-style GTO -> GEO orbit-raising campaign optimized by
+GOES-style launch-to-GEO campaign: the real Atlas V/Centaur launch-to-GTO
+profile (docs/goes_gto_geo_mission_plan.md Section 2), followed by the
+apogee-raising campaign optimized by
 orbitopt.problems.geo_raising.GeoRaisingProblem -- the Earth-centered analog of
 mission_timeline.py, and a new mission in the Mission Control app.
 
@@ -10,6 +12,10 @@ burn fires, placed on +X here), starting from the inclined, eccentric injection
 ellipse and rounding + de-inclining orbit by orbit to the final equatorial GEO
 circle. Points are sampled uniformly in eccentric anomaly with Kepler timing so
 the marker moves realistically (slow at apogee, fast at perigee) when scrubbed.
+The prepended launch-vehicle arcs (parking orbit, transfer orbit, then the
+injection ellipse) use the same construction for the same reason, even though
+their real burns don't all fire exactly at apogee -- see the launch_events
+block in compute_and_export_geo_mission for what that simplifies away.
 
 Positions are Earth-centered km. The timeline is the *consecutive-apogee* lower
 bound on elapsed time (each orbit flown back-to-back); a real campaign skips
@@ -36,6 +42,20 @@ GOES_GTO = dict(gto_perigee_km=8108.0, gto_apogee_km=35286.0, gto_inclination_de
 GEO_RAISING_KWARGS = {k: v for k, v in GOES_GTO.items() if k != "gto_apogee_km"}
 APOGEE_DWELL_S = 41 * 60
 EARTH_RADIUS_KM = 6378.0
+
+# Real Atlas V 541 / GOES-16 launch-to-GTO profile (docs/goes_gto_geo_mission_plan.md
+# Section 2 -- the well-documented, sourced launch-vehicle elements, not the
+# "[illus.]"-flagged spacecraft-phase ones). Three Centaur burns: parking-orbit
+# insertion, transfer-orbit injection, then a combined apogee-raise + plane-cut
+# burn at apogee that lands exactly on GOES_GTO -- ties this prepended segment
+# to the same numbers GEO_RAISING_KWARGS already uses for the modeled campaign,
+# rather than introducing an unrelated set of constants. Liftoff/ascent (T0 to
+# ~T+5 min: SRB burn, staging, powered flight to parking-orbit insertion) is
+# real but not itself a Kepler arc -- not drawn, same as mission_timeline.py's
+# Artemis scene, which likewise starts its trail already in orbit, not at the
+# pad; flagged with an event note instead of silently vanishing from the story.
+PARKING_ORBIT = dict(perigee_km=167.0, apogee_km=541.0, inclination_deg=28.15)
+TRANSFER_ORBIT = dict(perigee_km=187.0, apogee_km=32716.0, inclination_deg=25.68)
 
 
 def _kepler_arc(rp_km, ra_km, incl_rad, e_start, e_end, n_pts, mu, t0_s):
@@ -88,15 +108,70 @@ def compute_and_export_geo_mission(points_per_orbit=110, seed=1):
     rp_after = sched["perigee_after_km"]
     n_burns = sched["n_burns"]
 
-    # trajectory: injection perigee->apogee, then each post-burn orbit apogee->apogee
+    # trajectory: launch-to-GTO (real Atlas V/Centaur profile), then injection
+    # perigee->apogee, then each post-burn orbit apogee->apogee
     positions = []
     times = []
     apogee_times = []  # time of each burn (at an apogee)
     t_cursor = 0.0
+    launch_events = []
 
-    pos, tt = _kepler_arc(rp0, r_geo, i0, 0.0, np.pi, points_per_orbit, mu, t_cursor)
+    # Argument of perigee at each real burn is explicitly undocumented (mission
+    # plan Section 6, open question #1) -- there is no sourced "correct"
+    # orientation to match, so each arc below reuses _kepler_arc's own fixed
+    # perigee-at--X/apogee-at-+X convention rather than inventing one. Real
+    # elapsed times differ somewhat from each arc's own natural half-period
+    # (burns 2/3 fire near an equatorial node, not exactly at the geometric
+    # apogee -- mission plan Section 2) -- narrated in the event notes, not
+    # forced into the animation timing, the same simplification this file's
+    # own subtitle already documents for the LAE campaign's timeline below.
+    launch_events.append({
+        "label": "Liftoff", "time": 0.0,
+        "note": "Atlas V 541 / Centaur; ascent to parking-orbit insertion (SRB burn, "
+                "staging, ~5 min) isn't itself drawn -- the trail starts already in "
+                "orbit, same as the Artemis II scene.",
+    })
+
+    parking_rp = EARTH_RADIUS_KM + PARKING_ORBIT["perigee_km"]
+    parking_ra = EARTH_RADIUS_KM + PARKING_ORBIT["apogee_km"]
+    parking_i = np.radians(PARKING_ORBIT["inclination_deg"])
+    pos, tt = _kepler_arc(parking_rp, parking_ra, parking_i, 0.0, np.pi, points_per_orbit, mu, t_cursor)
     positions.append(pos)
     times.append(tt)
+    t_cursor = tt[-1]
+    launch_events.append({
+        "label": "Parking-orbit insertion", "time": round(float(tt[0] / 86400.0), 4),
+        "note": f"Centaur burn 1 (~7 min 38 s) -- {PARKING_ORBIT['perigee_km']:.0f} x "
+                f"{PARKING_ORBIT['apogee_km']:.0f} km, {PARKING_ORBIT['inclination_deg']:.2f} deg",
+    })
+
+    transfer_rp = EARTH_RADIUS_KM + TRANSFER_ORBIT["perigee_km"]
+    transfer_ra = EARTH_RADIUS_KM + TRANSFER_ORBIT["apogee_km"]
+    transfer_i = np.radians(TRANSFER_ORBIT["inclination_deg"])
+    launch_events.append({
+        "label": "Transfer-orbit injection", "time": round(float(t_cursor / 86400.0), 4),
+        "note": f"Centaur burn 2 (~5 min 36 s) -- {TRANSFER_ORBIT['perigee_km']:.0f} x "
+                f"{TRANSFER_ORBIT['apogee_km']:.0f} km, {TRANSFER_ORBIT['inclination_deg']:.2f} deg",
+    })
+    pos, tt = _kepler_arc(transfer_rp, transfer_ra, transfer_i, 0.0, np.pi, points_per_orbit, mu, t_cursor)
+    positions.append(pos[1:])
+    times.append(tt[1:])
+    t_cursor = tt[-1]
+
+    launch_events.append({
+        "label": "Apogee raise + plane cut / separation", "time": round(float(t_cursor / 86400.0), 4),
+        "note": f"Centaur burn 3 (~1 min 33 s) -- {GOES_GTO['gto_perigee_km']:.0f} x "
+                f"{GOES_GTO['gto_apogee_km']:.0f} km, {GOES_GTO['gto_inclination_deg']:.1f} deg "
+                "(the real GOES-16 injection orbit); spacecraft separates ~3.5 h after liftoff. "
+                "From here the apogee-raising campaign below idealizes the shared burn apogee as "
+                "already at the geostationary radius (see GeoRaisingProblem's own docstring) rather "
+                "than this real ~35,286 km injection apogee -- a deliberate screening-model "
+                "simplification, not an error.",
+    })
+
+    pos, tt = _kepler_arc(rp0, r_geo, i0, 0.0, np.pi, points_per_orbit, mu, t_cursor)
+    positions.append(pos[1:])
+    times.append(tt[1:])
     t_cursor = tt[-1]
     apogee_times.append(t_cursor)  # burn 0 fires here (first apogee)
 
@@ -133,7 +208,7 @@ def compute_and_export_geo_mission(points_per_orbit=110, seed=1):
         burn_vectors.append(((v_after - v_before) * 1000.0))  # km/s -> m/s
         v_before = v_after
 
-    events = []
+    events = launch_events
     for k in range(n_burns):
         burn_day = round(float((apogee_times[k]) / 86400.0), 4)
         events.append({
@@ -181,10 +256,11 @@ def compute_and_export_geo_mission(points_per_orbit=110, seed=1):
     return scene_document(
         scene_id="goes-gto-geo",
         title="GOES — GTO to GEO Raising",
-        subtitle="Optimized minimum finite-burn-feasible apogee-burn campaign from a GOES-like\n"
-                 "transfer orbit to geostationary orbit. Screening model (impulsive, apogee at GEO\n"
-                 "radius); timeline is the consecutive-apogee lower bound (a real campaign skips\n"
-                 "apogees between burns over ~2 weeks).",
+        subtitle="Real Atlas V/Centaur launch-to-transfer-orbit profile (GOES-16), followed by an\n"
+                 "optimized minimum finite-burn-feasible apogee-burn campaign to geostationary orbit.\n"
+                 "Screening model for the campaign (impulsive, apogee idealized at GEO radius);\n"
+                 "timeline is the consecutive-apogee lower bound (a real campaign skips apogees\n"
+                 "between burns over ~2 weeks).",
         distance_unit="km",
         central_body_id="earth",
         bodies=bodies,

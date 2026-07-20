@@ -10,9 +10,11 @@
 > **Implemented in this repo** (screening/optimization + visualization half of
 > the two-stage pattern): `problems/geo_raising.py` (`GeoRaisingProblem`),
 > `examples/10_gto_geo_orbit_raising.py`, `viz/geo_raising.py` (Mission Control
-> "GOES — GTO to GEO" scene), `tests/test_geo_raising.py`. The tudatpy
-> verification stage (`target_geo_insertion`, perturbed `propagate_multi_arc`)
-> is the remaining next increment (see Section 5.6).
+> "GOES — GTO to GEO" scene, now including the Section 2 launch-to-GTO
+> profile -- parking orbit, transfer-orbit injection, apogee raise + plane
+> cut -- prepended ahead of the apogee-raising campaign), `tests/test_geo_raising.py`.
+> The tudatpy verification stage (`target_geo_insertion`, perturbed
+> `propagate_multi_arc`) is the remaining next increment (see Section 5.6).
 
 # GOES Launch-to-GEO Mission Plan Design
 
