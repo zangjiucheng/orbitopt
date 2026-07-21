@@ -10,6 +10,10 @@ scene-format read/write/validate surface and the PyVista/PySide6 3D viewer --
 pykep, tudatpy, pygmo, and CuPy are conda-only (see environment.yml) and are
 required for the trajectory optimization/propagation pieces described below.
 
+Project site: **[zangjiucheng.github.io/orbitopt](https://zangjiucheng.github.io/orbitopt/)**
+(`docs/index.html`, deployed via `.github/workflows/pages.yml` on every push
+to `main`).
+
 ## Why this split
 
 - **pykep + pygmo**: cheap, analytic/patched-conic trajectory models
@@ -32,11 +36,15 @@ src/orbitopt/
   __main__.py        `python -m orbitopt` entry point, delegates to cli.py
   scene_format.py    the scene file format's entire read/write/validate surface --
                       zero heavy deps (stdlib + jsonschema only); see "Packaging" below
+  mission_config.py  YAML mission-config read/validate/build surface -- same zero-heavy-
+                      deps split as scene_format.py; see "Config-driven mission runs" below
   schemas/
-    scene-1.0.json   the versioned JSON Schema that IS the scene file format
+    scene-1.0.json              the versioned JSON Schema that IS the scene file format
+    mission-geo-raising-1.0.json  config schema for mission.kind: geo-raising
   missions.py        named-mission registry (id -> loader) shared by the app + CLI,
                       with third-party plugin discovery via entry points
-  cli.py             the `orbitopt` console command (app / view / export / missions)
+  cli.py             the `orbitopt` console command (app / view / export / missions /
+                      validate / run)
   core/
     gpu.py          numpy/cupy array-module abstraction (the GPU on/off switch)
     problem.py       OrbitOptProblem base class: pygmo UDP + optional batch_fitness()
@@ -81,6 +89,8 @@ src/orbitopt/
     pv_viewer.py        minimal single-scene viewer/scripting API (PyVista/VTK)
     theme.py            Qt stylesheet for the app below (dark "tracking station" look)
     icon.py             generates the app's window/taskbar icon programmatically
+    icons.py            same approach as icon.py, for small toolbar glyphs (play/pause,
+                        panel chevrons, ...) -- real drawn icons, not Unicode/emoji text
     app.py               Mission Control: the persistent, general-purpose desktop
                         app (PySide6 + pyvistaqt) -- mission list, time-warp
                         strip, per-body info cards; see "Mission Control" below
@@ -173,6 +183,50 @@ Once `your_package` is installed alongside orbitopt, `my-mission` shows up in
 `orbitopt missions`, `orbitopt view my-mission`, and Mission Control's sidebar
 -- discovered at runtime via `importlib.metadata.entry_points`, isolated so a
 broken plugin is a warning, not a crash for every other mission.
+
+### Config-driven mission runs
+
+The missions above are Python code -- every parameter (orbit elements, burn
+schedule, spacecraft mass, optimizer seed) lives as a source-level constant.
+`orbitopt.mission_config` adds a parallel, per-mission-kind path that needs
+none of that: describe a mission in YAML, and `orbitopt` schema-checks it,
+runs it, and writes a scene file the viewer already knows how to open.
+
+```yaml
+# my_mission.yaml
+mission:
+  id: my-geo-mission
+  title: My GEO raising campaign
+  kind: geo-raising          # -- the only kind so far; see below
+target:
+  geostationary_longitude_deg: -101.0
+campaign_search:
+  n_burns: { min: 2, max: 6 }
+output:
+  scene_file: scenes/my-geo-mission.json
+```
+
+```
+orbitopt validate my_mission.yaml   # schema-only, no compute -- catches typos fast
+orbitopt run my_mission.yaml        # optimize, then tudatpy-verify, then write the scene
+orbitopt view scenes/my-geo-mission.json
+```
+
+Every field is optional except `mission` and `output` -- an omitted section
+falls back to the real GOES-16 numbers `viz/geo_raising.py`'s built-in `goes`
+mission already uses, so the minimal config just re-derives that mission
+exactly. `orbitopt run` also re-flies the winning schedule through the
+existing `verify.geo_insertion.verify_geo_raising` (tudatpy, J2+J22+Sun/Moon)
+and reports whether it actually converges to true GEO -- pass `--skip-verify`
+to skip that for faster iteration. See
+`src/orbitopt/schemas/mission-geo-raising-1.0.json` for the full schema, and
+`src/orbitopt/viz/geo_raising.py`'s `build_from_config` for the adapter.
+
+This is a first cut for one mission kind (`geo-raising`); porting
+`free_return`/`mga` the same way (a schema + a `build_from_config` adapter
+each) is the natural next extension, following the same
+`orbitopt.mission_config._KIND_SCHEMAS` / `_KIND_BUILDERS` registration
+pattern this one already establishes.
 
 ## Setup
 
@@ -295,10 +349,16 @@ orbitopt            # or: orbitopt-app  /  python -m orbitopt  /  python -m orbi
 ```
 
 `pip install -e .` puts the `orbitopt` and `orbitopt-app` console scripts on
-PATH (see `orbitopt.cli` for the `app` / `view` / `export` subcommands); the
-`examples/` scripts are annotated references, not the way to start the app.
+PATH (see `orbitopt.cli` for the `app` / `view` / `export` / `validate` /
+`run` subcommands); the `examples/` scripts are annotated references, not
+the way to start the app.
 Keyboard shortcuts inside the app: Space play/pause, ←/→ step, Home restart,
-`[` / `]` change time-warp, ⌘Q/Ctrl+Q quit.
+`[` / `]` change time-warp, T track the selected body, M focus/zoom to it,
+F1 (or the keyboard icon in the view-controls row) opens an in-app shortcuts
+reference, ⌘Q/Ctrl+Q quit. Every toolbar glyph (play/pause, panel-collapse
+chevrons, the shortcuts icon) is a real vector icon drawn with QPainter
+(`orbitopt/viz/icons.py`), the same approach `icon.py` already used for the
+app's own window icon -- not a Unicode symbol used as button text.
 
 A persistent app, not a script that renders one scene and exits: a mission
 list sidebar (Solar System, Artemis II, plus `File > Open scene file...`

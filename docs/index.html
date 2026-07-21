@@ -770,13 +770,31 @@
   // Orbit-raising sequence: (rp, ra) in normalized units, Earth at radius REARTH.
   // Solved with real Kepler mechanics (mean anomaly -> eccentric anomaly via
   // Newton iteration -> perifocal position), not a cosmetic parametric ellipse.
+  //
+  // Every burn here fires exactly at an apsis and preserves THAT apsis while
+  // changing the other one -- the same apsis-preserving convention
+  // src/orbitopt/viz/geo_raising.py actually flies. That's load-bearing, not
+  // just tidy: a perigee-preserving (raise-apogee) burn can only join two
+  // orbits that touch at their shared perigee, so the spacecraft must be
+  // AT that perigee -- i.e. have coasted a full lap -- when it fires; an
+  // apogee-preserving (raise-perigee) burn likewise needs a full lap
+  // between apogees. The one exception is the single phase change from
+  // "raising apogee" to "raising perigee": that connecting orbit only needs
+  // to coast perigee->apogee (half a lap) before its own apogee burn.
+  // `startFrac`/`spanFrac` encode exactly this -- an earlier version of this
+  // animation always reset every leg to start at perigee and coast a full
+  // lap regardless of which apsis the upcoming burn actually preserved,
+  // which is physically wrong for the two raise-perigee legs below and
+  // showed up as the spacecraft visibly jumping to a different point in
+  // space at those transitions.
   var REARTH = 0.075;
   var LEGS = [
-    { rp: 0.16, ra: 0.28, periodMs: 2600, holds: 1.0 },
-    { rp: 0.16, ra: 0.54, periodMs: 3400, holds: 1.0 },
-    { rp: 0.40, ra: 0.54, periodMs: 3050, holds: 1.0 },
-    { rp: 0.54, ra: 0.54, periodMs: 3800, holds: 1.6 },
+    { rp: 0.16, ra: 0.24, startFrac: 0.0, spanFrac: 1.0, periodMs: 2400 },  // raise apogee (burn @ perigee)
+    { rp: 0.16, ra: 0.56, startFrac: 0.0, spanFrac: 0.5, periodMs: 2600 },  // raise apogee -> perigee->apogee half-lap
+    { rp: 0.38, ra: 0.56, startFrac: 0.5, spanFrac: 1.0, periodMs: 3200 },  // raise perigee (burn @ apogee)
+    { rp: 0.56, ra: 0.56, startFrac: 0.5, spanFrac: 1.6, periodMs: 3600 },  // circularized -- hold a lap+ at GEO
   ];
+  var TARGET_R = LEGS[LEGS.length - 1].ra;
   var BURN_FLASH_MS = 420;
 
   function keplerE(M, e) {
@@ -786,10 +804,13 @@
     }
     return E;
   }
-  function legPosition(leg, f) {
+  // mFrac is an ABSOLUTE mean-anomaly fraction (not leg-relative 0..1) --
+  // 0 is always perigee, 0.5 is always apogee, regardless of where this
+  // leg's own startFrac/spanFrac place it in that cycle.
+  function legPosition(leg, mFrac) {
     var a = (leg.rp + leg.ra) / 2;
     var e = leg.ra > leg.rp ? (leg.ra - leg.rp) / (leg.ra + leg.rp) : 0;
-    var M = f * Math.PI * 2;
+    var M = mFrac * Math.PI * 2;
     var E = keplerE(M, e);
     var x = a * (Math.cos(E) - e);
     var y = a * Math.sqrt(Math.max(0, 1 - e * e)) * Math.sin(E);
@@ -824,15 +845,16 @@
     var leg = LEGS[legIndex];
     var elapsed = t - legStart;
     var period = reduceMotion ? leg.periodMs * 0.001 : leg.periodMs;
-    var f = (elapsed / period) % 1;
-    var doneHolding = elapsed > period * leg.holds;
+    var localFrac = elapsed / period; // fraction of one full lap elapsed on this leg
+    var doneHolding = localFrac > leg.spanFrac;
+    var mFrac = leg.startFrac + Math.min(localFrac, leg.spanFrac);
 
     if (doneHolding) {
       burnFlashUntil = t + BURN_FLASH_MS;
       legIndex = (legIndex + 1) % LEGS.length;
       legStart = t;
       leg = LEGS[legIndex];
-      f = 0;
+      mFrac = leg.startFrac;
     }
 
     for (var i = 0; i <= legIndex; i++) {
@@ -843,7 +865,7 @@
     }
 
     ox.beginPath();
-    ox.arc(cx, cy, 0.54 * scale, 0, Math.PI * 2);
+    ox.arc(cx, cy, TARGET_R * scale, 0, Math.PI * 2);
     ox.strokeStyle = "rgba(94,200,255,0.20)";
     ox.setLineDash([2 * DPR, 5 * DPR]);
     ox.lineWidth = 1 * DPR;
@@ -859,7 +881,7 @@
     ox.arc(cx, cy, earthR, 0, Math.PI * 2);
     ox.fill();
 
-    var pos = legPosition(leg, f);
+    var pos = legPosition(leg, mFrac);
     var sx = cx + pos.x * scale, sy = cy + pos.y * scale;
 
     var flashing = t < burnFlashUntil;
