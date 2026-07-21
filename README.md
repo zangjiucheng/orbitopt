@@ -1,5 +1,11 @@
 # orbitopt
 
+[![CI](https://github.com/zangjiucheng/orbitopt/actions/workflows/ci.yml/badge.svg)](https://github.com/zangjiucheng/orbitopt/actions/workflows/ci.yml)
+[![Pages](https://github.com/zangjiucheng/orbitopt/actions/workflows/pages.yml/badge.svg)](https://github.com/zangjiucheng/orbitopt/actions/workflows/pages.yml)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](pyproject.toml)
+[![License: GPL v3+](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
+[![Site](https://img.shields.io/badge/site-zangjiucheng.github.io%2Forbitopt-e8a23e)](https://zangjiucheng.github.io/orbitopt/)
+
 Orbital trajectory optimization research framework built on **pykep**
 (fast patched-conic trajectory design + pygmo global optimization) and
 **tudatpy** (high-fidelity numerical propagation), with **CUDA-accelerated
@@ -11,14 +17,6 @@ A plain `pip install orbitopt` (or the `viewer` extra) only gets the
 scene-format read/write/validate surface and the PyVista/PySide6 3D viewer --
 pykep, tudatpy, pygmo, and CuPy are conda-only (see environment.yml) and are
 required for the trajectory optimization/propagation pieces described below.
-
-Project site: **[zangjiucheng.github.io/orbitopt](https://zangjiucheng.github.io/orbitopt/)**
-(`docs/index.html`, deployed via `.github/workflows/pages.yml` on every push
-to `main`).
-
-<a href="https://zangjiucheng.github.io/orbitopt/">
-<img src="docs/assets/website-hero.png" alt="orbitopt project site: a flight-log-style page with a MET scroll rail, a live two-body Kepler orbit-raising animation, and the screen/verify/batch pattern" width="640">
-</a>
 
 ## Why this split
 
@@ -156,83 +154,50 @@ into three layers so that's true in practice, not just in principle:
 ### Named missions + third-party plugins
 
 `orbitopt.missions` is a small registry -- `(id, title, loader)` -- shared by
-Mission Control and the CLI, so both list the same missions without
-maintaining separate copies. Built-ins (`solar-system`, `artemis2`, `goes`)
-register themselves lazily: importing `orbitopt.missions` costs nothing beyond
-`scene_format`, and a loader's own heavy imports only run when its mission is
-actually selected/computed.
-
-A separate, independently pip-installed package can add its own mission with
-no orbitopt source changes, via a setuptools entry point in the
-`orbitopt.missions` group:
+Mission Control and the CLI. Built-ins (`solar-system`, `artemis2`, `goes`)
+register lazily; a separate pip-installed package can add its own mission
+with no orbitopt source changes via a setuptools entry point:
 
 ```toml
 # your_package's pyproject.toml
 [project.entry-points."orbitopt.missions"]
 my-mission = "your_package.missions:my_mission"
 ```
-
 ```python
-# your_package/missions.py
-from orbitopt.missions import Mission
-
-def my_mission() -> Mission:
-    return Mission("my-mission", "My Mission", _load)
-
-def _load() -> dict:
-    ...  # build (or orbitopt.scene_format.read_scene a bundled file) and
-    ...  # return a SceneData dict
-    return scene
+# your_package/missions.py -- my_mission() returns Mission("my-mission", "My Mission", _load)
+# _load() returns a SceneData dict (build one, or scene_format.read_scene a bundled file)
 ```
 
-Once `your_package` is installed alongside orbitopt, `my-mission` shows up in
-`orbitopt missions`, `orbitopt view my-mission`, and Mission Control's sidebar
--- discovered at runtime via `importlib.metadata.entry_points`, isolated so a
-broken plugin is a warning, not a crash for every other mission.
+Discovered at runtime via `importlib.metadata.entry_points`; a broken plugin
+is a warning, not a crash for every other mission.
 
 ### Config-driven mission runs
 
-The missions above are Python code -- every parameter (orbit elements, burn
-schedule, spacecraft mass, optimizer seed) lives as a source-level constant.
-`orbitopt.mission_config` adds a parallel, per-mission-kind path that needs
-none of that: describe a mission in YAML, and `orbitopt` schema-checks it,
-runs it, and writes a scene file the viewer already knows how to open.
+The missions above are Python code -- every parameter lives as a source
+constant. `orbitopt.mission_config` adds a per-mission-kind YAML path
+instead: describe a mission, and `orbitopt` schema-checks it, runs it, and
+writes a scene file the viewer already knows how to open.
 
 ```yaml
 # my_mission.yaml
-mission:
-  id: my-geo-mission
-  title: My GEO raising campaign
-  kind: geo-raising          # -- the only kind so far; see below
-target:
-  geostationary_longitude_deg: -101.0
-campaign_search:
-  n_burns: { min: 2, max: 6 }
-output:
-  scene_file: scenes/my-geo-mission.json
+mission: { id: my-geo-mission, title: My GEO raising campaign, kind: geo-raising }
+target: { geostationary_longitude_deg: -101.0 }
+campaign_search: { n_burns: { min: 2, max: 6 } }
+output: { scene_file: scenes/my-geo-mission.json }
 ```
-
 ```
 orbitopt validate my_mission.yaml   # schema-only, no compute -- catches typos fast
 orbitopt run my_mission.yaml        # optimize, then tudatpy-verify, then write the scene
-orbitopt view scenes/my-geo-mission.json
 ```
 
-Every field is optional except `mission` and `output` -- an omitted section
-falls back to the real GOES-16 numbers `viz/geo_raising.py`'s built-in `goes`
-mission already uses, so the minimal config just re-derives that mission
-exactly. `orbitopt run` also re-flies the winning schedule through the
-existing `verify.geo_insertion.verify_geo_raising` (tudatpy, J2+J22+Sun/Moon)
-and reports whether it actually converges to true GEO -- pass `--skip-verify`
-to skip that for faster iteration. See
-`src/orbitopt/schemas/mission-geo-raising-1.0.json` for the full schema, and
-`src/orbitopt/viz/geo_raising.py`'s `build_from_config` for the adapter.
-
-This is a first cut for one mission kind (`geo-raising`); porting
-`free_return`/`mga` the same way (a schema + a `build_from_config` adapter
-each) is the natural next extension, following the same
-`orbitopt.mission_config._KIND_SCHEMAS` / `_KIND_BUILDERS` registration
-pattern this one already establishes.
+Every field but `mission`/`output` is optional and falls back to the real
+GOES-16 numbers the built-in `goes` mission uses, so a minimal config just
+re-derives that mission. `orbitopt run` also re-flies the winner through
+`verify.geo_insertion.verify_geo_raising` (tudatpy) and reports whether it
+converges to true GEO (`--skip-verify` to skip). See
+`schemas/mission-geo-raising-1.0.json` for the full schema and
+`geo_raising.py`'s `build_from_config` for the adapter -- one mission kind so
+far; porting `free_return`/`mga` the same way is the natural next step.
 
 ## Setup
 
@@ -262,91 +227,39 @@ N; at 200k it was ~2.5x, at 2M it's 4.7x) -- porkchop grids and wide
 population-based optimizer runs are exactly the "large N, no data
 dependencies" shape that benefits.
 
-**pygmo gotcha that cost real debugging time:** `bfe` must be attached to the
-*raw* UDA (`uda.set_bfe(bfe)`) *before* wrapping it in `pg.algorithm(uda)`.
-`pg.algorithm` never exposes `set_bfe` itself, and calling it on the wrapped
-object either raises or (if swallowed) silently falls back to evaluating one
-candidate at a time -- ~15x slower, with no error to indicate why. Also, only
-some algorithms support it at all: `pg.pso_gen`, `pg.cmaes`, `pg.nsga2` do;
-`pg.sga`, `pg.sade`, `pg.de` do not (pygmo 2.19.7). `orbitopt.optimize.runner`
-handles this correctly; see its docstring.
+Gotchas that cost real debugging time along the way (full root-cause
+writeups in [`docs/engineering-notes.md`](docs/engineering-notes.md)):
 
-**SPICE frame gotcha:** SPICE's `"J2000"` (mean equator/equinox) and
-`"ECLIPJ2000"` (ecliptic-and-equinox) frames are related by a ~23.4-degree
-rotation (Earth's obliquity) and are NOT interchangeable -- mixing states
-queried in one against the other silently produces errors of hundreds of
-thousands of km, not a small correction. Every module that touches
-Earth/Moon/Sun ephemerides in this codebase uses `ECLIPJ2000` consistently;
-if you add a new one, match it.
-
-**RK4 step-size gotcha for close encounters:** a fixed step size that's
-perfectly fine for a multi-day interplanetary coast (300-600s) is NOT fine
-near a close lunar flyby -- an empirical convergence check found step_size=600s
-reporting an 81,733 km closest approach for a trajectory whose true
-(step_size<=15s converged) closest approach was 4,379 km. Local trajectory
-curvature near a several-thousand-km-altitude flyby is far sharper than
-during a plain coast; `verify.differential_correction` defaults to a 60s
-step for exactly this reason. If you extend this code to closer flybys
-(hundreds of km altitude or less), re-run the convergence check -- 60s may
-no longer be fine enough.
-
-**GPU is not always faster -- measured, not assumed:** `nbody_gpu.propagate_spacecraft_batch`
-is GPU-*slower* than CPU below roughly N~20,000 candidates (N=2000, n_steps=300:
-CPU 20.2s vs GPU 107.8s), the opposite of the Lambert solver's crossover.
-The RK4 wrapper issues 4*n_steps small CuPy kernel launches per call (one
-Newton-solved Moon/Sun position lookup per RK4 substage), and per-launch
-overhead dominates until the batch is large enough to amortize it -- unlike
-`lambert.gpu_batch`, which has no per-step Python loop calling it repeatedly.
-`problems/free_return.py` and `examples/05_artemis2_free_return.py` default
-to `use_gpu=False` for this reason; don't assume GPU is the right choice for
-a new batched routine without measuring at your actual batch size.
-
-**Undamped Newton diverges on real (imprecise) inputs, not just in theory:**
-wiring the full pipeline together end-to-end -- not just testing each stage
-in isolation -- surfaced a case where a GPU-coarse-screened TLI guess, only
-slightly different from a hand-verified working one, sent
-`differential_correction.target_lunar_flyby`'s plain Newton step into a
-runaway divergence (residual growing to tens of millions of km within a few
-iterations). Root cause: the coarse two-body Moon model's own
-closest-approach-time estimate was off by more than two days for that
-candidate, which anchored the fixed-time targeter to a time with no nearby
-feasible solution. Fixed with two changes that are cheap to skip and easy to
-regret skipping: (1) sanity-check the refined coast duration against the
-caller's own guess before trusting it, falling back to the guess if the
-"closest approach" found is implausibly far away in time or distance; (2)
-cap and backtrack the Newton step (classic damped Newton) instead of always
-taking the full linearized step. Both are exercised by
-`tests/test_cislunar.py::test_target_lunar_flyby_converges_from_an_imprecise_gpu_screened_guess`,
-using the exact delta-v that used to diverge -- a reminder that a solver
-validated only on its own best-case hand-picked input isn't validated for
-what an upstream (imprecise, automated) stage will actually hand it.
+- **pygmo**: `bfe` must be attached to the raw UDA before wrapping it in
+  `pg.algorithm(uda)`, or it silently falls back to evaluating one candidate
+  at a time -- ~15x slower, no error.
+- **SPICE**: `"J2000"` and `"ECLIPJ2000"` frames are ~23.4 degrees apart and
+  not interchangeable; mixing them silently produces errors of hundreds of
+  thousands of km.
+- **RK4 step size**: fine for a multi-day coast, NOT fine near a close lunar
+  flyby -- 600s reported an 81,733 km closest approach where 15s converged
+  to 4,379 km.
+- **GPU isn't always faster**: `nbody_gpu.propagate_spacecraft_batch` is
+  GPU-*slower* than CPU below ~20,000 candidates -- measured, not assumed.
+- **Undamped Newton diverges on real inputs**: an imprecise upstream guess
+  sent a plain Newton targeter into runaway divergence; fixed with a
+  sanity-checked initial guess and a damped/backtracking step.
 
 ## Examples
 
-- `examples/01_earth_mars_lambert_gpu.py` -- optimize (t0, tof) for an
-  Earth->Mars transfer with pygmo PSO, every generation GPU-batched.
-- `examples/02_mga_cassini_like.py` -- GPU-screen Earth->Venus launch windows,
-  then optimize a 5-body MGA-1DSM sequence (pykep.trajopt.mga_1dsm) seeded
-  from the screening result.
-- `examples/03_verify_with_tudat.py` -- propagate a pykep Lambert solution
-  through tudatpy's N-body dynamics and report the drift vs. the two-body
-  prediction.
-- `examples/04_porkchop_gpu.py` -- generate and plot a full Earth->Mars
-  porkchop grid from one batched GPU call.
-- `examples/05_artemis2_free_return.py` -- Lambert-seeded, GPU-screened,
-  tudatpy-refined Earth-Moon free-return trajectory targeting the real
-  Artemis II perilune altitude (see the "Cislunar / Artemis II" section
-  below for what this does and does not claim to reproduce).
-- `examples/06_solar_system_explorer_data.py` -- regenerate the solar-system
-  SceneData JSON (only needed if you want to cache it; the viewer below can
-  also compute it live).
-- `examples/07_mission_timeline_data.py` -- regenerate the Artemis II
-  mission SceneData JSON, same caveat.
-- `examples/10_gto_geo_orbit_raising.py` -- optimize a GOES-style GTO->GEO
-  orbit-raising campaign (min finite-burn-feasible apogee-burn schedule) with
-  the GPU-batched screening optimizer, then verify + refine the final burn to
-  true GEO in tudatpy (J2/J22 + Sun/Moon); see `docs/goes_gto_geo_mission_plan.md`
-  and the "GOES — GTO to GEO" Mission Control scene.
+- `01_earth_mars_lambert_gpu.py` -- optimize an Earth->Mars transfer with
+  pygmo PSO, every generation GPU-batched.
+- `02_mga_cassini_like.py` -- GPU-screen Earth->Venus launch windows, then
+  optimize a 5-body MGA-1DSM sequence seeded from the screening result.
+- `03_verify_with_tudat.py` -- propagate a pykep Lambert solution through
+  tudatpy's N-body dynamics and report the drift vs. the two-body prediction.
+- `04_porkchop_gpu.py` -- a full Earth->Mars porkchop grid from one batched
+  GPU call.
+- `05_artemis2_free_return.py` -- the cislunar free-return pipeline below.
+- `06_solar_system_explorer_data.py` / `07_mission_timeline_data.py` --
+  regenerate cached SceneData JSON (the viewer can also compute these live).
+- `10_gto_geo_orbit_raising.py` -- the GOES-style GTO->GEO campaign; see
+  `docs/goes_gto_geo_mission_plan.md`.
 
 ## Mission Control (general-purpose desktop app)
 
@@ -388,17 +301,9 @@ copy.
 Clicking a body card also focuses the camera on it, same idea as KSP's
 tracking-station vessel list.
 
-**Testing this needed a real window, and that surfaced a real "which
-screenshot API" gotcha:** grabbing the Qt widget itself (`QWidget.grab()`)
-comes back solid black for the embedded 3D view -- Qt's generic widget
-compositor doesn't reliably capture the native OpenGL surface pyvistaqt
-renders into. `plotter.screenshot()` (PyVista's own capture path) shows the
-real content; this is a testing/screenshotting quirk, not a rendering bug
--- the view displays correctly on screen either way. Also, VTK's native
-Win32 OpenGL context fails outright under Qt's `offscreen` platform plugin
-(`QT_QPA_PLATFORM=offscreen`), so `tests/test_app.py` runs against a real
-(if briefly-shown) window rather than a headless one, unlike this
-project's other `off_screen=True` PyVista tests.
+Testing this needed a real (if briefly-shown) window, not a headless one --
+`tests/test_app.py`; see [`docs/engineering-notes.md`](docs/engineering-notes.md)
+for the screenshot-API gotcha that surfaced.
 
 ## Single-scene 3D viewer (PyVista, no app chrome)
 
@@ -435,71 +340,27 @@ from orbitopt.viz.solar_system import export_solar_system_data
 show_scene(export_solar_system_data())
 ```
 
-**Marker sizing, and a bug this sidesteps entirely:** body markers render
-via VTK's `render_points_as_spheres` point rendering, which draws at a
-constant *screen-pixel* size regardless of camera distance. An earlier,
-now-removed browser/Three.js iteration of this viewer hand-rolled that same
-"constant apparent size" behavior (recomputing world-space marker scale
-from distance-to-camera every frame) and got the scale factor wrong: the
-Sun's marker stayed large enough in world-space to visually swallow
-Mercury's entire orbit even fully zoomed in. Letting VTK's own point
-rendering handle it avoids that whole class of bug for free -- one more
-reason (on top of "no HTML/CSS/JS to hand-write") this landed on a
-Python-native 3D toolkit instead of a from-scratch web renderer.
-
-**Slider gotcha that cost real debugging time:** PyVista's
-`add_slider_widget` defaults to `interaction_event='end'` -- the callback
-only fires on mouse-*release*, not while dragging. A naive test that
-manually invoked VTK's `'InteractionEvent'` to simulate a drag therefore
-silently did nothing (right event name, wrong one for the widget's actual
-default), which looked exactly like the scene simply not updating. Fixed
-by passing `interaction_event='always'` explicitly, both for correctness
-(this test) and because live feedback while dragging is the UX you
-actually want from a timeline scrubber.  Covered by
-`tests/test_pv_viewer.py::test_mission_timeline_slider_updates_spacecraft_position`.
+Body markers render via VTK's `render_points_as_spheres` point rendering
+(constant screen-pixel size regardless of camera distance, sidestepping a
+real world-space-scaling bug an earlier browser/Three.js iteration of this
+viewer had); the timeline scrubber needs `interaction_event='always'` to
+fire while dragging, not just on release. Both covered in
+[`docs/engineering-notes.md`](docs/engineering-notes.md).
 
 ## Cislunar / Artemis II free-return pipeline
 
 `examples/05_artemis2_free_return.py` chains every layer of the framework:
-
-1. **Patched-conic seed**: an Earth-only 2-body Lambert arc (`lambert.cpu`)
-   from a parking-orbit position to the Moon's real position (`bodies.moon_state`,
-   sourced from tudatpy/SPICE, not pykep -- pykep's `jpl_lp` has no Moon) at
-   the coast time, giving a plane- and energy-appropriate initial TLI burn
-   guess instead of an arbitrary kick. (An arbitrarily-oriented parking
-   orbit needs a wildly unrealistic 11+ km/s "TLI" burn to reach a
-   misaligned Moon position in the allotted time -- this isn't a solver
-   bug, it's what happens when the launch geometry doesn't match the
-   target, exactly as it constrains real launch windows.)
-2. **GPU coarse screening** (`problems.free_return.FreeReturnScreeningProblem`):
-   a pygmo population of candidate burns around that seed, batch-evaluated
-   through `dynamics.nbody_gpu`'s simplified propagator, searching for the
-   burn whose coarse closest-approach to the Moon matches the target
-   distance.
-3. **tudatpy differential correction** (`verify.differential_correction.target_lunar_flyby`):
-   Newton-Raphson refinement of the winning candidate against the real
-   SPICE-based Earth+Moon+Sun n-body model, converging to the actual
-   Artemis II perilune altitude (6,545 km above the lunar surface) to
-   within ~10 km in 3 iterations / a few seconds.
-4. **Independent fine-resolution verification**: re-propagate the converged
-   solution at a finer step than the corrector used and re-measure closest
-   approach from scratch, so the reported number isn't just "what the
-   corrector's own residual said" (see the RK4 step-size gotcha above --
-   this distinction mattered here in practice, not just in principle).
-
-**What this does not claim:** NASA hasn't published Artemis II's
-navigation-grade state vectors or SPICE kernels, so there is no ground
-truth to fit against -- this independently re-solves the same free-return
-boundary-value problem and lands on a trajectory of the same class and
-comparable magnitudes, not a reproduction of the actual flown mission.
-It also targets flyby *distance* only, in whatever direction the Lambert
-seed happens to miss by; a genuine unpowered free return additionally needs
-the B-plane crossing aimed so gravity alone bends the outbound trajectory
-back through Earth's atmosphere, which is a 2-parameter aim-point targeting
-problem this example doesn't attempt -- expect the example's post-flyby
-trajectory to *not* re-enter on its own within the propagated window. Adding
-that targeting (vary the B-plane aim point, not just distance, as the
-Newton unknowns) is the natural next extension of `differential_correction.py`.
+a Lambert-arc TLI seed (`lambert.cpu`, aimed at the Moon's real SPICE
+position) &rarr; GPU coarse screening (`problems.free_return`) &rarr; tudatpy
+differential correction (`verify.differential_correction.target_lunar_flyby`)
+converging to the real Artemis II perilune altitude (6,545 km) within ~10 km
+&rarr; independent fine-resolution re-verification. It's an independent
+re-solve of the same boundary-value problem, not a reproduction of the
+actual flown mission (NASA hasn't published navigation-grade state vectors
+to fit against), and targets flyby *distance* only -- no B-plane aim-point
+control yet, so the post-flyby trajectory won't re-enter on its own. Full
+step-by-step breakdown and caveats in
+[`docs/engineering-notes.md`](docs/engineering-notes.md).
 
 ## Known limitations / extension points
 
