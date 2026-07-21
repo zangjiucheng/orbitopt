@@ -5,6 +5,8 @@ Orbital trajectory optimization research framework built on **pykep**
 **tudatpy** (high-fidelity numerical propagation), with **CUDA-accelerated
 batch candidate evaluation** via CuPy.
 
+![Mission Control, playing back the GOES GTO-to-GEO raising campaign -- real Atlas V launch profile, optimized apogee-burn schedule, live event log and time-warp scrubber](docs/assets/mission-control-goes.png)
+
 A plain `pip install orbitopt` (or the `viewer` extra) only gets the
 scene-format read/write/validate surface and the PyVista/PySide6 3D viewer --
 pykep, tudatpy, pygmo, and CuPy are conda-only (see environment.yml) and are
@@ -13,6 +15,10 @@ required for the trajectory optimization/propagation pieces described below.
 Project site: **[zangjiucheng.github.io/orbitopt](https://zangjiucheng.github.io/orbitopt/)**
 (`docs/index.html`, deployed via `.github/workflows/pages.yml` on every push
 to `main`).
+
+<a href="https://zangjiucheng.github.io/orbitopt/">
+<img src="docs/assets/website-hero.png" alt="orbitopt project site: a flight-log-style page with a MET scroll rail, a live two-body Kepler orbit-raising animation, and the screen/verify/batch pattern" width="640">
+</a>
 
 ## Why this split
 
@@ -360,6 +366,8 @@ chevrons, the shortcuts icon) is a real vector icon drawn with QPainter
 (`orbitopt/viz/icons.py`), the same approach `icon.py` already used for the
 app's own window icon -- not a Unicode symbol used as button text.
 
+<img src="docs/assets/mission-control-shortcuts.png" alt="Mission Control's in-app keyboard-shortcuts reference panel" width="360">
+
 A persistent app, not a script that renders one scene and exits: a mission
 list sidebar (Solar System, Artemis II, plus `File > Open scene file...`
 for any `SceneData` JSON) you switch between without relaunching, a 3D view
@@ -400,6 +408,8 @@ orbitopt view artemis2
 orbitopt view goes
 orbitopt view path/to/some_scene.json
 ```
+
+![Mission Control's Solar System scene: heliocentric positions and orbit paths for the Sun and eight planets, with live per-body distance/period/eccentricity/inclination readouts](docs/assets/mission-control-solar-system.png)
 
 A real desktop window (PyVista/VTK -- no browser, no HTML/CSS/JS anywhere
 in this package): drag to orbit the camera, scroll/pinch to zoom, click a
