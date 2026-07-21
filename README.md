@@ -45,6 +45,7 @@ src/orbitopt/
   schemas/
     scene-1.0.json              the versioned JSON Schema that IS the scene file format
     mission-geo-raising-1.0.json  config schema for mission.kind: geo-raising
+    mission-mars-transfer-1.0.json  config schema for mission.kind: mars-transfer
   missions.py        named-mission registry (id -> loader) shared by the app + CLI,
                       with third-party plugin discovery via entry points
   cli.py             the `orbitopt` console command (app / view / export / missions /
@@ -78,6 +79,9 @@ src/orbitopt/
                         refines a coarse TLI guess into a precise lunar-flyby distance
     geo_insertion.py   verifies a GEO-raising candidate in tudatpy (numerical
                         propagation of the burn sequence vs. the GPU-screened prediction)
+    mars_insertion.py  tudatpy-targets the Earth->Mars transfer's trajectory-correction
+                        maneuver (TCM) and Mars-orbit-insertion (MOI) burn -- the two
+                        real burns beyond the idealized Lambert departure
   viz/
     porkchop.py        GPU-batched porkchop grid + plotting
     scene.py           orbitopt's own exporter-side builder helpers (body_entry,
@@ -87,6 +91,9 @@ src/orbitopt/
     mission_timeline.py exports the Artemis II free-return mission as a
                         scrubbable SceneData document
     geo_raising.py     exports the GEO orbit-raising mission as a SceneData document
+    mars_transfer.py   exports the Earth-to-Mars-orbit-insertion mission as a single
+                        continuous heliocentric SceneData trail (three physics regimes --
+                        near-Earth, cruise, near-Mars -- stitched at each SOI handoff)
     scene_renderer.py  populates a PyVista plotter from a SceneData document --
                         shared by both viewers below, so there's one place
                         that knows how to draw {bodies, orbits, trails}
@@ -154,8 +161,8 @@ into three layers so that's true in practice, not just in principle:
 ### Named missions + third-party plugins
 
 `orbitopt.missions` is a small registry -- `(id, title, loader)` -- shared by
-Mission Control and the CLI. Built-ins (`solar-system`, `artemis2`, `goes`)
-register lazily; a separate pip-installed package can add its own mission
+Mission Control and the CLI. Built-ins (`solar-system`, `artemis2`, `goes`,
+`mars`) register lazily; a separate pip-installed package can add its own mission
 with no orbitopt source changes via a setuptools entry point:
 
 ```toml
@@ -196,8 +203,12 @@ re-derives that mission. `orbitopt run` also re-flies the winner through
 `verify.geo_insertion.verify_geo_raising` (tudatpy) and reports whether it
 converges to true GEO (`--skip-verify` to skip). See
 `schemas/mission-geo-raising-1.0.json` for the full schema and
-`geo_raising.py`'s `build_from_config` for the adapter -- one mission kind so
-far; porting `free_return`/`mga` the same way is the natural next step.
+`geo_raising.py`'s `build_from_config` for the adapter. `mars-transfer`
+(`schemas/mission-mars-transfer-1.0.json`, `mars_transfer.py`'s
+`build_from_config`) is the second kind, config-driving the `mars` built-in
+mission's Earth-to-Mars-orbit-insertion trajectory (see
+`docs/mars_mission_plan.md`); porting `free_return`/`mga` the same way is
+the natural next step.
 
 ## Setup
 
@@ -311,6 +322,7 @@ for the screenshot-API gotcha that surfaced.
 orbitopt view solar-system
 orbitopt view artemis2
 orbitopt view goes
+orbitopt view mars
 orbitopt view path/to/some_scene.json
 ```
 

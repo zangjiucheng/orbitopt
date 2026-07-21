@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zangjiucheng/orbitopt/schemas/mission-mars-transfer-1.0.json",
+  "title": "orbitopt Earth->Mars transfer mission config v1.0",
+  "description": "A user-editable YAML/JSON config for the Earth-launch-to-Mars-orbit-insertion mission (orbitopt.viz.mars_transfer.build_from_config), letting a user tune the departure window, parking orbit, time-of-flight search range, target Mars capture orbit, and the optimizer/propagation knobs without touching source. Same strictness convention as mission-geo-raising-1.0.json (additionalProperties: false everywhere) -- catching a typo'd field name here, before any compute runs, is the entire point of `orbitopt validate`. Every section besides `mission` and `output` is optional; an omitted section (or omitted leaf field within a present section) falls back to orbitopt's own built-in defaults -- the same values the 'mars' built-in mission already uses. This mission ends at Mars orbit insertion, not a landing -- this framework has no atmosphere model (see orbitopt.viz.mars_transfer's module docstring).",
+  "type": "object",
+  "required": ["schemaVersion", "mission", "output"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0",
+      "description": "Which version of this mission-config schema the document was written against."
+    },
+    "mission": {
+      "type": "object",
+      "required": ["id", "title", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Stable slug for the produced scene, e.g. 'mars-transfer'." },
+        "title": { "type": "string", "minLength": 1 },
+        "kind": { "const": "mars-transfer", "description": "Selects the Mars-transfer adapter (orbitopt.viz.mars_transfer.build_from_config)." }
+      }
+    },
+    "launch_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The Earth departure date range the porkchop screen + optimizer search over. Defaults to a real near-term Earth-Mars Hohmann-class window (2026-09 through 2027-02) if omitted.",
+      "properties": {
+        "start_date": {
+          "type": "array", "items": { "type": "integer" }, "minItems": 3, "maxItems": 3,
+          "description": "[year, month, day]."
+        },
+        "end_date": {
+          "type": "array", "items": { "type": "integer" }, "minItems": 3, "maxItems": 3,
+          "description": "[year, month, day]."
+        }
+      }
+    },
+    "parking_orbit": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The Earth parking orbit the trail starts from before the TMI burn. Defaults to a 185 km circular parking orbit (matches the Artemis II mission's convention) if omitted.",
+      "properties": {
+        "altitude_km": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "tof_search": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Time-of-flight bounds (days) the optimizer searches within. Defaults to 130-320 days if omitted.",
+      "properties": {
+        "min_days": { "type": "number", "exclusiveMinimum": 0 },
+        "max_days": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "mars_arrival_orbit": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The target captured orbit at Mars. periapsis_km also doubles as the trajectory-correction maneuver's aim point. Defaults to a ~500 km periapsis altitude x 20,000 km apoapsis altitude captured ellipse if omitted.",
+      "properties": {
+        "periapsis_km": { "type": "number", "exclusiveMinimum": 0, "description": "Target periapsis radius from Mars center (not altitude)." },
+        "apoapsis_altitude_km": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "campaign_search": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How the optimizer searches (t0, tof) for the minimum-dv Lambert transfer within the launch window and time-of-flight bounds.",
+      "properties": {
+        "optimizer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "population": { "type": "integer", "exclusiveMinimum": 0 },
+            "generations": { "type": "integer", "exclusiveMinimum": 0 },
+            "seed": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "required": ["scene_file"],
+      "additionalProperties": false,
+      "properties": {
+        "scene_file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where `orbitopt run` writes the produced scene-1.0.json document; overridable with --out."
+        }
+      }
+    }
+  }
+}

@@ -134,6 +134,12 @@ def _load_goes() -> dict:
     return compute_and_export_geo_mission()
 
 
+def _load_mars() -> dict:
+    from orbitopt.viz.mars_transfer import compute_and_export_mars_mission
+    return compute_and_export_mars_mission()
+
+
 register("solar-system", "Solar System", _load_solar_system)
 register("artemis2", "Artemis II — Free Return", _load_artemis2)
 register("goes", "GOES — GTO to GEO", _load_goes)
+register("mars", "Mars — Earth to Orbit Insertion", _load_mars)

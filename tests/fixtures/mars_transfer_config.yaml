@@ -1,0 +1,38 @@
+# A mars-transfer mission config for tests / manual `orbitopt validate` and
+# `orbitopt run` smoke checks. Unlike geo_raising_config.yaml, there's no way
+# to make this genuinely fast: the TCM/MOI targeting (verify.mars_insertion)
+# is real tudatpy N-body propagation over a multi-hundred-day cruise, not an
+# optional high-fidelity pass on top of a cheap screening result -- it's
+# always part of building this mission. The optimizer population/generations
+# below are still trimmed well below the "mars" built-in mission's tuned
+# defaults to keep this as fast as the pipeline allows.
+schemaVersion: "1.0"
+
+mission:
+  id: mars-transfer-fixture
+  title: "Mars-transfer config fixture (fast settings, not tuned for realism)"
+  kind: mars-transfer
+
+launch_window:
+  start_date: [2026, 9, 1]
+  end_date: [2027, 2, 1]
+
+parking_orbit:
+  altitude_km: 185.0
+
+tof_search:
+  min_days: 130.0
+  max_days: 320.0
+
+mars_arrival_orbit:
+  periapsis_km: 3889.5
+  apoapsis_altitude_km: 20000.0
+
+campaign_search:
+  optimizer:
+    population: 64
+    generations: 40
+    seed: 5
+
+output:
+  scene_file: scenes/mars-transfer-fixture.json

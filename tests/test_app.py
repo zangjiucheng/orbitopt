@@ -44,7 +44,7 @@ def test_mission_control_loads_and_switches_missions():
     window.show()
     _pump_until(app, lambda: not window._loading)
 
-    assert window.mission_list.count() == 3  # Solar System, Artemis II, GOES GTO->GEO
+    assert window.mission_list.count() == 4  # Solar System, Artemis II, GOES GTO->GEO, Mars
     assert window._current_scene is not None
     assert window._current_scene["id"] == "solar-system"
     assert not window.timeline_bar.isVisible()

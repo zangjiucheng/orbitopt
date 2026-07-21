@@ -33,6 +33,7 @@ import yaml
 # and one schema file -- no changes to the loading/validation machinery.
 _KIND_SCHEMAS = {
     "geo-raising": "mission-geo-raising-1.0.json",
+    "mars-transfer": "mission-mars-transfer-1.0.json",
 }
 
 # mission.kind -> (module, attribute) of a `build_from_config(config: dict)
@@ -42,6 +43,7 @@ _KIND_SCHEMAS = {
 # (pykep/pygmo/tudatpy) to be installed -- only jsonschema + pyyaml.
 _KIND_BUILDERS = {
     "geo-raising": ("orbitopt.viz.geo_raising", "build_from_config"),
+    "mars-transfer": ("orbitopt.viz.mars_transfer", "build_from_config"),
 }
 
 
