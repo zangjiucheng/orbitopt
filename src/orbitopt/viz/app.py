@@ -20,13 +20,15 @@ import sys
 
 os.environ.setdefault("QT_API", "pyside6")
 
-from PySide6.QtCore import QObject, QRectF, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QObject, QRectF, QSize, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QKeySequence, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QDialog,
     QFileDialog,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -48,10 +50,11 @@ from pyvistaqt import QtInteractor
 from vtkmodules.vtkRenderingCore import vtkRenderWindow
 
 from orbitopt.missions import list_missions
+from orbitopt.viz import icons
 from orbitopt.viz.icon import app_icon
 from orbitopt.viz.pv_viewer import load_scene
 from orbitopt.viz.scene_renderer import SceneRenderer
-from orbitopt.viz.theme import ACCENT, BG_VOID, INK_SECONDARY, STYLESHEET
+from orbitopt.viz.theme import ACCENT, BG_VOID, INK_MUTED, INK_SECONDARY, STYLESHEET
 
 # Time-warp speed is a continuous log-scale control (0.001x .. 1000x), not
 # fixed presets, so it can be fine-tuned to any rate. self._speed is in
@@ -421,7 +424,7 @@ class MissionControlWindow(QMainWindow):
         self.splitter.setHandleWidth(4)
 
         self.sidebar = self._build_sidebar()
-        self.left_rail = self._build_rail("»", self._toggle_sidebar, "Show missions")
+        self.left_rail = self._build_rail(icons.chevron_right_icon, self._toggle_sidebar, "Show missions")
         self.left_stack = QStackedWidget()
         self.left_stack.addWidget(self.sidebar)
         self.left_stack.addWidget(self.left_rail)
@@ -455,7 +458,7 @@ class MissionControlWindow(QMainWindow):
         self.splitter.addWidget(center)
 
         self.info_panel = self._build_info_panel()
-        self.right_rail = self._build_rail("«", self._toggle_info_panel, "Show body info")
+        self.right_rail = self._build_rail(icons.chevron_left_icon, self._toggle_info_panel, "Show body info")
         self.right_stack = QStackedWidget()
         self.right_stack.addWidget(self.info_panel)
         self.right_stack.addWidget(self.right_rail)
@@ -474,16 +477,20 @@ class MissionControlWindow(QMainWindow):
         self._build_menu()
         self.statusBar().showMessage("Ready")
 
-    def _build_rail(self, glyph: str, handler, tip: str) -> QWidget:
+    def _build_rail(self, icon_fn, handler, tip: str) -> QWidget:
         """A thin vertical strip shown when a panel is collapsed: just an expand
-        button, so the panel can be summoned back from its own edge."""
+        button, so the panel can be summoned back from its own edge. ``icon_fn``
+        is one of icons.py's chevron_*_icon functions, not a text glyph -- see
+        icons.py's module docstring for why."""
         rail = QWidget()
         rail.setObjectName("railBar")
         layout = QVBoxLayout(rail)
         layout.setContentsMargins(3, 9, 3, 9)
         layout.setSpacing(0)
-        btn = QPushButton(glyph)
+        btn = QPushButton()
         btn.setObjectName("railButton")
+        btn.setIcon(icon_fn())
+        btn.setIconSize(QSize(13, 13))
         btn.setToolTip(tip)
         btn.clicked.connect(handler)
         layout.addWidget(btn, alignment=Qt.AlignHCenter | Qt.AlignTop)
@@ -504,8 +511,10 @@ class MissionControlWindow(QMainWindow):
         header_row = QHBoxLayout()
         header = QLabel("MISSIONS")
         header.setObjectName("sectionHeader")
-        self.sidebar_collapse = QPushButton("❮")
+        self.sidebar_collapse = QPushButton()
         self.sidebar_collapse.setObjectName("panelCollapse")
+        self.sidebar_collapse.setIcon(icons.chevron_left_icon())
+        self.sidebar_collapse.setIconSize(QSize(12, 12))
         self.sidebar_collapse.setToolTip("Collapse missions panel")
         self.sidebar_collapse.clicked.connect(self._toggle_sidebar)
         header_row.addWidget(header)
@@ -598,6 +607,19 @@ class MissionControlWindow(QMainWindow):
         self.lock_combo.addItem("None", None)
         self.lock_combo.currentIndexChanged.connect(self._on_lock_reference_changed)
         row.addWidget(self.lock_combo)
+
+        help_sep = QFrame()
+        help_sep.setObjectName("viewSep")
+        help_sep.setFrameShape(QFrame.VLine)
+        row.addWidget(help_sep)
+
+        self.shortcuts_btn = QPushButton()
+        self.shortcuts_btn.setObjectName("helpButton")
+        self.shortcuts_btn.setIcon(icons.keyboard_icon())
+        self.shortcuts_btn.setIconSize(QSize(13, 13))
+        self.shortcuts_btn.setToolTip("Keyboard shortcuts (F1)")
+        self.shortcuts_btn.clicked.connect(self._show_shortcuts_dialog)
+        row.addWidget(self.shortcuts_btn)
         return box
 
     def _build_timeline_bar(self) -> QWidget:
@@ -608,8 +630,10 @@ class MissionControlWindow(QMainWindow):
         layout.setContentsMargins(16, 8, 16, 8)
         layout.setSpacing(12)
 
-        self.play_btn = QPushButton("▶")
+        self.play_btn = QPushButton()
         self.play_btn.setObjectName("playButton")
+        self.play_btn.setIcon(icons.play_icon())
+        self.play_btn.setIconSize(QSize(15, 15))
         self.play_btn.clicked.connect(self._toggle_play)
         layout.addWidget(self.play_btn)
 
@@ -617,8 +641,10 @@ class MissionControlWindow(QMainWindow):
         speed_col.setSpacing(2)
         speed_header = QHBoxLayout()
         speed_header.addWidget(QLabel("TIME WARP"))
-        self.auto_slow_btn = QPushButton("⏱")
+        self.auto_slow_btn = QPushButton()
         self.auto_slow_btn.setObjectName("autoSlowButton")
+        self.auto_slow_btn.setIcon(icons.clock_icon(ACCENT))
+        self.auto_slow_btn.setIconSize(QSize(12, 12))
         self.auto_slow_btn.setCheckable(True)
         self.auto_slow_btn.setChecked(True)
         self.auto_slow_btn.setToolTip(
@@ -673,8 +699,10 @@ class MissionControlWindow(QMainWindow):
         outer.setSpacing(8)
 
         header_row = QHBoxLayout()
-        self.info_collapse = QPushButton("❯")
+        self.info_collapse = QPushButton()
         self.info_collapse.setObjectName("panelCollapse")
+        self.info_collapse.setIcon(icons.chevron_right_icon())
+        self.info_collapse.setIconSize(QSize(12, 12))
         self.info_collapse.setToolTip("Collapse body-info panel")
         self.info_collapse.clicked.connect(self._toggle_info_panel)
         header = QLabel("BODIES")
@@ -779,6 +807,74 @@ class MissionControlWindow(QMainWindow):
         view_menu.addSeparator()
         view_menu.addAction("Toggle missions panel", self._toggle_sidebar)
         view_menu.addAction("Toggle body-info panel", self._toggle_info_panel)
+
+        help_menu = self.menuBar().addMenu("&Help")
+        shortcuts_action = help_menu.addAction("Keyboard Shortcuts…", self._show_shortcuts_dialog)
+        shortcuts_action.setShortcut(QKeySequence(Qt.Key_F1))
+
+    # ----------------------------------------------------------------- Help
+    # Every entry here matches an actual wired shortcut (see _build_menu
+    # above) or a documented mouse gesture (see _on_card_clicked) -- kept as
+    # one static list so this panel can't silently drift out of sync with
+    # what the app actually does.
+    _SHORTCUTS = [
+        ("Space", "Play / pause"),
+        ("← / →", "Step back / forward"),
+        ("Home", "Restart timeline"),
+        ("[ / ]", "Slower / faster time-warp"),
+        ("T", "Track selected body"),
+        ("M", "Focus (zoom to) selected body"),
+        ("F1", "Show this panel"),
+        ("Ctrl+Q / ⌘Q", "Quit"),
+        ("Click", "Select a body"),
+        ("Ctrl/⌘-click", "Measure distance to another body"),
+    ]
+
+    def _show_shortcuts_dialog(self):
+        """A QDialog is its own top-level window, so it does not inherit
+        self's stylesheet automatically -- set it explicitly so this panel
+        matches the rest of the app instead of falling back to the OS
+        default look. Built once and reused (cached on
+        self._shortcuts_dialog) since its content is static."""
+        if getattr(self, "_shortcuts_dialog", None) is None:
+            dialog = QDialog(self)
+            dialog.setObjectName("shortcutsDialog")
+            dialog.setWindowTitle("Keyboard Shortcuts")
+            dialog.setStyleSheet(STYLESHEET)
+
+            outer = QVBoxLayout(dialog)
+            outer.setContentsMargins(22, 20, 22, 20)
+            outer.setSpacing(14)
+
+            title = QLabel("KEYBOARD SHORTCUTS")
+            title.setObjectName("sectionHeader")
+            outer.addWidget(title)
+
+            grid = QGridLayout()
+            grid.setHorizontalSpacing(14)
+            grid.setVerticalSpacing(8)
+            for row, (key, desc) in enumerate(self._SHORTCUTS):
+                cap = QLabel(key)
+                cap.setObjectName("keyCap")
+                cap.setAlignment(Qt.AlignCenter)
+                grid.addWidget(cap, row, 0)
+                label = QLabel(desc)
+                label.setObjectName("shortcutDesc")
+                grid.addWidget(label, row, 1)
+            outer.addLayout(grid)
+
+            close_btn = QPushButton("Close")
+            close_btn.setObjectName("viewButton")
+            close_btn.clicked.connect(dialog.close)
+            close_row = QHBoxLayout()
+            close_row.addStretch(1)
+            close_row.addWidget(close_btn)
+            outer.addLayout(close_row)
+
+            self._shortcuts_dialog = dialog
+        self._shortcuts_dialog.show()
+        self._shortcuts_dialog.raise_()
+        self._shortcuts_dialog.activateWindow()
 
     # -------------------------------------------------------- Panels / camera
     def _toggle_sidebar(self):
@@ -1447,7 +1543,7 @@ class MissionControlWindow(QMainWindow):
 
     def _set_playing(self, playing: bool):
         self._playing = playing
-        self.play_btn.setText("⏸" if playing else "▶")
+        self.play_btn.setIcon(icons.pause_icon() if playing else icons.play_icon())
         if playing:
             self._last_tick_ms = None
             self._timer.start()
@@ -1457,6 +1553,7 @@ class MissionControlWindow(QMainWindow):
 
     def _set_event_slowdown_enabled(self, on: bool):
         self._event_slowdown_enabled = bool(on)
+        self.auto_slow_btn.setIcon(icons.clock_icon(ACCENT if self._event_slowdown_enabled else INK_MUTED))
         if not self._playing:
             self._sync_speed_readout(self._speed)
         self.statusBar().showMessage(

@@ -308,6 +308,41 @@ QPushButton#autoSlowButton:hover {{
     color: {INK_PRIMARY};
 }}
 
+QPushButton#helpButton {{
+    min-width: 22px;
+    max-width: 22px;
+    min-height: 22px;
+    max-height: 22px;
+    padding: 0;
+    margin-left: 2px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: {INK_MUTED};
+}}
+QPushButton#helpButton:hover {{
+    color: {ACCENT};
+    border-color: {HAIRLINE};
+}}
+
+QDialog#shortcutsDialog {{
+    background: {PANEL};
+}}
+QLabel#keyCap {{
+    font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: {INK_PRIMARY};
+    background: {PANEL_RAISED};
+    border: 1px solid {HAIRLINE};
+    border-radius: 6px;
+    padding: 4px 10px;
+    min-width: 70px;
+}}
+QLabel#shortcutDesc {{
+    font-size: 13px;
+    color: {INK_SECONDARY};
+}}
+
 QFrame#maneuverRow {{
     background: {PANEL_RAISED};
     border: 1px solid {HAIRLINE};
