@@ -375,6 +375,11 @@ QLabel#dateReadout {{
     font-size: 10.5px;
     color: {INK_MUTED};
 }}
+QLabel#scaleReadout {{
+    font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 9.5px;
+    color: {INK_MUTED};
+}}
 
 QMenuBar {{
     background: {PANEL};

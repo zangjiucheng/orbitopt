@@ -326,9 +326,22 @@ class SpinnerWidget(QWidget):
 
 class EventSlider(QSlider):
     """The timeline scrubber, with a marker painted over the groove at each
-    mission event (burns, flybys, insertions). Hovering a marker shows the
-    event's label + note; clicking one seeks straight to it. Falls back to a
-    plain slider when the scene has no timeline events."""
+    mission event (burns, flybys, insertions). Hovering near a marker shows
+    every event within reach (not just one -- events that land within a few
+    pixels of each other, e.g. a burn immediately followed by an SOI-exit
+    note, used to be visually indistinguishable and only the first-added one
+    was ever reachable by click); clicking snaps to whichever is nearest.
+    Falls back to a plain slider when the scene has no timeline events."""
+
+    _HIT_TOLERANCE_PX = 7
+    # A normal marker's own triangle is ~6px wide (see paintEvent's `half`),
+    # so anything closer than that already visually overlaps -- clustering
+    # only below 3px (an earlier value here) left genuinely-touching markers
+    # rendered as two separate, ambiguous shapes instead of one clear
+    # cluster mark. Confirmed empirically against a real rendered frame, not
+    # assumed: the Mars mission's Mars-SOI-entry/MOI events, ~4.8px apart in
+    # practice, looked like touching-but-unmerged marks at the old value.
+    _CLUSTER_TOLERANCE_PX = 6
 
     def __init__(self, parent=None):
         super().__init__(Qt.Horizontal, parent)
@@ -355,11 +368,20 @@ class EventSlider(QSlider):
         span = (self.maximum() - self.minimum()) or 1
         return groove.left() + int((value - self.minimum()) / span * groove.width())
 
-    def _event_near(self, x, tol=6):
-        for ev in self._events:
-            if abs(self._value_to_x(ev[0]) - x) <= tol:
-                return ev
-        return None
+    def _events_near(self, x, tol):
+        """Every event within `tol` px of `x`, nearest first -- not just the
+        first one added, so a click/hover near a cluster of close-together
+        events reaches all of them instead of being stuck on whichever
+        happened to be first in the scene's event list."""
+        near = sorted(
+            ((abs(self._value_to_x(ev[0]) - x), ev) for ev in self._events),
+            key=lambda pair: pair[0],
+        )
+        return [ev for dist, ev in near if dist <= tol]
+
+    def _event_near(self, x, tol=None):
+        near = self._events_near(x, self._HIT_TOLERANCE_PX if tol is None else tol)
+        return near[0] if near else None
 
     def paintEvent(self, event):  # noqa: N802
         super().paintEvent(event)
@@ -367,29 +389,53 @@ class EventSlider(QSlider):
             return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(QPen(QColor(ACCENT), 1.4))
-        painter.setBrush(QColor(ACCENT))
         cy = self.height() // 2
-        for value, _label, _note in self._events:
+
+        # Bucket by rounded pixel position so events within
+        # _CLUSTER_TOLERANCE_PX draw as one bolder cluster mark instead of
+        # silently overlapping into what looks like (and, before this fix,
+        # behaved as) a single ordinary event.
+        buckets: dict[int, list] = {}
+        for value, label, note in self._events:
             x = self._value_to_x(value)
+            buckets.setdefault(round(x / self._CLUSTER_TOLERANCE_PX), []).append(x)
+        centers = {key: round(sum(xs) / len(xs)) for key, xs in buckets.items()}
+        counts = {key: len(xs) for key, xs in buckets.items()}
+
+        for key, x in centers.items():
+            clustered = counts[key] > 1
+            painter.setPen(QPen(QColor(ACCENT), 1.8 if clustered else 1.4))
+            painter.setBrush(QColor(ACCENT))
             painter.drawLine(x, 7, x, cy + 2)
+            half = 4.2 if clustered else 3.0
             tri = QPainterPath()
-            tri.moveTo(x - 3.0, 1.0)
-            tri.lineTo(x + 3.0, 1.0)
+            tri.moveTo(x - half, 1.0)
+            tri.lineTo(x + half, 1.0)
             tri.lineTo(x, 7.0)
             tri.closeSubpath()
             painter.drawPath(tri)
+            if clustered:
+                # A small dot below the marker's guide line signals "more
+                # than one event here" at a glance, without needing to hover
+                # first. Below, not above: the widget's actual rendered
+                # height is ~16px (QSlider::handle's 15px + a hair), so a
+                # mark above y=0 is silently clipped by Qt's paint-event
+                # clip rect -- confirmed empirically by grabbing a real
+                # rendered frame and finding zero accent-colored pixels in
+                # that band, not assumed from the geometry alone.
+                painter.drawEllipse(QRectF(x - 1.6, cy + 4.0, 3.2, 3.2))
         painter.end()
 
     def mouseMoveEvent(self, event):  # noqa: N802
-        ev = self._event_near(int(event.position().x()))
-        self.setToolTip(f"{ev[1]}\n{ev[2]}".strip() if ev else "")
+        near = self._events_near(int(event.position().x()), self._HIT_TOLERANCE_PX)
+        text = "\n\n".join(f"{label}\n{note}".strip() for _value, label, note in near)
+        self.setToolTip(text)
         super().mouseMoveEvent(event)
 
     def mousePressEvent(self, event):  # noqa: N802
         ev = self._event_near(int(event.position().x()))
         if ev is not None:
-            self.setValue(ev[0])  # snap to the event
+            self.setValue(ev[0])  # snap to the nearest event
             return
         super().mousePressEvent(event)
 
@@ -755,6 +801,24 @@ class MissionControlWindow(QMainWindow):
         self.time_slider.setRange(0, 10000)
         self.time_slider.valueChanged.connect(self._on_slider_moved)
         slider_col.addWidget(self.time_slider)
+
+        # Fixed start/end scale reference under the bar: the MET readout above
+        # only ever shows the *current* scrubbed position, so there was no way
+        # to tell at a glance how long the whole mission span is -- easy to
+        # misjudge for a mission like Mars (300+ days) where nearly every event
+        # piles up within the first/last ~1% of the bar.
+        scale_row = QHBoxLayout()
+        scale_row.setContentsMargins(0, 0, 0, 0)
+        self.scale_start_label = QLabel("")
+        self.scale_start_label.setObjectName("scaleReadout")
+        self.scale_end_label = QLabel("")
+        self.scale_end_label.setObjectName("scaleReadout")
+        self.scale_end_label.setAlignment(Qt.AlignRight)
+        scale_row.addWidget(self.scale_start_label)
+        scale_row.addStretch(1)
+        scale_row.addWidget(self.scale_end_label)
+        slider_col.addLayout(scale_row)
+
         layout.addLayout(slider_col, stretch=1)
 
         return bar
@@ -1335,9 +1399,14 @@ class MissionControlWindow(QMainWindow):
             self.time_slider.setValue(0)
             self.time_slider.set_events(self._events, timeline["min"], timeline["max"])
             self.time_slider.blockSignals(False)
+            unit = timeline.get("unitLabel", "")
+            self.scale_start_label.setText(f"{timeline['min']:.1f} {unit}".strip())
+            self.scale_end_label.setText(f"{timeline['max']:.1f} {unit}".strip())
         else:
             self._current_time = 0.0
             self.time_slider.set_events([], 0.0, 1.0)
+            self.scale_start_label.setText("")
+            self.scale_end_label.setText("")
         self.event_label.setText("")
 
         # Precompute the maneuver-arrow display scale: physical delta-v (m/s) is
@@ -1593,9 +1662,15 @@ class MissionControlWindow(QMainWindow):
             return
         frac = value / self.time_slider.maximum()
         self._current_time = timeline["min"] + frac * (timeline["max"] - timeline["min"])
-        self._refresh_readouts(self.renderer.set_time(self._current_time))
-        self._update_tracking()
-        self._update_measure()
+        # Batched into a single render, same fix _on_tick already applies to
+        # playback: a manual scrub drag fires this handler at high frequency,
+        # and set_time/_update_tracking/_update_measure each doing their own
+        # render made dragging visibly jankier than playback at the same
+        # effective rate.
+        self._refresh_readouts(self.renderer.set_time(self._current_time, render=False))
+        self._update_tracking(render=False)
+        self._update_measure(render=False)
+        self.plotter.render()
 
     @staticmethod
     def _format_speed(speed: float) -> str:
