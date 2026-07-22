@@ -148,6 +148,65 @@ def _propagate_single_coast(bodies, acceleration_models, central_body, spacecraf
     return epochs, states
 
 
+class ReusableCoastPropagator:
+    """The build-once core of :func:`propagate_multi_arc`, exposed so a caller
+    that must drive a mission arc-by-arc in its own Python loop can still pay
+    the system-of-bodies + acceleration-model + SPICE setup a single time.
+
+    ``propagate_multi_arc`` builds that dynamical model once and reuses it for
+    every arc it's handed -- but only when the whole arc sequence is known
+    upfront. A caller whose *next* arc depends on the numerically-propagated
+    end state of the current one (e.g. viz.geo_raising applies an analytic
+    apsis burn computed from each coast's actual final state, then decimates
+    that arc on its own smoothness budget before the next coast) can't hand
+    over the full sequence, and so used to call propagate_multi_arc once per
+    arc -- rebuilding the identical environment ~9 times per mission. Building
+    one of these and calling :meth:`coast` per arc gives byte-identical
+    dynamics (same integrator, same bodies, same accelerations) with the setup
+    done once. See propagate_multi_arc's docstring for the parameters, which
+    mean exactly the same thing here.
+    """
+
+    def __init__(
+        self,
+        central_body="Earth",
+        perturbing_bodies=("Earth", "Moon", "Sun"),
+        step_size=60.0,
+        earth_spherical_harmonic=None,
+    ):
+        _ensure_spice_loaded()
+        body_settings = environment_setup.get_default_body_settings(
+            list(perturbing_bodies), central_body, "ECLIPJ2000",
+        )
+        bodies = environment_setup.create_system_of_bodies(body_settings)
+        bodies.create_empty_body("Spacecraft")
+
+        def _gravity_for(body):
+            if body == central_body and earth_spherical_harmonic is not None:
+                degree, order = earth_spherical_harmonic
+                return propagation_setup.acceleration.spherical_harmonic_gravity(int(degree), int(order))
+            return propagation_setup.acceleration.point_mass_gravity()
+
+        acceleration_settings = {"Spacecraft": {body: [_gravity_for(body)] for body in perturbing_bodies}}
+        self._bodies = bodies
+        self._acceleration_models = propagation_setup.create_acceleration_models(
+            bodies, acceleration_settings, ["Spacecraft"], [central_body],
+        )
+        self._central_body = central_body
+        self._step_size = float(step_size)
+
+    def coast(self, spacecraft_state, epoch_start, duration):
+        """Propagate one coast arc from ``spacecraft_state`` (SI, 6-vector) for
+        ``duration`` seconds starting at ``epoch_start`` (seconds), returning
+        ``(epochs, states)`` -- the same raw arrays :func:`propagate_multi_arc`
+        collects per arc, in the same absolute-epoch convention (i.e. epochs
+        start at ``epoch_start``)."""
+        return _propagate_single_coast(
+            self._bodies, self._acceleration_models, self._central_body,
+            spacecraft_state, float(epoch_start), duration, self._step_size,
+        )
+
+
 def propagate_multi_arc(
     r0,
     v0,
@@ -162,14 +221,15 @@ def propagate_multi_arc(
     instantaneous impulsive burns -- meant for a multi-phase mission like
     parking orbit -> perigee-raise -> phasing orbit -> TLI -> lunar coast ->
     TCMs -> Earth entry. The system-of-bodies and acceleration models are
-    built once and reused for every coast arc, since rebuilding them per arc
-    is wasteful and unnecessary (the dynamical model doesn't change, only the
-    initial state/epoch of each segment). Burn arcs consume no propagated
-    time; they just add ``delta_v`` (m/s) to the velocity of the last saved
-    state before the next coast resumes from there. The returned
-    PropagationResult concatenates every coast arc's history into one
-    continuous timeline; epochs remain relative to ``initial_epoch`` (i.e.
-    epoch 0.0 corresponds to ``initial_epoch``, not J2000).
+    built once (see :class:`ReusableCoastPropagator`) and reused for every
+    coast arc, since rebuilding them per arc is wasteful and unnecessary (the
+    dynamical model doesn't change, only the initial state/epoch of each
+    segment). Burn arcs consume no propagated time; they just add ``delta_v``
+    (m/s) to the velocity of the last saved state before the next coast
+    resumes from there. The returned PropagationResult concatenates every
+    coast arc's history into one continuous timeline; epochs remain relative
+    to ``initial_epoch`` (i.e. epoch 0.0 corresponds to ``initial_epoch``, not
+    J2000).
 
     ``earth_spherical_harmonic``: pass ``(degree, order)`` (e.g. ``(2, 2)`` for
     J2 + the J22 tesseral triaxiality) to model the *central* body's gravity
@@ -180,24 +240,9 @@ def propagate_multi_arc(
     dominant one for GEO is the Sun+Moon N-S inclination drift). ``None`` keeps
     the point-mass-only default (back-compatible with the free-return callers).
     """
-    _ensure_spice_loaded()
-
-    body_settings = environment_setup.get_default_body_settings(
-        list(perturbing_bodies), central_body, "ECLIPJ2000",
-    )
-    bodies = environment_setup.create_system_of_bodies(body_settings)
-    bodies.create_empty_body("Spacecraft")
-
-    def _gravity_for(body):
-        if body == central_body and earth_spherical_harmonic is not None:
-            degree, order = earth_spherical_harmonic
-            return propagation_setup.acceleration.spherical_harmonic_gravity(int(degree), int(order))
-        return propagation_setup.acceleration.point_mass_gravity()
-
-    acceleration_settings_on_spacecraft = {body: [_gravity_for(body)] for body in perturbing_bodies}
-    acceleration_settings = {"Spacecraft": acceleration_settings_on_spacecraft}
-    acceleration_models = propagation_setup.create_acceleration_models(
-        bodies, acceleration_settings, ["Spacecraft"], [central_body],
+    propagator = ReusableCoastPropagator(
+        central_body=central_body, perturbing_bodies=perturbing_bodies,
+        step_size=step_size, earth_spherical_harmonic=earth_spherical_harmonic,
     )
 
     current_state = np.concatenate([np.asarray(r0, dtype=float), np.asarray(v0, dtype=float)])
@@ -209,10 +254,7 @@ def propagate_multi_arc(
     for arc in arcs:
         arc_type = arc["type"]
         if arc_type == "coast":
-            epochs, states = _propagate_single_coast(
-                bodies, acceleration_models, central_body, current_state,
-                current_epoch, arc["duration"], step_size,
-            )
+            epochs, states = propagator.coast(current_state, current_epoch, arc["duration"])
             all_epochs.append(epochs)
             all_states.append(states)
             current_state = states[-1]

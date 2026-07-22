@@ -105,6 +105,17 @@ EVENT_SLOWDOWN_TARGET_SPEED = 0.02
 # 500-6000h) stay visually still, same as they really would.
 ROTATION_SIM_HOURS_PER_REAL_SECOND = 1.0
 
+# Clicking a maneuver row auto-frames its burn: the camera zooms in on the
+# spacecraft at the burn instant, to an ABSOLUTE distance of this multiple of
+# the scene's maneuver-arrow length (_maneuver_base_len, itself a fraction of
+# the orbit radius -- so the burn scale, shared by every event). Absolute, not
+# a relative dolly-in, so repeated clicks land on the same framing instead of
+# compounding. At 3x, the (camera-distance-clamped) arrow fills roughly half
+# the view with the spacecraft centered -- close enough to read the maneuver,
+# wide enough to keep some orbit context. Falls back to zoom_to_body's default
+# relative zoom for a scene whose events carry no burn vectors.
+EVENT_ZOOM_ARROW_MULTIPLE = 3.0
+
 
 class DebouncedInteractor(QtInteractor):
     """QtInteractor renders synchronously on *every* resizeEvent (see
@@ -132,6 +143,7 @@ class DebouncedInteractor(QtInteractor):
         self._resize_settle_timer.setSingleShot(True)
         self._resize_settle_timer.setInterval(self._RESIZE_SETTLE_MS)
         self._resize_settle_timer.timeout.connect(self._render_after_resize_settles)
+        self._install_dynamic_clipping()
 
     def resizeEvent(self, event):  # noqa: N802 -- Qt override signature
         if self._RenderWindow is None:
@@ -152,6 +164,62 @@ class DebouncedInteractor(QtInteractor):
         iren = self._Iren
         if iren is not None and hasattr(iren, "Render"):
             iren.Render()
+
+    # KSP-style dynamic depth range. VTK's default fit-to-scene clipping can't
+    # pull the near plane closer than a fixed fraction of the WHOLE scene's far
+    # plane, so in a scene tens of thousands of km across (a GEO ring) or many
+    # AU (the solar system), zooming in to inspect a local stretch of orbit
+    # shoves the geometry inside the near plane and it just vanishes -- capping
+    # how far you can usefully zoom. Instead we set the near plane proportional
+    # to the live camera-to-focal distance, so you can keep zooming in
+    # arbitrarily close (tracking-station style) with the focus staying visible,
+    # while the far plane still reaches the scene's far corner so distant bodies
+    # keep drawing. This has to catch BOTH ways the range gets reset: pyvista's
+    # wheel-zoom calls reset_camera_clipping_range() (overridden below), while
+    # track_body / zoom_to_body / reset_camera just move the camera and render,
+    # so we also recompute on the camera's own ModifiedEvent -- setting the
+    # range there, before the render, means VTK's fit never runs.
+    _CLIP_NEAR_FRACTION = 1.0e-3
+
+    def _install_dynamic_clipping(self) -> None:
+        self._clipping_busy = False
+        try:
+            self.camera.AddObserver("ModifiedEvent", lambda *_a: self._apply_dynamic_clipping())
+        except Exception:  # noqa: BLE001 -- no camera yet is fine; the override still covers zoom
+            pass
+
+    def _apply_dynamic_clipping(self) -> None:
+        if getattr(self, "_clipping_busy", False):
+            return  # our own SetClippingRange re-fires ModifiedEvent -- don't recurse
+        self._clipping_busy = True
+        try:
+            camera = self.camera
+            fx, fy, fz = camera.focal_point
+            px, py, pz = camera.position
+            distance = math.sqrt((px - fx) ** 2 + (py - fy) ** 2 + (pz - fz) ** 2)
+            xmin, xmax, ymin, ymax, zmin, zmax = self.bounds
+            if distance <= 0.0 or not all(
+                math.isfinite(b) for b in (xmin, xmax, ymin, ymax, zmin, zmax)
+            ):
+                super().reset_camera_clipping_range()
+                return
+            far_corner = max(
+                math.sqrt((px - x) ** 2 + (py - y) ** 2 + (pz - z) ** 2)
+                for x in (xmin, xmax) for y in (ymin, ymax) for z in (zmin, zmax)
+            )
+            near = max(distance * self._CLIP_NEAR_FRACTION, 1.0e-9)
+            far = far_corner * 1.05 + near
+            if far <= near:
+                super().reset_camera_clipping_range()
+                return
+            camera.SetClippingRange(near, far)
+        except Exception:  # noqa: BLE001 -- clipping is cosmetic; never break a render over it
+            super().reset_camera_clipping_range()
+        finally:
+            self._clipping_busy = False
+
+    def reset_camera_clipping_range(self):  # noqa: N802 -- overrides pyvista's snake_case method
+        self._apply_dynamic_clipping()
 
 
 class SceneLoader(QObject):
@@ -1274,9 +1342,13 @@ class MissionControlWindow(QMainWindow):
 
         # Precompute the maneuver-arrow display scale: physical delta-v (m/s) is
         # invisible next to orbit radii (km), so arrows are drawn at a fraction of
-        # the burn-site radius, lengthened in proportion to |delta-v|. The arrow
-        # only appears while the scrubber is within _maneuver_window of a burn, so
-        # it flashes past each maneuver instead of hanging on screen the whole time.
+        # the burn-site radius (_maneuver_base_len), lengthened in proportion to
+        # |delta-v|. That fraction is only the *wide-view cap*, though -- when the
+        # camera is dollied in on the spacecraft during a burn, set_maneuver_vector
+        # clamps it down to a fraction of the camera distance so the arrow doesn't
+        # swamp the very body it's drawn from. The arrow only appears while the
+        # scrubber is within _maneuver_window of a burn, so it flashes past each
+        # maneuver instead of hanging on screen the whole time.
         vectors = [e["vector"] for e in self._events if "vector" in e]
         if vectors:
             self._maneuver_max_dv = max(_norm3(v["deltaV"]) for v in vectors) or 1.0
@@ -1409,8 +1481,8 @@ class MissionControlWindow(QMainWindow):
             note_label.setWordWrap(True)
             v.addWidget(note_label)
 
-        row.setToolTip("Jump to this event")
-        row.mousePressEvent = lambda _e, t=event.get("time", 0.0): self._seek_to_time(t)
+        row.setToolTip("Jump to this event and zoom in on the burn")
+        row.mousePressEvent = lambda _e, ev=event: self._seek_to_event(ev)
         return row
 
     def _refresh_readouts(self, distances: dict[str, float]):
@@ -1454,10 +1526,55 @@ class MissionControlWindow(QMainWindow):
         if (maneuver is not None and self._maneuver_base_len > 0.0
                 and nearest_dt <= self._maneuver_window):
             vec = maneuver["vector"]
-            length = self._maneuver_base_len * (_norm3(vec["deltaV"]) / self._maneuver_max_dv)
-            self.renderer.set_maneuver_vector(vec["position"], vec["deltaV"], length)
+            magnitude_fraction = _norm3(vec["deltaV"]) / self._maneuver_max_dv
+            self.renderer.set_maneuver_vector(
+                vec["position"], vec["deltaV"], self._maneuver_base_len, magnitude_fraction)
         else:
             self.renderer.clear_maneuver_vector()
+
+    def _primary_spacecraft_id(self) -> str | None:
+        """The scene's main spacecraft body (kind == "spacecraft") -- GOES,
+        Orion, the Mars probe -- provided it's a real selectable body (has a
+        card). The auto-frame on a maneuver click (see _seek_to_event) points
+        the camera at this body, since that's what every burn is applied to."""
+        scene = self._current_scene
+        if not scene:
+            return None
+        for body in scene.get("bodies", []):
+            if body.get("kind") == "spacecraft" and body.get("id") in self._body_cards:
+                return body["id"]
+        return None
+
+    def _seek_to_event(self, event: dict):
+        """Jump the scrubber to a maneuver's time AND auto-frame its burn --
+        zoom the camera in on the spacecraft at that instant, so clicking a
+        maneuver row takes you right up to the burn (and its delta-v arrow)
+        instead of only moving the clock. An event with no burn vector (e.g.
+        the terminal "insertion" marker) just seeks. The zoom is to an
+        absolute distance (see EVENT_ZOOM_ARROW_MULTIPLE) so clicking rows in
+        succession lands on the same framing each time rather than diving in
+        further on every click."""
+        sc_id = self._primary_spacecraft_id()
+        zoom = sc_id is not None and "vector" in event and self._maneuver_base_len > 0.0
+        # Remember the pre-zoom framing so the M-key focus toggle can zoom back
+        # out to it -- the same contract _focus_selected sets up for its zoom.
+        if zoom:
+            cam = self.plotter.camera
+            pre_camera = (tuple(cam.position), tuple(cam.focal_point), tuple(cam.up))
+        self._seek_to_time(event.get("time", 0.0))
+        if not zoom:
+            return
+        self._selected_body_id = sc_id
+        self._measure_body_id = None
+        self._refresh_card_highlights()
+        self._update_measure()
+        self.renderer.zoom_to_body(
+            sc_id, self._current_time,
+            distance_km=self._maneuver_base_len * EVENT_ZOOM_ARROW_MULTIPLE,
+        )
+        self._pre_focus_camera = pre_camera
+        self._focus_zoomed = True
+        self.statusBar().showMessage(f"▸ {event.get('label', 'maneuver')} — framed the burn")
 
     def _seek_to_time(self, day: float):
         """Move the scrubber to a specific timeline time (used by the maneuver

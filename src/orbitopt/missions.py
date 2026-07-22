@@ -119,24 +119,46 @@ def get(id: str) -> Mission:
 # so `import orbitopt.missions` itself never needs pykep/pygmo/tudatpy --
 # only actually loading a compute-backed mission does.
 
+# The compute-backed missions (everything but the near-instant Solar System
+# data export) go through orbitopt.scene_cache.cached_scene: seconds of
+# optimization + tudatpy propagation the first time, then a disk-cached JSON
+# read on every later load (across app restarts) until the orbitopt source
+# that produces the scene changes. See scene_cache for the fingerprint-based
+# invalidation and why it's preferred over a committed static scene file.
+
 def _load_solar_system() -> dict:
     from orbitopt.viz.solar_system import export_solar_system_data
     return export_solar_system_data()
 
 
 def _load_artemis2() -> dict:
-    from orbitopt.viz.mission_timeline import compute_and_export_mission
-    return compute_and_export_mission()
+    from orbitopt.scene_cache import cached_scene
+
+    def _compute() -> dict:
+        from orbitopt.viz.mission_timeline import compute_and_export_mission
+        return compute_and_export_mission()
+
+    return cached_scene("artemis2", _compute)
 
 
 def _load_goes() -> dict:
-    from orbitopt.viz.geo_raising import compute_and_export_geo_mission
-    return compute_and_export_geo_mission()
+    from orbitopt.scene_cache import cached_scene
+
+    def _compute() -> dict:
+        from orbitopt.viz.geo_raising import compute_and_export_geo_mission
+        return compute_and_export_geo_mission()
+
+    return cached_scene("goes", _compute)
 
 
 def _load_mars() -> dict:
-    from orbitopt.viz.mars_transfer import compute_and_export_mars_mission
-    return compute_and_export_mars_mission()
+    from orbitopt.scene_cache import cached_scene
+
+    def _compute() -> dict:
+        from orbitopt.viz.mars_transfer import compute_and_export_mars_mission
+        return compute_and_export_mars_mission()
+
+    return cached_scene("mars", _compute)
 
 
 register("solar-system", "Solar System", _load_solar_system)

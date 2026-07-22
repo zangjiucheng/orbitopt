@@ -81,3 +81,45 @@ def moon_state(mjd2000: float) -> tuple[np.ndarray, np.ndarray]:
         ephemeris_time=ephemeris_time,
     )
     return cartesian_state[:3], cartesian_state[3:]
+
+
+def body_fixed_to_eclipj2000_matrix(body_name: str, mjd2000: float) -> np.ndarray:
+    """The 3x3 rotation matrix from a body's IAU body-fixed frame
+    (``IAU_<BODY>`` -- x toward the prime meridian on the equator, z toward
+    the north pole) to ECLIPJ2000, at the given MJD2000 epoch: the body's
+    real inertial orientation (pole/axial tilt AND prime-meridian rotation
+    phase) then.
+
+    Works for any body with IAU rotation elements in the standard PCK
+    kernels -- every Sun/planet/Moon rendered here. ``body_name`` is the
+    SPICE body name (e.g. "Earth", "Mars", "Sun", "Moon"); the frame queried
+    is ``IAU_<body_name uppercased>``. Note the giant planets' IAU frames use
+    System III (deep-interior) rotation and the Sun's a rigid mean rate, so
+    the *pole/tilt* is physical for every body but the absolute prime-meridian
+    *phase* is only meaningful where the texture's longitude 0 is registered
+    to that frame (today: Earth only).
+    """
+    _ensure_spice_loaded()
+    ephemeris_time = mjd2000_to_ephemeris_seconds(mjd2000)
+    frame = f"IAU_{body_name.upper()}"
+    return np.asarray(
+        spice.compute_rotation_matrix_between_frames(frame, "ECLIPJ2000", ephemeris_time),
+        dtype=float,
+    )
+
+
+def earth_body_fixed_to_eclipj2000(vector_ecef, mjd2000: float) -> np.ndarray:
+    """Rotate a (3,) vector from Earth body-fixed coordinates (IAU_Earth --
+    x toward the Greenwich meridian on the equator, z toward the north
+    pole) into the ECLIPJ2000 inertial frame, at the given MJD2000 epoch.
+
+    For a fixed direction/point on Earth's surface (e.g. a real launch
+    site's geodetic longitude/latitude), this is exactly what's needed to
+    find where that point actually is in inertial space at a specific real
+    time -- e.g. so a launch trajectory can start at the real launch site's
+    real inertial direction at liftoff, not an arbitrary fixed axis.
+    IAU_Earth's own pole is Earth's real rotation axis, not the ecliptic
+    pole (~23.4 degrees away) -- also relevant for a "north" (z) reference
+    that should mean Earth's true north, not the ecliptic normal.
+    """
+    return body_fixed_to_eclipj2000_matrix("Earth", mjd2000) @ np.asarray(vector_ecef, dtype=float)

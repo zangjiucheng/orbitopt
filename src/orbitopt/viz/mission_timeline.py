@@ -17,7 +17,12 @@ from __future__ import annotations
 import numpy as np
 import pykep as pk
 
-from orbitopt.bodies import mjd2000_from_date, mjd2000_to_ephemeris_seconds, moon_state
+from orbitopt.bodies import (
+    body_fixed_to_eclipj2000_matrix,
+    mjd2000_from_date,
+    mjd2000_to_ephemeris_seconds,
+    moon_state,
+)
 from orbitopt.lambert.cpu import solve_lambert_single
 from orbitopt.verify.differential_correction import target_lunar_flyby
 from orbitopt.verify.tudat_propagate import (
@@ -312,6 +317,7 @@ def compute_and_export_mission(
             "earth", "Earth", COLOR["earth"], "planet", radius_display=RADIUS_DISPLAY["earth"],
             position=[0.0, 0.0, 0.0], texture=TEXTURE["earth"], radius=EARTH_RADIUS_KM,
             rotation_period_hours=ROTATION_PERIOD_HOURS["earth"],
+            orientation_basis=body_fixed_to_eclipj2000_matrix("Earth", departure_mjd2000).tolist(),
         ),
         body_entry(
             "moon", "Moon", COLOR["moon"], "moon", radius_display=RADIUS_DISPLAY["moon"],
@@ -319,6 +325,7 @@ def compute_and_export_mission(
             info=[{"label": "Distance from Earth", "value": f"{moon_distance_km[0]:,.0f} km (varies over mission)"}],
             texture=TEXTURE["moon"], radius=MOON_RADIUS_KM,
             rotation_period_hours=ROTATION_PERIOD_HOURS["moon"],
+            orientation_basis=body_fixed_to_eclipj2000_matrix("Moon", departure_mjd2000).tolist(),
         ),
         body_entry(
             "spacecraft", "Orion", COLOR["spacecraft"], "spacecraft", radius_display=RADIUS_DISPLAY["spacecraft"],

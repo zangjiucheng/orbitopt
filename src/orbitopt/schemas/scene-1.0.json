@@ -77,6 +77,13 @@
           "type": "number",
           "description": "Sidereal axial rotation period in hours (one full 360-degree spin relative to the stars). Negative means retrograde (spins backward relative to its orbit, e.g. Venus, Uranus). Only has a visible effect on bodies also rendered as a real sphere (`texture`+`radius` set) -- a viewer with no concept of continuous/idle animation may simply ignore it."
         },
+        "orientationBasis": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } },
+          "description": "The body's real inertial orientation at timeline time 0, as a 3x3 row-major rotation matrix from its IAU body-fixed frame to the document's inertial frame. Its third column is the real spin axis (north pole). A renderer uses this to tilt the sphere to its true obliquity and spin it about that real axis (combined with `rotationPeriodHours`), rather than spinning about the frame's +Z. Optional; when absent the body spins about +Z (optionally offset by `rotationPhaseOffsetDeg`)."
+        },
         "orbit": {
           "type": "array",
           "items": { "$ref": "#/$defs/vec3" },
