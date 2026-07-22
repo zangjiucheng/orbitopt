@@ -59,6 +59,49 @@ def _actor_orientation_from_matrix(rotation: np.ndarray) -> tuple[float, float, 
 MANEUVER_COLOR = "#ff5a3c"  # burn / delta-v arrows (distinct from amber trails)
 
 
+def _default_view_direction(scene: dict) -> np.ndarray | None:
+    """Which direction the initial camera should look *from*, so a mission
+    with a real launch/departure site (GOES's Cape Canaveral longitude, a
+    lunar TLI burn, ...) opens already facing the hemisphere/region that
+    burn actually happens in, instead of PyVista's canned "iso" preset --
+    which has no idea where anything interesting in the scene is and, for
+    GOES specifically, happened to face Eurasia while the real launch site
+    (confirmed correct by direct SPICE-based position recovery, not
+    assumed) sits on the opposite, unseen side of Earth. Every other
+    Earth/Sun-relative direction in the scene (orbits, trails) is
+    unaffected -- this only orients the DEFAULT camera angle, not any data.
+
+    Uses the earliest timeline event with a ``vector`` (a burn's position)
+    for its AZIMUTH only (which side of the central body to face) -- a burn
+    site sits exactly in its orbit's own plane, so looking from that exact
+    direction (elevation included) collapsed a multi-orbit campaign like
+    GOES's edge-on into a thin line. The elevation is instead fixed at a
+    pleasant isometric-like angle, matching the "iso" preset's own oblique
+    look, so a mission with a real launch site opens facing the right
+    hemisphere without losing the wide campaign shape a top-down or
+    edge-on angle would flatten. Returns None (caller keeps whatever
+    fallback it already has) if the scene has no such event, e.g. Solar
+    System.
+    """
+    timeline = scene.get("timeline")
+    if not timeline:
+        return None
+    vector_events = [e for e in timeline.get("events", []) if "vector" in e]
+    if not vector_events:
+        return None
+    earliest = min(vector_events, key=lambda e: e.get("time", 0.0))
+    position = np.asarray(earliest["vector"]["position"], dtype=float)
+    if np.linalg.norm(position[:2]) == 0:
+        return None  # burn sits exactly on the pole axis -- azimuth undefined
+    azimuth = np.arctan2(position[1], position[0])
+    elevation = np.radians(35.0)  # close to a true isometric's 35.26 degrees
+    return np.array([
+        np.cos(elevation) * np.cos(azimuth),
+        np.cos(elevation) * np.sin(azimuth),
+        np.sin(elevation),
+    ])
+
+
 def marker_size(body: dict) -> float:
     return _MARKER_BASE_SIZE + _MARKER_WEIGHT_SIZE * body.get("radiusDisplay", 4.0)
 
@@ -325,7 +368,23 @@ class SceneRenderer:
 
         timeline = scene.get("timeline")
         self.set_time(timeline["min"] if timeline else 0.0)
-        self.plotter.camera_position = "iso"
+
+        view_direction = _default_view_direction(scene)
+        if view_direction is None:
+            self.plotter.camera_position = "iso"
+        else:
+            # Look from the direction of the earliest burn, keeping "world
+            # +Z is up" unless that's degenerate (near-polar direction),
+            # matching the up-vector convention _apply_axis_view's presets
+            # already use elsewhere in this app.
+            world_up = np.array([0.0, 0.0, 1.0])
+            if abs(np.dot(view_direction, world_up)) > 0.95:
+                world_up = np.array([0.0, 1.0, 0.0])
+            up = world_up - np.dot(world_up, view_direction) * view_direction
+            up /= np.linalg.norm(up)
+            self.plotter.camera_position = [
+                tuple(view_direction), (0.0, 0.0, 0.0), tuple(up),
+            ]
         self.plotter.reset_camera()
 
     def _register_rotation(self, body: dict, sphere_actor) -> None:
