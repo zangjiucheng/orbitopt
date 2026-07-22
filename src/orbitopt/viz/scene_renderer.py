@@ -478,8 +478,10 @@ class SceneRenderer:
     # whole orbit; this fraction wins when the camera is dollied in close on the
     # spacecraft during a burn -- where a purely world-space length (a fraction
     # of the orbit radius, ~9000 km at GEO) was many screen-widths long and
-    # buried the very spacecraft it was drawn from.
-    _MANEUVER_ARROW_SCREEN_FRACTION = 0.32
+    # buried the very spacecraft it was drawn from. Kept modest (well under
+    # half the ~distance-tall view) so the arrow reads as a marker on the
+    # spacecraft, not a blade sweeping across the frame.
+    _MANEUVER_ARROW_SCREEN_FRACTION = 0.14
 
     def set_maneuver_vector(self, position_km, delta_v, max_length_km: float,
                             magnitude_fraction: float = 1.0) -> None:
