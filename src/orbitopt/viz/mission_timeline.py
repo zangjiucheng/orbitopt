@@ -265,7 +265,6 @@ def compute_and_export_mission(
     moon_positions_km = np.array([
         body_position_at_absolute_epoch("Moon", reference_et + t) for t in epochs
     ]) / 1000.0
-    moon_distance_km = np.linalg.norm(moon_positions_km, axis=1)
 
     events = [
         {"label": "TLI burn", "time": 0.0, "note": f"delta-v {np.linalg.norm(targeting.delta_v):.0f} m/s"},
@@ -322,7 +321,11 @@ def compute_and_export_mission(
         body_entry(
             "moon", "Moon", COLOR["moon"], "moon", radius_display=RADIUS_DISPLAY["moon"],
             trail={"times": days, "positions": moon_positions_km.round(1).tolist()},
-            info=[{"label": "Distance from Earth", "value": f"{moon_distance_km[0]:,.0f} km (varies over mission)"}],
+            # No static "Distance from Earth" row -- every body card already
+            # shows a live "Distance" readout that tracks the scrubber (see
+            # app.py's _rebuild_body_cards); a fixed mission-start snapshot
+            # here duplicated it at t=0 and went stale (misleadingly) the
+            # moment the timeline moved.
             texture=TEXTURE["moon"], radius=MOON_RADIUS_KM,
             rotation_period_hours=ROTATION_PERIOD_HOURS["moon"],
             orientation_basis=body_fixed_to_eclipj2000_matrix("Moon", departure_mjd2000).tolist(),

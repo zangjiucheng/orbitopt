@@ -620,6 +620,11 @@ class MissionControlWindow(QMainWindow):
 
         title = QLabel("ORBITOPT MISSION CONTROL")
         title.setObjectName("appTitle")
+        # The sidebar (default ~220px, narrower once the splitter is dragged)
+        # is well short of this string's unwrapped width at 14px/700 weight --
+        # it was silently clipped mid-word with no ellipsis. Wrap instead of
+        # widening the sidebar just to fit a static branding string.
+        title.setWordWrap(True)
         layout.addWidget(title)
 
         header_row = QHBoxLayout()
@@ -637,6 +642,11 @@ class MissionControlWindow(QMainWindow):
         layout.addLayout(header_row)
 
         self.mission_list = QListWidget()
+        # Unlike the info panel's QScrollArea, this never had its horizontal
+        # scrollbar explicitly turned off -- Qt's native, unthemed scrollbar
+        # showed up as a stray gray line under the mission rows whenever an
+        # item's content requested slightly more width than available.
+        self.mission_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.mission_list.currentRowChanged.connect(self._on_mission_selected)
         layout.addWidget(self.mission_list, stretch=1)
 
@@ -1212,6 +1222,11 @@ class MissionControlWindow(QMainWindow):
             self._loaders[mission.title] = mission.load
             item = QListWidgetItem(mission.title)
             item.setData(Qt.UserRole, mission.title)
+            # A long title (e.g. "Mars — Earth to Orbit Insertion") elides
+            # with "…" now that the list's horizontal scrollbar is off --
+            # the tooltip is the only way to read it in full at a narrow
+            # sidebar width.
+            item.setToolTip(mission.title)
             self.mission_list.addItem(item)
         if self.mission_list.count():
             self.mission_list.setCurrentRow(0)
@@ -1233,6 +1248,7 @@ class MissionControlWindow(QMainWindow):
         self._loaders[key] = (lambda p=path: load_scene(p))
         item = QListWidgetItem(label)
         item.setData(Qt.UserRole, key)
+        item.setToolTip(path)
         self.mission_list.addItem(item)
         self.mission_list.setCurrentRow(self.mission_list.count() - 1)
 
@@ -1496,6 +1512,8 @@ class MissionControlWindow(QMainWindow):
             dist_key.setObjectName("bodyStat")
             dist_val = QLabel("—")
             dist_val.setObjectName("bodyStatValue")
+            dist_val.setWordWrap(True)
+            dist_val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             dist_row.addWidget(dist_key)
             dist_row.addStretch(1)
             dist_row.addWidget(dist_val)
@@ -1507,6 +1525,19 @@ class MissionControlWindow(QMainWindow):
                 k.setObjectName("bodyStat")
                 val = QLabel(row["value"])
                 val.setObjectName("bodyStatValue")
+                # Without word-wrap, a long value (e.g. "8,312 km from Moon
+                # center") reports its full unwrapped width as this row's
+                # (and so the whole scrollable card column's) minimum width --
+                # wider than the actual panel, with horizontal scrolling off,
+                # so the overflow silently became invisible instead of
+                # visibly clipped. Confirmed against a real rendered frame:
+                # the scroll content measured 318px against a 260px-wide
+                # panel, and even *short* values on unrelated rows vanished
+                # because addStretch pushed them into the same off-panel
+                # region. Word-wrap keeps every row's width bounded by the
+                # panel instead of by its longest value.
+                val.setWordWrap(True)
+                val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 r.addWidget(k)
                 r.addStretch(1)
                 r.addWidget(val)
