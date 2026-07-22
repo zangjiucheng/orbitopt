@@ -20,7 +20,7 @@ from __future__ import annotations
 import numpy as np
 import pykep as pk
 
-from orbitopt.bodies import planet
+from orbitopt.bodies import body_fixed_to_eclipj2000_matrix, planet
 from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, ROTATION_PERIOD_HOURS, TEXTURE, body_entry, scene_document
 
 _JPL_LP_BODIES = (
@@ -90,6 +90,7 @@ def export_solar_system_data(epoch_mjd2000=None, n_samples=240):
             radius_display=RADIUS_DISPLAY["sun"], position=[0.0, 0.0, 0.0],
             texture=TEXTURE["sun"], radius=_au_radius("sun"),
             rotation_period_hours=ROTATION_PERIOD_HOURS["sun"],
+            orientation_basis=body_fixed_to_eclipj2000_matrix("Sun", epoch_mjd2000).tolist(),
         )
     ]
 
@@ -119,6 +120,12 @@ def export_solar_system_data(epoch_mjd2000=None, n_samples=240):
             ],
             texture=TEXTURE.get(name), radius=_au_radius(name),
             rotation_period_hours=ROTATION_PERIOD_HOURS.get(name),
+            # Real axis/tilt only matters for the textured (real-sphere) bodies;
+            # Pluto renders as a point marker (no texture), so skip it there.
+            orientation_basis=(
+                body_fixed_to_eclipj2000_matrix(name, epoch_mjd2000).tolist()
+                if TEXTURE.get(name) else None
+            ),
         ))
 
     return scene_document(

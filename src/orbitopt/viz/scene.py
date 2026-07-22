@@ -90,6 +90,31 @@ ROTATION_PERIOD_HOURS = {
 }
 
 
+def earth_texture_mesh_azimuth_deg(longitude_deg: float) -> float:
+    """The azimuth (degrees, measured counterclockwise about local +Z from
+    local +X -- the same convention SceneRenderer's Z-axis-only rotation
+    uses, see _apply_rotation_for_time/advance_rotation) that
+    scene_renderer._equirectangular_sphere's UV mapping places real
+    ``longitude_deg`` at, on the UNROTATED mesh (before any actor.orientation
+    is applied). By that mapping's construction (u = azimuth / 2pi, texture
+    longitude = u*360 - 180): local -X (azimuth 180) is real longitude 0
+    (Greenwich), and azimuth increases with INCREASING EAST longitude -- the
+    same right-handed sense as Earth's real rotation about +Z, so the whole
+    map (not just Greenwich) lands non-mirrored once phase-aligned. Verified
+    by render: with the geo_raising phase offset applied, Cape Canaveral's
+    real ECLIPJ2000 direction looks straight at Florida.
+
+    Lets a scene producer compute a ``rotation_phase_offset_deg`` (see
+    ``body_entry``) that aligns a textured body's rendered orientation with
+    a real epoch, given that epoch's real body-fixed-to-inertial rotation
+    (e.g. ``orbitopt.bodies.earth_body_fixed_to_eclipj2000``) -- see
+    ``viz/geo_raising.py``'s launch-site orientation fix for a worked
+    example. Pure math, no epoch/frame dependency itself, so it stays in
+    this compute-stack-free module rather than ``orbitopt.bodies``.
+    """
+    return (longitude_deg + 180.0) % 360.0
+
+
 def body_entry(
     body_id,
     name,
@@ -104,6 +129,8 @@ def body_entry(
     texture=None,
     radius=None,
     rotation_period_hours=None,
+    rotation_phase_offset_deg=None,
+    orientation_basis=None,
 ):
     """One entry in SceneData.bodies. ``orbit``/``position``/``trail`` are
     all optional and independent: a static planet has orbit+position, a
@@ -122,6 +149,29 @@ def body_entry(
     see ROTATION_PERIOD_HOURS and scene_renderer.SceneRenderer.advance_rotation
     (timeline-less scenes) / SceneRenderer._apply_rotation_for_time (scenes
     with a timeline).
+
+    ``rotation_phase_offset_deg`` is a static additional rotation (degrees,
+    same Z-axis convention as the animated spin) added on top of whatever
+    the animated angle already is -- with no offset (the default), a body's
+    rendered orientation at t=0 is just whatever the untouched mesh's
+    default orientation happens to be, unrelated to reality. Set this (see
+    earth_texture_mesh_azimuth_deg) to align a body's rendered surface with
+    its real orientation at the scene's reference epoch, e.g. so a real
+    launch site actually appears under a trajectory that starts there. Made
+    redundant by ``orientation_basis`` (which pins the FULL orientation, not
+    just the spin phase); kept for bodies/scenes that don't supply one.
+
+    ``orientation_basis`` is the body's real inertial orientation at timeline
+    t=0 as a 3x3 row-major matrix (IAU body-fixed -> the scene's ECLIPJ2000
+    frame, e.g. from bodies.body_fixed_to_eclipj2000_matrix): its third column
+    is the real spin axis (north pole), so the renderer can tilt the body to its
+    real obliquity AND spin it about that real axis, not the scene's +Z. This
+    is what makes, e.g., the rendered Earth's equator line up with a
+    geostationary ring built on the real equator. Supersedes
+    rotation_phase_offset_deg when present; the pole/tilt it encodes is
+    physical for every body, the absolute prime-meridian phase only where the
+    texture is registered to the IAU frame (see
+    bodies.body_fixed_to_eclipj2000_matrix).
     """
     entry = {"id": body_id, "name": name, "color": color, "kind": kind, "radiusDisplay": radius_display}
     if orbit is not None:
@@ -140,6 +190,10 @@ def body_entry(
         entry["radius"] = radius
     if rotation_period_hours is not None:
         entry["rotationPeriodHours"] = rotation_period_hours
+    if rotation_phase_offset_deg is not None:
+        entry["rotationPhaseOffsetDeg"] = rotation_phase_offset_deg
+    if orientation_basis is not None:
+        entry["orientationBasis"] = orientation_basis
     return entry
 
 

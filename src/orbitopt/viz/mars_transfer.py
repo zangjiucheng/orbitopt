@@ -36,7 +36,12 @@ from __future__ import annotations
 import numpy as np
 import pykep as pk
 
-from orbitopt.bodies import mjd2000_from_date, mjd2000_to_ephemeris_seconds, planet
+from orbitopt.bodies import (
+    body_fixed_to_eclipj2000_matrix,
+    mjd2000_from_date,
+    mjd2000_to_ephemeris_seconds,
+    planet,
+)
 from orbitopt.lambert.gpu_batch import solve_lambert_batch
 from orbitopt.optimize.runner import run_optimization
 from orbitopt.problems.transfer_2body import Transfer2BodyProblem
@@ -326,15 +331,18 @@ def _build_mars_mission(
     bodies = [
         body_entry("sun", "Sun", COLOR["sun"], "sun", radius_display=RADIUS_DISPLAY["sun"],
                    position=[0.0, 0.0, 0.0], texture=TEXTURE["sun"], radius=696000.0,
-                   rotation_period_hours=ROTATION_PERIOD_HOURS["sun"]),
+                   rotation_period_hours=ROTATION_PERIOD_HOURS["sun"],
+                   orientation_basis=body_fixed_to_eclipj2000_matrix("Sun", t0).tolist()),
         body_entry("earth", "Earth", COLOR["earth"], "planet", radius_display=RADIUS_DISPLAY["earth"],
                    trail={"times": earth_orbit_days.round(4).tolist(), "positions": earth_track.round(1).tolist()},
                    texture=TEXTURE["earth"], radius=EARTH_RADIUS_KM,
-                   rotation_period_hours=ROTATION_PERIOD_HOURS["earth"]),
+                   rotation_period_hours=ROTATION_PERIOD_HOURS["earth"],
+                   orientation_basis=body_fixed_to_eclipj2000_matrix("Earth", t0).tolist()),
         body_entry("mars", "Mars", COLOR["mars"], "planet", radius_display=RADIUS_DISPLAY["mars"],
                    trail={"times": earth_orbit_days.round(4).tolist(), "positions": mars_track.round(1).tolist()},
                    texture=TEXTURE["mars"], radius=MARS_RADIUS_KM,
-                   rotation_period_hours=ROTATION_PERIOD_HOURS["mars"]),
+                   rotation_period_hours=ROTATION_PERIOD_HOURS["mars"],
+                   orientation_basis=body_fixed_to_eclipj2000_matrix("Mars", t0).tolist()),
         body_entry(
             "spacecraft", "Mars probe", COLOR["spacecraft"], "spacecraft",
             radius_display=RADIUS_DISPLAY["spacecraft"],

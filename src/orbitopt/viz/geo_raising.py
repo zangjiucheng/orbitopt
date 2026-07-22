@@ -8,7 +8,7 @@ mission_timeline.py, and a new mission in the Mission Control app.
 The screening optimizer produces an impulsive burn *schedule* (target
 perigee/inclination after each burn), not a propagated state history, so
 this module turns that schedule into an actual trajectory by real
-numerical integration (tudatpy, via verify.tudat_propagate.propagate_multi_arc,
+numerical integration (tudatpy, via verify.tudat_propagate.ReusableCoastPropagator,
 Earth point-mass gravity only -- matching the optimizer's own idealized
 two-body physics, so the flown (a, e, i) at each burn matches the schedule
 exactly) rather than hand-assembling idealized Keplerian arcs and hoping
@@ -54,6 +54,11 @@ from __future__ import annotations
 
 import numpy as np
 
+from orbitopt.bodies import (
+    body_fixed_to_eclipj2000_matrix,
+    earth_body_fixed_to_eclipj2000,
+    mjd2000_from_date,
+)
 from orbitopt.optimize.runner import run_optimization
 from orbitopt.problems.geo_raising import (
     GeoRaisingProblem,
@@ -61,8 +66,15 @@ from orbitopt.problems.geo_raising import (
     single_impulse_geo_insertion_ms,
 )
 from orbitopt.verify.geo_insertion import verify_geo_raising
-from orbitopt.verify.tudat_propagate import propagate_multi_arc
-from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, ROTATION_PERIOD_HOURS, TEXTURE, body_entry, scene_document
+from orbitopt.verify.tudat_propagate import ReusableCoastPropagator
+from orbitopt.viz.scene import (
+    COLOR,
+    RADIUS_DISPLAY,
+    ROTATION_PERIOD_HOURS,
+    TEXTURE,
+    body_entry,
+    scene_document,
+)
 
 # gto_apogee_km only feeds single_impulse_geo_insertion_ms's closed form below --
 # GeoRaisingProblem always models the shared burn apogee at r_geo (see the
@@ -71,6 +83,56 @@ from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, ROTATION_PERIOD_HOURS, TEX
 GOES_GTO = dict(gto_perigee_km=8108.0, gto_apogee_km=35286.0, gto_inclination_deg=10.6)
 GEO_RAISING_KWARGS = {k: v for k, v in GOES_GTO.items() if k != "gto_apogee_km"}
 APOGEE_DWELL_S = 41 * 60
+
+# Real Atlas V SLC-41 pad geodetic coordinates (Cape Canaveral SFS).
+# Longitude orients the exported trajectory (see _launch_site_rotation);
+# latitude isn't fed to that rotation (see its docstring) -- it's already
+# represented by PARKING_ORBIT's inclination, which was chosen to match it.
+LAUNCH_SITE_LATITUDE_DEG = 28.5721
+LAUNCH_SITE_LONGITUDE_DEG = -80.5853
+# Illustrative liftoff date -- matches mission_timeline.py's Artemis II and
+# verify.geo_insertion.verify_geo_raising's own default, so every mission in
+# the app nominally happens around the same near-future date, not because
+# any of these dates are individually meaningful.
+DEFAULT_LAUNCH_EPOCH_MJD2000 = mjd2000_from_date(2026, 8, 1)
+
+
+def _launch_site_rotation(lon_deg, mjd2000):
+    """Rigid rotation from this module's internal local convention (+x =
+    the apsis/launch-site-longitude reference direction, +z = the
+    orbital-plane-tilt reference) to real ECLIPJ2000 inertial directions,
+    at a real liftoff epoch -- so the exported trajectory actually launches
+    from the real geographic site (previously: an arbitrary, unrelated-to-
+    reality fixed +x axis, confirmed by rendering to land over open ocean
+    near the equator, nowhere near Florida) and every inclination in this
+    module is measured relative to Earth's REAL equator (previously:
+    ECLIPJ2000's own z axis, the ECLIPTIC pole -- ~23.4 degrees away from
+    Earth's real spin axis, a second, related error since every GOES
+    orbital element used here (28.15 deg parking-orbit inclination, 10.6
+    deg injection, GEO's i=0, ...) is a real published number relative to
+    Earth's equator, not the ecliptic).
+
+    Only longitude, not the launch site's full geodetic position, feeds
+    this rotation: +x targets a point on Earth's real equator at the launch
+    site's longitude, since the latitude offset is already what the
+    parking orbit's own inclination (chosen to match the launch site's
+    latitude, see LAUNCH_SITE_LATITUDE_DEG / PARKING_ORBIT) represents --
+    folding latitude in here too would double-count it. +z targets Earth's
+    real north pole (IAU_Earth's own +z), exactly orthogonal to any
+    equatorial +x by construction, so together they form a valid rotation
+    with y = z cross x.
+    """
+    lon_rad = np.radians(lon_deg)
+    x_ecef_equatorial = np.array([np.cos(lon_rad), np.sin(lon_rad), 0.0])
+    z_ecef_pole = np.array([0.0, 0.0, 1.0])
+    x_target = earth_body_fixed_to_eclipj2000(x_ecef_equatorial, mjd2000)
+    z_target = earth_body_fixed_to_eclipj2000(z_ecef_pole, mjd2000)
+    y_target = np.cross(z_target, x_target)
+    return np.column_stack([x_target, y_target, z_target])
+
+
+
+
 EARTH_RADIUS_KM = 6378.0
 
 # Real Atlas V 541 / GOES-16 launch-to-GTO profile (docs/goes_gto_geo_mission_plan.md
@@ -224,6 +286,7 @@ def _build_geo_mission(
     thrust_n=None,
     target_longitude_deg=None,
     penalty_weight=None,
+    launch_epoch_mjd2000=None,
     n_burns_min=2,
     n_burns_max=6,
     pop_size=160,
@@ -243,8 +306,17 @@ def _build_geo_mission(
     etc.) -- so the zero-argument call is unchanged. These parameters exist
     so orbitopt.mission_config's config-driven path can override any of them
     from a user-edited YAML file instead of editing this source.
+
+    ``launch_epoch_mjd2000`` (default DEFAULT_LAUNCH_EPOCH_MJD2000) is the
+    real liftoff time used only to orient the exported trajectory -- see
+    _launch_site_rotation -- against Earth's real rotational state then. It
+    doesn't affect the campaign's own physics/optimization at all (those
+    are orientation-independent, plain 2-body point-mass dynamics), only
+    where in inertial space the whole rigid trajectory ends up pointing.
     """
     mu = MU_EARTH_KM3_S2
+    launch_epoch_mjd2000 = DEFAULT_LAUNCH_EPOCH_MJD2000 if launch_epoch_mjd2000 is None else launch_epoch_mjd2000
+    launch_rotation = _launch_site_rotation(LAUNCH_SITE_LONGITUDE_DEG, launch_epoch_mjd2000)
     parking_orbit = dict(PARKING_ORBIT if parking_orbit is None else parking_orbit)
     transfer_apogee = TRANSFER_ORBIT_APOGEE_KM if transfer_orbit_apogee_km is None else transfer_orbit_apogee_km
     transfer_incl_deg = (
@@ -284,13 +356,25 @@ def _build_geo_mission(
     burn_events = []
     t_cursor = 0.0
 
+    # Build the tudat dynamical model (system-of-bodies + accelerations +
+    # SPICE) ONCE and coast every arc through it, instead of the old one
+    # propagate_multi_arc call per arc, which rebuilt that identical Earth
+    # point-mass environment ~9 times per mission (its dominant cost). The
+    # arcs can't be handed over as one sequence because each apsis burn below
+    # is computed from the *numerically-propagated* end state of the previous
+    # coast (see _apsis_burn_km_s calls), so this drives them one at a time --
+    # byte-identical dynamics, setup paid once. Earth point mass only, matching
+    # the campaign's own idealized two-body physics.
+    propagator = ReusableCoastPropagator(
+        central_body="Earth", perturbing_bodies=("Earth",), step_size=step_size_s,
+    )
+
     def _propagate(r_km, v_km_s, duration_s):
         nonlocal t_cursor
-        result = propagate_multi_arc(
-            r_km * 1000.0, v_km_s * 1000.0, 0.0,
-            arcs=[{"type": "coast", "duration": duration_s}],
-            central_body="Earth", perturbing_bodies=("Earth",), step_size=step_size_s,
-        )
+        state_si = np.concatenate([np.asarray(r_km, float), np.asarray(v_km_s, float)]) * 1000.0
+        epochs, states = propagator.coast(state_si, 0.0, duration_s)
+        final = states[-1] / 1000.0
+        last_epoch = float(epochs[-1])
         # step_size_s is fine (see the docstring's own precision note), so a
         # single arc can carry thousands of raw samples -- decimating each
         # arc to a FIXED point count here, not a shared budget divided
@@ -302,23 +386,22 @@ def _build_geo_mission(
         # would soak up most of a shared budget and the short, fast, small
         # early orbits would be left options-short enough to render as
         # visibly straight-line facets instead of a smooth curve.
-        states = result.states
-        epochs = result.epochs
         if len(states) > points_per_arc:
             keep = np.unique(np.linspace(0, len(states) - 1, points_per_arc).round().astype(int))
             states = states[keep]
             epochs = epochs[keep]
         states_km.append(states / 1000.0)
         epochs_s.append(epochs + t_cursor)
-        t_cursor += float(result.epochs[-1])
-        final = result.states[-1] / 1000.0
+        t_cursor += last_epoch
         return final[:3], final[3:]
 
     events.append({
         "label": "Liftoff", "time": 0.0,
-        "note": "Atlas V 541 / Centaur; ascent to parking-orbit insertion (SRB burn, "
-                "staging, ~5 min) isn't itself drawn -- the trail starts already in "
-                "orbit, same as the Artemis II scene.",
+        "note": f"Atlas V 541 / Centaur from Cape Canaveral SLC-41 "
+                f"({LAUNCH_SITE_LATITUDE_DEG:.2f}N, {-LAUNCH_SITE_LONGITUDE_DEG:.2f}W); "
+                "ascent to parking-orbit insertion (SRB burn, staging, ~5 min) isn't "
+                "itself drawn -- the trail starts already in orbit, same as the "
+                "Artemis II scene.",
     })
 
     parking_rp = EARTH_RADIUS_KM + parking_orbit["perigee_km"]
@@ -412,10 +495,24 @@ def _build_geo_mission(
     epochs_s = np.concatenate(epochs_s, axis=0)
     days = epochs_s / 86400.0
 
+    # Every position/velocity/delta-v vector so far is in this module's
+    # local convention (see _launch_site_rotation) -- rotate the whole
+    # rigid trajectory (position AND velocity columns) into real ECLIPJ2000
+    # directions now, in one place, rather than threading the rotation
+    # through every apsis/burn/coast call above. Valid because the
+    # propagation itself (plain 2-body Earth point-mass) has no preferred
+    # direction -- rotating the already-computed result is exactly
+    # equivalent to having computed it in the rotated frame from the start.
+    states_km[:, :3] = states_km[:, :3] @ launch_rotation.T
+    states_km[:, 3:] = states_km[:, 3:] @ launch_rotation.T
+
     for burn_time_s, label, note, position, delta_v in burn_events:
         events.append({
             "label": label, "time": round(burn_time_s / 86400.0, 4), "note": note,
-            "vector": {"position": [round(c, 1) for c in position], "deltaV": [round(c, 2) for c in delta_v]},
+            "vector": {
+                "position": [round(c, 1) for c in launch_rotation @ position],
+                "deltaV": [round(c, 2) for c in launch_rotation @ delta_v],
+            },
         })
     events.sort(key=lambda e: e["time"])
     events.append({"label": "GEO insertion", "time": round(float(days[-1]), 4),
@@ -440,10 +537,12 @@ def _build_geo_mission(
         body_entry("earth", "Earth", COLOR["earth"], "planet",
                    radius_display=RADIUS_DISPLAY["earth"], position=[0.0, 0.0, 0.0],
                    texture=TEXTURE["earth"], radius=EARTH_RADIUS_KM,
-                   rotation_period_hours=ROTATION_PERIOD_HOURS["earth"]),
+                   rotation_period_hours=ROTATION_PERIOD_HOURS["earth"],
+                   orientation_basis=body_fixed_to_eclipj2000_matrix(
+                       "Earth", launch_epoch_mjd2000).tolist()),
         body_entry("geo", "GEO ring", "#2fa97a", "reference", radius_display=2.4,
-                   orbit=_geo_ring(r_geo).round(1).tolist(), orbit_dashed=True,
-                   position=[float(r_geo), 0.0, 0.0],
+                   orbit=(_geo_ring(r_geo) @ launch_rotation.T).round(1).tolist(), orbit_dashed=True,
+                   position=(launch_rotation @ [float(r_geo), 0.0, 0.0]).round(1).tolist(),
                    info=[
                        {"label": "Radius", "value": f"{r_geo:,.0f} km"},
                        {"label": "Period", "value": f"{geo_period_h:.2f} h (1 sidereal day)"},
@@ -552,6 +651,8 @@ def build_from_config(config: dict) -> dict:
         kwargs["injection_orbit"] = launch["injection_orbit"]
     if "apogee_dwell_minutes" in launch:
         kwargs["apogee_dwell_s"] = launch["apogee_dwell_minutes"] * 60.0
+    if "launch_epoch_mjd2000" in launch:
+        kwargs["launch_epoch_mjd2000"] = launch["launch_epoch_mjd2000"]
     for key in ("wet_mass_kg", "dry_mass_kg", "isp_s", "thrust_n"):
         if key in spacecraft:
             kwargs[key] = spacecraft[key]

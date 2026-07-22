@@ -41,6 +41,10 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "description": "How long the trail dwells at apogee before the first LAE burn (illustrative pacing, not a physical constraint)."
+        },
+        "launch_epoch_mjd2000": {
+          "type": "number",
+          "description": "Real liftoff time (days since 2000-01-01, pykep's MJD2000 convention) used to orient the exported trajectory against Earth's real rotational state at launch -- e.g. so the trail starts at the real launch site's real position instead of an arbitrary fixed direction. Doesn't affect the campaign's own physics/optimization, only which way the whole (orientation-independent) trajectory points. Defaults to the same illustrative 2026-08-01 date used elsewhere in the app if omitted."
         }
       }
     },

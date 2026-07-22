@@ -19,10 +19,42 @@ from importlib import resources
 
 import numpy as np
 import pyvista as pv
+import vtk
 
 _MARKER_BASE_SIZE = 8.0
 _MARKER_WEIGHT_SIZE = 1.1
 _SPHERE_RESOLUTION = 48  # theta/phi mesh resolution -- smooth enough for a close-up, cheap at ~10 bodies
+
+# _equirectangular_sphere places texture longitude 0 (a body's prime meridian)
+# at the mesh's local -X (azimuth 180); an IAU body-fixed frame puts it at +X.
+# So orienting a mesh by a body's IAU->frame basis (orientationBasis) needs
+# this extra 180-deg spin about the shared pole to reconcile the two
+# prime-meridian conventions -- see viz.scene.earth_texture_mesh_azimuth_deg.
+_MESH_PRIME_MERIDIAN_OFFSET_DEG = 180.0
+
+
+def _rotation_z(angle_deg: float) -> np.ndarray:
+    """3x3 right-handed rotation by ``angle_deg`` about +Z."""
+    a = np.radians(angle_deg)
+    c, s = np.cos(a), np.sin(a)
+    return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+
+
+def _actor_orientation_from_matrix(rotation: np.ndarray) -> tuple[float, float, float]:
+    """The (rx, ry, rz) Euler angles (degrees) a VTK Prop3D's ``orientation``
+    needs to reproduce the 3x3 ``rotation``. Goes through vtkTransform so the
+    decomposition uses VTK's own orientation convention exactly (rather than
+    hand-rolling an Euler order that must match it), then the actor rotates
+    about its origin and is translated by ``position`` as usual -- so this
+    composes with set_time's per-tick ``actor.position`` the same way the
+    previous +Z-only ``orientation`` did."""
+    transform = vtk.vtkTransform()
+    matrix = vtk.vtkMatrix4x4()
+    for i in range(3):
+        for j in range(3):
+            matrix.SetElement(i, j, float(rotation[i, j]))
+    transform.SetMatrix(matrix)
+    return transform.GetOrientation()
 
 MANEUVER_COLOR = "#ff5a3c"  # burn / delta-v arrows (distinct from amber trails)
 
@@ -49,6 +81,65 @@ def _load_texture(filename: str) -> pv.Texture | None:
         return None
 
 
+def _equirectangular_sphere(radius: float) -> pv.PolyData:
+    """A UV sphere carrying per-vertex texture coordinates for an
+    equirectangular (lat/long) image -- the projection every texture in
+    assets/textures follows (row 0 = north pole, columns = longitude).
+
+    Built explicitly rather than via ``pv.Sphere().texture_map_to_sphere()``
+    because that filter's spherical UV assignment does not track azimuth
+    linearly on the installed VTK: it collapses the whole image into a thin
+    meridian band, rendering every textured body (Earth, Moon, Sun, planets)
+    as vertical smears instead of a wrapped map. Here u is set directly from
+    each vertex's azimuth and v from its polar angle, so the wrap is exact.
+
+    Conventions, all so the existing calibration keeps working unchanged:
+      * u = azimuth / 2pi, so real longitude 0 (Greenwich) lands at local
+        -X and u increases with the same right-handed sense about +Z that
+        SceneRenderer's rotation uses -- exactly what
+        viz.scene.earth_texture_mesh_azimuth_deg = (longitude + 180) documents
+        and viz.geo_raising's launch-site orientation relies on.
+      * v = 1 - phi/pi, putting the +Z pole (this app's rotation axis, see
+        advance_rotation) at the image's north edge -- so looking down +Z
+        shows the Arctic, not Antarctica.
+      * theta spans a full 0..2pi INCLUSIVE, duplicating the seam meridian, so
+        the wrap column interpolates u 0.98->1.0 rather than 0.98->0.0 (which
+        would smear the whole image across one seam triangle). The seam sits
+        at local +X, i.e. the antimeridian -- open Pacific, where it's least
+        visible.
+    """
+    n_theta, n_phi = _SPHERE_RESOLUTION * 2, _SPHERE_RESOLUTION
+    theta = np.linspace(0.0, 2.0 * np.pi, n_theta + 1)  # inclusive -> seam duplicated
+    phi = np.linspace(0.0, np.pi, n_phi + 1)            # inclusive -> both poles
+    theta_grid, phi_grid = np.meshgrid(theta, phi)
+    sin_phi = np.sin(phi_grid)
+    points = np.column_stack([
+        (radius * sin_phi * np.cos(theta_grid)).ravel(),
+        (radius * sin_phi * np.sin(theta_grid)).ravel(),
+        (radius * np.cos(phi_grid)).ravel(),
+    ])
+    tcoords = np.column_stack([
+        (theta_grid / (2.0 * np.pi)).ravel(),
+        (1.0 - phi_grid / np.pi).ravel(),
+    ]).astype(np.float32)
+
+    columns = n_theta + 1
+    row = np.arange(n_phi)[:, None]
+    col = np.arange(n_theta)[None, :]
+    top_left = (row * columns + col).ravel()
+    quads = np.column_stack([
+        np.full(top_left.size, 4),
+        top_left, top_left + 1, top_left + columns + 1, top_left + columns,
+    ]).ravel()
+
+    mesh = pv.PolyData(points, quads)
+    mesh.active_texture_coordinates = tcoords
+    # Explicit outward normals (radius direction) so smooth_shading lights the
+    # sphere correctly without a normals recompute.
+    mesh.point_data.active_normals = (points / radius).astype(np.float32)
+    return mesh
+
+
 def _sphere_actor(plotter, body: dict, name: str):
     """Build and add a real, textured 3D sphere for `body`, centered at the
     origin with the actor's own position transform left at (0,0,0) -- the
@@ -66,21 +157,7 @@ def _sphere_actor(plotter, body: dict, name: str):
     if texture is None:
         return None
 
-    sphere = pv.Sphere(
-        radius=float(radius), theta_resolution=_SPHERE_RESOLUTION, phi_resolution=_SPHERE_RESOLUTION,
-    ).texture_map_to_sphere()
-    # texture_map_to_sphere()'s default V coordinate puts row 0 of the image
-    # (north, by the near-universal equirectangular convention every texture
-    # here follows) at the sphere's -Z pole, not +Z -- confirmed by direct
-    # render, not assumed: with this flip omitted, looking down +Z (this
-    # app's rotation axis, see advance_rotation) at Earth's texture showed
-    # Antarctica, and -Z showed the Arctic. Flipping V here (not the image
-    # files, and not the rotation axis) fixes every body through this one
-    # shared code path at once, including the ones with no obvious surface
-    # features to notice the same flip by eye (Moon, other planets).
-    tcoords = sphere.active_texture_coordinates
-    tcoords[:, 1] = 1.0 - tcoords[:, 1]
-    sphere.active_texture_coordinates = tcoords
+    sphere = _equirectangular_sphere(float(radius))
     # A star is its own light source -- lighting=False renders its raw
     # texture colors with no shading falloff, so it reads as uniformly
     # bright regardless of viewing angle instead of having an implausible
@@ -254,17 +331,39 @@ class SceneRenderer:
     def _register_rotation(self, body: dict, sphere_actor) -> None:
         period_hours = body.get("rotationPeriodHours")
         if period_hours:  # excludes None and 0 (a real period is never exactly 0)
-            self._rotating.append({"actor": sphere_actor, "period_hours": float(period_hours)})
+            basis = body.get("orientationBasis")
+            self._rotating.append({
+                "actor": sphere_actor,
+                "period_hours": float(period_hours),
+                "phase_offset_deg": float(body.get("rotationPhaseOffsetDeg", 0.0)),
+                # 3x3 IAU-body-fixed -> scene-frame orientation at t=0 (real
+                # obliquity + pole + phase); None falls back to +Z spin.
+                "basis": np.asarray(basis, dtype=float) if basis is not None else None,
+            })
+
+    def _apply_body_spin(self, entry: dict, spin_deg: float) -> None:
+        """Orient one rotating body given ``spin_deg`` (degrees of axial spin
+        accumulated so far). With an ``orientationBasis`` (its real IAU
+        body-fixed -> scene-frame matrix at t=0), the body is tilted to its
+        real obliquity and spun about its REAL pole: rotation = basis @
+        Rz(prime-meridian offset + spin), applied as a full actor orientation.
+        Without one it falls back to the old upright +Z spin (offset by
+        rotationPhaseOffsetDeg). A negative period_hours (Venus, Uranus --
+        real retrograde rotators) makes spin_deg negative and so spins the
+        body the correct way through either path."""
+        basis = entry["basis"]
+        if basis is not None:
+            rotation = basis @ _rotation_z(_MESH_PRIME_MERIDIAN_OFFSET_DEG + spin_deg)
+            entry["actor"].orientation = _actor_orientation_from_matrix(rotation)
+        else:
+            angle_deg = (entry["phase_offset_deg"] + spin_deg) % 360.0
+            entry["actor"].orientation = (0.0, 0.0, angle_deg)
 
     def advance_rotation(self, delta_hours: float) -> None:
         """Spin every real-sphere body with a rotationPeriodHours by
-        ``delta_hours`` of wall-clock-driven time, around its own local Z
-        (polar) axis -- the same axis pv.Sphere()'s default direction=(0,0,1)
-        uses, so this is a "spin in place" transform independent of the
-        sphere's position. Axial tilt isn't modelled (every body spins
-        upright, not at its real tilt) -- a reasonable simplification for
-        what's meant to convey relative rotation *rates*, not a fully
-        accurate globe.
+        ``delta_hours`` of wall-clock-driven time. A body with an
+        orientationBasis spins about its real, tilted pole; one without spins
+        upright about local +Z (see _apply_body_spin).
 
         A no-op for a scene with its own timeline: rotation there tracks the
         mission's actual current time exactly (see _apply_rotation_for_time,
@@ -272,38 +371,37 @@ class SceneRenderer:
         would otherwise drift out of sync with pausing, scrubbing, or
         playback speed -- only applies to a timeline-less scene (the static
         Solar System view), where continuous ambient motion is the only
-        sensible notion of "current" rotation. A negative period_hours
-        (Venus, Uranus -- real retrograde rotators) naturally spins the
-        wrong way through this same formula: Python's ``%`` follows the
-        sign of its (positive) divisor, so the angle still wraps cleanly
-        into [0, 360) either way.
+        sensible notion of "current" rotation.
         """
         if self._has_timeline or not self._rotating:
             return
         self._rotation_elapsed_hours += delta_hours
         for entry in self._rotating:
-            angle_deg = (self._rotation_elapsed_hours / entry["period_hours"] * 360.0) % 360.0
-            entry["actor"].orientation = (0.0, 0.0, angle_deg)
+            spin_deg = self._rotation_elapsed_hours / entry["period_hours"] * 360.0
+            self._apply_body_spin(entry, spin_deg)
         self.plotter.render()
 
     def _apply_rotation_for_time(self, t: float) -> None:
         """Spin every real-sphere body to its orientation at mission time
         ``t`` (days, same units/origin as the scene's timeline), computed
-        directly as a function of ``t`` rather than accumulated tick-by-tick
-        -- see advance_rotation's docstring for the shared spin-in-place
-        mechanics and simplifications. Deterministic and idempotent in
-        ``t``, unlike advance_rotation's wall-clock accumulator, so scrubbing
-        the timeline to the same point always yields the same orientation,
-        pausing playback holds it exactly still, and any playback speed
-        (see app.py's time-warp control) speeds up or slows down rotation in
-        exact lockstep, because it's *t* driving the angle, not real time.
+        directly as a function of ``t`` rather than accumulated tick-by-tick.
+        Deterministic and idempotent in ``t``, unlike advance_rotation's
+        wall-clock accumulator, so scrubbing the timeline to the same point
+        always yields the same orientation, pausing playback holds it exactly
+        still, and any playback speed (see app.py's time-warp control) speeds
+        up or slows down rotation in exact lockstep, because it's *t* driving
+        the angle, not real time. Each body's real orientation comes from its
+        orientationBasis at t=0 plus the t-driven spin about its real pole
+        (see _apply_body_spin) -- so a body whose scene has a real epoch shows
+        its actual surface orientation and axial tilt at t=0, not whatever the
+        untouched mesh's default orientation happens to be.
         """
         if not self._rotating:
             return
         absolute_hours = t * 24.0
         for entry in self._rotating:
-            angle_deg = (absolute_hours / entry["period_hours"] * 360.0) % 360.0
-            entry["actor"].orientation = (0.0, 0.0, angle_deg)
+            spin_deg = absolute_hours / entry["period_hours"] * 360.0
+            self._apply_body_spin(entry, spin_deg)
 
     def set_time(self, t: float, render: bool = True) -> dict[str, float]:
         """Move every trailed body to its position at time ``t``, regrow
@@ -374,20 +472,44 @@ class SceneRenderer:
     def clear_measure_line(self, render: bool = True) -> None:
         self.plotter.remove_actor("measure-line", render=render)
 
-    def set_maneuver_vector(self, position_km, delta_v, length_km: float) -> None:
-        """Draw an arrow at ``position_km`` along the ``delta_v`` direction with a
-        (screen-visible) length of ``length_km`` -- a maneuver's burn vector.
-        Physical delta-v (m/s) is tiny next to orbit radii (km), so the length is
-        a caller-chosen display scale, not the true magnitude; only the direction
-        is physical. Reuses one named actor so successive burns replace it."""
+    # The longest maneuver arrow is clamped to this fraction of the current
+    # camera-to-focal distance, so it holds a roughly constant on-screen size
+    # at any zoom. The caller's world-space length wins when zoomed out to the
+    # whole orbit; this fraction wins when the camera is dollied in close on the
+    # spacecraft during a burn -- where a purely world-space length (a fraction
+    # of the orbit radius, ~9000 km at GEO) was many screen-widths long and
+    # buried the very spacecraft it was drawn from.
+    _MANEUVER_ARROW_SCREEN_FRACTION = 0.32
+
+    def set_maneuver_vector(self, position_km, delta_v, max_length_km: float,
+                            magnitude_fraction: float = 1.0) -> None:
+        """Draw an arrow at ``position_km`` along the ``delta_v`` direction -- a
+        maneuver's burn vector. Physical delta-v (m/s) is tiny next to orbit
+        radii (km), so the length is a display scale, not the true magnitude;
+        only the direction is physical. The largest burn is drawn at
+        ``max_length_km`` in a wide view but clamped down to a fixed fraction of
+        the current camera distance when zoomed in (so it never swamps the
+        tracked spacecraft); ``magnitude_fraction`` (0..1, this burn's |delta-v|
+        over the campaign's largest) then scales it so smaller burns read as
+        shorter arrows. Reuses one named actor so successive burns replace it."""
         pos = np.asarray(position_km, dtype=float)
         dv = np.asarray(delta_v, dtype=float)
         mag = float(np.linalg.norm(dv))
-        if mag < 1e-12 or length_km <= 0.0:
+        if mag < 1e-12 or max_length_km <= 0.0 or magnitude_fraction <= 0.0:
+            self.clear_maneuver_vector()
+            return
+        cam = self.plotter.camera
+        distance = float(np.linalg.norm(
+            np.asarray(cam.position, dtype=float)
+            - np.asarray(cam.focal_point, dtype=float)))
+        full_length = min(float(max_length_km),
+                          self._MANEUVER_ARROW_SCREEN_FRACTION * distance)
+        length_km = full_length * float(magnitude_fraction)
+        if length_km <= 0.0:
             self.clear_maneuver_vector()
             return
         arrow = pv.Arrow(
-            start=pos, direction=dv / mag, scale=float(length_km),
+            start=pos, direction=dv / mag, scale=length_km,
             tip_length=0.28, tip_radius=0.09, shaft_radius=0.032,
         )
         self.plotter.add_mesh(arrow, color=MANEUVER_COLOR, name="maneuver-vector",
@@ -464,16 +586,22 @@ class SceneRenderer:
         if render:
             self.plotter.render()
 
-    def zoom_to_body(self, body_id: str, t: float, distance_factor: float = 0.2) -> None:
+    def zoom_to_body(self, body_id: str, t: float, distance_factor: float = 0.2,
+                     distance_km: float | None = None) -> None:
         """Like track_body, but *dolly in* rather than preserve distance --
         the same direction/up as whatever the camera's current framing is,
-        scaled down to ``distance_factor`` of the current camera-to-focal-
-        point distance, so the KSP-style M-key focus (see app.py's
-        _focus_selected) visibly zooms in on the target instead of just
-        recentering on it. Relative to the *current* distance rather than an
-        absolute one, so it zooms in sensibly regardless of a scene's
-        distance scale (AU for the Solar System, km for a mission) or how
-        far away the camera already happened to be.
+        moved to a closer camera-to-focal-point distance, so the KSP-style
+        M-key focus (see app.py's _focus_selected) visibly zooms in on the
+        target instead of just recentering on it.
+
+        The target distance is either ``distance_factor`` of the *current*
+        distance (the default -- relative, so the M-key zoom-in works
+        regardless of a scene's distance scale or how far the camera already
+        was) or, if ``distance_km`` is given, that absolute distance. The
+        absolute mode is for framing that must be repeatable rather than
+        compounding: jumping to a maneuver event (see app.py's
+        _seek_to_event) lands on the same close framing every time, instead
+        of zooming in another 5x on each successive click.
         """
         pos = self.body_world_position(body_id, t)
         cam = self.plotter.camera
@@ -482,6 +610,7 @@ class SceneRenderer:
         offset = position - focal
         distance = float(np.linalg.norm(offset))
         direction = offset / distance if distance > 1e-12 else np.array([0.0, 0.0, 1.0])
+        target_distance = float(distance_km) if distance_km is not None else distance * distance_factor
         cam.focal_point = tuple(pos)
-        cam.position = tuple(pos + direction * (distance * distance_factor))
+        cam.position = tuple(pos + direction * target_distance)
         self.plotter.render()
