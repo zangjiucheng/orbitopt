@@ -54,7 +54,8 @@ from orbitopt.viz import icons
 from orbitopt.viz.icon import app_icon
 from orbitopt.viz.pv_viewer import load_scene
 from orbitopt.viz.scene_renderer import SceneRenderer
-from orbitopt.viz.theme import ACCENT, BG_VOID, INK_MUTED, INK_SECONDARY, STYLESHEET
+from orbitopt.viz.theme import ACCENT, BG_VOID, DANGER, INK_MUTED, INK_SECONDARY, STYLESHEET, SUCCESS
+from orbitopt.viz.ui_kit import MetricRow, StatusBadge
 
 # Time-warp speed is a continuous log-scale control (0.001x .. 1000x), not
 # fixed presets, so it can be fine-tuned to any rate. self._speed is in
@@ -265,6 +266,25 @@ class SceneLoader(QObject):
         self.finished.emit(self._name, scene)
 
 
+class BackendProbeWorker(QObject):
+    """One-shot check of orbitopt.core.gpu.GPU_AVAILABLE, run on a background
+    QThread the same way SceneLoader is: importing cupy and querying the CUDA
+    runtime is cheap when cupy isn't installed at all (the common case for a
+    pip-only ``orbitopt[viewer]`` install) but can take a couple hundred ms
+    the first time in a full conda/CUDA environment -- not worth risking a
+    startup hitch for, given the same cross-thread-signal machinery already
+    exists for scene loading."""
+
+    finished = Signal(bool)
+
+    def run(self):
+        try:
+            from orbitopt.core.gpu import GPU_AVAILABLE
+        except Exception:  # noqa: BLE001 -- absence of the compute stack just means "CPU"
+            GPU_AVAILABLE = False
+        self.finished.emit(GPU_AVAILABLE)
+
+
 def _format_distance(value: float, unit: str) -> str:
     if unit == "AU":
         return f"{value:,.3f} AU"
@@ -440,6 +460,26 @@ class EventSlider(QSlider):
         super().mousePressEvent(event)
 
 
+class ViewControlsPopover(QFrame):
+    """Compact popover for the less-frequently-used view settings (see
+    MissionControlWindow._build_view_controls_popover). A plain Qt.Popup
+    window rather than a QMenu with QWidgetAction rows: a QComboBox (the
+    face-lock control) embedded in a QMenu has flaky click-through behavior
+    on some platforms, where a normal popup window doesn't. Qt.Popup already
+    closes on any click outside it; Escape is wired explicitly below since
+    Qt.Popup doesn't bind that key on its own (design brief: "支持 Escape 关闭")."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent, Qt.Popup)
+        self.setObjectName("viewControlsPopover")
+
+    def keyPressEvent(self, event):  # noqa: N802 -- Qt override signature
+        if event.key() == Qt.Key_Escape:
+            self.close()
+            return
+        super().keyPressEvent(event)
+
+
 class MissionControlWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -458,8 +498,13 @@ class MissionControlWindow(QMainWindow):
         self._loading = False
         self._load_thread: QThread | None = None
         self._load_worker: SceneLoader | None = None
+        self._load_start_ts: float = 0.0
+        self._backend_probe_thread: QThread | None = None
+        self._backend_probe_worker: BackendProbeWorker | None = None
         self._closing = False
 
+        self._mission_items: dict[str, QListWidgetItem] = {}
+        self._viewport_press_pos: tuple[int, int] | None = None
         self._selected_body_id: str | None = None
         self._measure_body_id: str | None = None
         self._tracking = False
@@ -490,6 +535,7 @@ class MissionControlWindow(QMainWindow):
 
         self._build_ui()
         self._populate_builtin_missions()
+        self._start_backend_probe()
 
     def _size_to_screen(self):
         """Open at a comfortable size that always fits the current display.
@@ -555,6 +601,7 @@ class MissionControlWindow(QMainWindow):
         self.plotter.set_background(BG_VOID)
         self.plotter.enable_anti_aliasing()
         self.renderer = SceneRenderer(self.plotter)
+        self._install_viewport_picking()
 
         # The 3D view and a loading page share one slot. We swap to the loading
         # page (rather than overlaying a Qt widget on top of the view) because
@@ -674,9 +721,40 @@ class MissionControlWindow(QMainWindow):
         title_col.addWidget(self.scene_subtitle_label)
         layout.addLayout(title_col, stretch=1)
 
+        layout.addWidget(self._build_compute_status(), alignment=Qt.AlignVCenter)
         layout.addWidget(self._build_view_controls(), alignment=Qt.AlignVCenter)
 
         return bar
+
+    def _build_compute_status(self) -> QWidget:
+        """Real-state badges only, no fabricated telemetry: this app runs one
+        blocking compute-and-export call per mission on a background thread
+        (see _start_loading), not a live generation-by-generation optimizer
+        loop, so there's no genuine eval-rate/generation counter to show.
+        What *is* real: whether a scene is idle/loading/ready/failed, how
+        long the last load took, and a one-time CPU/GPU capability probe
+        (orbitopt.core.gpu.GPU_AVAILABLE, see BackendProbeWorker)."""
+        box = QWidget()
+        row = QHBoxLayout(box)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(12)
+
+        self.load_status_badge = StatusBadge("idle", "IDLE")
+        self.load_status_badge.setToolTip("Current mission scene load state")
+        row.addWidget(self.load_status_badge)
+
+        self.backend_badge = StatusBadge("idle", "…")
+        self.backend_badge.setToolTip(
+            "Whether this environment has a usable CUDA/CuPy backend "
+            "(orbitopt.core.gpu) -- probed once at startup"
+        )
+        row.addWidget(self.backend_badge)
+
+        self.load_time_metric = MetricRow("Load", "—", "s")
+        self.load_time_metric.setToolTip("Wall-clock time for the most recent mission load")
+        row.addWidget(self.load_time_metric)
+
+        return box
 
     def _build_view_controls(self) -> QWidget:
         """KSP-style camera view presets -- snap the camera to a fixed
@@ -716,10 +794,53 @@ class MissionControlWindow(QMainWindow):
         self.track_btn.toggled.connect(self._set_tracking)
         row.addWidget(self.track_btn)
 
-        face_label = QLabel("FACE")
-        face_label.setObjectName("viewLabel")
-        row.addWidget(face_label)
+        help_sep = QFrame()
+        help_sep.setObjectName("viewSep")
+        help_sep.setFrameShape(QFrame.VLine)
+        row.addWidget(help_sep)
 
+        # Less-frequently-used view settings (face-lock reference, reset
+        # camera, panel visibility) live in a compact popover behind this
+        # gear icon instead of sitting inline -- keeps the header lean per
+        # the design brief ("控件尽量不切割主视图" / low chrome), while Top/
+        # Front/Side/Iso/Track above stay inline since camera navigation is
+        # frequent enough to earn permanent screen space.
+        self.view_controls_popover = self._build_view_controls_popover()
+        self.view_controls_btn = QPushButton()
+        self.view_controls_btn.setObjectName("pixelIconButton")
+        self.view_controls_btn.setIcon(icons.gear_icon())
+        self.view_controls_btn.setIconSize(QSize(13, 13))
+        self.view_controls_btn.setToolTip("View controls — face-lock, reset camera, panels")
+        self.view_controls_btn.clicked.connect(self._toggle_view_controls_popover)
+        row.addWidget(self.view_controls_btn)
+
+        self.shortcuts_btn = QPushButton()
+        self.shortcuts_btn.setObjectName("helpButton")
+        self.shortcuts_btn.setIcon(icons.keyboard_icon())
+        self.shortcuts_btn.setIconSize(QSize(13, 13))
+        self.shortcuts_btn.setToolTip("Keyboard shortcuts (F1)")
+        self.shortcuts_btn.clicked.connect(self._show_shortcuts_dialog)
+        row.addWidget(self.shortcuts_btn)
+        return box
+
+    def _build_view_controls_popover(self) -> "ViewControlsPopover":
+        popover = ViewControlsPopover(self)
+        # Qt.Popup makes this its own top-level window, which (like
+        # _show_shortcuts_dialog's QDialog) does not inherit self's
+        # stylesheet automatically -- set it explicitly.
+        popover.setStyleSheet(STYLESHEET)
+        layout = QVBoxLayout(popover)
+        layout.setContentsMargins(10, 8, 10, 10)
+        layout.setSpacing(6)
+
+        cam_label = QLabel("CAMERA")
+        cam_label.setObjectName("menuSectionLabel")
+        layout.addWidget(cam_label)
+
+        face_row = QHBoxLayout()
+        face_label = QLabel("FACE LOCK")
+        face_label.setObjectName("viewLabel")
+        face_row.addWidget(face_label)
         self.lock_combo = QComboBox()
         self.lock_combo.setObjectName("lockCombo")
         self.lock_combo.setToolTip(
@@ -730,21 +851,52 @@ class MissionControlWindow(QMainWindow):
         )
         self.lock_combo.addItem("None", None)
         self.lock_combo.currentIndexChanged.connect(self._on_lock_reference_changed)
-        row.addWidget(self.lock_combo)
+        face_row.addWidget(self.lock_combo, stretch=1)
+        layout.addLayout(face_row)
 
-        help_sep = QFrame()
-        help_sep.setObjectName("viewSep")
-        help_sep.setFrameShape(QFrame.VLine)
-        row.addWidget(help_sep)
+        reset_btn = QPushButton("Reset camera (R)")
+        reset_btn.setObjectName("viewButton")
+        reset_btn.clicked.connect(self._reset_camera_from_popover)
+        layout.addWidget(reset_btn)
 
-        self.shortcuts_btn = QPushButton()
-        self.shortcuts_btn.setObjectName("helpButton")
-        self.shortcuts_btn.setIcon(icons.keyboard_icon())
-        self.shortcuts_btn.setIconSize(QSize(13, 13))
-        self.shortcuts_btn.setToolTip("Keyboard shortcuts (F1)")
-        self.shortcuts_btn.clicked.connect(self._show_shortcuts_dialog)
-        row.addWidget(self.shortcuts_btn)
-        return box
+        sep = QFrame()
+        sep.setObjectName("viewSep")
+        sep.setFrameShape(QFrame.HLine)
+        layout.addWidget(sep)
+
+        panels_label = QLabel("PANELS")
+        panels_label.setObjectName("menuSectionLabel")
+        layout.addWidget(panels_label)
+
+        rail_btn = QPushButton("Toggle mission rail")
+        rail_btn.setObjectName("viewButton")
+        rail_btn.clicked.connect(lambda: (self._toggle_sidebar(), popover.close()))
+        layout.addWidget(rail_btn)
+
+        inspector_btn = QPushButton("Toggle inspector (I)")
+        inspector_btn.setObjectName("viewButton")
+        inspector_btn.clicked.connect(lambda: (self._toggle_info_panel(), popover.close()))
+        layout.addWidget(inspector_btn)
+
+        popover.setFixedWidth(210)
+        return popover
+
+    def _reset_camera_from_popover(self):
+        self.plotter.reset_camera()
+        self.plotter.render()
+        self.view_controls_popover.close()
+
+    def _toggle_view_controls_popover(self):
+        popover = self.view_controls_popover
+        if popover.isVisible():
+            popover.close()
+            return
+        btn = self.view_controls_btn
+        anchor = btn.mapToGlobal(btn.rect().bottomRight())
+        popover.adjustSize()
+        anchor.setX(anchor.x() - popover.width())
+        popover.move(anchor)
+        popover.show()
 
     def _build_timeline_bar(self) -> QWidget:
         bar = QWidget()
@@ -931,6 +1083,11 @@ class MissionControlWindow(QMainWindow):
         play_menu.addSeparator()
         play_menu.addAction("Faster", lambda: self._cycle_speed(+1)).setShortcut(QKeySequence("]"))
         play_menu.addAction("Slower", lambda: self._cycle_speed(-1)).setShortcut(QKeySequence("["))
+        play_menu.addSeparator()
+        next_event_action = play_menu.addAction("Next event", lambda: self._seek_relative_event(+1))
+        next_event_action.setShortcut(QKeySequence("Shift+Right"))
+        prev_event_action = play_menu.addAction("Previous event", lambda: self._seek_relative_event(-1))
+        prev_event_action.setShortcut(QKeySequence("Shift+Left"))
 
         view_menu = self.menuBar().addMenu("&View")
         view_menu.addAction("Top view", self._view_top)
@@ -938,6 +1095,7 @@ class MissionControlWindow(QMainWindow):
         view_menu.addAction("Side view", self._view_side)
         view_menu.addAction("Isometric view", self._view_iso)
         reset_action = view_menu.addAction("Reset camera")
+        reset_action.setShortcut(QKeySequence("R"))
         reset_action.triggered.connect(lambda: (self.plotter.reset_camera(), self.plotter.render()))
         view_menu.addSeparator()
         focus_action = view_menu.addAction("Focus selected body", self._focus_selected)
@@ -948,7 +1106,8 @@ class MissionControlWindow(QMainWindow):
         self.track_action.toggled.connect(self._set_tracking)
         view_menu.addSeparator()
         view_menu.addAction("Toggle missions panel", self._toggle_sidebar)
-        view_menu.addAction("Toggle body-info panel", self._toggle_info_panel)
+        info_toggle_action = view_menu.addAction("Toggle body-info panel", self._toggle_info_panel)
+        info_toggle_action.setShortcut(QKeySequence("I"))
 
         help_menu = self.menuBar().addMenu("&Help")
         shortcuts_action = help_menu.addAction("Keyboard Shortcuts…", self._show_shortcuts_dialog)
@@ -962,10 +1121,13 @@ class MissionControlWindow(QMainWindow):
     _SHORTCUTS = [
         ("Space", "Play / pause"),
         ("← / →", "Step back / forward"),
+        ("Shift+← / →", "Previous / next mission event"),
         ("Home", "Restart timeline"),
         ("[ / ]", "Slower / faster time-warp"),
         ("T", "Track selected body"),
         ("M", "Focus (zoom to) selected body"),
+        ("R", "Reset camera"),
+        ("I", "Toggle inspector (body-info) panel"),
         ("F1", "Show this panel"),
         ("Ctrl+Q / ⌘Q", "Quit"),
         ("Click", "Select a body"),
@@ -1171,6 +1333,58 @@ class MissionControlWindow(QMainWindow):
             self.renderer.zoom_to_body(self._selected_body_id, self._current_time)
             self._focus_zoomed = True
 
+    # ------------------------------------------------------- Viewport click
+    # Clicking a body directly in the 3D view (not just its card) selects and
+    # focuses it in one gesture -- the brentmcnatt.com-style "click a planet"
+    # interaction. This has to distinguish a genuine click from the start of
+    # a click-and-drag camera orbit, since VTK's own left-button-press fires
+    # immediately on press, before any drag happens. So picking is done by
+    # hand, at release: record the press position, and only actually pick
+    # (at the release position) if the pointer barely moved in between --
+    # otherwise this was a drag, not a click, and does nothing.
+    _VIEWPORT_CLICK_TOLERANCE_PX = 4
+
+    def _install_viewport_picking(self):
+        # "cell" (vtkCellPicker) does a geometric ray/mesh intersection test
+        # against the actual actor geometry -- unlike "prop" (vtkPropPicker,
+        # a hardware/selection-buffer pick), it doesn't depend on reading
+        # back a rendered frame, so it isn't sensitive to render/composite
+        # timing. Also gets pyvista's own default 2.5%-of-window tolerance
+        # (see RenderWindowInteractor.picker's setter), which forgives a
+        # near-miss on a small body the same way a real click naturally would.
+        self.plotter.iren.picker = "cell"
+        self.plotter.iren.add_observer("LeftButtonPressEvent", self._on_viewport_left_press)
+        self.plotter.iren.add_observer("LeftButtonReleaseEvent", self._on_viewport_left_release)
+
+    def _on_viewport_left_press(self, *_args):
+        self._viewport_press_pos = self.plotter.iren.interactor.GetEventPosition()
+
+    def _on_viewport_left_release(self, *_args):
+        press_pos = self._viewport_press_pos
+        self._viewport_press_pos = None
+        if press_pos is None or self._current_scene is None:
+            return
+        x, y = self.plotter.iren.interactor.GetEventPosition()
+        if (x - press_pos[0]) ** 2 + (y - press_pos[1]) ** 2 > self._VIEWPORT_CLICK_TOLERANCE_PX ** 2:
+            return  # the pointer moved -- this was a camera-orbit drag, not a click
+        picker = self.plotter.iren.picker
+        picker.Pick(x, y, 0, self.plotter.renderer)
+        body_id = self.renderer.body_id_for_actor(picker.GetActor())
+        if body_id is None or body_id not in self._body_cards:
+            return
+        if QApplication.keyboardModifiers() & (Qt.ControlModifier | Qt.MetaModifier):
+            self._set_measure_partner(body_id)
+            return
+        # Same lightweight-select-then-toggle-focus composition as pressing M
+        # after clicking a card, just in one gesture: selecting a *different*
+        # body always focuses in (see _select_body resetting _focus_zoomed);
+        # clicking the *same*, already-focused body again toggles back out,
+        # matching the M shortcut's own zoom in/out toggle instead of
+        # zooming in further on every repeat click.
+        if body_id != self._selected_body_id:
+            self._select_body(body_id)
+        self._focus_selected()
+
     def _set_tracking(self, on: bool):
         """Turn continuous tracking on/off, keeping the button and menu item in
         sync (either can drive this)."""
@@ -1227,9 +1441,19 @@ class MissionControlWindow(QMainWindow):
             # the tooltip is the only way to read it in full at a narrow
             # sidebar width.
             item.setToolTip(mission.title)
+            # Neutral marker until this mission has actually been loaded once
+            # (or fails to) -- see _set_mission_status_icon, driven by the
+            # real SceneLoader finished/failed signals, not a static icon.
+            item.setIcon(icons.mission_marker_icon(INK_MUTED))
             self.mission_list.addItem(item)
+            self._mission_items[mission.title] = item
         if self.mission_list.count():
             self.mission_list.setCurrentRow(0)
+
+    def _set_mission_status_icon(self, key: str, color: str):
+        item = self._mission_items.get(key)
+        if item is not None:
+            item.setIcon(icons.mission_marker_icon(color))
 
     def _open_file(self):
         if self._loading:
@@ -1249,7 +1473,9 @@ class MissionControlWindow(QMainWindow):
         item = QListWidgetItem(label)
         item.setData(Qt.UserRole, key)
         item.setToolTip(path)
+        item.setIcon(icons.mission_marker_icon(INK_MUTED))
         self.mission_list.addItem(item)
+        self._mission_items[key] = item
         self.mission_list.setCurrentRow(self.mission_list.count() - 1)
 
     def _on_mission_selected(self, row: int):
@@ -1269,13 +1495,17 @@ class MissionControlWindow(QMainWindow):
             # freeze happen in the same turn and the user sees only the freeze.
             self._begin_switch(f"Loading {label}…")
             scene = self._scene_cache[key]
-            QTimer.singleShot(0, lambda: self._finish_cached(scene))
+            QTimer.singleShot(0, lambda: self._finish_cached(scene, key))
             return
 
         self._start_loading(key, label)
 
     def _begin_switch(self, message: str):
+        import time as _time
+
         self._loading = True
+        self._load_start_ts = _time.perf_counter()
+        self.load_status_badge.set_state("loading", "LOADING")
         self.mission_list.setEnabled(False)
         self._open_file_btn.setEnabled(False)
         QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
@@ -1310,15 +1540,45 @@ class MissionControlWindow(QMainWindow):
             self.plotter.reset_camera()
             self.plotter.render()
 
-    def _finish_cached(self, scene: dict):
+    def _finish_cached(self, scene: dict, key: str):
         # try/finally: if applying the scene raises (e.g. a malformed cached
         # scene dict), _end_switch must still run -- otherwise self._loading
         # stays True forever and the mission list / open-file button stay
         # disabled, requiring an app restart to recover.
         try:
             self._apply_scene(scene)
+            self._set_mission_status_icon(key, SUCCESS)
         finally:
             self._end_switch()
+
+    def _start_backend_probe(self):
+        """Runs BackendProbeWorker once, at startup, on its own QThread --
+        same reasoning as _start_loading below, just for a much smaller job.
+        The badge shows "…" (see _build_compute_status) until this reports
+        back."""
+        thread = QThread(self)
+        worker = BackendProbeWorker()
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_backend_probed, Qt.ConnectionType.QueuedConnection)
+        worker.finished.connect(thread.quit)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        # Same "keep a Python-side owner alive" reasoning as _load_thread/
+        # _load_worker -- cleared in _on_backend_probed once the result lands.
+        self._backend_probe_thread = thread
+        self._backend_probe_worker = worker
+        thread.start()
+
+    def _on_backend_probed(self, gpu_available: bool):
+        self._backend_probe_thread = None
+        self._backend_probe_worker = None
+        if self._closing:
+            return
+        if gpu_available:
+            self.backend_badge.set_state("verified", "GPU")
+        else:
+            self.backend_badge.set_state("idle", "CPU")
 
     def _start_loading(self, key: str, label: str | None = None):
         """Runs self._loaders[name]() on a background QThread instead of
@@ -1377,14 +1637,19 @@ class MissionControlWindow(QMainWindow):
         # Applied while the loading page is still up (plotter hidden); the swap
         # back to the view happens in _on_load_thread_finished -> _end_switch.
         self._apply_scene(scene)
+        self._set_mission_status_icon(name, SUCCESS)
 
     def _on_scene_load_failed(self, name: str, error_msg: str):
         if self._closing:
             return
+        self.load_status_badge.set_state("failed", "FAILED")
+        self._set_mission_status_icon(name, DANGER)
         QMessageBox.critical(self, f"Failed to load {name}", error_msg)
         self.statusBar().showMessage("Ready")
 
     def _apply_scene(self, scene: dict):
+        import time as _time
+
         self._current_scene = scene
         self.renderer.load(scene)
 
@@ -1449,6 +1714,18 @@ class MissionControlWindow(QMainWindow):
         self._rebuild_body_cards(scene)
         self._refresh_readouts(self.renderer.set_time(self._current_time))
         self.plotter.render()
+
+        # Set last, after everything above has succeeded -- these two are the
+        # "this load fully worked" signal for the title bar (this badge) and
+        # the mission-list row (set by the caller right after this returns,
+        # see _on_scene_loaded/_finish_cached). Setting READY any earlier let
+        # the badge announce success before the scene was actually usable: a
+        # KeyError/etc. anywhere above would leave it stuck on READY while the
+        # mission's list marker never left NEUTRAL.
+        self.load_status_badge.set_state("ready", "READY")
+        start = getattr(self, "_load_start_ts", None)
+        if start is not None:
+            self.load_time_metric.set_value(f"{_time.perf_counter() - start:.1f}")
 
     # --------------------------------------------------------------- Cards
     def _rebuild_body_cards(self, scene: dict):
@@ -1675,6 +1952,24 @@ class MissionControlWindow(QMainWindow):
         self._pre_focus_camera = pre_camera
         self._focus_zoomed = True
         self.statusBar().showMessage(f"▸ {event.get('label', 'maneuver')} — framed the burn")
+
+    def _seek_relative_event(self, direction: int):
+        """Shift+Right / Shift+Left: jump to the next/previous mission event
+        relative to the current scrubber time -- distinct from
+        _refresh_active_event's "most recent event at or before now" lookup,
+        which only ever looks backward and is used for the readout label,
+        not navigation."""
+        if not self._events:
+            return
+        ordered = sorted(self._events, key=lambda e: e.get("time", 0.0))
+        if direction > 0:
+            candidates = [e for e in ordered if e.get("time", 0.0) > self._current_time + 1e-9]
+            target = candidates[0] if candidates else None
+        else:
+            candidates = [e for e in ordered if e.get("time", 0.0) < self._current_time - 1e-9]
+            target = candidates[-1] if candidates else None
+        if target is not None:
+            self._seek_to_event(target)
 
     def _seek_to_time(self, day: float):
         """Move the scrubber to a specific timeline time (used by the maneuver
@@ -1917,6 +2212,16 @@ class MissionControlWindow(QMainWindow):
                     "quit was requested; not waiting further.",
                     file=sys.stderr,
                 )
+        probe_thread = self._backend_probe_thread
+        probe_worker = self._backend_probe_worker
+        if probe_thread is not None:
+            if probe_worker is not None:
+                try:
+                    probe_worker.finished.disconnect(self._on_backend_probed)
+                except (RuntimeError, TypeError):
+                    pass
+            probe_thread.quit()
+            probe_thread.wait(1000)  # a device-count query, never ~10s of compute like scene loads
         try:
             self.plotter.close()
         except Exception:  # noqa: BLE001 -- best-effort teardown, never block quit

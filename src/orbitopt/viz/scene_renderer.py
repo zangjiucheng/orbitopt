@@ -207,7 +207,7 @@ def _sphere_actor(plotter, body: dict, name: str):
     # "dark side" like a lit planet.
     is_self_lit = body.get("kind") == "star"
     return plotter.add_mesh(
-        sphere, texture=texture, name=name, pickable=False,
+        sphere, texture=texture, name=name, pickable=True,
         lighting=not is_self_lit, smooth_shading=True,
     )
 
@@ -286,6 +286,30 @@ class SceneRenderer:
         self._rotating: list[dict] = []
         self._rotation_elapsed_hours = 0.0
         self._has_timeline = False
+        # Keyed by the actor object itself, not id(actor) -- VTK's Python
+        # wrapper objects are not guaranteed to be the same *Python* object
+        # across two separate accesses to the same underlying C++ actor
+        # (e.g. one obtained from add_mesh()'s return value, another later
+        # from a picker's GetActor()), but they do implement __eq__/__hash__
+        # against the underlying object identity, so a plain dict keyed on
+        # the actor itself resolves correctly either way. id(actor) doesn't:
+        # if nothing else kept the *original* wrapper object alive, it could
+        # be garbage-collected and its id() reused by an unrelated actor,
+        # silently mapping a later pick to the wrong body (caught by testing
+        # -- see the click-to-focus feature this backs in app.py). Keeping
+        # the actor itself as the key also keeps it alive, side-stepping the
+        # problem entirely regardless of root cause.
+        # Rebuilt fresh on every load() (see below); only body marker actors
+        # (spheres/points) go in here -- orbit lines, trails, the measure
+        # line, and the maneuver arrow all stay pickable=False (see this
+        # module's other add_mesh calls), so click-to-select in the viewport
+        # (app.py's viewport pick handler) can only ever land on a body.
+        self._actor_body_ids: dict = {}
+
+    def body_id_for_actor(self, actor) -> str | None:
+        """Map a VTK actor (as returned by a picker's GetActor()) back to the
+        body id it represents, or None if it isn't a pickable body marker."""
+        return self._actor_body_ids.get(actor) if actor is not None else None
 
     def load(self, scene: dict) -> None:
         self.plotter.clear()
@@ -294,6 +318,7 @@ class SceneRenderer:
         self._static_positions = {}
         self._rotating = []
         self._rotation_elapsed_hours = 0.0
+        self._actor_body_ids = {}
         # A scene with a timeline (a mission) has its own notion of "current
         # time" (scrubbable, playable at any warp speed) that axial rotation
         # should track exactly -- see _apply_rotation_for_time, driven from
@@ -323,12 +348,14 @@ class SceneRenderer:
                 if sphere_actor is not None:
                     sphere_actor.position = tuple(float(c) for c in pos0)
                     self._register_rotation(body, sphere_actor)
+                    self._actor_body_ids[sphere_actor] = body["id"]
                 else:
                     point_poly = pv.PolyData(pos0.reshape(1, 3))
-                    self.plotter.add_mesh(
+                    marker_actor = self.plotter.add_mesh(
                         point_poly, color=color, point_size=marker_size(body),
-                        render_points_as_spheres=True, name=f"marker-{body['id']}",
+                        render_points_as_spheres=True, name=f"marker-{body['id']}", pickable=True,
                     )
+                    self._actor_body_ids[marker_actor] = body["id"]
 
                 full_positions = np.asarray(trail_positions, dtype=float)
                 full_poly = pv.MultipleLines(full_positions)
@@ -355,12 +382,14 @@ class SceneRenderer:
                 if sphere_actor is not None:
                     sphere_actor.position = tuple(float(c) for c in pos)
                     self._register_rotation(body, sphere_actor)
+                    self._actor_body_ids[sphere_actor] = body["id"]
                 else:
                     marker = pv.PolyData(pos.reshape(1, 3))
-                    self.plotter.add_mesh(
+                    marker_actor = self.plotter.add_mesh(
                         marker, color=color, point_size=marker_size(body),
-                        render_points_as_spheres=True, name=f"marker-{body['id']}",
+                        render_points_as_spheres=True, name=f"marker-{body['id']}", pickable=True,
                     )
+                    self._actor_body_ids[marker_actor] = body["id"]
                 self.plotter.add_point_labels(
                     pos.reshape(1, 3), [body["name"]], font_size=12, text_color=color,
                     shape=None, always_visible=True, show_points=False,
