@@ -39,6 +39,50 @@ this reason. If you extend this code to closer flybys (hundreds of km
 altitude or less), re-run the convergence check -- 60s may no longer be
 fine enough.
 
+## Verification layer: adaptive integrator + event location (task #136)
+
+Screening (`dynamics.nbody_gpu`) stays fixed-step RK4 for GPU batching. The
+tudatpy verification layer (`verify.tudat_propagate`) now defaults to
+`integrator="dop853"` -- tudat's adaptive RKDP 8(7), rtol 1e-11 / atol 1e-6,
+with the old `step_size` reused as the **maximum** step (so saved histories are
+never coarser than before) and `terminate_exactly_on_final_condition=True`
+(fixed-time-of-flight targeting needs the state exactly at the requested
+epoch). `integrator="rk4"` reproduces the legacy results.
+
+Events are roots of event functions solved with Brent's method on a cubic
+Hermite dense output (`verify.events`), with the bracketing interval
+re-propagated at fine spacing by the same `ReusableCoastPropagator`
+(`refine=True`, automatic for `propagate_multi_arc` results):
+
+| event | g(t) | API |
+|---|---|---|
+| periapsis / closest approach | (r - r_b).(v - v_b) | `find_closest_approach`, `find_periapsides` |
+| SOI crossing | \|r - r_b\| - R_SOI | `find_soi_crossings` |
+| entry interface | \|r\| - (R + h_EI) | `find_altitude_crossing` |
+
+`find_closest_approach(method="sample")` and
+`find_altitude_crossing(method="linear")` keep the legacy behaviour for
+comparison.
+
+Measured difference (`examples/11_event_location_comparison.py`, Part A:
+Keplerian lunar flyby, true perilune 1837.400 km):
+
+| output step | legacy nearest sample | error | event-located | error |
+|---:|---:|---:|---:|---:|
+| 15 s | 1837.431 km | +0.031 km | 1837.400000 km | < 1 mm |
+| 60 s | 1837.892 km | +0.492 km | 1837.400000 km | < 1 mm |
+| 300 s | 1849.652 km | +12.25 km | 1837.400000 km | < 1 mm |
+| 600 s | 1885.817 km | +48.42 km | 1837.400000 km | < 1 mm |
+| 1800 s | 2227.589 km | +390.2 km | 1837.400000 km | < 1 mm |
+
+The legacy error is always positive (a saved sample can only be farther than
+the true minimum) and grows ~quadratically with step; the event-located value
+is step-independent. Part B runs the same comparison through tudatpy
+(rk4+sample vs dop853+event) and must be run in the conda environment. Known
+limitation: a pass shorter than one output step whose range rate does not
+change sign between samples is caught only via the sample-wise minimum
+fallback (Hermite root, not re-propagated).
+
 ## GPU is not always faster -- measured, not assumed
 
 `nbody_gpu.propagate_spacecraft_batch` is GPU-*slower* than CPU below
