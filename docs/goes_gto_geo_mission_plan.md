@@ -7,14 +7,21 @@
 > injection apogee sits ~500 km below GEO); with the 13.0 h period, ~5 LAE
 > burns over ~8 days necessarily skip apogees between burns.
 >
-> **Implemented in this repo** (screening/optimization + visualization half of
-> the two-stage pattern): `problems/geo_raising.py` (`GeoRaisingProblem`),
+> **Implemented in this repo** (both halves of the two-stage pattern --
+> screening/optimization, tudatpy verification, and visualization):
+> `problems/geo_raising.py` (`GeoRaisingProblem`),
 > `examples/10_gto_geo_orbit_raising.py`, `viz/geo_raising.py` (Mission Control
 > "GOES — GTO to GEO" scene, now including the Section 2 launch-to-GTO
 > profile -- parking orbit, transfer-orbit injection, apogee raise + plane
-> cut -- prepended ahead of the apogee-raising campaign), `tests/test_geo_raising.py`.
-> The tudatpy verification stage (`target_geo_insertion`, perturbed
-> `propagate_multi_arc`) is the remaining next increment (see Section 5.6).
+> cut -- prepended ahead of the apogee-raising campaign), `tests/test_geo_raising.py`,
+> and the tudatpy verification stage `verify/geo_insertion.py`
+> (`verify_geo_raising` re-flies the schedule through `propagate_multi_arc`
+> under J2+J22 + Sun/Moon third-body gravity, refines the final apogee burn
+> with `target_geo_insertion`, reports a short station-keeping drift, and
+> emits a machine-readable verification report; see Section 5.6). It is wired
+> into `examples/10_gto_geo_orbit_raising.py`, the Mission Control GOES scene
+> and `orbitopt run` for `geo-raising` configs. Not yet modelled: SRP and
+> finite (non-impulsive) burns.
 
 # GOES Launch-to-GEO Mission Plan Design
 
@@ -163,8 +170,8 @@ The mission maps onto orbitopt's existing **two-stage pattern** (fast vectorizab
 ### 5.2 New components
 - **`problems/geo_raising.py` — `GeoRaisingProblem(OrbitOptProblem)`**: the fixed-N apogee-burn UDP with a real vectorized `batch_fitness()` (vis-viva at r = R_GEO + out-of-plane velocity composition, closed-form, GPU-capable). Constructor: `gto_perigee_km`, `gto_apogee_km`, `gto_inclination_deg` (~10.6 for the modeled GOES injection, or ~27 for a generic Cape GTO), `n_burns`, mass/Isp/thrust, `target_longitude_deg`.
 - **`examples/10_gto_geo_orbit_raising.py`**: build GTO from GOES-like elements (8,108 × 35,286 km, 10.6°, 5,192 kg, LEROS-1c 458 N / 324 s), run `run_optimization` for an **outer sweep of n_burns = 1…6** (pygmo continuous can't vary vector length), pick the min-total-Δv champion, then refine + verify in tudatpy and print achieved (a, e, i) and drift longitude.
-- **Terminal-element targeter** — add `target_geo_insertion()` to `differential_correction.py` (or sibling): unknowns = final apogee-burn 3-vector; residuals = (a − a_GEO, e − 0, i − 0); reuse `target_lunar_flyby`'s damped-Newton / FD-Jacobian / backtracking verbatim.
-- **Acceleration-model extension to `propagate_multi_arc()`**: optional perturbations config — `earth_sh_degree_order=(2,2)` (J2 + J22 triaxiality), `third_bodies=('Sun','Moon')`, `srp=dict(area_m2, Cr, mass_kg)` — keeping the point-mass default for back-compat (the README's named extension point).
+- **Terminal-element targeter** *(implemented: `verify/geo_insertion.py::target_geo_insertion()`, a damped Gauss-Newton least-squares variant)* — unknowns = final apogee-burn 3-vector; residuals = (a − a_GEO, e − 0, i − 0); reuse `target_lunar_flyby`'s damped-Newton / FD-Jacobian / backtracking verbatim.
+- **Acceleration-model extension to `propagate_multi_arc()`** *(implemented for spherical harmonics + third bodies via `earth_spherical_harmonic=(2, 2)` / `perturbing_bodies=('Earth', 'Moon', 'Sun')`; SRP still open)*: optional perturbations config — `earth_sh_degree_order=(2,2)` (J2 + J22 triaxiality), `third_bodies=('Sun','Moon')`, `srp=dict(area_m2, Cr, mass_kg)` — keeping the point-mass default for back-compat (the README's named extension point).
 - **`viz/geo_raising.py::compute_and_export_geo_mission()`**: Earth-centered SceneData (`centralBodyId='earth'`, `distance_unit='km'`), spacecraft trail over the raising sequence, static 42,164 km GEO reference ring (`orbitDashed=True`), per-apogee-burn timeline events, info rows (total Δv, achieved a/e/i, station longitude).
 - **`tests/test_geo_raising.py`**: `batch_fitness`-matches-`fitness` + known-optimum-split sanity test, plus a targeter-converges test (mirroring `test_problem_interfaces.py`, `test_cislunar.py`).
 
@@ -186,7 +193,7 @@ Minimize total impulsive Δv = Σ|Δv_k| (m/s) in one vectorized array op: each 
 - Drift longitude within tolerance with ~0 drift rate — soft target in screening; verified against real J22 triaxiality in tudatpy (stable points 75.3° E / 104.7° W).
 
 ### 5.6 tudatpy verification
-Re-fly the optimized impulsive burn+coast sequence with the extended `propagate_multi_arc` (`central_body='Earth'`, alternating `{impulsive_burn: Δv_k}` / `{coast: time-to-next-apogee}` arcs), then refine the final burn with `target_geo_insertion()` so achieved (a, e, i) hit GEO within tolerance. Perturbations (README extension point): (1) Earth `spherical_harmonic_gravity(2,2)` = J2 (residual RAAN/arg drift) + J22 tesseral (E-W libration toward 75.3° E / 104.7° W); (2) Sun + Moon `point_mass_gravity()` (the ~0.85°/yr N-S inclination drift — dominant long-term SK cost at GEO); (3) SRP via cannonball/panelled `radiation_pressure` from the Sun with Earth occultation (eccentricity oscillation of the light bus). Follow the repo's ECLIPJ2000-everywhere and SI-meters (tudat) vs. km/km·s (screening) conventions, converting at the handoff like `free_return.as_meters()`. An independent finer-step re-propagation (finer than the corrector step, per the RK4 gotcha) confirms terminal a/e/i and reports the residual one-week station-keeping Δv — the analog of examples/05's post-hoc closest-approach re-measure.
+*Implemented as `verify/geo_insertion.py::verify_geo_raising()` (J2+J22 + Sun/Moon; SRP not yet included).* Re-fly the optimized impulsive burn+coast sequence with the extended `propagate_multi_arc` (`central_body='Earth'`, alternating `{impulsive_burn: Δv_k}` / `{coast: time-to-next-apogee}` arcs), then refine the final burn with `target_geo_insertion()` so achieved (a, e, i) hit GEO within tolerance. Perturbations (README extension point): (1) Earth `spherical_harmonic_gravity(2,2)` = J2 (residual RAAN/arg drift) + J22 tesseral (E-W libration toward 75.3° E / 104.7° W); (2) Sun + Moon `point_mass_gravity()` (the ~0.85°/yr N-S inclination drift — dominant long-term SK cost at GEO); (3) SRP via cannonball/panelled `radiation_pressure` from the Sun with Earth occultation (eccentricity oscillation of the light bus). Follow the repo's ECLIPJ2000-everywhere and SI-meters (tudat) vs. km/km·s (screening) conventions, converting at the handoff like `free_return.as_meters()`. An independent finer-step re-propagation (finer than the corrector step, per the RK4 gotcha) confirms terminal a/e/i and reports the residual one-week station-keeping Δv — the analog of examples/05's post-hoc closest-approach re-measure.
 
 ### 5.7 Mission Control scene
 `compute_and_export_geo_mission()` builds the SceneData via `viz.scene` helpers (copying `mission_timeline.py`): Earth at origin (`COLOR['earth']`), spacecraft as a `body_entry` with `trail={times, positions}` decimated to `max_output_points` from the `propagate_multi_arc` history (GTO ellipse → successively rounder transfer ellipses → final circular GEO ring), plus the static 42,164 km equatorial GEO reference polyline (`orbitDashed=True`). Timeline events: one `{label:'Apogee burn k', time, note:'Δv … m/s'}` per burn, plus `GEO insertion` and `On station at <lon>`. Info rows: total Δv, achieved a/e/i, station longitude. Register in `viz/app.py::_builtin_missions()` as `('GOES GTO→GEO Raising', load_geo_raising)`; the shared `scene_renderer.py` + `pv_viewer.py` path and time-warp scrubber work unchanged, and it opens via `orbitopt view` on the exported JSON. Optionally add `examples/11_geo_raising_data.py` to cache the JSON (06/07 convention).
