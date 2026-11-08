@@ -251,14 +251,14 @@ def verify_geo_raising(problem, decision_vector, step_size=120.0, stationkeeping
 
     propagations, residuals = [], []
     if raising is not None:
-        propagations.append(propagation_report_section(raising, "raising", mu=mu))
+        propagations.append(propagation_report_section(raising, "raising"))
         # Numerical pre-final-burn state vs the screening model's analytic
         # (unperturbed Keplerian) final apogee state.
         residuals.append(_report.state_residual(
             "pre_final_burn_vs_screening", "analytic two-body apogee state of the screening schedule",
             state=pre_final, reference_state=states[n - 1],
         ))
-    propagations.append(propagation_report_section(sk, "stationkeeping", mu=mu))
+    propagations.append(propagation_report_section(sk, "stationkeeping"))
     # Achieved GEO vs ideal circular equatorial GEO at the same in-plane phase
     # (same position direction, circular speed perpendicular in the equator).
     r_hat = corrected_state[:3] / np.linalg.norm(corrected_state[:3])

@@ -155,6 +155,7 @@ def propagate_two_body_leg(
     bodies = environment_setup.create_system_of_bodies(body_settings)
 
     bodies.create_empty_body("Spacecraft")
+    central_mu = _central_gravitational_parameter(bodies, central_body)
 
     acceleration_settings_on_spacecraft = {
         body: [propagation_setup.acceleration.point_mass_gravity()]
@@ -196,6 +197,7 @@ def propagate_two_body_leg(
         "perturbing_bodies": list(perturbing_bodies),
         "earth_spherical_harmonic": None,
         "integrator": integrator_description(integrator, step_size, rtol, atol),
+        "central_gravitational_parameter": central_mu,
         "initial_state": initial_state,
         "initial_epoch_ephemeris_s": initial_epoch,
         "duration_s": float(tof_seconds),
@@ -272,6 +274,16 @@ def _propagate_single_coast(bodies, acceleration_models, central_body, spacecraf
     return epochs, states
 
 
+def _central_gravitational_parameter(bodies, central_body) -> float:
+    """GM (m^3/s^2) tudat actually uses for ``central_body``'s gravity in
+    ``bodies``. This is *not* always the SPICE kernel GM: tudat's default
+    Earth gravity field is a spherical-harmonic model with its own GM
+    (3.986004415e14 vs SPICE 3.9860043547e14, ~1.5e-8 relative), which by
+    itself exceeds the report's two-body conservation tolerance when the
+    energy is evaluated with the SPICE value."""
+    return float(bodies.get(central_body).gravitational_parameter)
+
+
 def _override_central_gravity(body_settings, central_body, gravity) -> dict:
     """Replace ``central_body``'s default gravity field (tudat: SPICE GM point
     mass or a GOCO/GGM spherical-harmonic model, each with its own GM and
@@ -341,6 +353,7 @@ class ReusableCoastPropagator:
             self._central_gravity = _override_central_gravity(body_settings, central_body, central_gravity)
         bodies = environment_setup.create_system_of_bodies(body_settings)
         bodies.create_empty_body("Spacecraft")
+        self._central_mu = _central_gravitational_parameter(bodies, central_body)
 
         def _gravity_for(body):
             if body == central_body and earth_spherical_harmonic is not None:
@@ -372,6 +385,7 @@ class ReusableCoastPropagator:
             else list(self._earth_spherical_harmonic),
             "integrator": integrator_description(self._integrator, self._step_size, self._rtol, self._atol),
             "central_gravity": None if self._central_gravity is None else dict(self._central_gravity),
+            "central_gravitational_parameter": self._central_mu,
         }
 
     def coast(self, spacecraft_state, epoch_start, duration, max_step=None):
@@ -511,10 +525,14 @@ def propagation_report_section(
     """One ``propagations[]`` entry of a verification report for a result of
     :func:`propagate_multi_arc` / :func:`propagate_two_body_leg` -- see
     :func:`orbitopt.verify.report.propagation_section`. ``mu`` defaults to
-    the SPICE GM of the propagation's central body."""
+    the central-body GM the propagation actually integrated with (recorded
+    in ``model["central_gravitational_parameter"]``), falling back to the
+    SPICE GM for results without that metadata."""
     if prop_result.model is None:
         raise ValueError("propagation_report_section needs a PropagationResult from "
                          "propagate_multi_arc / propagate_two_body_leg (model metadata missing)")
+    if mu is None:
+        mu = prop_result.model.get("central_gravitational_parameter")
     if mu is None:
         mu = body_gravitational_parameter(prop_result.model["central_body"])
     return _report.propagation_section(
