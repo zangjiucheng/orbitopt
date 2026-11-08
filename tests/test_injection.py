@@ -55,7 +55,10 @@ def test_frame_rotation_round_trip_and_matches_launch_windows():
 
 
 def test_ephemeris_seconds():
-    assert mjd2000_to_ephemeris_seconds(0.5) == pytest.approx(69.184)
+    # 2000-01-01 12:00 UTC is 64.184 s (32 leap s + 32.184 s) + TDB-TT past
+    # J2000 TDB -- SPICE str2et gives 64.183927 s. TT - UTC is not 69.184 s
+    # at every date (see tests/test_timescales.py for the cross-module check).
+    assert mjd2000_to_ephemeris_seconds(0.5) == pytest.approx(64.183927, abs=1e-5)
 
 
 # --------------------------------------------------------------------------
