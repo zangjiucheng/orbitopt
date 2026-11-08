@@ -17,6 +17,7 @@ from __future__ import annotations
 import math
 import os
 import sys
+import time
 
 os.environ.setdefault("QT_API", "pyside6")
 
@@ -67,6 +68,12 @@ from orbitopt.viz.ui_kit import MetricRow, StatusBadge
 SPEED_MIN = 0.001
 SPEED_MAX = 1000.0
 SPEED_SLIDER_STEPS = 1000
+
+# Minimum spacing between two timeline-scrub scene refreshes (~60 Hz). A
+# slider drag emits valueChanged once per mouse-move event -- often several
+# hundred Hz on a high-rate mouse -- and every extra refresh beyond what the
+# display can show is pure CPU/GPU cost that made fast scrubbing stutter.
+SCRUB_MIN_INTERVAL_MS = 16.0
 
 # Auto-slow near a timeline event (TLI burn, closest approach, entry interface,
 # ...) so fast-forwarding through a mission doesn't blow past the moments that
@@ -523,6 +530,15 @@ class MissionControlWindow(QMainWindow):
         self._timer.setInterval(33)
         self._timer.timeout.connect(self._on_tick)
         self._last_tick_ms = None
+
+        # Scrub render throttle (see _on_slider_moved): a drag can emit
+        # valueChanged far faster than the screen refreshes, so at most one
+        # scene refresh+render runs per SCRUB_MIN_INTERVAL_MS; anything in
+        # between is coalesced into one trailing refresh at the latest value.
+        self._scrub_timer = QTimer(self)
+        self._scrub_timer.setSingleShot(True)
+        self._scrub_timer.timeout.connect(self._apply_scrub)
+        self._last_scrub_render_ms = float("-inf")
 
         # Always-on (not gated by _playing/timeline presence, see
         # ROTATION_SIM_HOURS_PER_REAL_SECOND) -- started once here, stopped
@@ -1988,11 +2004,29 @@ class MissionControlWindow(QMainWindow):
             return
         frac = value / self.time_slider.maximum()
         self._current_time = timeline["min"] + frac * (timeline["max"] - timeline["min"])
+        # Throttled: _current_time is always up to date (anything reading it
+        # right after setValue() sees the new time), but the 3D refresh +
+        # render runs at most once per SCRUB_MIN_INTERVAL_MS. The first event
+        # of a burst applies immediately (leading edge, so a single click or
+        # keyboard step has no added latency); the rest coalesce into one
+        # trailing refresh at the latest slider value, so the final frame
+        # always matches where the drag stopped.
+        if self._scrub_timer.isActive():
+            return
+        elapsed_ms = time.monotonic() * 1000.0 - self._last_scrub_render_ms
+        if elapsed_ms >= SCRUB_MIN_INTERVAL_MS:
+            self._apply_scrub()
+        else:
+            self._scrub_timer.start(max(1, int(SCRUB_MIN_INTERVAL_MS - elapsed_ms)))
+
+    def _apply_scrub(self):
+        if not (self._current_scene and self._current_scene.get("timeline")):
+            return
+        self._last_scrub_render_ms = time.monotonic() * 1000.0
         # Batched into a single render, same fix _on_tick already applies to
-        # playback: a manual scrub drag fires this handler at high frequency,
-        # and set_time/_update_tracking/_update_measure each doing their own
-        # render made dragging visibly jankier than playback at the same
-        # effective rate.
+        # playback: set_time/_update_tracking/_update_measure each doing
+        # their own render made dragging visibly jankier than playback at
+        # the same effective rate.
         self._refresh_readouts(self.renderer.set_time(self._current_time, render=False))
         self._update_tracking(render=False)
         self._update_measure(render=False)
@@ -2176,6 +2210,7 @@ class MissionControlWindow(QMainWindow):
         any in-flight scene-loading thread so nothing fires mid-teardown."""
         self._set_playing(False)
         self._timer.stop()
+        self._scrub_timer.stop()
         self._rotation_timer.stop()
         self._spinner._timer.stop()  # the spinner has its own QTimer, independent of self._timer
         self.plotter._resize_settle_timer.stop()  # so it can't fire post-teardown
