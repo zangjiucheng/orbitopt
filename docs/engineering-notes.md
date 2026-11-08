@@ -162,3 +162,44 @@ trajectory to *not* re-enter on its own within the propagated window.
 Adding that targeting (vary the B-plane aim point, not just distance, as
 the Newton unknowns) is the natural next extension of
 `differential_correction.py`.
+
+## Window search: one porkchop minimum is not one basin
+
+`viz/mars_transfer.py` used to take the single lowest cell of a 120x120
+porkchop grid and run PSO only inside departure +-15 d / TOF +-30 d around
+it. A porkchop plot has several distinct valleys (adjacent launch windows,
+type-I vs type-II arcs), and a grid cell's value carries discretization
+error of the same order as the gap between valleys -- so a narrow, deeper
+valley that falls between grid nodes can rank behind a wide, shallow one
+and be excluded before the optimizer ever sees it.
+
+`optimize/multistart.py` replaces that with:
+
+1. `find_diverse_basins` -- every grid local minimum, greedily
+   non-max-suppressed so kept basins are at least one separation ellipse
+   apart (Mars: 20 d departure x 40 d TOF, up to 4 basins);
+2. `multistart_optimize` -- one independent PSO per basin (seed `seed+k`),
+   each in the old +-15/+-30 box, plus one PSO over the full window; runs
+   converging on the same optimum are merged;
+3. a `MultistartReport` -- the basin-0 run *is* the old single-basin
+   result (same box, same seed), so the comparison is recorded at no extra
+   cost: `baseline`, `best`, `improvement`, `extra_candidates`.
+
+The ranked candidates are then handed to tudatpy in order: the first whose
+real flight closes (Earth-SOI escape, TCM converges) is exported; only if
+none does (up to `MAX_TUDAT_CANDIDATES`) is the Lambert-best flown
+best-effort, as before. The outcome (basins, runs, distinct candidates,
+baseline vs flown Lambert dv, rejected candidates) is written into the
+exported scene's TMI event note and logged at INFO.
+
+`tests/test_multistart.py` pins the failure mode on a synthetic two-valley
+landscape: the single-basin baseline is stuck at 7.0 in the wide valley,
+multistart finds the narrow 6.0 valley (improvement 1.0, +1 candidate),
+with both a brute-force optimizer and real pygmo PSO.
+
+MGA: `problems/mga.screen_departure_windows` now returns distinct first-leg
+basins (`diverse=True`) instead of the `top_k` lowest cells (which were
+neighbours in one valley), and `rank_windows_by_full_mga` re-ranks those
+windows by short independent full MGA-1DSM runs, so a launch window is no
+longer kept or dropped on first-leg dv alone (see
+`examples/02_mga_cassini_like.py`).
