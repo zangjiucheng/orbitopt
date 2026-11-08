@@ -1,0 +1,74 @@
+{
+  "config": {
+    "n": 2000,
+    "n_steps": 300,
+    "include_sun": true,
+    "repeat": 7
+  },
+  "env": {
+    "python": "3.13.18",
+    "numpy": "2.5.4",
+    "platform": "Linux-7.2.11-x86_64-with-glibc2.41",
+    "cpu_count": 8,
+    "gpu": {
+      "gpu_available": false
+    },
+    "jax_device": "cpu:0",
+    "numba": "0.68.1",
+    "jax": "0.12.0.1",
+    "cupy": null
+  },
+  "backends": {
+    "numpy": {
+      "status": "ok",
+      "first_call_s": 1.5528627468738705,
+      "median_s": 1.5026560078840703,
+      "min_s": 1.2374841570854187,
+      "median_rel_err": 0.0,
+      "n_rel_err_gt_1e-6": 0,
+      "closest_step_mismatches": 0,
+      "speedup_vs_numpy": 1.0
+    },
+    "cupy": {
+      "status": "skipped",
+      "reason": "no CuPy/CUDA device"
+    },
+    "numba-cpu": {
+      "status": "ok",
+      "first_call_s": 5.314336501993239,
+      "median_s": 0.05936535005457699,
+      "min_s": 0.05298308911733329,
+      "median_rel_err": 6.818535867940902e-16,
+      "n_rel_err_gt_1e-6": 37,
+      "closest_step_mismatches": 2,
+      "speedup_vs_numpy": 25.312004502670618
+    },
+    "jax": {
+      "status": "ok",
+      "first_call_s": 0.736091140890494,
+      "median_s": 0.2797814840450883,
+      "min_s": 0.23184675304219127,
+      "median_rel_err": 1.0284286258619034e-15,
+      "n_rel_err_gt_1e-6": 40,
+      "closest_step_mismatches": 1,
+      "speedup_vs_numpy": 5.370820063424602
+    },
+    "numba-cuda": {
+      "status": "skipped",
+      "reason": "no CUDA device for numba"
+    },
+    "cupy-raw": {
+      "status": "skipped",
+      "reason": "no CuPy/CUDA device"
+    }
+  },
+  "profile": {
+    "array_ops_per_call": 34514,
+    "array_ops_per_rk4_step": 90.0,
+    "array_ops_fixed": 7514.0,
+    "numpy_grid_precompute_s": 0.04270223691128194,
+    "numpy_total_s": 0.9126920478884131,
+    "numpy_rk4_loop_s": 0.8699898109771311,
+    "numpy_us_per_array_op": 32.22184485100485
+  }
+}
