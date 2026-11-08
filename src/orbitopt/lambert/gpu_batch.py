@@ -323,14 +323,18 @@ def _solve_batch_device(xp, r1_vec, r2_vec, tof, mu, prograde, maxiter, tol, ang
     r2v = xp.where(input_ok[:, None], r2_vec, 0.0)
 
     cross_z = r1v[:, 0] * r2v[:, 1] - r1v[:, 1] * r2v[:, 0]
-    cos_dnu = xp.clip(xp.sum(r1v * r2v, axis=-1) / (r1 * r2), -1.0, 1.0)
-    dnu = xp.arccos(cos_dnu)
+    # atan2(|r1 x r2|, r1.r2) keeps full relative accuracy for near-0/180 deg
+    # transfers, where arccos(dot/(r1 r2)) quantises the angle (cos ~ 1 - 6e-13
+    # has only ~4 significant digits of 1 - cos) and corrupts A and the
+    # velocities by km/s while still "converging" on the wrong geometry.
+    cross = xp.cross(r1v, r2v)
+    dnu = xp.arctan2(xp.linalg.norm(cross, axis=-1), xp.sum(r1v * r2v, axis=-1))
     long_way = (cross_z < 0.0) if prograde else (cross_z >= 0.0)
     dnu = xp.where(long_way, 2.0 * xp.pi - dnu, dnu)
     sin_dnu = xp.sin(dnu)
     angle_ok = xp.abs(sin_dnu) >= angle_tol
 
-    A = sin_dnu * xp.sqrt(r1 * r2 / xp.maximum(1.0 - xp.cos(dnu), 1e-12))
+    A = sin_dnu * xp.sqrt(r1 * r2 / xp.maximum(2.0 * xp.sin(0.5 * dnu) ** 2, 1e-30))
 
     # z < (2*pi)**2 for any 0-rev transfer. z = (2*pi)**2 is a removable
     # singularity of y(z) (C and z*S - 1 both vanish) whose floating-point

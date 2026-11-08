@@ -516,3 +516,39 @@ def test_kepler_tolerance_sweep_converges_continuously():
     errs = np.array(errs)
     assert np.all(np.diff(errs) <= 1e-13), errs
     assert errs[-1] < 1e-11
+
+
+def test_lambert_near_collinear_valid_means_correct():
+    """Acceptance regression: at 1.1e-6 rad (just outside angle_tol) the
+    batched path used to report valid=True with v1 ~1.8 km/s away from pykep,
+    because arccos(dot/(r1 r2)) quantised the transfer angle. Whenever the
+    batched solver claims validity near 0/180 deg it must now agree with pykep."""
+    mu = 3.986004418e14
+    rng = np.random.default_rng(1)
+    checked = 0
+    for k in range(400):
+        ang = 1.1e-6 if k == 0 else 10 ** rng.uniform(-6.5, -3)
+        if k % 2:
+            ang = np.pi - ang
+        u = rng.normal(size=3)
+        u /= np.linalg.norm(u)
+        w = rng.normal(size=3)
+        w -= w.dot(u) * u
+        w /= np.linalg.norm(w)
+        r1 = rng.uniform(6.8e6, 4e7) * u
+        r2 = rng.uniform(6.8e6, 4e7) * (np.cos(ang) * u + np.sin(ang) * w)
+        tof = rng.uniform(500.0, 40000.0)
+        prograde = bool(rng.integers(2))
+        res = solve_lambert_batch(r1[None], r2[None], tof, mu, prograde=prograde,
+                                  use_gpu=False, cpu_fallback=False)
+        if not res.valid[0]:
+            continue
+        try:
+            v1_ref, v2_ref = solve_lambert_single(r1, r2, tof, mu=mu, max_revs=0, prograde=prograde)[0]
+        except Exception:  # noqa: BLE001 -- pykep itself rejects the geometry
+            continue
+        checked += 1
+        scale = max(np.linalg.norm(v1_ref), 1.0)
+        assert np.linalg.norm(res.v1[0] - v1_ref) < 1e-6 * scale + 1e-2, (ang, tof, prograde)
+        assert np.linalg.norm(res.v2[0] - np.asarray(v2_ref)) < 1e-6 * scale + 1e-2, (ang, tof, prograde)
+    assert checked > 200
