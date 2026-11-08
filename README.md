@@ -49,7 +49,10 @@ src/orbitopt/
   missions.py        named-mission registry (id -> loader) shared by the app + CLI,
                       with third-party plugin discovery via entry points
   cli.py             the `orbitopt` console command (app / view / export / missions /
-                      validate / run)
+                      validate / run / launch-window)
+  launch_windows.py  daily launch windows (open/close time + azimuth) from a launch
+                      site into an orbit plane (in-plane / dogleg) or along a porkchop
+                      departure asymptote -- numpy only; see "Launch windows" below
   core/
     gpu.py          numpy/cupy array-module abstraction (the GPU on/off switch)
     problem.py       OrbitOptProblem base class: pygmo UDP + optional batch_fitness()
@@ -209,6 +212,31 @@ converges to true GEO (`--skip-verify` to skip). See
 mission's Earth-to-Mars-orbit-insertion trajectory (see
 `docs/mars_mission_plan.md`); porting `free_return`/`mga` the same way is
 the natural next step.
+
+### Launch windows
+
+`orbitopt.launch_windows` turns a target orbit plane + a launch site
+(`orbitopt.launch_sites`) into daily launch windows: open / close / optimal
+UTC and the launch azimuth at each. With no plane-change budget you get the
+instantaneous in-plane opportunities (one northbound, one southbound pass a
+day when |latitude| <= inclination); `--dogleg DEG` widens them into windows
+bounded by that out-of-plane angle and also yields dogleg-only windows for
+sites above the target inclination. Azimuths outside the site's range-safety
+corridors are dropped. For interplanetary departures,
+`porkchop_launch_windows(grid, site)` takes each porkchop departure date's
+minimum-C3 transfer, derives its asymptote (RLA/DLA) and returns that day's
+windows; `plot_porkchop(grid, launch_days=...)` hatches unlaunchable dates.
+
+```
+orbitopt launch-window ksc --inclination 51.64 --raan 100 --epoch 2026-11-08 --altitude-km 420 --days 3
+orbitopt launch-window kourou --inclination 98.57 --ltan 22.5 --epoch 2015-06-23 --json
+orbitopt launch-window ksc --rla 9.6 --dla 23.4 --epoch 2020-07-30 --azimuth 90 115
+```
+
+Plausibility (`tests/test_launch_windows.py`): KSC ISS launches at ~44.9 deg
+north-east, ISS windows moving ~23 min earlier a day, Sentinel-2A/2B (Kourou,
+SSO 10:30 LTDN) predicted within ~6-9 min of actual lift-off, and the Mars
+2020 window from SLC-41 opening within ~4 min of the real 11:50 UTC lift-off.
 
 ## Setup
 
