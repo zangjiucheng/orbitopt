@@ -46,6 +46,7 @@ src/orbitopt/
     scene-1.0.json              the versioned JSON Schema that IS the scene file format
     mission-geo-raising-1.0.json  config schema for mission.kind: geo-raising
     mission-mars-transfer-1.0.json  config schema for mission.kind: mars-transfer
+    verification-report-1.0.json    schema for verify.report's JSON reports
   missions.py        named-mission registry (id -> loader) shared by the app + CLI,
                       with third-party plugin discovery via entry points
   cli.py             the `orbitopt` console command (app / view / export / missions /
@@ -57,11 +58,17 @@ src/orbitopt/
     gpu_batch.py      batched 0-rev Lambert solver (universal-variable / Vallado),
                        vectorized -- the framework's core CUDA-acceleration point
     cpu.py             thin wrapper around pykep's reference Izzo solver (multi-rev capable)
+  scene_cache.py     cross-session disk cache for computed mission scenes, keyed by a
+                      fingerprint of the orbitopt source tree
   bodies.py            pykep.planet ephemeris + epoch helpers + real Moon state (via tudatpy/SPICE)
   dynamics/
     nbody_gpu.py       GPU-batched, simplified Earth-Moon(-Sun) coarse propagator
-                        (two-body Kepler batch solve + osculating Moon/Sun ephemeris +
-                        fixed-step RK4) for screening cislunar TLI candidates
+                        (two-body Kepler batch solve + osculating Moon/Sun ephemeris
+                        seeded from SPICE at the mission epoch + fixed-step RK4) for
+                        screening cislunar TLI candidates
+    nbody_fused.py     fused one-kernel prototypes (numba / CuPy raw / JAX) of
+                        nbody_gpu's closest-approach path -- benchmark-only, see
+                        docs/benchmarks/fused_kernel_evaluation.md
   problems/
     transfer_2body.py  single Lambert-leg transfer UDP, with a real batch_fitness()
     mga.py             wraps pykep.trajopt.mga_1dsm; GPU-screens launch windows first
@@ -70,18 +77,31 @@ src/orbitopt/
   optimize/
     gpu_bfe.py         custom pygmo UDBFE that dispatches to a problem's batch_fitness()
     runner.py          drives pygmo algorithms (pso_gen/cmaes/nsga2) through the GPU bfe
+    multistart.py      multi-basin global search: finds diverse porkchop valleys and
+                        optimizes each instead of shrinking to one global-minimum box
   verify/
     tudat_propagate.py numerically propagate a candidate leg and diff vs. the
                         pykep patched-conic prediction; also multi-arc propagation
-                        (coast/impulsive-burn sequences) + post-hoc closest-approach
-                        and altitude-crossing event detection
-    differential_correction.py  fixed-time Newton-Raphson shooting targeter that
-                        refines a coarse TLI guess into a precise lunar-flyby distance
-    geo_insertion.py   verifies a GEO-raising candidate in tudatpy (numerical
-                        propagation of the burn sequence vs. the GPU-screened prediction)
+                        (coast/impulsive-burn sequences, optional Earth spherical
+                        harmonics) + post-hoc closest-approach and altitude-crossing
+                        event detection
+    events.py          dense-output (Hermite) event location: periapsis / closest
+                        approach, SOI and entry-interface crossings
+    b_plane.py         B-plane geometry (B vector, angle, periapsis <-> |B|) for flybys
+    differential_correction.py  fixed-time Newton-Raphson shooting targeters:
+                        target_lunar_flyby (flyby distance) and target_lunar_b_plane
+                        (2-DOF B-plane aim point: periapsis distance + B-plane angle)
+    free_return_search.py  searches for a genuine zero-correction free-return
+                        geometry (post-flyby leg reaching Earth's entry interface)
+    geo_insertion.py   verifies a GEO-raising candidate in tudatpy: re-flies the burn
+                        sequence under J2+J22+Sun+Moon and refines the final apogee burn
+                        with target_geo_insertion so (a, e, i) hit true GEO
     mars_insertion.py  tudatpy-targets the Earth->Mars transfer's trajectory-correction
                         maneuver (TCM) and Mars-orbit-insertion (MOI) burn -- the two
                         real burns beyond the idealized Lambert departure
+    report.py          machine-readable verification report (residuals, perturbation
+                        inventory, step-convergence, conservation checks), validated
+                        against schemas/verification-report-1.0.json
   viz/
     porkchop.py        GPU-batched porkchop grid + plotting
     scene.py           orbitopt's own exporter-side builder helpers (body_entry,
@@ -369,8 +389,12 @@ converging to the real Artemis II perilune altitude (6,545 km) within ~10 km
 &rarr; independent fine-resolution re-verification. It's an independent
 re-solve of the same boundary-value problem, not a reproduction of the
 actual flown mission (NASA hasn't published navigation-grade state vectors
-to fit against), and targets flyby *distance* only -- no B-plane aim-point
-control yet, so the post-flyby trajectory won't re-enter on its own. Full
+to fit against), and targets flyby *distance* only, so the post-flyby
+trajectory won't re-enter on its own. For aim-point control,
+`verify.differential_correction.target_lunar_b_plane` targets both the
+periapsis distance and the B-plane angle (which side of the Moon the flyby
+passes, and so which way the return leg bends), and
+`verify.free_return_search` searches for a genuine free-return geometry. Full
 step-by-step breakdown and caveats in
 [`docs/engineering-notes.md`](docs/engineering-notes.md).
 
@@ -379,19 +403,23 @@ step-by-step breakdown and caveats in
 - The batched Lambert solver handles 0-revolution transfers only (multi-rev
   falls back to `orbitopt.lambert.cpu.solve_lambert_single`, which wraps
   pykep's full Izzo solver).
-- `verify.tudat_propagate` uses point-mass gravity only; extending to
-  spherical harmonics / SRP / drag is a matter of adding
-  `propagation_setup.acceleration` terms.
+- `verify.tudat_propagate` models point-mass gravity plus (in
+  `propagate_multi_arc`) optional central-body spherical harmonics
+  (`earth_spherical_harmonic=(degree, order)`, used for GEO's J2+J22);
+  SRP / drag / relativity aren't modelled yet -- adding them is a matter of
+  more `propagation_setup.acceleration` terms.
 - Low-thrust (continuous-thrust) trajectories aren't modelled yet; pykep's
   `sims_flanagan`/shape-based modules would plug in the same way `mga.py`
   wraps `mga_1dsm`.
 - `dynamics.nbody_gpu`'s Moon/Sun ephemeris is a pure two-body osculating
-  orbit seeded once from a real SPICE state at J2000 -- accurate to a few
-  thousand km over a several-day coast (validated), but not re-seeded for
-  epochs far from J2000 or spans much longer than ~10 days.
-- The free-return targeter is distance-only / fixed-time (see above); no
-  B-plane aim-point control, no multi-point (outbound + return) targeting,
-  no trajectory-correction-burn modelling.
+  orbit seeded from a real SPICE state at the mission epoch
+  (`propagate_spacecraft_batch` auto-seeds at `epoch0`) -- accurate to a few
+  thousand km over a several-day coast (validated), but not meant for spans
+  much longer than ~10 days from the seed.
+- The lunar free-return targeters are fixed-time (B-plane targeting via
+  `target_lunar_b_plane`, see above); there's no multi-point (outbound +
+  return) targeting and no trajectory-correction-burn modelling for the
+  cislunar case.
 
 ## License
 
