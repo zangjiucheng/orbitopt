@@ -1,0 +1,58 @@
+name: GPU CI
+
+# The CUDA test path. GitHub-hosted runners have no GPU, so this job targets
+# a self-hosted runner registered with the labels [self-hosted, linux, x64,
+# gpu] (NVIDIA driver >= the CUDA 13 minimum installed on the host; nothing
+# else needed -- the CUDA runtime comes from the lockfile).
+#
+# Triggered manually (Actions -> GPU CI -> Run workflow), or on a PR by
+# adding the `gpu-ci` label. It deliberately does not run on every push, so
+# a missing/offline GPU runner never blocks the normal CPU CI.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize]
+
+concurrency:
+  group: gpu-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gpu-test:
+    name: test (GPU, CuPy/CUDA 13, locked env)
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    runs-on: [self-hosted, linux, x64, gpu]
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash -l {0}
+    env:
+      # tests/conftest.py: turn "no CUDA device" into a hard error instead of
+      # skipping the gpu-marked tests, so this job can't pass vacuously.
+      ORBITOPT_REQUIRE_GPU: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show GPU
+        run: nvidia-smi
+
+      - name: Create locked GPU env
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: envs/gpu.conda-lock.yml
+          environment-name: orbitopt-gpu
+          cache-environment: true
+
+      - name: Install orbitopt (editable, no-deps)
+        run: python -m pip install -e . --no-deps
+
+      - name: CuPy sanity check
+        run: python -c "import cupy; cupy.show_config(); print('devices:', cupy.cuda.runtime.getDeviceCount())"
+
+      - name: Run CUDA tests
+        run: pytest tests/ -v -m gpu
+
+      - name: Run GPU-relevant suites (CPU/GPU backends side by side)
+        run: pytest tests/test_gpu_lambert.py tests/test_runner_device.py tests/test_porkchop.py -v

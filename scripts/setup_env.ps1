@@ -1,13 +1,13 @@
-# Reproduces the orbitopt conda environment from scratch.
-# Run from PowerShell: .\scripts\setup_env.ps1
+# Reproduces the orbitopt conda environment from the pinned lockfiles.
+# Run from PowerShell:  .\scripts\setup_env.ps1          (CPU-only env "orbitopt")
+#                       .\scripts\setup_env.ps1 -Gpu     (CuPy/CUDA 13 env "orbitopt-gpu")
 #
-# tudatpy is conda-forge/tudat-team only and pins python=3.10, numpy<2.0 in
-# its own environment.yaml -- but numpy gets pulled to 2.x by other deps
-# during solve regardless (harmless in practice: pykep/pygmo/tudatpy all
-# import and run fine under numpy 2.2, verified empirically for this repo).
-# pykep additionally needs scipy<1.14 (it calls the removed scipy.interpolate
-# .interp2d internally) -- conda-forge hasn't caught up, so we pin it after
-# the fact via pip.
+# The lockfiles (envs/*.conda-lock.yml) pin every package, including numpy
+# (>=1.26.4,<2 -- tudatpy 1.0's own requirement) and scipy (<1.14,
+# pykep still calls the removed scipy.interpolate.interp2d). No solve, no
+# pip step: install is reproducible. See envs/README.md.
+
+param([switch]$Gpu)
 
 $ErrorActionPreference = "Stop"
 
@@ -18,11 +18,17 @@ if (-not (Get-Command conda -ErrorAction SilentlyContinue)) {
     $env:Path = "$env:USERPROFILE\miniforge3;$env:USERPROFILE\miniforge3\Scripts;$env:Path"
 }
 
-conda env create -f environment.yml -y
+$flavor = if ($Gpu) { "gpu" } else { "cpu" }
+$envName = if ($Gpu) { "orbitopt-gpu" } else { "orbitopt" }
+$lockfile = Join-Path $PSScriptRoot "..\envs\$flavor.conda-lock.yml"
 
-$envPy = "$env:USERPROFILE\miniforge3\envs\orbitopt\python.exe"
-& $envPy -m pip install "scipy<1.14,>=1.11"
-& $envPy -m pip install -e . --no-deps
+if (-not (Get-Command conda-lock -ErrorAction SilentlyContinue)) {
+    conda install -n base -c conda-forge "conda-lock>=4" -y
+}
+conda-lock install -n $envName $lockfile
 
-Write-Host "Done. Activate with: conda activate orbitopt"
+$envPy = "$env:USERPROFILE\miniforge3\envs\$envName\python.exe"
+& $envPy -m pip install -e (Join-Path $PSScriptRoot "..") --no-deps
+
+Write-Host "Done. Activate with: conda activate $envName"
 Write-Host "Verify with:         $envPy -m pytest tests/ -v"
