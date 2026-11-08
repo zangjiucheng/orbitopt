@@ -151,3 +151,18 @@ def test_multistart_with_real_pygmo_pso():
     assert report.baseline.value > 6.5  # single basin can't leave the wide valley
     assert report.best.value < 6.2
     assert report.improvement > 0.7
+
+
+@pytest.mark.parametrize(
+    "values, xg, yg, expected",
+    [
+        ([[3.0]], [1.0], [2.0], [(1.0, 2.0, 3.0)]),  # single cell: no neighbours at all
+        (np.full((4, 5), 7.0), np.arange(5.0), np.arange(4.0), [(0.0, 0.0, 7.0)]),  # perfectly flat
+        ([[np.inf, 2.0, 2.0]], [0.0, 1.0, 2.0], [0.0], [(1.0, 0.0, 2.0)]),  # flat finite part
+        ([[np.inf], [4.0]], [0.0], [0.0, 1.0], [(0.0, 1.0, 4.0)]),  # one finite cell
+    ],
+)
+def test_find_diverse_basins_degenerate_grids_return_one_basin(values, xg, yg, expected):
+    basins = find_diverse_basins(values, xg, yg, min_separation=(1.0, 1.0))
+    assert [(b.x, b.y, b.value) for b in basins] == expected
+    assert basins[0].rank == 0

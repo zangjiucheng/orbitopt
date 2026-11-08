@@ -185,6 +185,12 @@ def find_diverse_basins(
 
     sx, sy = (float(s) for s in min_separation)
     iy, ix = np.nonzero(_local_minima_mask(v))
+    if iy.size == 0:
+        # No cell is strictly below a neighbour: a single-cell grid, or a
+        # perfectly flat (finite part of the) grid. There is still exactly one
+        # basin -- the best finite cell (first one, for a tie).
+        flat = np.where(np.isfinite(v), v, np.inf)
+        iy, ix = (np.atleast_1d(i) for i in np.unravel_index(int(np.argmin(flat)), v.shape))
     order = np.argsort(v[iy, ix], kind="stable")
     global_min = float(v[iy[order[0]], ix[order[0]]])
 
