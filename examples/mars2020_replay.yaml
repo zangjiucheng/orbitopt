@@ -1,0 +1,25 @@
+# Mars 2020 (Perseverance) replay: real 2020 departure window, real arrival-ish TOF range.
+schemaVersion: "1.0"
+mission:
+  id: mars-2020-replay
+  title: "Mars 2020 replay — KSC, July 2020 window"
+  kind: mars-transfer
+launch_window:
+  start_date: [2020, 7, 17]
+  end_date: [2020, 8, 15]
+parking_orbit:
+  altitude_km: 185.0
+tof_search:
+  min_days: 150.0
+  max_days: 300.0
+mars_arrival_orbit:
+  periapsis_km: 3889.5
+  apoapsis_altitude_km: 20000.0
+campaign_search:
+  optimizer:
+    population: 128
+    generations: 120
+    seed: 7
+output:
+  scene_file: out/mars-2020-replay.json
+  verification_report: out/mars-2020-replay.verification.json

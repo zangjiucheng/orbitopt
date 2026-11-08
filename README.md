@@ -6,500 +6,216 @@
 [![License: GPL v3+](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
 [![Site](https://img.shields.io/badge/site-zangjiucheng.github.io%2Forbitopt-e8a23e)](https://zangjiucheng.github.io/orbitopt/)
 
-Orbital trajectory optimization research framework built on **pykep**
-(fast patched-conic trajectory design + pygmo global optimization) and
-**tudatpy** (high-fidelity numerical propagation), with **CUDA-accelerated
-batch candidate evaluation** via CuPy.
+**Screen fast, verify exactly.** orbitopt is an orbital trajectory
+optimization framework. It searches huge design spaces with cheap
+patched-conic models (**pykep + pygmo**, batched on the GPU with **CuPy**),
+then re-flies the winners under high-fidelity numerical propagation
+(**tudatpy**) and writes a machine-readable verification report for every
+result. Mission Control, a desktop 3D app, plays the missions back.
 
-![Mission Control, playing back the GOES GTO-to-GEO raising campaign -- real Atlas V launch profile, optimized apogee-burn schedule, live event log and time-warp scrubber](docs/assets/mission-control-goes.png)
+![Mission Control, playing back the GOES GTO-to-GEO raising campaign](docs/assets/mission-control-goes.png)
 
-A plain `pip install orbitopt` (or the `viewer` extra) only gets the
-scene-format read/write/validate surface and the PyVista/PySide6 3D viewer --
-pykep, tudatpy, pygmo, and CuPy are conda-only (see `envs/`) and are
-required for the trajectory optimization/propagation pieces described below.
+## What it does
 
-## Why this split
+| Stage | What you get | Where |
+|---|---|---|
+| **Search** | Batched Lambert solver, porkchop grids, pygmo optimizers with GPU batch fitness, multi-basin multistart | `lambert/`, `optimize/`, `problems/` |
+| **Launch** | Daily launch windows from a site database (range-safety azimuth corridors), vehicle C3/payload curves as optimizer constraints, LEO parking orbit → TLI/TMI injection | `launch_windows.py`, `launch_constraints.py`, `injection.py` |
+| **Verify** | tudatpy N-body propagation (adaptive RKDP8(7)), dense-output event location, Newton/B-plane targeters (TCM, MOI, lunar flyby, GEO insertion), JSON verification reports | `verify/` |
+| **Visualize** | Versioned scene file format, single-scene viewer, Mission Control app | `scene_format.py`, `viz/` |
 
-- **pykep + pygmo**: cheap, analytic/patched-conic trajectory models
-  (Lambert arcs, multi-gravity-assist sequences) searched with population-based
-  global optimizers. Fast to evaluate, good for exploring huge search spaces,
-  but ignores perturbations.
-- **tudatpy**: numerical, N-body-capable propagation. Expensive per call, used
-  to *verify* a pykep/pygmo solution actually holds up when Earth/Mars/Jupiter
-  gravity, etc. are included, not to search the space itself.
-- **CUDA (CuPy)**: population-based optimization and porkchop-plot generation
-  evaluate thousands to millions of *independent* candidate trajectories per
-  run. That evaluation is batched into single vectorized array ops instead of
-  a Python loop, running on GPU when available and falling back to vectorized
-  numpy otherwise -- same code path either way (`orbitopt.core.gpu`).
+Built-in missions: **Artemis II** free return, **GOES** GTO→GEO raising,
+**Earth → Mars** orbit insertion, and the solar system.
 
-## Architecture
+## Validated against flown missions
 
-```
-src/orbitopt/
-  __main__.py        `python -m orbitopt` entry point, delegates to cli.py
-  scene_format.py    the scene file format's entire read/write/validate surface --
-                      zero heavy deps (stdlib + jsonschema only); see "Packaging" below
-  mission_config.py  YAML mission-config read/validate/build surface -- same zero-heavy-
-                      deps split as scene_format.py; see "Config-driven mission runs" below
-  schemas/
-    scene-1.0.json              the versioned JSON Schema that IS the scene file format
-    mission-geo-raising-1.0.json  config schema for mission.kind: geo-raising
-    mission-mars-transfer-1.0.json  config schema for mission.kind: mars-transfer
-    verification-report-1.0.json    schema for verify.report's JSON reports
-  missions.py        named-mission registry (id -> loader) shared by the app + CLI,
-                      with third-party plugin discovery via entry points
-  cli.py             the `orbitopt` console command (app / view / export / missions /
-                      validate / run / launch-window)
-  launch_windows.py  daily launch windows (open/close time + azimuth) from a launch
-                      site into an orbit plane (in-plane / dogleg) or along a porkchop
-                      departure asymptote -- numpy only; see "Launch windows" below
-  injection.py       launch site -> LEO parking orbit -> TLI/TMI burn from v-infinity,
-                      numerically verified (J2, scipy or tudatpy) with differential
-                      correction + verification report; see "Parking orbit and injection"
-  core/
-    gpu.py          numpy/cupy array-module abstraction (the GPU on/off switch)
-    problem.py       OrbitOptProblem base class: pygmo UDP + optional batch_fitness()
-  lambert/
-    gpu_batch.py      batched 0-rev Lambert solver (universal-variable / Vallado),
-                       vectorized -- the framework's core CUDA-acceleration point
-    cpu.py             thin wrapper around pykep's reference Izzo solver (multi-rev capable)
-  scene_cache.py     cross-session disk cache for computed mission scenes, keyed by a
-                      fingerprint of the orbitopt source tree
-  bodies.py            pykep.planet ephemeris + epoch helpers + real Moon state (via tudatpy/SPICE)
-  dynamics/
-    nbody_gpu.py       GPU-batched, simplified Earth-Moon(-Sun) coarse propagator
-                        (two-body Kepler batch solve + osculating Moon/Sun ephemeris
-                        seeded from SPICE at the mission epoch + fixed-step RK4) for
-                        screening cislunar TLI candidates
-    nbody_fused.py     fused one-kernel prototypes (numba / CuPy raw / JAX) of
-                        nbody_gpu's closest-approach path -- benchmark-only, see
-                        docs/benchmarks/fused_kernel_evaluation.md
-  problems/
-    transfer_2body.py  single Lambert-leg transfer UDP, with a real batch_fitness()
-    mga.py             wraps pykep.trajopt.mga_1dsm; GPU-screens launch windows first
-    free_return.py     GPU-batched TLI-burn screening UDP (orbitopt.dynamics.nbody_gpu-backed)
-    geo_raising.py     GPU-batched GEO orbit-raising burn-sequence UDP
-  optimize/
-    gpu_bfe.py         custom pygmo UDBFE that dispatches to a problem's batch_fitness()
-    runner.py          drives pygmo algorithms (pso_gen/cmaes/nsga2) through the GPU bfe
-    multistart.py      multi-basin global search: finds diverse porkchop valleys and
-                        optimizes each instead of shrinking to one global-minimum box
-  verify/
-    tudat_propagate.py numerically propagate a candidate leg and diff vs. the
-                        pykep patched-conic prediction; also multi-arc propagation
-                        (coast/impulsive-burn sequences, optional Earth spherical
-                        harmonics) + post-hoc closest-approach and altitude-crossing
-                        event detection
-    events.py          dense-output (Hermite) event location: periapsis / closest
-                        approach, SOI and entry-interface crossings
-    b_plane.py         B-plane geometry (B vector, angle, periapsis <-> |B|) for flybys
-    differential_correction.py  fixed-time Newton-Raphson shooting targeters:
-                        target_lunar_flyby (flyby distance) and target_lunar_b_plane
-                        (2-DOF B-plane aim point: periapsis distance + B-plane angle)
-    free_return_search.py  searches for a genuine zero-correction free-return
-                        geometry (post-flyby leg reaching Earth's entry interface)
-    geo_insertion.py   verifies a GEO-raising candidate in tudatpy: re-flies the burn
-                        sequence under J2+J22+Sun+Moon and refines the final apogee burn
-                        with target_geo_insertion so (a, e, i) hit true GEO
-    mars_insertion.py  tudatpy-targets the Earth->Mars transfer's trajectory-correction
-                        maneuver (TCM) and Mars-orbit-insertion (MOI) burn -- the two
-                        real burns beyond the idealized Lambert departure
-    report.py          machine-readable verification report (residuals, perturbation
-                        inventory, step-convergence, conservation checks), validated
-                        against schemas/verification-report-1.0.json
-  viz/
-    porkchop.py        GPU-batched porkchop grid + plotting
-    scene.py           orbitopt's own exporter-side builder helpers (body_entry,
-                        scene_document) over the public scene_format/schema above --
-                        every exporter below builds through this, not the format directly
-    solar_system.py    exports the whole solar system as a SceneData document
-    mission_timeline.py exports the Artemis II free-return mission as a
-                        scrubbable SceneData document
-    geo_raising.py     exports the GEO orbit-raising mission as a SceneData document
-    mars_transfer.py   exports the Earth-to-Mars-orbit-insertion mission as a single
-                        continuous heliocentric SceneData trail (three physics regimes --
-                        near-Earth, cruise, near-Mars -- stitched at each SOI handoff)
-    scene_renderer.py  populates a PyVista plotter from a SceneData document --
-                        shared by both viewers below, so there's one place
-                        that knows how to draw {bodies, orbits, trails}
-    pv_viewer.py        minimal single-scene viewer/scripting API (PyVista/VTK)
-    theme.py            Qt stylesheet for the app below (dark "tracking station" look)
-    icon.py             generates the app's window/taskbar icon programmatically
-    icons.py            same approach as icon.py, for small toolbar glyphs (play/pause,
-                        panel chevrons, ...) -- real drawn icons, not Unicode/emoji text
-    app.py               Mission Control: the persistent, general-purpose desktop
-                        app (PySide6 + pyvistaqt) -- mission list, time-warp
-                        strip, per-body info cards; see "Mission Control" below
+| Mission | orbitopt | Real |
+|---|---|---|
+| Mars 2020: KSC launch-window optimum, Jul 30 | 11:51:28 UTC | lift-off 11:50 UTC |
+| Mars 2020: lowest-C3 departure in the 2020 window | Jul 18 (C3 13.2 km²/s²) | launch period opened Jul 17 |
+| Sentinel-2A/2B: Kourou SSO launch time | within 6–9 min | actual lift-off |
+| ISS: KSC launch azimuth / daily window drift | 44.9°, ~23 min earlier per day | same |
+| Artemis II: lunar perilune altitude after differential correction | within ~10 km | 6,545 km |
+
+The Mars 2020 numbers come from
+[`examples/14_mars2020_replay.py`](examples/14_mars2020_replay.py), which runs
+the whole chain: porkchop → multistart → launch constraints → launch window →
+parking orbit and TMI, numerically verified (9/9 checks pass). The same search
+shows a Falcon 9 could not have flown that 4,037 kg payload: its C3 ceiling is
+8.6 km²/s², below the 13.2 minimum of the whole window. The tudatpy cruise
+(TCM targeted in the B-plane, then Mars orbit insertion at 505 km periapsis)
+runs from a config:
+`orbitopt run examples/mars2020_replay.yaml`.
+
+## Quick start
+
+pykep, pygmo and tudatpy are only on conda-forge / tudat-team, so the compute
+stack comes from a locked conda environment:
+
+```bash
+micromamba create -n orbitopt -f envs/cpu.conda-lock.yml   # or envs/gpu.conda-lock.yml (CuPy, CUDA 13)
+micromamba activate orbitopt
+pip install -e . --no-deps
+pytest tests/
 ```
 
-The cislunar pieces (`dynamics/nbody_gpu.py`, `problems/free_return.py`,
-`verify/differential_correction.py`, plus the Moon ephemeris in `bodies.py`
-and the multi-arc extension in `verify/tudat_propagate.py`) implement the
-same two-stage pattern as the rest of the framework, applied to an
-Artemis-II-like Earth-Moon free-return trajectory: `examples/05_artemis2_free_return.py`
-Lambert-seeds a parking-orbit-aligned TLI guess, GPU-batch-screens the burn
-vector against a simplified osculating Moon model, then refines the winner
-in tudatpy to hit the real Artemis II perilune altitude (6,545 km) to
-within ~10 km.
+On Windows, `.\scripts\setup_env.ps1` (add `-Gpu` for CUDA) does the same.
+See [`envs/README.md`](envs/README.md) for regenerating the lockfiles and the
+GPU CI job.
 
-Extending the framework with a new problem type means writing a new
-`orbitopt.core.problem.OrbitOptProblem` subclass; if its per-candidate work is
-vectorizable, give it a real `batch_fitness()` and it gets GPU accel through
-`optimize.runner.run_optimization` for free. If not (e.g. wrapping pykep's own
-compiled UDPs, as `problems/mga.py` does), it still works, just CPU-bound --
-GPU pre-screening of the search space (see `problems.mga.screen_departure_windows`)
-is the fallback acceleration point for that case.
-
-## Packaging: scene files, the viewer, and the compute stack
-
-pykep/pygmo/tudatpy ship only on conda-forge/tudat-team -- they don't exist on
-PyPI at all, so "just `pip install orbitopt` and compute a trajectory" is not
-achievable in a plain pip environment; that half genuinely needs a conda
-environment (see Setup below). But *reading, validating, and viewing* a scene
-someone already computed doesn't need any of that, and the package is split
-into three layers so that's true in practice, not just in principle:
-
-1. **Scene file format** (`orbitopt.scene_format`, `orbitopt/schemas/scene-1.0.json`)
-   -- the base package. Depends on nothing but the standard library +
-   `jsonschema`. `pip install orbitopt` gets you `read_scene`/`write_scene`/
-   `validate_scene` against a versioned, independent JSON Schema: a scene file
-   produced by any orbitopt release validates against the schema version it
-   declares (`schemaVersion`), regardless of what orbitopt's own code looks
-   like by the time you read it. Adding an optional field to the format is not
-   a breaking change (unknown fields are always allowed, GeoJSON-style);
-   removing/renaming/narrowing one is, and gets a new `scene-2.0.json` etc.
-   with its own `schemaVersion` so old and new documents both keep validating
-   against whichever schema they were written for.
-2. **Viewer** (`orbitopt[viewer]`: `orbitopt.viz.pv_viewer`, `.scene_renderer`,
-   `.app`) -- `pip install orbitopt[viewer]` adds numpy/pyvista/pyside6/
-   pyvistaqt, all real PyPI wheels, no conda needed. This is enough to load
-   any scene file (yours, a colleague's, one shipped by a different orbitopt
-   version) and open it in the single-scene viewer or Mission Control.
-3. **Compute** (`orbitopt.problems`, `orbitopt.verify`, `orbitopt.dynamics`,
-   and the mission-*computing* viz exporters -- `solar_system.py`,
-   `mission_timeline.py`, `geo_raising.py`, `porkchop.py`) -- needs pykep/
-   pygmo/tudatpy from conda-forge. There is deliberately no `orbitopt[compute]`
-   extras group in `pyproject.toml`: declaring conda-only packages as a pip
-   extras would make `pip install orbitopt[compute]` fail outright instead of
-   degrading gracefully. Build this layer from the conda lockfiles in `envs/` (see Setup).
-
-### Named missions + third-party plugins
-
-`orbitopt.missions` is a small registry -- `(id, title, loader)` -- shared by
-Mission Control and the CLI. Built-ins (`solar-system`, `artemis2`, `goes`,
-`mars`) register lazily; a separate pip-installed package can add its own mission
-with no orbitopt source changes via a setuptools entry point:
-
-```toml
-# your_package's pyproject.toml
-[project.entry-points."orbitopt.missions"]
-my-mission = "your_package.missions:my_mission"
-```
-```python
-# your_package/missions.py -- my_mission() returns Mission("my-mission", "My Mission", _load)
-# _load() returns a SceneData dict (build one, or scene_format.read_scene a bundled file)
+```bash
+orbitopt                                   # Mission Control
+orbitopt view mars                         # one built-in mission in the plain viewer
+orbitopt run examples/mars2020_replay.yaml # optimize, verify in tudatpy, write scene + report
+orbitopt launch-window ksc --rla 9.6 --dla 23.4 --epoch 2020-07-30
+python examples/14_mars2020_replay.py      # the end-to-end walkthrough above
 ```
 
-Discovered at runtime via `importlib.metadata.entry_points`; a broken plugin
-is a warning, not a crash for every other mission.
+## CLI
 
-### Config-driven mission runs
+| Command | Does |
+|---|---|
+| `orbitopt` / `orbitopt app` | Mission Control |
+| `orbitopt view <mission or scene.json>` | single-scene 3D viewer |
+| `orbitopt export <mission> -o scene.json` | cache a built-in mission's scene |
+| `orbitopt missions` | list registered missions (built-in and plugins) |
+| `orbitopt validate config.yaml` | schema-check a mission config, no compute |
+| `orbitopt run config.yaml` | run a config: optimize, verify, write scene + `.verification.json` |
+| `orbitopt launch-window <site> ...` | daily launch windows into an orbit plane (`--inclination`, `--raan`/`--ltan`, `--dogleg`) or along a departure asymptote (`--rla/--dla`) |
 
-The missions above are Python code -- every parameter lives as a source
-constant. `orbitopt.mission_config` adds a per-mission-kind YAML path
-instead: describe a mission, and `orbitopt` schema-checks it, runs it, and
-writes a scene file the viewer already knows how to open.
+## Mission configs
+
+Missions can be described in YAML instead of Python. Every section except
+`mission` and `output` is optional, and omitted fields fall back to the
+built-in mission's values:
 
 ```yaml
-# my_mission.yaml
 mission: { id: my-geo-mission, title: My GEO raising campaign, kind: geo-raising }
 target: { geostationary_longitude_deg: -101.0 }
 campaign_search: { n_burns: { min: 2, max: 6 } }
 output: { scene_file: scenes/my-geo-mission.json }
 ```
-```
-orbitopt validate my_mission.yaml   # schema-only, no compute -- catches typos fast
-orbitopt run my_mission.yaml        # optimize, then tudatpy-verify, then write the scene
-```
 
-Every field but `mission`/`output` is optional and falls back to the real
-GOES-16 numbers the built-in `goes` mission uses, so a minimal config just
-re-derives that mission. `orbitopt run` also re-flies the winner through
-`verify.geo_insertion.verify_geo_raising` (tudatpy) and reports whether it
-converges to true GEO (`--skip-verify` to skip). See
-`schemas/mission-geo-raising-1.0.json` for the full schema and
-`geo_raising.py`'s `build_from_config` for the adapter. `mars-transfer`
-(`schemas/mission-mars-transfer-1.0.json`, `mars_transfer.py`'s
-`build_from_config`) is the second kind, config-driving the `mars` built-in
-mission's Earth-to-Mars-orbit-insertion trajectory (see
-`docs/mars_mission_plan.md`); porting `free_return`/`mga` the same way is
-the natural next step.
+Supported kinds: `geo-raising` and `mars-transfer`. Schemas are in
+`src/orbitopt/schemas/`.
 
-### Launch windows
+## Verification reports
 
-`orbitopt.launch_windows` turns a target orbit plane + a launch site
-(`orbitopt.launch_sites`) into daily launch windows: open / close / optimal
-UTC and the launch azimuth at each. With no plane-change budget you get the
-instantaneous in-plane opportunities (one northbound, one southbound pass a
-day when |latitude| <= inclination); `--dogleg DEG` widens them into windows
-bounded by that out-of-plane angle and also yields dogleg-only windows for
-sites above the target inclination. Azimuths outside the site's range-safety
-corridors are dropped. For interplanetary departures,
-`porkchop_launch_windows(grid, site)` takes each porkchop departure date's
-minimum-C3 transfer, derives its asymptote (RLA/DLA) and returns that day's
-windows; `plot_porkchop(grid, launch_days=...)` hatches unlaunchable dates.
+Each verification stage emits a JSON report validated against
+`schemas/verification-report-1.0.json`. A report lists the dynamics model and
+what it leaves out, integrator settings, a step-convergence re-run,
+conservation checks against a two-body reference, targeting residuals and
+pass/fail checks. `orbitopt run` writes the reports next to the scene and
+warns when any check fails.
+
+Launch-site and launch-vehicle data cite a source and are tagged `official`
+or `public_estimate`, with accuracy and date. The values are planning-level;
+see [`docs/launch-data-sources.md`](docs/launch-data-sources.md).
+
+## Layout
 
 ```
-orbitopt launch-window ksc --inclination 51.64 --raan 100 --epoch 2026-11-08 --altitude-km 420 --days 3
-orbitopt launch-window kourou --inclination 98.57 --ltan 22.5 --epoch 2015-06-23 --json
-orbitopt launch-window ksc --rla 9.6 --dla 23.4 --epoch 2020-07-30 --azimuth 90 115
+src/orbitopt/
+  cli.py, missions.py          console command; mission registry (+ entry-point plugins)
+  scene_format.py, schemas/    scene / config / report JSON Schemas (stdlib + jsonschema only)
+  mission_config.py            YAML mission configs
+  core/                        numpy/CuPy switch; OrbitOptProblem (pygmo UDP + batch_fitness)
+  lambert/                     batched 0-rev Lambert (GPU); pykep Izzo wrapper (multi-rev)
+  dynamics/                    GPU-batched Earth-Moon-Sun screening propagator
+  problems/                    transfer, MGA-1DSM, free return, GEO raising
+  optimize/                    pygmo runner + GPU batch evaluator, multistart
+  launch_*.py, injection.py    sites, vehicles, constraints, windows, parking orbit → TLI/TMI
+  verify/                      tudatpy propagation, events, B-plane, targeters, reports
+  viz/                         porkchop, mission exporters, renderer, viewer, Mission Control
 ```
 
-Plausibility (`tests/test_launch_windows.py`): KSC ISS launches at ~44.9 deg
-north-east, ISS windows moving ~23 min earlier a day, Sentinel-2A/2B (Kourou,
-SSO 10:30 LTDN) predicted within ~6-9 min of actual lift-off, and the Mars
-2020 window from SLC-41 opening within ~4 min of the real 11:50 UTC lift-off.
+To add a problem type, subclass `orbitopt.core.problem.OrbitOptProblem`. If it
+implements a vectorized `batch_fitness()`, `optimize.runner.run_optimization`
+evaluates it on the GPU. To add a mission without touching orbitopt, register
+it from another package:
 
-### Launch data sources
+```toml
+[project.entry-points."orbitopt.missions"]
+my-mission = "your_package.missions:my_mission"   # returns Mission(id, title, loader)
+```
 
-Every launch-site and launch-vehicle value cites a `source` and is tagged
-`official` (provider / agency document) or `public_estimate` (secondary
-reference, digitized curve, mission-history reconstruction), with accuracy and
-date. Reports carry this through: `LaunchConstraints.describe()["data_sources"]`
-and the `orbitopt launch-window` table footer give the source and overall
-confidence of the data used. The numbers are planning-level, and many are
-estimates rather than facts. See
-[`docs/launch-data-sources.md`](docs/launch-data-sources.md) for the
-limitations.
+## Installing without conda
 
-### Parking orbit and injection (TLI / TMI)
+The package has three layers, and only the last needs conda:
 
-`orbitopt.injection` closes the chain from the launch pad to the injection
-burn. `plan_departure(site, target, start=...)` takes the first asymptote
-launch window, builds the circular LEO parking orbit whose plane contains the
-site at lift-off and the departure direction (altitude, inclination, RAAN,
-secular J2), and places the burn at the perigee of the departure hyperbola
-whose asymptote is the target v-infinity (`InjectionTarget.from_v_inf` /
-`from_c3_rla_dla`, TMI) or opposite a target apogee (`from_apogee`, TLI):
-burn epoch, coast time and tangential delta-v. `verify_injection(plan)`
-propagates insertion -> coast -> burn -> SOI / apogee with Earth J2 (scipy
-DOP853, or `backend="tudat"`), corrects the burn with a Newton shooting
-step on the propagated v-infinity (via `verify.b_plane.b_plane_state`) or
-osculating apogee, and emits a `launch-injection` verification report
-(step convergence, conservation, parking-coast residual, launch geometry,
-optional vehicle C3 / site DLA). `plan.lunar_b_plane_targeter_inputs()`
-hands the burn to `verify.differential_correction.target_lunar_b_plane`
-(ECLIPJ2000, tudat epochs). Example: `examples/13_launch_to_injection.py`.
+1. **Scene format**: `pip install orbitopt` gives you `read_scene` /
+   `write_scene` / `validate_scene` against the versioned
+   `scene-1.0.json`. Adding fields is non-breaking; breaking changes get a
+   new schema version.
+2. **Viewer**: `pip install orbitopt[viewer]` adds PyVista, PySide6 and
+   pyvistaqt, which is enough to open any scene file in the viewer or Mission
+   Control.
+3. **Compute**: problems, verification and mission exporters need the conda
+   environment above. There is deliberately no `[compute]` extra, because
+   pip cannot install those packages.
 
-## Setup
+## Mission Control
 
-tudatpy is conda-forge/tudat-team only (no PyPI wheels) and pins `python=3.10`;
-pykep additionally needs `scipy<1.14` (it still calls the since-removed
-`scipy.interpolate.interp2d`). Two environments are provided, each as a
-human-edited spec plus a fully pinned [conda-lock](https://github.com/conda/conda-lock)
-file (linux-64 + win-64, every package from conda -- no unlocked pip step):
+<img src="docs/assets/mission-control-shortcuts.png" alt="Mission Control keyboard shortcuts" width="320" align="right">
 
-| Env | Spec | Lockfile | Contents |
+A desktop app (PySide6 + pyvistaqt). It has a mission list, a 3D view, live
+orbit readouts for each body, and a time-warp strip with an event log for
+scenes that have a timeline. You can switch missions without relaunching,
+and `File > Open scene file...` opens any scene JSON.
+
+Shortcuts: Space play/pause · ←/→ step · Home restart · `[` `]` time warp ·
+T track body · M focus body · F1 shortcut reference.
+
+<br clear="right">
+
+## Performance
+
+Measured on an RTX A3000 Laptop GPU (6 GB):
+
+| Workload | CPU (numpy) | GPU (CuPy) | Speedup |
 |---|---|---|---|
-| `orbitopt` (CPU-only) | `envs/cpu.yml` | `envs/cpu.conda-lock.yml` | compute stack + viewer, no CUDA |
-| `orbitopt-gpu` | `envs/gpu.yml` | `envs/gpu.conda-lock.yml` | the above + CuPy on CUDA 13 |
+| 2,000,000 Lambert solves | 82.8 s | 17.7 s | 4.7× |
+| 90,000-cell Earth–Mars porkchop | — | 1.08 s | — |
 
-```bash
-micromamba create -n orbitopt -f envs/cpu.conda-lock.yml   # or: conda-lock install -n orbitopt envs/cpu.conda-lock.yml
-micromamba activate orbitopt
-pip install -e . --no-deps
-pytest tests/ -v
-```
+Speedup grows with batch size: it is ~2.5× at 200k solves. The GPU is not
+always faster: the cislunar screening propagator is slower on the GPU below
+~20,000 candidates. Fused-kernel benchmarks are in
+[`docs/benchmarks/`](docs/benchmarks/fused_kernel_evaluation.md).
 
-On Windows, `.\scripts\setup_env.ps1` (add `-Gpu` for the CUDA env) does the
-same. NumPy is constrained to `>=1.26.4,<2` -- tudatpy 1.0's real pin; the
-old numpy-2.x drift came from the unlocked `pip:` section, which is gone. The GPU env needs an NVIDIA
-driver new enough for CUDA 13 (`nvidia-smi`); the CUDA runtime itself comes
-from conda. See `envs/README.md` for regenerating the locks and for the GPU CI
-job (`.github/workflows/gpu.yml`, self-hosted runner, manual / `gpu-ci` label).
+## Lessons learned
 
-## Measured results (RTX A3000 Laptop, 6 GB, this machine)
+Root causes are written up in
+[`docs/engineering-notes.md`](docs/engineering-notes.md) and
+[`docs/mars_mission_plan.md`](docs/mars_mission_plan.md):
 
-| Workload | CPU (vectorized numpy) | GPU (CuPy) | Speedup |
-|---|---|---|---|
-| 2,000,000 independent Lambert solves | 82.8 s (24.2k/s) | 17.7 s (112.8k/s) | 4.7x |
-| 90,000-cell Earth-Mars porkchop grid | -- | 1.08 s (83.2k solves/s) | -- |
+- If a pygmo `bfe` is attached after wrapping the UDA in `pg.algorithm`,
+  pygmo silently evaluates one candidate at a time, ~15× slower.
+- SPICE `J2000` and `ECLIPJ2000` are 23.4° apart; mixing them puts errors in
+  the hundreds of thousands of km.
+- Fixed-step RK4 at 600 s put a lunar flyby at 81,733 km closest approach; the
+  converged value is 4,379 km.
+- Aiming a Mars TCM at a fixed-time point flew the 2020 trajectory *below the
+  surface* because gravity focusing bends the approach inward. The TCM now
+  targets periapsis in the B-plane.
+- A conservation check that used SPICE's Mars GM instead of the GM tudat
+  integrates with (1.9e-8 apart) reported 1.2e-7 of energy drift that was not
+  there.
 
-Speedup grows with batch size (GPU kernel-launch overhead dominates at small
-N; at 200k it was ~2.5x, at 2M it's 4.7x) -- porkchop grids and wide
-population-based optimizer runs are exactly the "large N, no data
-dependencies" shape that benefits.
+## Limitations
 
-Gotchas that cost real debugging time along the way (full root-cause
-writeups in [`docs/engineering-notes.md`](docs/engineering-notes.md)):
-
-- **pygmo**: `bfe` must be attached to the raw UDA before wrapping it in
-  `pg.algorithm(uda)`, or it silently falls back to evaluating one candidate
-  at a time -- ~15x slower, no error.
-- **SPICE**: `"J2000"` and `"ECLIPJ2000"` frames are ~23.4 degrees apart and
-  not interchangeable; mixing them silently produces errors of hundreds of
-  thousands of km.
-- **RK4 step size**: fine for a multi-day coast, NOT fine near a close lunar
-  flyby -- 600s reported an 81,733 km closest approach where 15s converged
-  to 4,379 km.
-- **GPU isn't always faster**: `nbody_gpu.propagate_spacecraft_batch` is
-  GPU-*slower* than CPU below ~20,000 candidates -- measured, not assumed.
-- **Undamped Newton diverges on real inputs**: an imprecise upstream guess
-  sent a plain Newton targeter into runaway divergence; fixed with a
-  sanity-checked initial guess and a damped/backtracking step.
-
-## Examples
-
-- `01_earth_mars_lambert_gpu.py` -- optimize an Earth->Mars transfer with
-  pygmo PSO, every generation GPU-batched.
-- `02_mga_cassini_like.py` -- GPU-screen Earth->Venus launch windows, then
-  optimize a 5-body MGA-1DSM sequence seeded from the screening result.
-- `03_verify_with_tudat.py` -- propagate a pykep Lambert solution through
-  tudatpy's N-body dynamics and report the drift vs. the two-body prediction.
-- `04_porkchop_gpu.py` -- a full Earth->Mars porkchop grid from one batched
-  GPU call.
-- `05_artemis2_free_return.py` -- the cislunar free-return pipeline below.
-- `06_solar_system_explorer_data.py` / `07_mission_timeline_data.py` --
-  regenerate cached SceneData JSON (the viewer can also compute these live).
-- `10_gto_geo_orbit_raising.py` -- the GOES-style GTO->GEO campaign; see
-  `docs/goes_gto_geo_mission_plan.md`.
-- `12_launch_constrained_transfer.py` -- the Earth->Mars optimum with and
-  without launch constraints (rocket C3 capability + launch-site DLA,
-  `orbitopt.launch_constraints`); results in `docs/engineering-notes.md`.
-- `13_launch_to_injection.py` -- launch site -> parking orbit -> TMI/TLI burn,
-  numerically verified end to end (`orbitopt.injection`; numpy/scipy only).
-
-## Mission Control (general-purpose desktop app)
-
-```
-orbitopt            # or: orbitopt-app  /  python -m orbitopt  /  python -m orbitopt app
-```
-
-`pip install -e .` puts the `orbitopt` and `orbitopt-app` console scripts on
-PATH (see `orbitopt.cli` for the `app` / `view` / `export` / `validate` /
-`run` subcommands); the `examples/` scripts are annotated references, not
-the way to start the app.
-Keyboard shortcuts inside the app: Space play/pause, ←/→ step, Home restart,
-`[` / `]` change time-warp, T track the selected body, M focus/zoom to it,
-F1 (or the keyboard icon in the view-controls row) opens an in-app shortcuts
-reference, ⌘Q/Ctrl+Q quit. Every toolbar glyph (play/pause, panel-collapse
-chevrons, the shortcuts icon) is a real vector icon drawn with QPainter
-(`orbitopt/viz/icons.py`), the same approach `icon.py` already used for the
-app's own window icon -- not a Unicode symbol used as button text.
-
-<img src="docs/assets/mission-control-shortcuts.png" alt="Mission Control's in-app keyboard-shortcuts reference panel" width="360">
-
-A persistent app, not a script that renders one scene and exits: a mission
-list sidebar (Solar System, Artemis II, plus `File > Open scene file...`
-for any `SceneData` JSON) you switch between without relaunching, a 3D view
-in the middle, live per-body orbit-info cards on the right (distance,
-period, eccentricity, inclination -- whatever `info` rows that scene's
-exporter attached), and a time-warp control strip at the bottom for scenes
-with a timeline (0.15x through 100x, plus direct scrubbing). Built with
-PySide6 + pyvistaqt: the 3D content is the exact same PyVista/VTK renderer
-as the single-scene viewer below (`orbitopt/viz/scene_renderer.py`, shared
-by both -- see it for the split between "rebuild everything" on mission
-switch vs. "just move points and swap the trail actor" on every timeline
-tick), the surrounding chrome is real Qt widgets styled after a dark
-"tracking station" look (`orbitopt/viz/theme.py`) -- KSP's map view was the
-reference point for what that chrome should *do* (a vessel list you switch
-between, a time-warp strip, per-body info readouts), not a literal skin to
-copy.
-
-Clicking a body card also focuses the camera on it, same idea as KSP's
-tracking-station vessel list.
-
-Testing this needed a real (if briefly-shown) window, not a headless one --
-`tests/test_app.py`; see [`docs/engineering-notes.md`](docs/engineering-notes.md)
-for the screenshot-API gotcha that surfaced.
-
-## Single-scene 3D viewer (PyVista, no app chrome)
-
-```
-orbitopt view solar-system
-orbitopt view artemis2
-orbitopt view goes
-orbitopt view mars
-orbitopt view path/to/some_scene.json
-```
-
-![Mission Control's Solar System scene: heliocentric positions and orbit paths for the Sun and eight planets, with live per-body distance/period/eccentricity/inclination readouts](docs/assets/mission-control-solar-system.png)
-
-A real desktop window (PyVista/VTK -- no browser, no HTML/CSS/JS anywhere
-in this package): drag to orbit the camera, scroll/pinch to zoom, click a
-body for its info panel. Scenes with a `timeline` (currently just the
-Artemis II mission) get a scrubber slider at the bottom -- dragging it
-moves the spacecraft/Moon to their position at that mission time, redraws
-the "traveled so far" trail, and updates the live distance readout.
-
-Every scene the viewer can open is the same `SceneData` dict (see
-`orbitopt/viz/scene.py`): `{title, distanceUnit, bodies: [{id, name, color,
-kind, radiusDisplay, orbit?, position?, trail?, info?}], timeline?}`. The
-viewer (`orbitopt/viz/pv_viewer.py`) has exactly one render path for that
-shape -- adding a new scene (a Lambert transfer, an MGA sequence, anything
-else this framework computes) means writing another small exporter that
-builds a `SceneData` document through `viz.scene`'s helpers, not touching
-the viewer. `load_scene(path)` reads one from disk; `show_scene(scene)`
-opens it -- both are plain functions you can call from a script or a
-notebook, e.g.:
-
-```python
-from orbitopt.viz.pv_viewer import show_scene
-from orbitopt.viz.solar_system import export_solar_system_data
-show_scene(export_solar_system_data())
-```
-
-Body markers render via VTK's `render_points_as_spheres` point rendering
-(constant screen-pixel size regardless of camera distance, sidestepping a
-real world-space-scaling bug an earlier browser/Three.js iteration of this
-viewer had); the timeline scrubber needs `interaction_event='always'` to
-fire while dragging, not just on release. Both covered in
-[`docs/engineering-notes.md`](docs/engineering-notes.md).
-
-## Cislunar / Artemis II free-return pipeline
-
-`examples/05_artemis2_free_return.py` chains every layer of the framework:
-a Lambert-arc TLI seed (`lambert.cpu`, aimed at the Moon's real SPICE
-position) &rarr; GPU coarse screening (`problems.free_return`) &rarr; tudatpy
-differential correction (`verify.differential_correction.target_lunar_flyby`)
-converging to the real Artemis II perilune altitude (6,545 km) within ~10 km
-&rarr; independent fine-resolution re-verification. It's an independent
-re-solve of the same boundary-value problem, not a reproduction of the
-actual flown mission (NASA hasn't published navigation-grade state vectors
-to fit against), and targets flyby *distance* only, so the post-flyby
-trajectory won't re-enter on its own. For aim-point control,
-`verify.differential_correction.target_lunar_b_plane` targets both the
-periapsis distance and the B-plane angle (which side of the Moon the flyby
-passes, and so which way the return leg bends), and
-`verify.free_return_search` searches for a genuine free-return geometry. Full
-step-by-step breakdown and caveats in
-[`docs/engineering-notes.md`](docs/engineering-notes.md).
-
-## Known limitations / extension points
-
-- The batched Lambert solver handles 0-revolution transfers only (multi-rev
-  falls back to `orbitopt.lambert.cpu.solve_lambert_single`, which wraps
-  pykep's full Izzo solver).
-- `verify.tudat_propagate` models point-mass gravity plus (in
-  `propagate_multi_arc`) optional central-body spherical harmonics
-  (`earth_spherical_harmonic=(degree, order)`, used for GEO's J2+J22);
-  SRP / drag / relativity aren't modelled yet -- adding them is a matter of
-  more `propagation_setup.acceleration` terms.
-- Low-thrust (continuous-thrust) trajectories aren't modelled yet; pykep's
-  `sims_flanagan`/shape-based modules would plug in the same way `mga.py`
-  wraps `mga_1dsm`.
-- `dynamics.nbody_gpu`'s Moon/Sun ephemeris is a pure two-body osculating
-  orbit seeded from a real SPICE state at the mission epoch
-  (`propagate_spacecraft_batch` auto-seeds at `epoch0`) -- accurate to a few
-  thousand km over a several-day coast (validated), but not meant for spans
-  much longer than ~10 days from the seed.
-- The lunar free-return targeters are fixed-time (B-plane targeting via
-  `target_lunar_b_plane`, see above); there's no multi-point (outbound +
-  return) targeting and no trajectory-correction-burn modelling for the
-  cislunar case.
+- The batched Lambert solver is 0-revolution only. Multi-rev falls back to
+  pykep's Izzo solver.
+- Verification models point-mass gravity plus optional central-body
+  spherical harmonics. It has no SRP, drag or relativity.
+- No low-thrust trajectories (pykep's Sims-Flanagan modules would plug in like `mga.py`).
+- The GPU screening ephemeris for the Moon and Sun is a two-body osculating
+  orbit, good for spans of up to ~10 days from its SPICE seed.
+- Missions end at orbit insertion, with no EDL. The TCM/MOI targeters are
+  not guaranteed to converge for every geometry. When the TCM doesn't
+  close, the Mars pipeline moves on to the next candidate. It never exports
+  a trajectory that hits Mars, and any failed check shows up in the
+  verification report.
 
 ## License
 
-GPL-3.0-or-later -- see [`LICENSE`](LICENSE) for the full text. Copyright (C)
-2026 Jiucheng Zang.
+GPL-3.0-or-later. See [`LICENSE`](LICENSE). Copyright (C) 2026 Jiucheng Zang.

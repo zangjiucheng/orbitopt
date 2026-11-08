@@ -73,22 +73,20 @@
   a { color: inherit; }
   ::selection { background: var(--accent-dim); color: var(--accent); }
 
-  /* --- scroll-reveal: each phase's rows arrive as you scroll into it ("a
-     scroll is a mission"). Gated on .js so a no-JS / crawler view shows
-     everything; JS then adds .in as elements enter the viewport. --- */
-  .js .hero-body > *,
-  .js .phase .wrap > * {
+  /* --- motion budget: exactly two orchestrated moments -- the hero's load
+     sequence, and the Mars 2020 replay plot drawing its contours when it's
+     reached. Section rows no longer fade in one by one. Gated on .js so a
+     no-JS / crawler view shows everything. --- */
+  .js .hero-body > * {
     opacity: 0;
-    transform: translateY(22px);
+    transform: translateY(18px);
     transition: opacity .8s cubic-bezier(.16, .7, .3, 1), transform .8s cubic-bezier(.16, .7, .3, 1);
-    will-change: opacity, transform;
   }
-  .js .hero-body > *.in,
-  .js .phase .wrap > *.in { opacity: 1; transform: none; }
+  .js .hero-body > *.in { opacity: 1; transform: none; }
   @media (prefers-reduced-motion: reduce) {
-    .js .hero-body > *,
-    .js .phase .wrap > * { opacity: 1 !important; transform: none !important; transition: none; }
+    .js .hero-body > * { opacity: 1 !important; transform: none !important; transition: none; }
   }
+  :focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
 
   .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 28px 0 calc(var(--rail-w) + 28px); }
   @media (max-width: 900px) { .wrap { padding: 0 20px; } }
@@ -197,7 +195,7 @@
   }
 
   .hero-top {
-    position: relative; padding: 26px 0 0; font-family: var(--font-mono); font-size: 11.5px;
+    position: relative; padding-top: 26px; font-family: var(--font-mono); font-size: 11.5px;
     color: var(--ink-muted); letter-spacing: 0.06em; display: flex; align-items: center; gap: 10px;
   }
   .hero-top .patch {
@@ -205,7 +203,11 @@
   }
   .hero-top b { color: var(--ink-2); font-weight: 500; }
 
-  .hero-body { position: relative; margin-top: auto; padding-bottom: 64px; max-width: 720px; }
+  .hero-body { position: relative; margin-top: auto; padding-bottom: 56px; }
+  /* .wrap's auto margins inside the column-flex hero would otherwise shrink
+     these rows to fit and center them off the page grid */
+  .hero > .wrap { width: 100%; }
+  .hero-body > * { max-width: 760px; }
   .hero-kicker {
     font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; color: var(--verify);
     letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 14px;
@@ -238,30 +240,62 @@
   }
   .btn-ghost:hover { border-color: var(--verify); color: var(--verify); }
 
-  /* ----------------------------------------------------------- Phases */
-  .phase { padding: 100px 0; border-bottom: 1px solid var(--hairline-soft); position: relative; }
-  .phase:last-of-type { border-bottom: none; }
-  @media (max-width: 700px) { .phase { padding: 64px 0; } }
+  /* telemetry readout under the hero CTA: one real result, linked to the
+     replay section that derives it */
+  .hero-readout {
+    display: flex; flex-wrap: wrap; gap: 6px 28px; align-items: baseline;
+    margin-top: 44px; padding-top: 16px; border-top: 1px solid var(--hairline);
+    font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-muted);
+    text-decoration: none; transition: border-color .2s ease;
+  }
+  .hero-readout:hover { border-top-color: var(--accent); }
+  .hero-readout .hr-k { color: var(--verify); }
+  .hero-readout b { color: var(--ink); font-weight: 600; }
+  .hero-readout:hover .hr-k { color: var(--accent); }
 
-  .phase-head { max-width: 66ch; margin-bottom: 48px; }
+  /* ----------------------------------------------------------- Phases */
+  section.phase { padding: 104px 0; border-bottom: 1px solid var(--hairline-soft); position: relative; }
+  section.phase:last-of-type { border-bottom: none; }
+  @media (max-width: 700px) { section.phase { padding: 64px 0; } }
+
+  /* Section head: headline on the left, its explanation set against the
+     headline's baseline on the right -- reads like a log entry's title +
+     remarks column rather than a centered marketing stack. */
+  .phase-head {
+    display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    gap: 18px 56px; align-items: end; margin-bottom: 56px;
+    padding-bottom: 26px; border-bottom: 1px solid var(--hairline-soft);
+  }
+  .phase-head .met-chip { grid-column: 1 / -1; margin-bottom: 0; }
+  @media (max-width: 900px) { .phase-head { grid-template-columns: 1fr; margin-bottom: 40px; } }
   h2 {
     font-family: var(--font-display); font-weight: 700; text-transform: uppercase;
-    font-size: clamp(30px, 4.4vw, 48px); line-height: 0.98; margin: 0 0 16px;
+    font-size: clamp(32px, 4.6vw, 54px); line-height: 0.95; margin: 0; text-wrap: balance;
   }
-  .phase-sub { color: var(--ink-2); font-size: 16px; max-width: 60ch; }
+  .phase-sub { color: var(--ink-2); font-size: 15.5px; max-width: 54ch; margin: 0; }
+  .phase-sub code { font-family: var(--font-mono); font-size: 0.9em; color: var(--ink); }
 
   /* ---------------------------------------------------- Phase 1: burn arc */
   .burn-sequence { position: relative; padding-top: 8px; }
-  .burn-svg { width: 100%; height: 64px; display: block; }
-  .burn-nodes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: -6px; }
-  @media (max-width: 800px) { .burn-nodes { grid-template-columns: 1fr; gap: 14px; } .burn-svg { display: none; } }
+  .burn-svg { width: 100%; height: 72px; display: block; }
+  .burn-nodes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: -4px; }
+  @media (max-width: 900px) { .burn-nodes { grid-template-columns: 1fr 1fr; gap: 28px 20px; } .burn-svg { display: none; } }
+  @media (max-width: 560px) { .burn-nodes { grid-template-columns: 1fr; } }
   .bnode {
     border-left: 2px solid var(--stripe, var(--accent));
     padding: 4px 0 4px 18px;
   }
-  .bnode:nth-child(2) { margin-top: 34px; }
-  .bnode:nth-child(3) { margin-top: 0; }
-  @media (max-width: 800px) { .bnode:nth-child(2), .bnode:nth-child(3) { margin-top: 0; } }
+  .bnode:nth-child(2), .bnode:nth-child(3) { margin-top: 26px; }
+  @media (max-width: 900px) { .bnode:nth-child(2), .bnode:nth-child(3) { margin-top: 0; } }
+  .bnode.constrain { --stripe: var(--burn); }
+  .bnode.report { --stripe: var(--saturn); }
+  .batch-band {
+    margin-top: 44px; display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap;
+    padding: 16px 0 0; border-top: 1px dashed var(--hairline);
+    font-size: 14px; color: var(--ink-2);
+  }
+  .batch-band b { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--earth); flex: none; }
+  .batch-band code { font-family: var(--font-mono); font-size: 0.9em; color: var(--ink); }
   .bnode .btag {
     font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.12em;
     text-transform: uppercase; color: var(--stripe, var(--accent)); display: block; margin-bottom: 8px;
@@ -344,6 +378,7 @@
   /* --------------------------------------------------- Phase 5: anomaly log */
   .anomaly { display: flex; gap: 24px; padding: 26px 0; border-top: 1px solid var(--hairline-soft); }
   .anomaly:last-child { border-bottom: 1px solid var(--hairline-soft); }
+  .phase-head + .anomaly { border-top: none; padding-top: 0; }
   @media (max-width: 640px) { .anomaly { flex-direction: column; gap: 10px; } }
   .anomaly .anum {
     font-family: var(--font-display); font-weight: 700; font-size: 40px; color: var(--burn);
@@ -364,7 +399,7 @@
     max-width: 760px;
   }
   .console-head {
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 14px;
     padding: 11px 16px; border-bottom: 1px solid var(--hairline-soft);
   }
   .console-head span { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-muted); letter-spacing: 0.04em; }
@@ -400,6 +435,112 @@
   footer .flinks a { font-size: 13px; color: var(--ink-2); text-decoration: none; }
   footer .flinks a:hover { color: var(--accent); }
 
+  /* ------------------------------------------- Phase: Mars 2020 replay */
+  .replay-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr); gap: 40px; align-items: start; }
+  @media (max-width: 1000px) { .replay-grid { grid-template-columns: 1fr; } }
+  .plot {
+    margin: 0; border: 1px solid var(--hairline); background: var(--panel);
+    padding: 18px 18px 12px;
+  }
+  .plot svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .plot .ax { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-muted); }
+  .plot .ax-title { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-2); }
+  .plot .ctr { fill: none; stroke: var(--ink-muted); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .plot .ctr.c14 { stroke: var(--accent); stroke-width: 1.6; fill: rgba(232,162,62,0.09); }
+  .plot .ctr.c16 { stroke-opacity: .85; }
+  .plot .ctr.c20 { stroke-opacity: .6; }
+  .plot .ctr.c25 { stroke-opacity: .42; }
+  .plot .ctr.c30 { stroke-opacity: .28; }
+  .js .plot .ctr { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.6s cubic-bezier(.3,.6,.2,1); }
+  .js .plot .ctr.c14 { fill-opacity: 0; transition: stroke-dashoffset 1.6s cubic-bezier(.3,.6,.2,1), fill-opacity .8s ease 1.2s; }
+  .js .plot .mk { opacity: 0; transition: opacity .5s ease 1.5s; }
+  .js .plot.drawn .ctr { stroke-dashoffset: 0; }
+  .js .plot.drawn .ctr.c14 { fill-opacity: 1; }
+  .js .plot.drawn .mk { opacity: 1; }
+  .plot .c20 { transition-delay: .15s; } .plot .c25 { transition-delay: .3s; } .plot .c30 { transition-delay: .45s; }
+  @media (prefers-reduced-motion: reduce) {
+    .js .plot .ctr, .js .plot .mk { stroke-dashoffset: 0 !important; opacity: 1 !important; fill-opacity: 1 !important; transition: none !important; }
+  }
+  .plot figcaption {
+    display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid var(--hairline-soft); font-size: 12.5px; color: var(--ink-muted);
+  }
+  .key { display: inline-flex; align-items: center; gap: 7px; }
+  .key i { display: inline-block; width: 14px; height: 0; border-top: 1.6px solid var(--accent); }
+  .key i.band { height: 10px; border: none; background: rgba(94,200,255,0.12); }
+  .key i.ring { width: 10px; height: 10px; border: 1.6px solid var(--accent); border-radius: 50%; }
+  .key i.real { width: 9px; height: 9px; border: none; background: var(--verify); transform: rotate(45deg); }
+
+  .readout { border-top: 1px solid var(--hairline); }
+  .rrow { display: grid; grid-template-columns: 1fr auto; gap: 2px 16px; padding: 15px 0; border-bottom: 1px solid var(--hairline-soft); }
+  .rrow .rq { grid-column: 1 / -1; font-size: 13px; color: var(--ink-muted); }
+  .rrow .rv { font-family: var(--font-display); font-weight: 600; font-size: 27px; line-height: 1.05; color: var(--ink); }
+  .rrow .rv small { font-family: var(--font-body); font-weight: 400; font-size: 13px; color: var(--ink-2); margin-left: 4px; }
+  .rrow .rref { font-family: var(--font-mono); font-size: 12px; color: var(--verify); text-align: right; align-self: end; padding-bottom: 4px; }
+  .rrow.hit .rv { color: var(--accent); }
+  .replay-note { font-size: 12.5px; color: var(--ink-muted); margin: 14px 0 0; }
+
+  .subhead {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    margin: 72px 0 18px;
+  }
+  .subhead h3 { font-family: var(--font-display); font-weight: 600; text-transform: uppercase; font-size: 24px; letter-spacing: 0.01em; margin: 0; }
+  .subhead p { margin: 0; font-size: 13.5px; color: var(--ink-2); max-width: 58ch; }
+
+  /* launch-window strip: 30 July 2020, 00:00-24:00 UTC */
+  .wstrip { position: relative; padding: 46px 0 34px; }
+  .wtrack { position: relative; height: 34px; background: var(--panel); border: 1px solid var(--hairline-soft); }
+  .win { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, rgba(94,200,255,0.16) 0 6px, rgba(94,200,255,0.07) 6px 12px); border-left: 1px solid var(--verify); border-right: 1px solid var(--verify); }
+  .win.open-l { border-left: none; } .win.open-r { border-right: none; }
+  .wmark { position: absolute; top: -10px; bottom: -10px; width: 0; border-left: 1.5px solid var(--accent); }
+  .wmark.real { border-left: 1.5px dashed var(--ink); }
+  .wlabel { position: absolute; font-family: var(--font-mono); font-size: 11.5px; white-space: nowrap; transform: translateX(-50%); }
+  .wlabel.top { top: 8px; color: var(--accent); }
+  .wlabel.bot { bottom: 4px; color: var(--ink); }
+  .wlabel.alt { color: var(--ink-muted); }
+  .wticks { position: relative; height: 18px; margin-top: 8px; }
+  .wticks span { white-space: nowrap; position: absolute; transform: translateX(-50%); font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-muted); }
+  .wticks span:first-child { transform: none; } .wticks span:last-child { transform: translateX(-100%); }
+  @media (max-width: 640px) { .wlabel.alt { display: none; } .wticks span.odd { display: none; } }
+
+  .verify-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: start; }
+  @media (max-width: 900px) { .verify-grid { grid-template-columns: 1fr; } }
+  .checks { list-style: none; margin: 0; padding: 14px 18px 16px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.95; color: var(--ink-2); }
+  .checks li { display: flex; gap: 12px; min-width: 0; }
+  .checks li span:last-child { overflow-wrap: anywhere; }
+  .checks .ok { color: var(--saturn); font-weight: 600; flex: none; }
+  .checks .sum { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hairline-soft); color: var(--ink); }
+  .checks .dim { color: var(--ink-muted); }
+
+  .fleet { margin: 0; }
+  .fleet-chart { position: relative; padding-top: 4px; }
+  .frow-b { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 14px; align-items: center; padding: 7px 0; }
+  .frow-b .fname { font-size: 13px; color: var(--ink-2); }
+  .fbar-wrap { position: relative; height: 22px; }
+  .fbar { position: absolute; left: 0; top: 3px; bottom: 3px; background: var(--hairline); }
+  .fbar.go { background: linear-gradient(90deg, rgba(94,200,255,0.35), rgba(94,200,255,0.75)); }
+  .fbar.nogo { background: var(--burn); }
+  .fval { position: absolute; top: 50%; transform: translateY(-50%); font-family: var(--font-mono); font-size: 11.5px; color: var(--ink); padding-left: 8px; white-space: nowrap; }
+  .need { position: absolute; top: -18px; bottom: -6px; width: 0; border-left: 1px dashed var(--accent); }
+  .need span { position: absolute; top: -2px; left: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--accent); white-space: nowrap; }
+  .fleet figcaption { font-size: 12.5px; color: var(--ink-muted); margin-top: 12px; border-top: 1px solid var(--hairline-soft); padding-top: 10px; }
+  .frow-b.na .fval { position: static; transform: none; display: block; white-space: normal; color: var(--ink-muted); padding: 2px 0 0; font-size: 11px; line-height: 1.4; }
+  .frow-b.na .fbar-wrap { height: auto; }
+  @media (max-width: 480px) { .frow-b { grid-template-columns: 88px minmax(0, 1fr); } }
+
+  .arrival { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); }
+  .arrival > div { padding: 18px 18px 18px 0; }
+  .arrival > div + div { padding-left: 18px; border-left: 1px solid var(--hairline-soft); }
+  .arrival .aq { font-size: 12.5px; color: var(--ink-muted); }
+  .arrival .av { font-family: var(--font-display); font-weight: 600; font-size: 30px; line-height: 1.1; }
+  .arrival .av small { font-family: var(--font-body); font-weight: 400; font-size: 13px; color: var(--ink-2); margin-left: 3px; }
+  .arrival .an { font-size: 12.5px; color: var(--ink-2); }
+  @media (max-width: 800px) {
+    .arrival { grid-template-columns: 1fr 1fr; }
+    .arrival > div:nth-child(3) { padding-left: 0; border-left: none; }
+    .arrival > div:nth-child(n+3) { border-top: 1px solid var(--hairline-soft); }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
   }
@@ -413,7 +554,8 @@
   <div class="met-stops" id="metStops">
     <button class="met-stop" data-target="#top"><span class="met-dot"></span><span class="met-time">T+00:00 LIFTOFF</span></button>
     <button class="met-stop" data-target="#pattern"><span class="met-dot"></span><span class="met-time">T+00:04 STAGING</span></button>
-    <button class="met-stop" data-target="#missions"><span class="met-dot"></span><span class="met-time">T+00:11 MANIFEST</span></button>
+    <button class="met-stop" data-target="#replay"><span class="met-dot"></span><span class="met-time">T+00:08 REPLAY</span></button>
+    <button class="met-stop" data-target="#missions"><span class="met-dot"></span><span class="met-time">T+00:14 MANIFEST</span></button>
     <button class="met-stop" data-target="#results"><span class="met-dot"></span><span class="met-time">T+00:19 TELEMETRY</span></button>
     <button class="met-stop" data-target="#architecture"><span class="met-dot"></span><span class="met-time">T+00:27 SYSTEMS</span></button>
     <button class="met-stop" data-target="#lessons"><span class="met-dot"></span><span class="met-time">T+00:35 ANOMALY LOG</span></button>
@@ -429,6 +571,7 @@
     </a>
     <div class="nav-crumbs">
       <a href="#pattern">approach</a><span class="sep">/</span>
+      <a href="#replay">mars 2020</a><span class="sep">/</span>
       <a href="#missions">missions</a><span class="sep">/</span>
       <a href="#results">results</a><span class="sep">/</span>
       <a href="#architecture">architecture</a><span class="sep">/</span>
@@ -456,8 +599,8 @@
     <p class="lede">
       orbitopt pairs <code>pykep</code> + <code>pygmo</code>'s cheap, population-based search
       with <code>tudatpy</code>'s high-fidelity numerical propagation — CUDA-batched
-      where it counts — to find <em>and confirm</em> real trajectories, from a single
-      Lambert transfer to a GTO → GEO orbit-raising campaign.
+      where it counts — to find <em>and confirm</em> real trajectories, from the
+      launch pad and its daily window through injection, cruise and orbit insertion.
     </p>
     <div class="cta-row">
       <a class="btn btn-primary" href="https://github.com/zangjiucheng/orbitopt" target="_blank" rel="noopener">
@@ -466,61 +609,242 @@
       </a>
       <a class="btn btn-ghost" href="#start">$ pip install orbitopt[viewer] →</a>
     </div>
+    <a class="hero-readout" href="#replay">
+      <span class="hr-k">Mars 2020 replay</span>
+      <span class="hr-v">predicted lift-off <b>11:51:28</b> UTC</span>
+      <span class="hr-v">flown <b>11:50:00</b> UTC</span>
+      <span class="hr-v">Mars periapsis <b>504.7 km</b> for a 500 km target</span>
+    </a>
   </div>
 </header>
 
 <section class="phase" id="pattern">
   <div class="wrap">
-    <div class="met-chip"><span class="bar"></span><span class="phase">T+00:04 · Staging</span></div>
     <div class="phase-head">
-      <h2>Every mission runs the same two-burn sequence</h2>
+      <div class="met-chip"><span class="bar"></span><span class="phase">T+00:04 · Staging</span></div>
+      <h2>Every mission flies the same four stages</h2>
       <p class="phase-sub">
-        A screening optimizer explores a huge search space cheaply; a numerical
-        verifier re-flies only the winner under real physics. Neither stage does
-        the other's job.
+        A cheap optimizer sweeps the whole search space, real-world launch
+        limits prune it, a numerical propagator re-flies only the survivor,
+        and a machine-readable report says whether it held.
       </p>
     </div>
 
     <div class="burn-sequence">
-      <svg class="burn-svg" viewBox="0 0 900 64" preserveAspectRatio="none" aria-hidden="true">
-        <path d="M20,50 C 250,50 250,10 450,10 S 650,50 880,50" fill="none" stroke="#262239" stroke-width="1.5"/>
-        <circle cx="20" cy="50" r="4" fill="#e8a23e"/>
-        <circle cx="450" cy="10" r="4" fill="#5ec8ff"/>
-        <circle cx="880" cy="50" r="4" fill="#4c8eff"/>
+      <svg class="burn-svg" viewBox="0 0 900 72" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M14,58 C 140,58 180,18 300,18 S 470,58 600,52 S 760,14 886,14" fill="none" stroke="#262239" stroke-width="1.5"/>
+        <circle cx="14" cy="58" r="4" fill="#e8a23e"/>
+        <circle cx="300" cy="18" r="4" fill="#ff5a3c"/>
+        <circle cx="600" cy="52" r="4" fill="#5ec8ff"/>
+        <circle cx="886" cy="14" r="4" fill="#2fa97a"/>
       </svg>
       <div class="burn-nodes">
         <div class="bnode">
-          <span class="btag">Stage 1 — Screen</span>
+          <span class="btag">1 · Search</span>
           <h3>pykep + pygmo</h3>
-          <p>Cheap, analytic patched-conic models — Lambert arcs, multi-gravity-assist
-            sequences — searched with population-based global optimizers
-            (<code>pso_gen</code>, <code>cmaes</code>, <code>nsga2</code>). Fast enough
-            to sweep a huge search space; blind to perturbations.</p>
+          <p>Patched-conic Lambert arcs and gravity-assist sequences, swept by
+            population optimizers. Multi-basin multistart optimizes every distinct
+            porkchop valley instead of shrinking onto one.</p>
+        </div>
+        <div class="bnode constrain">
+          <span class="btag">2 · Constrain</span>
+          <h3>Rocket + launch site</h3>
+          <p>Vehicle C3-vs-payload curves and the site's reachable declination
+            enter the fitness. Daily launch windows respect range-safety azimuth
+            corridors, and every number cites its source.</p>
         </div>
         <div class="bnode verify">
-          <span class="btag">Stage 2 — Verify</span>
-          <h3>tudatpy</h3>
-          <p>Numerical, N-body-capable propagation confirms a screened solution
-            actually holds once Earth/Moon/Sun gravity — J2+J22 for GEO — is
-            included. Expensive per call, so it only ever re-checks the winner.</p>
+          <span class="btag">3 · Verify</span>
+          <h3>tudatpy + scipy</h3>
+          <p>Adaptive RKDP8(7) N-body propagation with dense-output event location.
+            Parking orbit → TLI/TMI under J2, Newton and B-plane targeters close
+            the gap to the real trajectory.</p>
         </div>
-        <div class="bnode batch">
-          <span class="btag">Throughout — Batch</span>
-          <h3>CUDA via CuPy</h3>
-          <p>Thousands to millions of <em>independent</em> candidates per run,
-            batched into vectorized array ops — GPU when available, numpy
-            otherwise, same code path either way (<code>orbitopt.core.gpu</code>).</p>
+        <div class="bnode report">
+          <span class="btag">4 · Report</span>
+          <h3>Verification JSON</h3>
+          <p>Every run writes a schema-validated report: step convergence,
+            conservation, residuals, the force model actually used, and a
+            pass/fail per check.</p>
         </div>
       </div>
+      <div class="batch-band">
+        <b>throughout</b>
+        <span>Thousands to millions of independent candidates per run are batched into
+          vectorized array ops — CuPy on a GPU, numpy otherwise, one code path
+          (<code>orbitopt.core.gpu</code>).</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="phase" id="replay">
+  <div class="wrap">
+    <div class="phase-head">
+      <div class="met-chip"><span class="bar"></span><span class="phase">T+00:08 · Replay</span></div>
+      <h2>Mars 2020, rebuilt from the launch pad</h2>
+      <p class="phase-sub">
+        Perseverance lifted off from Cape Canaveral SLC-41 at 11:50 UTC on
+        30 July 2020. Given ephemerides, a launch-site database and a rocket
+        performance curve, this is what orbitopt reconstructs, end to end.
+      </p>
+    </div>
+
+    <div class="replay-grid">
+      <figure class="plot" id="porkchop">
+        <svg viewBox="-58 -16 690 470" role="img" aria-label="Earth to Mars porkchop plot for the 2020 opportunity: departure-C3 contours over departure date and flight time, with the real launch period, orbitopt's optimum and the flown Mars 2020 point marked">
+          <g stroke="#1a1728" stroke-width="1">
+            <line x1="0" y1="0" x2="600" y2="0"/><line x1="0" y1="100" x2="600" y2="100"/>
+            <line x1="0" y1="200" x2="600" y2="200"/><line x1="0" y1="300" x2="600" y2="300"/>
+            <line x1="104.3" y1="0" x2="104.3" y2="400"/><line x1="195.7" y1="0" x2="195.7" y2="400"/>
+            <line x1="306.5" y1="0" x2="306.5" y2="400"/><line x1="397.8" y1="0" x2="397.8" y2="400"/>
+            <line x1="508.7" y1="0" x2="508.7" y2="400"/>
+          </g>
+          <rect x="208.7" y="0" width="189.1" height="400" fill="rgba(94,200,255,0.07)"/>
+          <line x1="208.7" y1="0" x2="208.7" y2="400" stroke="#5ec8ff" stroke-opacity=".45" stroke-dasharray="3 4"/>
+          <line x1="397.8" y1="0" x2="397.8" y2="400" stroke="#5ec8ff" stroke-opacity=".45" stroke-dasharray="3 4"/>
+          <text x="303" y="16" text-anchor="middle" class="ax" style="fill:#5ec8ff">real launch period · Jul 17 – Aug 15</text>
+          <g>
+          <path class="ctr c30" pathLength="1" d="M7.3,400.0 L3.8,398.5 L1.4,397.5 L0.0,396.9"/>
+          <path class="ctr c30" pathLength="1" d="M0.0,258.5 L7.5,257.0 L11.3,256.3 L18.9,254.8 L22.6,254.0 L30.2,252.5 L34.2,251.6 L41.5,250.1 L46.3,249.1 L52.8,247.8 L58.3,246.5 L64.2,245.4 L70.1,244.0 L75.5,242.9 L81.7,241.5 L86.8,240.5 L93.2,239.0 L98.1,238.0 L104.5,236.5 L109.4,235.4 L115.7,234.0 L120.8,232.9 L126.8,231.4 L132.1,230.3 L137.8,228.9 L143.4,227.7 L148.7,226.4 L154.7,225.1 L159.4,223.9 L166.0,222.4 L170.1,221.4 L177.4,219.7 L181.1,218.8 L188.7,217.0 L192.5,216.1 L200.0,214.3 L203.8,213.4 L211.3,211.5 L215.1,210.6 L222.5,208.8 L226.4,207.9 L232.8,206.3 L237.7,205.1 L243.1,203.8 L249.1,202.4 L253.4,201.3 L260.4,199.6 L264.2,198.6 L271.7,196.8 L275.5,195.9 L283.0,194.0 L286.8,193.1 L294.3,191.3 L298.1,190.4 L305.0,188.7 L309.4,187.7 L315.6,186.2 L320.8,185.0 L326.2,183.6 L332.1,182.3 L337.0,181.1 L343.4,179.7 L348.0,178.6 L354.7,177.2 L359.4,176.1 L366.0,174.7 L371.3,173.6 L377.4,172.4 L383.8,171.1 L388.7,170.2 L396.2,168.8 L400.0,168.1 L407.5,166.9 L413.2,166.0 L418.9,165.3 L426.4,164.4 L434.0,163.7 L437.7,163.5 L445.3,163.2 L452.8,163.3 L456.6,163.6 L464.2,164.5 L470.8,166.0 L475.5,167.7 L479.2,169.6 L483.0,172.1 L486.8,175.5 L489.2,178.6 L490.8,181.1 L493.0,186.2 L494.3,190.5 L495.0,193.7 L495.7,198.7 L496.1,203.8 L496.1,208.8 L496.0,213.8 L495.7,218.9 L495.2,223.9 L494.6,228.9 L494.3,231.4 L493.6,236.5 L492.7,241.5 L491.9,246.5 L491.0,251.6 L490.5,254.1 L489.5,259.1 L488.5,264.2 L487.4,269.2 L486.8,272.2 L485.8,276.7 L484.7,281.8 L483.6,286.8 L483.0,289.3 L481.9,294.3 L480.7,299.4 L479.6,304.4 L479.0,306.9 L477.8,311.9 L476.6,317.0 L475.5,321.9 L474.8,324.5 L473.7,329.6 L472.5,334.6 L471.7,337.8 L470.6,342.1 L469.4,347.2 L468.2,352.2 L467.6,354.7 L466.3,359.7 L465.0,364.8 L464.2,368.2 L463.1,372.3 L461.7,377.4 L460.4,382.3 L459.6,384.9 L458.2,389.9 L456.7,395.0 L455.9,397.5"/>
+          <path class="ctr c30" pathLength="1" d="M0.0,32.1 L2.2,30.2 L3.8,28.9 L5.2,27.7 L7.5,25.6 L8.1,25.2 L11.0,22.6 L11.3,22.4 L14.0,20.1 L15.1,19.2 L16.9,17.6 L18.9,15.9 L19.9,15.1 L22.6,12.7 L22.8,12.6 L25.7,10.1 L26.4,9.5 L28.6,7.5 L30.2,6.2 L31.6,5.0 L34.0,3.0 L34.5,2.5 L37.4,0.0"/>
+          <path class="ctr c30" pathLength="1" d="M490.1,0.0 L483.6,2.5 L479.2,4.1 L475.5,5.6 L470.3,7.5 L464.2,9.9 L460.4,11.3 L456.6,12.7 L450.3,15.1 L445.3,17.0 L441.5,18.4 L436.9,20.1 L430.2,22.6 L426.4,24.0 L422.6,25.4 L416.7,27.7 L411.3,29.6 L407.5,31.0 L403.1,32.7 L396.3,35.2 L392.5,36.6 L388.7,38.0 L382.7,40.3 L377.4,42.2 L373.6,43.6 L369.1,45.3 L362.3,47.8 L358.5,49.1 L354.7,50.5 L348.5,52.8 L343.4,54.7 L339.6,56.1 L334.8,57.9 L328.3,60.2 L324.5,61.6 L320.8,63.0 L314.1,65.4 L309.4,67.1 L305.7,68.5 L300.3,70.4 L294.3,72.6 L290.6,73.9 L286.4,75.5 L279.5,78.0 L275.5,79.4 L271.7,80.8 L265.6,83.0 L260.4,84.9 L256.6,86.2 L251.6,88.1 L245.3,90.3 L241.5,91.7 L237.7,93.1 L230.7,95.6 L226.4,97.1 L222.6,98.5 L216.7,100.6 L211.3,102.5 L207.5,103.9 L202.6,105.7 L196.2,107.9 L192.5,109.3 L188.5,110.7 L181.5,113.2 L177.4,114.6 L173.6,116.0 L167.3,118.2 L162.3,120.0 L158.5,121.3 L153.1,123.3 L147.2,125.4 L143.4,126.7 L138.9,128.3 L132.1,130.7 L128.3,132.0 L124.5,133.4 L117.5,135.8 L113.2,137.3 L109.4,138.7 L103.1,140.9 L98.1,142.6 L94.3,143.9 L88.7,145.9 L83.0,147.9 L79.2,149.2 L74.3,150.9 L67.9,153.1 L64.2,154.4 L59.8,156.0 L52.8,158.4 L49.1,159.6 L45.2,161.0 L37.9,163.5 L34.0,164.8 L30.2,166.2 L23.2,168.6 L18.9,170.0 L15.1,171.3 L8.5,173.6 L3.8,175.2 L0.0,176.5"/>
+          <path class="ctr c25" pathLength="1" d="M63.2,400.0 L60.4,398.7 L57.5,397.5 L56.6,397.1 L52.8,395.4 L52.0,395.0 L49.1,393.6 L46.5,392.5 L45.3,391.9 L41.5,390.1 L41.1,389.9 L37.7,388.4 L35.7,387.4 L34.0,386.6 L30.5,384.9 L30.2,384.8 L26.4,382.9 L25.3,382.4 L22.6,381.1 L20.2,379.9 L18.9,379.2 L15.2,377.4 L15.1,377.3 L11.3,375.4 L10.2,374.8 L7.5,373.5 L5.4,372.3 L3.8,371.5 L0.6,369.8 L0.0,369.5"/>
+          <path class="ctr c25" pathLength="1" d="M0.0,265.6 L6.4,264.2 L11.3,263.2 L18.1,261.6 L22.6,260.7 L29.7,259.1 L34.0,258.3 L41.4,256.6 L45.3,255.8 L52.8,254.1 L56.6,253.4 L64.2,251.7 L67.9,250.9 L75.5,249.2 L79.2,248.4 L86.8,246.7 L90.6,245.9 L98.1,244.2 L101.9,243.4 L109.4,241.7 L113.2,240.9 L120.8,239.2 L124.5,238.4 L132.1,236.6 L135.8,235.8 L143.4,234.1 L147.2,233.3 L154.7,231.5 L158.5,230.7 L166.0,229.0 L169.8,228.1 L177.2,226.4 L181.1,225.6 L188.3,223.9 L192.5,223.0 L199.4,221.4 L203.8,220.4 L210.4,218.9 L215.1,217.8 L221.5,216.4 L226.4,215.3 L232.7,213.8 L237.7,212.7 L243.9,211.3 L249.1,210.2 L255.3,208.8 L260.4,207.7 L266.7,206.3 L271.7,205.3 L278.4,203.8 L283.0,202.8 L290.4,201.3 L294.3,200.5 L301.9,198.9 L305.7,198.2 L313.2,196.7 L317.0,196.0 L324.5,194.6 L329.7,193.7 L335.8,192.7 L343.4,191.5 L347.2,190.9 L354.7,189.8 L362.3,188.9 L366.0,188.5 L373.6,187.8 L381.1,187.3 L388.7,187.0 L396.2,187.0 L403.8,187.4 L411.3,188.4 L415.1,189.1 L422.5,191.2 L426.4,192.8 L430.2,194.8 L434.0,197.4 L437.7,200.8 L440.2,203.8 L441.9,206.3 L444.6,211.3 L445.6,213.8 L447.1,218.9 L448.2,223.9 L448.9,228.9 L449.1,231.4 L449.4,236.5 L449.5,241.5 L449.4,246.5 L449.2,251.6 L449.0,254.1 L448.6,259.1 L448.2,264.2 L447.6,269.2 L447.0,274.2 L446.3,279.2 L445.6,284.3 L445.2,286.8 L444.4,291.8 L443.6,296.9 L442.7,301.9 L441.8,306.9 L441.4,309.4 L440.4,314.5 L439.4,319.5 L438.5,324.5 L437.7,328.2 L436.9,332.1 L435.9,337.1 L434.8,342.1 L434.0,346.1 L433.2,349.7 L432.0,354.7 L430.8,359.7 L430.2,362.4 L429.0,367.3 L427.6,372.3 L426.4,376.9 L425.6,379.9 L424.1,384.9 L422.6,389.7 L421.7,392.5 L420.0,397.5"/>
+          <path class="ctr c25" pathLength="1" d="M453.5,0.0 L449.1,1.8 L445.3,3.2 L440.8,5.0 L434.4,7.5 L430.2,9.2 L426.4,10.6 L421.4,12.6 L415.1,15.0 L411.3,16.4 L407.5,17.9 L401.7,20.1 L396.2,22.2 L392.5,23.6 L388.3,25.2 L381.6,27.7 L377.4,29.2 L373.6,30.6 L368.0,32.7 L362.3,34.8 L358.5,36.2 L354.3,37.7 L347.4,40.3 L343.4,41.7 L339.6,43.1 L333.5,45.3 L328.3,47.2 L324.5,48.5 L319.5,50.3 L313.2,52.6 L309.4,53.9 L305.4,55.3 L298.3,57.9 L294.3,59.2 L290.6,60.6 L283.9,62.9 L279.2,64.5 L275.5,65.8 L269.4,67.9 L264.2,69.7 L260.4,71.0 L254.7,73.0 L249.1,74.9 L245.3,76.1 L239.9,78.0 L234.0,80.0 L230.2,81.2 L224.8,83.0 L218.9,85.0 L215.1,86.2 L209.6,88.1 L203.8,89.9 L200.0,91.1 L194.0,93.1 L188.7,94.8 L184.9,96.0 L178.2,98.1 L173.6,99.5 L169.8,100.7 L162.3,103.0 L158.5,104.2 L153.6,105.7 L147.2,107.6 L143.4,108.7 L136.6,110.7 L132.1,112.0 L127.8,113.2 L120.8,115.1 L117.0,116.2 L109.4,118.2 L105.7,119.2 L99.5,120.8 L94.3,122.0 L89.0,123.3 L83.0,124.6 L77.7,125.8 L71.7,127.0 L64.5,128.3 L60.4,129.0 L52.8,130.0 L45.3,130.7 L41.5,130.9 L34.0,130.8 L30.2,130.4 L22.6,128.4 L18.9,125.8 L17.0,123.3 L15.7,118.2 L16.2,113.2 L17.7,108.2 L18.9,105.3 L21.2,100.6 L22.6,98.0 L25.6,93.1 L27.3,90.6 L30.2,86.4 L32.6,83.0 L34.5,80.5 L37.7,76.3 L40.4,73.0 L42.4,70.4 L45.3,67.0 L48.7,62.9 L50.9,60.4 L53.1,57.9 L56.6,53.9 L59.8,50.3 L62.0,47.8 L64.3,45.3 L67.9,41.4 L71.3,37.7 L73.6,35.2 L76.0,32.7 L79.2,29.3 L83.0,25.3 L85.6,22.6 L88.0,20.1 L90.6,17.5 L94.3,13.6 L97.8,10.1 L100.3,7.5 L102.8,5.0 L105.7,2.1"/>
+          <path class="ctr c20" pathLength="1" d="M133.6,400.0 L128.3,397.7 L124.5,396.0 L120.8,394.3 L116.8,392.5 L111.4,389.9 L106.2,387.4 L101.9,385.3 L98.1,383.4 L94.3,381.5 L90.6,379.5 L86.5,377.4 L81.8,374.8 L77.2,372.3 L72.8,369.8 L68.4,367.3 L64.2,364.8 L60.4,362.5 L56.6,360.2 L52.8,357.8 L49.1,355.4 L45.3,352.9 L41.5,350.3 L37.7,347.7 L34.0,344.9 L30.2,342.1 L27.0,339.6 L23.8,337.1 L20.8,334.6 L18.0,332.1 L15.1,329.4 L11.3,325.7 L7.9,322.0 L5.7,319.5 L3.8,316.9 L0.6,311.9"/>
+          <path class="ctr c20" pathLength="1" d="M0.0,293.6 L3.6,289.3 L6.7,286.8 L10.5,284.3 L15.1,281.8 L18.9,280.0 L22.6,278.3 L26.5,276.7 L33.3,274.2 L37.7,272.8 L41.5,271.5 L48.8,269.2 L52.8,268.0 L57.4,266.7 L64.2,264.8 L67.9,263.8 L75.5,261.8 L79.2,260.8 L85.7,259.1 L90.6,257.9 L95.8,256.6 L101.9,255.1 L106.1,254.1 L113.2,252.4 L117.0,251.5 L124.5,249.7 L128.3,248.8 L135.8,247.1 L139.6,246.2 L147.2,244.5 L150.9,243.7 L158.5,242.0 L162.3,241.2 L169.8,239.5 L173.6,238.7 L181.1,237.1 L184.9,236.2 L192.5,234.7 L196.2,233.8 L203.8,232.3 L207.9,231.4 L215.1,230.0 L220.5,228.9 L226.4,227.8 L233.5,226.4 L237.7,225.7 L245.3,224.3 L249.1,223.6 L256.6,222.3 L262.2,221.4 L267.9,220.5 L275.5,219.4 L279.2,218.8 L286.8,217.8 L294.3,217.0 L300.0,216.4 L305.7,215.9 L313.2,215.3 L320.8,215.0 L328.3,214.9 L335.8,215.1 L343.4,215.7 L348.8,216.4 L354.7,217.5 L360.1,218.9 L366.0,221.0 L369.8,222.8 L373.6,225.0 L377.4,227.8 L381.1,231.4 L383.3,234.0 L385.1,236.5 L387.9,241.5 L389.1,244.0 L390.9,249.1 L392.3,254.1 L392.8,256.6 L393.7,261.6 L394.2,266.7 L394.6,271.7 L394.8,276.7 L394.8,281.8 L394.7,286.8 L394.5,291.8 L394.2,296.9 L393.8,301.9 L393.3,306.9 L392.8,311.9 L392.5,314.5 L391.8,319.5 L391.0,324.5 L390.2,329.6 L389.4,334.6 L388.7,338.3 L387.9,342.1 L386.9,347.2 L385.7,352.2 L384.9,355.6 L383.8,359.7 L382.5,364.8 L381.1,369.3 L380.2,372.3 L378.5,377.4 L377.4,380.5 L375.6,384.9 L373.6,389.6 L372.2,392.5 L369.8,397.2 L368.3,400.0"/>
+          <path class="ctr c20" pathLength="1" d="M384.1,0.0 L377.4,2.5 L373.6,3.9 L369.8,5.3 L363.4,7.5 L358.5,9.3 L354.7,10.6 L348.9,12.6 L343.4,14.4 L339.6,15.7 L333.6,17.6 L328.3,19.3 L324.5,20.5 L317.5,22.6 L313.2,23.9 L308.9,25.2 L301.9,27.1 L298.1,28.2 L290.6,30.2 L286.8,31.1 L280.4,32.7 L275.5,33.8 L269.1,35.2 L264.2,36.2 L256.6,37.6 L252.8,38.2 L245.3,39.2 L237.7,39.9 L230.2,40.2 L222.6,39.9 L215.1,38.5 L211.3,37.1 L207.5,34.9 L203.8,30.4 L202.7,27.7 L202.2,22.6 L202.8,17.6 L203.8,13.8 L205.0,10.1 L207.2,5.0 L208.4,2.5"/>
+          <path class="ctr c16" pathLength="1" d="M237.7,397.8 L234.0,397.3 L226.4,395.9 L222.2,395.0 L215.1,393.3 L211.3,392.3 L203.8,390.1 L200.0,388.9 L195.6,387.4 L188.7,385.0 L184.9,383.5 L181.1,382.1 L175.8,379.9 L170.0,377.4 L166.0,375.6 L162.3,373.8 L158.5,372.0 L154.2,369.8 L149.4,367.3 L144.8,364.8 L140.4,362.3 L136.1,359.7 L132.1,357.2 L128.3,354.8 L124.5,352.3 L120.8,349.7 L117.4,347.2 L114.1,344.7 L111.0,342.1 L108.0,339.6 L105.2,337.1 L101.9,333.9 L98.1,329.9 L95.6,327.0 L93.7,324.5 L90.6,319.9 L89.0,317.0 L87.0,311.9 L86.4,309.4 L86.1,304.4 L86.8,300.4 L88.1,296.9 L90.6,293.1 L94.0,289.3 L97.0,286.8 L100.5,284.3 L104.5,281.8 L109.2,279.2 L113.2,277.3 L117.0,275.7 L120.8,274.1 L127.0,271.7 L132.1,269.9 L135.8,268.7 L142.2,266.7 L147.2,265.2 L150.9,264.1 L158.5,262.1 L162.3,261.1 L169.8,259.2 L173.6,258.4 L181.1,256.7 L184.9,255.9 L192.5,254.3 L196.2,253.6 L203.8,252.2 L207.5,251.6 L215.1,250.4 L222.6,249.3 L226.4,248.8 L234.0,247.9 L241.5,247.1 L249.0,246.5 L252.8,246.3 L260.4,246.1 L267.9,246.1 L275.5,246.4 L279.2,246.7 L286.8,247.6 L294.1,249.1 L298.1,250.2 L302.4,251.6 L308.2,254.1 L312.7,256.6 L316.2,259.1 L319.2,261.6 L321.7,264.2 L324.5,267.7 L327.1,271.7 L328.5,274.2 L330.7,279.2 L332.1,283.4 L333.0,286.8 L334.0,291.8 L334.7,296.9 L335.1,301.9 L335.3,306.9 L335.2,311.9 L335.0,317.0 L334.5,322.0 L333.9,327.0 L333.1,332.1 L332.1,337.1 L331.5,339.6 L330.1,344.7 L328.6,349.7 L327.7,352.2 L325.7,357.2 L324.5,359.9 L322.0,364.8 L320.6,367.3 L317.4,372.3 L315.5,374.8 L313.2,377.6 L309.4,381.5 L305.7,384.9 L302.2,387.4 L298.3,389.9 L294.3,392.0 L290.6,393.7 L286.8,395.1 L279.2,397.2 L275.5,397.9 L267.9,398.9 L260.4,399.3 L252.8,399.2 L245.3,398.7 L237.7,397.8"/>
+          <path class="ctr c14" pathLength="1" d="M226.4,360.0 L222.6,359.5 L215.1,358.0 L211.3,357.1 L203.8,354.8 L200.0,353.4 L196.2,351.9 L191.1,349.7 L186.0,347.2 L181.4,344.7 L177.4,342.2 L173.6,339.7 L170.0,337.1 L166.9,334.6 L164.0,332.1 L161.5,329.6 L158.5,326.1 L155.5,322.0 L154.1,319.5 L152.2,314.5 L151.6,309.4 L152.4,304.4 L154.7,299.7 L156.9,296.9 L159.5,294.3 L162.7,291.8 L166.5,289.3 L171.2,286.8 L176.9,284.3 L181.1,282.7 L184.9,281.4 L192.3,279.2 L196.2,278.3 L203.8,276.8 L207.5,276.1 L215.1,275.2 L222.6,274.5 L230.2,274.3 L237.7,274.6 L245.3,275.4 L252.1,276.7 L256.6,278.0 L260.4,279.4 L265.3,281.8 L269.3,284.3 L272.4,286.8 L275.5,289.9 L278.8,294.3 L280.2,296.9 L282.4,301.9 L283.1,304.4 L284.1,309.4 L284.5,314.5 L284.3,319.5 L283.7,324.5 L283.0,327.4 L281.5,332.1 L279.3,337.1 L277.9,339.6 L275.5,343.2 L272.1,347.2 L269.3,349.7 L266.0,352.2 L261.9,354.7 L256.6,357.1 L252.8,358.3 L246.3,359.7 L241.5,360.3 L234.0,360.5 L226.4,360.0 Z"/>
+          </g>
+          <g class="mk">
+            <path d="M209.2,316 h12 M215.2,310 v12" stroke="#a9a6bb" stroke-width="1.4"/>
+            <text x="215.2" y="384" text-anchor="middle" class="ax" style="fill:#a9a6bb">window C3 min 13.2</text>
+            <circle cx="262.2" cy="289.4" r="7" fill="none" stroke="#e8a23e" stroke-width="2"/>
+            <text x="250" y="258" text-anchor="end" class="ax" style="fill:#e8a23e">orbitopt optimum · C3 13.8</text>
+            <rect x="288.5" y="288.2" width="10" height="10" fill="#5ec8ff" transform="rotate(45 293.5 293.2)"/>
+            <text x="306" y="306" class="ax" style="fill:#f4f2ea">Mars 2020, flown</text>
+          </g>
+          <g class="ax">
+            <text x="-10" y="404" text-anchor="end">150</text><text x="-10" y="304" text-anchor="end">200</text>
+            <text x="-10" y="204" text-anchor="end">250</text><text x="-10" y="104" text-anchor="end">300</text>
+            <text x="-10" y="4" text-anchor="end">350</text>
+            <text x="104.3" y="422" text-anchor="middle">Jul 1</text><text x="195.7" y="422" text-anchor="middle">Jul 15</text>
+            <text x="306.5" y="422" text-anchor="middle">Aug 1</text><text x="397.8" y="422" text-anchor="middle">Aug 15</text>
+            <text x="508.7" y="422" text-anchor="middle">Sep 1</text>
+          </g>
+          <text x="300" y="448" text-anchor="middle" class="ax-title">Earth departure, 2020</text>
+          <text transform="translate(-44 200) rotate(-90)" text-anchor="middle" class="ax-title">flight time, days</text>
+          <rect x="0" y="0" width="600" height="400" fill="none" stroke="#262239"/>
+        </svg>
+        <figcaption>
+          <span class="key"><i></i>C3 = 14 km²/s² (filled below)</span>
+          <span class="key"><i style="border-color:#6f6c85"></i>16 · 20 · 25 · 30</span>
+          <span class="key"><i class="band"></i>real launch period</span>
+          <span class="key"><i class="ring"></i>multistart optimum</span>
+          <span class="key"><i class="real"></i>flown</span>
+        </figcaption>
+      </figure>
+
+      <div>
+        <div class="readout">
+          <div class="rrow">
+            <span class="rq">Where the window opens (lowest departure C3)</span>
+            <span class="rv">Jul 18<small>C3 13.2</small></span>
+            <span class="rref">real period opened Jul 17</span>
+          </div>
+          <div class="rrow">
+            <span class="rq">Best transfer found by the multistart search</span>
+            <span class="rv">Jul 25<small>205 days</small></span>
+            <span class="rref">flown Jul 30 · 203 days</span>
+          </div>
+          <div class="rrow hit">
+            <span class="rq">Optimal lift-off from KSC on 30 July</span>
+            <span class="rv">11:51:28<small>UTC</small></span>
+            <span class="rref">flown 11:50:00 · Δ +1.5 min</span>
+          </div>
+        </div>
+        <p class="replay-note">From the lift-off row on, the real departure date and the 203.4-day
+          flight time are inputs; the time of day is the prediction. The rocket model is
+          Atlas V 551 (the database has no 541) carrying 4,037 kg.</p>
+      </div>
+    </div>
+
+    <div class="subhead">
+      <h3>The launch day, 30 July 2020</h3>
+      <p>Windows from KSC into the departure asymptote (RLA 9.5°, DLA 23.6°), limited to the Eastern Range's 35°–120° azimuth corridor.</p>
+    </div>
+    <div class="wstrip" role="img" aria-label="Launch windows on 30 July 2020 UTC: open until 08:52, 09:41 to 16:44, and from 23:37. Predicted optimum 11:51:28, actual lift-off 11:50.">
+      <span class="wlabel top alt" style="left:29.28%">07:01:40</span>
+      <span class="wlabel top" style="left:49.41%">model 11:51:28</span>
+      <div class="wtrack">
+        <div class="win open-l" style="left:0;width:36.94%"></div>
+        <div class="win" style="left:40.36%;width:29.35%"></div>
+        <div class="win open-r" style="left:98.41%;width:1.59%"></div>
+        <div class="wmark" style="left:29.28%;opacity:.5"></div>
+        <div class="wmark" style="left:49.41%"></div>
+        <div class="wmark real" style="left:49.31%"></div>
+      </div>
+      <span class="wlabel bot" style="left:49.31%">flown 11:50:00</span>
+      <div class="wticks">
+        <span style="left:0">00:00</span><span class="odd" style="left:16.67%">04</span><span style="left:33.33%">08</span>
+        <span class="odd" style="left:50%">12</span><span style="left:66.67%">16</span><span class="odd" style="left:83.33%">20</span><span style="left:100%">24:00 UTC</span>
+      </div>
+    </div>
+
+    <div class="subhead">
+      <h3>Can the rocket fly it?</h3>
+      <p>Launch constraints are part of the optimizer's fitness, not a post-hoc filter. Same 4,037 kg payload on every vehicle in the database.</p>
+    </div>
+    <div class="verify-grid">
+      <figure class="fleet">
+        <div class="fleet-chart" role="img" aria-label="Maximum C3 with 4,037 kg payload: Falcon 9 8.6, Atlas V 551 20.8, Long March 5 22.0, Vulcan VC6 45.6, Falcon Heavy 57.2; the transfer needs 13.8">
+          <div class="frow-b"><span class="fname">Falcon 9</span><div class="fbar-wrap"><div class="fbar nogo" style="width:11.51%"></div><span class="fval" style="left:21.60%;color:var(--burn)">8.6 · no 2020 transfer</span><div class="need" style="left:18.40%"><span>needs 13.8</span></div></div></div>
+          <div class="frow-b"><span class="fname">Atlas V 551</span><div class="fbar-wrap"><div class="fbar go" style="width:27.72%"></div><span class="fval" style="left:27.72%">20.8</span><div class="need" style="left:18.40%"></div></div></div>
+          <div class="frow-b"><span class="fname">Long March 5</span><div class="fbar-wrap"><div class="fbar go" style="width:29.36%"></div><span class="fval" style="left:29.36%">22.0</span><div class="need" style="left:18.40%"></div></div></div>
+          <div class="frow-b"><span class="fname">Vulcan VC6</span><div class="fbar-wrap"><div class="fbar go" style="width:60.84%"></div><span class="fval" style="left:60.84%">45.6</span><div class="need" style="left:18.40%"></div></div></div>
+          <div class="frow-b"><span class="fname">Falcon Heavy</span><div class="fbar-wrap"><div class="fbar go" style="width:76.25%"></div><span class="fval" style="left:76.25%">57.2</span><div class="need" style="left:18.40%"></div></div></div>
+          <div class="frow-b na"><span class="fname">Long March 3B</span><div class="fbar-wrap"><span class="fval">outside its tabulated payload range — refused to extrapolate</span></div></div>
+        </div>
+        <figcaption>Maximum departure C3 (km²/s²) at 4,037 kg. The 2020 window's lowest C3 is 13.2, so Falcon 9 has no feasible transfer at all; at the optimum's C3 it could carry 3,561 kg.</figcaption>
+      </figure>
+
+      <div class="console">
+        <div class="console-head"><span>mars2020_injection.verification.json</span><span>status.checks</span></div>
+        <ul class="checks">
+          <li><span class="ok">PASS</span><span>launch.site_in_plane</span></li>
+          <li><span class="ok">PASS</span><span>launch.azimuth_in_corridor</span></li>
+          <li><span class="ok">PASS</span><span>launch.inclination_reachable</span></li>
+          <li><span class="ok">PASS</span><span>launch.c3_within_vehicle</span></li>
+          <li><span class="ok">PASS</span><span>launch.dla_within_site</span></li>
+          <li><span class="ok">PASS</span><span>residual.parking_coast_vs_analytic</span></li>
+          <li><span class="ok">PASS</span><span>launch-injection.step_convergence</span></li>
+          <li><span class="ok">PASS</span><span>launch-injection.two_body_conservation</span></li>
+          <li><span class="ok">PASS</span><span>targeting.converged <span class="dim">10.4 → 0.083 m/s, 1 Newton step</span></span></li>
+          <li class="sum"><span class="ok">9/9</span><span>passed: true</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="subhead">
+      <h3>Injection to orbit insertion</h3>
+      <p>Full tudatpy cruise under Sun, Earth, Mars and Jupiter gravity. The correction burn is targeted in the B-plane, so the periapsis itself hits the target.</p>
+    </div>
+    <div class="arrival">
+      <div><div class="aq">TMI burn</div><div class="av">3,863<small>m/s</small></div><div class="an">185 km parking orbit, i 28.45°, 40 min coast</div></div>
+      <div><div class="aq">Trajectory correction</div><div class="av">48.0<small>m/s</small></div><div class="an">B-plane targeted, 1 Newton step</div></div>
+      <div><div class="aq">Mars periapsis altitude</div><div class="av" style="color:var(--accent)">504.7<small>km</small></div><div class="an">target 500 km</div></div>
+      <div><div class="aq">Capture orbit</div><div class="av">13,894<small>km · e 0.72</small></div><div class="an">mission report: all checks pass</div></div>
     </div>
   </div>
 </section>
 
 <section class="phase" id="missions">
   <div class="wrap">
-    <div class="met-chip"><span class="bar"></span><span class="phase">T+00:11 · Manifest</span></div>
     <div class="phase-head">
-      <h2>Four real missions, one viewer</h2>
+      <div class="met-chip"><span class="bar"></span><span class="phase">T+00:14 · Manifest</span></div>
+      <h2>Real missions, one viewer</h2>
       <p class="phase-sub">
         Every mission — built-in or your own — is the same <code style="font-family:var(--font-mono)">SceneData</code>
         JSON document, opened by the same PyVista/PySide6 renderer: Mission Control.
@@ -547,10 +871,22 @@
         <div class="fact">min. <b>finite-burn-feasible</b> schedule, J2+J22+Sun/Moon verified</div>
       </div>
       <div class="ticket">
-        <div class="thead"><span class="tdot" style="color:#5ec8ff;background:#5ec8ff"></span><h3>Config-driven runs</h3><span class="newpill">NEW</span></div>
-        <p><code>orbitopt validate</code> / <code>orbitopt run</code>: describe a
-          mission in YAML, get a schema-checked, physically-verified scene file.</p>
-        <div class="fact">strict JSON-Schema config + the real <b>verify_geo_raising</b> pass</div>
+        <div class="thead"><span class="tdot" style="color:#e14b3d;background:#e14b3d"></span><h3>Mars — launch to orbit insertion</h3><span class="newpill">NEW</span></div>
+        <p>Lambert-optimized departure, a full N-body cruise with a B-plane-targeted
+          correction burn, and capture into an elliptical Mars orbit.</p>
+        <div class="fact">periapsis target 500&nbsp;km — flown <b>504.7&nbsp;km</b></div>
+      </div>
+      <div class="ticket">
+        <div class="thead"><span class="tdot" style="color:#ff5a3c;background:#ff5a3c"></span><h3>Launch windows</h3><span class="newpill">NEW</span></div>
+        <p>Daily open, close and optimal lift-off times from a sourced launch-site
+          database, into an orbit plane or along an interplanetary asymptote.</p>
+        <div class="fact"><b>orbitopt launch-window</b> ksc --rla 9.6 --dla 23.4</div>
+      </div>
+      <div class="ticket">
+        <div class="thead"><span class="tdot" style="color:#5ec8ff;background:#5ec8ff"></span><h3>Config-driven runs</h3></div>
+        <p><code>orbitopt validate</code> / <code>orbitopt run</code>: describe a GEO-raising
+          or Mars-transfer mission in YAML, get a verified scene and its report.</p>
+        <div class="fact">strict JSON-Schema config → scene + <b>verification report</b></div>
       </div>
     </div>
     <div class="manifest-hint">⇠ swipe / scroll for the full manifest ⇢</div>
@@ -559,8 +895,8 @@
 
 <section class="phase" id="results">
   <div class="wrap">
-    <div class="met-chip"><span class="bar"></span><span class="phase">T+00:19 · Telemetry</span></div>
     <div class="phase-head">
+      <div class="met-chip"><span class="bar"></span><span class="phase">T+00:19 · Telemetry</span></div>
       <h2>Measured, not assumed</h2>
       <p class="phase-sub">
         Speedup grows with batch size — GPU kernel-launch overhead dominates at
@@ -587,8 +923,8 @@
 
 <section class="phase" id="architecture">
   <div class="wrap">
-    <div class="met-chip"><span class="bar"></span><span class="phase">T+00:27 · Systems</span></div>
     <div class="phase-head">
+      <div class="met-chip"><span class="bar"></span><span class="phase">T+00:27 · Systems</span></div>
       <h2>Three layers, one scene format</h2>
       <p class="phase-sub">
         Reading and viewing a scene someone already computed doesn't need
@@ -614,9 +950,9 @@
         <div class="layer">
           <span class="lnum">03 · conda environment</span>
           <h4>Compute stack</h4>
-          <p>pykep + pygmo + tudatpy ship only on conda-forge/tudat-team.
-            <code>envs/cpu.conda-lock.yml</code> (or the CUDA <code>envs/gpu.conda-lock.yml</code>) builds the layer that actually
-            optimizes and verifies trajectories.</p>
+          <p>pykep + pygmo + tudatpy ship only on conda-forge/tudat-team. Fully pinned
+            conda-lock files build it: <code>envs/cpu.conda-lock.yml</code>, or
+            <code>envs/gpu.conda-lock.yml</code> with CuPy on CUDA 13.</p>
         </div>
       </div>
       <pre class="tree"><span class="comment"># src/orbitopt/</span>
@@ -626,12 +962,18 @@
 <span class="path">problems/</span>    transfer_2body.py, mga.py
              free_return.py, geo_raising.py
 <span class="path">optimize/</span>    gpu_bfe.py, runner.py     <span class="comment"># pygmo + custom batch fitness evaluator</span>
-<span class="path">verify/</span>      tudat_propagate.py
-             differential_correction.py
-             geo_insertion.py          <span class="comment"># tudatpy-based, high-fidelity checks</span>
+             multistart.py             <span class="comment"># one optimizer per porkchop valley</span>
+<span class="path">launch_*.py</span>  sites, vehicles,          <span class="comment"># sourced data, C3/DLA constraints,</span>
+             constraints, windows      <span class="comment"># daily launch windows</span>
+<span class="path">injection.py</span>                   <span class="comment"># pad -> parking orbit -> TLI/TMI, verified</span>
+<span class="path">verify/</span>      tudat_propagate.py, events.py
+             differential_correction.py, b_plane.py
+             geo_insertion.py, mars_insertion.py
+             report.py                 <span class="comment"># schema-validated verification reports</span>
 <span class="path">viz/</span>         scene_renderer.py         <span class="comment"># one PyVista draw path, every scene</span>
              app.py                    <span class="comment"># Mission Control (PySide6 + pyvistaqt)</span>
-             solar_system.py, mission_timeline.py, geo_raising.py
+             solar_system.py, mission_timeline.py
+             geo_raising.py, mars_transfer.py, porkchop.py
 <span class="path">mission_config.py</span>              <span class="comment"># YAML config -> validated -> built scene</span>
 <span class="path">missions.py</span>                    <span class="comment"># named-mission registry + plugin entry points</span>
 <span class="path">scene_format.py</span>                <span class="comment"># the format's entire read/write/validate surface</span></pre>
@@ -641,11 +983,12 @@
 
 <section class="phase" id="lessons">
   <div class="wrap">
-    <div class="met-chip"><span class="bar"></span><span class="phase">T+00:35 · Anomaly log</span></div>
     <div class="phase-head">
+      <div class="met-chip"><span class="bar"></span><span class="phase">T+00:35 · Anomaly log</span></div>
       <h2>Bugs that cost real debugging time</h2>
       <p class="phase-sub">
-        Kept in the README on purpose — root-caused and measured, not smoothed over.
+        Root-caused and measured, not smoothed over. Longer write-ups for the
+        early ones live in <code>docs/engineering-notes.md</code>.
       </p>
     </div>
 
@@ -678,13 +1021,36 @@
           converged (≤15s step) closest approach was 4,379&nbsp;km.</p>
       </div>
     </div>
+    <div class="anomaly">
+      <div class="anum">04</div>
+      <div class="abody">
+        <span class="atag">Mars TCM · aimed at a point, not a periapsis</span>
+        <p><b>The 2020 replay flew below the surface of Mars.</b> The correction burn
+          aimed the spacecraft at a point 3,889.5&nbsp;km from Mars's center at a fixed
+          time. Gravity bends the approach inward, so the real periapsis came out at
+          3,341&nbsp;km, under Mars's 3,389.5&nbsp;km radius, and the report still passed.
+          A second targeting stage now solves for the B-plane vector with the arrival
+          time held fixed, and the flown periapsis lands at 504.7&nbsp;km altitude.</p>
+      </div>
+    </div>
+    <div class="anomaly">
+      <div class="anum">05</div>
+      <div class="abody">
+        <span class="atag">Verification report · two values of one constant</span>
+        <p><b>An energy drift that wasn't there.</b> The orbit-insertion conservation
+          check computed energy with SPICE's Mars GM while tudat integrated with its own,
+          1.9×10⁻⁸ apart. On an e&nbsp;=&nbsp;0.75 capture orbit that reads as a 1.2×10⁻⁷
+          drift, which failed every run. The tell: angular momentum, which doesn't involve
+          GM, drifted only 10⁻¹³. With the integrator's own GM the drift is 2×10⁻¹².</p>
+      </div>
+    </div>
   </div>
 </section>
 
 <section class="phase" id="start">
   <div class="wrap">
-    <div class="met-chip"><span class="bar"></span><span class="phase">T+00:42 · Go / No-go</span></div>
     <div class="phase-head">
+      <div class="met-chip"><span class="bar"></span><span class="phase">T+00:42 · Go / No-go</span></div>
       <h2>From a YAML file to a verified mission</h2>
       <p class="phase-sub">
         No source edits: describe a mission's orbit elements, spacecraft, and
@@ -695,7 +1061,7 @@
     <div class="console">
       <div class="console-head">
         <span>flight-terminal — orbitopt</span>
-        <button class="copy-btn" data-copy="pip install orbitopt[viewer]&#10;orbitopt view solar-system&#10;&#10;cat my_mission.yaml&#10;mission:&#10;  id: my-geo-mission&#10;  title: My GEO raising campaign&#10;  kind: geo-raising&#10;target:&#10;  geostationary_longitude_deg: -101.0&#10;campaign_search:&#10;  n_burns: { min: 2, max: 6 }&#10;output:&#10;  scene_file: scenes/my-geo-mission.json&#10;&#10;orbitopt validate my_mission.yaml&#10;orbitopt run my_mission.yaml&#10;orbitopt view scenes/my-geo-mission.json">copy all</button>
+        <button class="copy-btn" data-copy="pip install orbitopt[viewer]&#10;orbitopt view solar-system&#10;&#10;cat my_mission.yaml&#10;mission:&#10;  id: my-geo-mission&#10;  title: My GEO raising campaign&#10;  kind: geo-raising&#10;target:&#10;  geostationary_longitude_deg: -101.0&#10;campaign_search:&#10;  n_burns: { min: 2, max: 6 }&#10;output:&#10;  scene_file: scenes/my-geo-mission.json&#10;&#10;orbitopt validate my_mission.yaml&#10;orbitopt run my_mission.yaml&#10;orbitopt view scenes/my-geo-mission.json&#10;&#10;orbitopt launch-window ksc --rla 9.6 --dla 23.4 --epoch 2020-07-30 --azimuth 90 115">copy all</button>
       </div>
       <pre class="code"><span class="c"># view any scene -- no conda, real PyPI wheels only</span>
 <span class="k">pip install</span> orbitopt[viewer]
@@ -714,10 +1080,13 @@
 <span class="c">output:</span>
   scene_file: <span class="s">scenes/my-geo-mission.json</span>
 
-<span class="c"># schema-check, then optimize + tudatpy-verify + write</span>
+<span class="c"># schema-check, then optimize + tudatpy-verify + write scene and report</span>
 <span class="k">orbitopt validate</span> my_mission.yaml
 <span class="k">orbitopt run</span> my_mission.yaml
-<span class="k">orbitopt view</span> scenes/my-geo-mission.json</pre>
+<span class="k">orbitopt view</span> scenes/my-geo-mission.json
+
+<span class="c"># daily launch windows from KSC along the Mars 2020 departure asymptote</span>
+<span class="k">orbitopt launch-window</span> ksc --rla 9.6 --dla 23.4 --epoch 2020-07-30 --azimuth 90 115</pre>
     </div>
     <p class="start-note">Every field falls back to the real GOES-16 numbers if omitted — the minimal config just re-derives the built-in mission. See <a href="https://github.com/zangjiucheng/orbitopt/blob/main/src/orbitopt/schemas/mission-geo-raising-1.0.json" target="_blank" rel="noopener">the full config schema</a> on GitHub.</p>
   </div>
@@ -970,25 +1339,30 @@
 
   /* ---- scroll-reveal + hero load-in ---- */
   var heroRows = Array.prototype.slice.call(document.querySelectorAll(".hero-body > *"));
-  var phaseRows = Array.prototype.slice.call(document.querySelectorAll(".phase .wrap > *"));
+  var plot = document.getElementById("porkchop");
   function revealNow(el) { el.classList.add("in"); }
 
   if (reduceMotion || !("IntersectionObserver" in window)) {
-    heroRows.concat(phaseRows).forEach(revealNow);
+    heroRows.forEach(revealNow);
+    if (plot) plot.classList.add("drawn");
   } else {
     // Hero is above the fold: play it as a short staggered load sequence
     // rather than waiting on a scroll it never gets.
     heroRows.forEach(function (el, i) {
       setTimeout(function () { revealNow(el); }, 120 + i * 95);
     });
-    var revObserver = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (!entry.isIntersecting) return;
-        revealNow(entry.target);
-        revObserver.unobserve(entry.target);
-      });
-    }, { rootMargin: "0px 0px -12% 0px", threshold: 0.06 });
-    phaseRows.forEach(function (el) { revObserver.observe(el); });
+    // The one scroll-triggered moment: the replay plot draws its C3
+    // contours, then drops its markers, when it comes into view.
+    if (plot) {
+      var plotObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          plot.classList.add("drawn");
+          plotObserver.disconnect();
+        });
+      }, { threshold: 0.35 });
+      plotObserver.observe(plot);
+    }
   }
 
   /* ---- count-up: the telemetry pull number spins up when it's reached ---- */
