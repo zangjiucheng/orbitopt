@@ -23,6 +23,10 @@ class PorkchopGrid:
     v_inf_arrival: np.ndarray  # (n_tof, n_t0) km/s
     total_dv: np.ndarray  # (n_tof, n_t0) km/s
     converged: np.ndarray  # (n_tof, n_t0) bool
+    # Departure excess-velocity vectors (n_tof, n_t0, 3) km/s in the
+    # ephemeris frame (heliocentric ecliptic J2000 for jpl_lp); feeds
+    # orbitopt.launch_windows.porkchop_launch_windows (asymptote RLA/DLA).
+    v_inf_departure: np.ndarray | None = None
 
 
 def _eph_batch(body, epochs_mjd2000):
@@ -158,13 +162,19 @@ def compute_porkchop(
         v_inf_arrival=v_inf_arr.reshape(shape),
         total_dv=total_dv.reshape(shape),
         converged=result.converged.reshape(shape),
+        v_inf_departure=v_dep_excess.reshape(shape + (3,)),
     )
 
 
-def plot_porkchop(grid: PorkchopGrid, title="Porkchop plot", levels=40, ax=None):
+def plot_porkchop(grid: PorkchopGrid, title="Porkchop plot", levels=40, ax=None,
+                  launch_days=None):
     """Contour-plot total delta-v (km/s) over the (t0, tof) grid. Returns the
     matplotlib Axes. Import of matplotlib is local so headless/GPU-only use
     of this module doesn't require a display backend.
+
+    ``launch_days`` (optional): the ``porkchop_launch_windows(grid, site)``
+    result. Departure dates with no launch window from the site are hatched
+    out, and each launchable date's best (minimum-C3) transfer is marked.
     """
     import matplotlib.pyplot as plt
 
@@ -177,4 +187,19 @@ def plot_porkchop(grid: PorkchopGrid, title="Porkchop plot", levels=40, ax=None)
     ax.set_ylabel("Time of flight [days]")
     ax.set_title(title)
     plt.colorbar(cs, ax=ax, label="Total delta-v [km/s]")
+    if launch_days is not None:
+        _overlay_launch_days(ax, grid, launch_days)
     return ax
+
+
+def _overlay_launch_days(ax, grid: PorkchopGrid, launch_days):
+    half = 0.5 * (grid.t0_grid[1] - grid.t0_grid[0]) if len(grid.t0_grid) > 1 else 0.5
+    for day in launch_days:
+        if not day.launchable:
+            ax.axvspan(day.t0_mjd2000 - half, day.t0_mjd2000 + half,
+                       facecolor="none", edgecolor="0.5", hatch="//", linewidth=0)
+    ok = [d for d in launch_days if d.launchable]
+    if ok:
+        ax.plot([d.t0_mjd2000 for d in ok], [d.tof_days for d in ok], "w.", markersize=4,
+                label="launchable (min-C3 transfer)")
+        ax.legend(loc="upper right", fontsize="small")

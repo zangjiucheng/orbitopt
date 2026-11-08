@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zangjiucheng/orbitopt/schemas/launch-vehicles-1.0.json",
+  "title": "orbitopt launch-vehicle performance database",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "vehicles"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "vehicles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/vehicle"}
+    }
+  },
+  "$defs": {
+    "provenance": {"enum": ["official", "public_estimate"]},
+    "source": {"type": "string", "minLength": 1},
+    "accuracy": {"type": "string", "minLength": 1},
+    "asOf": {"type": "string", "pattern": "^[0-9]{4}(-[0-9]{2}(-[0-9]{2})?)?$"},
+    "orbitEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["payload_kg", "provenance", "source"],
+      "properties": {
+        "payload_kg": {"type": "number", "exclusiveMinimum": 0},
+        "provenance": {"$ref": "#/$defs/provenance"},
+        "source": {"$ref": "#/$defs/source"},
+        "accuracy": {"$ref": "#/$defs/accuracy"},
+        "as_of": {"$ref": "#/$defs/asOf"}
+      }
+    },
+    "vehicle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "orbit_capability", "c3_curve", "upper_stage"],
+      "properties": {
+        "name": {"type": "string"},
+        "provider": {"type": "string"},
+        "family": {"type": "string"},
+        "orbit_capability": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "LEO": {"$ref": "#/$defs/orbitEntry"},
+            "GTO": {"$ref": "#/$defs/orbitEntry"},
+            "TLI": {"$ref": "#/$defs/orbitEntry"}
+          }
+        },
+        "c3_curve": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provenance", "source", "points"],
+          "properties": {
+            "provenance": {"$ref": "#/$defs/provenance"},
+            "source": {"$ref": "#/$defs/source"},
+            "accuracy": {"$ref": "#/$defs/accuracy"},
+            "as_of": {"$ref": "#/$defs/asOf"},
+            "points": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "type": "array",
+                "prefixItems": [{"type": "number"}, {"type": "number", "exclusiveMinimum": 0}],
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          }
+        },
+        "upper_stage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["max_restarts", "max_coast_s", "provenance", "source"],
+          "properties": {
+            "name": {"type": "string"},
+            "max_restarts": {"type": "integer", "minimum": 0},
+            "max_coast_s": {"type": "number", "minimum": 0},
+            "provenance": {"$ref": "#/$defs/provenance"},
+            "source": {"$ref": "#/$defs/source"},
+            "accuracy": {"$ref": "#/$defs/accuracy"},
+            "as_of": {"$ref": "#/$defs/asOf"},
+            "notes": {"type": "string"}
+          }
+        }
+      }
+    }
+  }
+}

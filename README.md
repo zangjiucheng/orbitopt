@@ -50,7 +50,13 @@ src/orbitopt/
   missions.py        named-mission registry (id -> loader) shared by the app + CLI,
                       with third-party plugin discovery via entry points
   cli.py             the `orbitopt` console command (app / view / export / missions /
-                      validate / run)
+                      validate / run / launch-window)
+  launch_windows.py  daily launch windows (open/close time + azimuth) from a launch
+                      site into an orbit plane (in-plane / dogleg) or along a porkchop
+                      departure asymptote -- numpy only; see "Launch windows" below
+  injection.py       launch site -> LEO parking orbit -> TLI/TMI burn from v-infinity,
+                      numerically verified (J2, scipy or tudatpy) with differential
+                      correction + verification report; see "Parking orbit and injection"
   core/
     gpu.py          numpy/cupy array-module abstraction (the GPU on/off switch)
     problem.py       OrbitOptProblem base class: pygmo UDP + optional batch_fitness()
@@ -230,6 +236,62 @@ mission's Earth-to-Mars-orbit-insertion trajectory (see
 `docs/mars_mission_plan.md`); porting `free_return`/`mga` the same way is
 the natural next step.
 
+### Launch windows
+
+`orbitopt.launch_windows` turns a target orbit plane + a launch site
+(`orbitopt.launch_sites`) into daily launch windows: open / close / optimal
+UTC and the launch azimuth at each. With no plane-change budget you get the
+instantaneous in-plane opportunities (one northbound, one southbound pass a
+day when |latitude| <= inclination); `--dogleg DEG` widens them into windows
+bounded by that out-of-plane angle and also yields dogleg-only windows for
+sites above the target inclination. Azimuths outside the site's range-safety
+corridors are dropped. For interplanetary departures,
+`porkchop_launch_windows(grid, site)` takes each porkchop departure date's
+minimum-C3 transfer, derives its asymptote (RLA/DLA) and returns that day's
+windows; `plot_porkchop(grid, launch_days=...)` hatches unlaunchable dates.
+
+```
+orbitopt launch-window ksc --inclination 51.64 --raan 100 --epoch 2026-11-08 --altitude-km 420 --days 3
+orbitopt launch-window kourou --inclination 98.57 --ltan 22.5 --epoch 2015-06-23 --json
+orbitopt launch-window ksc --rla 9.6 --dla 23.4 --epoch 2020-07-30 --azimuth 90 115
+```
+
+Plausibility (`tests/test_launch_windows.py`): KSC ISS launches at ~44.9 deg
+north-east, ISS windows moving ~23 min earlier a day, Sentinel-2A/2B (Kourou,
+SSO 10:30 LTDN) predicted within ~6-9 min of actual lift-off, and the Mars
+2020 window from SLC-41 opening within ~4 min of the real 11:50 UTC lift-off.
+
+### Launch data sources
+
+Every launch-site and launch-vehicle value cites a `source` and is tagged
+`official` (provider / agency document) or `public_estimate` (secondary
+reference, digitized curve, mission-history reconstruction), with accuracy and
+date. Reports carry this through: `LaunchConstraints.describe()["data_sources"]`
+and the `orbitopt launch-window` table footer give the source and overall
+confidence of the data used. The numbers are planning-level, and many are
+estimates rather than facts. See
+[`docs/launch-data-sources.md`](docs/launch-data-sources.md) for the
+limitations.
+
+### Parking orbit and injection (TLI / TMI)
+
+`orbitopt.injection` closes the chain from the launch pad to the injection
+burn. `plan_departure(site, target, start=...)` takes the first asymptote
+launch window, builds the circular LEO parking orbit whose plane contains the
+site at lift-off and the departure direction (altitude, inclination, RAAN,
+secular J2), and places the burn at the perigee of the departure hyperbola
+whose asymptote is the target v-infinity (`InjectionTarget.from_v_inf` /
+`from_c3_rla_dla`, TMI) or opposite a target apogee (`from_apogee`, TLI):
+burn epoch, coast time and tangential delta-v. `verify_injection(plan)`
+propagates insertion -> coast -> burn -> SOI / apogee with Earth J2 (scipy
+DOP853, or `backend="tudat"`), corrects the burn with a Newton shooting
+step on the propagated v-infinity (via `verify.b_plane.b_plane_state`) or
+osculating apogee, and emits a `launch-injection` verification report
+(step convergence, conservation, parking-coast residual, launch geometry,
+optional vehicle C3 / site DLA). `plan.lunar_b_plane_targeter_inputs()`
+hands the burn to `verify.differential_correction.target_lunar_b_plane`
+(ECLIPJ2000, tudat epochs). Example: `examples/13_launch_to_injection.py`.
+
 ## Setup
 
 tudatpy is conda-forge/tudat-team only (no PyPI wheels) and pins `python=3.10`;
@@ -302,6 +364,11 @@ writeups in [`docs/engineering-notes.md`](docs/engineering-notes.md)):
   regenerate cached SceneData JSON (the viewer can also compute these live).
 - `10_gto_geo_orbit_raising.py` -- the GOES-style GTO->GEO campaign; see
   `docs/goes_gto_geo_mission_plan.md`.
+- `12_launch_constrained_transfer.py` -- the Earth->Mars optimum with and
+  without launch constraints (rocket C3 capability + launch-site DLA,
+  `orbitopt.launch_constraints`); results in `docs/engineering-notes.md`.
+- `13_launch_to_injection.py` -- launch site -> parking orbit -> TMI/TLI burn,
+  numerically verified end to end (`orbitopt.injection`; numpy/scipy only).
 
 ## Mission Control (general-purpose desktop app)
 

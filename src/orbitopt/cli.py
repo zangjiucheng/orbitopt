@@ -9,6 +9,8 @@ the single-scene 3D viewer directly, without going through examples/.
     orbitopt export goes -o goes.json   # cache a built-in mission's scene JSON
     orbitopt validate my_mission.yaml   # schema-check a mission config (no compute)
     orbitopt run my_mission.yaml        # run a mission config, write + verify its scene
+    orbitopt launch-window kourou --inclination 51.64 --raan 100 --epoch 2026-11-08
+                                        # daily launch windows (no compute stack)
 
 The same commands work as ``python -m orbitopt ...``. Installed as the
 ``orbitopt`` and ``orbitopt-app`` console scripts (see pyproject.toml), so
@@ -126,6 +128,47 @@ def _cmd_run(args):
             print(("WARNING: " if "DID NOT CONVERGE" in line else "") + line)
 
 
+def _cmd_launch_window(args):
+    from orbitopt import launch_windows as lw
+
+    start = args.start or args.epoch
+    if args.rla is not None or args.dla is not None:
+        if args.rla is None or args.dla is None:
+            raise SystemExit("--rla and --dla must be given together")
+        windows = lw.asymptote_launch_windows(
+            args.site, args.rla, args.dla, start, args.days, args.azimuth, args.step)
+    else:
+        if args.inclination is None:
+            raise SystemExit("give --inclination (with --raan or --ltan), or --rla/--dla")
+        if args.ltan is not None:
+            plane = lw.sun_synchronous_plane(args.ltan, args.epoch, args.inclination)
+        elif args.altitude_km is not None:
+            plane = lw.OrbitPlane.from_altitude(args.inclination, args.raan, args.epoch, args.altitude_km)
+        else:
+            plane = lw.OrbitPlane(args.inclination, args.raan, lw.as_mjd2000(args.epoch))
+        windows = lw.plane_launch_windows(
+            args.site, plane, start, args.days, args.dogleg,
+            respect_corridors=not args.ignore_corridors, azimuth_range_deg=args.azimuth,
+            step_s=args.step)
+    if args.json:
+        print(json.dumps([w.to_dict() for w in windows], indent=2, ensure_ascii=False))
+        return
+    if windows:
+        print(lw.format_windows(windows))
+    else:
+        print("no launch window in the requested interval")
+    from orbitopt.data_provenance import format_data_sources
+    from orbitopt.launch_sites import get_launch_site
+
+    # Windows depend on the site's location and (unless overridden on the
+    # command line) its range-safety azimuth corridors.
+    fields = ["location"]
+    if args.azimuth is None and not (args.rla is None and args.ignore_corridors):
+        fields.append("azimuth_corridors")
+    print()
+    print(format_data_sources(get_launch_site(args.site).data_sources(fields)))
+
+
 def build_parser() -> argparse.ArgumentParser:
     mission_ids = ", ".join(m.id for m in list_missions())
 
@@ -155,6 +198,31 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("-o", "--out", help="output scene path (default: the config's output.scene_file)")
     run.add_argument("--skip-verify", action="store_true",
                      help="skip the high-fidelity result verification (faster, less trustworthy)")
+
+    lw = sub.add_parser("launch-window",
+                        help="daily launch windows from a launch site into an orbit plane / asymptote")
+    lw.add_argument("site", help="launch site id, name or alias (see orbitopt/data/launch_sites.yaml)")
+    lw.add_argument("--inclination", type=float, help="target orbit inclination [deg]")
+    lw.add_argument("--raan", type=float, default=0.0, help="target RAAN at --epoch [deg] (default 0)")
+    lw.add_argument("--epoch", default="2000-01-01T00:00:00Z",
+                    help="UTC epoch of --raan / --ltan, ISO-8601 or MJD2000")
+    lw.add_argument("--altitude-km", type=float,
+                    help="circular altitude; makes RAAN regress at the J2 rate")
+    lw.add_argument("--ltan", type=float,
+                    help="sun-synchronous plane: local time of ascending node [h] (overrides --raan)")
+    lw.add_argument("--rla", type=float, help="departure asymptote right ascension [deg]")
+    lw.add_argument("--dla", type=float, help="departure asymptote declination [deg]")
+    lw.add_argument("--start", help="start of the search, UTC (default: --epoch)")
+    lw.add_argument("--days", type=float, default=1.0, help="search span [days] (default 1)")
+    lw.add_argument("--dogleg", type=float, default=0.0,
+                    help="plane-change budget [deg]; 0 = instantaneous in-plane windows")
+    lw.add_argument("--azimuth", type=float, nargs=2, action="append", metavar=("START", "END"),
+                    help="allowed azimuth corridor, clockwise [deg]; repeatable "
+                         "(default: the site's range-safety corridors)")
+    lw.add_argument("--ignore-corridors", action="store_true",
+                    help="plane windows: do not filter by the site's azimuth corridors")
+    lw.add_argument("--step", type=float, default=60.0, help="scan step [s] (default 60)")
+    lw.add_argument("--json", action="store_true", help="print JSON instead of a table")
     return parser
 
 
@@ -172,6 +240,8 @@ def main(argv=None):
         _cmd_validate(args)
     elif args.command == "run":
         _cmd_run(args)
+    elif args.command == "launch-window":
+        _cmd_launch_window(args)
 
 
 if __name__ == "__main__":

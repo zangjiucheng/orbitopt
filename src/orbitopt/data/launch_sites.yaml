@@ -1,0 +1,218 @@
+# orbitopt launch-site database (schema: orbitopt/schemas/launch-sites-1.0.json)
+#
+# One entry per launch site. Every entry carries a `sources` list; each field
+# group (location, altitude, azimuth_corridors, rotation_speed_gain) names the
+# source(s) it was taken from via `sources[*].covers` -- the loader rejects a
+# site with an uncovered field group. Each source records
+#   ref         (required) the document / page / method
+#   provenance  (required) official        -- launch provider / agency document
+#                          public_estimate -- secondary reference, public
+#                                             compilation or reconstruction;
+#                                             approximate, NOT an official value
+#                          derived         -- computed from other fields
+#   accuracy    (optional) stated or estimated accuracy
+#   as_of       (optional) "YYYY[-MM[-DD]]": publication or access date
+# Limitations are documented in docs/launch-data-sources.md.
+#
+# Conventions
+#   latitude_deg / longitude_deg : geodetic (WGS-84), degrees; east-positive.
+#   altitude_m                   : height of the reference pad above sea level
+#                                  (approximate, a few-metre accuracy is
+#                                  irrelevant for the rotation gain).
+#   rotation_speed_gain_m_s      : eastward inertial velocity of the pad due
+#                                  to Earth rotation, omega_E * (N(phi)+h) *
+#                                  cos(phi) with WGS-84 N(phi). The loader
+#                                  re-computes this and rejects entries that
+#                                  disagree by more than 1 m/s.
+#   azimuth_corridors_deg        : allowed launch azimuths (range safety),
+#                                  degrees clockwise from true north. Each
+#                                  corridor is [start, end] swept clockwise;
+#                                  a corridor may wrap through north (e.g.
+#                                  [349.5, 93.5]).
+#
+# Reachable inclinations are *derived* from latitude + corridors
+# (cos i = cos(phi) sin(Az)) for a direct ascent without dog-leg manoeuvres;
+# they are not stored here. Corridors marked `confidence: approximate` were
+# reconstructed from the envelope of historically flown inclinations rather
+# than taken from a published range-safety document -- treat them as a
+# planning-level constraint, not an authoritative range limit.
+schemaVersion: "1.0"
+sites:
+  - id: cape-canaveral
+    name: Cape Canaveral / Kennedy Space Center
+    aliases: [KSC, CCSFS, CCAFS, Cape Canaveral, Kennedy, LC-39A, SLC-40, Eastern Range]
+    country: USA
+    reference_pad: KSC LC-39A
+    latitude_deg: 28.6082
+    longitude_deg: -80.6041
+    altitude_m: 15
+    rotation_speed_gain_m_s: 408.6
+    azimuth_corridors_deg:
+      - [35.0, 120.0]
+    confidence: published
+    sources:
+      - covers: [rotation_speed_gain]
+        ref: "Derived: omega_E * (N(phi) + h) * cos(phi), omega_E = 7.2921150e-5 rad/s (IERS Conventions 2010), WGS-84 ellipsoid (NGA TR8350.2)"
+        provenance: derived
+        accuracy: "<1 m/s (loader recomputes and rejects >1 m/s disagreement)"
+        as_of: "2026"
+      - covers: [location, altitude]
+        ref: "NASA KSC, Launch Complex 39A fact sheet; coordinates as listed on Wikipedia 'Kennedy Space Center Launch Complex 39A' (accessed 2026)"
+        provenance: public_estimate
+        accuracy: "~100 m horizontal (pad centre); altitude +/-10 m"
+        as_of: "2026"
+      - covers: [azimuth_corridors]
+        ref: "Isakowitz, Hopkins & Hopkins, International Reference Guide to Space Launch Systems, 4th ed., AIAA 2004 -- Eastern Range launch azimuths 35-120 deg"
+        provenance: public_estimate
+        accuracy: "+/-1 deg; Eastern Range limits as reproduced in a secondary reference, actual per-mission limits set by the range"
+        as_of: "2004"
+
+  - id: vandenberg
+    name: Vandenberg Space Force Base
+    aliases: [VSFB, VAFB, Vandenberg AFB, SLC-4E, Western Range]
+    country: USA
+    reference_pad: SLC-4E
+    latitude_deg: 34.6321
+    longitude_deg: -120.6106
+    altitude_m: 100
+    rotation_speed_gain_m_s: 383.1
+    azimuth_corridors_deg:
+      - [147.0, 201.0]
+    confidence: published
+    sources:
+      - covers: [rotation_speed_gain]
+        ref: "Derived: omega_E * (N(phi) + h) * cos(phi), omega_E = 7.2921150e-5 rad/s (IERS Conventions 2010), WGS-84 ellipsoid (NGA TR8350.2)"
+        provenance: derived
+        accuracy: "<1 m/s (loader recomputes and rejects >1 m/s disagreement)"
+        as_of: "2026"
+      - covers: [location, altitude]
+        ref: "Wikipedia 'Vandenberg Space Launch Complex 4' (SLC-4E coordinates, accessed 2026)"
+        provenance: public_estimate
+        accuracy: "~100 m horizontal (pad centre); altitude +/-20 m"
+        as_of: "2026"
+      - covers: [azimuth_corridors]
+        ref: "Isakowitz, Hopkins & Hopkins, International Reference Guide to Space Launch Systems, 4th ed., AIAA 2004 -- Western Range launch azimuths 147-201 deg"
+        provenance: public_estimate
+        accuracy: "+/-1 deg; Western Range limits as reproduced in a secondary reference, actual per-mission limits set by the range"
+        as_of: "2004"
+
+  - id: kourou
+    name: Guiana Space Centre (Kourou)
+    aliases: [CSG, Guiana Space Centre, Centre Spatial Guyanais, ELA-3, ELA-4]
+    country: France (French Guiana)
+    reference_pad: ELA-3
+    latitude_deg: 5.2392
+    longitude_deg: -52.7685
+    altitude_m: 15
+    rotation_speed_gain_m_s: 463.2
+    azimuth_corridors_deg:
+      - [349.5, 93.5]
+    confidence: published
+    sources:
+      - covers: [rotation_speed_gain]
+        ref: "Derived: omega_E * (N(phi) + h) * cos(phi), omega_E = 7.2921150e-5 rad/s (IERS Conventions 2010), WGS-84 ellipsoid (NGA TR8350.2)"
+        provenance: derived
+        accuracy: "<1 m/s (loader recomputes and rejects >1 m/s disagreement)"
+        as_of: "2026"
+      - covers: [location, altitude]
+        ref: "Arianespace, Ariane 5 User's Manual, Issue 5 Rev 2 (2016), ch. 6 (CSG description, ELA-3 location)"
+        provenance: official
+        accuracy: "~100 m horizontal; altitude +/-10 m"
+        as_of: "2016"
+      - covers: [azimuth_corridors]
+        ref: "Arianespace, Ariane 5 User's Manual, Issue 5 Rev 2 (2016), sec. 2 -- CSG launch azimuth range -10.5 deg to +93.5 deg"
+        provenance: official
+        accuracy: "as published by the launch provider"
+        as_of: "2016"
+
+  - id: jiuquan
+    name: Jiuquan Satellite Launch Center
+    aliases: [JSLC, Jiuquan, 酒泉, 酒泉卫星发射中心, Dongfeng]
+    country: China
+    reference_pad: LC-43/94 (SLS-1)
+    latitude_deg: 40.9581
+    longitude_deg: 100.2913
+    altitude_m: 1000
+    rotation_speed_gain_m_s: 351.8
+    azimuth_corridors_deg:
+      - [90.0, 191.0]
+    confidence: approximate
+    sources:
+      - covers: [rotation_speed_gain]
+        ref: "Derived: omega_E * (N(phi) + h) * cos(phi), omega_E = 7.2921150e-5 rad/s (IERS Conventions 2010), WGS-84 ellipsoid (NGA TR8350.2)"
+        provenance: derived
+        accuracy: "<1 m/s (loader recomputes and rejects >1 m/s disagreement)"
+        as_of: "2026"
+      - covers: [location]
+        ref: "Wikipedia 'Jiuquan Satellite Launch Center' (LC-43/94 coordinates, accessed 2026)"
+        provenance: public_estimate
+        accuracy: "~100 m horizontal (pad centre)"
+        as_of: "2026"
+      - covers: [altitude]
+        ref: "CALT, Long March 2C User's Manual (2016) -- JSLC elevation ~1000 m"
+        provenance: official
+        accuracy: "+/-100 m (rounded figure)"
+        as_of: "2016"
+      - covers: [azimuth_corridors]
+        ref: "Approximate: envelope of historically flown direct-ascent inclinations from JSLC (~41 deg crewed Shenzhou to ~98 deg SSO), e.g. Jonathan McDowell, GCAT launch log (planet4589.org)"
+        provenance: public_estimate
+        accuracy: "+/-5 deg; reconstructed from flown inclinations, not a published range-safety limit"
+        as_of: "2026"
+
+  - id: wenchang
+    name: Wenchang Space Launch Site
+    aliases: [WSLS, Wenchang, 文昌, 文昌航天发射场, LC-101, LC-201]
+    country: China
+    reference_pad: LC-101
+    latitude_deg: 19.6145
+    longitude_deg: 110.9510
+    altitude_m: 10
+    rotation_speed_gain_m_s: 438.3
+    azimuth_corridors_deg:
+      - [90.0, 188.0]
+    confidence: approximate
+    sources:
+      - covers: [rotation_speed_gain]
+        ref: "Derived: omega_E * (N(phi) + h) * cos(phi), omega_E = 7.2921150e-5 rad/s (IERS Conventions 2010), WGS-84 ellipsoid (NGA TR8350.2)"
+        provenance: derived
+        accuracy: "<1 m/s (loader recomputes and rejects >1 m/s disagreement)"
+        as_of: "2026"
+      - covers: [location, altitude]
+        ref: "Wikipedia 'Wenchang Space Launch Site' (LC-101 coordinates, accessed 2026)"
+        provenance: public_estimate
+        accuracy: "~100 m horizontal (pad centre); altitude +/-10 m"
+        as_of: "2026"
+      - covers: [azimuth_corridors]
+        ref: "Approximate: envelope of historically flown inclinations from Wenchang (~19.5 deg GTO to ~97.5 deg SSO, Long March 5/7/8), e.g. Jonathan McDowell, GCAT launch log (planet4589.org)"
+        provenance: public_estimate
+        accuracy: "+/-5 deg; reconstructed from flown inclinations, not a published range-safety limit"
+        as_of: "2026"
+
+  - id: baikonur
+    name: Baikonur Cosmodrome
+    aliases: [Baikonur, Tyuratam, Байконур, 拜科努尔, LC-1/5, Gagarin's Start]
+    country: Kazakhstan (leased by Russia)
+    reference_pad: Site 1/5 (Gagarin's Start)
+    latitude_deg: 45.9200
+    longitude_deg: 63.3422
+    altitude_m: 90
+    rotation_speed_gain_m_s: 324.1
+    azimuth_corridors_deg:
+      - [347.0, 63.5]
+    confidence: approximate
+    sources:
+      - covers: [rotation_speed_gain]
+        ref: "Derived: omega_E * (N(phi) + h) * cos(phi), omega_E = 7.2921150e-5 rad/s (IERS Conventions 2010), WGS-84 ellipsoid (NGA TR8350.2)"
+        provenance: derived
+        accuracy: "<1 m/s (loader recomputes and rejects >1 m/s disagreement)"
+        as_of: "2026"
+      - covers: [location, altitude]
+        ref: "Wikipedia 'Gagarin's Start' (Site 1/5 coordinates, accessed 2026)"
+        provenance: public_estimate
+        accuracy: "~100 m horizontal (pad centre); altitude +/-20 m"
+        as_of: "2026"
+      - covers: [azimuth_corridors]
+        ref: "Approximate: drop-zone-constrained inclination envelope ~51.6 deg (ISS) to ~99 deg (SSO, Dnepr/Zenit) per Isakowitz et al., International Reference Guide to Space Launch Systems, 4th ed., AIAA 2004 (Baikonur section)"
+        provenance: public_estimate
+        accuracy: "+/-5 deg; drop-zone envelope from a secondary reference, not a published range-safety limit"
+        as_of: "2004"
