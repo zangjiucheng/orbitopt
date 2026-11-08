@@ -67,7 +67,7 @@ where = ["src"]
 # must ship inside the wheel/sdist -- by default setuptools only includes
 # .py files, and both orbitopt.scene_format and orbitopt.viz.scene_renderer
 # load these at runtime via importlib.resources.
-orbitopt = ["schemas/*.json", "viz/assets/textures/*.jpg", "viz/assets/textures/*.png"]
+orbitopt = ["schemas/*.json", "data/*.yaml", "viz/assets/textures/*.jpg", "viz/assets/textures/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
