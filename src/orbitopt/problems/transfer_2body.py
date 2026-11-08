@@ -5,6 +5,11 @@ t0 and time of flight to minimize total hyperbolic-excess delta-v (departure
 Decision vector: [t0_mjd2000, tof_days].
 Objective: |v1 - v_dep_planet(t0)| + |v2 - v_arr_planet(t0 + tof)|.
 
+Optional ``launch_constraints`` (orbitopt.launch_constraints.LaunchConstraints)
+check the departure v_inf against a rocket's C3 capability and a launch
+site's reachable DLA, marking violators invalid or penalizing them, in both
+fitness() and the batched (CPU/GPU) batch_fitness().
+
 This is deliberately the simplest possible interplanetary-transfer UDP: it
 exists to demonstrate the GPU batch_fitness() wiring end-to-end (see
 orbitopt.optimize.runner.run_optimization). orbitopt.problems.mga builds a
@@ -28,8 +33,10 @@ class Transfer2BodyProblem(OrbitOptProblem):
         tof_bounds,
         mu=pk.MU_SUN,
         use_gpu=None,
+        launch_constraints=None,
     ):
         super().__init__(use_gpu=use_gpu)
+        self.launch_constraints = launch_constraints
         self.departure_body = departure_body
         self.arrival_body = arrival_body
         self.t0_bounds = t0_bounds
@@ -57,8 +64,11 @@ class Transfer2BodyProblem(OrbitOptProblem):
         )
         if not res.converged[0]:
             return [1e6]
-        dv_total = np.linalg.norm(res.v1[0] - v1p) + np.linalg.norm(res.v2[0] - v2p)
-        return [dv_total]
+        v_inf_dep = res.v1[0] - v1p
+        dv_total = np.linalg.norm(v_inf_dep) + np.linalg.norm(res.v2[0] - v2p)
+        if self.launch_constraints is not None:
+            dv_total = self.launch_constraints.apply(np.array([dv_total]), v_inf_dep[None, :])[0]
+        return [float(dv_total)]
 
     def batch_fitness(self, dvs):
         n = 2
@@ -79,8 +89,13 @@ class Transfer2BodyProblem(OrbitOptProblem):
             r1, r2, tofs_safe * pk.DAY2SEC, self.mu, use_gpu=self.use_gpu,
         )
 
-        dv_total = np.linalg.norm(result.v1 - v1p, axis=1) + np.linalg.norm(
+        v_inf_dep = result.v1 - v1p
+        dv_total = np.linalg.norm(v_inf_dep, axis=1) + np.linalg.norm(
             result.v2 - v2p, axis=1
         )
         dv_total = np.where(bad | ~result.converged, 1e6, dv_total)
+        if self.launch_constraints is not None:
+            # Same vectorized check for the CPU and GPU batch paths (the
+            # Lambert result is already host-side; apply() also accepts cupy).
+            dv_total = self.launch_constraints.apply(dv_total, v_inf_dep)
         return dv_total

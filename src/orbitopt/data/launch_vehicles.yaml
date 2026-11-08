@@ -1,0 +1,336 @@
+# orbitopt launch-vehicle performance database (schema: launch-vehicles-1.0).
+#
+# Every data item (orbit capability, c3_curve, upper_stage) records where it
+# came from (see docs/launch-data-sources.md for the limitations):
+#   provenance  (required) official | public_estimate
+#     official         -- published by the launch provider / agency (user guide,
+#                         press kit, provider website)
+#     public_estimate  -- derived from public sources (e.g. digitized NASA Launch
+#                         Services Program performance curves, mission history,
+#                         third-party analyses). Treat as approximate, NOT fact.
+#   source      (required) the document / page / method the value came from
+#   accuracy    (optional) stated or estimated accuracy of the value
+#   as_of       (optional) "YYYY[-MM[-DD]]": publication or access date
+#
+# Units: payload in kg, C3 in km^2/s^2, coast duration in seconds.
+# `c3_curve.points` are [C3, max payload] pairs: C3 strictly increasing,
+# payload strictly decreasing. Queries outside the tabulated C3 / payload
+# range raise or are flagged -- the model never extrapolates.
+#
+# `upper_stage.max_restarts` counts re-ignitions after the first upper-stage
+# burn (so total burns = max_restarts + 1). `max_coast_s` is the longest
+# single coast between burns the stage is qualified/advertised for.
+#
+# To use your own data, copy this file and pass its path to
+# orbitopt.launch_vehicles.load_launch_vehicles(path).
+schema_version: "1.0"
+vehicles:
+  falcon-9:
+    name: Falcon 9 Block 5 (expendable)
+    provider: SpaceX
+    family: Falcon
+    orbit_capability:
+      LEO:
+        payload_kg: 22800
+        provenance: official
+        source: "SpaceX, Falcon 9 vehicle page, spacex.com/vehicles/falcon-9 (expendable LEO figure)"
+        accuracy: "as published, rounded to 100 kg; reference orbit not specified by provider"
+        as_of: "2026"
+      GTO:
+        payload_kg: 8300
+        provenance: official
+        source: "SpaceX, Falcon 9 vehicle page, spacex.com/vehicles/falcon-9 (expendable, GTO-1800 m/s)"
+        accuracy: "as published, rounded to 100 kg"
+        as_of: "2026"
+      TLI:
+        payload_kg: 4400
+        provenance: public_estimate
+        source: "Public estimate for C3 ~ -2 km^2/s^2 (not a SpaceX figure); lower than this file's c3_curve value at C3 = -2 (5200 kg), treat as conservative"
+        accuracy: "+/-20%"
+        as_of: "2026"
+    c3_curve:
+      provenance: public_estimate
+      source: "Approximate digitization of the NASA Launch Services Program performance curve, elvperf.ksc.nasa.gov (Falcon 9 expendable)"
+      accuracy: "+/-10% (hand digitization of a plotted curve)"
+      as_of: "2026"
+      points:
+        - [-2.0, 5200]
+        - [0.0, 4900]
+        - [10.0, 3900]
+        - [20.0, 3000]
+        - [30.0, 2200]
+        - [40.0, 1500]
+        - [50.0, 950]
+        - [60.0, 500]
+    upper_stage:
+      name: Falcon 9 second stage (Merlin 1D Vacuum)
+      max_restarts: 2
+      max_coast_s: 21600
+      provenance: public_estimate
+      source: "Public estimate from flown multi-burn missions (e.g. GPS III, direct-GEO) and SpaceX Rideshare guide; not a published qualification limit"
+      accuracy: "indicative only; actual limits are mission-specific"
+      as_of: "2026"
+      notes: "Long coasts (several hours) require the extended-mission kit."
+
+  falcon-heavy:
+    name: Falcon Heavy (expendable)
+    provider: SpaceX
+    family: Falcon
+    orbit_capability:
+      LEO:
+        payload_kg: 63800
+        provenance: official
+        source: "SpaceX, Falcon Heavy vehicle page, spacex.com/vehicles/falcon-heavy (fully expendable)"
+        accuracy: "as published, rounded to 100 kg; never flown in this configuration"
+        as_of: "2026"
+      GTO:
+        payload_kg: 26700
+        provenance: official
+        source: "SpaceX, Falcon Heavy vehicle page, spacex.com/vehicles/falcon-heavy (fully expendable)"
+        accuracy: "as published, rounded to 100 kg"
+        as_of: "2026"
+      TLI:
+        payload_kg: 15800
+        provenance: public_estimate
+        source: "Read off this file's c3_curve at C3 = -2 km^2/s^2 (not a SpaceX figure)"
+        accuracy: "+/-15% (inherits c3_curve uncertainty)"
+        as_of: "2026"
+    c3_curve:
+      provenance: public_estimate
+      source: "Approximate digitization of the NASA Launch Services Program performance curve, elvperf.ksc.nasa.gov (Falcon Heavy expendable)"
+      accuracy: "+/-10% (hand digitization of a plotted curve)"
+      as_of: "2026"
+      points:
+        - [-2.0, 15800]
+        - [0.0, 15000]
+        - [10.0, 12300]
+        - [20.0, 10000]
+        - [30.0, 8000]
+        - [40.0, 6300]
+        - [50.0, 4900]
+        - [60.0, 3700]
+        - [80.0, 1900]
+        - [100.0, 700]
+    upper_stage:
+      name: Falcon second stage (Merlin 1D Vacuum)
+      max_restarts: 2
+      max_coast_s: 21600
+      provenance: public_estimate
+      source: "Public estimate from USSF-44 / USSF-67 (~6 h coast) mission reports; not a published qualification limit"
+      accuracy: "indicative only; actual limits are mission-specific"
+      as_of: "2026"
+      notes: "Extended-mission kit flown on USSF-44 / direct-GEO missions."
+
+  sls-block-1:
+    name: SLS Block 1 (ICPS)
+    provider: NASA
+    family: SLS
+    orbit_capability:
+      LEO:
+        payload_kg: 95000
+        provenance: official
+        source: "NASA, Space Launch System Reference Guide (NP-2022-03-3045-HQ), Block 1 LEO capability"
+        accuracy: "as published, rounded to 1 t"
+        as_of: "2022"
+      TLI:
+        payload_kg: 27000
+        provenance: official
+        source: "NASA, Space Launch System Reference Guide (NP-2022-03-3045-HQ), Block 1 '>27 t to TLI'"
+        accuracy: "lower bound as published (>27 t)"
+        as_of: "2022"
+    c3_curve:
+      provenance: public_estimate
+      source: "Public estimates from NASA SLS mission-planner material (no official C3 table published)"
+      accuracy: "+/-15%"
+      as_of: "2022"
+      points:
+        - [-2.0, 27000]
+        - [0.0, 26000]
+        - [10.0, 22000]
+        - [20.0, 18500]
+        - [40.0, 12500]
+        - [60.0, 8000]
+        - [80.0, 4500]
+        - [100.0, 2000]
+    upper_stage:
+      name: Interim Cryogenic Propulsion Stage (RL10B-2)
+      max_restarts: 1
+      max_coast_s: 7200
+      provenance: public_estimate
+      source: "Public estimate from Artemis I ICPS flight profile (perigee-raise + TLI burns)"
+      accuracy: "indicative only; actual limits are mission-specific"
+      as_of: "2026"
+
+  atlas-v-551:
+    name: Atlas V 551
+    provider: ULA
+    family: Atlas
+    orbit_capability:
+      LEO:
+        payload_kg: 18850
+        provenance: official
+        source: "ULA, Atlas V Launch Services User's Guide (2010), 551 LEO (28.5 deg, 200 km)"
+        accuracy: "as published, rounded to 50 kg"
+        as_of: "2010"
+      GTO:
+        payload_kg: 8900
+        provenance: official
+        source: "ULA, Atlas V Launch Services User's Guide (2010), 551 GTO-1804 m/s"
+        accuracy: "as published, rounded to 50 kg"
+        as_of: "2010"
+    c3_curve:
+      provenance: public_estimate
+      source: "Approximate digitization of the NASA Launch Services Program performance curve, elvperf.ksc.nasa.gov (Atlas V 551)"
+      accuracy: "+/-10% (hand digitization of a plotted curve)"
+      as_of: "2026"
+      points:
+        - [0.0, 6200]
+        - [10.0, 5000]
+        - [20.0, 4100]
+        - [30.0, 3300]
+        - [40.0, 2600]
+        - [50.0, 2000]
+        - [60.0, 1500]
+    upper_stage:
+      name: Centaur III (single RL10)
+      max_restarts: 2
+      max_coast_s: 32400
+      provenance: public_estimate
+      source: "Public estimate from long-coast Centaur missions (e.g. AEHF, MUOS) and ULA mission overviews"
+      accuracy: "indicative only; actual limits are mission-specific"
+      as_of: "2026"
+      notes: "Long-coast configurations flown for direct-GEO missions."
+
+  vulcan-vc6:
+    name: Vulcan Centaur VC6
+    provider: ULA
+    family: Vulcan
+    orbit_capability:
+      LEO:
+        payload_kg: 27200
+        provenance: official
+        source: "ULA, Vulcan vehicle page, ulalaunch.com/rockets/vulcan-centaur (VC6)"
+        accuracy: "as published, rounded to 100 kg"
+        as_of: "2026"
+      GTO:
+        payload_kg: 14400
+        provenance: official
+        source: "ULA, Vulcan vehicle page, ulalaunch.com/rockets/vulcan-centaur (VC6)"
+        accuracy: "as published, rounded to 100 kg"
+        as_of: "2026"
+      TLI:
+        payload_kg: 12100
+        provenance: public_estimate
+        source: "Public ULA conference presentations (not in a ULA user's guide)"
+        accuracy: "+/-15%"
+        as_of: "2026"
+    c3_curve:
+      provenance: public_estimate
+      source: "Public estimates scaled from ULA presentations; not an official ULA curve"
+      accuracy: "+/-20%"
+      as_of: "2026"
+      points:
+        - [-2.0, 12100]
+        - [0.0, 11500]
+        - [10.0, 9200]
+        - [20.0, 7400]
+        - [30.0, 5900]
+        - [40.0, 4600]
+        - [60.0, 2600]
+    upper_stage:
+      name: Centaur V (two RL10C-X)
+      max_restarts: 3
+      max_coast_s: 43200
+      provenance: public_estimate
+      source: "Public estimate from ULA Centaur V descriptions (long-duration capability); not a published qualification limit"
+      accuracy: "indicative only; actual limits are mission-specific"
+      as_of: "2026"
+
+  long-march-5:
+    name: Long March 5 (CZ-5)
+    provider: CASC
+    family: Long March
+    orbit_capability:
+      LEO:
+        payload_kg: 25000
+        provenance: official
+        source: "CASC / CALT published capability figures (press material, China Academy of Launch Vehicle Technology)"
+        accuracy: "as published, rounded to 1 t; reference orbit not stated"
+        as_of: "2026"
+      GTO:
+        payload_kg: 14000
+        provenance: official
+        source: "CASC / CALT published capability figures (press material, China Academy of Launch Vehicle Technology)"
+        accuracy: "as published, rounded to 1 t"
+        as_of: "2026"
+      TLI:
+        payload_kg: 8200
+        provenance: official
+        source: "CASC / CALT published capability figures (press material, China Academy of Launch Vehicle Technology)"
+        accuracy: "as published, rounded to 100 kg"
+        as_of: "2026"
+    c3_curve:
+      provenance: public_estimate
+      source: "Estimated from Chang'e-5 / Tianwen-1 launch masses and orbits (mission history)"
+      accuracy: "+/-20%"
+      as_of: "2020"
+      points:
+        - [-2.0, 8200]
+        - [0.0, 7800]
+        - [10.0, 5800]
+        - [20.0, 4300]
+        - [30.0, 3000]
+        - [40.0, 2000]
+    upper_stage:
+      name: CZ-5 second stage (YF-75D)
+      max_restarts: 1
+      max_coast_s: 3600
+      provenance: public_estimate
+      source: "Public estimate from CZ-5 mission profiles (two-burn second stage)"
+      accuracy: "indicative only; actual limits are mission-specific"
+      as_of: "2026"
+      notes: "YZ-2 kick stage (not modelled here) adds multiple restarts for MEO/GEO."
+
+  long-march-3b:
+    name: Long March 3B (CZ-3B/E)
+    provider: CASC
+    family: Long March
+    orbit_capability:
+      LEO:
+        payload_kg: 11500
+        provenance: official
+        source: "CGWIC, LM-3A Series Launch Vehicle User's Manual, Issue 2011 (LM-3B/E)"
+        accuracy: "as published, rounded to 100 kg"
+        as_of: "2011"
+      GTO:
+        payload_kg: 5500
+        provenance: official
+        source: "CGWIC, LM-3A Series Launch Vehicle User's Manual, Issue 2011 (LM-3B/E, standard GTO)"
+        accuracy: "as published, rounded to 100 kg"
+        as_of: "2011"
+      TLI:
+        payload_kg: 3800
+        provenance: public_estimate
+        source: "Public estimate from Chang'e-3/4 launch mass (~3.8 t), not a CGWIC figure"
+        accuracy: "+/-10%"
+        as_of: "2019"
+    c3_curve:
+      provenance: public_estimate
+      source: "Estimated from Chang'e-2/3/4 launch masses and orbits (mission history)"
+      accuracy: "+/-20%"
+      as_of: "2019"
+      points:
+        - [-2.0, 3800]
+        - [0.0, 3500]
+        - [10.0, 2600]
+        - [20.0, 1900]
+        - [30.0, 1300]
+        - [40.0, 800]
+    upper_stage:
+      name: CZ-3B third stage (YF-75)
+      max_restarts: 1
+      max_coast_s: 1800
+      provenance: public_estimate
+      source: "Public estimate from CGWIC LM-3A Series User's Manual mission descriptions (two-burn third stage)"
+      accuracy: "indicative only; actual limits are mission-specific"
+      as_of: "2026"

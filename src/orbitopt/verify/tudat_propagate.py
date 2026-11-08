@@ -272,6 +272,32 @@ def _propagate_single_coast(bodies, acceleration_models, central_body, spacecraf
     return epochs, states
 
 
+def _override_central_gravity(body_settings, central_body, gravity) -> dict:
+    """Replace ``central_body``'s default gravity field (tudat: SPICE GM point
+    mass or a GOCO/GGM spherical-harmonic model, each with its own GM and
+    reference radius) by a degree-2 zonal field built from ``gravity`` =
+    ``{"gravitational_parameter": m^3/s^2, "reference_radius": m, "j2": -}``.
+
+    Both the spherical-harmonic and the point-mass acceleration then use the
+    *same* GM as the caller's analytic model, so e.g. the two-body
+    conservation re-run (central point mass only) conserves the energy the
+    report computes with that GM, and J2 matches the analytic secular rates.
+    The body-fixed frame of the default field is kept (falls back to
+    ``IAU_<body>``, the frame of tudat's default SPICE rotation model)."""
+    mu = float(gravity["gravitational_parameter"])
+    radius = float(gravity["reference_radius"])
+    j2 = float(gravity.get("j2", 0.0))
+    settings = body_settings.get(central_body)
+    frame = getattr(settings.gravity_field_settings, "associated_reference_frame", None) or f"IAU_{central_body}"
+    cosine = np.zeros((3, 3))
+    cosine[0, 0] = 1.0
+    cosine[2, 0] = -j2 / np.sqrt(5.0)  # fully normalized C20
+    settings.gravity_field_settings = environment_setup.gravity_field.spherical_harmonic(
+        mu, radius, cosine, np.zeros((3, 3)), frame)
+    return {"gravitational_parameter": mu, "reference_radius": radius, "j2": j2,
+            "normalized_c20": float(cosine[2, 0]), "associated_reference_frame": frame}
+
+
 class ReusableCoastPropagator:
     """The build-once core of :func:`propagate_multi_arc`, exposed so a caller
     that must drive a mission arc-by-arc in its own Python loop can still pay
@@ -304,11 +330,15 @@ class ReusableCoastPropagator:
         integrator=DEFAULT_INTEGRATOR,
         rtol=VERIFY_RTOL,
         atol=VERIFY_ATOL,
+        central_gravity=None,
     ):
         _ensure_spice_loaded()
         body_settings = environment_setup.get_default_body_settings(
             list(perturbing_bodies), central_body, "ECLIPJ2000",
         )
+        self._central_gravity = None
+        if central_gravity is not None:
+            self._central_gravity = _override_central_gravity(body_settings, central_body, central_gravity)
         bodies = environment_setup.create_system_of_bodies(body_settings)
         bodies.create_empty_body("Spacecraft")
 
@@ -341,6 +371,7 @@ class ReusableCoastPropagator:
             "earth_spherical_harmonic": None if self._earth_spherical_harmonic is None
             else list(self._earth_spherical_harmonic),
             "integrator": integrator_description(self._integrator, self._step_size, self._rtol, self._atol),
+            "central_gravity": None if self._central_gravity is None else dict(self._central_gravity),
         }
 
     def coast(self, spacecraft_state, epoch_start, duration, max_step=None):
