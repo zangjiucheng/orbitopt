@@ -78,6 +78,8 @@ from orbitopt.launch_windows import (
 MU_EARTH_M3_S2 = 3.986004418e14
 R_EARTH_M = 6378137.0
 J2_EARTH = 1.08262668e-3
+# The one Earth gravity model of the plan and of both verification backends.
+EARTH_GRAVITY = {"gravitational_parameter": MU_EARTH_M3_S2, "reference_radius": R_EARTH_M, "j2": J2_EARTH}
 # TT - UTC since 2017-01-01 (37 leap seconds + 32.184 s).
 TT_MINUS_UTC_S = 69.184
 # Earth's sphere of influence w.r.t. the Sun [km] -- default end of the
@@ -685,6 +687,7 @@ class NumpyEarthPropagator:
     def model_description(self) -> dict:
         return {"central_body": "Earth", "perturbing_bodies": ["Earth"],
                 "earth_spherical_harmonic": [2, 0] if self.j2 else None,
+                "central_gravity": dict(EARTH_GRAVITY, gravitational_parameter=self.mu),
                 "integrator": _scipy_integrator_description(self.rtol, self.atol, self.max_step_s)}
 
     def propagate_arcs(self, state0, arcs, initial_epoch_s: float = 0.0) -> ArcPropagation:
@@ -715,10 +718,15 @@ class TudatEarthPropagator:
             self.perturbing_bodies = ("Earth",) + self.perturbing_bodies
         self.j2 = bool(j2)
         self.rtol, self.atol, self.max_step_s = float(rtol), float(atol), float(max_step_s)
+        # tudat's default Earth (SPICE GM point mass / GOCO-GGM harmonics) has
+        # a different GM and reference radius from the analytic plan; give it
+        # this module's constants so dynamics, B-plane / apogee targets and
+        # the report's conservation check all use one Earth.
         self.mu = MU_EARTH_M3_S2
         self._prop = ReusableCoastPropagator(
             central_body="Earth", perturbing_bodies=self.perturbing_bodies, step_size=self.max_step_s,
-            earth_spherical_harmonic=(2, 0) if self.j2 else None, rtol=self.rtol, atol=self.atol)
+            earth_spherical_harmonic=(2, 0) if self.j2 else None, rtol=self.rtol, atol=self.atol,
+            central_gravity=EARTH_GRAVITY)
 
     def coast(self, state, epoch_start_s: float, duration_s: float, max_step=None):
         epochs, states = self._prop.coast(equatorial_to_ecliptic(state), epoch_start_s, duration_s, max_step)
@@ -903,7 +911,10 @@ def verify_injection(
     ``coast_tolerance_km``), targeting convergence, launch geometry (site in plane, azimuth in a
     range-safety corridor, inclination reachable) and, if
     ``launch_constraints`` (:class:`orbitopt.launch_constraints.
-    LaunchConstraints`) is given, the vehicle C3 limit."""
+    LaunchConstraints`) is given, the vehicle C3 limit (both hyperbolic and
+    elliptic targets: C3 from the energy of the corrected post-burn state,
+    so a TLI with C3 ~ -2 km^2/s^2 is checked against the curve too) and,
+    for a hyperbolic target, the site DLA limit."""
     from orbitopt.verify import report as _report
 
     prop = propagator if propagator is not None else make_propagator(backend)
@@ -985,14 +996,35 @@ def verify_injection(
     if target.kind == "elliptic":
         targets["max_out_of_plane_deg"] = float(max_out_of_plane_deg)
         extra_checks["targeting.out_of_plane"] = bool(abs(oop) <= max_out_of_plane_deg)
-    if launch_constraints is not None and target.kind == "hyperbolic" and achieved is not None:
-        v = achieved.reshape(1, 3)
-        if launch_constraints.frame == "ecliptic":
-            v = equatorial_to_ecliptic(v)
-        ev = launch_constraints.evaluate(v)
-        extra_checks["launch.c3_within_vehicle"] = bool(float(ev.c3_excess[0]) <= 0.0)
-        extra_checks["launch.dla_within_site"] = bool(float(ev.dla_excess_deg[0]) <= 0.0)
+    if launch_constraints is not None:
+        # The vehicle limit applies to every injection: C3 = 2 * specific
+        # energy of the post-burn arc (negative for TLI / any elliptic
+        # target), compared against the vehicle's C3 curve at the payload.
+        # The site DLA limit only exists for a departure asymptote.
+        # (Hyperbolic: |v_inf|^2 at the end of the escape arc, which includes
+        # the J2 energy exchange; elliptic, or a failed escape: post-burn
+        # point-mass energy.)
+        if target.kind == "hyperbolic" and achieved is not None:
+            c3_achieved = float(np.dot(achieved, achieved)) / 1e6
+        else:
+            post = pre.copy()
+            post[3:] += dv
+            c3_achieved = (float(np.dot(post[3:], post[3:]))
+                           - 2.0 * mu / float(np.linalg.norm(post[:3]))) / 1e6
+        targets["achieved_c3_km2_s2"] = c3_achieved
         targets["launch_constraints"] = launch_constraints.describe()
+        if launch_constraints.vehicle is not None:
+            targets["max_c3_km2_s2"] = launch_constraints.max_c3
+            extra_checks["launch.c3_within_vehicle"] = bool(c3_achieved <= launch_constraints.max_c3)
+        if target.kind == "hyperbolic":
+            if achieved is None:
+                extra_checks["launch.dla_within_site"] = False
+            else:
+                v = achieved.reshape(1, 3)
+                if launch_constraints.frame == "ecliptic":
+                    v = equatorial_to_ecliptic(v)
+                ev = launch_constraints.evaluate(v)
+                extra_checks["launch.dla_within_site"] = bool(float(ev.dla_excess_deg[0]) <= 0.0)
 
     report = _report.build_report(
         kind="launch-injection", label=f"{lv.site_id}-{target.name or target.kind}-{orbit.epoch_mjd2000:.5f}",

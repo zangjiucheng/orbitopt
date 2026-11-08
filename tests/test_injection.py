@@ -226,8 +226,62 @@ def test_c3_beyond_vehicle_fails_verification():
     assert not v.passed
 
 
+def test_tli_beyond_vehicle_fails_verification():
+    # Falcon 9's tabulated curve gives max C3 = -2 km^2/s^2 at 5200 kg; a TLI
+    # to a 1.5 Mkm apogee needs C3 ~ -0.5, so it must not pass.
+    target = InjectionTarget.from_apogee(1_500_000.0, 120.0, 10.0, name="high-TLI")
+    plan = plan_departure("cape-canaveral", target, start=START)
+    lc = LaunchConstraints.from_names("falcon-9", 5200.0, "cape-canaveral", frame="equatorial")
+    v = verify_injection(plan, launch_constraints=lc, convergence_check=False)
+    assert v.converged
+    checks = v.report["status"]["checks"]
+    assert v.report["targets"]["achieved_c3_km2_s2"] > lc.max_c3
+    assert not checks["launch.c3_within_vehicle"]
+    assert "launch.dla_within_site" not in checks  # no asymptote for an ellipse
+    assert not v.passed
+
+
+def test_tli_within_vehicle_passes_c3_check():
+    plan = plan_departure("cape-canaveral", TLI, start=START)
+    lc = LaunchConstraints.from_names("falcon-heavy", 10_000.0, "cape-canaveral", frame="equatorial")
+    v = verify_injection(plan, launch_constraints=lc, convergence_check=False)
+    assert -2.5 < v.report["targets"]["achieved_c3_km2_s2"] < -1.5
+    assert v.report["status"]["checks"]["launch.c3_within_vehicle"]
+    assert v.passed
+
+
+def test_tudat_backend_uses_injection_earth_gravity(monkeypatch):
+    """The tudat backend must give tudat the same Earth (GM, radius, J2) as
+    the analytic plan and the report's conservation check (tudat's default
+    SPICE / GOCO Earth differs by ~2e-7 in GM -- 20x the 1e-8 tolerance)."""
+    import sys
+    import types
+
+    from orbitopt import injection
+
+    seen = {}
+
+    class FakeCoast:
+        def __init__(self, **kw):
+            seen.update(kw)
+
+    fake = types.ModuleType("orbitopt.verify.tudat_propagate")
+    fake.ReusableCoastPropagator = FakeCoast
+    monkeypatch.setitem(sys.modules, "orbitopt.verify.tudat_propagate", fake)
+    prop = injection.TudatEarthPropagator()
+    g = seen["central_gravity"]
+    assert g["gravitational_parameter"] == prop.mu == MU_EARTH_M3_S2
+    assert g["reference_radius"] == injection.R_EARTH_M
+    assert g["j2"] == injection.J2_EARTH
+    seen.clear()
+    prop.with_overrides(perturbing_bodies=("Earth",), earth_spherical_harmonic=None)
+    assert seen["central_gravity"]["gravitational_parameter"] == MU_EARTH_M3_S2
+    assert seen["earth_spherical_harmonic"] is None
+
+
 def test_tudat_backend_end_to_end():
     pytest.importorskip("tudatpy")
     plan = plan_departure("cape-canaveral", TMI, start=START, min_coast_s=600.0)
     v = verify_injection(plan, backend="tudat", convergence_check=False)
     assert v.passed and v.final_error < 0.5
+    assert v.report["status"]["checks"]["launch-injection.two_body_conservation"]
