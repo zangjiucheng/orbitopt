@@ -39,6 +39,76 @@ this reason. If you extend this code to closer flybys (hundreds of km
 altitude or less), re-run the convergence check -- 60s may no longer be
 fine enough.
 
+## Verification layer: adaptive integrator + event location (task #136)
+
+Screening (`dynamics.nbody_gpu`) stays fixed-step RK4 for GPU batching. The
+tudatpy verification layer (`verify.tudat_propagate`) now defaults to
+`integrator="dop853"` -- tudat's adaptive RKDP 8(7), rtol 1e-11 / atol 1e-6,
+with the old `step_size` reused as the **maximum** step (so saved histories are
+never coarser than before) and `terminate_exactly_on_final_condition=True`
+(fixed-time-of-flight targeting needs the state exactly at the requested
+epoch). `integrator="rk4"` reproduces the legacy results.
+
+Events are roots of event functions solved with Brent's method on a cubic
+Hermite dense output (`verify.events`), with the bracketing interval
+re-propagated at fine spacing by the same `ReusableCoastPropagator`
+(`refine=True`, automatic for `propagate_multi_arc` results):
+
+| event | g(t) | API |
+|---|---|---|
+| periapsis / closest approach | (r - r_b).(v - v_b) | `find_closest_approach`, `find_periapsides` |
+| SOI crossing | \|r - r_b\| - R_SOI | `find_soi_crossings` |
+| entry interface | \|r\| - (R + h_EI) | `find_altitude_crossing` |
+
+`find_closest_approach(method="sample")` and
+`find_altitude_crossing(method="linear")` keep the legacy behaviour for
+comparison.
+
+Measured difference (`examples/11_event_location_comparison.py`, Part A:
+Keplerian lunar flyby, true perilune 1837.400 km):
+
+| output step | legacy nearest sample | error | event-located | error |
+|---:|---:|---:|---:|---:|
+| 15 s | 1837.431 km | +0.031 km | 1837.400000 km | < 1 mm |
+| 60 s | 1837.892 km | +0.492 km | 1837.400000 km | < 1 mm |
+| 300 s | 1849.652 km | +12.25 km | 1837.400000 km | < 1 mm |
+| 600 s | 1885.817 km | +48.42 km | 1837.400000 km | < 1 mm |
+| 1800 s | 2227.589 km | +390.2 km | 1837.400000 km | < 1 mm |
+
+The legacy error is always positive (a saved sample can only be farther than
+the true minimum) and grows ~quadratically with step; the event-located value
+is step-independent. Part B runs the same comparison through tudatpy
+(rk4+sample vs dop853+event) and must be run in the conda environment. Known
+limitation: a pass shorter than one output step whose range rate does not
+change sign between samples is caught only via the sample-wise minimum
+fallback (Hermite root, not re-propagated).
+
+## Verification report: every verification emits machine-readable JSON (task #137)
+
+Every high-fidelity verifier (`verify_geo_raising`, `target_mars_approach`,
+`verify_mars_orbit_insertion`, `target_lunar_flyby`, `target_lunar_b_plane`,
+`compare_to_lambert_prediction`) now attaches a report (`result.report`, see
+`orbitopt/verify/report.py`, schema `schemas/verification-report-1.0.json`)
+with:
+
+- **residuals**: position/velocity of the numerical solution minus a named
+  reference (Lambert arrival, analytic screening orbit, targeter aim point);
+- **integrator**: method, rtol/atol, min/max step, realised step statistics,
+  and a **step-convergence** check (re-run at tolerances x0.01, or half the
+  step for RK4; the final-state difference is the integration-error estimate);
+- **conservation**: energy and angular-momentum drift per coast arc. Under
+  perturbed dynamics these quantities are not conserved, so that block is
+  `applicable: false`; the applicable check re-runs the same initial state
+  under the central point mass only;
+- **dynamics**: the perturbation inventory (Earth J2/J22 harmonics, Sun/Moon/
+  planet point masses, plus what is *not* modelled).
+
+Each report costs up to 2 extra propagations per propagation it covers. It is
+byte-reproducible (no timestamps, sorted keys, `digest` = SHA-256 of the
+canonical JSON). `orbitopt run` writes it next to the scene as
+`<scene>.verification.json` (or `output.verification_report`); set
+`ORBITOPT_VERIFICATION_REPORT_DIR` to also write every report from library calls.
+
 ## GPU is not always faster -- measured, not assumed
 
 `nbody_gpu.propagate_spacecraft_batch` is GPU-*slower* than CPU below

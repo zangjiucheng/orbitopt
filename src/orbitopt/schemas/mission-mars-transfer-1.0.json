@@ -87,6 +87,11 @@
           "type": "string",
           "minLength": 1,
           "description": "Where `orbitopt run` writes the produced scene-1.0.json document; overridable with --out."
+        },
+        "verification_report": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where `orbitopt run` writes the machine-readable verification report (verification-report-1.0.json schema). Default: next to the scene as <scene stem>.verification.json."
         }
       }
     }
