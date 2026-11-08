@@ -1,0 +1,201 @@
+# orbitopt launch-vehicle performance database (schema: launch-vehicles-1.0).
+#
+# Every number carries a `provenance` tag:
+#   official         -- published by the launch provider / agency (user guide,
+#                       press kit, provider website)
+#   public_estimate  -- derived from public sources (e.g. digitized NASA Launch
+#                       Services Program performance curves, mission history,
+#                       third-party analyses). Treat as approximate.
+#
+# Units: payload in kg, C3 in km^2/s^2, coast duration in seconds.
+# `c3_curve.points` are [C3, max payload] pairs: C3 strictly increasing,
+# payload strictly decreasing. Queries outside the tabulated C3 / payload
+# range raise or are flagged -- the model never extrapolates.
+#
+# `upper_stage.max_restarts` counts re-ignitions after the first upper-stage
+# burn (so total burns = max_restarts + 1). `max_coast_s` is the longest
+# single coast between burns the stage is qualified/advertised for.
+#
+# To use your own data, copy this file and pass its path to
+# orbitopt.launch_vehicles.load_launch_vehicles(path).
+schema_version: "1.0"
+vehicles:
+  falcon-9:
+    name: Falcon 9 Block 5 (expendable)
+    provider: SpaceX
+    family: Falcon
+    orbit_capability:
+      LEO: {payload_kg: 22800, provenance: official, source: "SpaceX website (expendable)"}
+      GTO: {payload_kg: 8300, provenance: official, source: "SpaceX website (expendable)"}
+      TLI: {payload_kg: 4400, provenance: public_estimate, source: "Estimated from C3 curve at C3 ~ -2"}
+    c3_curve:
+      provenance: public_estimate
+      source: "Approximate digitization of NASA LSP performance curve"
+      points:
+        - [-2.0, 5200]
+        - [0.0, 4900]
+        - [10.0, 3900]
+        - [20.0, 3000]
+        - [30.0, 2200]
+        - [40.0, 1500]
+        - [50.0, 950]
+        - [60.0, 500]
+    upper_stage:
+      name: Falcon 9 second stage (Merlin 1D Vacuum)
+      max_restarts: 2
+      max_coast_s: 21600
+      provenance: public_estimate
+      notes: "Long coasts (several hours) require the extended-mission kit."
+
+  falcon-heavy:
+    name: Falcon Heavy (expendable)
+    provider: SpaceX
+    family: Falcon
+    orbit_capability:
+      LEO: {payload_kg: 63800, provenance: official, source: "SpaceX website (expendable)"}
+      GTO: {payload_kg: 26700, provenance: official, source: "SpaceX website (expendable)"}
+      TLI: {payload_kg: 15800, provenance: public_estimate, source: "Estimated from C3 curve at C3 ~ -2"}
+    c3_curve:
+      provenance: public_estimate
+      source: "Approximate digitization of NASA LSP performance curve"
+      points:
+        - [-2.0, 15800]
+        - [0.0, 15000]
+        - [10.0, 12300]
+        - [20.0, 10000]
+        - [30.0, 8000]
+        - [40.0, 6300]
+        - [50.0, 4900]
+        - [60.0, 3700]
+        - [80.0, 1900]
+        - [100.0, 700]
+    upper_stage:
+      name: Falcon second stage (Merlin 1D Vacuum)
+      max_restarts: 2
+      max_coast_s: 21600
+      provenance: public_estimate
+      notes: "Extended-mission kit flown on USSF-44 / direct-GEO missions."
+
+  sls-block-1:
+    name: SLS Block 1 (ICPS)
+    provider: NASA
+    family: SLS
+    orbit_capability:
+      LEO: {payload_kg: 95000, provenance: official, source: "NASA SLS reference guide"}
+      TLI: {payload_kg: 27000, provenance: official, source: "NASA SLS reference guide (>27 t to TLI)"}
+    c3_curve:
+      provenance: public_estimate
+      source: "Public estimates from NASA SLS mission-planner material"
+      points:
+        - [-2.0, 27000]
+        - [0.0, 26000]
+        - [10.0, 22000]
+        - [20.0, 18500]
+        - [40.0, 12500]
+        - [60.0, 8000]
+        - [80.0, 4500]
+        - [100.0, 2000]
+    upper_stage:
+      name: Interim Cryogenic Propulsion Stage (RL10B-2)
+      max_restarts: 1
+      max_coast_s: 7200
+      provenance: public_estimate
+
+  atlas-v-551:
+    name: Atlas V 551
+    provider: ULA
+    family: Atlas
+    orbit_capability:
+      LEO: {payload_kg: 18850, provenance: official, source: "ULA Atlas V user's guide"}
+      GTO: {payload_kg: 8900, provenance: official, source: "ULA Atlas V user's guide"}
+    c3_curve:
+      provenance: public_estimate
+      source: "Approximate digitization of NASA LSP performance curve"
+      points:
+        - [0.0, 6200]
+        - [10.0, 5000]
+        - [20.0, 4100]
+        - [30.0, 3300]
+        - [40.0, 2600]
+        - [50.0, 2000]
+        - [60.0, 1500]
+    upper_stage:
+      name: Centaur III (single RL10)
+      max_restarts: 2
+      max_coast_s: 32400
+      provenance: public_estimate
+      notes: "Long-coast configurations flown for direct-GEO missions."
+
+  vulcan-vc6:
+    name: Vulcan Centaur VC6
+    provider: ULA
+    family: Vulcan
+    orbit_capability:
+      LEO: {payload_kg: 27200, provenance: official, source: "ULA Vulcan website"}
+      GTO: {payload_kg: 14400, provenance: official, source: "ULA Vulcan website"}
+      TLI: {payload_kg: 12100, provenance: public_estimate, source: "Public ULA presentations"}
+    c3_curve:
+      provenance: public_estimate
+      source: "Public estimates; not an official ULA curve"
+      points:
+        - [-2.0, 12100]
+        - [0.0, 11500]
+        - [10.0, 9200]
+        - [20.0, 7400]
+        - [30.0, 5900]
+        - [40.0, 4600]
+        - [60.0, 2600]
+    upper_stage:
+      name: Centaur V (two RL10C-X)
+      max_restarts: 3
+      max_coast_s: 43200
+      provenance: public_estimate
+
+  long-march-5:
+    name: Long March 5 (CZ-5)
+    provider: CASC
+    family: Long March
+    orbit_capability:
+      LEO: {payload_kg: 25000, provenance: official, source: "CASC / CALT published capability"}
+      GTO: {payload_kg: 14000, provenance: official, source: "CASC / CALT published capability"}
+      TLI: {payload_kg: 8200, provenance: official, source: "CASC / CALT published capability"}
+    c3_curve:
+      provenance: public_estimate
+      source: "Estimated from Chang'e-5 / Tianwen-1 mission history"
+      points:
+        - [-2.0, 8200]
+        - [0.0, 7800]
+        - [10.0, 5800]
+        - [20.0, 4300]
+        - [30.0, 3000]
+        - [40.0, 2000]
+    upper_stage:
+      name: CZ-5 second stage (YF-75D)
+      max_restarts: 1
+      max_coast_s: 3600
+      provenance: public_estimate
+      notes: "YZ-2 kick stage (not modelled here) adds multiple restarts for MEO/GEO."
+
+  long-march-3b:
+    name: Long March 3B (CZ-3B/E)
+    provider: CASC
+    family: Long March
+    orbit_capability:
+      LEO: {payload_kg: 11500, provenance: official, source: "CGWIC LM-3A series user's manual"}
+      GTO: {payload_kg: 5500, provenance: official, source: "CGWIC LM-3A series user's manual"}
+      TLI: {payload_kg: 3800, provenance: public_estimate, source: "Chang'e-3/4 launch mass"}
+    c3_curve:
+      provenance: public_estimate
+      source: "Estimated from lunar mission history"
+      points:
+        - [-2.0, 3800]
+        - [0.0, 3500]
+        - [10.0, 2600]
+        - [20.0, 1900]
+        - [30.0, 1300]
+        - [40.0, 800]
+    upper_stage:
+      name: CZ-3B third stage (YF-75)
+      max_restarts: 1
+      max_coast_s: 1800
+      provenance: public_estimate
