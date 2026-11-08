@@ -152,10 +152,21 @@ def _cmd_launch_window(args):
             step_s=args.step)
     if args.json:
         print(json.dumps([w.to_dict() for w in windows], indent=2, ensure_ascii=False))
-    elif windows:
+        return
+    if windows:
         print(lw.format_windows(windows))
     else:
         print("no launch window in the requested interval")
+    from orbitopt.data_provenance import format_data_sources
+    from orbitopt.launch_sites import get_launch_site
+
+    # Windows depend on the site's location and (unless overridden on the
+    # command line) its range-safety azimuth corridors.
+    fields = ["location"]
+    if args.azimuth is None and not (args.rla is None and args.ignore_corridors):
+        fields.append("azimuth_corridors")
+    print()
+    print(format_data_sources(get_launch_site(args.site).data_sources(fields)))
 
 
 def build_parser() -> argparse.ArgumentParser:

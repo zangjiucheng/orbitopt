@@ -136,3 +136,14 @@ def test_problem_toggle_off_matches_unconstrained():
     p_off, p_none = _problem(lc), _problem(None)
     dvs = rng.uniform(*p_off.get_bounds(), size=(32, 2)).ravel()
     assert np.array_equal(p_off.batch_fitness(dvs), p_none.batch_fitness(dvs))
+
+
+def test_describe_reports_data_sources_and_confidence():
+    d = LaunchConstraints.from_names("falcon-9", 4000.0, "kourou").describe()
+    ds = d["data_sources"]
+    items = [r["item"] for r in ds["items"]]
+    assert items == ["falcon-9 c3_curve", "kourou location", "kourou azimuth_corridors"]
+    assert all(r["source"] for r in ds["items"])
+    # the digitized C3 curve is an estimate, so the whole set is not "official"
+    assert ds["confidence"] == "public_estimate"
+    assert LaunchConstraints.from_names(None, 0.0, "kourou").describe()["data_sources"]["confidence"] == "official"

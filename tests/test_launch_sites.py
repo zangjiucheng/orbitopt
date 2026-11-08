@@ -123,3 +123,38 @@ def test_custom_file_and_validation(tmp_path):
     import json
     p.write_text(json.dumps(data), encoding="utf-8")
     assert len(load_launch_sites(p)) == len(data["sites"])
+
+
+# ---- data sources (task #155) ----------------------------------------------
+
+@pytest.mark.parametrize("sid", REQUIRED_SITES)
+def test_every_source_has_provenance_accuracy_and_date(sid):
+    import re
+    recs = get_launch_site(sid).data_sources()
+    assert {r.item.split(" ", 1)[1] for r in recs} == set(FIELDS)
+    for r in recs:
+        assert r.source and r.provenance in ("official", "public_estimate", "derived")
+        assert r.accuracy, f"{r.item}: no accuracy"
+        assert re.fullmatch(r"\d{4}(-\d{2}(-\d{2})?)?", r.as_of), f"{r.item}: bad as_of"
+
+
+def test_approximate_corridors_are_tagged_as_estimates():
+    for site in load_launch_sites():
+        if site.confidence == "approximate":
+            for r in site.data_sources(["azimuth_corridors"]):
+                assert r.provenance == "public_estimate", r.item
+
+
+def test_uncovered_field_group_rejected():
+    bad = _raw()
+    bad["sites"][0]["sources"] = [s for s in bad["sites"][0]["sources"]
+                                  if "azimuth_corridors" not in s["covers"]]
+    with pytest.raises(ValueError, match="no source cited for azimuth_corridors"):
+        validate_launch_site_data(bad)
+
+
+def test_source_without_provenance_rejected():
+    bad = _raw()
+    del bad["sites"][0]["sources"][0]["provenance"]
+    with pytest.raises(jsonschema.ValidationError):
+        validate_launch_site_data(bad)

@@ -2,7 +2,9 @@
 capability, and upper-stage restart/coast limits, read from a configurable
 YAML data file (the packaged default is ``orbitopt/data/launch_vehicles.yaml``).
 
-Every value is tagged ``official`` or ``public_estimate``. Queries never
+Every value is tagged ``official`` or ``public_estimate`` and cites a
+``source`` (plus optional ``accuracy`` / ``as_of``); ``vehicle.data_sources()``
+returns them for reports. Queries never
 extrapolate: a C3 or payload outside the tabulated curve raises
 :class:`OutOfPerformanceRange` (``max_payload`` / ``max_c3``) or comes back
 flagged ``in_range=False`` (``query_max_payload`` / ``query_max_c3``).
@@ -22,10 +24,12 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from importlib import resources
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 import jsonschema
 import yaml
+
+from orbitopt.data_provenance import DataSource
 
 PROVENANCES = ("official", "public_estimate")
 ORBITS = ("LEO", "GTO", "TLI")
@@ -41,6 +45,8 @@ class OrbitCapability:
     payload_kg: float
     provenance: str
     source: str = ""
+    accuracy: str = ""
+    as_of: str = ""
 
 
 @dataclass(frozen=True)
@@ -50,6 +56,9 @@ class UpperStage:
     provenance: str
     name: str = ""
     notes: str = ""
+    source: str = ""
+    accuracy: str = ""
+    as_of: str = ""
 
     @property
     def max_burns(self) -> int:
@@ -77,6 +86,32 @@ class LaunchVehicle:
     provider: str = ""
     family: str = ""
     c3_source: str = ""
+    c3_accuracy: str = ""
+    c3_as_of: str = ""
+
+    def data_sources(self, items: Sequence[str] | None = None) -> list[DataSource]:
+        """Provenance records for this vehicle's data items: ``"c3_curve"``,
+        ``"upper_stage"`` and the orbits in ``orbit_capability`` (``"LEO"``
+        ...). ``items=None`` returns all of them."""
+        recs = {
+            "c3_curve": DataSource(f"{self.key} c3_curve", self.c3_provenance, self.c3_source,
+                                   self.c3_accuracy, self.c3_as_of),
+            "upper_stage": DataSource(f"{self.key} upper_stage", self.upper_stage.provenance,
+                                      self.upper_stage.source, self.upper_stage.accuracy,
+                                      self.upper_stage.as_of),
+        }
+        for orbit, cap in self.orbit_capability.items():
+            recs[orbit] = DataSource(f"{self.key} {orbit} capability", cap.provenance, cap.source,
+                                     cap.accuracy, cap.as_of)
+        if items is None:
+            return list(recs.values())
+        out = []
+        for it in items:
+            key = it if it in recs else it.upper()
+            if key not in recs:
+                raise KeyError(f"{self.key}: no data item {it!r} (have: {', '.join(recs)})")
+            out.append(recs[key])
+        return out
 
     @property
     def c3_range(self) -> tuple[float, float]:
@@ -164,16 +199,22 @@ def _build_vehicle(key: str, d: dict) -> LaunchVehicle:
         family=d.get("family", ""),
         c3_points=pts,
         c3_provenance=d["c3_curve"]["provenance"],
-        c3_source=d["c3_curve"].get("source", ""),
+        c3_source=d["c3_curve"]["source"],
+        c3_accuracy=d["c3_curve"].get("accuracy", ""),
+        c3_as_of=d["c3_curve"].get("as_of", ""),
         upper_stage=UpperStage(
             max_restarts=int(us["max_restarts"]),
             max_coast_s=float(us["max_coast_s"]),
             provenance=us["provenance"],
             name=us.get("name", ""),
             notes=us.get("notes", ""),
+            source=us["source"],
+            accuracy=us.get("accuracy", ""),
+            as_of=us.get("as_of", ""),
         ),
         orbit_capability={
-            orbit: OrbitCapability(float(v["payload_kg"]), v["provenance"], v.get("source", ""))
+            orbit: OrbitCapability(float(v["payload_kg"]), v["provenance"], v["source"],
+                                   v.get("accuracy", ""), v.get("as_of", ""))
             for orbit, v in (d.get("orbit_capability") or {}).items()
         },
     )

@@ -45,7 +45,7 @@
           "minItems": 1,
           "items": {
             "type": "object",
-            "required": ["covers", "ref"],
+            "required": ["covers", "ref", "provenance"],
             "additionalProperties": false,
             "properties": {
               "covers": {
@@ -53,7 +53,10 @@
                 "minItems": 1,
                 "items": {"enum": ["location", "altitude", "azimuth_corridors", "rotation_speed_gain"]}
               },
-              "ref": {"type": "string", "minLength": 1}
+              "ref": {"type": "string", "minLength": 1},
+              "provenance": {"enum": ["official", "public_estimate", "derived"]},
+              "accuracy": {"type": "string", "minLength": 1},
+              "as_of": {"type": "string", "pattern": "^[0-9]{4}(-[0-9]{2}(-[0-9]{2})?)?$"}
             }
           }
         }
