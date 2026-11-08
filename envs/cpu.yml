@@ -1,0 +1,21 @@
+# CPU-only orbitopt environment spec. Edit this, then regenerate
+# cpu.conda-lock.yml (see envs/README.md) -- install from the lockfile.
+name: orbitopt
+channels:
+  - conda-forge
+  - tudat-team
+dependencies:
+  - python=3.10
+  - tudatpy=1.0  # declares its boost (1.84) and numpy pins; 0.9.0 links
+                 # libboost 1.85 undeclared and no longer imports
+  - pykep
+  - pygmo
+  - numpy>=1.26.4,<2  # tudatpy 1.0.0 requires numpy<2.0 (its real conda pin)
+  - scipy>=1.11,<1.14  # pykep.trajopt still calls scipy.interpolate.interp2d (gone in 1.14)
+  - matplotlib=3.9.2
+  - notebook
+  - pytest
+  - pip
+  - pyvista
+  - pyside6
+  - pyvistaqt

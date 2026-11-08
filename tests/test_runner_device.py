@@ -83,6 +83,6 @@ def test_device_for_third_party_udps():
     assert GpuBatchFitnessEvaluator.device_for(None) == "CPU"
 
 
-@pytest.mark.skipif(not gpu.GPU_AVAILABLE, reason="needs CuPy + CUDA")
+@pytest.mark.gpu
 def test_cupy_backend_reports_gpu():
     assert _run(Sphere(use_gpu=True)).device == "GPU"

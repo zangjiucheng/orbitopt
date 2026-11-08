@@ -15,7 +15,7 @@ batch candidate evaluation** via CuPy.
 
 A plain `pip install orbitopt` (or the `viewer` extra) only gets the
 scene-format read/write/validate surface and the PyVista/PySide6 3D viewer --
-pykep, tudatpy, pygmo, and CuPy are conda-only (see environment.yml) and are
+pykep, tudatpy, pygmo, and CuPy are conda-only (see `envs/`) and are
 required for the trajectory optimization/propagation pieces described below.
 
 ## Why this split
@@ -156,7 +156,7 @@ into three layers so that's true in practice, not just in principle:
    pygmo/tudatpy from conda-forge. There is deliberately no `orbitopt[compute]`
    extras group in `pyproject.toml`: declaring conda-only packages as a pip
    extras would make `pip install orbitopt[compute]` fail outright instead of
-   degrading gracefully. Build this layer via `environment.yml` (see Setup).
+   degrading gracefully. Build this layer from the conda lockfiles in `envs/` (see Setup).
 
 ### Named missions + third-party plugins
 
@@ -214,17 +214,28 @@ the natural next step.
 
 tudatpy is conda-forge/tudat-team only (no PyPI wheels) and pins `python=3.10`;
 pykep additionally needs `scipy<1.14` (it still calls the since-removed
-`scipy.interpolate.interp2d`). See `environment.yml` / `scripts/setup_env.ps1`.
+`scipy.interpolate.interp2d`). Two environments are provided, each as a
+human-edited spec plus a fully pinned [conda-lock](https://github.com/conda/conda-lock)
+file (linux-64 + win-64, every package from conda -- no unlocked pip step):
 
-```powershell
-.\scripts\setup_env.ps1
-conda activate orbitopt
+| Env | Spec | Lockfile | Contents |
+|---|---|---|---|
+| `orbitopt` (CPU-only) | `envs/cpu.yml` | `envs/cpu.conda-lock.yml` | compute stack + viewer, no CUDA |
+| `orbitopt-gpu` | `envs/gpu.yml` | `envs/gpu.conda-lock.yml` | the above + CuPy on CUDA 13 |
+
+```bash
+micromamba create -n orbitopt -f envs/cpu.conda-lock.yml   # or: conda-lock install -n orbitopt envs/cpu.conda-lock.yml
+micromamba activate orbitopt
+pip install -e . --no-deps
 pytest tests/ -v
 ```
 
-The GPU package (`cupy-cuda13x`) is pip-installed inside the conda env; adjust
-the `cupy-cudaXXx` package name in `environment.yml` to match your CUDA driver
-version (`nvidia-smi`) if not CUDA 13.
+On Windows, `.\scripts\setup_env.ps1` (add `-Gpu` for the CUDA env) does the
+same. NumPy is constrained to `>=1.26.4,<2` -- tudatpy 1.0's real pin; the
+old numpy-2.x drift came from the unlocked `pip:` section, which is gone. The GPU env needs an NVIDIA
+driver new enough for CUDA 13 (`nvidia-smi`); the CUDA runtime itself comes
+from conda. See `envs/README.md` for regenerating the locks and for the GPU CI
+job (`.github/workflows/gpu.yml`, self-hosted runner, manual / `gpu-ci` label).
 
 ## Measured results (RTX A3000 Laptop, 6 GB, this machine)
 

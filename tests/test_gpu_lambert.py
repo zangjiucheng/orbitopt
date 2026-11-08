@@ -9,7 +9,6 @@ import numpy as np
 import pykep as pk
 import pytest
 
-from orbitopt.core.gpu import GPU_AVAILABLE
 from orbitopt.lambert.cpu import solve_lambert_single
 from orbitopt.lambert.gpu_batch import solve_lambert_batch
 
@@ -31,7 +30,7 @@ def _random_heliocentric_transfer_cases(n, seed=0):
     return r1, r2, tof
 
 
-@pytest.mark.parametrize("use_gpu", [False] + ([True] if GPU_AVAILABLE else []))
+@pytest.mark.parametrize("use_gpu", [False, pytest.param(True, marks=pytest.mark.gpu)])
 def test_batch_matches_pykep_reference(use_gpu):
     n = 200
     r1, r2, tof = _random_heliocentric_transfer_cases(n)
@@ -55,9 +54,8 @@ def test_batch_matches_pykep_reference(use_gpu):
     assert max_v_err < 1.0, f"max |v_batch - v_pykep| = {max_v_err} m/s"
 
 
+@pytest.mark.gpu
 def test_cpu_and_gpu_backends_agree():
-    if not GPU_AVAILABLE:
-        pytest.skip("no CUDA device available in this environment")
     n = 500
     r1, r2, tof = _random_heliocentric_transfer_cases(n, seed=1)
 

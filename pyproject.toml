@@ -52,7 +52,7 @@ viewer = [
 # viz exporters) ship only on conda-forge/tudat-team and do not exist on
 # PyPI at all -- listing them in optional-dependencies would make
 # `pip install orbitopt[compute]` fail outright, not degrade gracefully.
-# Building the compute stack means a conda environment; see environment.yml
+# Building the compute stack means a conda environment; see envs/README.md
 # and this README's Setup section.
 
 [project.scripts]
@@ -71,4 +71,7 @@ orbitopt = ["schemas/*.json", "viz/assets/textures/*.jpg", "viz/assets/textures/
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["slow: multi-second tests that run a real tudatpy propagation or optimization loop"]
+markers = [
+    "slow: multi-second tests that run a real tudatpy propagation or optimization loop",
+    "gpu: needs CuPy + a CUDA device; skipped without one, a hard error under ORBITOPT_REQUIRE_GPU=1 (see tests/conftest.py)",
+]
