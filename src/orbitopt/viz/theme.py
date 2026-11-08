@@ -1,57 +1,79 @@
-"""Qt stylesheet for the Mission Control app -- "OrbitOpt Pixel Mission
-Control": a dark, canvas-first tracking-station chrome (dense info panels,
-a time-warp control strip, orbit-colored readouts) with a restrained retro
-aerospace / pixel-console visual language layered on top -- hard 0-3px
-edges instead of soft rounded cards, a monospace type system throughout,
-and small semantic status badges instead of prose. The 3D trajectory view
-itself stays untouched by any of this (see scene_renderer.py); this module
-only ever styles the Qt chrome around it.
+"""Qt stylesheet for the Mission Control app: a dark "tracking station"
+chrome around the 3D view (mission rail, inspector, time-warp strip).
+
+The palette is the project's shared one -- the same tokens as the project
+site (docs/index.html :root): void/panel/hairline/ink, amber accent, and
+scene.py's verify/burn/body colors. The July "pixel mission control" reskin
+swapped it for a cyan palette; this restores the shared palette (and the
+site's type pairing: a sans for prose, a monospace for readouts) while
+keeping that reskin's layout, hard edges and status badges. The 3D view
+itself is styled by scene_renderer.py, not here.
 """
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
-# Design tokens. Names are kept stable across the previous ("KSP tracking
-# station") palette so icons.py/app.py's existing imports don't need to
-# change -- only the *values* moved to the pixel-mission-control palette.
-# New tokens (SURFACE_HOVER, BORDER_SOFT, SUCCESS/WARNING/DANGER/INFO) are
-# additive.
+# Design tokens -- keep in sync with docs/index.html's :root.
 # ---------------------------------------------------------------------------
-BG_VOID = "#05070A"
-PANEL = "#0B0F14"
-PANEL_RAISED = "#10161D"
-SURFACE_HOVER = "#151D26"
-HAIRLINE = "#27313B"
-BORDER_SOFT = "#18212A"
-INK_PRIMARY = "#DCE7EE"
-INK_SECONDARY = "#91A2AE"
-INK_MUTED = "#56656F"
-ACCENT = "#65D5C8"
-ACCENT_DIM = "#17332F"
-ACCENT_MID = "#2D746D"   # accent on a dark wash (e.g. selected-item text-on-fill contexts)
+BG_VOID = "#050409"        # --void
+PANEL = "#0b0916"          # --panel
+PANEL_RAISED = "#13101e"   # --panel-raised
+SURFACE_HOVER = "#1b1729"
+HAIRLINE = "#262239"       # --hairline
+BORDER_SOFT = "#1a1728"    # --hairline-soft
+INK_PRIMARY = "#f4f2ea"    # --ink
+INK_SECONDARY = "#a9a6bb"  # --ink-2
+INK_MUTED = "#6f6c85"      # --ink-muted
+ACCENT = "#e8a23e"         # --accent
+ACCENT_DIM = "#3a2e17"     # --accent-dim
+ACCENT_MID = "#8a6125"     # accent on a dark wash (selected-item contexts)
 
-# Semantic status colors -- every state badge, mission-list status dot, and
-# body/maneuver highlight maps to exactly one of these, never an arbitrary
-# per-trajectory color (see spec: "颜色必须具有语义").
-SUCCESS = "#79C267"   # verified / loaded
-WARNING = "#D5A84D"   # partial / caution
-DANGER = "#D46A6A"    # failed
-INFO = "#70A5E8"      # running / neutral-active
+# Semantic status colors -- every state badge, mission-list status dot and
+# body/maneuver highlight maps to exactly one of these.
+SUCCESS = "#2fa97a"   # verified / loaded            (--saturn)
+WARNING = "#f0c05a"   # partial / caution
+DANGER = "#ff5a3c"    # failed                       (--burn)
+INFO = "#5ec8ff"      # running / neutral-active     (--verify)
 
-MEASURE = INFO
-MEASURE_DIM = "#16233A"
+MEASURE = INFO          # distance-measurement line + readout (cool, against the amber)
+MEASURE_DIM = "#142833"  # --verify-dim
 
-# Monospace stack: prefers a few widely-available programmer/geometric
-# monospace faces (spec 4.3), falls back to the platform's own monospace --
-# no font binaries are bundled with the app.
-FONT_MONO = (
-    '"JetBrains Mono", "IBM Plex Mono", "Space Mono", "SF Mono", '
-    '"Cascadia Code", "Consolas", monospace'
-)
+# Type: the site's pairing. Neither family is bundled; each stack falls back
+# to the platform's own UI / monospace faces.
+FONT_SANS = '"IBM Plex Sans", -apple-system, "SF Pro Text", "Segoe UI", sans-serif'
+FONT_MONO = '"IBM Plex Mono", "SF Mono", "Cascadia Code", "Consolas", monospace'
 
 STYLESHEET = f"""
 * {{
-    font-family: {FONT_MONO};
+    font-family: {FONT_SANS};
     color: {INK_PRIMARY};
+}}
+
+/* Numeric readouts and small labels in monospace, as on the site. */
+QLabel#appTitle, QLabel#sectionHeader, QLabel#viewLabel, QLabel#menuSectionLabel,
+QLabel#measureDist, QLabel#bodyStatValue, QLabel#metReadout, QLabel#speedValue,
+QLabel#keyCap, QLabel#maneuverTime, QLabel#dateReadout, QLabel#scaleReadout,
+QLabel#statusBadgeText, QLabel#metricLabel, QLabel#metricValue, QLabel#metricUnit {{
+    font-family: {FONT_MONO};
+}}
+
+/* Dialogs and tooltips get the dark panel explicitly: the global ink color
+   above otherwise lands on the platform's default (light, on macOS) dialog
+   background -- white text on white in QMessageBox. */
+QDialog, QMessageBox {{
+    background: {PANEL};
+}}
+QMessageBox QLabel {{
+    color: {INK_PRIMARY};
+    background: transparent;
+}}
+QMessageBox QPushButton {{
+    min-width: 72px;
+}}
+QToolTip {{
+    background: {PANEL_RAISED};
+    color: {INK_PRIMARY};
+    border: 1px solid {HAIRLINE};
+    padding: 4px 6px;
 }}
 
 QMainWindow, QWidget#centralWidget {{

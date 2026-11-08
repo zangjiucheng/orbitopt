@@ -230,10 +230,82 @@ class DebouncedInteractor(QtInteractor):
         self._apply_dynamic_clipping()
 
 
+def _is_picklable(fn) -> bool:
+    import pickle
+
+    try:
+        pickle.dumps(fn)
+    except Exception:  # noqa: BLE001 -- lambdas/closures (e.g. File > Open) just run in-thread
+        return False
+    return True
+
+
+class ComputePool:
+    """A single persistent worker *process* for mission compute.
+
+    A QThread alone does not keep the UI responsive here: the loaders
+    (pykep/pygmo Python callbacks, small-array numpy, tudatpy bindings) hold
+    the GIL nearly the whole time, so the main thread is starved. Measured
+    while computing Artemis II with no scene cache: a 16 ms main-thread timer
+    fired 63 times in 20 s instead of ~1,260, with gaps up to 1.08 s. A
+    separate process has its own GIL. SceneLoader still runs on a QThread,
+    but that thread only blocks in ``future.result()``, which releases the GIL.
+
+    ``spawn`` (not fork): forking a process that already holds Qt, VTK and an
+    OpenGL context is unsafe on macOS. The worker is started lazily on the
+    first submit and reused, so heavy imports are paid once per session.
+    ``ORBITOPT_INPROCESS_COMPUTE=1`` disables it (debugging, profilers).
+    """
+
+    def __init__(self):
+        self._executor = None
+
+    @staticmethod
+    def enabled() -> bool:
+        return os.environ.get("ORBITOPT_INPROCESS_COMPUTE", "") != "1"
+
+    def run(self, fn):
+        """Call ``fn()`` in the worker process and return its result (blocking)."""
+        from concurrent.futures.process import BrokenProcessPool
+
+        if self._executor is None:
+            import multiprocessing as mp
+            from concurrent.futures import ProcessPoolExecutor
+
+            from orbitopt._compute_worker import watch_parent
+
+            self._executor = ProcessPoolExecutor(
+                max_workers=1, mp_context=mp.get_context("spawn"),
+                initializer=watch_parent, initargs=(os.getpid(),),
+            )
+        try:
+            return self._executor.submit(fn).result()
+        except BrokenProcessPool as exc:
+            # The worker died (crash in native code, or terminate() on quit).
+            # Drop the broken executor so the next load starts a fresh one.
+            self._executor = None
+            raise RuntimeError("the compute process exited unexpectedly") from exc
+
+    def terminate(self):
+        """Kill the worker immediately (on quit) -- a mission compute can run for
+        minutes and must not hold the app open."""
+        executor, self._executor = self._executor, None
+        if executor is None:
+            return
+        for proc in list(getattr(executor, "_processes", {}).values()):
+            try:
+                proc.terminate()
+            except Exception:  # noqa: BLE001 -- best-effort teardown
+                pass
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 class SceneLoader(QObject):
     """Runs a scene loader (e.g. compute_and_export_mission, ~10s of pure
-    Python/numpy/tudatpy work) on a background QThread so it can't block
-    the UI event loop -- moveToThread + signals is the standard PySide
+    Python/numpy/tudatpy work) off the UI thread: picklable loaders (every
+    registered mission) in the ComputePool worker process, anything else
+    (e.g. File > Open's lambda, a fast JSON read) directly on this QThread.
+    moveToThread + signals is the standard PySide
     pattern for this, not a raw threading.Thread, because Qt needs the
     result handed back via a queued signal/slot connection to land safely
     on the main thread rather than touching any Qt/VTK objects directly
@@ -259,14 +331,18 @@ class SceneLoader(QObject):
     finished = Signal(str, object)
     failed = Signal(str, str)
 
-    def __init__(self, name, loader):
+    def __init__(self, name, loader, pool: ComputePool | None = None):
         super().__init__()
         self._name = name
         self._loader = loader
+        self._pool = pool
 
     def run(self):
         try:
-            scene = self._loader()
+            if self._pool is not None and ComputePool.enabled() and _is_picklable(self._loader):
+                scene = self._pool.run(self._loader)
+            else:
+                scene = self._loader()
         except Exception as exc:  # noqa: BLE001 -- reported to the user via the failed signal
             self.failed.emit(self._name, str(exc))
             return
@@ -503,6 +579,7 @@ class MissionControlWindow(QMainWindow):
         self._playing = False
 
         self._loading = False
+        self._compute_pool = ComputePool()
         self._load_thread: QThread | None = None
         self._load_worker: SceneLoader | None = None
         self._load_start_ts: float = 0.0
@@ -1619,7 +1696,7 @@ class MissionControlWindow(QMainWindow):
         self._begin_switch(f"Computing {label}…")
 
         thread = QThread(self)
-        worker = SceneLoader(key, self._loaders[key])
+        worker = SceneLoader(key, self._loaders[key], self._compute_pool)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         # QueuedConnection explicitly, not AutoConnection -- see the comment
@@ -2239,6 +2316,9 @@ class MissionControlWindow(QMainWindow):
                         signal.disconnect(slot)
                     except (RuntimeError, TypeError):
                         pass
+            # Kill the compute process first: the loader thread is blocked in
+            # future.result() and unblocks as soon as the worker is gone.
+            self._compute_pool.terminate()
             thread.quit()
             # Scene loading (e.g. compute_and_export_mission) can take ~10s --
             # give it generous room to finish before tearing down the plotter
@@ -2261,6 +2341,7 @@ class MissionControlWindow(QMainWindow):
                     pass
             probe_thread.quit()
             probe_thread.wait(1000)  # a device-count query, never ~10s of compute like scene loads
+        self._compute_pool.terminate()  # idle worker process, if any
         try:
             self.plotter.close()
         except Exception:  # noqa: BLE001 -- best-effort teardown, never block quit
