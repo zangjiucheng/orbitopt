@@ -15,7 +15,15 @@ pytest.importorskip("PySide6")
 pytest.importorskip("pyvistaqt")
 
 
-def _pump_until(app, predicate, timeout=30.0):
+# Upper bound for one mission compute, not a performance target: it only
+# turns a deadlock into a failure instead of a hang. A cold Artemis II
+# compute takes ~19 s on an M-series Mac and longer on a 2-vCPU CI runner
+# (it timed out at 30 s on GitHub Actions once the verification integrator
+# became adaptive RKDP8(7)).
+LOAD_TIMEOUT_S = 180.0
+
+
+def _pump_until(app, predicate, timeout=LOAD_TIMEOUT_S):
     """Drive the real Qt event loop with processEvents() until `predicate()`
     is true or `timeout` elapses. Mission loading now runs on a background
     QThread (see app.py's SceneLoader), so tests must wait for it the same
