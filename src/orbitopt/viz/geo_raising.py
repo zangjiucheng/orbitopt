@@ -65,6 +65,7 @@ from orbitopt.problems.geo_raising import (
     MU_EARTH_KM3_S2,
     single_impulse_geo_insertion_ms,
 )
+from orbitopt.verify import report as verification_report
 from orbitopt.verify.geo_insertion import verify_geo_raising
 from orbitopt.verify.tudat_propagate import ReusableCoastPropagator
 from orbitopt.viz.scene import (
@@ -693,4 +694,7 @@ def build_from_config(config: dict) -> dict:
             f"after {result.iterations} targeter iterations."
         )
         scene["subtitle"] = scene.get("subtitle", "") + "\n" + summary
+        if result.report is not None:
+            # Popped and written next to the scene by `orbitopt run`.
+            verification_report.attach_to_scene(scene, result.report)
     return scene

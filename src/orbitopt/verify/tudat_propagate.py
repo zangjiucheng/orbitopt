@@ -22,8 +22,8 @@ see :mod:`orbitopt.verify.events`, instead of by picking saved samples.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Callable, Optional
 
 import numpy as np
 from tudatpy import constants, numerical_simulation
@@ -31,6 +31,7 @@ from tudatpy.interface import spice
 from tudatpy.numerical_simulation import environment_setup, propagation_setup
 
 from orbitopt.verify import events as _events
+from orbitopt.verify import report as _report
 
 # Verification-layer integrator defaults (see module docstring).
 DEFAULT_INTEGRATOR = "dop853"
@@ -59,6 +60,13 @@ class PropagationResult:
     # bracketing interval at fine resolution. Both optional / back-compatible.
     epoch_offset: float = 0.0
     propagator: Optional["ReusableCoastPropagator"] = None
+    # Verification-report metadata (task #137): the dynamics/integrator
+    # description, the (start, stop) index range of every coast arc in
+    # ``states`` (burns split arcs), and a hook that re-runs the identical
+    # propagation with keyword overrides (tighter tolerances, two-body only).
+    model: Optional[dict] = None
+    segments: Optional[list] = None
+    rerun: Optional[Callable[..., "PropagationResult"]] = field(default=None, repr=False)
 
 
 def _integrator_settings(integrator, step_size, rtol=VERIFY_RTOL, atol=VERIFY_ATOL, min_step=VERIFY_MIN_STEP):
@@ -88,6 +96,19 @@ def _integrator_settings(integrator, step_size, rtol=VERIFY_RTOL, atol=VERIFY_AT
     )
 
 
+def integrator_description(integrator, step_size, rtol=VERIFY_RTOL, atol=VERIFY_ATOL, min_step=VERIFY_MIN_STEP) -> dict:
+    """JSON-ready description of what :func:`_integrator_settings` builds."""
+    name = str(integrator).lower()
+    if name == "rk4":
+        return {"name": "rk4", "method": "Runge-Kutta 4 (fixed step)", "adaptive": False,
+                "step_s": float(step_size), "rtol": None, "atol": None,
+                "min_step_s": None, "max_step_s": float(step_size)}
+    return {"name": "dop853", "method": "Runge-Kutta-Dormand-Prince 8(7) (tudat rkdp_87), adaptive",
+            "adaptive": True, "step_s": None, "rtol": float(rtol), "atol": float(atol),
+            "atol_units": "m and m/s, element-wise", "initial_step_s": min(float(step_size), 60.0),
+            "min_step_s": float(min_step), "max_step_s": float(step_size)}
+
+
 def _time_termination(final_epoch, integrator):
     # Adaptive steps don't land on final_epoch by themselves; callers use the
     # final state *at* the requested time (TCM targeting), so stop exactly.
@@ -107,6 +128,8 @@ def propagate_two_body_leg(
     save_history=True,
     departure_epoch_ephemeris_seconds=0.0,
     integrator=DEFAULT_INTEGRATOR,
+    rtol=VERIFY_RTOL,
+    atol=VERIFY_ATOL,
 ) -> PropagationResult:
     """Numerically propagate an initial Cartesian state [r1, v1] for
     ``tof_seconds`` under point-mass gravity from every body in
@@ -147,7 +170,7 @@ def propagate_two_body_leg(
     initial_epoch = float(departure_epoch_ephemeris_seconds)
     final_epoch = initial_epoch + float(tof_seconds)
 
-    integrator_settings = _integrator_settings(integrator, step_size)
+    integrator_settings = _integrator_settings(integrator, step_size, rtol=rtol, atol=atol)
     termination_condition = _time_termination(final_epoch, integrator)
 
     output_variables = None
@@ -167,15 +190,44 @@ def propagate_two_body_leg(
     epochs = np.array(sorted(state_history.keys()))
     states = np.array([state_history[t] for t in epochs])
 
-    return PropagationResult(epochs=epochs, states=states, final_state=states[-1])
+    model = {
+        "function": "propagate_two_body_leg",
+        "central_body": central_body,
+        "perturbing_bodies": list(perturbing_bodies),
+        "earth_spherical_harmonic": None,
+        "integrator": integrator_description(integrator, step_size, rtol, atol),
+        "initial_state": initial_state,
+        "initial_epoch_ephemeris_s": initial_epoch,
+        "duration_s": float(tof_seconds),
+        "arcs": [{"type": "coast", "duration": float(tof_seconds)}],
+    }
+
+    def rerun(**overrides):
+        kw = dict(perturbing_bodies=perturbing_bodies, central_body=central_body, step_size=step_size,
+                  departure_epoch_ephemeris_seconds=departure_epoch_ephemeris_seconds,
+                  integrator=integrator, rtol=rtol, atol=atol)
+        overrides.pop("earth_spherical_harmonic", None)
+        kw.update(overrides)
+        return propagate_two_body_leg(r1, v1, tof_seconds, **kw)
+
+    return PropagationResult(
+        epochs=epochs, states=states, final_state=states[-1], epoch_offset=0.0,
+        model=model, segments=[(0, len(epochs))], rerun=rerun,
+    )
 
 
-def compare_to_lambert_prediction(prop_result: PropagationResult, r2_lambert, v2_lambert):
+def compare_to_lambert_prediction(prop_result: PropagationResult, r2_lambert, v2_lambert,
+                                  report=True, report_path=None):
     """Compare a numerically propagated final state to pykep's patched-conic
     Lambert-arc prediction (r2, v2). Returns a dict of position/velocity
     discrepancies -- large values indicate the two-body assumption breaks
     down for this leg (e.g. a close planetary flyby not modelled as an
     instantaneous v-infinity match).
+
+    With ``report`` (default) and a result from :func:`propagate_two_body_leg`
+    / :func:`propagate_multi_arc`, the dict also carries ``"report"``: the
+    machine-readable verification report (:mod:`orbitopt.verify.report`),
+    written to ``report_path`` if given.
     """
     r2_num, v2_num = prop_result.final_state[:3], prop_result.final_state[3:]
     r2_lambert = np.asarray(r2_lambert, dtype=float)
@@ -183,14 +235,26 @@ def compare_to_lambert_prediction(prop_result: PropagationResult, r2_lambert, v2
 
     pos_error = np.linalg.norm(r2_num - r2_lambert)
     vel_error = np.linalg.norm(v2_num - v2_lambert)
-    return {
+    out = {
         "position_error_km": pos_error / 1000.0,
         "velocity_error_m_s": vel_error,
     }
+    if report and prop_result.model is not None:
+        out["report"] = _report.finalize_report(_report.build_report(
+            kind="lambert-leg",
+            label=f"departure-et-{prop_result.model['initial_epoch_ephemeris_s']:.3f}",
+            propagations=[propagation_report_section(prop_result, "leg")],
+            residuals=[_report.state_residual(
+                "arrival_vs_lambert", "pykep patched-conic Lambert arrival state (r2, v2)",
+                state=prop_result.final_state, reference_state=np.concatenate([r2_lambert, v2_lambert]),
+            )],
+            inputs={"r2_lambert_m": r2_lambert, "v2_lambert_m_s": v2_lambert},
+        ), report_path)
+    return out
 
 
-def _propagate_single_coast(bodies, acceleration_models, central_body, spacecraft_state, epoch_start, duration, step_size, integrator=DEFAULT_INTEGRATOR):
-    integrator_settings = _integrator_settings(integrator, step_size)
+def _propagate_single_coast(bodies, acceleration_models, central_body, spacecraft_state, epoch_start, duration, step_size, integrator=DEFAULT_INTEGRATOR, rtol=VERIFY_RTOL, atol=VERIFY_ATOL):
+    integrator_settings = _integrator_settings(integrator, step_size, rtol=rtol, atol=atol)
     termination_condition = _time_termination(epoch_start + float(duration), integrator)
     propagator_settings = propagation_setup.propagator.translational(
         [central_body],
@@ -238,6 +302,8 @@ class ReusableCoastPropagator:
         step_size=60.0,
         earth_spherical_harmonic=None,
         integrator=DEFAULT_INTEGRATOR,
+        rtol=VERIFY_RTOL,
+        atol=VERIFY_ATOL,
     ):
         _ensure_spice_loaded()
         body_settings = environment_setup.get_default_body_settings(
@@ -260,6 +326,22 @@ class ReusableCoastPropagator:
         self._central_body = central_body
         self._step_size = float(step_size)
         self._integrator = integrator
+        self._rtol = float(rtol)
+        self._atol = float(atol)
+        self._perturbing_bodies = tuple(perturbing_bodies)
+        self._earth_spherical_harmonic = (
+            None if earth_spherical_harmonic is None else tuple(int(x) for x in earth_spherical_harmonic)
+        )
+
+    def model_description(self) -> dict:
+        """Dynamics + integrator description for verification reports."""
+        return {
+            "central_body": self._central_body,
+            "perturbing_bodies": list(self._perturbing_bodies),
+            "earth_spherical_harmonic": None if self._earth_spherical_harmonic is None
+            else list(self._earth_spherical_harmonic),
+            "integrator": integrator_description(self._integrator, self._step_size, self._rtol, self._atol),
+        }
 
     def coast(self, spacecraft_state, epoch_start, duration, max_step=None):
         """Propagate one coast arc from ``spacecraft_state`` (SI, 6-vector) for
@@ -272,7 +354,7 @@ class ReusableCoastPropagator:
         return _propagate_single_coast(
             self._bodies, self._acceleration_models, self._central_body,
             np.asarray(spacecraft_state, dtype=float), float(epoch_start), duration, step,
-            self._integrator,
+            self._integrator, self._rtol, self._atol,
         )
 
     def refine_fn(self, epoch_offset=0.0):
@@ -294,6 +376,8 @@ def propagate_multi_arc(
     step_size=60.0,
     earth_spherical_harmonic=None,
     integrator=DEFAULT_INTEGRATOR,
+    rtol=VERIFY_RTOL,
+    atol=VERIFY_ATOL,
 ) -> PropagationResult:
     """Propagate a spacecraft through a sequence of ``arcs`` -- coasts and
     instantaneous impulsive burns -- meant for a multi-phase mission like
@@ -325,7 +409,7 @@ def propagate_multi_arc(
     propagator = ReusableCoastPropagator(
         central_body=central_body, perturbing_bodies=perturbing_bodies,
         step_size=step_size, earth_spherical_harmonic=earth_spherical_harmonic,
-        integrator=integrator,
+        integrator=integrator, rtol=rtol, atol=atol,
     )
 
     current_state = np.concatenate([np.asarray(r0, dtype=float), np.asarray(v0, dtype=float)])
@@ -333,6 +417,8 @@ def propagate_multi_arc(
 
     all_epochs = []
     all_states = []
+    segments = []
+    n_saved = 0
 
     for arc in arcs:
         arc_type = arc["type"]
@@ -340,6 +426,8 @@ def propagate_multi_arc(
             epochs, states = propagator.coast(current_state, current_epoch, arc["duration"])
             all_epochs.append(epochs)
             all_states.append(states)
+            segments.append((n_saved, n_saved + len(epochs)))
+            n_saved += len(epochs)
             current_state = states[-1]
             current_epoch = epochs[-1]
         elif arc_type == "impulsive_burn":
@@ -355,9 +443,52 @@ def propagate_multi_arc(
     epochs = np.concatenate(all_epochs) - float(initial_epoch)
     states = np.concatenate(all_states, axis=0)
 
+    model = propagator.model_description()
+    model.update(
+        function="propagate_multi_arc",
+        initial_state=np.concatenate([np.asarray(r0, dtype=float), np.asarray(v0, dtype=float)]),
+        initial_epoch_ephemeris_s=float(initial_epoch),
+        duration_s=float(epochs[-1]),
+        arcs=[
+            {"type": "coast", "duration": float(a["duration"])} if a["type"] == "coast"
+            else {"type": "impulsive_burn", "delta_v": np.asarray(a["delta_v"], dtype=float)}
+            for a in arcs
+        ],
+    )
+
+    def rerun(**overrides):
+        kw = dict(central_body=central_body, perturbing_bodies=perturbing_bodies, step_size=step_size,
+                  earth_spherical_harmonic=earth_spherical_harmonic, integrator=integrator,
+                  rtol=rtol, atol=atol)
+        kw.update(overrides)
+        return propagate_multi_arc(r0, v0, initial_epoch, arcs, **kw)
+
     return PropagationResult(
         epochs=epochs, states=states, final_state=current_state,
         epoch_offset=float(initial_epoch), propagator=propagator,
+        model=model, segments=segments, rerun=rerun,
+    )
+
+
+def propagation_report_section(
+    prop_result: PropagationResult,
+    label: str,
+    convergence_check: bool = True,
+    conservation_check: bool = True,
+    mu=None,
+) -> dict:
+    """One ``propagations[]`` entry of a verification report for a result of
+    :func:`propagate_multi_arc` / :func:`propagate_two_body_leg` -- see
+    :func:`orbitopt.verify.report.propagation_section`. ``mu`` defaults to
+    the SPICE GM of the propagation's central body."""
+    if prop_result.model is None:
+        raise ValueError("propagation_report_section needs a PropagationResult from "
+                         "propagate_multi_arc / propagate_two_body_leg (model metadata missing)")
+    if mu is None:
+        mu = body_gravitational_parameter(prop_result.model["central_body"])
+    return _report.propagation_section(
+        prop_result, label, mu=mu,
+        convergence_check=convergence_check, conservation_check=conservation_check,
     )
 
 

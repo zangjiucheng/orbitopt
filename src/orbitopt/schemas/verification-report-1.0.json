@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zangjiucheng.github.io/orbitopt/schemas/verification-report-1.0.json",
+  "title": "orbitopt verification report",
+  "description": "Machine-readable output of every high-fidelity verification (orbitopt.verify.report): residuals, integrator tolerances + step convergence, energy / angular-momentum error, and the perturbation-model inventory. Deterministic (no timestamps, sorted keys); `digest` is the SHA-256 of the canonical JSON of everything else.",
+  "oneOf": [
+    { "$ref": "#/$defs/report" },
+    { "$ref": "#/$defs/bundle" }
+  ],
+  "$defs": {
+    "num": { "type": ["number", "null"] },
+    "vec": { "type": ["array", "null"], "items": { "$ref": "#/$defs/num" } },
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "status": {
+      "type": "object",
+      "required": ["passed", "checks"],
+      "properties": {
+        "passed": { "type": "boolean" },
+        "checks": { "type": "object", "additionalProperties": { "type": "boolean" } }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["python", "numpy"],
+      "additionalProperties": { "type": ["string", "null"] }
+    },
+    "force": {
+      "type": "object",
+      "required": ["body", "role", "type", "model", "degree", "order", "terms"],
+      "properties": {
+        "body": { "type": "string" },
+        "role": { "enum": ["central", "third_body"] },
+        "type": { "const": "gravity" },
+        "model": { "enum": ["point_mass", "spherical_harmonic"] },
+        "degree": { "type": "integer", "minimum": 0 },
+        "order": { "type": "integer", "minimum": 0 },
+        "terms": { "type": "array", "items": { "type": "string" } },
+        "ephemeris": { "type": "string" }
+      }
+    },
+    "dynamics": {
+      "type": "object",
+      "required": ["central_body", "frame", "forces", "summary", "not_modelled"],
+      "properties": {
+        "central_body": { "type": "string" },
+        "frame": { "type": "string" },
+        "forces": { "type": "array", "items": { "$ref": "#/$defs/force" } },
+        "summary": {
+          "type": "object",
+          "required": ["central_point_mass_only", "earth_J2", "earth_J22", "sun_gravity", "moon_gravity", "third_bodies"],
+          "properties": {
+            "central_point_mass_only": { "type": "boolean" },
+            "central_J2": { "type": "boolean" },
+            "central_J22": { "type": "boolean" },
+            "earth_J2": { "type": "boolean" },
+            "earth_J22": { "type": "boolean" },
+            "sun_gravity": { "type": "boolean" },
+            "moon_gravity": { "type": "boolean" },
+            "third_bodies": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "not_modelled": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "convergence": {
+      "type": "object",
+      "required": ["checked", "converged"],
+      "properties": {
+        "checked": { "type": "boolean" },
+        "converged": { "type": ["boolean", "null"] },
+        "method": { "type": "string" },
+        "reason": { "type": "string" },
+        "refined_settings": { "type": "object" },
+        "delta_position_m": { "$ref": "#/$defs/num" },
+        "delta_velocity_m_s": { "$ref": "#/$defs/num" },
+        "position_tolerance_m": { "$ref": "#/$defs/num" },
+        "velocity_tolerance_m_s": { "$ref": "#/$defs/num" }
+      }
+    },
+    "integrator": {
+      "type": "object",
+      "required": ["name", "method", "adaptive", "rtol", "atol", "max_step_s", "steps", "convergence"],
+      "properties": {
+        "name": { "enum": ["dop853", "rk4"] },
+        "method": { "type": "string" },
+        "adaptive": { "type": "boolean" },
+        "rtol": { "$ref": "#/$defs/num" },
+        "atol": { "$ref": "#/$defs/num" },
+        "step_s": { "$ref": "#/$defs/num" },
+        "min_step_s": { "$ref": "#/$defs/num" },
+        "max_step_s": { "$ref": "#/$defs/num" },
+        "steps": {
+          "type": "object",
+          "required": ["n_steps", "min_s", "max_s", "mean_s", "median_s", "n_segments"],
+          "properties": {
+            "n_steps": { "type": "integer", "minimum": 0 },
+            "n_segments": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "convergence": { "$ref": "#/$defs/convergence" }
+      }
+    },
+    "conservationBlock": {
+      "type": "object",
+      "required": ["mu_m3_s2", "energy_rel_drift_max", "angular_momentum_rel_drift_max", "segments", "applicable", "reason"],
+      "properties": {
+        "mu_m3_s2": { "type": "number" },
+        "energy_rel_drift_max": { "$ref": "#/$defs/num" },
+        "angular_momentum_rel_drift_max": { "$ref": "#/$defs/num" },
+        "segments": { "type": "array" },
+        "applicable": { "type": "boolean" },
+        "reason": { "type": "string" },
+        "within_tolerance": { "type": "boolean" }
+      }
+    },
+    "propagation": {
+      "type": "object",
+      "required": ["label", "dynamics", "integrator", "conservation", "final_state"],
+      "properties": {
+        "label": { "type": "string" },
+        "final_state": { "$ref": "#/$defs/vec" },
+        "initial_state": { "$ref": "#/$defs/vec" },
+        "dynamics": { "$ref": "#/$defs/dynamics" },
+        "integrator": { "$ref": "#/$defs/integrator" },
+        "conservation": {
+          "type": "object",
+          "required": ["tolerance_rel", "propagated_model"],
+          "properties": {
+            "tolerance_rel": { "type": "number" },
+            "propagated_model": { "$ref": "#/$defs/conservationBlock" },
+            "two_body_reference": { "$ref": "#/$defs/conservationBlock" }
+          }
+        }
+      }
+    },
+    "residual": {
+      "type": "object",
+      "required": ["name", "reference", "position_residual_m", "velocity_residual_m_s"],
+      "properties": {
+        "name": { "type": "string" },
+        "reference": { "type": "string" },
+        "position_residual_m": { "$ref": "#/$defs/num" },
+        "position_residual_vector_m": { "$ref": "#/$defs/vec" },
+        "velocity_residual_m_s": { "$ref": "#/$defs/num" },
+        "velocity_residual_vector_m_s": { "$ref": "#/$defs/vec" },
+        "tolerance": { "type": "object" },
+        "within_tolerance": { "type": "boolean" }
+      }
+    },
+    "report": {
+      "type": "object",
+      "required": ["schemaVersion", "kind", "label", "status", "inputs", "propagations", "residuals", "targets", "provenance", "digest"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": "1.0" },
+        "kind": { "type": "string", "not": { "const": "bundle" } },
+        "label": { "type": "string" },
+        "status": { "$ref": "#/$defs/status" },
+        "inputs": { "type": "object" },
+        "propagations": { "type": "array", "items": { "$ref": "#/$defs/propagation" } },
+        "residuals": { "type": "array", "items": { "$ref": "#/$defs/residual" } },
+        "targets": { "type": ["object", "null"] },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "bundle": {
+      "type": "object",
+      "required": ["schemaVersion", "kind", "label", "status", "reports", "provenance", "digest"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": "1.0" },
+        "kind": { "const": "bundle" },
+        "label": { "type": "string" },
+        "status": { "$ref": "#/$defs/status" },
+        "reports": { "type": "array", "items": { "$ref": "#/$defs/report" } },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    }
+  }
+}
