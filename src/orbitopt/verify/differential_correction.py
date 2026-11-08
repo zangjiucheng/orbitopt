@@ -88,7 +88,7 @@ def _miss_vector_m(
         perturbing_bodies=perturbing_bodies, step_size=step_size,
     )
     spacecraft_pos_m = result.final_state[:3]
-    absolute_epoch = reference_epoch_ephemeris_seconds + result.epochs[-1]
+    absolute_epoch = absolute_initial_epoch + result.epochs[-1]
     moon_pos_m = body_position_at_absolute_epoch("Moon", absolute_epoch)
     return spacecraft_pos_m - moon_pos_m, result
 
@@ -116,7 +116,7 @@ def _relative_state_m(
         perturbing_bodies=perturbing_bodies, step_size=step_size,
     )
     spacecraft_state = result.final_state
-    absolute_epoch = reference_epoch_ephemeris_seconds + result.epochs[-1]
+    absolute_epoch = absolute_initial_epoch + result.epochs[-1]
     moon_pos_m = body_position_at_absolute_epoch("Moon", absolute_epoch)
     moon_vel_m_s = body_velocity_at_absolute_epoch("Moon", absolute_epoch)
     r_rel_m = spacecraft_state[:3] - moon_pos_m
@@ -157,7 +157,7 @@ def _refine_coast_duration(
         ],
         perturbing_bodies=perturbing_bodies, step_size=step_size,
     )
-    closest = find_closest_approach(result, reference_epoch_ephemeris_seconds, body_name="Moon")
+    closest = find_closest_approach(result, absolute_initial_epoch, body_name="Moon")
 
     plausible_time = abs(closest.epoch - coast_duration_guess) < 0.5 * coast_duration_guess
     plausible_distance = closest.distance_km < 200_000.0
@@ -751,7 +751,7 @@ def _flyby_and_return(
         perturbing_bodies=perturbing_bodies, step_size=step_size,
     )
     (_s0, e0), (s1, e1) = result.segments
-    sample_epoch_abs = reference_epoch_ephemeris_seconds + result.epochs[e0 - 1]
+    sample_epoch_abs = absolute_initial_epoch + result.epochs[e0 - 1]
     sc_state = result.states[e0 - 1]
     r_rel = sc_state[:3] - body_position_at_absolute_epoch("Moon", sample_epoch_abs)
     v_rel = sc_state[3:] - body_velocity_at_absolute_epoch("Moon", sample_epoch_abs)
