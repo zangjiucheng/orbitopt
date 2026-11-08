@@ -28,7 +28,8 @@ from tudatpy.astro import element_conversion
 from tudatpy.interface import spice
 
 from orbitopt.bodies import mjd2000_from_date, mjd2000_to_ephemeris_seconds
-from orbitopt.verify.tudat_propagate import propagate_multi_arc
+from orbitopt.verify import report as _report
+from orbitopt.verify.tudat_propagate import propagate_multi_arc, propagation_report_section
 
 GEO_PERTURBATIONS = dict(
     perturbing_bodies=("Earth", "Moon", "Sun"),
@@ -77,6 +78,7 @@ class GeoInsertionResult:
     stationkeeping: dict                 # drift of the corrected GEO over stationkeeping_days
     epoch_mjd2000: float                 # real mission epoch (first-apogee/injection date) used throughout
     residual_history: list = field(default_factory=list)
+    report: dict | None = None  # machine-readable verification report (orbitopt.verify.report)
 
 
 def target_geo_insertion(pre_burn_state, dv_guess, mu, target_radius_m,
@@ -154,7 +156,7 @@ def target_geo_insertion(pre_burn_state, dv_guess, mu, target_radius_m,
 
 
 def verify_geo_raising(problem, decision_vector, step_size=120.0, stationkeeping_days=3.0,
-                       epoch_mjd2000: float | None = None) -> GeoInsertionResult:
+                       epoch_mjd2000: float | None = None, report_path=None) -> GeoInsertionResult:
     """Re-fly ``problem``'s optimized schedule under J2+J22+Sun+Moon and refine
     the final burn to true GEO. ``problem`` is an
     orbitopt.problems.geo_raising.GeoRaisingProblem, ``decision_vector`` its
@@ -172,7 +174,12 @@ def verify_geo_raising(problem, decision_vector, step_size=120.0, stationkeeping
     iterates the epoch back toward consistency, so leaving it at the J2000
     default silently reports drift/libration for a date with no relation to
     the mission. Defaults to 2026-08-01 absent a published GOES-like launch
-    date (matching ``viz.mission_timeline``'s Artemis II placeholder)."""
+    date (matching ``viz.mission_timeline``'s Artemis II placeholder).
+
+    Always attaches a verification report (``result.report``, see
+    :mod:`orbitopt.verify.report`) covering the raising and station-keeping
+    propagations; written to ``report_path`` if given (or into
+    ``$ORBITOPT_VERIFICATION_REPORT_DIR``)."""
     if epoch_mjd2000 is None:
         epoch_mjd2000 = mjd2000_from_date(2026, 8, 1)
     reference_epoch_s = mjd2000_to_ephemeris_seconds(epoch_mjd2000)
@@ -198,6 +205,7 @@ def verify_geo_raising(problem, decision_vector, step_size=120.0, stationkeeping
         arcs.append({"type": "impulsive_burn", "delta_v": burns[k]})
         period = orbital_period(orbits[k + 1][0], r_geo, mu)
         arcs.append({"type": "coast", "duration": period})
+    raising = None
     if arcs:
         raising = propagate_multi_arc(
             states[0][:3], states[0][3:], reference_epoch_s, arcs=arcs,
@@ -241,6 +249,43 @@ def verify_geo_raising(problem, decision_vector, step_size=120.0, stationkeeping
         "de": sk_end["e"] - achieved_corrected["e"],
     }
 
+    propagations, residuals = [], []
+    if raising is not None:
+        propagations.append(propagation_report_section(raising, "raising", mu=mu))
+        # Numerical pre-final-burn state vs the screening model's analytic
+        # (unperturbed Keplerian) final apogee state.
+        residuals.append(_report.state_residual(
+            "pre_final_burn_vs_screening", "analytic two-body apogee state of the screening schedule",
+            state=pre_final, reference_state=states[n - 1],
+        ))
+    propagations.append(propagation_report_section(sk, "stationkeeping", mu=mu))
+    # Achieved GEO vs ideal circular equatorial GEO at the same in-plane phase
+    # (same position direction, circular speed perpendicular in the equator).
+    r_hat = corrected_state[:3] / np.linalg.norm(corrected_state[:3])
+    r_hat_eq = np.array([r_hat[0], r_hat[1], 0.0])
+    r_hat_eq = r_hat_eq / max(np.linalg.norm(r_hat_eq), 1e-300)
+    ideal_geo = np.concatenate([
+        r_geo * r_hat_eq,
+        np.sqrt(mu / r_geo) * np.cross([0.0, 0.0, 1.0], r_hat_eq),
+    ])
+    residuals.append(_report.state_residual(
+        "post_insertion_vs_ideal_geo", "circular equatorial orbit at r_geo through the burn longitude",
+        state=corrected_state, reference_state=ideal_geo,
+    ))
+    report = _report.build_report(
+        kind="geo-insertion", label=f"epoch-mjd2000-{epoch_mjd2000:.6f}",
+        propagations=propagations, residuals=residuals,
+        inputs={"epoch_mjd2000": epoch_mjd2000, "reference_epoch_ephemeris_s": reference_epoch_s,
+                "step_size_s": step_size, "stationkeeping_days": stationkeeping_days,
+                "n_burns": n, "decision_vector": np.asarray(decision_vector, dtype=float)},
+        targets={"converged": converged, "iterations": iterations, "r_geo_km": r_geo / 1000.0,
+                 "achieved_uncorrected": achieved_uncorrected, "achieved_corrected": achieved_corrected,
+                 "a_error_km": achieved_corrected["a_km"] - r_geo / 1000.0,
+                 "stationkeeping": stationkeeping, "residual_history": history,
+                 "ideal_final_burn_ms": ideal_burn, "corrected_final_burn_ms": corrected_burn},
+    )
+    _report.finalize_report(report, report_path)
+
     return GeoInsertionResult(
         converged=converged,
         iterations=iterations,
@@ -252,4 +297,5 @@ def verify_geo_raising(problem, decision_vector, step_size=120.0, stationkeeping
         stationkeeping=stationkeeping,
         epoch_mjd2000=epoch_mjd2000,
         residual_history=history,
+        report=report,
     )

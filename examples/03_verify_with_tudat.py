@@ -15,6 +15,7 @@ import pykep as pk
 
 from orbitopt.bodies import mjd2000_from_date, mjd2000_to_ephemeris_seconds, planet
 from orbitopt.lambert.cpu import solve_lambert_single
+from orbitopt.verify.report import write_report
 from orbitopt.verify.tudat_propagate import (
     compare_to_lambert_prediction,
     propagate_two_body_leg,
@@ -51,6 +52,13 @@ def main():
     print(f"\nDrift vs. pykep patched-conic prediction after {tof_days:.0f} days:")
     print(f"  position error: {diff['position_error_km']:,.1f} km")
     print(f"  velocity error: {diff['velocity_error_m_s']:.2f} m/s")
+    rep = diff["report"]
+    conv = rep["propagations"][0]["integrator"]["convergence"]
+    tb = rep["propagations"][0]["conservation"]["two_body_reference"]
+    print(f"  integration error estimate: {conv['delta_position_m']:.3g} m / {conv['delta_velocity_m_s']:.3g} m/s "
+          f"({'converged' if conv['converged'] else 'NOT converged'})")
+    print(f"  two-body energy / |h| drift: {tb['energy_rel_drift_max']:.2e} / {tb['angular_momentum_rel_drift_max']:.2e}")
+    print(f"  verification report (JSON): {write_report(rep, 'verification_report_earth_mars.json')}")
     print("(non-zero by construction -- Earth/Mars/Jupiter perturb the transfer "
           "that pykep modelled as an unperturbed two-body arc)")
 

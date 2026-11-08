@@ -83,6 +83,32 @@ limitation: a pass shorter than one output step whose range rate does not
 change sign between samples is caught only via the sample-wise minimum
 fallback (Hermite root, not re-propagated).
 
+## Verification report: every verification emits machine-readable JSON (task #137)
+
+Every high-fidelity verifier (`verify_geo_raising`, `target_mars_approach`,
+`verify_mars_orbit_insertion`, `target_lunar_flyby`, `target_lunar_b_plane`,
+`compare_to_lambert_prediction`) now attaches a report (`result.report`, see
+`orbitopt/verify/report.py`, schema `schemas/verification-report-1.0.json`)
+with:
+
+- **residuals**: position/velocity of the numerical solution minus a named
+  reference (Lambert arrival, analytic screening orbit, targeter aim point);
+- **integrator**: method, rtol/atol, min/max step, realised step statistics,
+  and a **step-convergence** check (re-run at tolerances x0.01, or half the
+  step for RK4; the final-state difference is the integration-error estimate);
+- **conservation**: energy and angular-momentum drift per coast arc. Under
+  perturbed dynamics these quantities are not conserved, so that block is
+  `applicable: false`; the applicable check re-runs the same initial state
+  under the central point mass only;
+- **dynamics**: the perturbation inventory (Earth J2/J22 harmonics, Sun/Moon/
+  planet point masses, plus what is *not* modelled).
+
+Each report costs up to 2 extra propagations per propagation it covers. It is
+byte-reproducible (no timestamps, sorted keys, `digest` = SHA-256 of the
+canonical JSON). `orbitopt run` writes it next to the scene as
+`<scene>.verification.json` (or `output.verification_report`); set
+`ORBITOPT_VERIFICATION_REPORT_DIR` to also write every report from library calls.
+
 ## GPU is not always faster -- measured, not assumed
 
 `nbody_gpu.propagate_spacecraft_batch` is GPU-*slower* than CPU below
