@@ -53,6 +53,9 @@ src/orbitopt/
   launch_windows.py  daily launch windows (open/close time + azimuth) from a launch
                       site into an orbit plane (in-plane / dogleg) or along a porkchop
                       departure asymptote -- numpy only; see "Launch windows" below
+  injection.py       launch site -> LEO parking orbit -> TLI/TMI burn from v-infinity,
+                      numerically verified (J2, scipy or tudatpy) with differential
+                      correction + verification report; see "Parking orbit and injection"
   core/
     gpu.py          numpy/cupy array-module abstraction (the GPU on/off switch)
     problem.py       OrbitOptProblem base class: pygmo UDP + optional batch_fitness()
@@ -238,6 +241,25 @@ north-east, ISS windows moving ~23 min earlier a day, Sentinel-2A/2B (Kourou,
 SSO 10:30 LTDN) predicted within ~6-9 min of actual lift-off, and the Mars
 2020 window from SLC-41 opening within ~4 min of the real 11:50 UTC lift-off.
 
+### Parking orbit and injection (TLI / TMI)
+
+`orbitopt.injection` closes the chain from the launch pad to the injection
+burn. `plan_departure(site, target, start=...)` takes the first asymptote
+launch window, builds the circular LEO parking orbit whose plane contains the
+site at lift-off and the departure direction (altitude, inclination, RAAN,
+secular J2), and places the burn at the perigee of the departure hyperbola
+whose asymptote is the target v-infinity (`InjectionTarget.from_v_inf` /
+`from_c3_rla_dla`, TMI) or opposite a target apogee (`from_apogee`, TLI):
+burn epoch, coast time and tangential delta-v. `verify_injection(plan)`
+propagates insertion -> coast -> burn -> SOI / apogee with Earth J2 (scipy
+DOP853, or `backend="tudat"`), corrects the burn with a Newton shooting
+step on the propagated v-infinity (via `verify.b_plane.b_plane_state`) or
+osculating apogee, and emits a `launch-injection` verification report
+(step convergence, conservation, parking-coast residual, launch geometry,
+optional vehicle C3 / site DLA). `plan.lunar_b_plane_targeter_inputs()`
+hands the burn to `verify.differential_correction.target_lunar_b_plane`
+(ECLIPJ2000, tudat epochs). Example: `examples/13_launch_to_injection.py`.
+
 ## Setup
 
 tudatpy is conda-forge/tudat-team only (no PyPI wheels) and pins `python=3.10`;
@@ -302,6 +324,8 @@ writeups in [`docs/engineering-notes.md`](docs/engineering-notes.md)):
 - `12_launch_constrained_transfer.py` -- the Earth->Mars optimum with and
   without launch constraints (rocket C3 capability + launch-site DLA,
   `orbitopt.launch_constraints`); results in `docs/engineering-notes.md`.
+- `13_launch_to_injection.py` -- launch site -> parking orbit -> TMI/TLI burn,
+  numerically verified end to end (`orbitopt.injection`; numpy/scipy only).
 
 ## Mission Control (general-purpose desktop app)
 
