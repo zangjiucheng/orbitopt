@@ -297,6 +297,65 @@ def sun_state_batch(dt, use_gpu=None, mu_sun=MU_SUN_KM3_S2, maxiter=20, seed_epo
     return to_numpy(r), to_numpy(v)
 
 
+def _precompute_body_grid(
+    epoch0, dt, n_steps, xp, mu_earth, mu_moon, include_sun, mu_sun, maxiter, seed_epoch
+):
+    """Moon (and optionally Sun) positions at every RK4 half-step epoch of
+    ``propagate_spacecraft_batch``, for all N candidates.
+
+    Returns a list of ``(mu_body, r_body, indirect)`` tuples where
+    ``r_body`` is a (2*n_steps+1, N, 3) xp array of body positions at
+    ``epoch0 + k*dt/2`` and ``indirect`` is the matching
+    ``r_body / |r_body|^3`` indirect (Earth-acceleration) term -- both
+    independent of the spacecraft state, so computed once here.
+
+    The half-step epochs are reproduced with the same floating-point
+    accumulation the integrator historically used (``t += dt`` per step,
+    ``+ 0.5*dt`` for the mid stages), so the result matches the previous
+    per-stage evaluation bit-for-bit up to Kepler-solver round-off. Kepler
+    solves are only run for the distinct (epoch0, dt) pairs in the batch;
+    each candidate then gathers its column from that compact grid.
+    """
+    epoch0_h = np.asarray(to_numpy(epoch0), dtype=np.float64)
+    dt_h = np.asarray(to_numpy(dt), dtype=np.float64)
+    pairs = np.stack([epoch0_h, dt_h], axis=1)
+    uniq, inverse = np.unique(pairs, axis=0, return_inverse=True)
+    inverse = np.asarray(inverse).reshape(-1)
+    u_epoch0, u_dt = uniq[:, 0], uniq[:, 1]
+
+    n_grid = 2 * n_steps + 1
+    t_grid = np.empty((n_grid, uniq.shape[0]), dtype=np.float64)
+    t = u_epoch0.copy()
+    for step in range(n_steps):
+        t_grid[2 * step] = t
+        t_grid[2 * step + 1] = t + 0.5 * u_dt
+        t_grid[2 * step + 2] = t + u_dt
+        t = t + u_dt
+    # (k4 of step s and k1 of step s+1 share index 2s+2; both were always
+    # ``t + dt`` computed the same way, so one entry serves both.)
+
+    t_since_seed = xp.asarray((t_grid - seed_epoch).reshape(-1))
+    inv = xp.asarray(inverse)
+
+    bodies = [(mu_moon, lambda ts: _moon_state_core(ts, xp, mu_earth, maxiter, seed_epoch, mu_moon))]
+    if include_sun:
+        bodies.append((mu_sun, lambda ts: _sun_state_core(ts, xp, mu_sun, maxiter, seed_epoch)))
+
+    out = []
+    for mu_body, state_fn in bodies:
+        r_u, _ = state_fn(t_since_seed)
+        r_u = r_u.reshape(n_grid, uniq.shape[0], 3)
+        ind_u = r_u / xp.linalg.norm(r_u, axis=-1)[..., None] ** 3
+        if uniq.shape[0] == 1:
+            r_body = xp.broadcast_to(r_u, (n_grid, inverse.shape[0], 3))
+            indirect = xp.broadcast_to(ind_u, (n_grid, inverse.shape[0], 3))
+        else:
+            r_body = r_u[:, inv]
+            indirect = ind_u[:, inv]
+        out.append((mu_body, r_body, indirect))
+    return out
+
+
 @dataclass
 class SpacecraftBatchResult:
     r: np.ndarray  # (n_steps+1, N, 3) position history, km
@@ -356,9 +415,11 @@ def propagate_spacecraft_batch(
 
     ``kepler_maxiter`` controls the Newton iteration count of the internal
     Moon/Sun Kepler solves (see ``moon_state_batch``) -- it is separate from
-    the spacecraft RK4 step count and defaults low because it is paid 4x
-    per RK4 step (once per stage) and each iteration is its own GPU kernel
-    launch, so its cost is launch-count- rather than array-size-bound.
+    the spacecraft RK4 step count. The Moon/Sun positions at every RK4
+    half-step epoch are precomputed once before integration (one batched
+    Kepler solve per distinct (epoch0, dt) pair -- see
+    ``_precompute_body_grid``), so this cost is paid once per call, not
+    4x per RK4 step.
     """
     xp = get_array_module(use_gpu)
 
@@ -376,26 +437,28 @@ def propagate_spacecraft_batch(
     if include_sun and mu_sun is None:
         mu_sun = MU_SUN_KM3_S2
 
-    def acceleration(r, t_abs):
+    # Every RK4 sub-stage of step ``s`` samples the Moon/Sun at one of the
+    # half-step epochs ``epoch0 + k*dt/2`` (k = 2s, 2s+1, 2s+2), and those
+    # epochs depend only on each candidate's (epoch0, dt) pair -- never on
+    # its spacecraft state. So instead of re-running the Kepler/Newton solve
+    # inside every acceleration() call (4*n_steps solves, each sized N), the
+    # whole (2*n_steps+1)-point half-step grid is solved ONCE up front, for
+    # each *distinct* (epoch0, dt) pair only. In the common case (a batch of
+    # candidates sharing one departure epoch and coast time) that is a single
+    # solve of 2*n_steps+1 points, broadcast to all N candidates.
+    ephem = _precompute_body_grid(
+        epoch0, dt, n_steps, xp, mu_earth, mu_moon, include_sun, mu_sun,
+        kepler_maxiter, moon_seed_epoch_ephemeris_seconds,
+    )
+
+    def acceleration(r, k):
         rn = xp.linalg.norm(r, axis=-1)
         a = -mu_earth * r / rn[:, None] ** 3
-
-        t_since_seed = t_abs - moon_seed_epoch_ephemeris_seconds
-        r_moon, _ = _moon_state_core(
-            t_since_seed, xp, mu_earth, kepler_maxiter, moon_seed_epoch_ephemeris_seconds, mu_moon
-        )
-        d = r_moon - r
-        dn = xp.linalg.norm(d, axis=-1)
-        rmoon_n = xp.linalg.norm(r_moon, axis=-1)
-        a = a + mu_moon * (d / dn[:, None] ** 3 - r_moon / rmoon_n[:, None] ** 3)
-
-        if include_sun:
-            r_sun, _ = _sun_state_core(t_since_seed, xp, mu_sun, kepler_maxiter, moon_seed_epoch_ephemeris_seconds)
-            d_s = r_sun - r
-            dsn = xp.linalg.norm(d_s, axis=-1)
-            rsun_n = xp.linalg.norm(r_sun, axis=-1)
-            a = a + mu_sun * (d_s / dsn[:, None] ** 3 - r_sun / rsun_n[:, None] ** 3)
-
+        for mu_body, r_body, indirect in ephem:
+            r_b = r_body[k]
+            d = r_b - r
+            dn = xp.linalg.norm(d, axis=-1)
+            a = a + mu_body * (d / dn[:, None] ** 3 - indirect[k])
         return a
 
     r_hist = xp.empty((n_steps + 1, n, 3), dtype=xp.float64)
@@ -412,16 +475,16 @@ def propagate_spacecraft_batch(
     dt_col = dt[:, None]
     for step in range(n_steps):
         k1r = v
-        k1v = acceleration(r, t_abs)
+        k1v = acceleration(r, 2 * step)
 
         k2r = v + 0.5 * dt_col * k1v
-        k2v = acceleration(r + 0.5 * dt_col * k1r, t_abs + 0.5 * dt)
+        k2v = acceleration(r + 0.5 * dt_col * k1r, 2 * step + 1)
 
         k3r = v + 0.5 * dt_col * k2v
-        k3v = acceleration(r + 0.5 * dt_col * k2r, t_abs + 0.5 * dt)
+        k3v = acceleration(r + 0.5 * dt_col * k2r, 2 * step + 1)
 
         k4r = v + dt_col * k3v
-        k4v = acceleration(r + dt_col * k3r, t_abs + dt)
+        k4v = acceleration(r + dt_col * k3r, 2 * step + 2)
 
         r = r + (dt_col / 6.0) * (k1r + 2.0 * k2r + 2.0 * k3r + k4r)
         v = v + (dt_col / 6.0) * (k1v + 2.0 * k2v + 2.0 * k3v + k4v)
