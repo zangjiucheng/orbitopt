@@ -24,7 +24,12 @@ from orbitopt.bodies import (
     moon_state,
 )
 from orbitopt.lambert.cpu import solve_lambert_single
-from orbitopt.verify.differential_correction import target_lunar_flyby
+from orbitopt.verify.differential_correction import (
+    LUNAR_RETURN_ENTRY_CORRIDOR_DEG,
+    LUNAR_RETURN_ENTRY_FPA_DEG,
+    flight_path_angle_deg,
+    target_free_return_entry_corridor,
+)
 from orbitopt.verify.tudat_propagate import (
     PropagationResult,
     body_position_at_absolute_epoch,
@@ -41,72 +46,33 @@ EARTH_ENTRY_INTERFACE_ALTITUDE_KM = 121.92  # 400,000 ft, the conventional atmos
 
 DEFAULT_TRANSFER_THETA_DEG = 142.0
 """Parking-orbit transfer angle behind the Moon's arrival direction (see
-_plane_aligned_parking_orbit) -- also, incidentally, the free variable that
-determines which side of the Moon the flyby passes on, and so whether the
-post-flyby return leg bends back toward Earth or swings wide of it (the
-actual "free return" part of a free-return trajectory; target_lunar_flyby's
-own targeting is lunar flyby *distance* only, see its docstring).
+_plane_aligned_parking_orbit) -- where along the parking orbit TLI happens.
 
-IMPORTANT CONTEXT: every (theta, coast_days) search run before this value
-was found ran on a real bug, not real physics -- the full post-flyby
-propagation here and in free_return_search.evaluate_theta was called with
-``initial_epoch=0.0`` instead of the real mission epoch
-(``reference_et``), so propagate_multi_arc's Moon/Sun point-mass gravity
-was sourced from SPICE at dates ~26 years off from the actual 2026
-mission (target_lunar_flyby's own internal Newton iteration was NOT
-affected -- it always offset by reference_et correctly -- so the TLI
-delta-v and targeted perilune distance were fine; only the subsequent
-free-flight propagation used for the exported trajectory shape and the
-return-leg/entry analysis was wrong). Symptom: the Moon's gravity was
-still being computed (real magnitude, ~real distance), but pulling in a
-direction uncorrelated with the correctly-rendered Moon body, so the
-exported trajectory visibly failed to react to the Moon it flies past.
-Now fixed (initial_epoch=reference_et) in this function,
-free_return_search.evaluate_theta, and examples/05_artemis2_free_return.py.
+History: this used to be the *only* lever on the return leg. The mission was
+targeted with target_lunar_flyby, which aims lunar flyby distance only, so
+the entry angle was incidental -- this angle was picked by scanning theta for
+a return that happened to reach the entry interface, and the best such scan
+point still entered at about -32.7 degrees, far steeper than survivable.
+(Separately, under the current adaptive DOP853 verification integrator that
+flyby-distance-only solution doesn't even return: its fixed-time "8,300 km"
+miss is an inbound sample, not the periapsis, and the real flyby dips much
+lower and escapes.)
 
-Re-scoring every previously-converged (theta, coast_days) point from this
-project's search history under the corrected physics changed the ranking
-completely -- e.g. the pre-fix "best" point (130 degrees / 4.0-day coast,
-believed to fall 415 km short of the entry interface) actually falls
-~3,331 km short under real physics, and the point before that (134
-degrees / 4.5-day coast, believed 585 km short) is actually ~22,419 km
-short. Two of the eight previously-converged points, though, turned out
-to be genuine (zero-correction-burn) free returns once correctly
-evaluated: 142 degrees (this default) and 162 degrees (both at a 3.5-day
-coast) both naturally reach the atmospheric entry interface around day
-6.6-6.7 with no further burns.
+Now the return is *targeted* (target_free_return_entry_corridor): the lunar
+B-plane aim point and the Earth-return perigee / entry flight-path angle are
+solved jointly, so theta just sets the departure geometry and no longer has
+to be tuned for luck. 142 degrees is kept because it gives a clean, fast-
+converging seed (~5 joint-Newton iterations).
+"""
 
-Still not a *safe* free return, despite reaching the interface: this
-angle's entry flight-path angle is -32.7 degrees, far steeper than a real
-lunar-return entry corridor (Artemis-class capsules fly a shallow ~-6 to
--6.5 degree skip-entry angle; anything much steeper than roughly -7 to -8
-degrees means unsurvivable deceleration loads, even though the ~11.0 km/s
-entry speed itself matches the real mission closely). A subsequent
-1-degree/0.5-degree local scan around this neighborhood (138-168 degrees
-at 3.5-day coast) found one materially better entry angle, 161 degrees
-(-21.6 degrees) -- still not close to survivable, and a worse trade
-overall: target_lunar_flyby's Newton-Raphson needs 12 iterations to
-converge there (~29s) vs. 6 for this default (~8.5s) or for 162 degrees
-(~8.1s), which is slow enough to blow past this project's GUI-load test
-timeout (test_app.py's 30s budget). That extra cost buys an entry angle
-that's still just as unsurvivable, so it isn't worth it -- if a future
-change closes the gap to a genuinely safe corridor, revisit this
-tradeoff, since a slow-but-safe point would clearly be worth the cost
-that a slow-and-still-unsafe one isn't. This also isn't a
-search-resolution fluke: entry angle swings wildly over fractions of a
-degree in this neighborhood (161.5 degrees, half a degree from 161, gives
--42.7) -- the same fragmented, chaotic feasible-region structure
-documented for flyby-distance convergence elsewhere in this project, now
-showing up in the entry angle too. The root cause is unchanged from every
-previous revision of this docstring: target_lunar_flyby only targets
-lunar flyby *distance*, not a B-plane aim point, so which entry angle a
-genuine return happens to hit is incidental, not controlled. Actually
-landing in the safe corridor needs a real 2-DOF B-plane targeter (jointly
-solving the lunar approach *and* the Earth return/entry-angle condition)
--- still not attempted here; see free_return_search.py's own module
-docstring for why the search built so far uses this angle (and
-coast_days_guess) as its free variables instead of B-plane coordinates
-directly.
+LAMBERT_AIM_OFFSET_KM = 20_000.0
+"""The Lambert seed aims this far ahead of the Moon (along the Moon's own
+direction of motion), not at its centre. Aiming at the centre gives a guess
+that, under real dynamics, passes through (or within a few hundred km of)
+the point-mass Moon -- a degenerate, near-radial relative trajectory with no
+meaningful B-plane, and a propagation that can abort on the singularity. A
+clear miss gives a well-defined incoming asymptote for the B-plane seed to
+work from; the targeter then pulls the flyby in to the Artemis II perilune.
 """
 
 
@@ -157,12 +123,15 @@ def compute_and_export_mission(
     step_seconds=60.0,
     parking_altitude_km=185.0,
     max_output_points=700,
+    entry_fpa_target_deg=LUNAR_RETURN_ENTRY_FPA_DEG,
 ):
-    """Re-run the Lambert-seeded differential-correction targeter (same
-    approach as examples/05_artemis2_free_return.py, without the GPU
-    coarse-screening stage -- a hand-verified Lambert guess is already
-    close enough that the targeter converges directly) and export the
-    resulting trajectory as a scrubbable SceneData document.
+    """Solve the free return with the joint lunar B-plane + Earth-return
+    entry-corridor targeter (verify.differential_correction.
+    target_free_return_entry_corridor), seeded by an offset Lambert arc
+    (see LAMBERT_AIM_OFFSET_KM), and export the resulting trajectory as a
+    scrubbable SceneData document. The return leg reaches the entry
+    interface at ``entry_fpa_target_deg`` (default -6 degrees, inside the
+    real lunar-return skip-entry corridor) with no further burns.
 
     ``step_seconds`` defaults to 60s, not a coarser animation-friendly
     value, for the same reason ``verify.differential_correction`` does: a
@@ -188,40 +157,52 @@ def compute_and_export_mission(
     target_distance_km = ARTEMIS_II_PERILUNE_ALTITUDE_KM + MOON_RADIUS_KM
 
     r0, v0 = _plane_aligned_parking_orbit(r_moon_arrival, v_moon_arrival, parking_altitude_km, mu_earth)
-    (v1, _v2), = solve_lambert_single(r0, r_moon_arrival, coast_days_guess * 86400.0, mu=mu_earth, max_revs=0)[:1]
+    moon_h_hat = np.cross(r_moon_arrival, v_moon_arrival)
+    moon_h_hat /= np.linalg.norm(moon_h_hat)
+    along_track_hat = np.cross(moon_h_hat, r_moon_arrival / np.linalg.norm(r_moon_arrival))
+    lambert_aim = r_moon_arrival + LAMBERT_AIM_OFFSET_KM * 1000.0 * along_track_hat
+    (v1, _v2), = solve_lambert_single(r0, lambert_aim, coast_days_guess * 86400.0, mu=mu_earth, max_revs=0)[:1]
     dv_guess = v1 - v0
-    targeting = target_lunar_flyby(
+    # Joint lunar B-plane + Earth-return entry-corridor targeting: perilune at
+    # the Artemis II altitude AND the return leg crossing the entry interface
+    # at a survivable skip-entry flight-path angle, verified by TudatPy.
+    targeting = target_free_return_entry_corridor(
         r0=r0, v0_pre_burn=v0, initial_epoch=0.0,
         dv_guess=dv_guess, coast_duration_guess=coast_days_guess * 86400.0,
-        target_distance_km=target_distance_km,
+        target_periapsis_km=target_distance_km,
         reference_epoch_ephemeris_seconds=reference_et,
+        target_entry_fpa_deg=entry_fpa_target_deg,
+        earth_radius_km=EARTH_RADIUS_KM,
+        entry_interface_altitude_km=EARTH_ENTRY_INTERFACE_ALTITUDE_KM,
     )
     if not targeting.converged:
-        raise RuntimeError("Differential correction did not converge; adjust departure_mjd2000 or coast_days_guess.")
+        raise RuntimeError(
+            "Free-return entry-corridor targeting did not converge; adjust departure_mjd2000 or coast_days_guess."
+        )
 
+    # No need to integrate days past the (already verified) entry interface
+    # only to truncate them below; half a day of margin keeps the crossing
+    # comfortably inside the exported span.
+    export_duration_s = total_days * 86400.0
+    if targeting.entry_epoch is not None:
+        export_duration_s = min(export_duration_s, targeting.entry_epoch + 0.5 * 86400.0)
     full = propagate_multi_arc(
         r0, v0, reference_et,
         arcs=[
             {"type": "impulsive_burn", "delta_v": targeting.delta_v},
-            {"type": "coast", "duration": total_days * 86400.0},
+            {"type": "coast", "duration": export_duration_s},
         ],
         perturbing_bodies=("Earth", "Moon", "Sun"), step_size=step_seconds,
     )
 
-    # This targeter (see target_lunar_flyby) only aims the lunar-flyby
-    # distance, not a B-plane aim point -- so whether the resulting return
-    # leg happens to cross the atmospheric entry interface on its own is
-    # incidental, not guaranteed by construction. Either way, this
-    # propagator has no solid Earth or atmosphere model, so past the
-    # trajectory's own closest return approach it doesn't stop -- it just
-    # keeps going (through the massless-surface Earth if the perigee is low
-    # enough, or straight back out if it isn't) and swings back out on
-    # another multi-day arc, which is not what a real mission does and reads
-    # as an obviously broken shape (the spacecraft appears to pass through
-    # or bounce off the planet and loop back out) in the 3D view. Truncate
-    # at the genuine end of the free-return leg -- the entry-interface
-    # crossing if it reaches one, otherwise the return leg's own closest
-    # approach to Earth -- rather than exporting that unphysical tail.
+    # The targeter aims the return leg at the entry interface, but this
+    # propagator has no solid Earth or atmosphere model, so past the entry
+    # point it doesn't stop -- it keeps going through the massless-surface
+    # Earth and swings back out on another multi-day arc, which is not what a
+    # real mission does and reads as an obviously broken shape in the 3D
+    # view. Truncate at the genuine end of the free-return leg -- the entry-
+    # interface crossing (or, defensively, the return leg's own closest
+    # approach to Earth if it somehow misses the interface).
     entry = find_altitude_crossing(
         full, central_body_radius_km=EARTH_RADIUS_KM, threshold_altitude_km=EARTH_ENTRY_INTERFACE_ALTITUDE_KM,
     )
@@ -229,7 +210,7 @@ def compute_and_export_mission(
     if entry is not None:
         cutoff_epoch, cutoff_state = entry.epoch, entry.spacecraft_state
     else:
-        after_perilune = full.epochs > targeting.coast_duration
+        after_perilune = full.epochs > targeting.perilune_epoch
         if after_perilune.any():
             radii_km = np.linalg.norm(full.states[:, :3], axis=1) / 1000.0
             idx = int(np.argmin(np.where(after_perilune, radii_km, np.inf)))
@@ -246,8 +227,8 @@ def compute_and_export_mission(
             final_state=cutoff_state,
         )
 
-    perilune_day = round(targeting.coast_duration / 86400.0, 4)
-    perilune_idx_fine = int(np.argmin(np.abs(full.epochs - targeting.coast_duration)))
+    perilune_day = round(targeting.perilune_epoch / 86400.0, 4)
+    perilune_idx_fine = int(np.argmin(np.abs(full.epochs - targeting.perilune_epoch)))
 
     n_fine = len(full.epochs)
     if n_fine > max_output_points:
@@ -271,29 +252,23 @@ def compute_and_export_mission(
         {
             "label": "Closest approach to Moon",
             "time": perilune_day,
-            "note": f"{targeting.final_distance_km:.0f} km from Moon center "
-                    f"({targeting.final_distance_km - MOON_RADIUS_KM:.0f} km altitude)",
+            "note": f"{targeting.perilune_distance_km:.0f} km from Moon center "
+                    f"({targeting.perilune_distance_km - MOON_RADIUS_KM:.0f} km altitude), "
+                    f"B-plane angle {targeting.b_plane_angle_deg:.1f} degrees",
         },
     ]
     if entry is not None:
-        entry_r = entry.spacecraft_state[:3]
-        entry_v = entry.spacecraft_state[3:]
-        entry_speed = np.linalg.norm(entry_v)
-        entry_flight_path_angle_deg = np.degrees(np.arcsin(
-            np.dot(entry_v, entry_r / np.linalg.norm(entry_r)) / entry_speed
-        ))
-        # A real lunar-return entry flies a shallow ~-6 to -6.5 degree
-        # skip-entry corridor (this targeter's ~11 km/s entry speed does
-        # match the real mission -- it's set by orbital energy, not by
-        # the untargeted B-plane angle). target_lunar_flyby only targets
-        # flyby distance, not a B-plane aim point, so whatever entry angle
-        # a genuine return happens to hit is incidental -- flag plainly
-        # when it's well outside a survivable corridor rather than
-        # silently reporting "free return" as if this were mission-ready.
+        entry_speed = np.linalg.norm(entry.spacecraft_state[3:])
+        entry_flight_path_angle_deg = flight_path_angle_deg(entry.spacecraft_state)
+        # Targeted, not incidental: the joint B-plane/entry-corridor solve
+        # aims this angle. Still state plainly whether this (independently
+        # re-propagated) crossing lands inside the corridor rather than
+        # silently calling it a safe free return.
+        steepest, shallowest = LUNAR_RETURN_ENTRY_CORRIDOR_DEG
         corridor_note = (
-            "within the real skip-entry corridor" if abs(entry_flight_path_angle_deg) <= 8.0
-            else f"NOT a survivable entry angle -- {abs(entry_flight_path_angle_deg):.0f} degrees is far "
-                 "steeper than the real ~6-6.5 degree skip-entry corridor (untargeted B-plane angle)"
+            f"inside the {abs(shallowest):.0f}-{abs(steepest):.0f} degree lunar-return skip-entry corridor"
+            if steepest <= entry_flight_path_angle_deg <= shallowest
+            else f"OUTSIDE the {abs(shallowest):.0f}-{abs(steepest):.0f} degree lunar-return entry corridor"
         )
         events.append({
             "label": "Earth entry interface",
@@ -335,7 +310,11 @@ def compute_and_export_mission(
             trail={"times": days, "positions": spacecraft_km.tolist()},
             info=[
                 {"label": "TLI delta-v", "value": f"{np.linalg.norm(targeting.delta_v):.0f} m/s"},
-                {"label": "Achieved perilune", "value": f"{targeting.final_distance_km:,.0f} km from Moon center"},
+                {"label": "Achieved perilune", "value": f"{targeting.perilune_distance_km:,.0f} km from Moon center"},
+                {"label": "Return perigee (vacuum)", "value": f"{targeting.return_perigee_km - EARTH_RADIUS_KM:,.0f} km altitude"},
+                {"label": "Entry flight-path angle",
+                 "value": "n/a" if targeting.entry_flight_path_angle_deg is None
+                 else f"{targeting.entry_flight_path_angle_deg:.2f} deg"},
             ],
         ),
     ]
@@ -343,7 +322,8 @@ def compute_and_export_mission(
     return scene_document(
         scene_id="artemis2-mission",
         title="Artemis II — Free Return",
-        subtitle="Independently re-solved trajectory targeting the real Artemis II perilune altitude.\n"
+        subtitle=f"Independently re-solved free return: Artemis II perilune altitude + targeted "
+                 f"{entry_fpa_target_deg:.0f} deg entry flight-path angle.\n"
                   "Not a reproduction of the flown mission -- NASA hasn't published navigation-grade state vectors.",
         distance_unit="km",
         central_body_id="earth",

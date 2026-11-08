@@ -1,0 +1,13 @@
+# Virtual packages assumed when solving gpu.yml (conda-lock defaults to
+# __cuda 11.4, which no cuda-version=13 build accepts). Mirrors the minimum
+# host the GPU lock targets: an NVIDIA driver exposing CUDA 13.
+subdirs:
+  linux-64:
+    packages:
+      __glibc: "2.28"
+      __unix: "0"
+      __cuda: "13.0"
+  win-64:
+    packages:
+      __win: "0"
+      __cuda: "13.0"

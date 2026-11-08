@@ -9,6 +9,7 @@ on:
 
 jobs:
   test:
+    name: test (CPU, linux-64, locked env)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -40,18 +41,48 @@ jobs:
             libxcb-xfixes0 \
             libxcb-xinerama0
 
-      # tudatpy is conda-forge/tudat-team only (no PyPI wheels) and pins
-      # python=3.10 -- see environment.yml / README.md "Setup".
-      - name: Set up Miniforge + orbitopt conda env
-        uses: conda-incubator/setup-miniconda@v3
+      # Installs the exact package set pinned in the CPU conda-lock file
+      # (no solve at CI time). tudatpy is conda-forge/tudat-team only (no
+      # PyPI wheels) and pins python=3.10 -- see envs/README.md.
+      - name: Create locked CPU env
+        uses: mamba-org/setup-micromamba@v2
         with:
-          miniforge-version: latest
-          environment-file: environment.yml
-          activate-environment: orbitopt
-          use-mamba: true
+          environment-file: envs/cpu.conda-lock.yml
+          environment-name: orbitopt
+          cache-environment: true
 
-      - name: Install orbitopt (editable, no-deps -- deps come from environment.yml)
+      - name: Install orbitopt (editable, no-deps -- deps come from the lockfile)
         run: python -m pip install -e . --no-deps
 
-      - name: Run test suite
+      - name: Run test suite (gpu-marked tests skip here; see gpu.yml)
         run: xvfb-run -a --server-args="-screen 0 1280x1024x24" pytest tests/ -v
+
+  lockfile-drift:
+    # Fails if envs/{cpu,gpu}.yml were edited without regenerating the
+    # lockfiles. --check-input-hash only re-solves when the spec's hash
+    # changed, so this is a no-op (seconds) on an untouched spec.
+    name: lockfiles match envs/*.yml
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: lock
+          create-args: conda-lock=4 python=3.12
+          init-shell: bash
+      - name: Check lockfiles are up to date
+        run: |
+          conda-lock lock --micromamba --check-input-hash \
+            -f envs/cpu.yml -p linux-64 -p win-64 \
+            --lockfile envs/cpu.conda-lock.yml
+          conda-lock lock --micromamba --check-input-hash \
+            -f envs/gpu.yml -p linux-64 -p win-64 \
+            --virtual-package-spec envs/virtual-packages-gpu.yml \
+            --lockfile envs/gpu.conda-lock.yml
+          git diff --exit-code -- envs/ || {
+            echo "::error::envs/*.conda-lock.yml are stale -- regenerate them (see envs/README.md)"
+            exit 1
+          }
