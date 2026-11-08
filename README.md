@@ -271,6 +271,9 @@ writeups in [`docs/engineering-notes.md`](docs/engineering-notes.md)):
   regenerate cached SceneData JSON (the viewer can also compute these live).
 - `10_gto_geo_orbit_raising.py` -- the GOES-style GTO->GEO campaign; see
   `docs/goes_gto_geo_mission_plan.md`.
+- `12_launch_constrained_transfer.py` -- the Earth->Mars optimum with and
+  without launch constraints (rocket C3 capability + launch-site DLA,
+  `orbitopt.launch_constraints`); results in `docs/engineering-notes.md`.
 
 ## Mission Control (general-purpose desktop app)
 

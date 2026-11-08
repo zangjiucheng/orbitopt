@@ -253,3 +253,59 @@ trajectory to *not* re-enter on its own within the propagated window.
 Adding that targeting (vary the B-plane aim point, not just distance, as
 the Newton unknowns) is the natural next extension of
 `differential_correction.py`.
+
+## Launch constraints in the fitness: measured effect on the optimum (task #153)
+
+`orbitopt.launch_constraints.LaunchConstraints` checks every candidate's
+departure v_inf against the selected rocket and launch site:
+
+- **C3** `= |v_inf|^2` must not exceed `vehicle.max_c3(payload_kg)` (the
+  task #151 curve; a payload outside the tabulated range is rejected when
+  the constraint is built, never extrapolated).
+- **DLA** (declination of v_inf in the Earth *equatorial* J2000 frame --
+  pykep's `jpl_lp` velocities are ecliptic, so v_inf is rotated by the
+  23.439 deg obliquity first) must satisfy `|DLA| <= min(i, 180 - i)` for
+  some direct-ascent inclination `i` the site can reach (task #150). Cape
+  Canaveral gives `|DLA| <= 59.8 deg`; every packaged site that reaches
+  i = 90 deg is unconstrained.
+
+`Transfer2BodyProblem(..., launch_constraints=lc)` applies it in `fitness()`
+and in the vectorized `batch_fitness()` used by both the CPU and GPU bfe
+(`apply()`/`evaluate()` are array-module agnostic, numpy or cupy).
+`lc.with_enabled(False)` (or `launch_constraints=None`) switches it off and
+reproduces the unconstrained fitness bit-for-bit
+(`tests/test_launch_constraints.py`).
+
+Two handling modes, both measured with
+`examples/12_launch_constrained_transfer.py` (Earth->Mars, departures in
+2028, TOF 100-400 d, PSO 150 gen x 512, seed 7, Falcon 9 expendable,
+4000 kg payload -> C3 <= 9.0 km^2/s^2, Cape Canaveral):
+
+| run | departure | TOF [d] | total dv [m/s] | C3 [km^2/s^2] | DLA [deg] | feasible |
+|---|---|---|---|---|---|---|
+| constraints off | 2028-11-24 | 300.7 | 5988.9 | 9.09 | 29.3 | no |
+| `mode="invalid"` | 2028-11-26 | 305.9 | 6015.7 | 9.00 | 29.9 | yes |
+| `mode="penalty"`, weight 1000 (default) | 2028-11-26 | 305.9 | 6015.7 | 9.00 | 29.9 | yes |
+| `mode="penalty"`, weight 100 | 2028-11-25 | 301.5 | 5996.8 (+penalty) | 9.07 | 29.6 | no |
+
+Switching the constraints on moves the optimum 2.4 days later with a
+5.2 day longer flight and costs +26.8 m/s total dv, landing exactly on the
+C3 limit. The DLA limit does not bind for this window (29-30 deg vs. 59.8).
+
+Gotchas found while measuring:
+
+- **Flat `invalid` landscape.** A plain `1e6` sentinel for every violator
+  gives a population that starts fully infeasible nothing to climb. Invalid
+  candidates therefore score `invalid_fitness + c3_excess + dla_excess`:
+  still unmistakably invalid, but graded. With an infeasible request
+  (Long March 3B, 2800 kg -> C3 <= 7.8, 2026 window, whose minimum C3 is
+  ~9.14) the optimizer now converges on the least-violating trajectory
+  (C3 9.14) instead of an arbitrary point (C3 303 before the fix).
+- **Penalty weight must beat the objective's slope.** Near a Mars-window
+  optimum d(dv)/d(C3) is ~300 m/s per km^2/s^2, so a weight of 100 m/s
+  per km^2/s^2 leaves the optimum slightly over the limit (row 4). The
+  default is 1000, which matched `invalid` mode exactly.
+- **Window edges.** In a 2030-01-01..2031-01-01 search box the optimum sits
+  on the upper t0 bound, so constrained/unconstrained comparisons there
+  measure the box, not the constraint -- pick a window containing the
+  whole launch period.
