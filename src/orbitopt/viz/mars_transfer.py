@@ -70,6 +70,9 @@ PARKING_ALTITUDE_KM = 185.0  # matches mission_timeline.py's Artemis II conventi
 EARTH_SOI_RADIUS_KM = 924000.0  # real Earth sphere-of-influence radius
 MARS_SOI_RADIUS_KM = 577000.0  # real Mars sphere-of-influence radius
 MARS_TCM_TARGET_PERIAPSIS_KM = MARS_RADIUS_KM + 500.0
+# A located periapsis below this altitude means the flown trajectory hits (or
+# grazes the atmosphere of) Mars; such a candidate is rejected, never exported.
+MARS_MIN_PERIAPSIS_ALT_KM = 100.0
 MARS_CAPTURE_APOAPSIS_ALT_KM = 20000.0
 
 # Real, near-term Earth->Mars Hohmann-class transfer window (synodic period
@@ -336,7 +339,8 @@ def _fly_transfer(
         "label": "Trajectory-correction maneuver", "time": round((soi_exit_epoch_et - reference_et) / 86400.0, 4),
         "note": f"closes the gap between the idealized Lambert departure and the real, "
                 f"perturbed trajectory -- {'converged' if tcm.converged else 'best effort, did not fully converge'} "
-                f"to {tcm.final_miss_km:,.0f} km from Mars center.",
+                f"to a {tcm.predicted_periapsis_km:,.0f} km Mars periapsis radius "
+                f"({tcm.predicted_periapsis_km - MARS_RADIUS_KM:,.0f} km altitude).",
         "vector": {"position": (sc_r_helio / 1000.0).round(1).tolist(), "deltaV": tcm.delta_v.round(2).tolist()},
     })
 
@@ -370,6 +374,10 @@ def _fly_transfer(
         soi_entry_time_days = round((arrival_epoch_et - reference_et) / 86400.0, 4)
 
     periapsis_km = float(np.linalg.norm(r_rel)) / 1000.0
+    if periapsis_km - MARS_RADIUS_KM < MARS_MIN_PERIAPSIS_ALT_KM:
+        raise _CandidateRejected(
+            f"located Mars periapsis {periapsis_km:,.0f} km ({periapsis_km - MARS_RADIUS_KM:,.0f} km altitude) "
+            f"is below the {MARS_MIN_PERIAPSIS_ALT_KM:g} km floor -- the trajectory would hit Mars")
     moi = verify_mars_orbit_insertion(
         r_rel, v_rel, periapsis_km=periapsis_km, apoapsis_km=periapsis_km + mars_capture_apoapsis_alt_km,
         arrival_epoch_et=arrival_epoch_et,

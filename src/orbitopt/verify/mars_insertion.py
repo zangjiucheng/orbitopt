@@ -27,6 +27,12 @@ import numpy as np
 from tudatpy.astro import element_conversion
 
 from orbitopt.verify import report as _report
+from orbitopt.verify.b_plane import (
+    b_plane_magnitude_for_periapsis,
+    b_plane_state,
+    perpendicular_basis,
+    periapsis_distance_m,
+)
 from orbitopt.verify.tudat_propagate import (
     body_gravitational_parameter,
     body_position_at_absolute_epoch,
@@ -46,8 +52,12 @@ class TcmTargetingResult:
     iterations: int
     coast_duration: float  # seconds, the fixed time-of-flight targeted
     final_state: np.ndarray  # (6,) heliocentric m, m/s at coast_duration
-    final_miss_km: float  # achieved distance from Mars center
+    final_miss_km: float  # distance from Mars center at the fixed coast_duration (not the periapsis)
     residual_history_km: list = field(default_factory=list)
+    # Periapsis of the osculating Mars-relative hyperbola at coast_duration --
+    # what the B-plane stage actually targets (target_periapsis_km).
+    predicted_periapsis_km: float = float("nan")
+    b_plane_residual_history_km: list = field(default_factory=list)
     report: dict | None = None  # machine-readable verification report (orbitopt.verify.report)
 
 
@@ -60,6 +70,106 @@ def _miss_km(sc_r_helio, sc_v_helio, initial_epoch_et, dv_trial, coast_duration,
     arrival_epoch_et = initial_epoch_et + float(result.epochs[-1])
     mars_r = body_position_at_absolute_epoch("Mars", arrival_epoch_et, central_body="Sun")
     return result.final_state[:3] - mars_r, result, arrival_epoch_et
+
+
+def _relative_state(sc_r_helio, sc_v_helio, initial_epoch_et, dv_trial, coast_duration, step_size):
+    """Mars-relative (r, v) at the end of the burn + coast."""
+    _, result, arrival_epoch_et = _miss_km(sc_r_helio, sc_v_helio, initial_epoch_et, dv_trial, coast_duration, step_size)
+    mars_r = body_position_at_absolute_epoch("Mars", arrival_epoch_et, central_body="Sun")
+    mars_v = body_velocity_at_absolute_epoch("Mars", arrival_epoch_et, central_body="Sun")
+    return result.final_state[:3] - mars_r, result.final_state[3:] - mars_v, result
+
+
+def _refine_b_plane(sc_r_helio, sc_v_helio, departure_epoch_et, dv, coast_duration, step_size,
+                    target_periapsis_km, tol_km, maxiter, fd_step_m_s, max_step_m_s):
+    """Second targeting stage: Newton on the osculating B-plane vector so the
+    *periapsis* of the Mars-relative hyperbola -- not the distance at a fixed
+    epoch -- equals ``target_periapsis_km``.
+
+    Why this stage exists: the first stage aims the spacecraft at a point
+    ``target_periapsis_km`` from Mars's center at a fixed time. Gravity
+    focusing bends the approach hyperbola inward, so the true periapsis ends
+    up well below that aim distance (measured: 3,889.5 km aimed -> 3,642 km
+    flown for the 2026 window, and 3,341 km -- under Mars's 3,389.5 km
+    surface -- for the 2020 window). Targeting the impact parameter
+    |B| = sqrt(rp (rp + 2 mu / v_inf^2)) instead fixes the periapsis itself.
+    Square 3x3 Newton system: (B.T, B.R) plus the along-asymptote position
+    S.r at the fixed epoch (a time-of-arrival constraint). The B direction
+    of the first-stage solution is kept (same "rescale the existing miss
+    direction" convention as the first stage).
+
+    Returns (dv, converged, predicted_periapsis_km, residual_history_km).
+    """
+    mu = body_gravitational_parameter("Mars")
+    target_rp_m = target_periapsis_km * 1000.0
+
+    def evaluate(dv_trial):
+        """(b_vec, v_inf_vec, r_rel, rp_m) at the fixed coast end, or Nones."""
+        r_rel, v_rel, _ = _relative_state(sc_r_helio, sc_v_helio, departure_epoch_et, dv_trial, coast_duration, step_size)
+        b, v_inf = b_plane_state(r_rel, v_rel, mu)
+        if b is None:
+            return None, None, r_rel, float("nan")
+        rp = float(periapsis_distance_m(float(np.linalg.norm(b)), float(np.linalg.norm(v_inf)), mu))
+        return b, v_inf, r_rel, rp
+
+    b0, v_inf0, r0, rp0 = evaluate(dv)
+    if b0 is None:
+        return dv, False, float("nan"), []
+    # Frozen targeting frame from the first-stage solution: S along v_inf,
+    # (T, R) spanning the B-plane. The aim point keeps the current B
+    # direction; the third equation pins S . r_rel (the along-asymptote
+    # position at the fixed epoch) to its starting value, i.e. holds the
+    # arrival time. Without it, B (2 components) leaves one dv direction
+    # free, and the min-norm step drifted the arrival time by days -- the
+    # fixed-epoch state then sat ~600,000 km out and the osculating B
+    # stopped describing the real encounter (measured, 2020 window).
+    s_hat = v_inf0 / float(np.linalg.norm(v_inf0))
+    t_hat, r_hat = perpendicular_basis(s_hat)
+    b_dir = np.array([b0 @ t_hat, b0 @ r_hat])
+    b_dir /= float(np.linalg.norm(b_dir))
+    s0 = float(r0 @ s_hat)
+
+    def residual(b, v_inf, r_rel):
+        b_mag_target = b_plane_magnitude_for_periapsis(target_rp_m, float(np.linalg.norm(v_inf)), mu)
+        bt, br = b_mag_target * b_dir
+        return np.array([b @ t_hat - bt, b @ r_hat - br, r_rel @ s_hat - s0])
+
+    history, converged, rp = [], False, rp0
+    for _ in range(maxiter):
+        b, v_inf, r_rel, rp = evaluate(dv)
+        err_km = abs(rp - target_rp_m) / 1000.0
+        history.append(err_km)
+        if err_km < tol_km:
+            converged = True
+            break
+        res = residual(b, v_inf, r_rel)
+        jac = np.zeros((3, 3))
+        for k in range(3):
+            bumped = dv.copy()
+            bumped[k] += fd_step_m_s
+            bb, bv, br_rel, _ = evaluate(bumped)
+            if bb is None:
+                return dv, False, rp / 1000.0, history
+            jac[:, k] = (residual(bb, bv, br_rel) - res) / fd_step_m_s
+        try:
+            step = np.linalg.solve(jac, -res)
+        except np.linalg.LinAlgError:
+            step = np.linalg.lstsq(jac, -res, rcond=None)[0]
+        scale = min(1.0, max_step_m_s / max(float(np.linalg.norm(step)), 1e-12))
+        res_norm = float(np.linalg.norm(res))
+        for _ in range(10):
+            trial = dv + scale * step
+            tb, tv, tr, _ = evaluate(trial)
+            if tb is not None and float(np.linalg.norm(residual(tb, tv, tr))) < res_norm:
+                dv = trial
+                break
+            scale *= 0.5
+        else:
+            break  # line search failed: stop with the best dv so far
+    if not converged:
+        _, _, _, rp = evaluate(dv)
+        converged = abs(rp - target_rp_m) / 1000.0 < tol_km
+    return dv, converged, rp / 1000.0, history
 
 
 def _refine_coast_duration(sc_r_helio, sc_v_helio, departure_epoch_et, dv, coast_duration_guess, step_size):
@@ -88,6 +198,9 @@ def target_mars_approach(
     max_step_m_s=300.0,
     outer_rounds=3,
     report_path=None,
+    periapsis_tol_km=10.0,
+    b_plane_fd_step_m_s=0.01,
+    b_plane_max_step_m_s=5.0,
 ) -> TcmTargetingResult:
     """Fixed-time Newton-Raphson shooting on a trajectory-correction burn
     (fired at ``departure_epoch_et``, i.e. right after Earth-SOI exit) so
@@ -108,6 +221,11 @@ def target_mars_approach(
     practice here, not assumed, by the first cut of this function landing
     within 1000 km of Mars's center at a time 1.6 days after the fixed
     target it was aiming for.
+
+    That fixed-time position stage only gets the trajectory into the right
+    neighbourhood; a second B-plane stage (``_refine_b_plane``) then targets
+    the periapsis of the approach hyperbola to ``periapsis_tol_km``. The
+    result is ``converged`` only if both stages converge.
     """
     dv = np.zeros(3)
     coast_duration = coast_duration_guess
@@ -168,22 +286,40 @@ def target_mars_approach(
         if converged:
             break
 
+    position_stage_converged = converged
+    predicted_periapsis_km, b_history = float("nan"), []
+    if position_stage_converged:
+        dv, converged, predicted_periapsis_km, b_history = _refine_b_plane(
+            sc_r_helio, sc_v_helio, departure_epoch_et, dv, coast_duration, step_size,
+            target_periapsis_km, periapsis_tol_km, maxiter, b_plane_fd_step_m_s, b_plane_max_step_m_s,
+        )
+
     final_m, final_result, arrival_et = _miss_km(sc_r_helio, sc_v_helio, departure_epoch_et, dv, coast_duration, step_size)
-    mars_r = body_position_at_absolute_epoch("Mars", arrival_et, central_body="Sun")
+    periapsis_ok = bool(np.isfinite(predicted_periapsis_km)
+                        and abs(predicted_periapsis_km - target_periapsis_km) <= periapsis_tol_km)
     report = _report.build_report(
         kind="mars-tcm", label=f"departure-et-{float(departure_epoch_et):.3f}",
         propagations=[propagation_report_section(final_result, "cruise")],
-        residuals=[_report.state_residual(
-            "arrival_vs_aim_point", "Mars position + targeted miss vector at the fixed arrival time",
-            position=final_result.final_state[:3], reference_position=mars_r + target_vector_m,
-            tolerance={"position_m": tol_km * 1000.0},
-        )],
+        residuals=[{
+            "name": "periapsis_vs_target",
+            "reference": "periapsis radius of the osculating Mars-relative hyperbola at the fixed "
+                         "arrival time vs target_periapsis_km (B-plane stage)",
+            "position_residual_m": (abs(predicted_periapsis_km - target_periapsis_km) * 1000.0
+                                    if np.isfinite(predicted_periapsis_km) else None),
+            "velocity_residual_m_s": None,
+            "tolerance": {"position_m": periapsis_tol_km * 1000.0},
+            "within_tolerance": periapsis_ok,
+        }],
         inputs={"sc_state_helio": np.concatenate([np.asarray(sc_r_helio, dtype=float), np.asarray(sc_v_helio, dtype=float)]),
                 "departure_epoch_et": float(departure_epoch_et), "coast_duration_guess_s": float(coast_duration_guess),
                 "target_periapsis_km": float(target_periapsis_km), "step_size_s": float(step_size)},
         targets={"converged": converged, "iterations": iterations, "delta_v_m_s": dv,
                  "coast_duration_s": coast_duration, "final_miss_km": float(np.linalg.norm(final_m)) / 1000.0,
-                 "residual_history_km": residual_history_km},
+                 "residual_history_km": residual_history_km,
+                 "position_stage_converged": position_stage_converged,
+                 "target_periapsis_km": float(target_periapsis_km),
+                 "predicted_periapsis_km": predicted_periapsis_km,
+                 "b_plane_residual_history_km": b_history},
     )
     _report.finalize_report(report, report_path)
     return TcmTargetingResult(
@@ -194,6 +330,8 @@ def target_mars_approach(
         final_state=final_result.final_state,
         final_miss_km=float(np.linalg.norm(final_m)) / 1000.0,
         residual_history_km=residual_history_km,
+        predicted_periapsis_km=predicted_periapsis_km,
+        b_plane_residual_history_km=b_history,
         report=report,
     )
 
@@ -358,7 +496,13 @@ def verify_mars_orbit_insertion(
 
     report = _report.build_report(
         kind="mars-orbit-insertion", label=f"arrival-et-{float(arrival_epoch_et):.3f}",
-        propagations=[propagation_report_section(sk, "capture-stationkeeping", mu=mu_mars)],
+        # No mu= override: the conservation check must use the GM tudat
+        # actually integrated with. SPICE's Mars GM differs from tudat's by
+        # ~1.9e-8 (relative), which on an e~0.75 capture orbit shows up as a
+        # ~1.2e-7 apparent energy "drift" (the 1/r term swings by 2a/rp - 2a/ra)
+        # and failed the 1e-8 tolerance even though the integration was fine
+        # (angular momentum, which doesn't involve mu, drifted ~1e-13).
+        propagations=[propagation_report_section(sk, "capture-stationkeeping")],
         inputs={"pre_burn_state_mars": np.concatenate([np.asarray(r_rel_m, dtype=float), np.asarray(v_rel_m_s, dtype=float)]),
                 "periapsis_km": float(periapsis_km), "apoapsis_km": float(apoapsis_km),
                 "arrival_epoch_et": float(arrival_epoch_et), "stationkeeping_days": float(stationkeeping_days),

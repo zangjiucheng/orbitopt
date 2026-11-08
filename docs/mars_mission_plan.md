@@ -75,11 +75,21 @@ either end up close.
    correction re-refines its target coast duration between outer rounds
    (mirroring `target_lunar_b_plane`'s own documented need for this — a
    large correction can shift the trajectory's true closest-approach time
-   enough that a stale fixed-time target stops being meaningful). The
-   targeter is not guaranteed to fully converge to the exact target
-   periapsis in a bounded number of iterations; the scene's "Trajectory
-   correction maneuver" event note reports the actual achieved miss
-   distance and whether it converged, rather than silently assuming success.
+   enough that a stale fixed-time target stops being meaningful). That
+   fixed-time position stage only reaches the right neighbourhood: aiming a
+   point `target_periapsis_km` from Mars's center at a fixed epoch lets
+   gravity focusing bend the real periapsis well below it (measured 252 km
+   altitude instead of 500 km for the 2026 window, and under the surface for
+   the 2020 window). A second B-plane stage therefore solves a square 3×3
+   Newton system — (B·T, B·R) of the osculating Mars-relative hyperbola plus
+   the along-asymptote position S·r at the fixed epoch, which holds the
+   arrival time — so the *periapsis* hits the target to 10 km. The
+   `mars-tcm` verification report carries a `periapsis_vs_target` residual,
+   and `viz/mars_transfer.py` rejects any candidate whose located periapsis
+   is below 100 km altitude instead of exporting an impact trajectory. The
+   targeter is not guaranteed to converge for every geometry; the scene's
+   "Trajectory correction maneuver" event note reports the achieved
+   periapsis, rather than silently assuming success.
 3. **Mars orbit insertion (MOI).** An apsis-preserving, tangential-only
    capture burn (closed-form vis-viva), applied at the *true* periapsis of
    the hyperbolic approach — located via a dedicated two-stage propagation

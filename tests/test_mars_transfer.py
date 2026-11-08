@@ -79,9 +79,13 @@ def test_full_mission_pipeline_end_to_end():
     continuous heliocentric trail is actually continuous at both phase
     boundaries (no double-back-in-time jump, the exact class of bug found
     and fixed during development -- see docs/mars_mission_plan.md)."""
-    from orbitopt.viz.mars_transfer import compute_and_export_mars_mission
+    from orbitopt.verify.report import pop_from_scene
+    from orbitopt.viz.mars_transfer import _build_mars_mission
 
-    scene = compute_and_export_mars_mission(seed=1, pop_size=64, generations=40)
+    # _build_mars_mission is compute_and_export_mars_mission minus the step
+    # that drops the attached verification reports, which are checked below.
+    scene = _build_mars_mission(seed=1, pop_size=64, generations=40)
+    reports = pop_from_scene(scene)
     validate_scene(scene)
 
     spacecraft = scene["bodies"][-1]
@@ -148,6 +152,41 @@ def test_full_mission_pipeline_end_to_end():
     dist_km = np.linalg.norm(np.diff(positions, axis=0), axis=1)
     implied_speed_km_s = np.divide(dist_km, dt_s, out=np.zeros_like(dist_km), where=dt_s > 0)
     assert np.all(implied_speed_km_s < 100.0)  # generous ceiling; a real bug measured >1000 km/s here
+
+    # The *flown* periapsis (located under full perturbed propagation) must
+    # hit the TCM's periapsis target, not merely the fixed-time aim distance:
+    # the old position-only targeter flew ~250 km low for this window, and
+    # under Mars's surface for the 2020 window.
+    from orbitopt.viz.mars_transfer import MARS_RADIUS_KM, MARS_TCM_TARGET_PERIAPSIS_KM
+
+    altitude_km = float(moi_event["note"].split("(")[1].split(" km altitude")[0].replace(",", ""))
+    assert abs(altitude_km - (MARS_TCM_TARGET_PERIAPSIS_KM - MARS_RADIUS_KM)) < 50.0
+
+    # Every verification stage (TCM + MOI) passes.
+    assert {r["kind"] for r in reports} == {"mars-tcm", "mars-orbit-insertion"}
+    for r in reports:
+        assert r["status"]["passed"], (r["kind"], r["status"]["checks"])
+
+
+@pytest.mark.slow
+def test_moi_conservation_check_uses_the_integrated_gm():
+    """Regression: the MOI report's two-body conservation check used SPICE's
+    Mars GM while tudat integrated with its own (~1.9e-8 relative apart),
+    which on an eccentric capture orbit reads as ~1e-7 energy drift and
+    failed the 1e-8 tolerance on every run."""
+    from orbitopt.verify.mars_insertion import verify_mars_orbit_insertion
+    from orbitopt.verify.tudat_propagate import body_gravitational_parameter
+
+    mu = body_gravitational_parameter("Mars")
+    rp_m = 3889.5e3
+    v_p = np.sqrt(2600.0 ** 2 + 2.0 * mu / rp_m)  # v_inf = 2.6 km/s hyperbola at periapsis
+    moi = verify_mars_orbit_insertion(
+        np.array([rp_m, 0.0, 0.0]), np.array([0.0, v_p, 0.0]),
+        periapsis_km=3889.5, apoapsis_km=3889.5 + 20000.0, arrival_epoch_et=666482578.0,
+    )
+    tb = moi.report["propagations"][0]["conservation"]["two_body_reference"]
+    assert tb["energy_rel_drift_max"] < 1e-9
+    assert moi.report["status"]["passed"], moi.report["status"]["checks"]
 
 
 @pytest.mark.slow
