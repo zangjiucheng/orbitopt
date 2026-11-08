@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 from orbitopt.missions import list_missions
 from orbitopt.scene_format import read_scene
@@ -86,6 +87,11 @@ def _cmd_validate(args):
     print(f"OK: {mission['id']} (kind: {mission['kind']})")
 
 
+def _report_path_for(scene_path) -> str:
+    p = Path(scene_path)
+    return str(p.with_name(p.stem + ".verification.json"))
+
+
 def _cmd_run(args):
     from orbitopt.mission_config import build_scene_from_config
     from orbitopt.scene_format import write_scene
@@ -98,9 +104,20 @@ def _cmd_run(args):
     print(f"Running {mission['id']!r} (kind: {mission['kind']})...")
     scene = build_scene_from_config(config)
 
+    from orbitopt.verify.report import bundle, pop_from_scene, write_report
+
+    reports = pop_from_scene(scene)
     out = args.out or config["output"]["scene_file"]
     write_scene(scene, out)
     print(f"wrote {out} ({len(scene.get('bodies', []))} bodies)")
+    if reports:
+        # One machine-readable verification report per run (task #137),
+        # next to the scene unless output.verification_report says otherwise.
+        report_out = config["output"].get("verification_report") or _report_path_for(out)
+        doc = reports[0] if len(reports) == 1 else bundle(reports, label=mission["id"])
+        write_report(doc, report_out)
+        print(("" if doc["status"]["passed"] else "WARNING: ")
+              + f"wrote verification report {report_out} (passed: {doc['status']['passed']})")
     # build_from_config appends its verification summary as trailing
     # subtitle lines -- surface it here too, so a non-convergence WARNING
     # is visible in the terminal, not just in the scene the UI shows later.

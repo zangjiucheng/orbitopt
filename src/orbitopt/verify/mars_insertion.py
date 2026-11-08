@@ -26,12 +26,14 @@ from dataclasses import dataclass, field
 import numpy as np
 from tudatpy.astro import element_conversion
 
+from orbitopt.verify import report as _report
 from orbitopt.verify.tudat_propagate import (
     body_gravitational_parameter,
     body_position_at_absolute_epoch,
     body_velocity_at_absolute_epoch,
     find_closest_approach,
     propagate_multi_arc,
+    propagation_report_section,
 )
 
 CRUISE_PERTURBATIONS = dict(perturbing_bodies=("Sun", "Earth", "Mars", "Jupiter"))
@@ -46,6 +48,7 @@ class TcmTargetingResult:
     final_state: np.ndarray  # (6,) heliocentric m, m/s at coast_duration
     final_miss_km: float  # achieved distance from Mars center
     residual_history_km: list = field(default_factory=list)
+    report: dict | None = None  # machine-readable verification report (orbitopt.verify.report)
 
 
 def _miss_km(sc_r_helio, sc_v_helio, initial_epoch_et, dv_trial, coast_duration, step_size):
@@ -84,6 +87,7 @@ def target_mars_approach(
     fd_step_m_s=0.5,
     max_step_m_s=300.0,
     outer_rounds=3,
+    report_path=None,
 ) -> TcmTargetingResult:
     """Fixed-time Newton-Raphson shooting on a trajectory-correction burn
     (fired at ``departure_epoch_et``, i.e. right after Earth-SOI exit) so
@@ -164,7 +168,24 @@ def target_mars_approach(
         if converged:
             break
 
-    final_m, final_result, _ = _miss_km(sc_r_helio, sc_v_helio, departure_epoch_et, dv, coast_duration, step_size)
+    final_m, final_result, arrival_et = _miss_km(sc_r_helio, sc_v_helio, departure_epoch_et, dv, coast_duration, step_size)
+    mars_r = body_position_at_absolute_epoch("Mars", arrival_et, central_body="Sun")
+    report = _report.build_report(
+        kind="mars-tcm", label=f"departure-et-{float(departure_epoch_et):.3f}",
+        propagations=[propagation_report_section(final_result, "cruise")],
+        residuals=[_report.state_residual(
+            "arrival_vs_aim_point", "Mars position + targeted miss vector at the fixed arrival time",
+            position=final_result.final_state[:3], reference_position=mars_r + target_vector_m,
+            tolerance={"position_m": tol_km * 1000.0},
+        )],
+        inputs={"sc_state_helio": np.concatenate([np.asarray(sc_r_helio, dtype=float), np.asarray(sc_v_helio, dtype=float)]),
+                "departure_epoch_et": float(departure_epoch_et), "coast_duration_guess_s": float(coast_duration_guess),
+                "target_periapsis_km": float(target_periapsis_km), "step_size_s": float(step_size)},
+        targets={"converged": converged, "iterations": iterations, "delta_v_m_s": dv,
+                 "coast_duration_s": coast_duration, "final_miss_km": float(np.linalg.norm(final_m)) / 1000.0,
+                 "residual_history_km": residual_history_km},
+    )
+    _report.finalize_report(report, report_path)
     return TcmTargetingResult(
         delta_v=dv,
         converged=converged,
@@ -173,6 +194,7 @@ def target_mars_approach(
         final_state=final_result.final_state,
         final_miss_km=float(np.linalg.norm(final_m)) / 1000.0,
         residual_history_km=residual_history_km,
+        report=report,
     )
 
 
@@ -253,6 +275,7 @@ class MoiResult:
     post_burn_state: np.ndarray  # (6,) Mars-relative m, m/s
     achieved: dict  # osculating a_km/e/i_deg immediately after the burn
     stationkeeping: dict  # drift of a/e/i over a short coast, Sun-perturbed
+    report: dict | None = None  # machine-readable verification report (orbitopt.verify.report)
 
 
 def insert_mars_orbit(
@@ -304,6 +327,7 @@ def verify_mars_orbit_insertion(
     arrival_epoch_et,
     stationkeeping_days=2.0,
     step_size=120.0,
+    report_path=None,
 ) -> MoiResult:
     """Compute the MOI burn (insert_mars_orbit) and confirm the resulting
     orbit actually stays captured (doesn't immediately escape or crash) by
@@ -332,10 +356,24 @@ def verify_mars_orbit_insertion(
         "di_deg": sk_end["i_deg"] - achieved["i_deg"],
     }
 
+    report = _report.build_report(
+        kind="mars-orbit-insertion", label=f"arrival-et-{float(arrival_epoch_et):.3f}",
+        propagations=[propagation_report_section(sk, "capture-stationkeeping", mu=mu_mars)],
+        inputs={"pre_burn_state_mars": np.concatenate([np.asarray(r_rel_m, dtype=float), np.asarray(v_rel_m_s, dtype=float)]),
+                "periapsis_km": float(periapsis_km), "apoapsis_km": float(apoapsis_km),
+                "arrival_epoch_et": float(arrival_epoch_et), "stationkeeping_days": float(stationkeeping_days),
+                "step_size_s": float(step_size)},
+        targets={"delta_v_m_s": delta_v, "achieved": achieved, "stationkeeping": stationkeeping,
+                 "target_a_km": 0.5 * (float(periapsis_km) + float(apoapsis_km)),
+                 "a_error_km": achieved["a_km"] - 0.5 * (float(periapsis_km) + float(apoapsis_km))},
+    )
+    _report.finalize_report(report, report_path)
+
     return MoiResult(
         delta_v_ms=delta_v,
         pre_burn_state=np.concatenate([np.asarray(r_rel_m, dtype=float), np.asarray(v_rel_m_s, dtype=float)]),
         post_burn_state=post_state,
         achieved=achieved,
         stationkeeping=stationkeeping,
+        report=report,
     )

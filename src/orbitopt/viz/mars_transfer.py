@@ -47,6 +47,7 @@ from orbitopt.bodies import (
 from orbitopt.lambert.gpu_batch import solve_lambert_batch
 from orbitopt.optimize.multistart import SINGLE_BASIN_HALF_WIDTH, find_diverse_basins, multistart_optimize
 from orbitopt.problems.transfer_2body import Transfer2BodyProblem
+from orbitopt.verify import report as verification_report
 from orbitopt.verify.mars_insertion import (
     locate_mars_periapsis,
     target_mars_approach,
@@ -468,7 +469,7 @@ def _fly_transfer(
         ),
     ]
 
-    return scene_document(
+    scene = scene_document(
         scene_id="mars-transfer",
         title="Mars — Earth to Orbit Insertion",
         subtitle="Real Earth departure window, GPU-screened + optimized Lambert transfer, a real\n"
@@ -486,6 +487,12 @@ def _fly_transfer(
             "referenceEpochEt": reference_et,
         },
     )
+    # Verification reports (task #137) ride along for `orbitopt run`, which
+    # writes them next to the scene; compute_and_export strips them.
+    for rep in (tcm.report, moi.report):
+        if rep is not None:
+            verification_report.attach_to_scene(scene, rep)
+    return scene
 
 
 def compute_and_export_mars_mission(**kwargs) -> dict:
@@ -493,7 +500,9 @@ def compute_and_export_mars_mission(**kwargs) -> dict:
     a real Earth->Mars transfer window, fly the full launch-to-orbit-insertion
     trajectory, and export it as a SceneData document. See the module
     docstring for what this does and does not model."""
-    return _build_mars_mission(**kwargs)
+    scene = _build_mars_mission(**kwargs)
+    verification_report.pop_from_scene(scene)
+    return scene
 
 
 def build_from_config(config: dict) -> dict:

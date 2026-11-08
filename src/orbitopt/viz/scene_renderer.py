@@ -20,6 +20,7 @@ from importlib import resources
 import numpy as np
 import pyvista as pv
 import vtk
+from vtkmodules.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray
 
 _MARKER_BASE_SIZE = 8.0
 _MARKER_WEIGHT_SIZE = 1.1
@@ -251,17 +252,7 @@ def position_at_time(body: dict, t: float) -> np.ndarray:
     if "trail" not in body:
         return np.asarray(body.get("position", [0.0, 0.0, 0.0]), dtype=float)
     times, positions = _validated_trail(body)
-    if t <= times[0]:
-        return np.asarray(positions[0], dtype=float)
-    if t >= times[-1]:
-        return np.asarray(positions[-1], dtype=float)
-    idx = int(np.searchsorted(times, t))
-    idx = max(1, min(idx, len(times) - 1))
-    t0, t1 = times[idx - 1], times[idx]
-    frac = (t - t0) / (t1 - t0) if t1 > t0 else 0.0
-    p0 = np.asarray(positions[idx - 1], dtype=float)
-    p1 = np.asarray(positions[idx], dtype=float)
-    return p0 + frac * (p1 - p0)
+    return _sample_trail(np.asarray(times, dtype=float), np.asarray(positions, dtype=float), t)[1]
 
 
 def trail_index_at_time(body: dict, t: float) -> int:
@@ -269,13 +260,101 @@ def trail_index_at_time(body: dict, t: float) -> int:
     return int(np.searchsorted(times, t))
 
 
+def _sample_trail(times: np.ndarray, positions: np.ndarray, t: float) -> tuple[int, np.ndarray]:
+    """``(trail_index_at_time, position_at_time)`` for already-converted
+    numpy ``times`` (n,) / ``positions`` (n, 3), with one binary search.
+    SceneRenderer caches those arrays per body at load() so the per-tick
+    path never re-converts a (possibly many-thousand-sample) Python list."""
+    idx = int(np.searchsorted(times, t))
+    if t <= times[0]:
+        return idx, positions[0].copy()
+    if t >= times[-1]:
+        return idx, positions[-1].copy()
+    i = max(1, min(idx, len(times) - 1))
+    t0, t1 = times[i - 1], times[i]
+    frac = (t - t0) / (t1 - t0) if t1 > t0 else 0.0
+    p0 = positions[i - 1]
+    return idx, p0 + frac * (positions[i] - p0)
+
+
+class _PastTrail:
+    """The "traveled so far" polyline of one trailed body, updated in place.
+
+    ``set_time`` is the timeline's hot path (every 33 ms playback tick and
+    every scrub event). It used to build a fresh ``pv.MultipleLines`` from
+    ``full_positions[:idx] + [pos]`` and ``add_mesh`` it under the same name
+    -- i.e. allocate a new mesh, tear down the old actor/mapper and upload
+    everything to VTK again, every tick. This class keeps ONE PolyData (and
+    so one actor/mapper) for the whole scene and edits it in O(1):
+
+    * points: a copy of the trail's samples plus one spare slot at the end
+      (N + 1 points). The polyline drawn is ``points[0 .. m]`` where
+      ``m = max(idx, 1)`` and ``points[m]`` is temporarily overwritten with
+      the body's current interpolated position -- exactly the old
+      ``full_positions[:m] + [pos]`` vertex sequence.
+    * cells: a single polyline whose connectivity is the static
+      ``0 .. N``; only its offsets array ``[0, m + 1]`` changes.
+
+    So an update restores the one previously-borrowed sample, writes the new
+    head vertex, bumps one offset, and marks the arrays Modified -- no
+    allocation, no actor churn, regardless of trail length or scrub distance.
+    """
+
+    def __init__(self, full_positions: np.ndarray):
+        self._full = np.asarray(full_positions, dtype=float)
+        n = len(self._full)
+        self._points = np.empty((n + 1, 3), dtype=float)
+        self._points[:n] = self._full
+        self._points[n] = self._full[-1]
+        # Offsets/connectivity backing arrays are kept alive on self: the VTK
+        # arrays below are zero-copy views of them (deep=False).
+        self._offsets = np.array([0, 2], dtype=_vtk_id_dtype())
+        self._connectivity = np.arange(n + 1, dtype=_vtk_id_dtype())
+
+        self._vtk_points_data = numpy_to_vtk(self._points, deep=False)
+        vtk_points = vtk.vtkPoints()
+        vtk_points.SetData(self._vtk_points_data)
+        self._vtk_offsets = numpy_to_vtkIdTypeArray(self._offsets, deep=False)
+        self._vtk_connectivity = numpy_to_vtkIdTypeArray(self._connectivity, deep=False)
+        self._cells = vtk.vtkCellArray()
+        self._cells.SetData(self._vtk_offsets, self._vtk_connectivity)
+
+        self.poly = pv.PolyData()
+        self.poly.SetPoints(vtk_points)
+        self.poly.SetLines(self._cells)
+        self._head = 1  # index of the slot currently holding the live position
+        self.update(1, self._full[0])
+
+    def update(self, idx: int, pos: np.ndarray) -> None:
+        n = len(self._full)
+        m = min(max(int(idx), 1), n)
+        old = self._head
+        # Give the previously borrowed slot its real sample back (slot n is
+        # the spare and has no sample of its own).
+        if old < n:
+            self._points[old] = self._full[old]
+        self._points[m] = pos
+        self._head = m
+        self._offsets[1] = m + 1
+        self._vtk_points_data.Modified()
+        self._vtk_offsets.Modified()
+        self._cells.Modified()
+        self.poly.Modified()
+
+
+def _vtk_id_dtype():
+    """numpy dtype matching this VTK build's vtkIdType (32 or 64 bit)."""
+    return np.int64 if vtk.vtkIdTypeArray().GetDataTypeSize() == 8 else np.int32
+
+
 class SceneRenderer:
     """Owns the 3D content of one scene inside a plotter. ``load()`` tears
     down and rebuilds everything (switching missions is rare -- a handful
     of times per session -- so simplicity beats trying to diff old/new
     scenes); ``set_time()`` is the hot path, called every timeline tick or
-    time-warp step, and only mutates existing mesh point arrays plus swaps
-    the "traveled so far" trail actor, never rebuilds from scratch.
+    time-warp step, and only mutates existing mesh point arrays in place
+    (body markers and the "traveled so far" trails, see _PastTrail), never
+    rebuilds meshes or swaps actors.
     """
 
     def __init__(self, plotter):
@@ -361,9 +440,9 @@ class SceneRenderer:
                 full_poly = pv.MultipleLines(full_positions)
                 self.plotter.add_mesh(full_poly, color=color, line_width=1.1, opacity=0.3, pickable=False)
 
-                past_poly = pv.MultipleLines(np.vstack([full_positions[0], pos0]))
+                past_trail = _PastTrail(full_positions)
                 self.plotter.add_mesh(
-                    past_poly, color=color, line_width=2.6, opacity=0.95,
+                    past_trail.poly, color=color, line_width=2.6, opacity=0.95,
                     name=f"past-{body['id']}", pickable=False,
                 )
 
@@ -371,7 +450,8 @@ class SceneRenderer:
                     "body": body,
                     "point_poly": point_poly,
                     "sphere_actor": sphere_actor,
-                    "past_actor_name": f"past-{body['id']}",
+                    "past_trail": past_trail,
+                    "times": np.asarray(trail_times, dtype=float),
                     "full_positions": full_positions,
                     "color": color,
                 }
@@ -506,20 +586,13 @@ class SceneRenderer:
         """
         distances = {}
         for body_id, entry in self._moving.items():
-            body = entry["body"]
-            pos = position_at_time(body, t)
+            idx, pos = _sample_trail(entry["times"], entry["full_positions"], t)
             if entry["sphere_actor"] is not None:
                 entry["sphere_actor"].position = tuple(float(c) for c in pos)
             else:
                 entry["point_poly"].points = pos.reshape(1, 3)
 
-            idx = trail_index_at_time(body, t)
-            past_pts = np.vstack([entry["full_positions"][: max(idx, 1)], pos.reshape(1, 3)])
-            new_past_poly = pv.MultipleLines(past_pts) if len(past_pts) > 1 else pv.MultipleLines(np.vstack([pos, pos]))
-            self.plotter.add_mesh(
-                new_past_poly, color=entry["color"], line_width=2.6, opacity=0.95,
-                name=entry["past_actor_name"], pickable=False,
-            )
+            entry["past_trail"].update(idx, pos)
             distances[body_id] = float(np.linalg.norm(pos))
 
         for body_id, pos in self._static_positions.items():
@@ -534,7 +607,8 @@ class SceneRenderer:
 
     def body_world_position(self, body_id: str, t: float) -> np.ndarray:
         if body_id in self._moving:
-            return position_at_time(self._moving[body_id]["body"], t)
+            entry = self._moving[body_id]
+            return _sample_trail(entry["times"], entry["full_positions"], t)[1]
         return self._static_positions.get(body_id, np.zeros(3))
 
     def focus_on(self, body_id: str, t: float) -> None:

@@ -36,6 +36,12 @@ class FreeReturnScreeningProblem(OrbitOptProblem):
     to the Moon reached during ``coast_days`` of coarse GPU propagation --
     zero means "this burn's coarse trajectory grazes the target distance
     from the Moon," which is what a global optimizer drives toward.
+
+    ``propagation_output`` is passed to ``nbody_gpu.propagate_spacecraft_batch``
+    as ``output``: the default ``"closest_approach"`` keeps only O(N) state
+    (running Moon closest approach) instead of the O(N x n_steps) history;
+    ``"history"`` keeps the original full-history path (same fitness, kept
+    for A/B checks).
     """
 
     def __init__(
@@ -48,6 +54,7 @@ class FreeReturnScreeningProblem(OrbitOptProblem):
         dv_bounds_km_s=(-4.5, 4.5),
         n_steps=400,
         use_gpu=None,
+        propagation_output="closest_approach",
     ):
         super().__init__(use_gpu=use_gpu)
         self.r0_km = np.asarray(r0_km, dtype=float)
@@ -57,6 +64,11 @@ class FreeReturnScreeningProblem(OrbitOptProblem):
         self.coast_seconds = float(coast_days) * 86400.0
         self.dv_bounds_km_s = dv_bounds_km_s
         self.n_steps = n_steps
+        if propagation_output not in ("closest_approach", "history"):
+            raise ValueError(
+                f"propagation_output must be 'closest_approach' or 'history', got {propagation_output!r}"
+            )
+        self.propagation_output = propagation_output
 
     def get_bounds(self):
         lo, hi = self.dv_bounds_km_s
@@ -78,7 +90,12 @@ class FreeReturnScreeningProblem(OrbitOptProblem):
             r0_batch, v0_batch, self.coast_seconds, self.n_steps,
             mu_earth=nb.MU_EARTH_KM3_S2, mu_moon=nb.MU_MOON_KM3_S2,
             epoch0=self.epoch0_seconds, use_gpu=self.use_gpu,
+            output=self.propagation_output,
         )
+
+        if self.propagation_output == "closest_approach":
+            self._last_min_distance_epoch_s = result.min_distance_epoch_s
+            return np.abs(result.min_distance_km - self.target_distance_km)
 
         moon_r, _ = nb.moon_state_batch(
             result.t_abs.ravel() - self.epoch0_seconds, use_gpu=self.use_gpu,
