@@ -159,6 +159,18 @@ def test_plan_departure_uses_first_launch_window():
         plan_departure("cape-canaveral", TMI)
 
 
+def test_plan_departure_liftoff_within_search_span():
+    from orbitopt.launch_windows import asymptote_launch_windows
+
+    rla, dla = TMI.rla_dla_deg
+    (w0, *_) = asymptote_launch_windows("cape-canaveral", rla, dla, START, 1.0)
+    # Search span that closes inside the first window, before its optimum.
+    for start, end in ((w0.open_mjd2000 - 0.01, 0.5 * (w0.open_mjd2000 + w0.close_mjd2000)),
+                       (as_mjd2000(START), as_mjd2000(START) + 1.0)):
+        plan = plan_departure("cape-canaveral", TMI, start=start, days=end - start)
+        assert start <= plan.launch.liftoff_mjd2000 <= end
+
+
 def test_lunar_b_plane_targeter_inputs_are_ecliptic():
     plan = plan_departure("cape-canaveral", TLI, start=START)
     kw = plan.lunar_b_plane_targeter_inputs()

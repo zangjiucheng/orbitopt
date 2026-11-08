@@ -195,6 +195,20 @@ def test_window_open_past_query_end_reports_true_close():
     assert w.close_mjd2000 == pytest.approx(w0.close_mjd2000, abs=1e-6)
 
 
+def test_optimum_never_after_search_end():
+    # Window 02:07-08:42 UTC, optimum (due east) at 06:55. A search that ends
+    # at 04:31 must not pick a lift-off after its cutoff.
+    corr = [(60.0, 115.0)]
+    (w0, _) = asymptote_launch_windows("cape-canaveral", 10.0, 23.0, "2020-07-30", 1.0, corr)
+    start = w0.open_mjd2000 - 0.001
+    end = 0.5 * (w0.open_mjd2000 + w0.optimal_mjd2000)
+    (w,) = asymptote_launch_windows("cape-canaveral", 10.0, 23.0, start, end - start, corr)
+    assert w.close_mjd2000 == pytest.approx(w0.close_mjd2000, abs=1e-6)  # true bounds kept
+    assert start <= w.optimal_mjd2000 <= end
+    assert w.optimal_mjd2000 == pytest.approx(end, abs=1e-6)  # closest to due east before the cutoff
+    assert 60.0 - 1e-3 <= w.azimuth_optimal_deg <= 115.0 + 1e-3
+
+
 def test_continuously_open_window_is_reported():
     wins = asymptote_launch_windows("cape-canaveral", 10.0, 23.0, "2020-07-30", 1.0, [(0.0, 360.0)])
     assert len(wins) == 1

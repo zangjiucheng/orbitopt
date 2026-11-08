@@ -339,10 +339,11 @@ def _scan(t0: float, t1: float, step_days: float, ok, seeds: list[float],
 
     Returns ``(open, close, optimal, open_bounded, close_bounded)``. An
     unbounded side (open over the whole extension) is clipped to t0 / t1 and
-    flagged False. The optimum is searched over the part of the interval at
-    or after t0 (an already-open window's best *remaining* launch instant):
-    the seed there minimizing ``score``, else the best sample refined by
-    golden-section search."""
+    flagged False. The optimum is searched over the part of the interval
+    inside [t0, t1] only (an already-open window's best *remaining* instant,
+    a window running past t1 its best instant before the cutoff): the
+    minimum of ``score`` over the seeds there, the best sample refined by
+    golden-section search, and the clipped edges."""
     ok1 = lambda t: bool(ok(np.array([t]))[0])  # noqa: E731
     score1 = lambda t: float(score(np.array([t]))[0])  # noqa: E731
     lo, hi = t0 - _SCAN_MARGIN_DAYS, t1 + _SCAN_MARGIN_DAYS
@@ -375,16 +376,18 @@ def _scan(t0: float, t1: float, step_days: float, ok, seeds: list[float],
             t_close = t1
         if not (t_open < t1 and t_close >= t0):
             continue
-        a = max(t_open, t0)
-        inside = ts[(ts >= a) & (ts <= t_close)]
-        seeded = [float(t) for t in inside if float(t) in seed_set]
-        if seeded:
-            t_opt = min(seeded, key=score1)
-        elif inside.size == 0:
-            t_opt = _golden_min(score1, a, t_close) if t_close > a else a
-        else:
+        # Optimum only over the part of the window inside the query span, so
+        # it is always a launchable instant of [t0, t1] (a window reported
+        # whole past t1 does not move lift-off past the search cutoff).
+        a, b = max(t_open, t0), min(t_close, t1)
+        inside = ts[(ts >= a) & (ts <= b)]
+        cands = [float(t) for t in inside if float(t) in seed_set]
+        if not cands and inside.size:
             t_best = float(inside[int(np.argmin(score(inside)))])
-            t_opt = _golden_min(score1, max(a, t_best - step_days), min(t_close, t_best + step_days))
+            cands.append(_golden_min(score1, max(a, t_best - step_days), min(b, t_best + step_days)))
+        # The edges matter when the optimum lies outside [a, b].
+        cands += [a, b] if b > a else [a]
+        t_opt = min(cands, key=score1)
         out.append((t_open, t_close, t_opt, open_bounded, close_bounded))
     return out
 
@@ -402,11 +405,13 @@ def plane_launch_windows(
     """Launch windows from ``site`` into ``plane`` open at any instant of
     [start, start+days) (``start``: MJD2000, datetime or ISO-8601 string,
     UTC): windows opening in it, a window already open at ``start``
-    (``w.open_before(start)``; its optimum is the best instant >= start) and
+    (``w.open_before(start)``) and
     a window open continuously (``open_bounded``/``close_bounded`` False,
     clipped to the interval). Back-to-back daily queries therefore both
     report a window straddling midnight; keep ``w.open_mjd2000 >= start`` to
-    de-duplicate.
+    de-duplicate. ``optimal_mjd2000`` always lies in [start, start+days]
+    (the best instant of the window inside the query), while open / close
+    are the window's true bounds.
 
     ``max_dogleg_deg = 0`` gives the instantaneous in-plane opportunities
     (open == close); a positive budget widens each into a window bounded by
