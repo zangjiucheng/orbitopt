@@ -12,6 +12,8 @@ import abc
 
 import numpy as np
 
+from orbitopt.core.gpu import get_array_module
+
 
 class OrbitOptProblem(abc.ABC):
     """Common base for all trajectory-optimization UDPs in this framework."""
@@ -49,3 +51,9 @@ class OrbitOptProblem(abc.ABC):
         """True if a subclass overrides batch_fitness with a real (non-loop)
         implementation, i.e. it's worth routing through the GPU bfe."""
         return type(self).batch_fitness is not OrbitOptProblem.batch_fitness
+
+    def array_module(self):
+        """The array module (``numpy`` or ``cupy``) batch_fitness() actually
+        runs on, resolved from ``self.use_gpu`` exactly as the vectorized
+        kernels resolve it (see orbitopt.core.gpu.get_array_module)."""
+        return get_array_module(self.use_gpu)
