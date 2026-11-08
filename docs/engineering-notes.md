@@ -122,6 +122,27 @@ and `examples/05_artemis2_free_return.py` default to `use_gpu=False` for
 this reason; don't assume GPU is the right choice for a new batched routine
 without measuring at your actual batch size.
 
+**Update (task #139):** the Moon/Sun positions now come from a grid computed
+once before integration: one batched Kepler solve over the 2*n_steps+1
+half-step epochs, run once for each distinct (epoch0, dt) pair. The
+4*n_steps Newton solves per call are gone. The output is bit-identical to
+the old per-stage evaluation. N=2000, n_steps=300, CPU (numpy, measured on
+the CI container, where the old code took 69.6s instead of 20.2s): **69.6s →
+0.83s** (~84x). The GPU path loses the same 4*n_steps×maxiter kernel
+launches, but it has not been re-measured (no CUDA device was available).
+Re-check the CPU/GPU crossover before you change the `use_gpu=False`
+defaults.
+
+**Update (task #143):** profiling counted ~4.5 M array ops (≈ CuPy kernel
+launches) per call before #139, which matches the old 107.8 s at about
+24 µs per launch. Today the count is 24.8 k, so CuPy should now be roughly
+on par with numpy at N=2000; this is an estimate that has not been measured
+on a GPU. A fused per-candidate RK4 loop is 20-30x faster than numpy even
+on the CPU (Numba). A CUDA fused kernel is not worth it at current batch
+sizes. Benchmark, numbers and decision:
+[`benchmarks/fused_kernel_evaluation.md`](benchmarks/fused_kernel_evaluation.md)
+(`scripts/bench_nbody_backends.py`).
+
 ## Undamped Newton diverges on real (imprecise) inputs, not just in theory
 
 Wiring the full pipeline together end-to-end -- not just testing each stage
