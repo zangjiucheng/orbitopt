@@ -106,3 +106,37 @@ def test_hermite_dense_output_handles_burn_seam_duplicates():
 def test_soi_radius_formula():
     # Earth SOI ~ 924,000 km
     assert ev.soi_radius_km(149.598e6, 3.986004418e14, 1.32712440018e20) == pytest.approx(9.25e5, rel=0.01)
+
+
+def _line(r0, v, t0, t1, n):
+    t = np.linspace(t0, t1, n)
+    return t, np.array([np.r_[r0 + v * (tt - t0), v] for tt in t])
+
+
+@pytest.mark.parametrize("v_post", [(0.0, 200.0, 0.0), (0.0, 900.0, 0.0), (-300.0, 300.0, 0.0)])
+@pytest.mark.parametrize("use_refine", [False, True])
+def test_closest_approach_does_not_interpolate_across_burn_seam(v_post, use_refine):
+    """Acceptance regression: a burn right after closest approach used to make
+    the pre-seam interval interpolate toward the *post*-burn velocity (the
+    pre-burn state was dropped), producing a spurious nearer periapsis. The
+    straight-line coast passes the body at exactly 9 km."""
+    t1, s1 = _line(np.array([-95e3, 9e3, 0.0]), np.array([100.0, 0.0, 0.0]), 0.0, 1000.0, 3)
+    t2, s2 = _line(s1[-1, :3], np.array(v_post), 1000.0, 3000.0, 3)
+    epochs, states = np.r_[t1, t2], np.vstack([s1, s2])
+
+    def refine(state0, t0, duration, max_step):
+        n = int(np.ceil(duration / max_step)) + 1
+        return _line(state0[:3], state0[3:], t0, t0 + duration, n)
+
+    e = ev.find_closest_approach_event(epochs, states, refine=refine if use_refine else None)
+    assert e.value == pytest.approx(9.0, abs=1e-6)
+    assert e.epoch == pytest.approx(950.0, abs=1e-2)
+
+
+def test_dense_output_uses_pre_burn_state_at_seam():
+    t1, s1 = _line(np.zeros(3), np.array([1.0, 0.0, 0.0]), 0.0, 10.0, 2)
+    t2, s2 = _line(s1[-1, :3], np.array([0.0, 5.0, 0.0]), 10.0, 20.0, 2)
+    d = ev.HermiteDenseOutput(np.r_[t1, t2], np.vstack([s1, s2]))
+    np.testing.assert_allclose(d(10.0, interval=0)[3:], [1.0, 0.0, 0.0])  # pre-burn
+    np.testing.assert_allclose(d(10.0)[3:], [0.0, 5.0, 0.0])  # post-burn
+    np.testing.assert_allclose(d(5.0), [5.0, 0, 0, 1.0, 0, 0], atol=1e-12)

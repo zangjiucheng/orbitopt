@@ -58,9 +58,13 @@ class HermiteDenseOutput:
     position error is O(h^4) per interval); velocity is the analytical
     derivative of the position cubic (O(h^3)). Epochs must be strictly
     increasing -- duplicate epochs (e.g. at an impulsive-burn seam in
-    ``propagate_multi_arc``) are handled by keeping the *last* state at a
-    repeated epoch, i.e. post-burn, which is the state the trajectory
-    continues from.
+    ``propagate_multi_arc``) are a velocity discontinuity: ``states`` keeps
+    the *last* state at a repeated epoch (post-burn, where the next interval
+    starts) while ``states_left`` keeps the *first* (pre-burn, where the
+    previous interval ends). Each interval's Hermite cubic uses its own
+    start state from ``states`` and end state from ``states_left``, so no
+    interval ever interpolates toward a velocity from the other side of a
+    burn.
     """
 
     def __init__(self, epochs, states):
@@ -71,13 +75,17 @@ class HermiteDenseOutput:
         if epochs.size < 2:
             raise ValueError("need at least two samples for dense output")
         # keep the last of any run of equal epochs
-        keep = np.ones(epochs.size, dtype=bool)
-        keep[:-1] = np.diff(epochs) > 0.0
-        epochs, states = epochs[keep], states[keep]
-        if np.any(np.diff(epochs) <= 0.0):
+        if np.any(np.diff(epochs) < 0.0):
             raise ValueError("epochs must be non-decreasing")
-        self.epochs = epochs
-        self.states = states
+        keep_last = np.ones(epochs.size, dtype=bool)
+        keep_last[:-1] = np.diff(epochs) > 0.0
+        keep_first = np.ones(epochs.size, dtype=bool)
+        keep_first[1:] = np.diff(epochs) > 0.0
+        if np.count_nonzero(keep_last) < 2:
+            raise ValueError("need at least two distinct epochs for dense output")
+        self.epochs = epochs[keep_last]
+        self.states = states[keep_last]  # post-seam state at each node
+        self.states_left = states[keep_first]  # pre-seam state at each node
 
     @property
     def t0(self):
@@ -87,15 +95,21 @@ class HermiteDenseOutput:
     def t1(self):
         return float(self.epochs[-1])
 
-    def __call__(self, t) -> np.ndarray:
+    def __call__(self, t, interval=None) -> np.ndarray:
+        """State at ``t``. ``interval`` pins the saved interval used, so an
+        endpoint shared with the next interval (an impulsive-burn seam)
+        evaluates to the pre-burn state when asked from the left."""
         t = float(t)
         e = self.epochs
-        i = int(np.clip(np.searchsorted(e, t, side="right") - 1, 0, e.size - 2))
+        if interval is None:
+            i = int(np.clip(np.searchsorted(e, t, side="right") - 1, 0, e.size - 2))
+        else:
+            i = int(interval)
         ta, tb = e[i], e[i + 1]
         h = tb - ta
         s = (t - ta) / h
         ra, va = self.states[i, :3], self.states[i, 3:]
-        rb, vb = self.states[i + 1, :3], self.states[i + 1, 3:]
+        rb, vb = self.states_left[i + 1, :3], self.states_left[i + 1, 3:]
         s2, s3 = s * s, s * s * s
         h00 = 2 * s3 - 3 * s2 + 1
         h10 = s3 - 2 * s2 + s
@@ -122,9 +136,9 @@ def _g_samples(epochs, states, g):
     return np.array([g(float(t), s) for t, s in zip(epochs, states)])
 
 
-def _brackets(gv, direction):
-    """Indices i such that g changes sign over [i, i+1] in ``direction``."""
-    a, b = gv[:-1], gv[1:]
+def _brackets(a, b, direction):
+    """Indices i such that g changes sign from ``a[i]`` (interval start) to
+    ``b[i]`` (interval end) in ``direction``."""
     up = (a < 0.0) & (b >= 0.0)
     down = (a > 0.0) & (b <= 0.0)
     if direction > 0:
@@ -136,8 +150,8 @@ def _brackets(gv, direction):
     return np.nonzero(mask)[0]
 
 
-def _solve_on(dense: HermiteDenseOutput, g, ta, tb, xtol):
-    f = lambda t: g(t, dense(t))  # noqa: E731
+def _solve_on(dense: HermiteDenseOutput, g, ta, tb, xtol, interval=None):
+    f = lambda t: g(t, dense(t, interval))  # noqa: E731
     fa, fb = f(ta), f(tb)
     if fa == 0.0:
         return ta
@@ -176,10 +190,14 @@ def locate_events(
     epochs = np.asarray(epochs, dtype=float)
     states = np.asarray(states, dtype=float)
     dense = HermiteDenseOutput(epochs, states)
-    gv = _g_samples(dense.epochs, dense.states, g)
+    # g at each interval's own start/end state: across an impulsive-burn seam
+    # the end value uses the pre-burn state, so a burn-induced jump in g is
+    # never mistaken for a root of the continuous trajectory.
+    ga = _g_samples(dense.epochs[:-1], dense.states[:-1], g)
+    gb = _g_samples(dense.epochs[1:], dense.states_left[1:], g)
     events = []
-    for i in _brackets(gv, direction):
-        ev = _locate_in_interval(dense, g, i, gv, refine, refine_points, refine_iterations, xtol)
+    for i in _brackets(ga, gb, direction):
+        ev = _locate_in_interval(dense, g, i, ga, refine, refine_points, refine_iterations, xtol)
         if ev is not None:
             events.append(ev)
             if first_only:
@@ -189,8 +207,9 @@ def locate_events(
 
 def _locate_in_interval(dense, g, i, gv, refine, refine_points, refine_iterations, xtol):
     ta, tb = float(dense.epochs[i]), float(dense.epochs[i + 1])
-    direction = 1 if gv[i] < 0.0 else -1
-    t_root = _solve_on(dense, g, ta, tb, xtol)
+    direction = 1 if gv[i] < 0.0 else -1  # gv = interval-start g values
+    t_root = _solve_on(dense, g, ta, tb, xtol, i)
+    k = i
     if t_root is None:
         return None
     local = dense
@@ -205,19 +224,21 @@ def _locate_in_interval(dense, g, i, gv, refine, refine_points, refine_iteration
             r_states = np.asarray(r_states, dtype=float)
             if r_epochs.size < 2:
                 break
-            local = HermiteDenseOutput(r_epochs, r_states)
-            rg = _g_samples(local.epochs, local.states, g)
-            idx = _brackets(rg, direction)
+            cand = HermiteDenseOutput(r_epochs, r_states)
+            rg = _g_samples(cand.epochs, cand.states, g)
+            idx = _brackets(rg[:-1], rg[1:], direction)
             if idx.size == 0:
                 break
             j = int(idx[0])
-            ta, tb = float(local.epochs[j]), float(local.epochs[j + 1])
-            state_a = local.states[j]
-            t_new = _solve_on(local, g, ta, tb, xtol)
+            ta2, tb2 = float(cand.epochs[j]), float(cand.epochs[j + 1])
+            t_new = _solve_on(cand, g, ta2, tb2, xtol, j)
             if t_new is None:
                 break
-            t_root = t_new
-    return Event(epoch=float(t_root), state=local(t_root), direction=direction, value=float("nan"))
+            # commit only a fully successful refinement step, so the returned
+            # epoch and state always come from the same dense output
+            local, k, t_root = cand, j, t_new
+            ta, tb, state_a = ta2, tb2, cand.states[j]
+    return Event(epoch=float(t_root), state=local(t_root, k), direction=direction, value=float("nan"))
 
 
 # --------------------------------------------------------------------------
@@ -279,7 +300,7 @@ def find_closest_approach_event(
         b = np.asarray(body_state_fn(epoch_offset + t), dtype=float)
         return float(np.linalg.norm(st[:3] - b[:3]))
 
-    periapsides = find_periapsides(e, s, body_state_fn, epoch_offset, refine=refine, **kw)
+    periapsides = find_periapsides(epochs, states, body_state_fn, epoch_offset, refine=refine, **kw)
     candidates = list(periapsides)
     for k in (0, e.size - 1):
         candidates.append(Event(float(e[k]), s[k].copy(), 0, float("nan")))
@@ -293,9 +314,9 @@ def find_closest_approach_event(
     if 0 < k < e.size - 1 and not covered:
         g = range_rate_event(body_state_fn, epoch_offset)
         for i in (k - 1, k):
-            t = _solve_on(dense, g, float(e[i]), float(e[i + 1]), kw.get("xtol", 1e-3))
+            t = _solve_on(dense, g, float(e[i]), float(e[i + 1]), kw.get("xtol", 1e-3), i)
             if t is not None:
-                candidates.append(Event(float(t), dense(t), 1, float("nan")))
+                candidates.append(Event(float(t), dense(t, i), 1, float("nan")))
         candidates.append(Event(float(e[k]), s[k].copy(), 0, float("nan")))
 
     best = min(candidates, key=lambda ev: dist_at(ev.epoch, ev.state))
