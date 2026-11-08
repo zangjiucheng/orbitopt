@@ -304,6 +304,25 @@ class SpacecraftBatchResult:
     t_abs: np.ndarray  # (n_steps+1, N) absolute epoch of each stored step, s since J2000
 
 
+@dataclass
+class ClosestApproachBatchResult:
+    """``propagate_spacecraft_batch(..., output="closest_approach")`` result:
+    O(N) instead of O(N x n_steps) -- only the running Moon closest approach
+    over the stored RK4 steps (0..n_steps inclusive, same sample set the
+    history mode stores) plus the final state.
+    """
+
+    min_distance_km: np.ndarray  # (N,) closest spacecraft-Moon distance over the steps, km
+    min_distance_epoch_s: np.ndarray  # (N,) absolute epoch of that closest step, s since J2000
+    min_distance_step: np.ndarray  # (N,) int, step index (0..n_steps) of that closest step
+    r: np.ndarray  # (N, 3) final position, km
+    v: np.ndarray  # (N, 3) final velocity, km/s
+    t_abs: np.ndarray  # (N,) final absolute epoch, s since J2000
+
+
+_OUTPUT_MODES = ("history", "closest_approach")
+
+
 def propagate_spacecraft_batch(
     r0,
     v0,
@@ -317,6 +336,7 @@ def propagate_spacecraft_batch(
     use_gpu=None,
     kepler_maxiter=20,
     moon_seed_epoch_ephemeris_seconds=None,
+    output="history",
 ):
     """Fixed-step RK4 propagation of N independent spacecraft under Earth
     point-mass gravity plus Moon (and optionally Sun) third-body
@@ -359,7 +379,27 @@ def propagate_spacecraft_batch(
     the spacecraft RK4 step count and defaults low because it is paid 4x
     per RK4 step (once per stage) and each iteration is its own GPU kernel
     launch, so its cost is launch-count- rather than array-size-bound.
+
+    ``output`` selects what is kept:
+
+    - ``"history"`` (default): a ``SpacecraftBatchResult`` with the full
+      (n_steps+1, N, ...) position/velocity/epoch history -- O(N x n_steps)
+      device memory and GPU->CPU transfer (~449 MB for 20,000 candidates x
+      400 steps).
+    - ``"closest_approach"``: a ``ClosestApproachBatchResult`` holding only
+      the running minimum spacecraft-Moon distance (and its epoch/step) plus
+      the final state -- O(N) memory, for fitness evaluation that only needs
+      the closest approach. The Moon position at each step is the one the
+      RK4 k1 stage already computes (same internal Moon model, same
+      ``mu_earth``/``mu_moon``/``kepler_maxiter``), so this costs one extra
+      Moon evaluation in total, not per step. Ties keep the earliest step
+      and NaN distances propagate, matching ``np.min``/``np.argmin`` on the
+      history.
     """
+    if output not in _OUTPUT_MODES:
+        raise ValueError(f"output must be one of {_OUTPUT_MODES}, got {output!r}")
+    track_closest = output == "closest_approach"
+
     xp = get_array_module(use_gpu)
 
     r0 = xp.asarray(r0, dtype=xp.float64)
@@ -376,14 +416,19 @@ def propagate_spacecraft_batch(
     if include_sun and mu_sun is None:
         mu_sun = MU_SUN_KM3_S2
 
-    def acceleration(r, t_abs):
+    def moon_position(t_abs):
+        r_moon, _ = _moon_state_core(
+            t_abs - moon_seed_epoch_ephemeris_seconds, xp, mu_earth, kepler_maxiter,
+            moon_seed_epoch_ephemeris_seconds, mu_moon,
+        )
+        return r_moon
+
+    def acceleration(r, t_abs, return_moon=False):
         rn = xp.linalg.norm(r, axis=-1)
         a = -mu_earth * r / rn[:, None] ** 3
 
         t_since_seed = t_abs - moon_seed_epoch_ephemeris_seconds
-        r_moon, _ = _moon_state_core(
-            t_since_seed, xp, mu_earth, kepler_maxiter, moon_seed_epoch_ephemeris_seconds, mu_moon
-        )
+        r_moon = moon_position(t_abs)
         d = r_moon - r
         dn = xp.linalg.norm(d, axis=-1)
         rmoon_n = xp.linalg.norm(r_moon, axis=-1)
@@ -396,23 +441,46 @@ def propagate_spacecraft_batch(
             rsun_n = xp.linalg.norm(r_sun, axis=-1)
             a = a + mu_sun * (d_s / dsn[:, None] ** 3 - r_sun / rsun_n[:, None] ** 3)
 
+        if return_moon:
+            return a, r_moon
         return a
-
-    r_hist = xp.empty((n_steps + 1, n, 3), dtype=xp.float64)
-    v_hist = xp.empty((n_steps + 1, n, 3), dtype=xp.float64)
-    t_hist = xp.empty((n_steps + 1, n), dtype=xp.float64)
 
     r = r0
     v = v0
     t_abs = epoch0
-    r_hist[0] = r
-    v_hist[0] = v
-    t_hist[0] = t_abs
+
+    if track_closest:
+        min_dist = xp.full((n,), xp.inf, dtype=xp.float64)
+        min_epoch = xp.array(epoch0, dtype=xp.float64, copy=True)
+        min_step = xp.zeros((n,), dtype=xp.int64)
+
+        def update_closest(step, r, r_moon, t_abs):
+            nonlocal min_dist, min_epoch, min_step
+            dist = xp.linalg.norm(r - r_moon, axis=-1)
+            # Strict "<" keeps the earliest step on ties (np.argmin semantics);
+            # the NaN clause makes a NaN distance stick, like np.min/np.argmin.
+            better = (dist < min_dist) | (xp.isnan(dist) & ~xp.isnan(min_dist))
+            min_dist = xp.where(better, dist, min_dist)
+            min_epoch = xp.where(better, t_abs, min_epoch)
+            min_step = xp.where(better, step, min_step)
+    else:
+        r_hist = xp.empty((n_steps + 1, n, 3), dtype=xp.float64)
+        v_hist = xp.empty((n_steps + 1, n, 3), dtype=xp.float64)
+        t_hist = xp.empty((n_steps + 1, n), dtype=xp.float64)
+        r_hist[0] = r
+        v_hist[0] = v
+        t_hist[0] = t_abs
 
     dt_col = dt[:, None]
     for step in range(n_steps):
         k1r = v
-        k1v = acceleration(r, t_abs)
+        if track_closest:
+            # k1 is evaluated at exactly (r, t_abs) of stored step ``step``,
+            # so its Moon position doubles as the closest-approach sample.
+            k1v, r_moon = acceleration(r, t_abs, return_moon=True)
+            update_closest(step, r, r_moon, t_abs)
+        else:
+            k1v = acceleration(r, t_abs)
 
         k2r = v + 0.5 * dt_col * k1v
         k2v = acceleration(r + 0.5 * dt_col * k1r, t_abs + 0.5 * dt)
@@ -427,8 +495,20 @@ def propagate_spacecraft_batch(
         v = v + (dt_col / 6.0) * (k1v + 2.0 * k2v + 2.0 * k3v + k4v)
         t_abs = t_abs + dt
 
-        r_hist[step + 1] = r
-        v_hist[step + 1] = v
-        t_hist[step + 1] = t_abs
+        if not track_closest:
+            r_hist[step + 1] = r
+            v_hist[step + 1] = v
+            t_hist[step + 1] = t_abs
+
+    if track_closest:
+        update_closest(n_steps, r, moon_position(t_abs), t_abs)
+        return ClosestApproachBatchResult(
+            min_distance_km=to_numpy(min_dist),
+            min_distance_epoch_s=to_numpy(min_epoch),
+            min_distance_step=to_numpy(min_step),
+            r=to_numpy(r),
+            v=to_numpy(v),
+            t_abs=to_numpy(t_abs),
+        )
 
     return SpacecraftBatchResult(r=to_numpy(r_hist), v=to_numpy(v_hist), t_abs=to_numpy(t_hist))
