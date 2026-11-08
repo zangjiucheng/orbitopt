@@ -12,6 +12,13 @@ from __future__ import annotations
 
 import numpy as np
 
+CPU = "CPU"
+GPU = "GPU"
+
+
+def _module_is_numpy(xp) -> bool:
+    return xp is np or getattr(xp, "__name__", "").split(".")[0] == "numpy"
+
 
 class GpuBatchFitnessEvaluator:
     """UDBFE that routes evaluation through problem.batch_fitness() when the
@@ -30,6 +37,31 @@ class GpuBatchFitnessEvaluator:
         dv_matrix = np.asarray(dvs, dtype=float).reshape(-1, n)
         out = [prob.fitness(dv) for dv in dv_matrix]
         return np.asarray(out, dtype=float).ravel()
+
+    @staticmethod
+    def device_for(udp) -> str:
+        """Report the device ("CPU" or "GPU") this evaluator really runs
+        ``udp``'s fitness on -- i.e. the array module behind the problem's
+        batch_fitness(), not merely the fact that this (GPU-named) evaluator
+        is in use.
+
+        A problem without batch_fitness() goes through the per-item
+        fitness() loop, which is CPU. Otherwise the backend is read from the
+        problem's ``array_module()`` (orbitopt.core.problem.OrbitOptProblem
+        provides it from ``use_gpu``); a third-party UDP that declares
+        neither ``array_module()`` nor ``use_gpu`` is assumed to be NumPy.
+        """
+        if udp is None or not hasattr(udp, "batch_fitness"):
+            return CPU
+        if hasattr(udp, "array_module"):
+            xp = udp.array_module()
+        elif hasattr(udp, "use_gpu"):
+            from orbitopt.core.gpu import get_array_module
+
+            xp = get_array_module(udp.use_gpu)
+        else:
+            return CPU
+        return CPU if _module_is_numpy(xp) else GPU
 
     def get_name(self):
         return "orbitopt GPU batch fitness evaluator"

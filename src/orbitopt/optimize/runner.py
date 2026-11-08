@@ -23,7 +23,36 @@ import time
 
 import pygmo as pg
 
-from orbitopt.optimize.gpu_bfe import GpuBatchFitnessEvaluator
+from orbitopt.optimize.gpu_bfe import CPU, GpuBatchFitnessEvaluator
+
+
+class OptimizationResult(tuple):
+    """``(champion_x, champion_f, elapsed_seconds)`` -- still unpackable as
+    the 3-tuple run_optimization() has always returned -- plus ``device``:
+    the backend ("CPU" or "GPU") fitness evaluation actually ran on."""
+
+    def __new__(cls, champion_x, champion_f, elapsed, device):
+        self = super().__new__(cls, (champion_x, champion_f, elapsed))
+        self.device = device
+        return self
+
+    @property
+    def champion_x(self):
+        return self[0]
+
+    @property
+    def champion_f(self):
+        return self[1]
+
+    @property
+    def elapsed(self):
+        return self[2]
+
+    def __repr__(self):
+        return (
+            f"OptimizationResult(champion_x={self[0]!r}, champion_f={self[1]!r}, "
+            f"elapsed={self[2]!r}, device={self.device!r})"
+        )
 
 
 def run_optimization(
@@ -43,13 +72,17 @@ def run_optimization(
     wrapped) so this function can attach the batch evaluator before wrapping
     it. Defaults to pg.pso_gen(gen=generations), which supports set_bfe.
 
-    Returns (champion_x, champion_f, elapsed_seconds).
+    Returns an OptimizationResult: unpacks as (champion_x, champion_f,
+    elapsed_seconds) and carries ``.device`` -- "GPU" only when the problem's
+    batch_fitness() really runs on CuPy, "CPU" for the NumPy fallback, the
+    per-item fitness() loop, or use_gpu_bfe=False.
     """
     prob = pg.problem(problem)
     uda = algorithm if algorithm is not None else pg.pso_gen(gen=generations, seed=seed)
 
     want_gpu_bfe = use_gpu_bfe and problem.has_batch_fitness()
     bfe = pg.bfe(GpuBatchFitnessEvaluator()) if want_gpu_bfe else pg.bfe()
+    device = GpuBatchFitnessEvaluator.device_for(problem) if want_gpu_bfe else CPU
 
     algo_uses_bfe = hasattr(uda, "set_bfe")
     if algo_uses_bfe:
@@ -63,11 +96,10 @@ def run_optimization(
     elapsed = time.perf_counter() - t0
 
     if verbose:
-        backend = "GPU" if want_gpu_bfe else "CPU"
         print(
             f"[orbitopt] {generations} generations, pop={pop_size}, "
-            f"{backend} bfe (algo consumes bfe each gen: {algo_uses_bfe}), "
+            f"{device} bfe (algo consumes bfe each gen: {algo_uses_bfe}), "
             f"{elapsed:.2f}s -> best f = {pop.champion_f}"
         )
 
-    return pop.champion_x, pop.champion_f, elapsed
+    return OptimizationResult(pop.champion_x, pop.champion_f, elapsed, device)
