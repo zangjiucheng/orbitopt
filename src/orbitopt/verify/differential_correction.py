@@ -27,12 +27,14 @@ from orbitopt.verify.b_plane import (
     perpendicular_basis,
     periapsis_distance_m,
 )
+from orbitopt.verify import report as _report
 from orbitopt.verify.tudat_propagate import (
     body_gravitational_parameter,
     body_position_at_absolute_epoch,
     body_velocity_at_absolute_epoch,
     find_closest_approach,
     propagate_multi_arc,
+    propagation_report_section,
 )
 
 
@@ -45,6 +47,7 @@ class TargetingResult:
     final_miss_km: np.ndarray  # (3,) achieved (spacecraft - Moon) vector at coast_duration
     final_distance_km: float
     residual_history_km: list = field(default_factory=list)
+    report: dict | None = None  # machine-readable verification report (orbitopt.verify.report)
 
 
 @dataclass
@@ -58,6 +61,7 @@ class BPlaneTargetingResult:
     final_b_plane_angle_deg: float
     final_v_inf_m_s: float
     residual_history_km: list = field(default_factory=list)
+    report: dict | None = None  # machine-readable verification report (orbitopt.verify.report)
 
 
 def _miss_vector_m(
@@ -173,6 +177,7 @@ def target_lunar_flyby(
     tol_km=50.0,
     fd_step_m_s=1.0,
     max_step_m_s=500.0,
+    report_path=None,
 ) -> TargetingResult:
     """Adjust a TLI delta_v so the spacecraft's high-fidelity (tudatpy,
     Earth+Moon+Sun point-mass) trajectory passes ``target_distance_km`` from
@@ -301,7 +306,27 @@ def target_lunar_flyby(
             if stall_count >= 3:
                 break
 
-    final_miss_m = miss(dv)
+    final_miss_m, final_result = _miss_vector_m(
+        r0, v0_pre_burn, initial_epoch, dv, coast_duration,
+        reference_epoch_ephemeris_seconds, perturbing_bodies, step_size,
+    )
+    report = _report.build_report(
+        kind="lunar-flyby-tli", label=f"ref-et-{float(reference_epoch_ephemeris_seconds):.3f}",
+        propagations=[propagation_report_section(final_result, "tli-coast")],
+        residuals=[_report.state_residual(
+            "flyby_miss_vs_aim_point", "Moon-relative targeted miss vector at the fixed flyby time",
+            position=final_miss_m, reference_position=target_vector_m,
+            tolerance={"position_m": tol_km * 1000.0},
+        )],
+        inputs={"pre_burn_state": np.concatenate([np.asarray(r0, dtype=float), np.asarray(v0_pre_burn, dtype=float)]),
+                "initial_epoch": float(initial_epoch), "dv_guess_m_s": dv_guess,
+                "coast_duration_guess_s": float(coast_duration_guess), "target_distance_km": float(target_distance_km),
+                "reference_epoch_ephemeris_s": float(reference_epoch_ephemeris_seconds), "step_size_s": float(step_size)},
+        targets={"converged": converged, "iterations": iterations, "delta_v_m_s": dv,
+                 "coast_duration_s": coast_duration, "final_distance_km": float(np.linalg.norm(final_miss_m) / 1000.0),
+                 "residual_history_km": residual_history_km},
+    )
+    _report.finalize_report(report, report_path)
     return TargetingResult(
         delta_v=dv,
         converged=converged,
@@ -310,6 +335,7 @@ def target_lunar_flyby(
         final_miss_km=final_miss_m / 1000.0,
         final_distance_km=float(np.linalg.norm(final_miss_m) / 1000.0),
         residual_history_km=residual_history_km,
+        report=report,
     )
 
 
@@ -455,6 +481,7 @@ def target_lunar_b_plane(
     fd_step_m_s=1.0,
     max_step_m_s=500.0,
     outer_rounds=4,
+    report_path=None,
 ) -> BPlaneTargetingResult:
     """Genuine 2-DOF B-plane targeter: adjust a TLI delta_v so the
     spacecraft's high-fidelity trajectory hits a *chosen* B-plane aim
@@ -552,14 +579,38 @@ def target_lunar_b_plane(
             break
 
     final_v_inf = float(np.linalg.norm(final_v_inf_vec))
+    final_periapsis_km = float(periapsis_distance_m(np.linalg.norm(final_b_vec), final_v_inf, mu_moon) / 1000.0)
+    final_angle_deg = b_plane_angle_deg(final_b_vec, final_v_inf_vec)
+    _r, _v, final_result = _relative_state_m(
+        r0, v0_pre_burn, initial_epoch, dv, coast_duration,
+        reference_epoch_ephemeris_seconds, perturbing_bodies, step_size,
+    )
+    report = _report.build_report(
+        kind="lunar-b-plane-tli", label=f"ref-et-{float(reference_epoch_ephemeris_seconds):.3f}",
+        propagations=[propagation_report_section(final_result, "tli-coast")],
+        inputs={"pre_burn_state": np.concatenate([np.asarray(r0, dtype=float), np.asarray(v0_pre_burn, dtype=float)]),
+                "initial_epoch": float(initial_epoch), "dv_guess_m_s": dv_guess,
+                "coast_duration_guess_s": float(coast_duration_guess),
+                "target_periapsis_km": float(target_periapsis_km),
+                "target_b_plane_angle_deg": float(target_b_plane_angle_deg),
+                "reference_epoch_ephemeris_s": float(reference_epoch_ephemeris_seconds), "step_size_s": float(step_size)},
+        targets={"converged": converged, "iterations": total_iterations, "delta_v_m_s": dv,
+                 "coast_duration_s": coast_duration, "final_periapsis_km": final_periapsis_km,
+                 "periapsis_error_km": final_periapsis_km - float(target_periapsis_km),
+                 "final_b_plane_angle_deg": float(final_angle_deg),
+                 "b_plane_angle_error_deg": float((final_angle_deg - float(target_b_plane_angle_deg) + 180.0) % 360.0 - 180.0),
+                 "final_v_inf_m_s": final_v_inf, "residual_history_km": all_residual_history_km},
+    )
+    _report.finalize_report(report, report_path)
     return BPlaneTargetingResult(
         delta_v=dv,
         converged=converged,
         iterations=total_iterations,
         coast_duration=coast_duration,
         final_b_vec_m=final_b_vec,
-        final_periapsis_km=float(periapsis_distance_m(np.linalg.norm(final_b_vec), final_v_inf, mu_moon) / 1000.0),
-        final_b_plane_angle_deg=b_plane_angle_deg(final_b_vec, final_v_inf_vec),
+        final_periapsis_km=final_periapsis_km,
+        final_b_plane_angle_deg=final_angle_deg,
         final_v_inf_m_s=final_v_inf,
         residual_history_km=all_residual_history_km,
+        report=report,
     )
