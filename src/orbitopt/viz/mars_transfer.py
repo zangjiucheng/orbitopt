@@ -33,6 +33,8 @@ for the same reason.
 """
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pykep as pk
 
@@ -43,7 +45,7 @@ from orbitopt.bodies import (
     planet,
 )
 from orbitopt.lambert.gpu_batch import solve_lambert_batch
-from orbitopt.optimize.runner import run_optimization
+from orbitopt.optimize.multistart import SINGLE_BASIN_HALF_WIDTH, find_diverse_basins, multistart_optimize
 from orbitopt.problems.transfer_2body import Transfer2BodyProblem
 from orbitopt.verify.mars_insertion import (
     locate_mars_periapsis,
@@ -75,26 +77,88 @@ DEPARTURE_WINDOW_START = (2026, 9, 1)
 DEPARTURE_WINDOW_END = (2027, 2, 1)
 TOF_RANGE_DAYS = (130.0, 320.0)
 
+# Multi-basin window search (see orbitopt.optimize.multistart): how many
+# distinct porkchop valleys get their own independent PSO run, how far apart
+# (departure days, TOF days) two valleys must be to count as distinct, and
+# how many ranked candidates tudatpy gets to try before falling back.
+MULTISTART_MAX_BASINS = 4
+MULTISTART_BASIN_SEPARATION = (20.0, 40.0)
+MAX_TUDAT_CANDIDATES = 3
 
-def _search_transfer(t0_range, tof_range, pop_size, generations, seed):
+logger = logging.getLogger(__name__)
+
+
+def _search_transfer(
+    t0_range,
+    tof_range,
+    pop_size,
+    generations,
+    seed,
+    max_basins=MULTISTART_MAX_BASINS,
+    basin_separation=MULTISTART_BASIN_SEPARATION,
+):
+    """Multi-basin search for the Earth->Mars Lambert transfer.
+
+    Screens the whole (t0, tof) window with a porkchop grid, keeps up to
+    ``max_basins`` spatially distinct local minima (not just the single grid
+    minimum -- adjacent windows and type-I/type-II families are separate
+    valleys whose grid minima are often within discretization error of each
+    other), runs one independent PSO per basin (box = the old single-basin
+    +-15 d / +-30 d recipe around each) plus one PSO over the full window,
+    and returns every distinct optimum, best first, together with the
+    MultistartReport recording how this compares to the single-basin result.
+
+    Returns ``(candidates, report)`` with ``candidates`` a list of
+    ``(t0, tof, v_inf_dep)`` tuples ranked by Lambert total dv.
+    """
     earth, mars = planet("earth"), planet("mars")
     grid = compute_porkchop(earth, mars, t0_range, tof_range, n_t0=120, n_tof=120, use_gpu=False)
     dv = np.where(grid.converged, grid.total_dv, np.inf)
-    idx = np.unravel_index(int(np.argmin(dv)), dv.shape)
-    seed_t0, seed_tof = float(grid.t0_grid[idx[1]]), float(grid.tof_grid[idx[0]])
+    basins = find_diverse_basins(
+        dv, grid.t0_grid, grid.tof_grid, max_basins=max_basins, min_separation=basin_separation,
+    )
 
-    t0_bounds = (max(t0_range[0], seed_t0 - 15.0), min(t0_range[1], seed_t0 + 15.0))
-    tof_bounds = (max(tof_range[0], seed_tof - 30.0), min(tof_range[1], seed_tof + 30.0))
-    problem = Transfer2BodyProblem(earth, mars, t0_bounds, tof_bounds)
-    x, _f, _elapsed = run_optimization(problem, pop_size=pop_size, generations=generations, seed=seed, verbose=False)
-    t0, tof = float(x[0]), float(x[1])
+    report = multistart_optimize(
+        lambda t0_bounds, tof_bounds: Transfer2BodyProblem(earth, mars, t0_bounds, tof_bounds),
+        basins,
+        full_bounds=(tuple(t0_range), tuple(tof_range)),
+        half_width=SINGLE_BASIN_HALF_WIDTH,
+        pop_size=pop_size,
+        generations=generations,
+        seed=seed,
+    )
+    report.notes.append(f"porkchop grid minimum {basins[0].value:.3f} km/s at t0={basins[0].x:.1f}, tof={basins[0].y:.1f}")
+    logger.info("Earth->Mars window search:\n%s", report.summary(unit="m/s"))
 
-    r1, v1p = earth.eph(pk.epoch(t0))
-    r2, v2p = mars.eph(pk.epoch(t0 + tof))
-    r1, v1p, r2, v2p = (np.asarray(a) for a in (r1, v1p, r2, v2p))
-    res = solve_lambert_batch(r1[None, :], r2[None, :], np.array([tof * pk.DAY2SEC]), pk.MU_SUN, use_gpu=False)
-    v_inf_dep = res.v1[0] - v1p
-    return t0, tof, v_inf_dep
+    candidates = []
+    for c in report.candidates:
+        t0, tof = c.x, c.y
+        r1, v1p = earth.eph(pk.epoch(t0))
+        r2, v2p = mars.eph(pk.epoch(t0 + tof))
+        r1, v1p, r2, v2p = (np.asarray(a) for a in (r1, v1p, r2, v2p))
+        res = solve_lambert_batch(r1[None, :], r2[None, :], np.array([tof * pk.DAY2SEC]), pk.MU_SUN, use_gpu=False)
+        candidates.append((t0, tof, res.v1[0] - v1p))
+    return candidates, report
+
+
+def _search_note(report, flown_index, rejected):
+    """One human-readable sentence recording the multistart search outcome
+    (it ends up in the exported scene's TMI event note)."""
+    best = report.candidates[flown_index]
+    parts = [
+        f"Window chosen by multi-basin search: {len(report.basins)} porkchop basins, "
+        f"{len(report.runs)} independent PSO runs, {len(report.candidates)} distinct candidates; "
+        f"flying candidate #{flown_index} ({best.value / 1000.0:.3f} km/s Lambert total)"
+    ]
+    if report.baseline is not None:
+        parts.append(f"single-basin baseline {report.baseline.value / 1000.0:.3f} km/s")
+    if rejected:
+        parts.append("rejected by tudatpy verification: " + ", ".join(f"#{i}" for i in rejected))
+    return "; ".join(parts) + "."
+
+
+class _CandidateRejected(RuntimeError):
+    """A Lambert candidate whose high-fidelity (tudatpy) flight did not hold up."""
 
 
 def _hyperbolic_departure_state(v_inf_dep, parking_radius_m, mu_earth):
@@ -144,11 +208,56 @@ def _build_mars_mission(
     mars_tcm_target_periapsis_km=MARS_TCM_TARGET_PERIAPSIS_KM,
     mars_capture_apoapsis_alt_km=MARS_CAPTURE_APOAPSIS_ALT_KM,
     max_output_points=3000,
+    max_tudat_candidates=MAX_TUDAT_CANDIDATES,
 ):
     if t0_range is None:
         t0_range = (mjd2000_from_date(*DEPARTURE_WINDOW_START), mjd2000_from_date(*DEPARTURE_WINDOW_END))
 
-    t0, tof, v_inf_dep = _search_transfer(t0_range, tof_range, pop_size, generations, seed)
+    candidates, report = _search_transfer(t0_range, tof_range, pop_size, generations, seed)
+    fly_kwargs = dict(
+        parking_altitude_km=parking_altitude_km,
+        mars_tcm_target_periapsis_km=mars_tcm_target_periapsis_km,
+        mars_capture_apoapsis_alt_km=mars_capture_apoapsis_alt_km,
+        max_output_points=max_output_points,
+    )
+
+    # Hand the ranked candidates to tudatpy one by one: the first whose real,
+    # perturbed flight closes (escape reaches the SOI, TCM converges) wins.
+    # Only if none does is the Lambert-best one flown on a best-effort basis
+    # -- same behaviour the single-candidate pipeline always had.
+    rejected = []
+    for i, (t0, tof, v_inf_dep) in enumerate(candidates[:max(1, max_tudat_candidates)]):
+        try:
+            return _fly_transfer(
+                t0, tof, v_inf_dep, require_tcm_converged=True,
+                search_note=_search_note(report, i, rejected), **fly_kwargs,
+            )
+        except RuntimeError as exc:
+            logger.warning("Mars candidate #%d (t0=%.2f, tof=%.2f) rejected by tudatpy verification: %s", i, t0, tof, exc)
+            rejected.append(i)
+    t0, tof, v_inf_dep = candidates[0]
+    return _fly_transfer(
+        t0, tof, v_inf_dep, require_tcm_converged=False,
+        search_note=_search_note(report, 0, rejected) + " No candidate fully converged; flying the Lambert-best one.",
+        **fly_kwargs,
+    )
+
+
+def _fly_transfer(
+    t0,
+    tof,
+    v_inf_dep,
+    *,
+    parking_altitude_km,
+    mars_tcm_target_periapsis_km,
+    mars_capture_apoapsis_alt_km,
+    max_output_points,
+    require_tcm_converged,
+    search_note="",
+):
+    """Fly one Lambert candidate through the real tudatpy pipeline and
+    export it as a scene. Raises _CandidateRejected when
+    ``require_tcm_converged`` and the TCM targeter did not converge."""
     reference_et = mjd2000_to_ephemeris_seconds(t0)
 
     mu_earth = pk.MU_EARTH
@@ -187,7 +296,7 @@ def _build_mars_mission(
         "label": "TMI burn", "time": round(tmi_rel_time_s / 86400.0, 4),
         "note": f"apsis-preserving at the {parking_altitude_km:.0f} km parking-orbit perigee, "
                 f"hyperbolic excess speed {np.linalg.norm(v_inf_dep) / 1000.0:.2f} km/s "
-                f"(C3 {np.sum((v_inf_dep / 1000.0) ** 2):.1f} km^2/s^2).",
+                f"(C3 {np.sum((v_inf_dep / 1000.0) ** 2):.1f} km^2/s^2). {search_note}".rstrip(),
         "vector": {"position": (tmi_r_helio / 1000.0).round(1).tolist(), "deltaV": tmi_dv.round(2).tolist()},
     })
 
@@ -220,6 +329,8 @@ def _build_mars_mission(
         coast_duration_guess=remaining_tof_s,
         target_periapsis_km=mars_tcm_target_periapsis_km,
     )
+    if require_tcm_converged and not tcm.converged:
+        raise _CandidateRejected(f"TCM did not converge (final miss {tcm.final_miss_km:,.0f} km)")
     events.append({
         "label": "Trajectory-correction maneuver", "time": round((soi_exit_epoch_et - reference_et) / 86400.0, 4),
         "note": f"closes the gap between the idealized Lambert departure and the real, "
