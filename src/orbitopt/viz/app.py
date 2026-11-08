@@ -22,7 +22,7 @@ import time
 os.environ.setdefault("QT_API", "pyside6")
 
 from PySide6.QtCore import QObject, QRectF, QSize, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QCursor, QKeySequence, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QKeySequence, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -1524,13 +1524,17 @@ class MissionControlWindow(QMainWindow):
         self.load_status_badge.set_state("loading", "LOADING")
         self.mission_list.setEnabled(False)
         self._open_file_btn.setEnabled(False)
-        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
+        # No wait cursor: on macOS 27 (PySide6 6.11 / VTK 9.6) setting any
+        # cursor on a window that contains the pyvistaqt QtInteractor
+        # segfaults -- QApplication.setOverrideCursor and widget.setCursor
+        # alike -- and the first mission load runs from __init__, so the app
+        # crashed on launch. The spinner overlay + LOADING badge + disabled
+        # mission list already signal the busy state.
         self._show_loading(message)
         self.statusBar().showMessage(message)
 
     def _end_switch(self):
         self._hide_loading()
-        QApplication.restoreOverrideCursor()
         self.mission_list.setEnabled(True)
         self._open_file_btn.setEnabled(True)
         self._loading = False
