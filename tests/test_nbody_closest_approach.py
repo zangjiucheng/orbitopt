@@ -149,3 +149,59 @@ def test_closest_approach_memory_is_O_N_not_O_N_steps():
     assert peak_ca_long < history_array_bytes / 4
     # O(N): 6x more steps must not grow the closest-approach footprint.
     assert peak_ca_long < 1.25 * peak_ca_short + 4096
+
+
+@pytest.mark.parametrize("include_sun", [False, True])
+def test_closest_approach_memory_flat_with_mixed_durations(include_sun):
+    """Regression: with >1 distinct (epoch0, t_span) pair the ephemeris
+    precompute used to expand the compact time x pair grid into a full
+    (2*n_steps+1, N, 3) time x candidate array per body (~769 MB for the
+    Moon alone at 20,000 x 400), silently restoring O(N x n_steps) memory
+    in closest_approach mode. The grid must stay compact and be gathered
+    one time slice at a time.
+    """
+    n = 1000
+    r_park, v_park = _parking_orbit_state()
+    r0 = np.broadcast_to(r_park, (n, 3))
+    v0 = v_park + _random_dvs(n, seed=3)
+    t_span = np.where(np.arange(n) % 2, 5.0, 6.0) * 86400.0  # two coast times
+    epoch0 = EPOCH0 + 3600.0 * (np.arange(n) % 3 == 0)  # and two epochs
+    kw = dict(
+        mu_earth=nb.MU_EARTH_KM3_S2, mu_moon=nb.MU_MOON_KM3_S2, include_sun=include_sun,
+        epoch0=epoch0, use_gpu=False, moon_seed_epoch_ephemeris_seconds=EPOCH0,
+    )
+
+    def peak(n_steps):
+        return _peak_bytes(lambda: nb.propagate_spacecraft_batch(
+            r0, v0, t_span, n_steps, output="closest_approach", **kw))
+
+    short_steps, long_steps = 20, 200
+    # One expanded (position + indirect) body grid at long_steps.
+    expanded_grid_bytes = 2 * (2 * long_steps + 1) * n * 3 * 8
+    peak_short = peak(short_steps)
+    peak_long = peak(long_steps)
+
+    assert peak_long < expanded_grid_bytes / 4
+    # 10x more steps must not grow the footprint beyond the tiny compact grid.
+    assert peak_long < 1.25 * peak_short + 256 * 1024
+
+
+def test_precomputed_body_grid_is_compact_for_mixed_pairs():
+    n, n_steps = 50, 12
+    dt = np.where(np.arange(n) % 2, 4.0, 5.0) * 86400.0 / n_steps
+    epoch0 = np.full(n, EPOCH0)
+    ephem, inverse = nb._precompute_body_grid(
+        epoch0, dt, n_steps, np, nb.MU_EARTH_KM3_S2, nb.MU_MOON_KM3_S2,
+        True, nb.MU_SUN_KM3_S2, 20, EPOCH0,
+    )
+    assert inverse.shape == (n,)
+    assert set(inverse.tolist()) == {0, 1}
+    for _, r_body, indirect in ephem:
+        assert r_body.shape == (2 * n_steps + 1, 2, 3)
+        assert indirect.shape == r_body.shape
+    # Each candidate's column is the ephemeris at its own half-step epochs.
+    moon_r = ephem[0][1]
+    k = 7
+    t_k = epoch0 + k * 0.5 * dt  # k odd -> t + 0.5*dt, matches grid accumulation to ~ulp
+    ref, _ = nb.moon_state_batch(t_k - EPOCH0, use_gpu=False, seed_epoch_ephemeris_seconds=EPOCH0)
+    np.testing.assert_allclose(moon_r[k][inverse], ref, rtol=1e-9, atol=1e-3)

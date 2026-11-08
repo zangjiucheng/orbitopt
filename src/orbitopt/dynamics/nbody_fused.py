@@ -78,15 +78,13 @@ def prepare_inputs(
     if include_sun and mu_sun is None:
         mu_sun = nb.MU_SUN_KM3_S2
 
-    # Same distinct-pair reduction _precompute_body_grid does internally;
-    # call it on the *unique* pairs so its output is already compact.
-    pairs = np.stack([epoch0, dt], axis=1)
-    uniq, inverse = np.unique(pairs, axis=0, return_inverse=True)
-    gidx = np.ascontiguousarray(np.asarray(inverse).reshape(-1).astype(np.int64))
-    ephem = nb._precompute_body_grid(
-        uniq[:, 0], uniq[:, 1], n_steps, np, mu_earth, mu_moon, include_sun,
+    # _precompute_body_grid returns the compact (n_grid, U, 3) grid over the
+    # distinct (epoch0, dt) pairs plus each candidate's column index.
+    ephem, inverse = nb._precompute_body_grid(
+        epoch0, dt, n_steps, np, mu_earth, mu_moon, include_sun,
         mu_sun, kepler_maxiter, moon_seed_epoch_ephemeris_seconds,
     )
+    gidx = np.ascontiguousarray(inverse.astype(np.int64))
     grid = np.ascontiguousarray(np.stack([np.asarray(e[1]) for e in ephem]))
     ind = np.ascontiguousarray(np.stack([np.asarray(e[2]) for e in ephem]))
     mus = np.array([e[0] for e in ephem], dtype=np.float64)

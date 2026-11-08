@@ -420,26 +420,34 @@ def _precompute_body_grid(
     epoch0, dt, n_steps, xp, mu_earth, mu_moon, include_sun, mu_sun, maxiter, seed_epoch
 ):
     """Moon (and optionally Sun) positions at every RK4 half-step epoch of
-    ``propagate_spacecraft_batch``, for all N candidates.
+    ``propagate_spacecraft_batch``, on a *compact* grid over the distinct
+    ``(epoch0, dt)`` pairs of the batch.
 
-    Returns a list of ``(mu_body, r_body, indirect)`` tuples where
-    ``r_body`` is a (2*n_steps+1, N, 3) xp array of body positions at
-    ``epoch0 + k*dt/2`` and ``indirect`` is the matching
+    Returns ``(bodies, inverse)``. ``bodies`` is a list of
+    ``(mu_body, r_body, indirect)`` tuples where ``r_body`` is a
+    (2*n_steps+1, U, 3) xp array of body positions at ``epoch0 + k*dt/2``
+    for each of the U distinct pairs, and ``indirect`` is the matching
     ``r_body / |r_body|^3`` indirect (Earth-acceleration) term -- both
     independent of the spacecraft state, so computed once here.
+    ``inverse`` is an (N,) int64 numpy array mapping each candidate to its
+    column of the compact grid.
+
+    The grid is deliberately NOT expanded to (2*n_steps+1, N, 3): with
+    mixed flight times / epochs that would bring back O(N x n_steps)
+    memory (~769 MB for the Moon alone at 20,000 candidates x 400 steps),
+    defeating ``output="closest_approach"``. Callers gather one time slice
+    at a time instead (``r_body[k][inverse]`` -- O(N) per stage).
 
     The half-step epochs are reproduced with the same floating-point
     accumulation the integrator historically used (``t += dt`` per step,
     ``+ 0.5*dt`` for the mid stages), so the result matches the previous
-    per-stage evaluation bit-for-bit up to Kepler-solver round-off. Kepler
-    solves are only run for the distinct (epoch0, dt) pairs in the batch;
-    each candidate then gathers its column from that compact grid.
+    per-stage evaluation bit-for-bit up to Kepler-solver round-off.
     """
     epoch0_h = np.asarray(to_numpy(epoch0), dtype=np.float64)
     dt_h = np.asarray(to_numpy(dt), dtype=np.float64)
     pairs = np.stack([epoch0_h, dt_h], axis=1)
     uniq, inverse = np.unique(pairs, axis=0, return_inverse=True)
-    inverse = np.asarray(inverse).reshape(-1)
+    inverse = np.asarray(inverse).reshape(-1).astype(np.int64)
     u_epoch0, u_dt = uniq[:, 0], uniq[:, 1]
 
     n_grid = 2 * n_steps + 1
@@ -454,7 +462,6 @@ def _precompute_body_grid(
     # ``t + dt`` computed the same way, so one entry serves both.)
 
     t_since_seed = xp.asarray((t_grid - seed_epoch).reshape(-1))
-    inv = xp.asarray(inverse)
 
     bodies = [(mu_moon, lambda ts: _moon_state_core(ts, xp, mu_earth, maxiter, seed_epoch, mu_moon))]
     if include_sun:
@@ -465,14 +472,8 @@ def _precompute_body_grid(
         r_u, _ = state_fn(t_since_seed)
         r_u = r_u.reshape(n_grid, uniq.shape[0], 3)
         ind_u = r_u / xp.linalg.norm(r_u, axis=-1)[..., None] ** 3
-        if uniq.shape[0] == 1:
-            r_body = xp.broadcast_to(r_u, (n_grid, inverse.shape[0], 3))
-            indirect = xp.broadcast_to(ind_u, (n_grid, inverse.shape[0], 3))
-        else:
-            r_body = r_u[:, inv]
-            indirect = ind_u[:, inv]
-        out.append((mu_body, r_body, indirect))
-    return out
+        out.append((mu_body, r_u, ind_u))
+    return out, inverse
 
 
 @dataclass
@@ -605,27 +606,34 @@ def propagate_spacecraft_batch(
     # each *distinct* (epoch0, dt) pair only. In the common case (a batch of
     # candidates sharing one departure epoch and coast time) that is a single
     # solve of 2*n_steps+1 points, broadcast to all N candidates.
-    ephem = _precompute_body_grid(
+    ephem, grid_inverse = _precompute_body_grid(
         epoch0, dt, n_steps, xp, mu_earth, mu_moon, include_sun, mu_sun,
         kepler_maxiter, moon_seed_epoch_ephemeris_seconds,
     )
+    # The grid stays compact, (2*n_steps+1, U, 3); each RK4 stage gathers
+    # only its own (N, 3) time slice, so ephemeris memory is
+    # O(U*n_steps + N) rather than O(N*n_steps) even when the batch mixes
+    # flight times / epochs. With a single distinct pair (U == 1) the
+    # (1, 3) slice simply broadcasts against the (N, 3) state.
+    if ephem[0][1].shape[1] == 1:
+        grid_inv = None
+    else:
+        grid_inv = xp.asarray(grid_inverse)
 
-    def acceleration(r, k):
+    def bodies_at(k):
+        """[(mu, r_body, indirect)] at half-step index ``k``, each (N|1, 3)."""
+        if grid_inv is None:
+            return [(mu, rb[k], ind[k]) for mu, rb, ind in ephem]
+        return [(mu, rb[k][grid_inv], ind[k][grid_inv]) for mu, rb, ind in ephem]
+
+    def acceleration(r, bodies):
         rn = xp.linalg.norm(r, axis=-1)
         a = -mu_earth * r / rn[:, None] ** 3
-        for mu_body, r_body, indirect in ephem:
-            r_b = r_body[k]
+        for mu_body, r_b, indirect in bodies:
             d = r_b - r
             dn = xp.linalg.norm(d, axis=-1)
-            a = a + mu_body * (d / dn[:, None] ** 3 - indirect[k])
+            a = a + mu_body * (d / dn[:, None] ** 3 - indirect)
         return a
-
-    # ephem[0] is always the Moon; its grid index 2*step is exactly the
-    # epoch of stored step ``step`` (same accumulation as ``t_abs``).
-    moon_grid = ephem[0][1]
-
-    def moon_position(step):
-        return moon_grid[2 * step]
 
     r = r0
     v = v0
@@ -654,22 +662,31 @@ def propagate_spacecraft_batch(
         t_hist[0] = t_abs
 
     dt_col = dt[:, None]
+    # Grid index 2*step is exactly the epoch of stored step ``step`` (same
+    # accumulation as ``t_abs``); index 2s+2 serves both k4 of step s and k1
+    # of step s+1, so each slice is gathered once and carried over.
+    b_start = bodies_at(0)
     for step in range(n_steps):
+        b_mid = bodies_at(2 * step + 1)
+        b_end = bodies_at(2 * step + 2)
+
         k1r = v
         if track_closest:
             # k1 is evaluated at exactly (r, t_abs) of stored step ``step``,
-            # so its grid Moon position doubles as the closest-approach sample.
-            update_closest(step, r, moon_position(step), t_abs)
-        k1v = acceleration(r, 2 * step)
+            # so its grid Moon position (bodies[0] is always the Moon)
+            # doubles as the closest-approach sample.
+            update_closest(step, r, b_start[0][1], t_abs)
+        k1v = acceleration(r, b_start)
 
         k2r = v + 0.5 * dt_col * k1v
-        k2v = acceleration(r + 0.5 * dt_col * k1r, 2 * step + 1)
+        k2v = acceleration(r + 0.5 * dt_col * k1r, b_mid)
 
         k3r = v + 0.5 * dt_col * k2v
-        k3v = acceleration(r + 0.5 * dt_col * k2r, 2 * step + 1)
+        k3v = acceleration(r + 0.5 * dt_col * k2r, b_mid)
 
         k4r = v + dt_col * k3v
-        k4v = acceleration(r + dt_col * k3r, 2 * step + 2)
+        k4v = acceleration(r + dt_col * k3r, b_end)
+        b_start = b_end
 
         r = r + (dt_col / 6.0) * (k1r + 2.0 * k2r + 2.0 * k3r + k4r)
         v = v + (dt_col / 6.0) * (k1v + 2.0 * k2v + 2.0 * k3v + k4v)
@@ -681,7 +698,7 @@ def propagate_spacecraft_batch(
             t_hist[step + 1] = t_abs
 
     if track_closest:
-        update_closest(n_steps, r, moon_position(n_steps), t_abs)
+        update_closest(n_steps, r, b_start[0][1], t_abs)
         return ClosestApproachBatchResult(
             min_distance_km=to_numpy(min_dist),
             min_distance_epoch_s=to_numpy(min_epoch),
