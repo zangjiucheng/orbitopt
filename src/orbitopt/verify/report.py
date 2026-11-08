@@ -249,6 +249,25 @@ def step_convergence(
     }
 
 
+def states_at_common_epoch(a, b):
+    """``(epoch, state_a, state_b)`` at the latest epoch both histories cover.
+
+    The run that ends later is interpolated (cubic Hermite dense output,
+    impulsive-burn seams respected) down to the shared epoch; the run that
+    ends there contributes its own final state unchanged."""
+    from orbitopt.verify.events import HermiteDenseOutput
+
+    ta, tb = float(a.epochs[-1]), float(b.epochs[-1])
+    t = min(ta, tb)
+
+    def at(res, t_end):
+        if t_end == t:
+            return np.asarray(res.final_state, dtype=float)
+        return HermiteDenseOutput(res.epochs, res.states)(t)
+
+    return t, at(a, ta), at(b, tb)
+
+
 def convergence_not_checked(reason: str) -> dict:
     return {"checked": False, "reason": reason, "converged": None}
 
@@ -383,7 +402,14 @@ def propagation_section(
             refined = {"step_size": integ["step_s"] * CONVERGENCE_STEP_FACTOR}
             method = f"re-run with step x{CONVERGENCE_STEP_FACTOR:g}"
         tight = rerun(**refined)
-        integ["convergence"] = step_convergence(result.final_state, tight.final_state, method, refined)
+        # A fixed-step run stops at the first step boundary at/after the
+        # requested end, so the nominal and refined runs can end at different
+        # epochs (1020 s vs 1005 s for a 1000 s request). Comparing their raw
+        # final states would count ordinary orbital motion as integration
+        # error, so both are evaluated at the latest epoch they share.
+        t_cmp, nominal_state, tight_state = states_at_common_epoch(result, tight)
+        integ["convergence"] = step_convergence(nominal_state, tight_state, method, refined)
+        integ["convergence"]["compared_at_epoch_s"] = t_cmp
 
     two_body = None
     if conservation_check:

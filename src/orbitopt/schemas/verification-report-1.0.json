@@ -71,6 +71,7 @@
         "method": { "type": "string" },
         "reason": { "type": "string" },
         "refined_settings": { "type": "object" },
+        "compared_at_epoch_s": { "$ref": "#/$defs/num" },
         "delta_position_m": { "$ref": "#/$defs/num" },
         "delta_velocity_m_s": { "$ref": "#/$defs/num" },
         "position_tolerance_m": { "$ref": "#/$defs/num" },

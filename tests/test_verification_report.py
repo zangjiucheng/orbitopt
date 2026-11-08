@@ -234,3 +234,36 @@ def test_cli_run_writes_verification_report_next_to_scene(tmp_path, monkeypatch,
     vr.validate_report(doc)
     assert doc["digest"] == rep["digest"]
     assert "verification report" in capsys.readouterr().out
+
+
+def test_fixed_step_convergence_compares_states_at_same_epoch():
+    """Acceptance regression: a 1000 s request with RK4 stops at 1020 s
+    (20 s step) and at 1005 s (10 s step). The report used to diff those raw
+    final states and call ~113 km of ordinary orbital motion integration
+    error. With an exact (analytic) history the error must be ~0."""
+    n_rate = np.sqrt(MU_EARTH / R_GEO**3)
+    v = np.sqrt(MU_EARTH / R_GEO)
+
+    ends = {20.0: 1020.0, 10.0: 1005.0}  # observed overshoots of a 1000 s request
+
+    def exact(step):
+        t = np.r_[np.arange(0.0, ends[step] - 0.5 * step, step), ends[step]]
+        th = n_rate * t
+        s = np.c_[R_GEO * np.cos(th), R_GEO * np.sin(th), 0 * t, -v * np.sin(th), v * np.cos(th), 0 * t]
+        model = {
+            "function": "fake", "central_body": "Earth", "perturbing_bodies": ["Earth"],
+            "earth_spherical_harmonic": None,
+            "integrator": {"name": "rk4", "method": "RK4", "adaptive": False, "rtol": None, "atol": None,
+                           "step_s": step, "min_step_s": None, "max_step_s": step},
+            "initial_state": s[0], "initial_epoch_ephemeris_s": 0.0, "duration_s": 1000.0,
+            "arcs": [{"type": "coast", "duration": 1000.0}],
+        }
+        return FakeResult(t, s, s[-1], model, [(0, len(t))], rerun=lambda step_size=None, **_: exact(step_size))
+
+    nominal = exact(20.0)
+    assert nominal.epochs[-1] == 1020.0 and exact(10.0).epochs[-1] == 1005.0
+    assert np.linalg.norm(nominal.final_state[:3] - exact(10.0).final_state[:3]) > 4e4  # the old false error (15 s of GEO motion)
+    conv = vr.propagation_section(nominal, "rk4", mu=MU_EARTH)["integrator"]["convergence"]
+    assert conv["compared_at_epoch_s"] == 1005.0
+    assert conv["delta_position_m"] < 1e-3
+    assert conv["converged"]
