@@ -175,6 +175,14 @@ def test_cli_launch_window_json(capsys):
     assert row["open_utc"].startswith("2015-06-23T01:")
 
 
+def test_cli_launch_window_table_lists_data_sources(capsys):
+    cli_main(["launch-window", "jiuquan", "--inclination", "98.0", "--epoch", "2020-01-01"])
+    out = capsys.readouterr().out
+    assert "Data sources (overall confidence: public_estimate)" in out
+    assert "jiuquan location" in out and "jiuquan azimuth_corridors" in out
+    assert "not official" in out
+
+
 # ---- porkchop link (needs pykep) -------------------------------------------
 
 def _planet(name):

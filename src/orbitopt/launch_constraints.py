@@ -33,6 +33,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
+from orbitopt.data_provenance import DataSource, data_sources_report
 from orbitopt.launch_sites import LaunchSite, get_launch_site
 from orbitopt.launch_vehicles import LaunchVehicle, get_launch_vehicle
 
@@ -133,7 +134,20 @@ class LaunchConstraints:
         """Site |DLA| limit [deg] (90 = unconstrained without a site)."""
         return 90.0 if self.site is None else max_abs_dla_for_site(self.site)
 
+    def data_sources(self) -> list[DataSource]:
+        """Provenance of the data the limits are computed from: the vehicle's
+        C3 curve (C3 limit) and the site's location + azimuth corridors
+        (DLA limit)."""
+        out: list[DataSource] = []
+        if self.vehicle is not None:
+            out += self.vehicle.data_sources(["c3_curve"])
+        if self.site is not None:
+            out += self.site.data_sources(["location", "azimuth_corridors"])
+        return out
+
     def describe(self) -> dict:
+        """JSON-ready summary of the constraint set, including the source and
+        confidence of the data behind each limit (``data_sources``)."""
         return {
             "enabled": self.enabled,
             "mode": self.mode,
@@ -142,6 +156,7 @@ class LaunchConstraints:
             "max_c3_km2_s2": self.max_c3,
             "site": self.site.id if self.site else None,
             "max_abs_dla_deg": self.max_abs_dla_deg,
+            "data_sources": data_sources_report(self.data_sources()),
         }
 
     # --- vectorized evaluation ------------------------------------------

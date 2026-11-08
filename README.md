@@ -238,6 +238,18 @@ north-east, ISS windows moving ~23 min earlier a day, Sentinel-2A/2B (Kourou,
 SSO 10:30 LTDN) predicted within ~6-9 min of actual lift-off, and the Mars
 2020 window from SLC-41 opening within ~4 min of the real 11:50 UTC lift-off.
 
+### Launch data sources
+
+Every launch-site and launch-vehicle value cites a `source` and is tagged
+`official` (provider / agency document) or `public_estimate` (secondary
+reference, digitized curve, mission-history reconstruction), with accuracy and
+date. Reports carry this through: `LaunchConstraints.describe()["data_sources"]`
+and the `orbitopt launch-window` table footer give the source and overall
+confidence of the data used. The numbers are planning-level, and many are
+estimates rather than facts. See
+[`docs/launch-data-sources.md`](docs/launch-data-sources.md) for the
+limitations.
+
 ## Setup
 
 tudatpy is conda-forge/tudat-team only (no PyPI wheels) and pins `python=3.10`;

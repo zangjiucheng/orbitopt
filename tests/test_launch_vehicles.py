@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import re
 
 import jsonschema
 import pytest
@@ -21,9 +22,11 @@ _MINIMAL = {
     "vehicles": {
         "toy": {
             "name": "Toy",
-            "orbit_capability": {"LEO": {"payload_kg": 1000, "provenance": "official"}},
-            "c3_curve": {"provenance": "public_estimate", "points": [[0, 1000], [10, 600], [20, 400]]},
-            "upper_stage": {"max_restarts": 1, "max_coast_s": 3600, "provenance": "official"},
+            "orbit_capability": {"LEO": {"payload_kg": 1000, "provenance": "official", "source": "toy guide"}},
+            "c3_curve": {"provenance": "public_estimate", "source": "toy estimate",
+                         "points": [[0, 1000], [10, 600], [20, 400]]},
+            "upper_stage": {"max_restarts": 1, "max_coast_s": 3600, "provenance": "official",
+                            "source": "toy guide"},
         }
     },
 }
@@ -118,3 +121,36 @@ def test_custom_data_file(tmp_path):
     vehicles = load_launch_vehicles(p)
     assert list(vehicles) == ["toy"]
     assert vehicles["toy"].upper_stage.max_burns == 2
+
+
+# ---- data sources (task #155) ----------------------------------------------
+
+@pytest.mark.parametrize("key", known_vehicles())
+def test_every_value_cites_source_accuracy_and_date(key):
+    v = get_launch_vehicle(key)
+    recs = v.data_sources()
+    assert len(recs) == 2 + len(v.orbit_capability)
+    for r in recs:
+        assert r.source.strip(), f"{r.item}: empty source"
+        assert r.provenance in PROVENANCES
+        assert r.accuracy, f"{r.item}: no accuracy"
+        assert re.fullmatch(r"\d{4}(-\d{2}(-\d{2})?)?", r.as_of), f"{r.item}: bad as_of {r.as_of!r}"
+
+
+@pytest.mark.parametrize("section", ["orbit", "c3_curve", "upper_stage"])
+def test_missing_source_rejected_by_schema(section):
+    bad = copy.deepcopy(_MINIMAL)
+    toy = bad["vehicles"]["toy"]
+    target = toy["orbit_capability"]["LEO"] if section == "orbit" else toy[section]
+    del target["source"]
+    with pytest.raises(jsonschema.ValidationError):
+        parse_launch_vehicles(bad)
+
+
+def test_data_sources_selection():
+    v = get_launch_vehicle("falcon-9")
+    (c3,) = v.data_sources(["c3_curve"])
+    assert c3.provenance == "public_estimate" and "NASA" in c3.source
+    assert v.data_sources(["leo"])[0].provenance == "official"
+    with pytest.raises(KeyError):
+        v.data_sources(["MEO"])

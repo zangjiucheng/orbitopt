@@ -3,7 +3,9 @@ azimuth corridors and the orbit inclinations they make reachable.
 
 The data lives in a configurable YAML/JSON file (default: the packaged
 ``orbitopt/data/launch_sites.yaml``) validated against
-``orbitopt/schemas/launch-sites-1.0.json``. Every entry cites its sources.
+``orbitopt/schemas/launch-sites-1.0.json``. Every entry cites its sources
+(with provenance official / public_estimate / derived, accuracy and date);
+``site.data_sources()`` returns them for reports.
 
     from orbitopt.launch_sites import get_launch_site
     site = get_launch_site("Kourou")          # name, id or alias, case-insensitive
@@ -27,6 +29,8 @@ from pathlib import Path
 import jsonschema
 import yaml
 
+from orbitopt.data_provenance import DataSource
+
 # IERS conventional mean angular velocity of the Earth [rad/s].
 OMEGA_EARTH = 7.2921150e-5
 # WGS-84 ellipsoid.
@@ -34,6 +38,8 @@ _WGS84_A = 6378137.0
 _WGS84_E2 = 6.69437999014e-3
 # Stored rotation gains may differ from the recomputed value by at most this.
 _GAIN_TOLERANCE_M_S = 1.0
+# Field groups every site must cite at least one source for.
+FIELD_GROUPS = ("location", "altitude", "azimuth_corridors", "rotation_speed_gain")
 
 
 def rotation_speed_gain(latitude_deg: float, altitude_m: float = 0.0) -> float:
@@ -80,6 +86,14 @@ def _merge_intervals(intervals: list[tuple[float, float]]) -> list[tuple[float, 
 class SourceRef:
     covers: tuple[str, ...]
     ref: str
+    provenance: str = "public_estimate"
+    accuracy: str = ""
+    as_of: str = ""
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "SourceRef":
+        return cls(tuple(d["covers"]), d["ref"], d.get("provenance", "public_estimate"),
+                   d.get("accuracy", ""), d.get("as_of", ""))
 
 
 @dataclass(frozen=True)
@@ -107,7 +121,7 @@ class LaunchSite:
             altitude_m=float(d["altitude_m"]),
             rotation_speed_gain_m_s=float(d["rotation_speed_gain_m_s"]),
             azimuth_corridors_deg=tuple((float(a), float(b)) for a, b in d["azimuth_corridors_deg"]),
-            sources=tuple(SourceRef(tuple(s["covers"]), s["ref"]) for s in d["sources"]),
+            sources=tuple(SourceRef.from_dict(s) for s in d["sources"]),
             aliases=tuple(d.get("aliases", ())),
             country=d.get("country", ""),
             reference_pad=d.get("reference_pad", ""),
@@ -145,6 +159,16 @@ class LaunchSite:
         azimuth_corridors, rotation_speed_gain)."""
         return [s.ref for s in self.sources if field in s.covers]
 
+    def data_sources(self, fields: tuple[str, ...] | list[str] | None = None) -> list[DataSource]:
+        """Provenance records, one per (field group, source). ``fields=None``
+        returns every field group in FIELD_GROUPS order."""
+        out = []
+        for f in (FIELD_GROUPS if fields is None else fields):
+            for s in self.sources:
+                if f in s.covers:
+                    out.append(DataSource(f"{self.id} {f}", s.provenance, s.ref, s.accuracy, s.as_of))
+        return out
+
 
 @lru_cache(maxsize=None)
 def _schema() -> dict:
@@ -164,6 +188,10 @@ def validate_launch_site_data(data: dict) -> None:
             if norm in seen and seen[norm] != site["id"]:
                 raise ValueError(f"launch-site name {key!r} used by both {seen[norm]!r} and {site['id']!r}")
             seen[norm] = site["id"]
+        covered = {f for s in site["sources"] for f in s["covers"]}
+        missing = [f for f in FIELD_GROUPS if f not in covered]
+        if missing:
+            raise ValueError(f"{site['id']}: no source cited for {', '.join(missing)}")
         expected = rotation_speed_gain(site["latitude_deg"], site["altitude_m"])
         if abs(site["rotation_speed_gain_m_s"] - expected) > _GAIN_TOLERANCE_M_S:
             raise ValueError(
