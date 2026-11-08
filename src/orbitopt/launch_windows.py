@@ -59,6 +59,9 @@ _TIME_TOL_DAYS = 0.05 / SECONDS_PER_DAY
 # Extra scan span either side of the requested interval (windows that open
 # inside it are reported whole even if they close after it).
 _SCAN_MARGIN_DAYS = 0.5
+# How far an interval touching the scan edge is followed outward before it is
+# declared continuously open (> one sidereal day: the geometry is periodic).
+_EXTEND_LIMIT_DAYS = 1.05
 
 
 # --------------------------------------------------------------------------
@@ -217,6 +220,19 @@ class LaunchWindow:
     inclination_deg: float    # inclination of the launch plane at the optimum
     dogleg_deg: float = 0.0   # plane change still needed at the optimum
     direction: str = ""       # "northbound" / "southbound" / "east" / "west" at the optimum
+    # False when the window has no opening / closing instant (open
+    # continuously); open / close are then clipped to the query interval.
+    open_bounded: bool = True
+    close_bounded: bool = True
+
+    def open_before(self, mjd2000: float) -> bool:
+        """True if the window was already open at ``mjd2000`` (e.g. the query
+        start)."""
+        return self.open_mjd2000 < mjd2000 <= self.close_mjd2000
+
+    @property
+    def continuous(self) -> bool:
+        return not (self.open_bounded or self.close_bounded)
 
     @property
     def open_utc(self) -> datetime:
@@ -245,6 +261,7 @@ class LaunchWindow:
             "azimuth_optimal_deg": round(self.azimuth_optimal_deg, 3),
             "inclination_deg": round(self.inclination_deg, 3),
             "dogleg_deg": round(self.dogleg_deg, 4),
+            "open_bounded": self.open_bounded, "close_bounded": self.close_bounded,
         }
 
 
@@ -290,22 +307,48 @@ def _golden_min(fn: Callable[[float], float], a: float, b: float) -> float:
     return 0.5 * (a + b)
 
 
+def _extend(ok, t_edge: float, direction: float, step_days: float) -> float | None:
+    """From an edge sample ``t_edge`` where ``ok`` holds, walk outward
+    (``direction`` = -1 back in time, +1 forward) for up to
+    ``_EXTEND_LIMIT_DAYS`` and return the true boundary (refined by
+    bisection), or None if ``ok`` holds over the whole extension -- the
+    interval is then open continuously (periodic geometry: a full day of
+    rotation already covered)."""
+    n = max(int(math.ceil(_EXTEND_LIMIT_DAYS / step_days)), 1)
+    ts = t_edge + direction * step_days * np.arange(1, n + 1)
+    flags = np.asarray(ok(ts), dtype=bool)
+    bad = np.flatnonzero(~flags)
+    if bad.size == 0:
+        return None
+    i = int(bad[0])
+    t_true = t_edge if i == 0 else float(ts[i - 1])
+    return _bisect(lambda t: bool(ok(np.array([t]))[0]), t_true, float(ts[i]))
+
+
 def _scan(t0: float, t1: float, step_days: float, ok, seeds: list[float],
-          score) -> list[tuple[float, float, float]]:
-    """Maximal intervals where ``ok`` holds that *open* in [t0, t1). The scan
-    runs over [t0 - _SCAN_MARGIN_DAYS, t1 + _SCAN_MARGIN_DAYS] so a window
-    straddling midnight is reported whole, once. Intervals are found on a
-    sample grid augmented with ``seeds`` (instants that may be narrower than
-    the grid), boundaries refined by bisection. ``ok`` and ``score`` are vectorized
-    (epoch array -> array). Returns (open, close, optimal); the optimum is the
-    seed in the interval minimizing ``score``, else the best sample refined by
+          score) -> list[tuple[float, float, float, bool, bool]]:
+    """Maximal intervals where ``ok`` holds that are open at some instant of
+    [t0, t1): intervals that open inside it (reported whole even if they
+    close after t1), an interval already open at t0, and an interval open
+    continuously. The scan runs over [t0 - _SCAN_MARGIN_DAYS, t1 +
+    _SCAN_MARGIN_DAYS]; an interval reaching an edge of the scan span is
+    followed outward (:func:`_extend`) to its true boundary. Intervals are
+    found on a sample grid augmented with ``seeds`` (instants that may be
+    narrower than the grid), boundaries refined by bisection. ``ok`` and
+    ``score`` are vectorized (epoch array -> array).
+
+    Returns ``(open, close, optimal, open_bounded, close_bounded)``. An
+    unbounded side (open over the whole extension) is clipped to t0 / t1 and
+    flagged False. The optimum is searched over the part of the interval at
+    or after t0 (an already-open window's best *remaining* launch instant):
+    the seed there minimizing ``score``, else the best sample refined by
     golden-section search."""
     ok1 = lambda t: bool(ok(np.array([t]))[0])  # noqa: E731
     score1 = lambda t: float(score(np.array([t]))[0])  # noqa: E731
     lo, hi = t0 - _SCAN_MARGIN_DAYS, t1 + _SCAN_MARGIN_DAYS
     n = max(int(math.ceil((hi - lo) / step_days)), 1)
     ts = np.unique(np.concatenate([np.linspace(lo, hi, n + 1), np.asarray(seeds, dtype=float)]))
-    flags = ok(ts)
+    flags = np.asarray(ok(ts), dtype=bool)
     seed_set = set(float(s) for s in seeds)
     out = []
     k = 0
@@ -316,18 +359,33 @@ def _scan(t0: float, t1: float, step_days: float, ok, seeds: list[float],
         j = k
         while j + 1 < len(ts) and flags[j + 1]:
             j += 1
-        t_open = float(ts[k]) if k == 0 else _bisect(ok1, float(ts[k]), float(ts[k - 1]))
-        t_close = float(ts[j]) if j == len(ts) - 1 else _bisect(ok1, float(ts[j]), float(ts[j + 1]))
-        inside = ts[k:j + 1]
+        if k == 0:
+            t_open = _extend(ok, float(ts[0]), -1.0, step_days)
+        else:
+            t_open = _bisect(ok1, float(ts[k]), float(ts[k - 1]))
+        if j == len(ts) - 1:
+            t_close = _extend(ok, float(ts[-1]), 1.0, step_days)
+        else:
+            t_close = _bisect(ok1, float(ts[j]), float(ts[j + 1]))
+        k = j + 1
+        open_bounded, close_bounded = t_open is not None, t_close is not None
+        if t_open is None:
+            t_open = t0
+        if t_close is None:
+            t_close = t1
+        if not (t_open < t1 and t_close >= t0):
+            continue
+        a = max(t_open, t0)
+        inside = ts[(ts >= a) & (ts <= t_close)]
         seeded = [float(t) for t in inside if float(t) in seed_set]
         if seeded:
             t_opt = min(seeded, key=score1)
+        elif inside.size == 0:
+            t_opt = _golden_min(score1, a, t_close) if t_close > a else a
         else:
             t_best = float(inside[int(np.argmin(score(inside)))])
-            t_opt = _golden_min(score1, max(t_open, t_best - step_days), min(t_close, t_best + step_days))
-        if t0 <= t_open < t1 and k > 0 and j < len(ts) - 1:
-            out.append((t_open, t_close, t_opt))
-        k = j + 1
+            t_opt = _golden_min(score1, max(a, t_best - step_days), min(t_close, t_best + step_days))
+        out.append((t_open, t_close, t_opt, open_bounded, close_bounded))
     return out
 
 
@@ -341,8 +399,14 @@ def plane_launch_windows(
     azimuth_range_deg: Sequence[Sequence[float]] | None = None,
     step_s: float = 60.0,
 ) -> list[LaunchWindow]:
-    """Launch windows from ``site`` into ``plane`` opening in [start, start+days)
-    (``start``: MJD2000, datetime or ISO-8601 string, UTC).
+    """Launch windows from ``site`` into ``plane`` open at any instant of
+    [start, start+days) (``start``: MJD2000, datetime or ISO-8601 string,
+    UTC): windows opening in it, a window already open at ``start``
+    (``w.open_before(start)``; its optimum is the best instant >= start) and
+    a window open continuously (``open_bounded``/``close_bounded`` False,
+    clipped to the interval). Back-to-back daily queries therefore both
+    report a window straddling midnight; keep ``w.open_mjd2000 >= start`` to
+    de-duplicate.
 
     ``max_dogleg_deg = 0`` gives the instantaneous in-plane opportunities
     (open == close); a positive budget widens each into a window bounded by
@@ -401,7 +465,7 @@ def plane_launch_windows(
         seeds.append(_golden_min(score1, float(ts[k - 1]), float(ts[k + 1])))
 
     windows = []
-    for t_open, t_close, t_opt in _scan(t0, t1, step, ok, seeds, score):
+    for t_open, t_close, t_opt, ob, cb in _scan(t0, t1, step, ok, seeds, score):
         az, inc = geometry(np.array([t_open, t_close, t_opt]))
         dog = math.degrees(math.asin(min(1.0, score1(t_opt))))
         windows.append(LaunchWindow(
@@ -409,7 +473,7 @@ def plane_launch_windows(
             open_mjd2000=t_open, close_mjd2000=t_close, optimal_mjd2000=t_opt,
             azimuth_open_deg=float(az[0]), azimuth_close_deg=float(az[1]),
             azimuth_optimal_deg=float(az[2]), inclination_deg=float(inc[2]), dogleg_deg=dog,
-            direction=_direction(float(az[2])),
+            direction=_direction(float(az[2])), open_bounded=ob, close_bounded=cb,
         ))
     return windows
 
@@ -450,7 +514,8 @@ def asymptote_launch_windows(
     at which the prograde plane through the site and the asymptote has a
     launch azimuth inside ``azimuth_range_deg`` (default: the site's
     corridors). The optimum is the most easterly azimuth (least inclination,
-    most rotation gain)."""
+    most rotation gain). Already-open and continuously open windows are
+    reported as in :func:`plane_launch_windows`."""
     site = get_launch_site(site) if isinstance(site, str) else site
     t0 = as_mjd2000(start)
     corridors = azimuth_range_deg if azimuth_range_deg is not None else site.azimuth_corridors_deg
@@ -477,14 +542,14 @@ def asymptote_launch_windows(
         return np.where(np.isnan(az), 1e9, np.abs(np.mod(az - 90.0 + 180.0, 360.0) - 180.0))
 
     windows = []
-    for t_open, t_close, t_opt in _scan(t0, t0 + days, step_s / SECONDS_PER_DAY, ok, [], score):
+    for t_open, t_close, t_opt, ob, cb in _scan(t0, t0 + days, step_s / SECONDS_PER_DAY, ok, [], score):
         az, inc = geometry(np.array([t_open, t_close, t_opt]))
         windows.append(LaunchWindow(
             site_id=site.id, kind="asymptote",
             open_mjd2000=t_open, close_mjd2000=t_close, optimal_mjd2000=t_opt,
             azimuth_open_deg=float(az[0]), azimuth_close_deg=float(az[1]),
             azimuth_optimal_deg=float(az[2]), inclination_deg=float(inc[2]),
-            direction=_direction(float(az[2])),
+            direction=_direction(float(az[2])), open_bounded=ob, close_bounded=cb,
         ))
     return windows
 

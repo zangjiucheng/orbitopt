@@ -126,8 +126,11 @@ def test_multi_day_scan_matches_daily_scans_without_duplicates():
     plane = OrbitPlane.from_altitude(51.64, 100.0, ISS_EPOCH, 420.0)
     whole = plane_launch_windows("wenchang", plane, ISS_EPOCH, 3.0, max_dogleg_deg=2.0)
     start = as_mjd2000(ISS_EPOCH)
+    # Daily queries also report a window already open at their start (one
+    # straddling midnight); keep only those opening in the day to de-duplicate.
     daily = [w for d in range(3)
-             for w in plane_launch_windows("wenchang", plane, start + d, 1.0, max_dogleg_deg=2.0)]
+             for w in plane_launch_windows("wenchang", plane, start + d, 1.0, max_dogleg_deg=2.0)
+             if w.open_mjd2000 >= start + d]
     assert [round(w.open_mjd2000, 6) for w in whole] == [round(w.open_mjd2000, 6) for w in daily]
 
 
@@ -165,6 +168,46 @@ def test_asymptote_window_azimuth_range():
         for az in (w.azimuth_open_deg, w.azimuth_close_deg, w.azimuth_optimal_deg):
             assert 90.0 - 1e-3 <= az <= 115.0 + 1e-3
         assert w.close_mjd2000 > w.open_mjd2000
+
+
+def test_window_already_open_at_start_is_reported():
+    wins = asymptote_launch_windows("cape-canaveral", 10.0, 23.0, "2020-07-30", 1.0, [(90.0, 115.0)])
+    first = wins[0]
+    start = 0.5 * (first.open_mjd2000 + first.close_mjd2000)
+    later = asymptote_launch_windows("cape-canaveral", 10.0, 23.0, start, 0.1, [(90.0, 115.0)])
+    assert later, "window open at the query start was reported as no window"
+    (w,) = later
+    assert w.open_before(start)
+    assert w.open_mjd2000 == pytest.approx(first.open_mjd2000, abs=1e-6)
+    assert w.close_mjd2000 == pytest.approx(first.close_mjd2000, abs=1e-6)
+    assert start <= w.optimal_mjd2000 <= w.close_mjd2000  # best *remaining* instant
+    assert w.open_bounded and w.close_bounded
+
+
+def test_window_open_past_query_end_reports_true_close():
+    wins = asymptote_launch_windows("cape-canaveral", 10.0, 23.0, "2020-07-30", 1.0, [(90.0, 115.0)])
+    w0 = wins[-1]
+    # Query a span that ends inside the window and whose scan margin ends
+    # inside it too: the true close must still be found.
+    start = w0.open_mjd2000 - 0.01
+    (w,) = [x for x in asymptote_launch_windows("cape-canaveral", 10.0, 23.0, start, 0.02,
+                                                  [(90.0, 115.0)]) if x.open_mjd2000 >= start]
+    assert w.close_mjd2000 == pytest.approx(w0.close_mjd2000, abs=1e-6)
+
+
+def test_continuously_open_window_is_reported():
+    wins = asymptote_launch_windows("cape-canaveral", 10.0, 23.0, "2020-07-30", 1.0, [(0.0, 360.0)])
+    assert len(wins) == 1
+    (w,) = wins
+    assert w.continuous and not w.open_bounded and not w.close_bounded
+    start = as_mjd2000("2020-07-30")
+    assert (w.open_mjd2000, w.close_mjd2000) == (pytest.approx(start), pytest.approx(start + 1.0))
+    assert w.azimuth_optimal_deg == pytest.approx(90.0, abs=0.01)
+    assert w.to_dict()["open_bounded"] is False
+    # Plane target with a dogleg budget covering every geometry: same.
+    (p,) = plane_launch_windows("cape-canaveral", OrbitPlane(51.6, 0.0), start, 1.0,
+                                max_dogleg_deg=90.0, respect_corridors=False)
+    assert p.continuous
 
 
 def test_cli_launch_window_json(capsys):
