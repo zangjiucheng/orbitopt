@@ -12,11 +12,15 @@ evaluated as one batched array operation instead of a Python loop -- on GPU
 via CuPy when available, transparently falling back to vectorized numpy on
 CPU otherwise.
 
-The iteration count is fixed (not data-dependent) so the whole solve is a
-straight-line sequence of array ops with no per-item branching, which is
-exactly what GPUs execute well. Only the zero-revolution, short-way/long-way
-transfer is implemented; multi-revolution solutions are out of scope for the
-batched solver (use orbitopt.lambert.cpu.solve_lambert_single, which wraps
+Each iteration is a straight-line sequence of array ops with no per-item
+branching, which is exactly what GPUs execute well. Newton uses the analytic
+dTOF/dz (Curtis eq. 5.43, one Stumpff evaluation per iteration instead of
+the three a central difference needs); candidates whose TOF residual is
+at the floating-point floor are retired and dropped from the (compacted)
+working set, and the loop exits as soon as none remain (one device->host
+sync per iteration), so ``maxiter`` is an upper bound, not a fixed count.
+Only the zero-revolution, short-way/long-way transfer is implemented;
+multi-revolution solutions are out of scope for the batched solver (use orbitopt.lambert.cpu.solve_lambert_single, which wraps
 pykep's full multi-rev Izzo solver, when those are needed).
 
 Reliability guarantees (see ``LambertBatchResult.valid``):
@@ -55,11 +59,25 @@ class LambertBatchResult:
     residual: np.ndarray  # (N,) |tof(z) - tof_target| (0 for CPU-fallback, inf if invalid)
     valid: np.ndarray  # (N,) bool: solution passed every validity check
     fallback: np.ndarray  # (N,) bool: solution came from the pykep CPU fallback
+    iterations: int = 0  # root-finder iterations actually run (<= maxiter)
 
     @property
     def converged(self) -> np.ndarray:
         """Backward-compatible alias of ``valid`` (converged *and* physical)."""
         return self.valid
+
+
+_STUMPFF_SERIES_ZMAX = 0.1
+# C(z) = sum (-z)^k / (2k+2)!,  S(z) = sum (-z)^k / (2k+3)!,  k = 0..5
+_C_SERIES = (1 / 2, -1 / 24, 1 / 720, -1 / 40320, 1 / 3628800, -1 / 479001600)
+_S_SERIES = (1 / 6, -1 / 120, 1 / 5040, -1 / 362880, 1 / 39916800, -1 / 6227020800)
+
+
+def _horner(z, coeffs):
+    acc = coeffs[-1]
+    for c in reversed(coeffs[:-1]):
+        acc = c + z * acc
+    return acc
 
 
 def _stumpff(z, xp):
@@ -69,8 +87,11 @@ def _stumpff(z, xp):
     pre-guarded against division by zero before selection -- this is the
     standard trick for writing branchless, GPU-friendly special functions.
     """
-    pos = z > 1e-6
-    neg = z < -1e-6
+    # Below |z| = 0.1 the closed forms lose ~eps/|z| to cancellation
+    # (1 - cos sqrt(z) etc.), which stalls Newton near parabolic orbits; the
+    # degree-5 series there is accurate to < 1e-17.
+    pos = z > _STUMPFF_SERIES_ZMAX
+    neg = z < -_STUMPFF_SERIES_ZMAX
 
     z_pos = xp.where(pos, z, 1.0)
     sz_pos = xp.sqrt(z_pos)
@@ -82,8 +103,8 @@ def _stumpff(z, xp):
     c_neg = (1.0 - xp.cosh(sz_neg)) / (-z_neg)
     s_neg = (xp.sinh(sz_neg) - sz_neg) / z_neg**1.5
 
-    c_small = 0.5 - z / 24.0 + z**2 / 720.0 - z**3 / 40320.0
-    s_small = 1.0 / 6.0 - z / 120.0 + z**2 / 5040.0 - z**3 / 362880.0
+    c_small = _horner(z, _C_SERIES)
+    s_small = _horner(z, _S_SERIES)
 
     C = xp.where(pos, c_pos, xp.where(neg, c_neg, c_small))
     S = xp.where(pos, s_pos, xp.where(neg, s_neg, s_small))
@@ -105,6 +126,12 @@ def _tof_of_z(z, r1, r2, A, mu, xp):
     true TOF as y -> 0+ -- so the bracketed root finder treats it as "too
     short" and moves z up, instead of iterating on a clamped fake value.
     """
+    t, y, C, _, phys = _tof_core(z, r1, r2, A, mu, xp)
+    return t, y, C, phys
+
+
+def _tof_core(z, r1, r2, A, mu, xp):
+    """Shared body of ``_tof_of_z``; also returns S(z) for the derivative."""
     y, C, S = _y_of_z(z, r1, r2, A, xp)
     phys = (y > 0.0) & (C > 0.0) & xp.isfinite(y) & xp.isfinite(C) & xp.isfinite(S)
     y_s = xp.where(phys, y, 1.0)
@@ -114,7 +141,53 @@ def _tof_of_z(z, r1, r2, A, mu, xp):
     t = (chi**3 * S_s + A * xp.sqrt(y_s)) / xp.sqrt(mu)
     phys = phys & xp.isfinite(t)
     t = xp.where(phys, t, 0.0)
-    return t, y, C, phys
+    return t, y, C, S, phys
+
+
+# Taylor coefficients of D(z) = (C(z) - 3 S(z) / (2 C(z))) / (2 z) about z = 0.
+# The closed form cancels catastrophically as z -> 0 (numerator ~ -7z/120),
+# so |z| < _D_SERIES_ZMAX uses the series (truncation error < 1e-13).
+_D_SERIES = (-7.0 / 240.0, 1.0 / 2520.0, -1.0 / 44800.0, -1.0 / 5702400.0)
+_D_SERIES_ZMAX = 0.05
+# Relative Newton step on z below which a candidate counts as converged.
+_Z_STEP_TOL = 1e-13
+# Relative TOF residual below which a non-improving Newton step means the
+# floating-point noise floor of TOF(z) was reached.
+_F_NOISE_RTOL = 1e-9
+
+
+def _tof_and_dtdz(z, r1, r2, A, mu, xp):
+    """TOF(z), its analytic derivative dTOF/dz and the physical mask.
+
+    Derivative of the universal-variable TOF (Curtis eq. 5.43):
+
+        sqrt(mu) dt/dz = (y/C)^1.5 [ D(z) + 3 S^2 / (4 C) ]
+                         + A/8 [ 3 S sqrt(y) / C + A sqrt(C / y) ]
+
+    with D(z) = (C - 3S/(2C)) / (2z), evaluated by its Taylor series near
+    z = 0 (where it reduces to Curtis's z = 0 special case). Shares one
+    Stumpff evaluation with TOF(z), replacing the two extra TOF evaluations
+    the old central difference needed.
+    """
+    t, y, C, S, phys = _tof_core(z, r1, r2, A, mu, xp)
+    y_s = xp.where(phys, y, 1.0)
+    C_s = xp.where(phys, C, 1.0)
+    S_s = xp.where(phys, S, 0.0)
+
+    small = xp.abs(z) < _D_SERIES_ZMAX
+    z_big = xp.where(small, 1.0, z)
+    d_closed = (C_s - 1.5 * S_s / C_s) / (2.0 * z_big)
+    c0, c1, c2, c3 = _D_SERIES
+    d_series = c0 + z * (c1 + z * (c2 + z * c3))
+    D = xp.where(small, d_series, d_closed)
+
+    sqrt_y = xp.sqrt(y_s)
+    dtdz = (
+        (y_s / C_s) ** 1.5 * (D + 0.75 * S_s**2 / C_s)
+        + 0.125 * A * (3.0 * S_s * sqrt_y / C_s + A * xp.sqrt(C_s / y_s))
+    ) / xp.sqrt(mu)
+    dtdz = xp.where(phys, dtdz, xp.nan)
+    return t, dtdz, phys
 
 
 def _pykep_fallback(r1_vec, r2_vec, tof, mu, prograde):
@@ -163,7 +236,9 @@ def solve_lambert_batch(
         None (default) picks CuPy if available, else numpy. True forces GPU
         and raises if unavailable; False forces CPU.
     maxiter : int
-        Fixed number of safeguarded Newton/bisection iterations.
+        Upper bound on safeguarded Newton/bisection iterations; the loop
+        exits early once every candidate has converged (or was retired as
+        unsolvable). ``LambertBatchResult.iterations`` reports the count.
     tol : float
         Relative TOF tolerance: converged iff |tof(z)-tof| < tol*max(tof, 1).
     cpu_fallback : bool
@@ -195,7 +270,7 @@ def solve_lambert_batch(
     tof = xp.broadcast_to(xp.asarray(tof, dtype=xp.float64), (n,))
 
     with np.errstate(all="ignore"):
-        v1, v2, residual, valid, hard = _solve_batch_device(
+        v1, v2, residual, valid, hard, iterations = _solve_batch_device(
             xp, r1_vec, r2_vec, tof, mu, prograde, maxiter, tol, angle_tol,
         )
 
@@ -221,7 +296,9 @@ def solve_lambert_batch(
     v2[~valid] = 0.0
     residual[~valid] = np.inf
 
-    return LambertBatchResult(v1=v1, v2=v2, residual=residual, valid=valid, fallback=fallback)
+    return LambertBatchResult(
+        v1=v1, v2=v2, residual=residual, valid=valid, fallback=fallback, iterations=iterations,
+    )
 
 
 def _solve_batch_device(xp, r1_vec, r2_vec, tof, mu, prograde, maxiter, tol, angle_tol):
@@ -278,24 +355,66 @@ def _solve_batch_device(xp, r1_vec, r2_vec, tof, mu, prograde, maxiter, tol, ang
     f_hi, _ = F(z_hi)
     bracket_ok = (f_lo < 0.0) & (f_hi > 0.0) & xp.isfinite(f_lo) & xp.isfinite(f_hi)
 
-    lo, hi = z_lo, z_hi
-    z = xp.clip(xp.zeros(n, dtype=xp.float64), lo, hi)
+    # Candidates that cannot produce a valid answer (malformed input,
+    # degenerate angle, failed bracket) are not iterated at all. The loop
+    # works on a compacted copy of the still-active candidates only, so
+    # converged ones cost nothing once they retire, and it exits as soon as
+    # none are left (one device->host sync per iteration for the size).
+    z = xp.clip(xp.zeros(n, dtype=xp.float64), z_lo, z_hi)
+    idx = xp.nonzero(input_ok & angle_ok & bracket_ok)[0]
+    zw, lo, hi = z[idx], z_lo[idx], z_hi[idx]
+    r1w, r2w, Aw, tofw = r1[idx], r2[idx], A[idx], tof[idx]
+    f_prev = xp.full(idx.shape[0], xp.inf, dtype=xp.float64)
+    iterations = 0
     for _ in range(maxiter):
-        f, phys = F(z)
+        if int(idx.shape[0]) == 0:
+            break  # every candidate converged/retired: early exit
+        iterations += 1
+        t, dtdz, phys = _tof_and_dtdz(zw, r1w, r2w, Aw, mu, xp)
+        f = t - tofw
         # Maintain the bracket. Non-physical (y <= 0) points count as
         # "too short" -- the true TOF tends to 0 there.
         too_short = f < 0.0
-        lo = xp.where(too_short, z, lo)
-        hi = xp.where(too_short, hi, z)
+        lo = xp.where(too_short, zw, lo)
+        hi = xp.where(too_short, hi, zw)
 
-        h = 1e-5 * xp.maximum(xp.abs(z), 1.0)
-        f_plus, ph_p = F(z + h)
-        f_minus, ph_m = F(z - h)
-        dfdz = (f_plus - f_minus) / (2.0 * h)
-        deriv_ok = phys & ph_p & ph_m & xp.isfinite(dfdz) & (dfdz > 0.0)
-        z_newton = z - f / xp.where(deriv_ok, dfdz, 1.0)
+        # Analytic Newton step, damped by the bracket: any step that is
+        # non-finite, has a non-positive derivative or leaves (lo, hi) is
+        # replaced by bisection.
+        deriv_ok = phys & xp.isfinite(dtdz) & (dtdz > 0.0)
+        z_newton = zw - f / xp.where(deriv_ok, dtdz, 1.0)
         newton_ok = deriv_ok & xp.isfinite(z_newton) & (z_newton > lo) & (z_newton < hi)
-        z = xp.where(newton_ok, z_newton, 0.5 * (lo + hi))
+        z_next = xp.where(newton_ok, z_newton, 0.5 * (lo + hi))
+        # An exact root sits on the bracket edge just set (hi = z), so the
+        # zero Newton step is "outside" (lo, hi); keep z rather than bisect.
+        z_next = xp.where(f == 0.0, zw, z_next)
+
+        # Early termination. ``tol`` is only the *acceptance* threshold (a
+        # 1e-6 TOF residual can still be ~m/s in velocity), so a candidate
+        # is retired only once it is inside ``tol`` *and* Newton has reached
+        # the floating-point noise floor: exact residual, negligible step, or
+        # -- with |f| already far below ``tol`` (so a slow bisection phase
+        # can't trigger it) -- the last step failed to halve |f|.
+        # Retired candidates keep the current z, whose residual was just
+        # checked; the final residual is re-verified after the loop anyway.
+        abs_f = xp.abs(f)
+        tof_scale = xp.maximum(tofw, 1.0)
+        resid_ok = phys & xp.isfinite(f) & (abs_f < tol * tof_scale)
+        stalled = (
+            (f == 0.0)
+            | (newton_ok & (xp.abs(z_newton - zw) <= _Z_STEP_TOL * xp.maximum(xp.abs(zw), 1.0)))
+            | ((abs_f >= 0.5 * f_prev) & (abs_f < _F_NOISE_RTOL * tof_scale))
+        )
+        retire = resid_ok & stalled
+        # z_next == z is a fixed point of this deterministic update (e.g. a
+        # bracket collapsed to one float): further iterations cannot help.
+        stuck = z_next == zw
+        zw = xp.where(retire, zw, z_next)
+        z[idx] = zw
+
+        keep = xp.nonzero(~(retire | stuck))[0]
+        idx, zw, lo, hi, f_prev = idx[keep], zw[keep], lo[keep], hi[keep], abs_f[keep]
+        r1w, r2w, Aw, tofw = r1w[keep], r2w[keep], Aw[keep], tofw[keep]
 
     tof_final, y, C, phys = _tof_of_z(z, r1, r2, A, mu, xp)
     residual = xp.abs(tof_final - tof)
@@ -314,4 +433,4 @@ def _solve_batch_device(xp, r1_vec, r2_vec, tof, mu, prograde, maxiter, tol, ang
 
     valid = input_ok & angle_ok & bracket_ok & converged & (y > 0.0) & (C > 0.0) & g_ok & v_ok
     hard = input_ok & ~valid
-    return v1, v2, residual, valid, hard
+    return v1, v2, residual, valid, hard, iterations
