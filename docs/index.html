@@ -994,6 +994,10 @@
       </div>
     </div>
     <div class="manifest-hint">⇠ swipe / scroll for the full manifest ⇢</div>
+    <figure class="figure" style="margin-top:28px">
+      <img src="assets/mission-control-mars.png" alt="Mission Control on the Earth-to-Mars transfer: candidate trajectories, the heliocentric transfer in 3D, the launch-window porkchop with the candidates on it, and the selected candidate's numbers" loading="lazy" />
+      <figcaption><span class="fignum">FIG. 1</span> — Mission Control on Earth→Mars: the optimizer's candidates, the launch-window screen they came from, and the verified flight</figcaption>
+    </figure>
   </div>
 </section>
 
@@ -1019,7 +1023,7 @@
       </div>
       <figure class="figure">
         <img src="assets/porkchop_earth_mars.png" alt="Earth to Mars porkchop plot: departure date vs. arrival date contour grid of total delta-v, generated from one batched GPU call" loading="lazy" />
-        <figcaption><span class="fignum">FIG. 1</span> — Earth→Mars porkchop grid, one batched GPU call — <code>examples/04_porkchop_gpu.py</code></figcaption>
+        <figcaption><span class="fignum">FIG. 2</span> — Earth→Mars porkchop grid, one batched GPU call — <code>examples/04_porkchop_gpu.py</code></figcaption>
       </figure>
     </div>
   </div>
@@ -1076,6 +1080,7 @@
              report.py                 <span class="comment"># schema-validated verification reports</span>
 <span class="path">viz/</span>         scene_renderer.py         <span class="comment"># one PyVista draw path, every scene</span>
              app.py                    <span class="comment"># Mission Control (PySide6 + pyvistaqt)</span>
+             state.py, charts.py        <span class="comment"># shared selection/time, linked 2D charts</span>
              solar_system.py, mission_timeline.py
              geo_raising.py, mars_transfer.py, porkchop.py
 <span class="path">mission_config.py</span>              <span class="comment"># YAML config -> validated -> built scene</span>

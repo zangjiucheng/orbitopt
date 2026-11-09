@@ -176,13 +176,15 @@ fails outright under Qt's `offscreen` platform plugin
 (`QT_QPA_PLATFORM=offscreen`), so `tests/test_app.py` runs against a real
 (if briefly-shown) window rather than a headless one, unlike this
 project's other `off_screen=True` PyVista tests. README.md's own
-screenshots were captured this way -- see the git history of
-`docs/assets/mission-control-*.png` for the actual capture script's
-approach (composite `window.grab()` with `plotter.screenshot()` for just
-the viewport region; a real OS-level screen capture was tried first and
+screenshots are captured this way by `scripts/capture_screenshots.py`
+(composite `window.grab()` with `plotter.screenshot()` for just the
+viewport region; a real OS-level screen capture was tried first and
 rejected after it picked up an unrelated foreground window instead of the
 app -- not safe to rely on in an environment where this process can't
-reliably hold OS focus).
+reliably hold OS focus). One trap when compositing: the image `grab()`
+returns keeps the window's device pixel ratio, so a QPainter on it already
+works in logical coordinates -- scaling the viewport rect by the ratio
+again pastes the 3D view at twice its offset on a Retina display.
 
 ## VTK point markers: constant apparent size, and a bug this sidesteps
 

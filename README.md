@@ -11,9 +11,10 @@ optimization framework. It searches huge design spaces with cheap
 patched-conic models (**pykep + pygmo**, batched on the GPU with **CuPy**),
 then re-flies the winners under high-fidelity numerical propagation
 (**tudatpy**) and writes a machine-readable verification report for every
-result. Mission Control, a desktop 3D app, plays the missions back.
+result. Mission Control, a desktop 3D app, plays the missions back and shows
+why a trajectory was chosen and how well it was verified.
 
-![Mission Control, playing back the GOES GTO-to-GEO raising campaign](docs/assets/mission-control-goes.png)
+![Mission Control on the Earth-to-Mars transfer: the optimizer's candidate trajectories on the left, the heliocentric transfer in 3D, the launch-window porkchop with the candidates on it below, and the selected candidate's numbers on the right](docs/assets/mission-control-mars.png)
 
 ## What it does
 
@@ -22,7 +23,7 @@ result. Mission Control, a desktop 3D app, plays the missions back.
 | **Search** | Batched Lambert solver, porkchop grids, pygmo optimizers with GPU batch fitness, multi-basin multistart | `lambert/`, `optimize/`, `problems/` |
 | **Launch** | Daily launch windows from a site database (range-safety azimuth corridors), vehicle C3/payload curves as optimizer constraints, LEO parking orbit → TLI/TMI injection | `launch_windows.py`, `launch_constraints.py`, `injection.py` |
 | **Verify** | tudatpy N-body propagation (adaptive RKDP8(7)), dense-output event location, Newton/B-plane targeters (TCM, MOI, lunar flyby, GEO insertion), JSON verification reports | `verify/` |
-| **Visualize** | Versioned scene file format, single-scene viewer, Mission Control app | `scene_format.py`, `viz/` |
+| **Visualize** | Versioned scene file format, single-scene viewer, Mission Control: planet-centered views, candidate comparison, verification reports, linked porkchop / distance charts | `scene_format.py`, `viz/` |
 
 Built-in missions: **Artemis II** free return, **GOES** GTO→GEO raising,
 **Earth → Mars** orbit insertion, and the solar system.
@@ -136,6 +137,7 @@ src/orbitopt/
   launch_*.py, injection.py    sites, vehicles, constraints, windows, parking orbit → TLI/TMI
   verify/                      tudatpy propagation, events, B-plane, targeters, reports
   viz/                         porkchop, mission exporters, renderer, viewer, Mission Control
+                               (app.py + state, panels, charts; see its module docstring)
 ```
 
 To add a problem type, subclass `orbitopt.core.problem.OrbitOptProblem`. If it
@@ -165,15 +167,39 @@ The package has three layers, and only the last needs conda:
 
 ## Mission Control
 
+A desktop app (PySide6 + pyvistaqt) for working through a mission, not just
+playing it. Every panel follows the same selection and mission time:
+
+- **Missions and trajectories** (left). Switch missions without relaunching;
+  `File > Open scene file...` opens any scene JSON. For an optimized mission
+  the TRAJECTORIES list shows every distinct candidate the optimizer found,
+  with what happened to it at the verification gate. Picking one highlights
+  its two-body Lambert screening arc in 3D.
+- **3D view, centered where it matters** (middle). The CENTER strip
+  re-centers the view on the Sun, Earth, Mars or the Moon, so the Earth
+  departure and the Mars capture are visible at their own scale inside a
+  heliocentric transfer. It also says whether body sizes are to scale.
+- **Linked charts** (below). *Launch window*: the porkchop grid the search
+  screened, with the candidates on it; click one to select it. *Distance*:
+  the spacecraft's distance to each body over the mission; click or drag to
+  move the mission time.
+- **Inspector and Verification** (right). Body readouts, maneuvers and the
+  selected candidate's numbers; and the high-fidelity verification reports:
+  every check, residuals against their tolerances, force model, integrator
+  step convergence, conservation. The title bar always shows VERIFIED,
+  VERIFY FAILED or NOT CHECKED.
+- **Timeline** (bottom). Time warp, events, and the mission's phases
+  (parking orbit, cruise, lunar flyby, ...); click a phase to jump to it.
+
+![Artemis II centered on the Moon at closest approach: the lunar-flyby phase lit on the timeline, the distance chart dipping at the Moon, and the Verification tab listing the checks the free return passed](docs/assets/mission-control-artemis.png)
+
 <img src="docs/assets/mission-control-shortcuts.png" alt="Mission Control keyboard shortcuts" width="320" align="right">
 
-A desktop app (PySide6 + pyvistaqt). It has a mission list, a 3D view, live
-orbit readouts for each body, and a time-warp strip with an event log for
-scenes that have a timeline. You can switch missions without relaunching,
-and `File > Open scene file...` opens any scene JSON.
+Shortcuts: Space play/pause · ←/→ step · Shift+←/→ previous/next event ·
+Home restart · `[` `]` time warp · T track body · M focus body ·
+I toggle the right panel · F1 shortcut reference.
 
-Shortcuts: Space play/pause · ←/→ step · Home restart · `[` `]` time warp ·
-T track body · M focus body · F1 shortcut reference.
+The screenshots are regenerated with `scripts/capture_screenshots.py`.
 
 <br clear="right">
 
