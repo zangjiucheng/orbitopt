@@ -103,7 +103,9 @@ def test_phase_strip_highlights_current_phase_and_seeks_on_click():
     left = strip.mapFromGlobal(bar.time_slider.mapToGlobal(groove.topLeft())).x()
     assert strip._x(0.0) == pytest.approx(left, abs=1.0)
     assert strip._x(10.0) == pytest.approx(left + groove.width(), abs=1.0)
-    assert 0 < strip._x(0.0) < strip.width() and strip._x(10.0) <= strip.width()
+    # Inside the strip. Not "> 0": whether the groove has a left margin is up
+    # to the Qt style (macOS insets it; Fusion, offscreen and Linux CI don't).
+    assert 0 <= strip._x(0.0) < strip._x(10.0) <= strip.width()
 
     state.set_time(5.0)
     assert strip.current_phase()["label"] == "Flyby"
