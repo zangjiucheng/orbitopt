@@ -22,7 +22,16 @@ from PySide6.QtWidgets import (
 
 from orbitopt.viz import icons
 from orbitopt.viz.state import MissionState, time_to_fraction
-from orbitopt.viz.theme import ACCENT, INK_MUTED
+from orbitopt.viz.theme import (
+    ACCENT,
+    ACCENT_DIM,
+    HAIRLINE,
+    INK_MUTED,
+    INK_PRIMARY,
+    INK_SECONDARY,
+    PANEL_RAISED,
+    SURFACE_HOVER,
+)
 
 # Time-warp speed is a continuous log-scale control (0.001x .. 1000x), not
 # fixed presets, so it can be fine-tuned to any rate. Speed is in simulated
@@ -187,6 +196,90 @@ class EventSlider(QSlider):
 
 
 
+class PhaseStrip(QWidget):
+    """The scene's mission phases as bands under the scrubber, on the same x
+    scale as its groove: the current phase in the accent tint, the others in
+    two alternating neutrals (phases differ per mission, so they get no
+    categorical colors). Hover names the span; click jumps to its start."""
+
+    HEIGHT = 18
+
+    def __init__(self, slider: QSlider, state: MissionState, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._slider = slider
+        self._state = state
+        self._phases: list[dict] = []
+        self.setFixedHeight(self.HEIGHT)
+        self.setMouseTracking(True)
+        state.scene_changed.connect(self._on_scene_changed)
+        state.time_changed.connect(lambda _t: self.update())
+
+    @property
+    def phases(self) -> list[dict]:
+        return self._phases
+
+    def _on_scene_changed(self, _scene):
+        timeline = self._state.timeline
+        self._phases = list((timeline or {}).get("phases", []))
+        self.setVisible(bool(self._phases))
+        self.update()
+
+    def _x(self, t: float) -> float:
+        groove = self._slider._groove()
+        # The slider is a sibling, not an ancestor: go through global
+        # coordinates (QWidget.mapTo needs a parent).
+        origin = self.mapFromGlobal(self._slider.mapToGlobal(groove.topLeft())).x()
+        return origin + time_to_fraction(self._state.timeline, t) * groove.width()
+
+    def current_phase(self) -> dict | None:
+        t = self._state.time
+        return next((p for p in self._phases if p["start"] <= t <= p["end"]), None)
+
+    def phase_at(self, x: float) -> dict | None:
+        return next((p for p in self._phases if self._x(p["start"]) <= x <= self._x(p["end"])), None)
+
+    def paintEvent(self, _event):  # noqa: N802
+        if not self._phases or self._state.timeline is None:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        font = painter.font()
+        font.setPointSizeF(8.5)
+        painter.setFont(font)
+        current = self.current_phase()
+        for k, phase in enumerate(self._phases):
+            x0, x1 = self._x(phase["start"]), self._x(phase["end"])
+            rect = QRectF(x0, 2.0, max(1.0, x1 - x0), self.height() - 4.0)
+            active = phase is current
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(ACCENT_DIM if active else (PANEL_RAISED if k % 2 == 0 else SURFACE_HOVER)))
+            painter.drawRect(rect)
+            painter.setPen(QPen(QColor(HAIRLINE), 1.0))
+            painter.drawLine(rect.topLeft(), rect.bottomLeft())
+            text = painter.fontMetrics().elidedText(phase["label"], Qt.ElideRight, int(rect.width() - 8))
+            if text and text != "…":
+                painter.setPen(QColor(INK_PRIMARY if active else INK_SECONDARY))
+                painter.drawText(rect.adjusted(4, 0, -4, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
+        painter.end()
+
+    def mouseMoveEvent(self, event):  # noqa: N802
+        phase = self.phase_at(event.position().x())
+        if phase is None:
+            self.setToolTip("")
+        else:
+            unit = self._state.timeline.get("unitLabel", "")
+            tip = f"{phase['label']}\nT+{phase['start']:.2f} – T+{phase['end']:.2f} {unit}"
+            if phase.get("note"):
+                tip += f"\n{phase['note']}"
+            self.setToolTip(tip + "\nClick to jump to its start")
+        super().mouseMoveEvent(event)
+
+    def mousePressEvent(self, event):  # noqa: N802
+        phase = self.phase_at(event.position().x())
+        if phase is not None:
+            self._state.set_time(phase["start"])
+
+
 class TimelineBar(QWidget):
     """Play button, time-warp control and the event-marked scrubber.
 
@@ -200,6 +293,8 @@ class TimelineBar(QWidget):
     play_clicked = Signal()
     auto_slow_toggled = Signal(bool)
 
+    _BASE_HEIGHT = 72
+
     def __init__(self, state: MissionState, parent: QWidget | None = None):
         super().__init__(parent)
         self._state = state
@@ -208,7 +303,7 @@ class TimelineBar(QWidget):
         # A QWidget *subclass* only paints its stylesheet background/border
         # with this attribute set (a plain QWidget gets it implicitly).
         self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setFixedHeight(72)
+        self.setFixedHeight(self._BASE_HEIGHT)
         self._build()
         state.scene_changed.connect(self._on_scene_changed)
         state.time_changed.connect(self._on_time_changed)
@@ -277,6 +372,9 @@ class TimelineBar(QWidget):
         self.time_slider.valueChanged.connect(self._on_time_slider)
         slider_col.addWidget(self.time_slider)
 
+        self.phase_strip = PhaseStrip(self.time_slider, self._state)
+        slider_col.addWidget(self.phase_strip)
+
         # Fixed start/end scale reference under the bar: the MET readout above
         # only ever shows the *current* scrubbed position, so there was no way
         # to tell at a glance how long the whole mission span is -- easy to
@@ -300,6 +398,8 @@ class TimelineBar(QWidget):
     def _on_scene_changed(self, _scene):
         timeline = self._state.timeline
         self.setVisible(timeline is not None)
+        has_phases = bool((timeline or {}).get("phases"))
+        self.setFixedHeight(self._BASE_HEIGHT + (PhaseStrip.HEIGHT + 2 if has_phases else 0))
         self.time_slider.blockSignals(True)
         self.time_slider.setValue(0)
         if timeline:

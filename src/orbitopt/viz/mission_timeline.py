@@ -37,10 +37,23 @@ from orbitopt.verify.tudat_propagate import (
     find_altitude_crossing,
     propagate_multi_arc,
 )
-from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, ROTATION_PERIOD_HOURS, TEXTURE, body_entry, scene_document
+from orbitopt.viz.scene import (
+    COLOR,
+    RADIUS_DISPLAY,
+    ROTATION_PERIOD_HOURS,
+    TEXTURE,
+    body_entry,
+    crossing_times,
+    phase_spans,
+    scene_document,
+)
 
 EARTH_RADIUS_KM = 6378.0
 MOON_RADIUS_KM = 1737.4
+# Laplace sphere of influence of the Moon w.r.t. Earth, a * (m_moon/m_earth)^(2/5)
+# = 384,400 km * 0.0123^0.4 ~ 66,100 km. Only used to name the flyby phase on
+# the timeline; the propagation itself is full three-body, no patched conics.
+MOON_SOI_RADIUS_KM = 66_100.0
 ARTEMIS_II_PERILUNE_ALTITUDE_KM = 6545.0
 EARTH_ENTRY_INTERFACE_ALTITUDE_KM = 121.92  # 400,000 ft, the conventional atmospheric entry interface
 
@@ -372,9 +385,29 @@ def _build_artemis2_mission(
             "min": 0.0,
             "max": days[-1],
             "events": events,
+            "phases": _artemis_phases(days, spacecraft_km, moon_positions_km, events),
             "referenceEpochEt": reference_et,
         },
     ), targeting
+
+
+def _artemis_phases(days, spacecraft_km, moon_positions_km, events):
+    """Outbound coast, the lunar flyby (while inside the Moon's sphere of
+    influence -- crossing times interpolated from the exported samples), the
+    return coast to entry interface, and anything propagated past it."""
+    entry = next(e["time"] for e in events if e["label"] == "Earth entry interface")
+    moon_dist = np.linalg.norm(np.asarray(spacecraft_km) - np.asarray(moon_positions_km), axis=1)
+    soi = crossing_times(days, moon_dist, MOON_SOI_RADIUS_KM)
+    end = days[-1]
+    if soi is None:
+        return phase_spans([("Coast", 0.0, entry), ("Past entry interface", entry, end)])
+    t_in, t_out = soi
+    return phase_spans([
+        ("Outbound coast", 0.0, t_in, "TLI to Moon SOI entry"),
+        ("Lunar flyby", t_in, t_out, f"inside the Moon's sphere of influence ({MOON_SOI_RADIUS_KM:,.0f} km)"),
+        ("Return coast", t_out, entry, "Moon SOI exit to the 122 km entry interface, no burns"),
+        ("Past entry interface", entry, end, "propagated in vacuum -- no atmosphere model"),
+    ])
 
 
 def build_from_config(config: dict, recorder=None) -> dict:

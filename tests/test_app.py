@@ -86,6 +86,12 @@ def test_mission_control_loads_and_switches_missions():
     assert "Verification report" not in window.scene_subtitle_label.text()
     window.right_tabs.setCurrentWidget(window.inspector)
 
+    # Phases: the lunar flyby is the Moon-SOI crossing and contains perilune.
+    phases = window.timeline_bar.phase_strip.phases
+    flyby = next(p for p in phases if p["label"] == "Lunar flyby")
+    closest = next(e["time"] for e in state.events if "approach" in e["label"].lower())
+    assert flyby["start"] < closest < flyby["end"]
+
     # Linked charts: Artemis II has no launch-window screen, only distances.
     charts = window.chart_panel
     assert not charts.isHidden()

@@ -77,6 +77,7 @@ from orbitopt.viz.scene import (
     ROTATION_PERIOD_HOURS,
     TEXTURE,
     body_entry,
+    phase_spans,
     scene_document,
 )
 
@@ -640,9 +641,23 @@ def _build_geo_mission(
             "min": 0.0,
             "max": round(float(days[-1]), 4),
             "events": events,
+            "phases": _geo_phases(events, round(float(days[-1]), 4)),
         },
     )
     return scene, problem, x, sched
+
+
+def _geo_phases(events, end):
+    """Coast to the first apogee, the apogee-raising burn sequence (first to
+    last burn), and the final coast after it."""
+    burns = sorted(e["time"] for e in events if "vector" in e)
+    if not burns:
+        return phase_spans([("Coast", 0.0, end)])
+    return phase_spans([
+        ("Coast to first apogee", 0.0, burns[0]),
+        ("Apogee-raising burns", burns[0], burns[-1], f"{len(burns)} burns at the shared apogee"),
+        ("Final coast", burns[-1], end, "to GEO insertion"),
+    ])
 
 
 def compute_and_export_geo_mission(seed=1, step_size_s=2.0, max_output_points=2500, **kwargs) -> dict:

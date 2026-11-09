@@ -204,6 +204,48 @@ def body_entry(
     return entry
 
 
+def phase_spans(spans, min_length=1e-6) -> list:
+    """Timeline ``phases`` from ``[(label, start, end), ...]`` or
+    ``[(label, start, end, note), ...]`` in timeline units, in order. Spans
+    shorter than ``min_length`` (e.g. a parking orbit of zero length when
+    the trajectory starts at the burn) are dropped rather than drawn as
+    slivers."""
+    phases = []
+    for span in spans:
+        label, start, end = span[0], float(span[1]), float(span[2])
+        if end - start < min_length:
+            continue
+        phase = {"label": label, "start": round(start, 6), "end": round(end, 6)}
+        if len(span) > 3 and span[3]:
+            phase["note"] = span[3]
+        phases.append(phase)
+    return phases
+
+
+def crossing_times(times, distances, radius):
+    """``(first_inside, last_inside)`` times at which ``distances`` (same
+    length as ``times``) drops below / rises back above ``radius``, linearly
+    interpolated between samples; ``None`` if it never goes inside."""
+    import numpy as np
+
+    t = np.asarray(times, dtype=float)
+    d = np.asarray(distances, dtype=float)
+    inside = np.flatnonzero(d < radius)
+    if inside.size == 0:
+        return None
+
+    def cross(i0, i1):
+        if d[i1] == d[i0]:
+            return float(t[i1])
+        f = (radius - d[i0]) / (d[i1] - d[i0])
+        return float(t[i0] + f * (t[i1] - t[i0]))
+
+    first, last = int(inside[0]), int(inside[-1])
+    t_in = float(t[0]) if first == 0 else cross(first - 1, first)
+    t_out = float(t[-1]) if last == len(t) - 1 else cross(last, last + 1)
+    return t_in, t_out
+
+
 def scene_document(scene_id, title, bodies, distance_unit="AU", subtitle=None, central_body_id=None, timeline=None):
     doc = {
         "schemaVersion": SCHEMA_VERSION,

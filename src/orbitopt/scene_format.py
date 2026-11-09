@@ -109,6 +109,13 @@ def validate_scene(scene: dict) -> None:
                 "velocities, when given, must be the same length (one per timestamp)."
             )
 
+    for phase in (scene.get("timeline") or {}).get("phases", []):
+        if phase["end"] < phase["start"]:
+            raise ValueError(
+                f"scene document is invalid: timeline phase {phase['label']!r} ends "
+                f"({phase['end']}) before it starts ({phase['start']})."
+            )
+
     porkchop = scene.get("porkchop")
     if porkchop is not None:
         n_t0, n_tof = len(porkchop["departureMjd2000"]), len(porkchop["tofDays"])

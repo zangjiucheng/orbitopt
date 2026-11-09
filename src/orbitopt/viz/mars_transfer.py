@@ -78,7 +78,15 @@ from orbitopt.verify.tudat_propagate import (
 )
 from orbitopt.viz.candidates import build_candidate_entries
 from orbitopt.viz.porkchop import compute_porkchop, porkchop_document
-from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, ROTATION_PERIOD_HOURS, TEXTURE, body_entry, scene_document
+from orbitopt.viz.scene import (
+    COLOR,
+    RADIUS_DISPLAY,
+    ROTATION_PERIOD_HOURS,
+    TEXTURE,
+    body_entry,
+    phase_spans,
+    scene_document,
+)
 
 EARTH_RADIUS_KM = 6378.0
 MARS_RADIUS_KM = 3389.5
@@ -807,6 +815,7 @@ def _fly_transfer(
             "min": 0.0,
             "max": round(total_days, 4),
             "events": events,
+            "phases": _mars_phases(events, total_days),
             "referenceEpochEt": reference_et,
         },
     )
@@ -816,6 +825,23 @@ def _fly_transfer(
         if rep is not None:
             verification_report.attach_to_scene(scene, rep)
     return scene
+
+
+def _mars_phases(events, total_days):
+    """Mission phases from this module's own event times: launch ascent (with
+    a real launch), the parking orbit, Earth departure out to the real Earth
+    SOI, the heliocentric cruise, the approach inside the real Mars SOI, and
+    Mars orbit after insertion."""
+    t = {e["label"]: e["time"] for e in events}
+    insertion = t.get("Parking-orbit insertion", 0.0)
+    return phase_spans([
+        ("Ascent", t.get("Liftoff", 0.0), insertion, "launch to parking-orbit insertion (not drawn)"),
+        ("Parking orbit", insertion, t["TMI burn"]),
+        ("Earth departure", t["TMI burn"], t["Earth-SOI exit"], "escape hyperbola out to the Earth SOI"),
+        ("Interplanetary cruise", t["Earth-SOI exit"], t["Mars-SOI entry / approach"], "heliocentric, after the TCM"),
+        ("Mars approach", t["Mars-SOI entry / approach"], t["Mars orbit insertion"], "inside the Mars SOI"),
+        ("Mars orbit", t["Mars orbit insertion"], total_days, "captured orbit after MOI"),
+    ])
 
 
 def compute_and_export_mars_mission(**kwargs) -> dict:

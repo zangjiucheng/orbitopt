@@ -224,6 +224,21 @@
           "type": "number",
           "description": "SPICE ephemeris seconds (TDB, seconds past J2000) that timeline time 0 corresponds to, if the timeline maps to a real calendar date."
         },
+        "phases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label", "start", "end"],
+            "properties": {
+              "label": { "type": "string", "minLength": 1 },
+              "start": { "type": "number" },
+              "end": { "type": "number" },
+              "note": { "type": "string" }
+            },
+            "additionalProperties": true
+          },
+          "description": "Optional named mission phases (e.g. parking orbit, cruise, Mars approach) as [start, end] spans in timeline units, in order, defined by the producer from the physics -- a viewer draws them, it does not infer them."
+        },
         "events": {
           "type": "array",
           "items": { "$ref": "#/$defs/event" }
