@@ -50,6 +50,23 @@
       "additionalProperties": true,
       "description": "Optional: how this scene's trajectory was verified. Absent means no verification ran -- a viewer should say 'not checked', never imply success."
     },
+    "porkchop": {
+      "type": "object",
+      "required": ["departureMjd2000", "tofDays", "totalDv"],
+      "properties": {
+        "model": { "type": "string", "description": "What produced the grid, e.g. a two-body Lambert screen." },
+        "unit": { "type": "string" },
+        "departureMjd2000": { "type": "array", "items": { "type": "number" }, "description": "Departure epochs (columns), MJD2000." },
+        "tofDays": { "type": "array", "items": { "type": "number" }, "description": "Times of flight (rows), days." },
+        "totalDv": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": ["number", "null"] } },
+          "description": "One row per tofDays entry, one value per departureMjd2000 entry; null where the solve did not converge."
+        }
+      },
+      "additionalProperties": true,
+      "description": "Optional: the launch-window screen the optimizer searched (a porkchop plot)."
+    },
     "candidates": {
       "type": "array",
       "items": { "$ref": "#/$defs/candidate" },

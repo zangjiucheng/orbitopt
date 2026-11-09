@@ -109,6 +109,16 @@ def validate_scene(scene: dict) -> None:
                 "velocities, when given, must be the same length (one per timestamp)."
             )
 
+    porkchop = scene.get("porkchop")
+    if porkchop is not None:
+        n_t0, n_tof = len(porkchop["departureMjd2000"]), len(porkchop["tofDays"])
+        rows = porkchop["totalDv"]
+        if len(rows) != n_tof or any(len(r) != n_t0 for r in rows):
+            raise ValueError(
+                f"scene document is invalid: porkchop totalDv must be {n_tof} rows (one per "
+                f"tofDays) of {n_t0} values (one per departureMjd2000)."
+            )
+
     for cand in scene.get("candidates", []):
         path = cand.get("screeningPath", {})
         n_t, n_p = len(path.get("times", [])), len(path.get("positions", []))

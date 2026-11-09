@@ -20,6 +20,7 @@ Layout of the package:
 * timeline_bar.py -- play / time-warp / event scrubber (bottom).
 * view_strip.py   -- which body the view is centered on, and body scale.
 * verification_panel.py -- the scene's verification reports (right, 2nd tab).
+* charts.py       -- linked 2D charts under the 3D view (porkchop, distance).
 * viewport.py     -- the embedded VTK view; compute.py -- background loads.
 
 This module only assembles those pieces and owns what is specific to the
@@ -60,6 +61,7 @@ from PySide6.QtWidgets import (
 from orbitopt.missions import list_missions
 from orbitopt.viz import icons
 from orbitopt.viz.candidate_panel import CandidatePanel
+from orbitopt.viz.charts import ChartPanel
 from orbitopt.viz.compute import BackendProbeWorker, ComputePool, SceneLoader
 from orbitopt.viz.icon import app_icon
 from orbitopt.viz.inspector import InspectorPanel
@@ -278,7 +280,20 @@ class MissionControlWindow(QMainWindow):
         self.center_stack = QStackedWidget()
         self.center_stack.addWidget(self.plotter)
         self.center_stack.addWidget(self._build_loading_page())
-        center_layout.addWidget(self.center_stack, stretch=1)
+
+        # The 3D view over the linked 2D charts; the splitter lets the charts
+        # be dragged smaller, never the 3D view away.
+        self.chart_panel = ChartPanel(self.state)
+        self.center_splitter = QSplitter(Qt.Vertical)
+        self.center_splitter.setObjectName("centerSplitter")
+        self.center_splitter.setHandleWidth(4)
+        self.center_splitter.addWidget(self.center_stack)
+        self.center_splitter.addWidget(self.chart_panel)
+        self.center_splitter.setCollapsible(0, False)
+        self.center_splitter.setStretchFactor(0, 3)
+        self.center_splitter.setStretchFactor(1, 1)
+        self.center_splitter.setSizes([560, 210])
+        center_layout.addWidget(self.center_splitter, stretch=1)
 
         self.timeline_bar = TimelineBar(self.state)
         self.timeline_bar.play_clicked.connect(self._toggle_play)

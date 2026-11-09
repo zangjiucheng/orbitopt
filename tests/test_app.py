@@ -59,6 +59,7 @@ def test_mission_control_loads_and_switches_missions():
     assert state.scene["id"] == "solar-system"
     assert not window.timeline_bar.isVisible()
     assert window.verification_badge.isHidden()  # an ephemeris snapshot: nothing to verify
+    assert window.chart_panel.isHidden()  # ...and nothing to chart
 
     sidebar.select_row(1)
     # The switch must not block: select_row() returns immediately and the
@@ -84,6 +85,11 @@ def test_mission_control_loads_and_switches_missions():
     assert "Step convergence" in window.verification_panel.text()
     assert "Verification report" not in window.scene_subtitle_label.text()
     window.right_tabs.setCurrentWidget(window.inspector)
+
+    # Linked charts: Artemis II has no launch-window screen, only distances.
+    charts = window.chart_panel
+    assert not charts.isHidden()
+    assert [charts.tabText(i) for i in range(charts.count())] == ["Distance"]
 
     # Scrubbing the slider moves the shared time, and the inspector follows.
     timeline = state.timeline

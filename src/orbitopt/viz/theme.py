@@ -97,17 +97,21 @@ QWidget#timelineBar {{
 QWidget#titleBar {{
     border-bottom: 1px solid {HAIRLINE};
 }}
-QTabWidget#rightTabs {{
+QTabWidget#rightTabs, QTabWidget#chartTabs {{
     background: {PANEL};
 }}
 QTabWidget#rightTabs::pane {{
     border: none;
     border-left: 1px solid {HAIRLINE};
 }}
-QTabWidget#rightTabs QTabBar {{
+QTabWidget#chartTabs::pane {{
+    border: none;
+    border-top: 1px solid {HAIRLINE};
+}}
+QTabWidget#rightTabs QTabBar, QTabWidget#chartTabs QTabBar {{
     background: {PANEL};
 }}
-QTabWidget#rightTabs QTabBar::tab {{
+QTabWidget#rightTabs QTabBar::tab, QTabWidget#chartTabs QTabBar::tab {{
     background: {PANEL};
     color: {INK_MUTED};
     padding: 7px 12px 6px 12px;
@@ -117,10 +121,10 @@ QTabWidget#rightTabs QTabBar::tab {{
     font-weight: 600;
     letter-spacing: 0.06em;
 }}
-QTabWidget#rightTabs QTabBar::tab:hover {{
+QTabWidget#rightTabs QTabBar::tab:hover, QTabWidget#chartTabs QTabBar::tab:hover {{
     color: {INK_SECONDARY};
 }}
-QTabWidget#rightTabs QTabBar::tab:selected {{
+QTabWidget#rightTabs QTabBar::tab:selected, QTabWidget#chartTabs QTabBar::tab:selected {{
     color: {INK_PRIMARY};
     border-bottom: 2px solid {ACCENT};
 }}

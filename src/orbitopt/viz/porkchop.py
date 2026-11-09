@@ -166,6 +166,20 @@ def compute_porkchop(
     )
 
 
+def porkchop_document(grid: PorkchopGrid) -> dict:
+    """The scene's ``porkchop`` field: the screening grid's total delta-v
+    (km/s, rows = time of flight, columns = departure), with ``None`` where
+    the Lambert solve did not converge -- a gap, never a made-up value."""
+    dv = np.where(grid.converged & np.isfinite(grid.total_dv), np.round(grid.total_dv, 3), np.nan)
+    return {
+        "model": "Sun-centered Lambert transfer, total delta-v (pykep JPL low-precision ephemerides)",
+        "unit": "km/s",
+        "departureMjd2000": np.round(np.asarray(grid.t0_grid, dtype=float), 4).tolist(),
+        "tofDays": np.round(np.asarray(grid.tof_grid, dtype=float), 4).tolist(),
+        "totalDv": [[None if np.isnan(v) else float(v) for v in row] for row in dv],
+    }
+
+
 def plot_porkchop(grid: PorkchopGrid, title="Porkchop plot", levels=40, ax=None,
                   launch_days=None):
     """Contour-plot total delta-v (km/s) over the (t0, tof) grid. Returns the

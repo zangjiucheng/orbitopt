@@ -77,7 +77,7 @@ from orbitopt.verify.tudat_propagate import (
     propagate_multi_arc,
 )
 from orbitopt.viz.candidates import build_candidate_entries
-from orbitopt.viz.porkchop import compute_porkchop
+from orbitopt.viz.porkchop import compute_porkchop, porkchop_document
 from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, ROTATION_PERIOD_HOURS, TEXTURE, body_entry, scene_document
 
 EARTH_RADIUS_KM = 6378.0
@@ -139,8 +139,9 @@ def _search_transfer(
     ecliptic frame) is applied to every PSO fitness -- the porkchop screen
     stays unconstrained, it only seeds the basins.
 
-    Returns ``(candidates, report)`` with ``candidates`` a list of
-    ``(t0, tof, v_inf_dep)`` tuples ranked by Lambert total dv.
+    Returns ``(candidates, report, grid)`` with ``candidates`` a list of
+    ``(t0, tof, v_inf_dep)`` tuples ranked by Lambert total dv and ``grid``
+    the porkchop screen (exported with the scene for the viewer's chart).
     """
     recorder = StageRecorder() if recorder is None else recorder
     earth, mars = planet("earth"), planet("mars")
@@ -181,7 +182,7 @@ def _search_transfer(
     opt.notes.extend(report.notes)
 
     candidates = [(c.x, c.y, _lambert_v_inf_dep(earth, mars, c.x, c.y)) for c in report.candidates]
-    return candidates, report
+    return candidates, report, grid
 
 
 def _lambert_v_inf_dep(earth, mars, t0, tof):
@@ -299,10 +300,11 @@ def _build_mars_mission(
     if launch is not None and launch.pinned:
         t0, tof = launch.departure_mjd2000, launch.tof_days
         candidates, report = [(t0, tof, _lambert_v_inf_dep(planet("earth"), planet("mars"), t0, tof))], None
+        porkchop_grid = None
         recorder.skip(SEARCH, "transfer pinned by the config's launch.departure")
         recorder.skip(OPTIMIZE, "transfer pinned by the config's launch.departure")
     else:
-        candidates, report = _search_transfer(
+        candidates, report, porkchop_grid = _search_transfer(
             t0_range, tof_range, pop_size, generations, seed,
             launch_constraints=launch_constraints, recorder=recorder,
         )
@@ -416,6 +418,8 @@ def _build_mars_mission(
         recorder[SELECT].candidates, gate.candidates, outcome.index,
         reference_et=scene["timeline"]["referenceEpochEt"], flown_body_id="spacecraft",
     )
+    if porkchop_grid is not None:
+        scene["porkchop"] = porkchop_document(porkchop_grid)
     return scene
 
 
