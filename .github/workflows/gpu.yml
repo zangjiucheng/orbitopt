@@ -56,3 +56,16 @@ jobs:
 
       - name: Run GPU-relevant suites (CPU/GPU backends side by side)
         run: pytest tests/test_gpu_lambert.py tests/test_runner_device.py tests/test_porkchop.py -v
+
+      # Same record as the manual run on the local GPU server
+      # (docs/gpu-regression/README.md): env + per-case timings + failure logs.
+      - name: GPU regression record
+        if: always()
+        run: python scripts/gpu_regression.py --out-dir gpu-regression-record
+
+      - name: Upload GPU regression record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpu-regression-record
+          path: gpu-regression-record/

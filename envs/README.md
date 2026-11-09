@@ -68,3 +68,7 @@ changes without its lockfile being regenerated.
   rather than skip if no CUDA device is visible, then runs `pytest -m gpu`.
 
 Locally on a CUDA machine: `ORBITOPT_REQUIRE_GPU=1 pytest -m gpu -v`.
+For the
+recorded CUDA regression run on the local GPU server (environment, per-case
+timings, failure logs), use `python scripts/gpu_regression.py`. See
+[`docs/gpu-regression/README.md`](../docs/gpu-regression/README.md).
