@@ -109,6 +109,16 @@ def validate_scene(scene: dict) -> None:
                 "velocities, when given, must be the same length (one per timestamp)."
             )
 
+    for cand in scene.get("candidates", []):
+        path = cand.get("screeningPath", {})
+        n_t, n_p = len(path.get("times", [])), len(path.get("positions", []))
+        if n_t == 0 or n_t != n_p:
+            raise ValueError(
+                f"scene document is invalid: candidate {cand.get('id', '<unknown>')!r} has a "
+                f"screening path with {n_t} times and {n_p} positions; it needs at least one "
+                "point and one position per time."
+            )
+
 
 def is_valid_scene(scene: dict) -> bool:
     """Non-raising form of validate_scene() -- True/False instead of an

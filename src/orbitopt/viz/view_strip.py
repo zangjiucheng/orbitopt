@@ -76,6 +76,7 @@ class ViewStrip(QWidget):
     def _on_scene_changed(self, scene):
         for button in self._buttons.values():
             self._group.removeButton(button)
+            button.setParent(None)
             button.deleteLater()
         self._buttons = {}
         options = frame_options(scene)

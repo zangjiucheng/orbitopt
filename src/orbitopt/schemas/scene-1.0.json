@@ -32,7 +32,12 @@
       "type": "array",
       "items": { "$ref": "#/$defs/body" }
     },
-    "timeline": { "$ref": "#/$defs/timeline" }
+    "timeline": { "$ref": "#/$defs/timeline" },
+    "candidates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/candidate" },
+      "description": "Optional: the distinct trajectories the optimizer found, best rank first, for comparison. Each carries its numbers, what happened to it at candidate selection and at the verification gate, and a screening-fidelity path. Only the exported candidate (if any) has a high-fidelity flight, named by `flownBodyId`."
+    }
   },
   "additionalProperties": true,
   "$defs": {
@@ -129,6 +134,38 @@
           "type": "array",
           "items": { "$ref": "#/$defs/vec3" },
           "description": "Optional velocity at each corresponding `times` entry -- same length as `times`, in `distanceUnit` per timeline unit (e.g. km/day when timeline.unitLabel is 'days'). When present, a viewer can interpolate between samples with cubic Hermite instead of straight chords. That matters for a sparsely sampled body used as a moving reference frame: a one-day chord of Earth's orbit misses the true arc by thousands of km, which swamps a low Earth orbit drawn relative to Earth."
+        }
+      },
+      "additionalProperties": true
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["id", "label", "screeningPath"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "searchIndex": { "type": "integer", "description": "Index in the optimizer's candidate list." },
+        "rank": { "type": ["integer", "null"], "description": "Rank by cost among distinct candidates (0 = best)." },
+        "selection": { "type": "string", "description": "Candidate-selection status, e.g. 'selected' (short-listed for high-fidelity flight) or 'truncated' (distinct but beyond the short list)." },
+        "selectionReason": { "type": "string" },
+        "verdict": { "type": ["string", "null"], "description": "Verification-gate verdict: 'accepted', 'degraded', 'rejected', 'not_evaluated', or null when the candidate never reached the gate." },
+        "verification": { "type": ["string", "null"], "description": "Tri-state verification result ('passed', 'failed', 'not_checked') of the candidate's high-fidelity flight, or null if it was not flown." },
+        "verdictReasons": { "type": "array", "items": { "type": "string" } },
+        "exported": { "type": "boolean", "description": "True for the candidate this scene's mission trajectory is." },
+        "bestEffort": { "type": "boolean", "description": "Exported although it did not pass verification." },
+        "departureMjd2000": { "type": "number" },
+        "tofDays": { "type": "number" },
+        "lambertTotalDvMs": { "type": ["number", "null"], "description": "Patched-conic (Lambert) total delta-v the optimizer ranked by, m/s." },
+        "flownBodyId": { "type": "string", "description": "Id of the body whose trail is this candidate's high-fidelity flight." },
+        "screeningPath": {
+          "type": "object",
+          "required": ["fidelity", "times", "positions"],
+          "properties": {
+            "fidelity": { "type": "string", "description": "Human-readable model the path comes from (e.g. two-body Lambert). Never a flown trajectory." },
+            "times": { "type": "array", "items": { "type": "number" }, "description": "Timeline coordinates; may fall outside the timeline when the candidate departs on another date." },
+            "positions": { "type": "array", "items": { "$ref": "#/$defs/vec3" }, "description": "Same length as `times`, scene frame and distanceUnit." }
+          },
+          "additionalProperties": true
         }
       },
       "additionalProperties": true

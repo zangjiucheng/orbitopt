@@ -163,6 +163,9 @@ class MissionState(QObject):
       * ``frame_changed(body_id)`` -- the view was re-centered on a body
         (None: the scene's own frame). Display only: world data, times and
         distance readouts do not change with it.
+      * ``candidate_changed(candidate_id)`` -- a different optimizer
+        candidate was picked for comparison (see the scene's ``candidates``).
+        A new scene starts on its exported candidate.
 
     Camera state (tracking, face-lock, focus zoom) is deliberately *not* here:
     it belongs to the 3D view, not to the mission, and a 2D chart has no use
@@ -173,6 +176,7 @@ class MissionState(QObject):
     time_changed = Signal(float)
     selection_changed = Signal()
     frame_changed = Signal(object)
+    candidate_changed = Signal(object)
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
@@ -182,6 +186,8 @@ class MissionState(QObject):
         self._selected_body_id: str | None = None
         self._measure_body_id: str | None = None
         self._frame_body_id: str | None = None
+        self._candidates: dict[str, dict] = {}
+        self._candidate_id: str | None = None
 
     # ------------------------------------------------------------ scene
     @property
@@ -220,6 +226,10 @@ class MissionState(QObject):
         self._selected_body_id = None
         self._measure_body_id = None
         self._frame_body_id = None
+        candidates = scene.get("candidates", []) if scene else []
+        self._candidates = {c["id"]: c for c in candidates}
+        exported = next((c for c in candidates if c.get("exported")), None)
+        self._candidate_id = (exported or (candidates[0] if candidates else {})).get("id")
         self.scene_changed.emit(scene)
 
     # ------------------------------------------------------------- time
@@ -286,3 +296,24 @@ class MissionState(QObject):
             return
         self._frame_body_id = body_id
         self.frame_changed.emit(body_id)
+
+    # ------------------------------------------------------- candidates
+    @property
+    def candidates(self) -> list[dict]:
+        """The scene's optimizer candidates, best rank first."""
+        return list(self._candidates.values())
+
+    @property
+    def candidate_id(self) -> str | None:
+        return self._candidate_id
+
+    def candidate(self, candidate_id: str | None = None) -> dict | None:
+        """A candidate by id, or the selected one."""
+        cid = self._candidate_id if candidate_id is None else candidate_id
+        return self._candidates.get(cid) if cid is not None else None
+
+    def select_candidate(self, candidate_id: str) -> None:
+        if candidate_id not in self._candidates or candidate_id == self._candidate_id:
+            return
+        self._candidate_id = candidate_id
+        self.candidate_changed.emit(candidate_id)

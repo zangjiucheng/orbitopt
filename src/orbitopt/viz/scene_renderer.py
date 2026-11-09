@@ -58,6 +58,10 @@ def _actor_orientation_from_matrix(rotation: np.ndarray) -> tuple[float, float, 
     return transform.GetOrientation()
 
 MANEUVER_COLOR = "#ff5a3c"  # burn / delta-v arrows (distinct from amber trails)
+# Optimizer candidates' screening arcs: the picked one in the app's "active"
+# cyan, the rest a quiet neutral so they read as context, not as flights.
+CANDIDATE_SELECTED_COLOR = "#5ec8ff"
+CANDIDATE_COLOR = "#a9a6bb"
 
 
 def _default_view_direction(scene: dict) -> np.ndarray | None:
@@ -449,6 +453,9 @@ class SceneRenderer:
         self._orbit_actors: list = []
         self._frame_body_id: str | None = None
         self._time = 0.0
+        self._candidate_actors: dict[str, object] = {}
+        self._candidate_id: str | None = None
+        self._candidates_show_all = True
         self._rotating: list[dict] = []
         self._rotation_elapsed_hours = 0.0
         self._has_timeline = False
@@ -485,6 +492,8 @@ class SceneRenderer:
         self._static_items = {}
         self._orbit_actors = []
         self._frame_body_id = None
+        self._candidate_actors = {}
+        self._candidate_id = None
         self._rotating = []
         self._rotation_elapsed_hours = 0.0
         self._actor_body_ids = {}
@@ -582,6 +591,13 @@ class SceneRenderer:
                 self._static_items[body["id"]] = {
                     "sphere_actor": sphere_actor, "marker_poly": marker, "label_poly": label_poly,
                 }
+
+        for cand in scene.get("candidates", []):
+            points = np.asarray(cand["screeningPath"]["positions"], dtype=float)
+            self._candidate_actors[cand["id"]] = self.plotter.add_mesh(
+                pv.MultipleLines(points), color=CANDIDATE_COLOR, line_width=1.0, opacity=0.4,
+                pickable=False, name=f"candidate-{cand['id']}",
+            )
 
         timeline = scene.get("timeline")
         self.set_time(timeline["min"] if timeline else 0.0)
@@ -772,7 +788,37 @@ class SceneRenderer:
             entry["full_poly"].points = display
             entry["past_trail"].set_positions(display)
         self._place_static_geometry(self.frame_origin(self._time))
+        self._apply_candidate_style()
         self.set_time(self._time, render=render)
+
+    # --------------------------------------------------------- candidates
+    def highlight_candidate(self, candidate_id: str | None, show_all: bool = True, render: bool = True) -> None:
+        """Emphasize one optimizer candidate's screening arc; with
+        ``show_all`` False the others are hidden instead of dimmed."""
+        self._candidate_id = candidate_id
+        self._candidates_show_all = bool(show_all)
+        self._apply_candidate_style()
+        if render:
+            self.plotter.render()
+
+    def candidate_visible(self, candidate_id: str) -> bool:
+        actor = self._candidate_actors.get(candidate_id)
+        return bool(actor is not None and actor.GetVisibility())
+
+    def _apply_candidate_style(self) -> None:
+        # Screening arcs are drawn only in the scene's own frame: they belong
+        # to other departure dates, outside the span over which the planets'
+        # trails (and so any planet-centered frame) are defined.
+        in_scene_frame = self._frame_body_id is None
+        for cid, actor in self._candidate_actors.items():
+            selected = cid == self._candidate_id
+            actor.SetVisibility(in_scene_frame and (selected or self._candidates_show_all))
+            prop = actor.prop
+            prop.color = CANDIDATE_SELECTED_COLOR if selected else CANDIDATE_COLOR
+            # Kept under the mission trail's weight (2.6): the flown trajectory
+            # stays the primary line, a candidate arc is a comparison overlay.
+            prop.line_width = 1.6 if selected else 1.0
+            prop.opacity = 0.8 if selected else 0.4
 
     def _frame_origin_many(self, ts: np.ndarray) -> np.ndarray:
         body_id = self._frame_body_id

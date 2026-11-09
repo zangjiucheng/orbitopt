@@ -15,6 +15,7 @@ Layout of the package:
 * state.py        -- MissionState: the loaded scene, current time and body
                      selection, shared by every panel through Qt signals.
 * sidebar.py      -- the mission list (left).
+* candidate_panel.py -- the optimizer's candidate trajectories (left).
 * inspector.py    -- measure readout, maneuver list and body cards (right).
 * timeline_bar.py -- play / time-warp / event scrubber (bottom).
 * view_strip.py   -- which body the view is centered on, and body scale.
@@ -56,6 +57,7 @@ from PySide6.QtWidgets import (
 
 from orbitopt.missions import list_missions
 from orbitopt.viz import icons
+from orbitopt.viz.candidate_panel import CandidatePanel
 from orbitopt.viz.compute import BackendProbeWorker, ComputePool, SceneLoader
 from orbitopt.viz.icon import app_icon
 from orbitopt.viz.inspector import InspectorPanel
@@ -186,6 +188,7 @@ class MissionControlWindow(QMainWindow):
         self.state.time_changed.connect(self._on_time_changed)
         self.state.selection_changed.connect(self._update_measure)
         self.state.frame_changed.connect(self._on_frame_changed)
+        self.state.candidate_changed.connect(self._on_candidate_changed)
         self._populate_builtin_missions()
         self._start_backend_probe()
 
@@ -239,6 +242,9 @@ class MissionControlWindow(QMainWindow):
         self.sidebar.mission_activated.connect(self._on_mission_activated)
         self.sidebar.open_file_clicked.connect(self._open_file)
         self.sidebar.collapse_clicked.connect(self._toggle_sidebar)
+        self.candidate_panel = CandidatePanel(self.state)
+        self.candidate_panel.show_all_box.toggled.connect(lambda _on: self._apply_candidate_highlight())
+        self.sidebar.add_section(self.candidate_panel)
         self.left_rail = self._build_rail(icons.chevron_right_icon, self._toggle_sidebar, "Show missions")
         self.left_stack = QStackedWidget()
         self.left_stack.addWidget(self.sidebar)
@@ -1110,6 +1116,7 @@ class MissionControlWindow(QMainWindow):
         # Resets time + selection and lets the timeline bar and the inspector
         # rebuild themselves for the new scene.
         self.state.set_scene(scene)
+        self._apply_candidate_highlight(render=False)
         self._refresh_view()
 
         # Set last, after everything above has succeeded -- these two are the
@@ -1201,6 +1208,20 @@ class MissionControlWindow(QMainWindow):
         self._refresh_view()
         name = self.state.body(body_id)["name"] if body_id else "the scene's own frame"
         self.statusBar().showMessage(f"View centered on {name}")
+
+    def _apply_candidate_highlight(self, render: bool = True):
+        self.renderer.highlight_candidate(
+            self.state.candidate_id, show_all=self.candidate_panel.show_all_box.isChecked(), render=render,
+        )
+
+    def _on_candidate_changed(self, _candidate_id):
+        self._apply_candidate_highlight()
+        cand = self.state.candidate()
+        if cand is not None:
+            self.statusBar().showMessage(
+                f"{cand['label']} highlighted" + ("" if self.state.frame_body_id is None
+                                                  else " — screening arcs show in the scene's own frame")
+            )
 
     # ------------------------------------------------------- Event seeking
     def _seek_to_event(self, event: dict):

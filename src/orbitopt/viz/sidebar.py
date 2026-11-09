@@ -28,6 +28,7 @@ class MissionSidebar(QWidget):
         # with this attribute set (a plain QWidget gets it implicitly).
         self.setAttribute(Qt.WA_StyledBackground, True)
         layout = QVBoxLayout(self)
+        self._layout = layout
         layout.setContentsMargins(8, 10, 8, 10)
         layout.setSpacing(0)
 
@@ -66,6 +67,10 @@ class MissionSidebar(QWidget):
         self.open_file_btn = QPushButton("Open scene file…")
         self.open_file_btn.clicked.connect(self.open_file_clicked)
         layout.addWidget(self.open_file_btn)
+
+    def add_section(self, widget: QWidget) -> None:
+        """Add a panel below the mission list (above the open-file button)."""
+        self._layout.insertWidget(self._layout.indexOf(self.open_file_btn), widget)
 
     def add_mission(self, key: str, label: str, tooltip: str) -> None:
         item = QListWidgetItem(label)

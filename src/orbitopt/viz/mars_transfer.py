@@ -76,6 +76,7 @@ from orbitopt.verify.tudat_propagate import (
     body_velocity_at_absolute_epoch,
     propagate_multi_arc,
 )
+from orbitopt.viz.candidates import build_candidate_entries
 from orbitopt.viz.porkchop import compute_porkchop
 from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, ROTATION_PERIOD_HOURS, TEXTURE, body_entry, scene_document
 
@@ -406,7 +407,16 @@ def _build_mars_mission(
     if outcome.best_effort:
         refine.notes.append(f"no candidate passed verification; candidate #{outcome.index} exported best-effort")
     refine.constraint_violations = violations(outcome.payload[2])
-    return mark_scene_best_effort(outcome.result, gate)
+    scene = mark_scene_best_effort(outcome.result, gate)
+    # Every distinct candidate, for side-by-side comparison in the viewer: its
+    # numbers, its fate at selection and at the gate, and its two-body Lambert
+    # screening arc (only the exported one has a high-fidelity flight -- the
+    # spacecraft trail).
+    scene["candidates"] = build_candidate_entries(
+        recorder[SELECT].candidates, gate.candidates, outcome.index,
+        reference_et=scene["timeline"]["referenceEpochEt"], flown_body_id="spacecraft",
+    )
+    return scene
 
 
 def _select_candidates(candidates, report, max_candidates, recorder, pinned=False):

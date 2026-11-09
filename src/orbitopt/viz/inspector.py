@@ -12,6 +12,7 @@ from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from orbitopt.viz import icons
+from orbitopt.viz.candidate_panel import candidate_status, format_date, format_dv
 from orbitopt.viz.state import MissionState
 
 
@@ -45,6 +46,7 @@ class InspectorPanel(QWidget):
         self._event_widgets: list[QWidget] = []
         self._event_rows: list[tuple[dict, QFrame]] = []
         self._active_event_id: int | None = None
+        self._candidate_card: QFrame | None = None
         self.setObjectName("infoPanel")
         # A QWidget *subclass* only paints its stylesheet background/border
         # with this attribute set (a plain QWidget gets it implicitly).
@@ -53,6 +55,7 @@ class InspectorPanel(QWidget):
         state.scene_changed.connect(self._rebuild)
         state.selection_changed.connect(self._refresh_card_highlights)
         state.time_changed.connect(lambda _t: self._refresh_active_event())
+        state.candidate_changed.connect(lambda _cid: self._fill_candidate_card())
 
     def _build(self):
         outer = QVBoxLayout(self)
@@ -131,14 +134,20 @@ class InspectorPanel(QWidget):
 
     # --------------------------------------------------------- rebuild
     def _rebuild(self, scene: dict | None):
+        # setParent(None) takes each old widget out of the panel right away;
+        # deleteLater alone waits for the event loop, and until then the old
+        # cards still show above the new ones.
         for card in self._body_cards.values():
+            card["frame"].setParent(None)
             card["frame"].deleteLater()
         self._body_cards = {}
         for widget in self._event_widgets:
+            widget.setParent(None)
             widget.deleteLater()
         self._event_widgets = []
         self._event_rows = []
         self._active_event_id = None
+        self._candidate_card = None
         self.measure_card.setVisible(False)
 
         stretch_item = self.info_layout.takeAt(self.info_layout.count() - 1)
@@ -147,6 +156,18 @@ class InspectorPanel(QWidget):
         if scene is None:
             self.info_layout.addStretch(1)
             return
+
+        if self._state.candidates:
+            header = QLabel("CANDIDATE")
+            header.setObjectName("sectionHeader")
+            self.info_layout.addWidget(header)
+            self._event_widgets.append(header)
+            self._candidate_card = QFrame()
+            self._candidate_card.setObjectName("bodyCard")
+            QVBoxLayout(self._candidate_card).setContentsMargins(10, 8, 10, 8)
+            self.info_layout.addWidget(self._candidate_card)
+            self._event_widgets.append(self._candidate_card)
+            self._fill_candidate_card()
 
         timeline = scene.get("timeline")
         events = self._state.events
@@ -172,6 +193,84 @@ class InspectorPanel(QWidget):
 
         self.info_layout.addStretch(1)
         self._refresh_active_event()
+
+    def candidate_card_text(self) -> str:
+        """Every label's text in the candidate card (for tests)."""
+        if self._candidate_card is None:
+            return ""
+        return "\n".join(w.text() for w in self._candidate_card.findChildren(QLabel))
+
+    def _fill_candidate_card(self):
+        card, cand = self._candidate_card, self._state.candidate()
+        if card is None or cand is None:
+            return
+        layout = card.layout()
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)  # item.widget() is None after this
+                widget.deleteLater()
+            elif item.layout() is not None:
+                _clear_layout(item.layout())
+        layout.setSpacing(3)
+
+        name_row = QHBoxLayout()
+        name = QLabel(cand["label"])
+        name.setObjectName("bodyName")
+        status_text, color = candidate_status(cand)
+        status = QLabel(status_text)
+        status.setStyleSheet(f"color: {color}; font-size: 10px; font-weight: 600;")
+        name_row.addWidget(name)
+        name_row.addStretch(1)
+        name_row.addWidget(status)
+        layout.addLayout(name_row)
+
+        best = min((c["lambertTotalDvMs"] for c in self._state.candidates
+                    if c.get("lambertTotalDvMs") is not None), default=None)
+        dv = cand.get("lambertTotalDvMs")
+        dv_text = format_dv(dv)
+        if dv is not None and best is not None and dv > best:
+            dv_text += f"  (+{(dv - best) / 1000.0:.3f} vs best)"
+        elif dv is not None and best is not None:
+            dv_text += "  (best)"
+        departure = cand.get("departureMjd2000")
+        tof = cand.get("tofDays")
+        rank = cand.get("rank")
+        rows = [
+            ("Departure", format_date(departure)),
+            ("Arrival", format_date(None if departure is None or tof is None else departure + tof)),
+            ("Time of flight", "—" if tof is None else f"{tof:.1f} days"),
+            ("Lambert Δv", dv_text),
+            ("Selection", f"{cand.get('selection', '—')}" + ("" if rank is None else f", rank {rank}")),
+            ("Verification", (cand.get("verification") or "not flown").replace("_", " ")),
+        ]
+        for key, value in rows:
+            r = QHBoxLayout()
+            k = QLabel(key)
+            k.setObjectName("bodyStat")
+            val = QLabel(value)
+            val.setObjectName("bodyStatValue")
+            val.setWordWrap(True)
+            val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            r.addWidget(k)
+            r.addStretch(1)
+            r.addWidget(val)
+            layout.addLayout(r)
+
+        notes = list(cand.get("verdictReasons") or [])
+        if cand.get("exported"):
+            notes.append("This is the mission trajectory (amber): flown in high fidelity; "
+                         "the cyan arc is its two-body screening estimate.")
+        else:
+            flown = next((c for c in self._state.candidates if c.get("exported")), None)
+            notes.append("Screening arc only (two-body Lambert) -- not flown in high fidelity."
+                         + (f" The timeline and maneuvers are {flown['label']}'s." if flown else ""))
+        for text in notes:
+            note = QLabel(text)
+            note.setObjectName("maneuverNote")
+            note.setWordWrap(True)
+            layout.addWidget(note)
 
     def _add_body_card(self, body: dict):
         frame = QFrame()
@@ -245,6 +344,10 @@ class InspectorPanel(QWidget):
         top = QHBoxLayout()
         name = QLabel(event.get("label", ""))
         name.setObjectName("maneuverName")
+        # Long names ("Trajectory-correction maneuver") next to the time would
+        # otherwise set a minimum width wider than the panel, and with
+        # horizontal scrolling off every card got clipped on the right.
+        name.setWordWrap(True)
         time_label = QLabel(f"T+{event.get('time', 0.0):.2f} {unit}")
         time_label.setObjectName("maneuverTime")
         top.addWidget(name)
@@ -285,3 +388,14 @@ class InspectorPanel(QWidget):
         for e, row in self._event_rows:
             row.setProperty("active", id(e) == active_id)
             _repolish(row)
+
+
+def _clear_layout(layout) -> None:
+    while layout.count():
+        item = layout.takeAt(0)
+        widget = item.widget()
+        if widget is not None:
+            widget.setParent(None)  # item.widget() is None after this
+            widget.deleteLater()
+        elif item.layout() is not None:
+            _clear_layout(item.layout())
