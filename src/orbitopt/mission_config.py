@@ -20,7 +20,6 @@ do.
 from __future__ import annotations
 
 import hashlib
-import importlib
 import json
 from functools import lru_cache
 from importlib import resources
@@ -38,8 +37,9 @@ _KIND_SCHEMAS = {
     "lunar-free-return": "mission-lunar-free-return-1.0.json",
 }
 
-# mission.kind -> (module, attribute) of a `build_from_config(config: dict)
-# -> dict` callable. Imported lazily (only once a config of that kind is
+# mission.kind -> (module, attribute) of a `build_from_config(config: dict,
+# recorder=None) -> dict` callable (``recorder``: an
+# orbitopt.pipeline.StageRecorder the builder reports its stage results to). Imported lazily (only once a config of that kind is
 # actually built, not merely validated) via importlib, not a module-level
 # import, so validating a config never requires that kind's compute stack
 # (pykep/pygmo/tudatpy) to be installed -- only jsonschema + pyyaml.
@@ -111,16 +111,24 @@ def load_mission_config(path, *, validate: bool = True) -> dict:
 
 
 def build_scene_from_config(config: dict) -> dict:
-    """Validate ``config`` and run its mission kind's builder, returning a
-    SceneData dict (see orbitopt.scene_format) ready for ``write_scene`` or
-    the viewer. The kind's module -- and whatever compute stack it needs --
-    is only imported here, at call time, not at import time of this module."""
-    validate_mission_config(config)
-    kind = config["mission"]["kind"]
-    module_name, attr = _KIND_BUILDERS[kind]
-    module = importlib.import_module(module_name)
-    builder = getattr(module, attr)
-    return builder(config)
+    """Validate ``config`` and run it through the unified mission pipeline
+    (orbitopt.pipeline.run_pipeline), returning just the SceneData dict (see
+    orbitopt.scene_format) ready for ``write_scene`` or the viewer, with any
+    verification reports still attached under
+    ``orbitopt.verify.report.SCENE_REPORTS_KEY`` (``pop_from_scene`` them).
+    Use ``run_pipeline`` directly for the standardized per-stage result.
+
+    The kind's module -- and whatever compute stack it needs -- is only
+    imported at call time, not at import time of this module."""
+    from orbitopt.pipeline import run_pipeline
+
+    result = run_pipeline(config)
+    scene = result.scene
+    if result.verification_reports:
+        from orbitopt.verify.report import SCENE_REPORTS_KEY
+
+        scene[SCENE_REPORTS_KEY] = list(result.verification_reports)
+    return scene
 
 
 def config_digest(config: dict) -> str:

@@ -138,6 +138,11 @@
           "type": "string",
           "minLength": 1,
           "description": "Where `orbitopt run` writes the machine-readable verification report (verification-report-1.0.json schema). Default: next to the scene as <scene stem>.verification.json."
+        },
+        "pipeline_result": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where `orbitopt run` writes the standardized pipeline result (pipeline-result-1.0.json schema: per-stage candidates, convergence, constraint violations, physical model, numerical error, timing). Default: next to the scene as <scene stem>.pipeline.json."
         }
       }
     }

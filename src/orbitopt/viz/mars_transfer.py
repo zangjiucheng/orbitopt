@@ -34,6 +34,7 @@ for the same reason.
 from __future__ import annotations
 
 import logging
+import time
 
 import numpy as np
 import pykep as pk
@@ -48,6 +49,7 @@ from orbitopt.injection import equatorial_to_ecliptic
 from orbitopt.lambert.gpu_batch import solve_lambert_batch
 from orbitopt.launch_injection import LaunchSpec, launch_to_injection
 from orbitopt.optimize.multistart import SINGLE_BASIN_HALF_WIDTH, find_diverse_basins, multistart_optimize
+from orbitopt.pipeline import CONSTRAINTS, OPTIMIZE, REFINE, SEARCH, VERIFY, StageRecorder
 from orbitopt.problems.transfer_2body import Transfer2BodyProblem
 from orbitopt.timescales import mjd2000_to_utc_datetime
 from orbitopt.verify import report as verification_report
@@ -104,6 +106,7 @@ def _search_transfer(
     max_basins=MULTISTART_MAX_BASINS,
     basin_separation=MULTISTART_BASIN_SEPARATION,
     launch_constraints=None,
+    recorder=None,
 ):
     """Multi-basin search for the Earth->Mars Lambert transfer.
 
@@ -123,13 +126,22 @@ def _search_transfer(
     Returns ``(candidates, report)`` with ``candidates`` a list of
     ``(t0, tof, v_inf_dep)`` tuples ranked by Lambert total dv.
     """
+    recorder = StageRecorder() if recorder is None else recorder
     earth, mars = planet("earth"), planet("mars")
-    grid = compute_porkchop(earth, mars, t0_range, tof_range, n_t0=120, n_tof=120, use_gpu=False)
-    dv = np.where(grid.converged, grid.total_dv, np.inf)
-    basins = find_diverse_basins(
-        dv, grid.t0_grid, grid.tof_grid, max_basins=max_basins, min_separation=basin_separation,
-    )
+    with recorder.stage(SEARCH) as st:
+        grid = compute_porkchop(earth, mars, t0_range, tof_range, n_t0=120, n_tof=120, use_gpu=False)
+        dv = np.where(grid.converged, grid.total_dv, np.inf)
+        basins = find_diverse_basins(
+            dv, grid.t0_grid, grid.tof_grid, max_basins=max_basins, min_separation=basin_separation,
+        )
+        st.physical_model = {"name": "Sun-centered Lambert porkchop grid (pykep ephemerides)",
+                             "fidelity": "patched-conic", "grid": [120, 120]}
+        st.candidates = [{"t0_mjd2000": b.x, "tof_days": b.y, "total_dv_km_s": b.value, "rank": b.rank}
+                         for b in basins]
+        st.convergence = {"converged": bool(basins), "grid_converged_fraction": float(np.mean(grid.converged))}
 
+    opt = recorder[OPTIMIZE]
+    t_opt = time.perf_counter()
     report = multistart_optimize(
         lambda t0_bounds, tof_bounds: Transfer2BodyProblem(
             earth, mars, t0_bounds, tof_bounds, launch_constraints=launch_constraints),
@@ -142,6 +154,15 @@ def _search_transfer(
     )
     report.notes.append(f"porkchop grid minimum {basins[0].value:.3f} km/s at t0={basins[0].x:.1f}, tof={basins[0].y:.1f}")
     logger.info("Earth->Mars window search:\n%s", report.summary(unit="m/s"))
+    recorder.add_time(OPTIMIZE, time.perf_counter() - t_opt)
+    opt.physical_model = {"name": "Sun-centered Lambert transfer, multistart PSO (Transfer2BodyProblem)",
+                          "fidelity": "patched-conic"}
+    opt.candidates = [{"t0_mjd2000": c.x, "tof_days": c.y, "total_dv_m_s": c.value, "basin_rank": c.basin_rank,
+                       "merged_runs": c.merged_runs} for c in report.candidates]
+    opt.convergence = {"converged": bool(report.candidates), "runs": len(report.runs),
+                       "distinct_candidates": len(report.candidates),
+                       "improvement_vs_single_basin_m_s": report.improvement}
+    opt.notes.extend(report.notes)
 
     candidates = [(c.x, c.y, _lambert_v_inf_dep(earth, mars, c.x, c.y)) for c in report.candidates]
     return candidates, report
@@ -228,6 +249,7 @@ def _build_mars_mission(
     max_output_points=3000,
     max_tudat_candidates=MAX_TUDAT_CANDIDATES,
     launch: LaunchSpec | None = None,
+    recorder=None,
 ):
     """``launch`` (orbitopt.launch_injection.LaunchSpec) switches on the
     real launch: the search is launch-constrained (vehicle C3 + site DLA),
@@ -235,23 +257,61 @@ def _build_mars_mission(
     flown from a launch-window lift-off into a site-reachable parking orbit
     with a numerically verified TMI burn. ``None`` (the default) is the
     original idealized-parking-orbit pipeline, unchanged."""
+    recorder = StageRecorder() if recorder is None else recorder
     if t0_range is None:
         t0_range = (mjd2000_from_date(*DEPARTURE_WINDOW_START), mjd2000_from_date(*DEPARTURE_WINDOW_END))
+
+    with recorder.stage(CONSTRAINTS) as st:
+        launch_constraints = None if launch is None else launch.constraints(frame="ecliptic")
+        st.physical_model = {"name": "departure window + TOF box" + ("" if launch is None else
+                                                                       ", launch vehicle C3 + site DLA limits"),
+                             "fidelity": "analytic",
+                             "t0_range_mjd2000": list(t0_range), "tof_range_days": list(tof_range),
+                             "launch_limits": None if launch_constraints is None else launch_constraints.describe()}
 
     if launch is not None and launch.pinned:
         t0, tof = launch.departure_mjd2000, launch.tof_days
         candidates, report = [(t0, tof, _lambert_v_inf_dep(planet("earth"), planet("mars"), t0, tof))], None
+        recorder.skip(SEARCH, "transfer pinned by the config's launch.departure")
+        recorder.skip(OPTIMIZE, "transfer pinned by the config's launch.departure")
     else:
         candidates, report = _search_transfer(
             t0_range, tof_range, pop_size, generations, seed,
-            launch_constraints=None if launch is None else launch.constraints(frame="ecliptic"),
+            launch_constraints=launch_constraints, recorder=recorder,
         )
     fly_kwargs = dict(
         parking_altitude_km=parking_altitude_km if launch is None else launch.parking_altitude_km,
         mars_tcm_target_periapsis_km=mars_tcm_target_periapsis_km,
         mars_capture_apoapsis_alt_km=mars_capture_apoapsis_alt_km,
         max_output_points=max_output_points,
+        recorder=recorder,
     )
+    refine = recorder[REFINE]
+    refine.physical_model = {"name": "tudatpy N-body (Earth/Sun escape, Sun-centered cruise with TCM, "
+                                     "Mars capture), fixed-step RK4", "fidelity": "high-fidelity"}
+
+    def violations(v_inf_dep):
+        if launch_constraints is None:
+            return {}
+        ev = launch_constraints.evaluate(np.asarray(v_inf_dep)[None, :])
+        return {"launch_c3_km2_s2": float(ev.c3_excess[0]), "launch_dla_deg": float(ev.dla_excess_deg[0])}
+
+    def refine_attempt(i, t0, tof, v_inf_dep, **kw):
+        entry = {"index": i, "t0_mjd2000": float(t0), "tof_days": float(tof), "selected": False}
+        refine.candidates.append(entry)
+        verify_s = recorder[VERIFY].elapsed_s
+        try:
+            with recorder.stage(REFINE):
+                scene = _fly_transfer(t0, tof, v_inf_dep, **injection_for(t0, v_inf_dep), **kw, **fly_kwargs)
+        except RuntimeError as exc:
+            entry["rejected"] = str(exc)
+            raise
+        finally:
+            # The MOI verification runs inside _fly_transfer; keep stage times disjoint.
+            refine.elapsed_s -= recorder[VERIFY].elapsed_s - verify_s
+        entry["selected"] = True
+        refine.constraint_violations = violations(v_inf_dep)
+        return scene
 
     def injection_for(t0, v_inf_dep):
         if launch is None:
@@ -268,18 +328,18 @@ def _build_mars_mission(
     rejected = []
     for i, (t0, tof, v_inf_dep) in enumerate(candidates[:max(1, max_tudat_candidates)]):
         try:
-            return _fly_transfer(
-                t0, tof, v_inf_dep, require_tcm_converged=True,
-                search_note=_search_note(report, i, rejected), **injection_for(t0, v_inf_dep), **fly_kwargs,
+            return refine_attempt(
+                i, t0, tof, v_inf_dep, require_tcm_converged=True,
+                search_note=_search_note(report, i, rejected),
             )
         except RuntimeError as exc:
             logger.warning("Mars candidate #%d (t0=%.2f, tof=%.2f) rejected by tudatpy verification: %s", i, t0, tof, exc)
             rejected.append(i)
     t0, tof, v_inf_dep = candidates[0]
-    return _fly_transfer(
-        t0, tof, v_inf_dep, require_tcm_converged=False,
+    refine.notes.append("no candidate fully converged; flying the Lambert-best one best-effort")
+    return refine_attempt(
+        0, t0, tof, v_inf_dep, require_tcm_converged=False,
         search_note=_search_note(report, 0, rejected) + " No candidate fully converged; flying the Lambert-best one.",
-        **injection_for(t0, v_inf_dep), **fly_kwargs,
     )
 
 
@@ -295,6 +355,7 @@ def _fly_transfer(
     require_tcm_converged,
     search_note="",
     injection=None,
+    recorder=None,
 ):
     """Fly one Lambert candidate through the real tudatpy pipeline and
     export it as a scene. Raises _CandidateRejected when
@@ -410,6 +471,13 @@ def _fly_transfer(
         coast_duration_guess=remaining_tof_s,
         target_periapsis_km=mars_tcm_target_periapsis_km,
     )
+    recorder = StageRecorder() if recorder is None else recorder
+    refine = recorder[REFINE]
+    refine.convergence = {"converged": bool(tcm.converged), "tcm_iterations": int(tcm.iterations)}
+    refine.numerical_error = {
+        "tcm_final_miss_km": float(tcm.final_miss_km),
+        "tcm_periapsis_error_km": float(abs(tcm.predicted_periapsis_km - mars_tcm_target_periapsis_km)),
+    }
     if require_tcm_converged and not tcm.converged:
         raise _CandidateRejected(f"TCM did not converge (final miss {tcm.final_miss_km:,.0f} km)")
     events.append({
@@ -455,10 +523,17 @@ def _fly_transfer(
         raise _CandidateRejected(
             f"located Mars periapsis {periapsis_km:,.0f} km ({periapsis_km - MARS_RADIUS_KM:,.0f} km altitude) "
             f"is below the {MARS_MIN_PERIAPSIS_ALT_KM:g} km floor -- the trajectory would hit Mars")
-    moi = verify_mars_orbit_insertion(
-        r_rel, v_rel, periapsis_km=periapsis_km, apoapsis_km=periapsis_km + mars_capture_apoapsis_alt_km,
-        arrival_epoch_et=arrival_epoch_et,
-    )
+    refine.numerical_error["located_periapsis_error_km"] = float(abs(periapsis_km - mars_tcm_target_periapsis_km))
+    with recorder.stage(VERIFY) as st:
+        moi = verify_mars_orbit_insertion(
+            r_rel, v_rel, periapsis_km=periapsis_km, apoapsis_km=periapsis_km + mars_capture_apoapsis_alt_km,
+            arrival_epoch_et=arrival_epoch_et,
+        )
+        st.physical_model = {"name": "tudatpy Mars point mass + Sun, MOI capture-burn targeting; "
+                                     "verification reports for launch injection / TCM / MOI",
+                             "fidelity": "high-fidelity"}
+        st.candidates = [{"captured_orbit": moi.achieved, "moi_delta_v_m_s": float(np.linalg.norm(moi.delta_v_ms)),
+                          "selected": True}]
     events.append({
         "label": "Mars-SOI entry / approach", "time": soi_entry_time_days,
         "note": f"crosses Mars's real sphere-of-influence radius ({MARS_SOI_RADIUS_KM:,.0f} km), "
@@ -593,7 +668,7 @@ def compute_and_export_mars_mission(**kwargs) -> dict:
     return scene
 
 
-def build_from_config(config: dict) -> dict:
+def build_from_config(config: dict, recorder=None) -> dict:
     """orbitopt.mission_config adapter for mission.kind == "mars-transfer"."""
     mission = config["mission"]
     launch_window = config.get("launch_window", {})
@@ -629,7 +704,7 @@ def build_from_config(config: dict) -> dict:
     if launch is not None:
         kwargs["launch"] = launch
 
-    scene = _build_mars_mission(**kwargs)
+    scene = _build_mars_mission(recorder=recorder, **kwargs)
     scene["id"] = mission["id"]
     scene["title"] = mission["title"]
     return scene

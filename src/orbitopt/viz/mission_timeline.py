@@ -375,7 +375,7 @@ def _build_artemis2_mission(
     ), targeting
 
 
-def build_from_config(config: dict) -> dict:
+def build_from_config(config: dict, recorder=None) -> dict:
     """orbitopt.mission_config adapter for mission.kind == "lunar-free-return"
     (the Artemis II free return; schema mission-lunar-free-return-1.0.json).
     Every omitted field falls back to compute_and_export_mission's defaults,
@@ -385,7 +385,12 @@ def build_from_config(config: dict) -> dict:
     perigee and entry corridor are checked on a full propagation), so there
     is no separate re-fly stage to skip: ``verification.enabled: false``
     (``orbitopt run --skip-verify``) only drops the machine-readable report
-    from the output -- the corridor check still gates the export."""
+    from the output -- the corridor check still gates the export.
+
+    ``recorder`` (an orbitopt.pipeline.StageRecorder) is accepted for the
+    unified pipeline's builder signature; this kind does not report
+    per-stage results, so those stages stay "not run" in the pipeline
+    result."""
     mission = config["mission"]
     departure = config.get("departure", {})
     parking_orbit = config.get("parking_orbit", {})

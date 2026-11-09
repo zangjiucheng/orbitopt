@@ -52,6 +52,8 @@ skipped apogees for orbit determination) -- noted in the subtitle.
 """
 from __future__ import annotations
 
+import time
+
 import numpy as np
 
 from orbitopt.bodies import (
@@ -60,6 +62,7 @@ from orbitopt.bodies import (
     mjd2000_from_date,
 )
 from orbitopt.optimize.runner import run_optimization
+from orbitopt.pipeline import CONSTRAINTS, OPTIMIZE, REFINE, SEARCH, VERIFY, StageRecorder
 from orbitopt.problems.geo_raising import (
     GeoRaisingProblem,
     MU_EARTH_KM3_S2,
@@ -233,6 +236,7 @@ def _search_feasible_schedule(
     gto_perigee_km, gto_inclination_deg, apogee_dwell_s,
     wet_mass_kg, dry_mass_kg, isp_s, thrust_n,
     target_longitude_deg, penalty_weight,
+    recorder=None,
 ):
     """Search n_burns in [n_burns_min, n_burns_max] for the smallest burn
     count GeoRaisingProblem can satisfy within its own finite-burn delta-v
@@ -247,7 +251,12 @@ def _search_feasible_schedule(
     GeoRaisingProblem kwargs, so its own constructor defaults apply --
     single source of truth for those numbers instead of duplicating them
     here.
+
+    ``recorder`` (orbitopt.pipeline.StageRecorder) receives the constraints
+    (finite-burn per-pass cap), search (burn-count sweep) and optimize (the
+    winning PSO run) stage results.
     """
+    recorder = StageRecorder() if recorder is None else recorder
     kwargs = dict(gto_perigee_km=gto_perigee_km, gto_inclination_deg=gto_inclination_deg)
     for key, value in (
         ("wet_mass_kg", wet_mass_kg), ("dry_mass_kg", dry_mass_kg),
@@ -257,13 +266,43 @@ def _search_feasible_schedule(
         if value is not None:
             kwargs[key] = value
 
-    cap = GeoRaisingProblem(n_burns=2, **kwargs).max_dv_per_pass_ms(apogee_dwell_s)
+    with recorder.stage(CONSTRAINTS) as st:
+        cap = GeoRaisingProblem(n_burns=2, **kwargs).max_dv_per_pass_ms(apogee_dwell_s)
+        st.physical_model = {"name": "finite-burn per-apogee-pass delta-v cap", "fidelity": "analytic"}
+        st.candidates = [{"max_dv_per_burn_ms": float(cap), "apogee_dwell_s": float(apogee_dwell_s),
+                          "n_burns_range": [n_burns_min, n_burns_max]}]
+
+    search = recorder[SEARCH]
+    search.physical_model = {"name": "impulsive two-body GTO->GEO apogee-burn campaign (GeoRaisingProblem)",
+                             "fidelity": "two-body"}
+    search.notes.append("sweep n_burns upward; the first finite-burn-feasible PSO optimum wins")
     for n_burns in range(n_burns_min, n_burns_max + 1):
         problem = GeoRaisingProblem(n_burns=n_burns, max_dv_per_burn_ms=cap, **kwargs)
-        x, _, _ = run_optimization(problem, pop_size=pop_size, generations=generations, seed=seed, verbose=False)
+        t_run = time.perf_counter()
+        x, f, _ = run_optimization(problem, pop_size=pop_size, generations=generations, seed=seed, verbose=False)
+        dt = time.perf_counter() - t_run
         sched = problem.decode(x)
+        overshoot = max(0.0, sched["max_burn_ms"] - cap)
+        search.candidates.append({
+            "n_burns": n_burns, "feasible": sched["feasible"], "dv_total_ms": sched["dv_total_ms"],
+            "max_burn_ms": sched["max_burn_ms"], "selected": sched["feasible"],
+        })
         if sched["feasible"]:
+            search.convergence = {"converged": True, "n_burns": n_burns, "attempts": len(search.candidates)}
+            opt = recorder.add_time(OPTIMIZE, dt)
+            opt.physical_model = dict(search.physical_model)
+            opt.candidates = [{"n_burns": n_burns, "decision_vector": np.asarray(x).tolist(),
+                               "fitness": float(np.ravel(f)[0]), "dv_total_ms": sched["dv_total_ms"],
+                               "dv_per_burn_ms": sched["dv_per_burn_ms"], "selected": True}]
+            opt.convergence = {"converged": True, "algorithm": "pso_gen", "population": pop_size,
+                               "generations": generations, "seed": seed}
+            opt.constraint_violations = {"finite_burn_cap_ms": overshoot}
+            search.status = "completed"
             return problem, x, sched
+        recorder.add_time(SEARCH, dt)
+    search.convergence = {"converged": False, "attempts": len(search.candidates)}
+    search.status = "failed"
+    search.error = "no finite-burn-feasible schedule in the n_burns range"
     raise RuntimeError(
         f"No finite-burn-feasible GTO->GEO schedule within n_burns in [{n_burns_min}, {n_burns_max}]."
     )
@@ -293,6 +332,7 @@ def _build_geo_mission(
     pop_size=160,
     generations=150,
     points_per_arc=150,
+    recorder=None,
 ):
     """Does the actual work for compute_and_export_geo_mission (see that
     function's docstring), additionally returning (problem, decision_vector,
@@ -342,7 +382,10 @@ def _build_geo_mission(
         wet_mass_kg=wet_mass_kg, dry_mass_kg=dry_mass_kg,
         isp_s=isp_s, thrust_n=thrust_n,
         target_longitude_deg=target_longitude_deg, penalty_weight=penalty_weight,
+        recorder=recorder,
     )
+    recorder = StageRecorder() if recorder is None else recorder
+    refine_t0 = time.perf_counter()
 
     r_geo = problem.r_geo
     rp0 = problem.rp0
@@ -496,6 +539,21 @@ def _build_geo_mission(
     epochs_s = np.concatenate(epochs_s, axis=0)
     days = epochs_s / 86400.0
 
+    # Refine = the launch profile + campaign re-flown as one continuously
+    # propagated tudatpy trajectory; its terminal-state miss from the ideal
+    # circular equatorial GEO is the fixed-step integration error estimate.
+    final_r, final_v = states_km[-1, :3], states_km[-1, 3:]
+    final_h = np.cross(final_r, final_v)
+    refine = recorder.add_time(REFINE, time.perf_counter() - refine_t0)
+    refine.physical_model = {"name": "tudatpy Earth point mass, fixed-step RK4", "fidelity": "two-body",
+                             "step_size_s": float(step_size_s)}
+    refine.candidates = [{"n_burns": int(n_burns), "duration_days": float(days[-1]),
+                          "burns": len(burn_events), "selected": True}]
+    refine.numerical_error = {
+        "final_radius_error_km": float(abs(np.linalg.norm(final_r) - r_geo)),
+        "final_inclination_deg": float(np.degrees(np.arccos(np.clip(final_h[2] / np.linalg.norm(final_h), -1, 1)))),
+    }
+
     # Every position/velocity/delta-v vector so far is in this module's
     # local convention (see _launch_site_rotation) -- rotate the whole
     # rigid trajectory (position AND velocity columns) into real ECLIPJ2000
@@ -616,7 +674,7 @@ def compute_and_export_geo_mission(seed=1, step_size_s=2.0, max_output_points=25
     return scene
 
 
-def build_from_config(config: dict) -> dict:
+def build_from_config(config: dict, recorder=None) -> dict:
     """orbitopt.mission_config adapter for mission.kind == "geo-raising":
     unpack a validated config dict into _build_geo_mission's parameters, run
     it, and -- unless verification.enabled is explicitly False -- re-fly the
@@ -675,18 +733,31 @@ def build_from_config(config: dict) -> dict:
     if "points_per_arc" in propagation:
         kwargs["points_per_arc"] = propagation["points_per_arc"]
 
+    recorder = StageRecorder() if recorder is None else recorder
     scene, problem, x, _sched = _build_geo_mission(
-        seed=seed, step_size_s=step_size_s, max_output_points=max_output_points, **kwargs
+        seed=seed, step_size_s=step_size_s, max_output_points=max_output_points, recorder=recorder, **kwargs
     )
 
-    if verification.get("enabled", True):
-        result = verify_geo_raising(
-            problem, x,
-            step_size=verification.get("step_size_s", 120.0),
-            stationkeeping_days=verification.get("stationkeeping_days", 3.0),
-            epoch_mjd2000=verification.get("epoch_mjd2000"),
-        )
-        achieved = result.achieved_corrected
+    if not verification.get("enabled", True):
+        recorder.skip(VERIFY, "verification.enabled is false")
+    else:
+        with recorder.stage(VERIFY) as st:
+            result = verify_geo_raising(
+                problem, x,
+                step_size=verification.get("step_size_s", 120.0),
+                stationkeeping_days=verification.get("stationkeeping_days", 3.0),
+                epoch_mjd2000=verification.get("epoch_mjd2000"),
+            )
+            achieved = result.achieved_corrected
+            st.physical_model = {"name": "tudatpy Earth J2+J22 + Sun/Moon third body, final-burn targeter",
+                                 "fidelity": "high-fidelity"}
+            st.convergence = {"converged": bool(result.converged), "iterations": int(result.iterations)}
+            st.candidates = [{"achieved": achieved, "selected": True}]
+            st.numerical_error = {
+                "final_a_error_km": abs(float(achieved["a_km"]) - float(result.r_geo_km)),
+                "final_eccentricity": float(achieved["e"]),
+                "final_inclination_deg": float(achieved["i_deg"]),
+            }
         summary = (
             f"High-fidelity verification (tudatpy, J2+J22+Sun/Moon): "
             f"{'CONVERGED' if result.converged else 'DID NOT CONVERGE'} -- achieved "

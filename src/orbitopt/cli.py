@@ -101,14 +101,9 @@ def _cmd_validate(args):
     print(f"OK: {mission['id']} (kind: {mission['kind']})")
 
 
-def _report_path_for(scene_path) -> str:
-    p = Path(scene_path)
-    return str(p.with_name(p.stem + ".verification.json"))
-
-
 def _cmd_run(args):
-    from orbitopt.mission_config import build_scene_from_config
-    from orbitopt.scene_format import write_scene
+    from orbitopt.pipeline import run_pipeline
+    from orbitopt.verify.report import RESULT_PASSED, format_status, status_result
 
     config = _load_and_validate_config(args.config)
     if args.skip_verify:
@@ -116,24 +111,20 @@ def _cmd_run(args):
 
     mission = config["mission"]
     print(f"Running {mission['id']!r} (kind: {mission['kind']})...")
-    scene = build_scene_from_config(config)
-
-    from orbitopt.verify.report import (
-        RESULT_PASSED, bundle, format_status, pop_from_scene, status_result, write_report,
-    )
-
-    reports = pop_from_scene(scene)
-    out = args.out or config["output"]["scene_file"]
-    write_scene(scene, out)
-    print(f"wrote {out} ({len(scene.get('bodies', []))} bodies)")
-    if reports:
-        # One machine-readable verification report per run (task #137),
-        # next to the scene unless output.verification_report says otherwise.
-        report_out = config["output"].get("verification_report") or _report_path_for(out)
-        doc = reports[0] if len(reports) == 1 else bundle(reports, label=mission["id"])
-        write_report(doc, report_out)
+    # The same unified pipeline (orbitopt.pipeline) the GUI and Python API
+    # use: MissionConfig -> Constraints -> Search -> Optimize -> Refine ->
+    # Verify -> Export, writing the scene, its verification report (task
+    # #137) and the standardized pipeline result next to each other.
+    result = run_pipeline(config, write_outputs=True, scene_path=args.out)
+    scene = result.scene
+    print(f"wrote {result.outputs['scene_file']} ({len(scene.get('bodies', []))} bodies)")
+    if "verification_report" in result.outputs:
+        doc = result.verification_document()
         print(("" if status_result(doc["status"]) == RESULT_PASSED else "WARNING: ")
-              + f"wrote verification report {report_out} ({format_status(doc['status'])})")
+              + f"wrote verification report {result.outputs['verification_report']} "
+              f"({format_status(doc['status'])})")
+    print(f"wrote pipeline result {result.outputs['pipeline_result']}")
+    print(result.summary())
     # build_from_config appends its verification summary as trailing
     # subtitle lines -- surface it here too, so a non-convergence WARNING
     # is visible in the terminal, not just in the scene the UI shows later.
