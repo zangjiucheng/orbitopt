@@ -44,9 +44,12 @@ from orbitopt.bodies import (
     mjd2000_to_ephemeris_seconds,
     planet,
 )
+from orbitopt.injection import equatorial_to_ecliptic
 from orbitopt.lambert.gpu_batch import solve_lambert_batch
+from orbitopt.launch_injection import LaunchSpec, launch_to_injection
 from orbitopt.optimize.multistart import SINGLE_BASIN_HALF_WIDTH, find_diverse_basins, multistart_optimize
 from orbitopt.problems.transfer_2body import Transfer2BodyProblem
+from orbitopt.timescales import mjd2000_to_utc_datetime
 from orbitopt.verify import report as verification_report
 from orbitopt.verify.mars_insertion import (
     locate_mars_periapsis,
@@ -100,6 +103,7 @@ def _search_transfer(
     seed,
     max_basins=MULTISTART_MAX_BASINS,
     basin_separation=MULTISTART_BASIN_SEPARATION,
+    launch_constraints=None,
 ):
     """Multi-basin search for the Earth->Mars Lambert transfer.
 
@@ -112,6 +116,10 @@ def _search_transfer(
     and returns every distinct optimum, best first, together with the
     MultistartReport recording how this compares to the single-basin result.
 
+    ``launch_constraints`` (orbitopt.launch_constraints.LaunchConstraints,
+    ecliptic frame) is applied to every PSO fitness -- the porkchop screen
+    stays unconstrained, it only seeds the basins.
+
     Returns ``(candidates, report)`` with ``candidates`` a list of
     ``(t0, tof, v_inf_dep)`` tuples ranked by Lambert total dv.
     """
@@ -123,7 +131,8 @@ def _search_transfer(
     )
 
     report = multistart_optimize(
-        lambda t0_bounds, tof_bounds: Transfer2BodyProblem(earth, mars, t0_bounds, tof_bounds),
+        lambda t0_bounds, tof_bounds: Transfer2BodyProblem(
+            earth, mars, t0_bounds, tof_bounds, launch_constraints=launch_constraints),
         basins,
         full_bounds=(tuple(t0_range), tuple(tof_range)),
         half_width=SINGLE_BASIN_HALF_WIDTH,
@@ -134,20 +143,25 @@ def _search_transfer(
     report.notes.append(f"porkchop grid minimum {basins[0].value:.3f} km/s at t0={basins[0].x:.1f}, tof={basins[0].y:.1f}")
     logger.info("Earth->Mars window search:\n%s", report.summary(unit="m/s"))
 
-    candidates = []
-    for c in report.candidates:
-        t0, tof = c.x, c.y
-        r1, v1p = earth.eph(pk.epoch(t0))
-        r2, v2p = mars.eph(pk.epoch(t0 + tof))
-        r1, v1p, r2, v2p = (np.asarray(a) for a in (r1, v1p, r2, v2p))
-        res = solve_lambert_batch(r1[None, :], r2[None, :], np.array([tof * pk.DAY2SEC]), pk.MU_SUN, use_gpu=False)
-        candidates.append((t0, tof, res.v1[0] - v1p))
+    candidates = [(c.x, c.y, _lambert_v_inf_dep(earth, mars, c.x, c.y)) for c in report.candidates]
     return candidates, report
+
+
+def _lambert_v_inf_dep(earth, mars, t0, tof):
+    """Departure excess velocity [m/s, heliocentric ecliptic] of the
+    Earth->Mars Lambert transfer leaving at t0 [MJD2000] with tof [days]."""
+    r1, v1p = earth.eph(pk.epoch(t0))
+    r2, v2p = mars.eph(pk.epoch(t0 + tof))
+    r1, v1p, r2, v2p = (np.asarray(a) for a in (r1, v1p, r2, v2p))
+    res = solve_lambert_batch(r1[None, :], r2[None, :], np.array([tof * pk.DAY2SEC]), pk.MU_SUN, use_gpu=False)
+    return res.v1[0] - v1p
 
 
 def _search_note(report, flown_index, rejected):
     """One human-readable sentence recording the multistart search outcome
     (it ends up in the exported scene's TMI event note)."""
+    if report is None:
+        return "Transfer pinned by the config's launch.departure (no window search)."
     best = report.candidates[flown_index]
     parts = [
         f"Window chosen by multi-basin search: {len(report.basins)} porkchop basins, "
@@ -213,17 +227,39 @@ def _build_mars_mission(
     mars_capture_apoapsis_alt_km=MARS_CAPTURE_APOAPSIS_ALT_KM,
     max_output_points=3000,
     max_tudat_candidates=MAX_TUDAT_CANDIDATES,
+    launch: LaunchSpec | None = None,
 ):
+    """``launch`` (orbitopt.launch_injection.LaunchSpec) switches on the
+    real launch: the search is launch-constrained (vehicle C3 + site DLA),
+    or skipped for a pinned ``launch.departure``, and every candidate is
+    flown from a launch-window lift-off into a site-reachable parking orbit
+    with a numerically verified TMI burn. ``None`` (the default) is the
+    original idealized-parking-orbit pipeline, unchanged."""
     if t0_range is None:
         t0_range = (mjd2000_from_date(*DEPARTURE_WINDOW_START), mjd2000_from_date(*DEPARTURE_WINDOW_END))
 
-    candidates, report = _search_transfer(t0_range, tof_range, pop_size, generations, seed)
+    if launch is not None and launch.pinned:
+        t0, tof = launch.departure_mjd2000, launch.tof_days
+        candidates, report = [(t0, tof, _lambert_v_inf_dep(planet("earth"), planet("mars"), t0, tof))], None
+    else:
+        candidates, report = _search_transfer(
+            t0_range, tof_range, pop_size, generations, seed,
+            launch_constraints=None if launch is None else launch.constraints(frame="ecliptic"),
+        )
     fly_kwargs = dict(
-        parking_altitude_km=parking_altitude_km,
+        parking_altitude_km=parking_altitude_km if launch is None else launch.parking_altitude_km,
         mars_tcm_target_periapsis_km=mars_tcm_target_periapsis_km,
         mars_capture_apoapsis_alt_km=mars_capture_apoapsis_alt_km,
         max_output_points=max_output_points,
     )
+
+    def injection_for(t0, v_inf_dep):
+        if launch is None:
+            return {}
+        try:
+            return {"injection": launch_to_injection(launch, v_inf_dep, t0)}
+        except ValueError as exc:  # no launch window from the site for this asymptote
+            raise _CandidateRejected(str(exc)) from exc
 
     # Hand the ranked candidates to tudatpy one by one: the first whose real,
     # perturbed flight closes (escape reaches the SOI, TCM converges) wins.
@@ -234,7 +270,7 @@ def _build_mars_mission(
         try:
             return _fly_transfer(
                 t0, tof, v_inf_dep, require_tcm_converged=True,
-                search_note=_search_note(report, i, rejected), **fly_kwargs,
+                search_note=_search_note(report, i, rejected), **injection_for(t0, v_inf_dep), **fly_kwargs,
             )
         except RuntimeError as exc:
             logger.warning("Mars candidate #%d (t0=%.2f, tof=%.2f) rejected by tudatpy verification: %s", i, t0, tof, exc)
@@ -243,7 +279,7 @@ def _build_mars_mission(
     return _fly_transfer(
         t0, tof, v_inf_dep, require_tcm_converged=False,
         search_note=_search_note(report, 0, rejected) + " No candidate fully converged; flying the Lambert-best one.",
-        **fly_kwargs,
+        **injection_for(t0, v_inf_dep), **fly_kwargs,
     )
 
 
@@ -258,61 +294,102 @@ def _fly_transfer(
     max_output_points,
     require_tcm_converged,
     search_note="",
+    injection=None,
 ):
     """Fly one Lambert candidate through the real tudatpy pipeline and
     export it as a scene. Raises _CandidateRejected when
-    ``require_tcm_converged`` and the TCM targeter did not converge."""
-    reference_et = mjd2000_to_ephemeris_seconds(t0)
+    ``require_tcm_converged`` and the TCM targeter did not converge.
 
+    ``injection`` (orbitopt.launch_injection.LaunchInjection) replaces the
+    idealized parking orbit by the real launch: the timeline starts at the
+    launch-window lift-off, the trail at parking-orbit insertion into the
+    site-reachable plane, and the TMI is the numerically verified burn."""
     mu_earth = pk.MU_EARTH
-    parking_r_m = (EARTH_RADIUS_KM + parking_altitude_km) * 1000.0
-    r_burn, v_park, v_hyp, _q_hat = _hyperbolic_departure_state(v_inf_dep, parking_r_m, mu_earth)
-    tmi_dv = v_hyp - v_park
-    parking_period_s = 2.0 * np.pi * np.sqrt(parking_r_m ** 3 / mu_earth)
-
-    events = [
-        {"label": "Liftoff", "time": 0.0,
-         "note": "Ascent to parking-orbit insertion isn't itself drawn (a two-body "
-                 "propagator can't represent it) -- the trail starts already in orbit, "
-                 "same as the Artemis II and GOES scenes."},
-        {"label": "Parking-orbit insertion", "time": 0.0,
-         "note": f"{parking_altitude_km:.0f} km circular parking orbit."},
-    ]
+    if injection is None:
+        reference_et = mjd2000_to_ephemeris_seconds(t0)
+        parking_r_m = (EARTH_RADIUS_KM + parking_altitude_km) * 1000.0
+        r_burn, v_park, v_hyp, _q_hat = _hyperbolic_departure_state(v_inf_dep, parking_r_m, mu_earth)
+        tmi_dv = v_hyp - v_park
+        parking_coast_s = 2.0 * np.pi * np.sqrt(parking_r_m ** 3 / mu_earth)
+        phase1_r0, phase1_v0, phase1_start_et = r_burn, v_park, reference_et
+        phase1_start_rel_s = 0.0  # parking-orbit insertion, relative to reference_et
+        departure_offset_s = 0.0  # reference_et - (Lambert departure t0)
+        events = [
+            {"label": "Liftoff", "time": 0.0,
+             "note": "Ascent to parking-orbit insertion isn't itself drawn (a two-body "
+                     "propagator can't represent it) -- the trail starts already in orbit, "
+                     "same as the Artemis II and GOES scenes."},
+            {"label": "Parking-orbit insertion", "time": 0.0,
+             "note": f"{parking_altitude_km:.0f} km circular parking orbit."},
+        ]
+    else:
+        plan, ver, spec = injection.plan, injection.verification, injection.spec
+        reference_et = mjd2000_to_ephemeris_seconds(plan.launch.liftoff_mjd2000)
+        phase1_start_et = mjd2000_to_ephemeris_seconds(plan.launch.insertion_mjd2000)
+        phase1_start_rel_s = phase1_start_et - reference_et
+        departure_offset_s = reference_et - mjd2000_to_ephemeris_seconds(t0)
+        state_ins = equatorial_to_ecliptic(plan.orbit.state_at(plan.orbit.epoch_mjd2000))
+        phase1_r0, phase1_v0 = state_ins[:3], state_ins[3:]
+        parking_coast_s = float(plan.burn.coast_s)
+        tmi_dv = equatorial_to_ecliptic(ver.delta_v_m_s)
+        r_burn = equatorial_to_ecliptic(plan.burn.pre_burn_state[:3])
+        liftoff_utc = mjd2000_to_utc_datetime(plan.launch.liftoff_mjd2000)
+        vehicle = spec.vehicle or "unspecified vehicle"
+        events = [
+            {"label": "Liftoff", "time": 0.0,
+             "note": f"{vehicle} lifts off from {plan.launch.site_id} at {liftoff_utc:%Y-%m-%d %H:%M:%S} UTC "
+                     f"(optimum of the {injection.window.direction} launch window, azimuth "
+                     f"{plan.launch.azimuth_deg:.1f} deg), {spec.payload_kg:,.0f} kg payload. The ascent "
+                     "itself isn't drawn -- the trail starts at parking-orbit insertion."},
+            {"label": "Parking-orbit insertion", "time": round(phase1_start_rel_s / 86400.0, 4),
+             "note": f"{plan.orbit.altitude_km:.0f} km circular parking orbit, inclination "
+                     f"{plan.orbit.inclination_deg:.2f} deg (plane through the site and the departure asymptote)."},
+        ]
 
     # --- Phase 1: Earth-centered -- parking orbit -> TMI burn -> escape ---
     escape = propagate_multi_arc(
-        r_burn, v_park, reference_et,
+        phase1_r0, phase1_v0, phase1_start_et,
         arcs=[
-            {"type": "coast", "duration": parking_period_s},
+            {"type": "coast", "duration": parking_coast_s},
             {"type": "impulsive_burn", "delta_v": tmi_dv},
             {"type": "coast", "duration": 12.0 * 86400.0},
         ],
         central_body="Earth", perturbing_bodies=("Earth", "Sun"), step_size=60.0,
     )
+    escape_epochs_rel = escape.epochs + phase1_start_rel_s  # seconds, relative to reference_et
     radii_km = np.linalg.norm(escape.states[:, :3], axis=1) / 1000.0
     soi_idx = int(np.argmax(radii_km >= EARTH_SOI_RADIUS_KM))
     if radii_km[soi_idx] < EARTH_SOI_RADIUS_KM:
         raise RuntimeError("Departure hyperbola never reached Earth-SOI radius in the coast window.")
-    tmi_rel_time_s = parking_period_s
+    tmi_rel_time_s = phase1_start_rel_s + parking_coast_s
     tmi_epoch_et = reference_et + tmi_rel_time_s
     tmi_r_helio = body_position_at_absolute_epoch("Earth", tmi_epoch_et, central_body="Sun") + r_burn
+    if injection is None:
+        tmi_note = (f"apsis-preserving at the {parking_altitude_km:.0f} km parking-orbit perigee, "
+                    f"hyperbolic excess speed {np.linalg.norm(v_inf_dep) / 1000.0:.2f} km/s "
+                    f"(C3 {np.sum((v_inf_dep / 1000.0) ** 2):.1f} km^2/s^2). {search_note}")
+    else:
+        tmi_note = (f"after a {parking_coast_s / 60.0:.1f} min parking-orbit coast, hyperbolic excess speed "
+                    f"{np.linalg.norm(v_inf_dep) / 1000.0:.2f} km/s (C3 {injection.c3_km2_s2:.2f} km^2/s^2, "
+                    f"RLA {injection.rla_deg:.2f} deg, DLA {injection.dla_deg:.2f} deg; vehicle limit "
+                    f"{spec.constraints().max_c3:.2f} km^2/s^2). Burn Newton-corrected to "
+                    f"{ver.final_error:.3f} {ver.error_units} v-infinity residual "
+                    f"(launch-injection verification {'passed' if ver.passed else 'NOT passed'}). {search_note}")
     events.append({
         "label": "TMI burn", "time": round(tmi_rel_time_s / 86400.0, 4),
-        "note": f"apsis-preserving at the {parking_altitude_km:.0f} km parking-orbit perigee, "
-                f"hyperbolic excess speed {np.linalg.norm(v_inf_dep) / 1000.0:.2f} km/s "
-                f"(C3 {np.sum((v_inf_dep / 1000.0) ** 2):.1f} km^2/s^2). {search_note}".rstrip(),
+        "note": tmi_note.rstrip(),
         "vector": {"position": (tmi_r_helio / 1000.0).round(1).tolist(), "deltaV": tmi_dv.round(2).tolist()},
     })
 
     keep_idx = np.arange(soi_idx + 1)
-    phase1_epochs_rel = escape.epochs[keep_idx]  # seconds, relative to reference_et
+    phase1_epochs_rel = escape_epochs_rel[keep_idx]  # seconds, relative to reference_et
     phase1_states = escape.states[keep_idx]
     phase1_epochs_rel, phase1_states = _decimate(phase1_epochs_rel, phase1_states)
 
-    soi_exit_epoch_et = reference_et + float(escape.epochs[soi_idx])
+    soi_exit_epoch_et = reference_et + float(escape_epochs_rel[soi_idx])
     soi_exit_state_earth = escape.states[soi_idx]
     events.append({
-        "label": "Earth-SOI exit", "time": round(float(escape.epochs[soi_idx]) / 86400.0, 4),
+        "label": "Earth-SOI exit", "time": round(float(escape_epochs_rel[soi_idx]) / 86400.0, 4),
         "note": f"{EARTH_SOI_RADIUS_KM:,.0f} km from Earth center (real Earth sphere-of-influence radius)."})
 
     earth_r_helio = body_position_at_absolute_epoch("Earth", soi_exit_epoch_et, central_body="Sun")
@@ -327,7 +404,7 @@ def _fly_transfer(
         phase1_helio_positions_km[i] = (earth_pos_m + phase1_states[i, :3]) / 1000.0
 
     # --- Phase 2: heliocentric cruise, with a real trajectory-correction burn ---
-    remaining_tof_s = tof * 86400.0 - float(escape.epochs[soi_idx])
+    remaining_tof_s = tof * 86400.0 - departure_offset_s - float(escape_epochs_rel[soi_idx])
     tcm = target_mars_approach(
         sc_r_helio, sc_v_helio, soi_exit_epoch_et,
         coast_duration_guess=remaining_tof_s,
@@ -473,7 +550,10 @@ def _fly_transfer(
                 {"label": "MOI delta-v", "value": f"{np.linalg.norm(moi.delta_v_ms):.0f} m/s"},
                 {"label": "Departure C3", "value": f"{np.sum((v_inf_dep / 1000.0) ** 2):.1f} km^2/s^2"},
                 {"label": "Captured orbit", "value": f"{a_captured_km:,.0f} km semi-major axis, e={moi.achieved['e']:.3f}"},
-            ],
+            ] + ([] if injection is None else [
+                {"label": "Launch", "value": f"{spec.vehicle or '-'} from {plan.launch.site_id}, "
+                                             f"{liftoff_utc:%Y-%m-%d %H:%M} UTC"},
+            ]),
         ),
     ]
 
@@ -497,7 +577,7 @@ def _fly_transfer(
     )
     # Verification reports (task #137) ride along for `orbitopt run`, which
     # writes them next to the scene; compute_and_export strips them.
-    for rep in (tcm.report, moi.report):
+    for rep in (None if injection is None else injection.report, tcm.report, moi.report):
         if rep is not None:
             verification_report.attach_to_scene(scene, rep)
     return scene
@@ -542,6 +622,12 @@ def build_from_config(config: dict) -> dict:
         kwargs["generations"] = optimizer["generations"]
     if "seed" in optimizer:
         kwargs["seed"] = optimizer["seed"]
+    # Optional real launch (site, rocket, payload, parking orbit). Absent or
+    # `enabled: false` leaves kwargs -- and so the pipeline -- untouched.
+    launch = LaunchSpec.from_config(
+        config.get("launch"), default_altitude_km=parking_orbit.get("altitude_km", PARKING_ALTITUDE_KM))
+    if launch is not None:
+        kwargs["launch"] = launch
 
     scene = _build_mars_mission(**kwargs)
     scene["id"] = mission["id"]

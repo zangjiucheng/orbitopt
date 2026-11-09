@@ -44,6 +44,49 @@
         "altitude_km": { "type": "number", "exclusiveMinimum": 0 }
       }
     },
+    "launch": {
+      "type": "object",
+      "required": ["site"],
+      "additionalProperties": false,
+      "description": "Optional real launch: site, rocket, payload and parking orbit (orbitopt.launch_injection). When present (and enabled), the (t0, tof) search applies the vehicle C3 / site DLA launch constraints, and the flown trajectory starts from a launch-window lift-off into a site-reachable parking orbit with a numerically verified TMI burn (verification report kind 'launch-injection'). Omit it (or set enabled: false) for the original behaviour: an idealized parking orbit with no site or rocket.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "site": { "type": "string", "minLength": 1, "description": "Launch-site id / name / alias from orbitopt's launch-site database, e.g. 'ksc'." },
+        "vehicle": { "type": "string", "minLength": 1, "description": "Launch-vehicle key from orbitopt's launch-vehicle database, e.g. 'atlas-v-551'. Omit to check only the site DLA limit." },
+        "payload_kg": { "type": "number", "exclusiveMinimum": 0, "description": "Injected mass; sets the vehicle's C3 capability." },
+        "constraint_mode": { "enum": ["invalid", "penalty"], "default": "invalid", "description": "How the search treats C3/DLA violations (orbitopt.launch_constraints)." },
+        "parking_orbit": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Parking orbit the vehicle inserts into. altitude_km defaults to the top-level parking_orbit.altitude_km (else 185 km).",
+          "properties": {
+            "altitude_km": { "type": "number", "exclusiveMinimum": 0 },
+            "min_coast_s": { "type": "number", "minimum": 0, "description": "Minimum parking-orbit coast before the TMI burn. Default 600 s." },
+            "ascent_time_s": { "type": "number", "minimum": 0, "description": "Lift-off to parking-orbit insertion. Default 600 s." },
+            "ascent_downrange_deg": { "type": "number", "minimum": 0, "description": "Downrange arc of the kinematic ascent. Default 20 deg." }
+          }
+        },
+        "window": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Daily launch-window selection on the departure day.",
+          "properties": {
+            "days": { "type": "number", "exclusiveMinimum": 0, "description": "Span searched from 00:00 UTC of the departure day. Default 1." },
+            "preferred_liftoff_utc": { "type": "string", "minLength": 1, "description": "ISO-8601 UTC instant; the window whose optimum is nearest it is flown (default: the first window)." }
+          }
+        },
+        "departure": {
+          "type": "object",
+          "required": ["utc", "tof_days"],
+          "additionalProperties": false,
+          "description": "Pin the Earth->Mars transfer instead of searching for it (e.g. to replay a flown mission's real departure).",
+          "properties": {
+            "utc": { "type": "string", "minLength": 1, "description": "ISO-8601 UTC departure epoch (a bare date means 00:00 UTC)." },
+            "tof_days": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      }
+    },
     "tof_search": {
       "type": "object",
       "additionalProperties": false,

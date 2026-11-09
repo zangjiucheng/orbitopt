@@ -123,8 +123,32 @@ either end up close.
    — one continuous numerical solution end to end, with an exact (not
    merely close) seam by construction, not a loosened tolerance.
 
+## Optional real launch (`launch` config section)
+
+By default the trail starts in an idealized parking orbit with no launch
+site or rocket. An optional `launch` section in the YAML config (site,
+vehicle, payload, parking orbit, optional preferred lift-off and pinned
+departure) switches on the real launch, through `launch_injection.py`:
+
+- the (t0, tof) PSO search applies the vehicle C3 and site DLA limits
+  (`LaunchConstraints`). A pinned `launch.departure` skips the search;
+- each candidate gets the launch windows for its departure day from the site.
+  The pipeline plans site → parking orbit → TMI (`plan_departure`) and
+  verifies it numerically (`verify_injection`, report kind
+  `launch-injection`, written with the TCM/MOI reports);
+- the scene timeline starts at that lift-off, and the trail starts at
+  parking-orbit insertion in the site-reachable plane, flying the corrected
+  TMI burn.
+
+`examples/mars2020_replay.yaml` carries Mars 2020's launch section, and
+`examples/14_mars2020_replay.py` reads the same section for its
+launch-to-injection steps. Omitting the section, or setting
+`enabled: false`, leaves the pipeline unchanged.
+
 ## Modules
 
+- `launch_injection.py`: shared launch-window → parking orbit → verified TMI
+  step (`LaunchSpec`, `launch_to_injection`).
 - `viz/mars_transfer.py` — the 3-phase pipeline + scene assembly
   (`_build_mars_mission`, `compute_and_export_mars_mission`,
   `build_from_config`).
