@@ -179,6 +179,9 @@ def test_candidate_panel_and_inspector_follow_the_selection():
         assert panel.isVisible()
         assert panel.row("candidate-0").property("active")  # exported one preselected
         assert "mission trajectory" in window.inspector.candidate_card_text()
+        # The scene has no reports: the badge is scoped to the exported one.
+        assert window.verification_badge._label.text() == "EXPORTED NOT CHECKED"
+        assert window.selection_badge.isHidden()
 
         panel.row("candidate-1").mousePressEvent(None)
         app.processEvents()
@@ -186,7 +189,20 @@ def test_candidate_panel_and_inspector_follow_the_selection():
         assert panel.row("candidate-1").property("active") and not panel.row("candidate-0").property("active")
         card = window.inspector.candidate_card_text()
         assert "REJECTED" in card and "(best)" in card and "not flown in high fidelity" in card
+        assert "Two-body Lambert" in card and "Selected candidate (screening)" in card
+        # Selecting an unverified candidate must not leave the UI implying it is verified.
+        assert not window.selection_badge.isHidden()
+        assert window.selection_badge._label.text() == "CANDIDATE #1 · SCREENING ONLY"
+        assert window.verification_badge._label.text().startswith("EXPORTED ")
+        assert "Candidate #1 — screening trajectory, NOT verified" in window.verification_panel.text()
         assert window.renderer.candidate_visible("candidate-1")
+
+        panel.row("candidate-0").mousePressEvent(None)
+        app.processEvents()
+        assert window.selection_badge.isHidden()
+        assert "TudatPy N-body" in window.inspector.candidate_card_text()
+        panel.row("candidate-1").mousePressEvent(None)
+        app.processEvents()
 
         panel.show_all_box.setChecked(False)
         app.processEvents()

@@ -23,6 +23,17 @@ _VERDICT_STATUS = {
 }
 _OFF_LIST = ("NOT SHORTLISTED", INK_MUTED)
 
+# What each kind of trajectory in a candidates scene is, at what fidelity.
+# Only the exported trajectory was flown (and verified) in high fidelity; every
+# candidate's arc, the exported one's included, is a screening estimate.
+SCREENING_FIDELITY_LABEL = "Two-body Lambert"
+FLOWN_FIDELITY_LABEL = "TudatPy N-body"
+
+
+def exported_candidate(candidates) -> dict | None:
+    """The candidate whose high-fidelity flight is the scene's trajectory."""
+    return next((c for c in candidates if c.get("exported")), None)
+
 
 def candidate_status(candidate: dict) -> tuple[str, str]:
     """``(label, color)`` for a candidate's outcome at the verification gate."""

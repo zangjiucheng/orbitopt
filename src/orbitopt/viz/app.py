@@ -72,7 +72,12 @@ from orbitopt.viz.state import MissionState, adjacent_event, eased_speed, neares
 from orbitopt.viz.theme import BG_VOID, DANGER, STYLESHEET, SUCCESS
 from orbitopt.viz.timeline_bar import TimelineBar
 from orbitopt.viz.ui_kit import MetricRow, StatusBadge
-from orbitopt.viz.verification_panel import RESULT_BADGE, VerificationPanel, display_subtitle, scene_verification_result
+from orbitopt.viz.verification_panel import (
+    VerificationPanel,
+    display_subtitle,
+    selection_badge_state,
+    verification_badge_state,
+)
 from orbitopt.viz.view_strip import ViewStrip
 from orbitopt.viz.viewport import DebouncedInteractor
 from orbitopt.viz.widgets import SpinnerWidget, ViewControlsPopover
@@ -410,6 +415,14 @@ class MissionControlWindow(QMainWindow):
         self.verification_badge.mousePressEvent = lambda _e: self._show_verification_tab()
         self.verification_badge.setVisible(False)
         row.addWidget(self.verification_badge)
+
+        # Shown only while a candidate other than the exported trajectory is
+        # selected: its arc is screening fidelity and was never verified, so
+        # the verification badge beside it must not read as its status.
+        self.selection_badge = StatusBadge("warning", "")
+        self.selection_badge.mousePressEvent = lambda _e: self._show_verification_tab()
+        self.selection_badge.setVisible(False)
+        row.addWidget(self.selection_badge)
 
         self.backend_badge = StatusBadge("idle", "…")
         self.backend_badge.setToolTip(
@@ -1157,14 +1170,17 @@ class MissionControlWindow(QMainWindow):
 
         self.scene_title_label.setText(scene["title"])
         self.scene_subtitle_label.setText(display_subtitle(scene))
-        result = scene_verification_result(scene)
-        self.verification_badge.setVisible(result is not None)
-        if result is not None:
-            self.verification_badge.set_state(*RESULT_BADGE[result])
+        badge = verification_badge_state(scene)
+        self.verification_badge.setVisible(badge is not None)
+        if badge is not None:
+            state, text, tooltip = badge
+            self.verification_badge.set_state(state, text)
+            self.verification_badge.setToolTip(tooltip)
 
         # Resets time + selection and lets the timeline bar and the inspector
         # rebuild themselves for the new scene.
         self.state.set_scene(scene)
+        self._refresh_selection_badge()
         self._apply_candidate_highlight(render=False)
         self._refresh_view()
 
@@ -1268,12 +1284,23 @@ class MissionControlWindow(QMainWindow):
             self.state.candidate_id, show_all=self.candidate_panel.show_all_box.isChecked(), render=render,
         )
 
+    def _refresh_selection_badge(self):
+        badge = selection_badge_state(self.state.scene, self.state.candidate())
+        self.selection_badge.setVisible(badge is not None)
+        if badge is not None:
+            state, text, tooltip = badge
+            self.selection_badge.set_state(state, text)
+            self.selection_badge.setToolTip(tooltip)
+
     def _on_candidate_changed(self, _candidate_id):
         self._apply_candidate_highlight()
+        self._refresh_selection_badge()
         cand = self.state.candidate()
         if cand is not None:
             self.statusBar().showMessage(
-                f"{cand['label']} highlighted" + ("" if self.state.frame_body_id is None
+                f"{cand['label']} highlighted"
+                + ("" if cand.get("exported") else " — screening arc only; verification shows the exported trajectory")
+                + ("" if self.state.frame_body_id is None
                                                   else " — screening arcs show in the scene's own frame")
             )
 
