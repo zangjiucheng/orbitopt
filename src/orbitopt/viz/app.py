@@ -17,6 +17,7 @@ Layout of the package:
 * sidebar.py      -- the mission list (left).
 * inspector.py    -- measure readout, maneuver list and body cards (right).
 * timeline_bar.py -- play / time-warp / event scrubber (bottom).
+* view_strip.py   -- which body the view is centered on, and body scale.
 * viewport.py     -- the embedded VTK view; compute.py -- background loads.
 
 This module only assembles those pieces and owns what is specific to the
@@ -65,6 +66,7 @@ from orbitopt.viz.state import MissionState, adjacent_event, eased_speed, neares
 from orbitopt.viz.theme import BG_VOID, DANGER, STYLESHEET, SUCCESS
 from orbitopt.viz.timeline_bar import TimelineBar
 from orbitopt.viz.ui_kit import MetricRow, StatusBadge
+from orbitopt.viz.view_strip import ViewStrip
 from orbitopt.viz.viewport import DebouncedInteractor
 from orbitopt.viz.widgets import SpinnerWidget, ViewControlsPopover
 
@@ -183,6 +185,7 @@ class MissionControlWindow(QMainWindow):
         self._build_ui()
         self.state.time_changed.connect(self._on_time_changed)
         self.state.selection_changed.connect(self._update_measure)
+        self.state.frame_changed.connect(self._on_frame_changed)
         self._populate_builtin_missions()
         self._start_backend_probe()
 
@@ -248,6 +251,8 @@ class MissionControlWindow(QMainWindow):
         center_layout.setContentsMargins(0, 0, 0, 0)
         center_layout.setSpacing(0)
         center_layout.addWidget(self._build_title_bar())
+        self.view_strip = ViewStrip(self.state)
+        center_layout.addWidget(self.view_strip)
 
         self.plotter = DebouncedInteractor(center)
         self.plotter.set_background(BG_VOID)
@@ -1149,7 +1154,8 @@ class MissionControlWindow(QMainWindow):
             vec = maneuver["vector"]
             magnitude_fraction = _norm3(vec["deltaV"]) / self._maneuver_max_dv
             self.renderer.set_maneuver_vector(
-                vec["position"], vec["deltaV"], self._maneuver_base_len, magnitude_fraction)
+                vec["position"], vec["deltaV"], self._maneuver_base_len, magnitude_fraction,
+                t=maneuver.get("time"))
         else:
             self.renderer.clear_maneuver_vector()
 
@@ -1179,6 +1185,22 @@ class MissionControlWindow(QMainWindow):
             return
         self._last_scrub_render_ms = time.monotonic() * 1000.0
         self._refresh_view()
+
+    def _on_frame_changed(self, body_id: str | None):
+        """Re-center the 3D view on ``body_id`` and frame its neighborhood
+        (or, back in the scene's own frame, fit the whole scene). The M-key
+        "zoom back out" camera was saved in the old frame's coordinates, so it
+        is dropped."""
+        self._focus_zoomed = False
+        self._pre_focus_camera = None
+        self.renderer.set_frame(body_id, render=False)
+        if body_id is None:
+            self.plotter.reset_camera()
+        else:
+            self.renderer.frame_camera_on_origin(self.renderer.local_extent(self.state.time))
+        self._refresh_view()
+        name = self.state.body(body_id)["name"] if body_id else "the scene's own frame"
+        self.statusBar().showMessage(f"View centered on {name}")
 
     # ------------------------------------------------------- Event seeking
     def _seek_to_event(self, event: dict):

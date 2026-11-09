@@ -714,7 +714,11 @@ def _fly_transfer(
         all_epochs_rel = all_epochs_rel[keep]
         all_positions_km = all_positions_km[keep]
 
-    days = (all_epochs_rel / 86400.0).round(4).tolist()
+    # Trail times keep 1e-8 day (~1 ms). Rounding to 1e-4 day (~8.6 s) put up
+    # to ~130 km of time/position mismatch on Earth (30 km/s) -- the same size
+    # as the parking-orbit features an Earth-centered view has to show.
+    trail_time_decimals = 8
+    days = (all_epochs_rel / 86400.0).round(trail_time_decimals).tolist()
     spacecraft_positions = all_positions_km.round(1).tolist()
 
     events.sort(key=lambda e: e["time"])
@@ -727,6 +731,18 @@ def _fly_transfer(
     mars_track = np.array([
         body_position_at_absolute_epoch("Mars", reference_et + d * 86400.0, central_body="Sun") for d in earth_orbit_days
     ]) / 1000.0
+    # Velocities in km/day (the trail's distance unit per timeline unit), so a
+    # viewer can Hermite-interpolate these once-a-day samples. Without them a
+    # straight chord between daily Earth samples misses the real arc by
+    # ~5,500 km -- invisible heliocentrically, but it would wreck the parking
+    # orbit and escape hyperbola when the view is centered on Earth.
+    km_per_day = 86400.0 / 1000.0
+    earth_vel = np.array([
+        body_velocity_at_absolute_epoch("Earth", reference_et + d * 86400.0, central_body="Sun") for d in earth_orbit_days
+    ]) * km_per_day
+    mars_vel = np.array([
+        body_velocity_at_absolute_epoch("Mars", reference_et + d * 86400.0, central_body="Sun") for d in earth_orbit_days
+    ]) * km_per_day
 
     bodies = [
         body_entry("sun", "Sun", COLOR["sun"], "sun", radius_display=RADIUS_DISPLAY["sun"],
@@ -734,12 +750,14 @@ def _fly_transfer(
                    rotation_period_hours=ROTATION_PERIOD_HOURS["sun"],
                    orientation_basis=body_fixed_to_eclipj2000_matrix("Sun", t0).tolist()),
         body_entry("earth", "Earth", COLOR["earth"], "planet", radius_display=RADIUS_DISPLAY["earth"],
-                   trail={"times": earth_orbit_days.round(4).tolist(), "positions": earth_track.round(1).tolist()},
+                   trail={"times": earth_orbit_days.round(trail_time_decimals).tolist(), "positions": earth_track.round(1).tolist(),
+                          "velocities": earth_vel.round(3).tolist()},
                    texture=TEXTURE["earth"], radius=EARTH_RADIUS_KM,
                    rotation_period_hours=ROTATION_PERIOD_HOURS["earth"],
                    orientation_basis=body_fixed_to_eclipj2000_matrix("Earth", t0).tolist()),
         body_entry("mars", "Mars", COLOR["mars"], "planet", radius_display=RADIUS_DISPLAY["mars"],
-                   trail={"times": earth_orbit_days.round(4).tolist(), "positions": mars_track.round(1).tolist()},
+                   trail={"times": earth_orbit_days.round(trail_time_decimals).tolist(), "positions": mars_track.round(1).tolist(),
+                          "velocities": mars_vel.round(3).tolist()},
                    texture=TEXTURE["mars"], radius=MARS_RADIUS_KM,
                    rotation_period_hours=ROTATION_PERIOD_HOURS["mars"],
                    orientation_basis=body_fixed_to_eclipj2000_matrix("Mars", t0).tolist()),

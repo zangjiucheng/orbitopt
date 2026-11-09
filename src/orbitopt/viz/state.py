@@ -107,6 +107,45 @@ def eased_speed(
     return near_speed + (speed - near_speed) * smoothstep
 
 
+# Body kinds that make sense as a view-frame center. A spacecraft is excluded
+# on purpose: centering on it is what Track already does, and its own trail
+# would collapse to a point.
+_FRAME_KINDS = {"sun", "star", "planet", "dwarf-planet", "moon"}
+
+
+def frame_options(scene: dict | None) -> list[tuple[str | None, str]]:
+    """``(frame_body_id, label)`` choices for re-centering the view: first the
+    scene's own frame (``None``), then every *moving* natural body, in scene
+    order. Only scenes with a timeline get more than the native option --
+    re-centering a static snapshot on a body is just a camera move, which the
+    Focus control already does."""
+    if not scene:
+        return []
+    bodies = scene.get("bodies", [])
+    central = next((b for b in bodies if b["id"] == scene.get("centralBodyId")), None)
+    options: list[tuple[str | None, str]] = [(None, central["name"] if central else "Scene origin")]
+    if not scene.get("timeline"):
+        return options
+    for body in bodies:
+        if body is central or body.get("kind") not in _FRAME_KINDS or "trail" not in body:
+            continue
+        options.append((body["id"], body["name"]))
+    return options
+
+
+def size_exaggeration_range(scene: dict | None) -> tuple[float, float] | None:
+    """``(min, max)`` of the ``radiusExaggeration`` declared by bodies drawn as
+    real spheres, if any is above 1 -- i.e. whether the view must say that
+    sizes are not to scale."""
+    if not scene:
+        return None
+    factors = [
+        float(b["radiusExaggeration"]) for b in scene.get("bodies", [])
+        if b.get("texture") and b.get("radius") and b.get("radiusExaggeration", 1.0) > 1.0
+    ]
+    return (min(factors), max(factors)) if factors else None
+
+
 # --------------------------------------------------------------------------
 # Shared state
 # --------------------------------------------------------------------------
@@ -121,6 +160,9 @@ class MissionState(QObject):
       * ``time_changed(t)`` -- the current timeline time moved.
       * ``selection_changed()`` -- the selected body or the measure partner
         changed (read ``selected_body_id`` / ``measure_body_id``).
+      * ``frame_changed(body_id)`` -- the view was re-centered on a body
+        (None: the scene's own frame). Display only: world data, times and
+        distance readouts do not change with it.
 
     Camera state (tracking, face-lock, focus zoom) is deliberately *not* here:
     it belongs to the 3D view, not to the mission, and a 2D chart has no use
@@ -130,6 +172,7 @@ class MissionState(QObject):
     scene_changed = Signal(object)
     time_changed = Signal(float)
     selection_changed = Signal()
+    frame_changed = Signal(object)
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
@@ -138,6 +181,7 @@ class MissionState(QObject):
         self._time = 0.0
         self._selected_body_id: str | None = None
         self._measure_body_id: str | None = None
+        self._frame_body_id: str | None = None
 
     # ------------------------------------------------------------ scene
     @property
@@ -175,6 +219,7 @@ class MissionState(QObject):
         # exist any more.
         self._selected_body_id = None
         self._measure_body_id = None
+        self._frame_body_id = None
         self.scene_changed.emit(scene)
 
     # ------------------------------------------------------------- time
@@ -226,3 +271,18 @@ class MissionState(QObject):
         self._measure_body_id = None if body_id == self._measure_body_id else body_id
         self.selection_changed.emit()
         return True
+
+    # ------------------------------------------------------------ frame
+    @property
+    def frame_body_id(self) -> str | None:
+        return self._frame_body_id
+
+    def set_frame(self, body_id: str | None) -> None:
+        """Re-center the view on ``body_id`` (None: the scene's own frame).
+        Ignores ids that are not one of ``frame_options(scene)``."""
+        if body_id not in {fid for fid, _ in frame_options(self._scene)}:
+            return
+        if body_id == self._frame_body_id:
+            return
+        self._frame_body_id = body_id
+        self.frame_changed.emit(body_id)

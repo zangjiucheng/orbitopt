@@ -111,6 +111,18 @@ def test_mission_control_loads_and_switches_missions():
     assert state.measure_body_id == other
     assert not window.inspector.measure_card.isHidden()
 
+    # Re-centering on the Moon: the button drives state, the renderer follows,
+    # and the Moon is drawn at the origin. Back to Earth restores the scene frame.
+    strip = window.view_strip
+    assert strip.frame_button(None).text() == "Earth"
+    strip.frame_button("moon").click()
+    app.processEvents()
+    assert state.frame_body_id == "moon" == window.renderer.frame_body_id
+    assert sum(abs(c) for c in window.renderer.body_display_position("moon", state.time)) < 1e-6
+    strip.frame_button(None).click()
+    app.processEvents()
+    assert state.frame_body_id is None and window.renderer.frame_body_id is None
+
     # Playback ticks advance time through the same state.
     state.set_time(timeline["min"])
     before = state.time
@@ -124,6 +136,9 @@ def test_mission_control_loads_and_switches_missions():
     assert state.scene["id"] == "solar-system"
     assert state.selected_body_id is None and state.measure_body_id is None
     assert window.inspector.measure_card.isHidden()
+    # The solar-system scene draws planets far larger than life and says so.
+    assert "not to scale" in window.view_strip.scale_label.text()
+    assert window.view_strip.frame_button("earth") is None  # static scene: no re-centering
 
     window.plotter.close()  # release the VTK/OpenGL context before Qt tears down the widget
     window.close()

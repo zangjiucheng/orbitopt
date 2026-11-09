@@ -248,11 +248,19 @@ def _validated_trail(body: dict) -> tuple[list, list]:
     return times, positions
 
 
+def _trail_velocities(body: dict) -> np.ndarray | None:
+    """The trail's optional ``velocities`` as an (n, 3) array, or None."""
+    velocities = body["trail"].get("velocities")
+    return None if velocities is None else np.asarray(velocities, dtype=float)
+
+
 def position_at_time(body: dict, t: float) -> np.ndarray:
     if "trail" not in body:
         return np.asarray(body.get("position", [0.0, 0.0, 0.0]), dtype=float)
     times, positions = _validated_trail(body)
-    return _sample_trail(np.asarray(times, dtype=float), np.asarray(positions, dtype=float), t)[1]
+    return _sample_trail(
+        np.asarray(times, dtype=float), np.asarray(positions, dtype=float), t, _trail_velocities(body),
+    )[1]
 
 
 def trail_index_at_time(body: dict, t: float) -> int:
@@ -260,11 +268,31 @@ def trail_index_at_time(body: dict, t: float) -> int:
     return int(np.searchsorted(times, t))
 
 
-def _sample_trail(times: np.ndarray, positions: np.ndarray, t: float) -> tuple[int, np.ndarray]:
+def _hermite(p0, v0, p1, v1, h, s):
+    """Cubic Hermite between (p0, v0) and (p1, v1) over an interval of length
+    ``h``, at normalized position ``s`` in [0, 1]. Works on scalars or on
+    arrays broadcasting along a leading axis."""
+    s2 = s * s
+    s3 = s2 * s
+    h00 = 2.0 * s3 - 3.0 * s2 + 1.0
+    h10 = s3 - 2.0 * s2 + s
+    h01 = -2.0 * s3 + 3.0 * s2
+    h11 = s3 - s2
+    return h00 * p0 + h10 * h * v0 + h01 * p1 + h11 * h * v1
+
+
+def _sample_trail(
+    times: np.ndarray, positions: np.ndarray, t: float, velocities: np.ndarray | None = None,
+) -> tuple[int, np.ndarray]:
     """``(trail_index_at_time, position_at_time)`` for already-converted
     numpy ``times`` (n,) / ``positions`` (n, 3), with one binary search.
     SceneRenderer caches those arrays per body at load() so the per-tick
-    path never re-converts a (possibly many-thousand-sample) Python list."""
+    path never re-converts a (possibly many-thousand-sample) Python list.
+
+    With ``velocities`` (n, 3) the position between samples is cubic Hermite;
+    without, a straight chord. The chord is fine for a densely sampled path
+    but not for a sparsely sampled one used as a moving frame origin -- see
+    the scene schema's ``trail.velocities``."""
     idx = int(np.searchsorted(times, t))
     if t <= times[0]:
         return idx, positions[0].copy()
@@ -272,9 +300,38 @@ def _sample_trail(times: np.ndarray, positions: np.ndarray, t: float) -> tuple[i
         return idx, positions[-1].copy()
     i = max(1, min(idx, len(times) - 1))
     t0, t1 = times[i - 1], times[i]
-    frac = (t - t0) / (t1 - t0) if t1 > t0 else 0.0
-    p0 = positions[i - 1]
-    return idx, p0 + frac * (positions[i] - p0)
+    h = t1 - t0
+    if h <= 0.0:
+        return idx, positions[i - 1].copy()
+    frac = (t - t0) / h
+    p0, p1 = positions[i - 1], positions[i]
+    if velocities is not None:
+        return idx, _hermite(p0, velocities[i - 1], p1, velocities[i], h, frac)
+    return idx, p0 + frac * (p1 - p0)
+
+
+def _sample_trail_many(
+    times: np.ndarray, positions: np.ndarray, ts: np.ndarray, velocities: np.ndarray | None = None,
+) -> np.ndarray:
+    """Vectorized ``_sample_trail(...)[1]`` for every time in ``ts`` (m,) ->
+    (m, 3). Used once per frame switch to move a whole trail into a new
+    frame, not on the per-tick path."""
+    ts = np.asarray(ts, dtype=float)
+    if len(times) == 1:
+        return np.repeat(positions[:1], len(ts), axis=0)
+    i = np.clip(np.searchsorted(times, ts), 1, len(times) - 1)
+    t0, t1 = times[i - 1], times[i]
+    h = t1 - t0
+    safe_h = np.where(h > 0.0, h, 1.0)
+    frac = np.clip(np.where(h > 0.0, (ts - t0) / safe_h, 0.0), 0.0, 1.0)[:, None]
+    p0, p1 = positions[i - 1], positions[i]
+    if velocities is not None:
+        out = _hermite(p0, velocities[i - 1], p1, velocities[i], safe_h[:, None], frac)
+    else:
+        out = p0 + frac * (p1 - p0)
+    out[ts <= times[0]] = positions[0]
+    out[ts >= times[-1]] = positions[-1]
+    return out
 
 
 class _PastTrail:
@@ -341,6 +398,20 @@ class _PastTrail:
         self._cells.Modified()
         self.poly.Modified()
 
+    def set_positions(self, full_positions: np.ndarray) -> None:
+        """Replace every sample (same count) -- e.g. the same trail seen from a
+        different reference frame -- keeping the arrays VTK already holds, so
+        no actor or mapper is rebuilt. The live head vertex is rewritten on
+        the next ``update``."""
+        full = np.asarray(full_positions, dtype=float)
+        if full.shape != self._full.shape:
+            raise ValueError(f"expected {self._full.shape} positions, got {full.shape}")
+        self._full = full
+        n = len(full)
+        self._points[:n] = full
+        self._points[n] = full[-1]
+        self.update(self._head, full[min(self._head, n - 1)])
+
 
 def _vtk_id_dtype():
     """numpy dtype matching this VTK build's vtkIdType (32 or 64 bit)."""
@@ -355,6 +426,16 @@ class SceneRenderer:
     time-warp step, and only mutates existing mesh point arrays in place
     (body markers and the "traveled so far" trails, see _PastTrail), never
     rebuilds meshes or swaps actors.
+
+    Reference frames: every position the scene stores is in the scene's own
+    frame ("world"). ``set_frame(body_id)`` re-centers the *display* on a
+    body -- r_display(t) = r_world(t) - r_body(t) -- so the neighborhood of a
+    planet the spacecraft passes can be inspected at its own scale. The
+    subtraction is done here in float64 before anything reaches VTK, so a
+    185 km orbit around Earth is not lost in the ~1e8 km heliocentric
+    magnitudes. World data never changes; distances reported by ``set_time``
+    stay in the world frame, so a readout does not change meaning with the
+    view.
     """
 
     def __init__(self, plotter):
@@ -362,6 +443,12 @@ class SceneRenderer:
         self.scene: dict | None = None
         self._moving: dict[str, dict] = {}
         self._static_positions: dict[str, np.ndarray] = {}
+        # Static geometry that has to be shifted when the frame origin moves:
+        # body actors / marker polys, label polys, and orbit-ring actors.
+        self._static_items: dict[str, dict] = {}
+        self._orbit_actors: list = []
+        self._frame_body_id: str | None = None
+        self._time = 0.0
         self._rotating: list[dict] = []
         self._rotation_elapsed_hours = 0.0
         self._has_timeline = False
@@ -395,6 +482,9 @@ class SceneRenderer:
         self.scene = scene
         self._moving = {}
         self._static_positions = {}
+        self._static_items = {}
+        self._orbit_actors = []
+        self._frame_body_id = None
         self._rotating = []
         self._rotation_elapsed_hours = 0.0
         self._actor_body_ids = {}
@@ -415,12 +505,15 @@ class SceneRenderer:
                 pts = np.vstack([pts, pts[0]])
                 orbit_mesh = pv.MultipleLines(pts)
                 opacity = 0.32 if body.get("orbitDashed") else 0.5
-                self.plotter.add_mesh(orbit_mesh, color=color, opacity=opacity, line_width=1, pickable=False)
+                self._orbit_actors.append(self.plotter.add_mesh(
+                    orbit_mesh, color=color, opacity=opacity, line_width=1, pickable=False,
+                ))
 
             if "trail" in body:
                 trail_times, trail_positions = _validated_trail(body)
                 t0 = scene.get("timeline", {}).get("min", trail_times[0])
                 pos0 = position_at_time(body, t0)
+                velocities = _trail_velocities(body)
 
                 sphere_actor = _sphere_actor(self.plotter, body, name=f"marker-{body['id']}")
                 point_poly = None
@@ -452,13 +545,19 @@ class SceneRenderer:
                     "sphere_actor": sphere_actor,
                     "past_trail": past_trail,
                     "times": np.asarray(trail_times, dtype=float),
+                    # World-frame samples (never modified) and the same
+                    # samples in the current display frame (what is drawn).
+                    "world_positions": full_positions,
+                    "velocities": velocities,
                     "full_positions": full_positions,
+                    "full_poly": full_poly,
                     "color": color,
                 }
             else:
                 pos = np.asarray(body.get("position", [0.0, 0.0, 0.0]), dtype=float)
                 self._static_positions[body["id"]] = pos
                 sphere_actor = _sphere_actor(self.plotter, body, name=f"marker-{body['id']}")
+                marker = None
                 if sphere_actor is not None:
                     sphere_actor.position = tuple(float(c) for c in pos)
                     self._register_rotation(body, sphere_actor)
@@ -470,10 +569,19 @@ class SceneRenderer:
                         render_points_as_spheres=True, name=f"marker-{body['id']}", pickable=True,
                     )
                     self._actor_body_ids[marker_actor] = body["id"]
+                # Labels come from a named point-data array on a PolyData we
+                # keep: given a list of strings instead, pyvista copies the
+                # points into its own PolyData and the label could not follow
+                # a frame change.
+                label_poly = pv.PolyData(pos.reshape(1, 3))
+                label_poly.point_data["label"] = np.array([body["name"]])
                 self.plotter.add_point_labels(
-                    pos.reshape(1, 3), [body["name"]], font_size=12, text_color=color,
+                    label_poly, "label", font_size=12, text_color=color,
                     shape=None, always_visible=True, show_points=False,
                 )
+                self._static_items[body["id"]] = {
+                    "sphere_actor": sphere_actor, "marker_poly": marker, "label_poly": label_poly,
+                }
 
         timeline = scene.get("timeline")
         self.set_time(timeline["min"] if timeline else 0.0)
@@ -584,19 +692,27 @@ class SceneRenderer:
         these methods), inflating and destabilizing per-tick render cost
         enough to read as playback jitter/stutter.
         """
+        self._time = t
+        origin = self.frame_origin(t)
         distances = {}
         for body_id, entry in self._moving.items():
-            idx, pos = _sample_trail(entry["times"], entry["full_positions"], t)
+            idx, world = _sample_trail(entry["times"], entry["world_positions"], t, entry["velocities"])
+            pos = world - origin
             if entry["sphere_actor"] is not None:
                 entry["sphere_actor"].position = tuple(float(c) for c in pos)
             else:
                 entry["point_poly"].points = pos.reshape(1, 3)
 
             entry["past_trail"].update(idx, pos)
-            distances[body_id] = float(np.linalg.norm(pos))
+            # World frame on purpose: the readout means "distance from the
+            # scene's center" whatever frame the view is in.
+            distances[body_id] = float(np.linalg.norm(world))
 
         for body_id, pos in self._static_positions.items():
             distances[body_id] = float(np.linalg.norm(pos))
+
+        if self._frame_body_id is not None:
+            self._place_static_geometry(origin)
 
         if self._has_timeline:
             self._apply_rotation_for_time(t)
@@ -606,13 +722,115 @@ class SceneRenderer:
         return distances
 
     def body_world_position(self, body_id: str, t: float) -> np.ndarray:
+        """Position in the scene's own (world) frame, whatever the view frame."""
         if body_id in self._moving:
             entry = self._moving[body_id]
-            return _sample_trail(entry["times"], entry["full_positions"], t)[1]
+            return _sample_trail(entry["times"], entry["world_positions"], t, entry["velocities"])[1]
         return self._static_positions.get(body_id, np.zeros(3))
 
+    def body_display_position(self, body_id: str, t: float) -> np.ndarray:
+        """Position as drawn: world position minus the frame origin at ``t``.
+        Everything that places the camera or draws at a body uses this."""
+        return self.body_world_position(body_id, t) - self.frame_origin(t)
+
+    # ------------------------------------------------------------- frames
+    # When the view is re-centered on a body, the camera frames the part of
+    # the other trails within this many of the body's radii (see
+    # local_extent): wide enough for an Earth parking orbit plus the start of
+    # the escape hyperbola, tight enough that the orbit is not a dot.
+    LOCAL_FRAME_RADII = 20.0
+
+    @property
+    def frame_body_id(self) -> str | None:
+        return self._frame_body_id
+
+    def frame_origin(self, t: float) -> np.ndarray:
+        """World position of the current frame's origin at ``t`` (zero in the
+        scene's own frame)."""
+        if self._frame_body_id is None:
+            return np.zeros(3)
+        return self.body_world_position(self._frame_body_id, t)
+
+    def set_frame(self, body_id: str | None, render: bool = True) -> None:
+        """Re-center the display on ``body_id`` (None: the scene's own frame).
+
+        Each trail is moved into the new frame sample by sample, r_i - r_F(t_i)
+        with the frame body Hermite-interpolated at the trail's own times, so a
+        trail drawn around a moving planet is the path *as seen from* that
+        planet, not the world path shifted by one fixed offset. Unknown ids
+        fall back to the scene's own frame.
+        """
+        if body_id is not None and body_id not in self._moving and body_id not in self._static_positions:
+            body_id = None
+        self._frame_body_id = body_id
+        for entry in self._moving.values():
+            if body_id is None:
+                display = entry["world_positions"]
+            else:
+                display = entry["world_positions"] - self._frame_origin_many(entry["times"])
+            entry["full_positions"] = display
+            entry["full_poly"].points = display
+            entry["past_trail"].set_positions(display)
+        self._place_static_geometry(self.frame_origin(self._time))
+        self.set_time(self._time, render=render)
+
+    def _frame_origin_many(self, ts: np.ndarray) -> np.ndarray:
+        body_id = self._frame_body_id
+        if body_id in self._moving:
+            entry = self._moving[body_id]
+            return _sample_trail_many(entry["times"], entry["world_positions"], ts, entry["velocities"])
+        return np.broadcast_to(self._static_positions.get(body_id, np.zeros(3)), (len(ts), 3))
+
+    def _place_static_geometry(self, origin: np.ndarray) -> None:
+        """Shift every fixed-position body, label and orbit ring by -origin."""
+        shift = tuple(float(-c) for c in origin)
+        for actor in self._orbit_actors:
+            actor.position = shift
+        for body_id, item in self._static_items.items():
+            pos = self._static_positions[body_id] - origin
+            if item["sphere_actor"] is not None:
+                item["sphere_actor"].position = tuple(float(c) for c in pos)
+            if item["marker_poly"] is not None:
+                item["marker_poly"].points = pos.reshape(1, 3)
+            item["label_poly"].points = pos.reshape(1, 3)
+
+    def local_extent(self, t: float) -> float:
+        """Radius of the neighborhood worth framing around the frame body: the
+        farthest point of any other trail within LOCAL_FRAME_RADII of it, so
+        the camera fits the local part of the path rather than its whole
+        interplanetary length. Falls back to the scene bounds when there is
+        no frame body or no radius to scale by."""
+        body = next((b for b in self.scene["bodies"] if b["id"] == self._frame_body_id), None) if self.scene else None
+        radius = float(body.get("radius", 0.0)) if body else 0.0
+        if radius <= 0.0:
+            xmin, xmax, ymin, ymax, zmin, zmax = self.plotter.bounds
+            return 0.5 * float(np.linalg.norm([xmax - xmin, ymax - ymin, zmax - zmin])) or 1.0
+        limit = self.LOCAL_FRAME_RADII * radius
+        nearest = 3.0 * radius
+        for body_id, entry in self._moving.items():
+            if body_id == self._frame_body_id:
+                continue
+            d = np.linalg.norm(entry["full_positions"], axis=1)
+            d = d[d <= limit]
+            if d.size:
+                nearest = max(nearest, float(d.max()))
+        return nearest
+
+    def frame_camera_on_origin(self, extent: float) -> None:
+        """Point the camera at the frame origin from its current direction, at
+        a distance that fits a sphere of ``extent`` in the view."""
+        cam = self.plotter.camera
+        offset = np.asarray(cam.position, dtype=float) - np.asarray(cam.focal_point, dtype=float)
+        norm = float(np.linalg.norm(offset))
+        direction = offset / norm if norm > 1e-12 else np.array([1.0, 1.0, 1.0]) / np.sqrt(3.0)
+        half_angle = np.radians(cam.view_angle) / 2.0
+        distance = 1.15 * extent / np.sin(half_angle)
+        cam.focal_point = (0.0, 0.0, 0.0)
+        cam.position = tuple(direction * distance)
+        self.plotter.render()
+
     def focus_on(self, body_id: str, t: float) -> None:
-        pos = self.body_world_position(body_id, t)
+        pos = self.body_display_position(body_id, t)
         self.plotter.camera.focal_point = tuple(pos)
         self.plotter.render()
 
@@ -621,8 +839,8 @@ class SceneRenderer:
         return the distance between them. Reuses a single named actor so it
         follows the bodies as the timeline advances, the same update-in-place
         trick set_time uses for the trails."""
-        a = self.body_world_position(id_a, t)
-        b = self.body_world_position(id_b, t)
+        a = self.body_display_position(id_a, t)
+        b = self.body_display_position(id_b, t)
         self.plotter.add_mesh(
             pv.Line(a, b), color=color, line_width=2.4,
             name="measure-line", pickable=False,
@@ -646,7 +864,7 @@ class SceneRenderer:
     _MANEUVER_ARROW_SCREEN_FRACTION = 0.14
 
     def set_maneuver_vector(self, position_km, delta_v, max_length_km: float,
-                            magnitude_fraction: float = 1.0) -> None:
+                            magnitude_fraction: float = 1.0, t: float | None = None) -> None:
         """Draw an arrow at ``position_km`` along the ``delta_v`` direction -- a
         maneuver's burn vector. Physical delta-v (m/s) is tiny next to orbit
         radii (km), so the length is a display scale, not the true magnitude;
@@ -655,8 +873,13 @@ class SceneRenderer:
         the current camera distance when zoomed in (so it never swamps the
         tracked spacecraft); ``magnitude_fraction`` (0..1, this burn's |delta-v|
         over the campaign's largest) then scales it so smaller burns read as
-        shorter arrows. Reuses one named actor so successive burns replace it."""
+        shorter arrows. Reuses one named actor so successive burns replace it.
+
+        ``position_km`` is in the world frame; ``t`` (the burn's time) moves it
+        into the current display frame."""
         pos = np.asarray(position_km, dtype=float)
+        if t is not None:
+            pos = pos - self.frame_origin(t)
         dv = np.asarray(delta_v, dtype=float)
         mag = float(np.linalg.norm(dv))
         if mag < 1e-12 or max_length_km <= 0.0 or magnitude_fraction <= 0.0:
@@ -723,7 +946,7 @@ class SceneRenderer:
         ``dt`` (seconds since the last call) enables smoothing -- see
         _TRACK_SMOOTHING_RATE_HZ -- and is omitted for one-shot jumps.
         """
-        pos = self.body_world_position(body_id, t)
+        pos = self.body_display_position(body_id, t)
         cam = self.plotter.camera
         focal = np.asarray(cam.focal_point, dtype=float)
         position = np.asarray(cam.position, dtype=float)
@@ -731,7 +954,7 @@ class SceneRenderer:
         distance = float(np.linalg.norm(offset))
 
         if reference_body_id is not None and reference_body_id != body_id:
-            ref_pos = self.body_world_position(reference_body_id, t)
+            ref_pos = self.body_display_position(reference_body_id, t)
             away = pos - ref_pos
             away_norm = float(np.linalg.norm(away))
             if away_norm > 1e-9 and distance > 1e-9:
@@ -767,7 +990,7 @@ class SceneRenderer:
         _seek_to_event) lands on the same close framing every time, instead
         of zooming in another 5x on each successive click.
         """
-        pos = self.body_world_position(body_id, t)
+        pos = self.body_display_position(body_id, t)
         cam = self.plotter.camera
         focal = np.asarray(cam.focal_point, dtype=float)
         position = np.asarray(cam.position, dtype=float)

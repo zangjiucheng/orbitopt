@@ -101,6 +101,13 @@ def validate_scene(scene: dict) -> None:
                 f"positions has {len(positions)}; they must be the same "
                 "length (one position per timestamp)."
             )
+        velocities = trail.get("velocities")
+        if velocities is not None and len(velocities) != len(times):
+            raise ValueError(
+                f"scene document is invalid: body {body_id!r} has "
+                f"{len(velocities)} trail velocities for {len(times)} times; "
+                "velocities, when given, must be the same length (one per timestamp)."
+            )
 
 
 def is_valid_scene(scene: dict) -> bool:

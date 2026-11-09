@@ -131,6 +131,7 @@ def body_entry(
     rotation_period_hours=None,
     rotation_phase_offset_deg=None,
     orientation_basis=None,
+    radius_exaggeration=None,
 ):
     """One entry in SceneData.bodies. ``orbit``/``position``/``trail`` are
     all optional and independent: a static planet has orbit+position, a
@@ -172,6 +173,10 @@ def body_entry(
     physical for every body, the absolute prime-meridian phase only where the
     texture is registered to the IAU frame (see
     bodies.body_fixed_to_eclipj2000_matrix).
+
+    ``radius_exaggeration`` declares that ``radius`` is drawn this many times
+    larger than the physical radius, so a viewer can label sizes as not to
+    scale (see the schema's ``radiusExaggeration``).
     """
     entry = {"id": body_id, "name": name, "color": color, "kind": kind, "radiusDisplay": radius_display}
     if orbit is not None:
@@ -194,6 +199,8 @@ def body_entry(
         entry["rotationPhaseOffsetDeg"] = rotation_phase_offset_deg
     if orientation_basis is not None:
         entry["orientationBasis"] = orientation_basis
+    if radius_exaggeration is not None:
+        entry["radiusExaggeration"] = radius_exaggeration
     return entry
 
 

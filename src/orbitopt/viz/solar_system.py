@@ -46,6 +46,26 @@ def _au_radius(body_id: str) -> float:
     return RADIUS_DISPLAY.get(body_id, 4.0) * _AU_RADIUS_SCALE
 
 
+# Volumetric mean radii (km), NASA NSSDCA planetary fact sheets. Only used to
+# report how much larger than life _au_radius draws each body (see
+# _radius_exaggeration) -- not for any physics.
+_MEAN_RADIUS_KM = {
+    "sun": 695_700.0, "mercury": 2_439.7, "venus": 6_051.8, "earth": 6_371.0,
+    "mars": 3_389.5, "jupiter": 69_911.0, "saturn": 58_232.0, "uranus": 25_362.0,
+    "neptune": 24_622.0, "pluto": 1_188.3,
+}
+
+
+def _radius_exaggeration(body_id: str) -> float | None:
+    """How many times larger than its physical radius ``body_id`` is drawn,
+    rounded to 2 significant figures, or None if unknown."""
+    radius_km = _MEAN_RADIUS_KM.get(body_id)
+    if radius_km is None:
+        return None
+    factor = _au_radius(body_id) * AU_M / 1000.0 / radius_km
+    return float(f"{factor:.2g}")
+
+
 def _eccentric_anomaly(mean_anomaly, e, maxiter=50, tol=1e-12):
     E = mean_anomaly.copy()
     for _ in range(maxiter):
@@ -89,6 +109,7 @@ def export_solar_system_data(epoch_mjd2000=None, n_samples=240):
             "sun", "Sun", COLOR["sun"], "star",
             radius_display=RADIUS_DISPLAY["sun"], position=[0.0, 0.0, 0.0],
             texture=TEXTURE["sun"], radius=_au_radius("sun"),
+            radius_exaggeration=_radius_exaggeration("sun"),
             rotation_period_hours=ROTATION_PERIOD_HOURS["sun"],
             orientation_basis=body_fixed_to_eclipj2000_matrix("Sun", epoch_mjd2000).tolist(),
         )
@@ -124,6 +145,7 @@ def export_solar_system_data(epoch_mjd2000=None, n_samples=240):
                 {"label": "Inclination", "value": f"{np.degrees(i):.2f}°"},
             ],
             texture=TEXTURE.get(name), radius=_au_radius(name),
+            radius_exaggeration=_radius_exaggeration(name),
             rotation_period_hours=ROTATION_PERIOD_HOURS.get(name),
             # Real axis/tilt only matters for the textured (real-sphere) bodies;
             # Pluto renders as a point marker (no texture), so skip it there.

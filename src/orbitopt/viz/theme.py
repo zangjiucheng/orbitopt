@@ -97,6 +97,17 @@ QWidget#timelineBar {{
 QWidget#titleBar {{
     border-bottom: 1px solid {HAIRLINE};
 }}
+QWidget#viewStrip {{
+    background: {PANEL};
+    border-bottom: 1px solid {BORDER_SOFT};
+}}
+QLabel#scaleNote {{
+    font-size: 10.5px;
+    color: {INK_MUTED};
+}}
+QLabel#scaleNote[warn="true"] {{
+    color: {WARNING};
+}}
 
 QLabel#appTitle {{
     font-size: 13px;

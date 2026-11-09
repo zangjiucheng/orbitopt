@@ -63,6 +63,11 @@
           "exclusiveMinimum": 0,
           "description": "Marker size in the viewer's display units (screen-relative, not physical radius) -- used for the point-marker fallback when `texture`/`radius` are absent, or a body's texture fails to load."
         },
+        "radiusExaggeration": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Optional factor by which `radius` is drawn larger than the body's physical radius (1 or absent means true scale). Lets a viewer state plainly that sizes are not to scale instead of letting an exaggerated planet read as real geometry."
+        },
         "texture": {
           "type": "string",
           "minLength": 1,
@@ -119,6 +124,11 @@
           "type": "array",
           "items": { "$ref": "#/$defs/vec3" },
           "description": "Position at each corresponding `times` entry -- same length as `times`."
+        },
+        "velocities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/vec3" },
+          "description": "Optional velocity at each corresponding `times` entry -- same length as `times`, in `distanceUnit` per timeline unit (e.g. km/day when timeline.unitLabel is 'days'). When present, a viewer can interpolate between samples with cubic Hermite instead of straight chords. That matters for a sparsely sampled body used as a moving reference frame: a one-day chord of Earth's orbit misses the true arc by thousands of km, which swamps a low Earth orbit drawn relative to Earth."
         }
       },
       "additionalProperties": true
