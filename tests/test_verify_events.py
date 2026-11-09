@@ -140,3 +140,100 @@ def test_dense_output_uses_pre_burn_state_at_seam():
     np.testing.assert_allclose(d(10.0, interval=0)[3:], [1.0, 0.0, 0.0])  # pre-burn
     np.testing.assert_allclose(d(10.0)[3:], [0.0, 5.0, 0.0])  # post-burn
     np.testing.assert_allclose(d(5.0), [5.0, 0, 0, 1.0, 0, 0], atol=1e-12)
+
+
+# --------------------------------------------------------------------------
+# Task #161: short-lived events hidden between two saved samples
+# --------------------------------------------------------------------------
+
+def _straddled(step, n_side=6):
+    """Flyby sampled so the analytic periapsis sits exactly mid-interval: the
+    two nearest saved samples are +-step/2 away and every sample is far above
+    the periapsis radius."""
+    vp = np.sqrt(V_INF**2 + 2 * MU_MOON / RP)
+    yp = np.array([RP, 0.0, 0.0, 0.0, vp, 0.0])
+    grid = (np.arange(-n_side, n_side) + 0.5) * step
+    states = []
+    for t in grid:
+        sol = solve_ivp(_two_body, (0.0, t), yp, method="DOP853", rtol=1e-13, atol=1e-8)
+        states.append(sol.y[:, -1])
+    return grid, np.array(states)
+
+
+GRAZE_STEP = 600.0
+R_GRAZE_KM = RP / 1000.0 + 40.0  # true path dips 40 km below this sphere
+
+
+def _analytic_crossing_epochs(radius_km):
+    """|t| at which the hyperbola reaches radius_km, by bisection on a tight propagation."""
+    vp = np.sqrt(V_INF**2 + 2 * MU_MOON / RP)
+    yp = np.array([RP, 0.0, 0.0, 0.0, vp, 0.0])
+    sol = solve_ivp(_two_body, (0.0, GRAZE_STEP), yp, method="DOP853", rtol=1e-13, atol=1e-8,
+                    dense_output=True)
+    from scipy.optimize import brentq
+    t = brentq(lambda tt: np.linalg.norm(sol.sol(tt)[:3]) / 1000.0 - radius_km, 0.0, GRAZE_STEP / 2)
+    return -t, t
+
+
+def test_graze_fixture_samples_are_all_above_threshold():
+    epochs, states = _straddled(GRAZE_STEP)
+    radii_km = np.linalg.norm(states[:, :3], axis=1) / 1000.0
+    assert np.all(radii_km > R_GRAZE_KM + 40.0)  # well clear: invisible to sign bracketing
+    assert ev.find_sphere_crossings(epochs, states, R_GRAZE_KM, g_rate=None) == []  # legacy behaviour
+
+
+@pytest.mark.parametrize("use_refine", [False, True])
+def test_graze_between_samples_is_detected(use_refine):
+    """Acceptance regression: all saved samples above the threshold, the true
+    trajectory crosses below and back up within one output step."""
+    epochs, states = _straddled(GRAZE_STEP)
+    t_in, t_out = _analytic_crossing_epochs(R_GRAZE_KM)
+    refine = _propagate if use_refine else None
+    found = ev.find_sphere_crossings(epochs, states, R_GRAZE_KM, refine=refine)
+    assert [c.direction for c in found] == [-1, +1]
+    tol_t, tol_r = (1e-2, 1e-3) if use_refine else (5.0, 1.0)
+    assert found[0].epoch == pytest.approx(t_in, abs=tol_t)
+    assert found[1].epoch == pytest.approx(t_out, abs=tol_t)
+    for c in found:
+        assert np.linalg.norm(c.state[:3]) / 1000.0 == pytest.approx(R_GRAZE_KM, abs=tol_r)
+
+    entry = ev.find_sphere_crossings(epochs, states, R_GRAZE_KM, direction=-1, refine=refine, first_only=True)
+    assert len(entry) == 1 and entry[0].direction == -1
+    assert entry[0].epoch == pytest.approx(t_in, abs=tol_t)
+
+
+def test_near_miss_graze_is_resolved_by_refinement():
+    """The extremum lies above the sphere: re-propagation must confirm that no
+    crossing happens (no false positive), with or without refine."""
+    epochs, states = _straddled(GRAZE_STEP)
+    r_km = RP / 1000.0 - 5.0  # sphere 5 km below the true periapsis
+    assert ev.find_sphere_crossings(epochs, states, r_km) == []
+    assert ev.find_sphere_crossings(epochs, states, r_km, refine=_propagate) == []
+
+
+def test_graze_found_by_refinement_when_hermite_misses_it():
+    """Very coarse output: the Hermite dense output alone may not dip below
+    the sphere, but the interval is suspicious, so it is re-propagated and
+    the true crossings are found."""
+    step = 2400.0
+    epochs, states = _straddled(step, n_side=3)
+    r_km = RP / 1000.0 + 2.0  # only 2 km of penetration
+    t_in, t_out = _analytic_crossing_epochs(r_km)
+    found = ev.find_sphere_crossings(epochs, states, r_km, refine=_propagate)
+    assert [c.direction for c in found] == [-1, +1]
+    assert found[0].epoch == pytest.approx(t_in, abs=1e-2)
+    assert found[1].epoch == pytest.approx(t_out, abs=1e-2)
+
+
+def test_find_altitude_crossing_detects_graze_between_samples():
+    tp = pytest.importorskip("orbitopt.verify.tudat_propagate", exc_type=ImportError)
+    epochs, states = _straddled(GRAZE_STEP)
+    t_in, _ = _analytic_crossing_epochs(R_GRAZE_KM)
+    body_r_km = 1737.4
+    prop = tp.PropagationResult(epochs=epochs, states=states, final_state=states[-1])
+    hit = tp.find_altitude_crossing(prop, body_r_km, R_GRAZE_KM - body_r_km, refine=_propagate)
+    assert hit is not None
+    assert hit.epoch == pytest.approx(t_in, abs=1e-2)
+    assert hit.altitude_km == pytest.approx(R_GRAZE_KM - body_r_km, abs=1e-3)
+    # the legacy linear method still cannot see it
+    assert tp.find_altitude_crossing(prop, body_r_km, R_GRAZE_KM - body_r_km, method="linear") is None
