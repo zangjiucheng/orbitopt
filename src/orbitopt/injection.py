@@ -47,7 +47,8 @@ Frames and time: everything here is Earth-centred J2000 *equatorial*
 (EME2000), metres / m/s, epochs as MJD2000 UTC days (the
 :mod:`orbitopt.launch_windows` convention; GMST with UT1 ~= UTC). Tudat
 ephemeris seconds are TDB since J2000 noon; :func:`mjd2000_to_ephemeris_seconds`
-uses TT - UTC = 69.184 s (valid since 2017). V-infinity inputs may be given
+is the leap-second-aware UTC -> TDB conversion of :mod:`orbitopt.timescales`
+(the same one :func:`orbitopt.bodies.mjd2000_to_ephemeris_seconds` uses). V-infinity inputs may be given
 in the ecliptic frame (pykep's heliocentric J2000 ecliptic) or equatorial.
 
 Model limits (planning level): impulsive burn (no finite-burn gravity loss),
@@ -74,14 +75,13 @@ from orbitopt.launch_windows import (
     as_mjd2000,
     asymptote_launch_windows,
 )
+from orbitopt.timescales import utc_mjd2000_to_tdb_seconds
 
 MU_EARTH_M3_S2 = 3.986004418e14
 R_EARTH_M = 6378137.0
 J2_EARTH = 1.08262668e-3
 # The one Earth gravity model of the plan and of both verification backends.
 EARTH_GRAVITY = {"gravitational_parameter": MU_EARTH_M3_S2, "reference_radius": R_EARTH_M, "j2": J2_EARTH}
-# TT - UTC since 2017-01-01 (37 leap seconds + 32.184 s).
-TT_MINUS_UTC_S = 69.184
 # Earth's sphere of influence w.r.t. the Sun [km] -- default end of the
 # escape arc for hyperbolic departures.
 EARTH_SOI_KM = 925_000.0
@@ -125,9 +125,9 @@ def _rotate(vec, mat) -> np.ndarray:
 
 
 def mjd2000_to_ephemeris_seconds(mjd2000: float) -> float:
-    """MJD2000 UTC days -> tudat/SPICE ephemeris seconds (TDB ~ TT since
-    J2000 12:00 TT)."""
-    return (float(mjd2000) - 0.5) * SECONDS_PER_DAY + TT_MINUS_UTC_S
+    """MJD2000 UTC days -> tudat/SPICE ephemeris seconds (TDB since J2000
+    12:00 TDB), leap-second aware; see :mod:`orbitopt.timescales`."""
+    return utc_mjd2000_to_tdb_seconds(mjd2000)
 
 
 def _unit(v) -> np.ndarray:

@@ -7,15 +7,14 @@ from datetime import date
 
 import numpy as np
 import pykep as pk
-from tudatpy.astro import time_conversion
 from tudatpy.interface import spice
+
+from orbitopt.timescales import utc_mjd2000_to_tdb_seconds
 
 _JPL_LP_BODIES = (
     "mercury", "venus", "earth", "mars", "jupiter",
     "saturn", "uranus", "neptune", "pluto",
 )
-
-_STD_MJD_AT_MJD2000_EPOCH = 51544.0
 
 _SPICE_LOADED = False
 
@@ -53,16 +52,15 @@ def state(body: pk.planet._base, mjd2000: float):
 
 
 def mjd2000_to_ephemeris_seconds(mjd2000: float) -> float:
-    """Convert an MJD2000 epoch (days since 2000-01-01 00:00:00, pykep's
-    convention) to ephemeris seconds since J2000 (2000-01-01 12:00:00 TDB),
-    the time format tudatpy/SPICE functions expect. The 12-hour offset
-    between the two epoch origins is why this isn't a plain days-to-seconds
-    scaling.
+    """Convert an MJD2000 UTC epoch (days since 2000-01-01 00:00:00 UTC,
+    pykep's / :mod:`orbitopt.launch_windows`' convention) to ephemeris
+    seconds -- TDB seconds since J2000 (2000-01-01 12:00:00 TDB), the time
+    argument tudatpy/SPICE expect. Leap-second aware (TT - UTC is 64.184 s
+    in 2000, 69.184 s since 2017); this is the same conversion
+    :func:`orbitopt.injection.mjd2000_to_ephemeris_seconds` uses, both from
+    :func:`orbitopt.timescales.utc_mjd2000_to_tdb_seconds`.
     """
-    julian_day = time_conversion.modified_julian_day_to_julian_day(
-        mjd2000 + _STD_MJD_AT_MJD2000_EPOCH
-    )
-    return time_conversion.julian_day_to_seconds_since_epoch(julian_day)
+    return utc_mjd2000_to_tdb_seconds(mjd2000)
 
 
 def moon_state(mjd2000: float) -> tuple[np.ndarray, np.ndarray]:

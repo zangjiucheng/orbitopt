@@ -350,3 +350,38 @@ Gotchas found while measuring:
   on the upper t0 bound, so constrained/unconstrained comparisons there
   measure the box, not the constraint -- pick a window containing the
   whole launch period.
+
+## Epochs: one leap-second-aware UTC -> TDB conversion (task #159)
+
+`orbitopt.bodies.mjd2000_to_ephemeris_seconds` used to pass MJD2000 straight
+through tudat's `julian_day_to_seconds_since_epoch` (no time-scale change, so
+UTC was silently treated as TDB), while `orbitopt.injection` hard-coded
+`(mjd2000 - 0.5) * 86400 + 69.184` (TT - UTC frozen at its post-2017 value).
+For the same input the two disagreed by ~69 s, and the Mission Control date
+label assumed a third offset (64.184 s). All three now call
+`orbitopt.timescales`: MJD2000 is a **UTC** label, ephemeris seconds are
+**TDB** past J2000 noon, TT - UTC comes from the IERS leap-second table, and
+TDB - TT from SPICE's DELTET formula. It matches SPICE `str2et` (64.183927 s
+at 2000-01-01 12:00 UTC) and ERFA `utctai`/`taitt` to < 10 us
+(`tests/test_timescales.py`).
+
+Measured change of the computed ephemeris epoch:
+
+| epoch (UTC)      | `bodies` paths | `injection` paths |
+|------------------|----------------|-------------------|
+| 2000-01-01 12:00 | +64.184 s      | -5.000 s          |
+| 2020-07-30 11:50 | +69.183 s      | -0.7 ms           |
+| 2026-08-01 00:00 | +69.183 s      | -0.7 ms           |
+
+* **Launch-to-Injection** (`examples/13`, numpy backend): output is
+  bit-identical before/after -- for any post-2017 date only the sub-ms
+  TDB - TT term changed. The Mars 2020 replay's injection step (`plan_departure`
+  at a 2020 epoch) is in the same post-2017 regime.
+* **`bodies`-based paths** (Moon state, `IAU_*` orientations, `mars_transfer`,
+  `mission_timeline`, `geo_insertion` reference epochs) now sample the
+  ephemeris 69.18 s later than before for the same UTC input: ~70 km of Moon
+  motion along its orbit, ~2,060 km of Earth/Mars heliocentric motion, and
+  0.29 deg of Earth rotation (~32 km at the equator for a launch site's
+  inertial position). These are now the correct values; the Mars 2020 replay
+  and tudat-backed verifications need the conda compute stack to re-fly and
+  should be re-run there to confirm the downstream trajectory deltas.
