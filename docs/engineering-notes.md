@@ -385,3 +385,28 @@ Measured change of the computed ephemeris epoch:
   inertial position). These are now the correct values; the Mars 2020 replay
   and tudat-backed verifications need the conda compute stack to re-fly and
   should be re-run there to confirm the downstream trajectory deltas.
+
+## Unified mission pipeline (task #170)
+
+Every config-driven mission runs one lifecycle, implemented in
+`src/orbitopt/pipeline.py`:
+
+`mission_config → constraints → search → optimize → refine → verify → export`
+
+`run_pipeline(config)` returns a `PipelineResult`; `to_dict()` is a
+`pipeline-result-1.0` document (`src/orbitopt/schemas/pipeline-result-1.0.json`)
+with the same structure for every mission kind. Each stage reports candidate
+trajectories, convergence status, constraint violations, the physical model,
+numerical error estimates and wall-clock time. Stages a kind doesn't have are
+`skipped`; stages after a failure are `not_run`.
+
+The CLI (`orbitopt run`, which now also writes `<scene>.pipeline.json`), the
+Python API (`mission_config.build_scene_from_config`, `pipeline.run_pipeline`)
+and the GUI's built-in `goes` / `mars` missions (`missions.builtin_mission_config`)
+all call the same `run_pipeline`.
+
+Migration is incremental. A kind's `build_from_config(config, recorder=None)`
+reports its stages to the `StageRecorder` it gets (`with recorder.stage("search")
+as st: ...`, `recorder.add_time(...)`, `recorder.skip(...)`); the pipeline
+handles config validation, the verify summary from verification reports, and
+export. `geo-raising` and `mars-transfer` are migrated.
