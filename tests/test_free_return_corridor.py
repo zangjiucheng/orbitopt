@@ -89,3 +89,87 @@ def test_artemis_free_return_enters_inside_the_safe_corridor():
     checks = result.report["status"]["checks"]
     assert checks["residual.entry_flight_path_angle_in_corridor"] is True
     assert checks["targeting.converged"] is True
+
+
+def _fake_targeting(*, converged, in_corridor, entry_fpa_deg):
+    from orbitopt.verify.differential_correction import FreeReturnTargetingResult
+
+    return FreeReturnTargetingResult(
+        delta_v=np.array([3100.0, 0.0, 0.0]), converged=converged, in_corridor=in_corridor,
+        iterations=4, coast_duration=3.5 * 86400.0, perilune_epoch=3.5 * 86400.0,
+        perilune_distance_km=8282.4, b_plane_angle_deg=0.0,
+        return_perigee_km=EARTH_RADIUS_KM + 30.0, target_return_perigee_km=EARTH_RADIUS_KM + 30.0,
+        entry_epoch=9.0 * 86400.0, entry_state=None, entry_speed_m_s=11_000.0,
+        entry_flight_path_angle_deg=entry_fpa_deg,
+    )
+
+
+def _stub_mission_geometry(monkeypatch, mt):
+    # Keep the gate tests independent of SPICE kernels: a fixed Moon state is
+    # enough to build the parking orbit and the Lambert seed.
+    monkeypatch.setattr(mt, "mjd2000_to_ephemeris_seconds", lambda mjd: 0.0)
+    monkeypatch.setattr(mt, "moon_state", lambda mjd: (np.array([3.84e8, 0.0, 0.0]), np.array([0.0, 1022.0, 0.0])))
+
+
+@pytest.mark.parametrize("converged, in_corridor, fpa", [
+    (True, False, -9.5),   # residuals converged, but the entry angle is too steep
+    (True, False, None),   # converged, but never reached the entry interface
+    (False, True, -6.0),
+])
+def test_mission_timeline_rejects_targeting_that_is_not_converged_and_in_corridor(monkeypatch, converged, in_corridor, fpa):
+    from orbitopt.viz import mission_timeline as mt
+
+    _stub_mission_geometry(monkeypatch, mt)
+    monkeypatch.setattr(mt, "target_free_return_entry_corridor",
+                        lambda **kw: _fake_targeting(converged=converged, in_corridor=in_corridor, entry_fpa_deg=fpa))
+
+    def must_not_propagate(*a, **kw):
+        raise AssertionError("a rejected targeting result must not be propagated/exported")
+
+    monkeypatch.setattr(mt, "propagate_multi_arc", must_not_propagate)
+    with pytest.raises(RuntimeError, match="rejected"):
+        mt.compute_and_export_mission(departure_mjd2000=9709.0)
+
+
+def _entry_crossing(fpa_deg):
+    from orbitopt.verify.tudat_propagate import AltitudeCrossingResult
+
+    r = (EARTH_RADIUS_KM + EARTH_ENTRY_INTERFACE_ALTITUDE_KM) * 1000.0
+    v = 11_000.0
+    state = np.array([r, 0.0, 0.0, v * np.sin(np.radians(fpa_deg)), v * np.cos(np.radians(fpa_deg)), 0.0])
+    return AltitudeCrossingResult(epoch=9.0 * 86400.0, altitude_km=EARTH_ENTRY_INTERFACE_ALTITUDE_KM,
+                                  spacecraft_state=state)
+
+
+def test_mission_timeline_independently_rejects_an_out_of_corridor_export(monkeypatch):
+    """The targeter claims converged + in_corridor, but the full re-propagated
+    trajectory enters too steeply: the export must still be refused."""
+    from orbitopt.verify.tudat_propagate import PropagationResult
+    from orbitopt.viz import mission_timeline as mt
+
+    _stub_mission_geometry(monkeypatch, mt)
+    monkeypatch.setattr(mt, "target_free_return_entry_corridor",
+                        lambda **kw: _fake_targeting(converged=True, in_corridor=True, entry_fpa_deg=-6.0))
+    epochs = np.linspace(0.0, 9.5 * 86400.0, 20)
+    states = np.tile([7.0e6, 0.0, 0.0, 0.0, 7.5e3, 0.0], (20, 1))
+    monkeypatch.setattr(mt, "propagate_multi_arc",
+                        lambda *a, **kw: PropagationResult(epochs=epochs, states=states, final_state=states[-1]))
+    monkeypatch.setattr(mt, "find_altitude_crossing", lambda *a, **kw: _entry_crossing(-9.0))
+    with pytest.raises(RuntimeError, match="outside the .* entry corridor"):
+        mt.compute_and_export_mission(departure_mjd2000=9709.0)
+
+    monkeypatch.setattr(mt, "find_altitude_crossing", lambda *a, **kw: None)
+    with pytest.raises(RuntimeError, match="never reaches"):
+        mt.compute_and_export_mission(departure_mjd2000=9709.0)
+
+
+@pytest.mark.parametrize("fpa, ok", [(-6.0, True), (-5.05, True), (-6.95, True), (-4.5, False), (-7.5, False)])
+def test_verify_entry_corridor_bounds(monkeypatch, fpa, ok):
+    from orbitopt.viz import mission_timeline as mt
+
+    monkeypatch.setattr(mt, "find_altitude_crossing", lambda *a, **kw: _entry_crossing(fpa))
+    if ok:
+        assert mt._verify_entry_corridor(object()).spacecraft_state is not None
+    else:
+        with pytest.raises(RuntimeError, match="outside"):
+            mt._verify_entry_corridor(object())
