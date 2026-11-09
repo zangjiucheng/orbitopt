@@ -145,7 +145,8 @@ def main():
     pop = pg.algorithm(algo).evolve(pop)
     x, f = pop.champion_x, pop.champion_f
     print(f"  best coarse candidate: {f[0]:.1f} km from target, dv={x} km/s "
-          f"({time.perf_counter() - t0:.1f}s, {pop_size * generations} candidate-evals)")
+          f"({time.perf_counter() - t0:.1f}s, {pop_size * generations} candidate-evals, "
+          f"backend={screen.last_backend})")
 
     dv_guess = x * 1000.0  # km/s -> m/s
     coast_guess_s = screen.time_to_closest_approach(x)
