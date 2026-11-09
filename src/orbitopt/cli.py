@@ -106,7 +106,9 @@ def _cmd_run(args):
     print(f"Running {mission['id']!r} (kind: {mission['kind']})...")
     scene = build_scene_from_config(config)
 
-    from orbitopt.verify.report import bundle, pop_from_scene, write_report
+    from orbitopt.verify.report import (
+        RESULT_PASSED, bundle, format_status, pop_from_scene, status_result, write_report,
+    )
 
     reports = pop_from_scene(scene)
     out = args.out or config["output"]["scene_file"]
@@ -118,14 +120,16 @@ def _cmd_run(args):
         report_out = config["output"].get("verification_report") or _report_path_for(out)
         doc = reports[0] if len(reports) == 1 else bundle(reports, label=mission["id"])
         write_report(doc, report_out)
-        print(("" if doc["status"]["passed"] else "WARNING: ")
-              + f"wrote verification report {report_out} (passed: {doc['status']['passed']})")
+        print(("" if status_result(doc["status"]) == RESULT_PASSED else "WARNING: ")
+              + f"wrote verification report {report_out} ({format_status(doc['status'])})")
     # build_from_config appends its verification summary as trailing
     # subtitle lines -- surface it here too, so a non-convergence WARNING
     # is visible in the terminal, not just in the scene the UI shows later.
     for line in scene.get("subtitle", "").splitlines():
-        if line.startswith("High-fidelity verification"):
-            print(("WARNING: " if "DID NOT CONVERGE" in line else "") + line)
+        if line.startswith("High-fidelity verification") or line.startswith("Verification report"):
+            bad = "DID NOT CONVERGE" in line or (
+                line.startswith("Verification report") and ": PASSED (" not in line)
+            print(("WARNING: " if bad else "") + line)
 
 
 def _cmd_launch_window(args):
