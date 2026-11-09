@@ -715,7 +715,10 @@ def find_altitude_crossing(
     """First downward crossing of ``threshold_altitude_km`` above a spherical
     central body of radius ``central_body_radius_km`` (e.g. 121.92 km, the
     400,000 ft Earth entry interface). Returns None if the propagated span
-    never goes below the threshold; if the very first sample is already below
+    never goes below the threshold -- including between saved samples: with
+    ``method="event"`` a graze that dips below and back up within one output
+    step is still detected (via the radial velocity + adaptive
+    re-propagation of that interval); if the very first sample is already below
     it, that sample is returned (as before).
 
     ``method="event"`` (default) root-finds |r| - (R + h) on the Hermite dense
@@ -727,17 +730,16 @@ def find_altitude_crossing(
     altitudes_km = radii_km - float(central_body_radius_km)
     below = altitudes_km < float(threshold_altitude_km)
 
-    if not np.any(below):
-        return None
-
-    crossing_indices = np.nonzero(below)[0]
-    idx_after = int(crossing_indices[0])
-    if idx_after == 0:
+    if below[0]:
         return AltitudeCrossingResult(
             epoch=float(prop_result.epochs[0]), altitude_km=float(altitudes_km[0]),
             spacecraft_state=prop_result.states[0].copy(),
         )
 
+    # NB: no early "no sample below -> None" exit for the event method: a
+    # grazing entry can dip below the threshold and come back up entirely
+    # between two saved samples; find_sphere_crossings detects that from the
+    # radial velocity and re-propagates / subdivides the interval.
     if method == "event":
         threshold_radius_km = float(central_body_radius_km) + float(threshold_altitude_km)
         found = _events.find_sphere_crossings(
@@ -754,6 +756,9 @@ def find_altitude_crossing(
     elif method != "linear":
         raise ValueError(f"Unknown method {method!r}; expected 'event' or 'linear'")
 
+    if not np.any(below):
+        return None
+    idx_after = int(np.nonzero(below)[0][0])
     idx_before = idx_after - 1
     alt_before, alt_after = altitudes_km[idx_before], altitudes_km[idx_after]
     if alt_after == alt_before:
