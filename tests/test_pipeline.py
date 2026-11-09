@@ -58,6 +58,8 @@ def fake_builder(config, recorder=None):
         st.candidates = [{"n": 1, "selected": True}, {"n": 2}]
         st.convergence = {"converged": True}
     recorder.add_time("optimize", 0.25).constraint_violations = {"cap_ms": 0.0}
+    with recorder.stage("select") as st:
+        st.candidates = [{"n": 1, "selected": True}]
     for attempt in range(2):  # first refine attempt rejected, second accepted
         try:
             with recorder.stage("refine") as st:
@@ -95,7 +97,7 @@ def _shape(doc):
 
 
 def test_stage_order_is_the_documented_lifecycle():
-    assert STAGES == ("mission_config", "constraints", "search", "optimize", "refine", "verify", "export")
+    assert STAGES == ("mission_config", "constraints", "search", "optimize", "select", "refine", "verify", "export")
 
 
 def test_recorder_times_stages_and_recovers_from_a_retried_failure():
@@ -155,7 +157,7 @@ def test_stages_a_kind_lacks_are_marked_skipped(monkeypatch):
     doc = run_pipeline(copy.deepcopy(GEO_CONFIG)).to_dict()
     statuses = {s["stage"]: s["status"] for s in doc["stages"]}
     assert statuses["mission_config"] == statuses["export"] == "completed"
-    assert {statuses[s] for s in ("constraints", "search", "optimize", "refine", "verify")} == {"skipped"}
+    assert {statuses[s] for s in ("constraints", "search", "optimize", "select", "refine", "verify")} == {"skipped"}
     validate_pipeline_result(doc)
 
 
@@ -223,8 +225,11 @@ def test_real_missions_run_through_the_unified_pipeline(fixture):
     validate_pipeline_result(doc)
     statuses = {s["stage"]: s["status"] for s in doc["stages"]}
     assert doc["status"] == "completed"
-    for stage in ("mission_config", "constraints", "search", "optimize", "refine", "verify", "export"):
+    for stage in ("mission_config", "constraints", "search", "optimize", "select", "refine", "verify", "export"):
         assert statuses[stage] == "completed", (stage, statuses)
     assert result.stage("optimize").candidates
     assert result.stage("refine").numerical_error
     assert result.verification_reports
+    gate = doc["gate"]
+    assert gate["exported_candidate"] is not None
+    assert doc["success"] == (gate["result"] == "passed" and not gate["best_effort"])

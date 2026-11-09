@@ -3,7 +3,7 @@ result document for every config-driven mission kind, shared by the CLI
 (``orbitopt run``), the GUI (the built-in "goes"/"mars" missions in
 orbitopt.missions) and the Python API.
 
-    MissionConfig -> Constraints -> Search -> Optimize -> Refine -> Verify -> Export
+    MissionConfig -> Constraints -> Search -> Optimize -> Select -> Refine -> Verify -> Export
 
     from orbitopt.mission_config import load_mission_config
     from orbitopt.pipeline import run_pipeline
@@ -12,6 +12,8 @@ orbitopt.missions) and the Python API.
     result.scene                # SceneData dict (verification reports removed)
     result.verification_reports # machine-readable reports (orbitopt.verify.report)
     result.to_dict()            # pipeline-result-1.0 document, same shape for every kind
+    result.success              # True only if the exported candidate passed verification
+    result.gate                 # Verification Gate: per-candidate verdicts + warnings
     print(result.summary())
 
 Every stage reports the same fields (``StageResult``): candidate
@@ -19,6 +21,18 @@ trajectories, convergence status, constraint violations, the physical model
 used, numerical error estimates and wall-clock time. A stage a mission kind
 doesn't have is ``skipped``; a stage that never ran because an earlier one
 raised is ``not_run``.
+
+Candidate Selection and the Verification Gate (task #171, see
+orbitopt.candidate_selection): the ``select`` stage dedupes, ranks and
+diversity-filters the optimizer's candidates into the short list refinement
+walks through, recording why each candidate was kept or dropped. The gate
+(``StageRecorder.gate``) records each candidate's verdict -- rejected by
+refinement, accepted (verification passed) or degraded (verification failed
+or not_checked) -- and which one was exported. Only an accepted candidate
+makes the run a ``success``; a best-effort export (nothing passed) carries a
+prominent warning in the pipeline result, the scene and the CLI output.
+Builders that don't drive the gate get a generic one: the exported scene's
+verification reports decide.
 
 Migration is incremental, not a one-shot rewrite: a mission kind's existing
 ``build_from_config(config, recorder=None)`` builder keeps doing the work
@@ -51,10 +65,11 @@ MISSION_CONFIG = "mission_config"
 CONSTRAINTS = "constraints"
 SEARCH = "search"
 OPTIMIZE = "optimize"
+SELECT = "select"
 REFINE = "refine"
 VERIFY = "verify"
 EXPORT = "export"
-STAGES = (MISSION_CONFIG, CONSTRAINTS, SEARCH, OPTIMIZE, REFINE, VERIFY, EXPORT)
+STAGES = (MISSION_CONFIG, CONSTRAINTS, SEARCH, OPTIMIZE, SELECT, REFINE, VERIFY, EXPORT)
 
 STATUS_COMPLETED = "completed"
 STATUS_SKIPPED = "skipped"
@@ -135,7 +150,10 @@ class StageRecorder:
     """
 
     def __init__(self, on_stage: Callable[[StageResult], None] | None = None):
+        from orbitopt.candidate_selection import VerificationGate
+
         self.results = {name: StageResult(name) for name in STAGES}
+        self.gate = VerificationGate()
         self._on_stage = on_stage
 
     def __getitem__(self, name: str) -> StageResult:
@@ -189,6 +207,23 @@ class PipelineResult:
     verification_reports: list = field(default_factory=list)
     outputs: dict = field(default_factory=dict)
     error: str | None = None
+    gate: object = None  # orbitopt.candidate_selection.VerificationGate
+
+    def __post_init__(self):
+        if self.gate is None:
+            from orbitopt.candidate_selection import VerificationGate
+
+            self.gate = VerificationGate()
+
+    @property
+    def success(self) -> bool:
+        """The run completed *and* the exported candidate passed the
+        Verification Gate (failed / not_checked / best-effort never count)."""
+        return self.status == STATUS_COMPLETED and self.gate.success
+
+    @property
+    def warnings(self) -> list:
+        return self.gate.warnings()
 
     @property
     def status(self) -> str:
@@ -231,12 +266,14 @@ class PipelineResult:
             "kind": "pipeline-result",
             "mission": dict(self.mission),
             "status": self.status,
+            "success": self.success,
             "elapsed_s": round(self.elapsed_s, 6),
             "stages": [s.to_dict() for s in self.stages],
             "verification": {
                 "result": self.verification_result,
                 "reports": [f"{r.get('kind', '?')}:{r.get('label', '?')}" for r in self.verification_reports],
             },
+            "gate": self.gate.to_dict(),
             "outputs": dict(self.outputs),
         }
         if self.error is not None:
@@ -252,6 +289,12 @@ class PipelineResult:
             worst = max(s.constraint_violations.values(), default=0.0) or 0.0
             lines.append(f"  {s.stage:<15} {s.status:<10} {s.elapsed_s:8.2f} s  "
                          f"{len(s.candidates):3d} cand.  {conv:<14} max violation {worst:.3g}")
+        g = self.gate
+        if g.exported is not None:
+            lines.append(f"  verification gate: {'SUCCESS' if self.success else 'NOT SUCCESSFUL'} -- exported "
+                         f"candidate #{g.exported} ({g.result}); "
+                         + ", ".join(f"{n} {v}" for v, n in g.to_dict()["counts"].items() if n))
+        lines.extend(f"  WARNING: {w}" for w in self.warnings)
         return "\n".join(lines)
 
 
@@ -333,6 +376,7 @@ def run_pipeline(
     result = PipelineResult(
         mission={k: mission.get(k) for k in ("id", "title", "kind")},
         stages=[recorder[name] for name in STAGES],
+        gate=recorder.gate,
     )
     try:
         with recorder.stage(MISSION_CONFIG) as st:
@@ -355,6 +399,7 @@ def run_pipeline(
             _summarize_verify_from_reports(verify, reports)
         elif verify.status == STATUS_NOT_RUN:
             recorder.skip(VERIFY, "no verification report produced")
+        _apply_gate(recorder.gate, reports, scene)
 
         with recorder.stage(EXPORT) as st:
             from orbitopt.scene_format import validate_scene
@@ -386,6 +431,19 @@ def run_pipeline(
     if write_outputs and "pipeline_result" in result.outputs:
         write_pipeline_result(result, result.outputs["pipeline_result"])
     return result
+
+
+def _apply_gate(gate, reports: list, scene: dict) -> None:
+    """Close the Verification Gate for the exported scene. A builder that
+    drove the gate itself (``gate.exported`` set) is taken as is; otherwise
+    the exported scene is the one candidate and its reports decide."""
+    from orbitopt.candidate_selection import mark_scene_best_effort
+    from orbitopt.verify.report import RESULT_FAILED
+
+    if gate.exported is None:
+        c = gate.evaluate(0, reports, source="exported scene")
+        gate.export(0, best_effort=c["verification"] == RESULT_FAILED)
+    mark_scene_best_effort(scene, gate)
 
 
 def _write_outputs(result: PipelineResult, config: dict, scene_path) -> None:

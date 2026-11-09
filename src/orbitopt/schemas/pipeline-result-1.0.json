@@ -2,9 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/zangjiucheng/orbitopt/schemas/pipeline-result-1.0.json",
   "title": "orbitopt pipeline result 1.0",
-  "description": "Standardized, mission-kind-independent result of one run of the unified mission pipeline (orbitopt.pipeline): MissionConfig -> Constraints -> Search -> Optimize -> Refine -> Verify -> Export. Every mission kind produces exactly this structure.",
+  "description": "Standardized, mission-kind-independent result of one run of the unified mission pipeline (orbitopt.pipeline): MissionConfig -> Constraints -> Search -> Optimize -> Select -> Refine -> Verify -> Export, with a Verification Gate between Verify and Export. Every mission kind produces exactly this structure.",
   "type": "object",
-  "required": ["schemaVersion", "kind", "mission", "status", "elapsed_s", "stages", "verification", "outputs"],
+  "required": ["schemaVersion", "kind", "mission", "status", "success", "elapsed_s", "stages", "verification", "gate", "outputs"],
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {"const": "1.0"},
@@ -19,18 +19,20 @@
         "kind": {"type": ["string", "null"]}
       }
     },
-    "status": {"enum": ["completed", "failed"]},
+    "status": {"enum": ["completed", "failed"], "description": "Execution status: did every stage run without raising."},
+    "success": {"type": "boolean", "description": "True only when the run completed AND the exported candidate passed the Verification Gate (verification result `passed`). failed / not_checked / best-effort exports are never a success."},
     "elapsed_s": {"type": "number", "minimum": 0},
     "error": {"type": "string"},
     "stages": {
       "type": "array",
-      "minItems": 7,
-      "maxItems": 7,
+      "minItems": 8,
+      "maxItems": 8,
       "prefixItems": [
         {"$ref": "#/$defs/stage", "properties": {"stage": {"const": "mission_config"}}},
         {"$ref": "#/$defs/stage", "properties": {"stage": {"const": "constraints"}}},
         {"$ref": "#/$defs/stage", "properties": {"stage": {"const": "search"}}},
         {"$ref": "#/$defs/stage", "properties": {"stage": {"const": "optimize"}}},
+        {"$ref": "#/$defs/stage", "properties": {"stage": {"const": "select"}}},
         {"$ref": "#/$defs/stage", "properties": {"stage": {"const": "refine"}}},
         {"$ref": "#/$defs/stage", "properties": {"stage": {"const": "verify"}}},
         {"$ref": "#/$defs/stage", "properties": {"stage": {"const": "export"}}}
@@ -44,6 +46,44 @@
       "properties": {
         "result": {"enum": ["passed", "failed", "not_checked"]},
         "reports": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "gate": {
+      "type": "object",
+      "description": "Verification Gate: per-candidate verdicts (why each was rejected / degraded / accepted) and which one was exported.",
+      "required": ["result", "success", "best_effort", "exported_candidate", "counts", "candidates", "warnings", "notes"],
+      "additionalProperties": false,
+      "properties": {
+        "result": {"enum": ["passed", "failed", "not_checked"], "description": "Tri-state verification result of the exported candidate."},
+        "success": {"type": "boolean"},
+        "best_effort": {"type": "boolean", "description": "No candidate passed verification and one was exported anyway."},
+        "exported_candidate": {"type": ["integer", "null"]},
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "accepted": {"type": "integer", "minimum": 0},
+            "degraded": {"type": "integer", "minimum": 0},
+            "rejected": {"type": "integer", "minimum": 0},
+            "not_evaluated": {"type": "integer", "minimum": 0}
+          }
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["index", "verdict", "verification", "reasons"],
+            "properties": {
+              "index": {"type": "integer"},
+              "verdict": {"enum": ["accepted", "degraded", "rejected", "not_evaluated"]},
+              "verification": {"enum": ["passed", "failed", "not_checked", null]},
+              "reasons": {"type": "array", "items": {"type": "string"}},
+              "best_effort": {"type": "boolean"}
+            }
+          }
+        },
+        "warnings": {"type": "array", "items": {"type": "string"}},
+        "notes": {"type": "array", "items": {"type": "string"}}
       }
     },
     "outputs": {
@@ -64,7 +104,7 @@
                    "constraint_violations", "physical_model", "numerical_error", "notes"],
       "additionalProperties": false,
       "properties": {
-        "stage": {"enum": ["mission_config", "constraints", "search", "optimize", "refine", "verify", "export"]},
+        "stage": {"enum": ["mission_config", "constraints", "search", "optimize", "select", "refine", "verify", "export"]},
         "status": {"enum": ["completed", "skipped", "failed", "not_run"]},
         "elapsed_s": {"type": "number", "minimum": 0, "description": "Wall-clock run time of the stage [s]."},
         "candidates": {
