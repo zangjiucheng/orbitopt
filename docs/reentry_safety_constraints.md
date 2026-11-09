@@ -53,17 +53,35 @@ All evaluated on an atmospheric 3-DOF trajectory flown from the EI state
 | C1 | Peak stagnation-point heat flux | `max q̇` [W/cm²] | Convective: Sutton–Graves `q̇_c = k √(ρ/R_n) V³`, `k = 1.7415e-4` (SI, Earth air). Radiative (relevant above ~10 km/s): Tauber–Sutton correlation, reported separately and flagged as low-fidelity | vehicle/TPS-specific; user input, no default pass/fail |
 | C2 | Total heat load | `Q = ∫ q̇ dt` [J/cm²] | Trapezoid integral of C1 over the pass from EI to end condition | TPS-specific; user input |
 | C3 | Peak sensed deceleration | `max |a_aero| / g0` [g], `a_aero = √(L²+D²)/m` | From the 3-DOF aero acceleration (not total acceleration incl. gravity) | e.g. crew ~ 8–10 g short duration; user input |
-| C4 | Skip-out risk | (a) any exit back above EI after first atmospheric pass; (b) apogee / energy at exit; (c) overshoot margin (Section 3) | Event detection on the 3-DOF trajectory with `find_altitude_crossing` semantics (upward crossing) | classification, see below |
+| C4 | Skip-out risk | (a) any exit back above EI after first atmospheric pass; (b) apogee / geocentric inertial energy at exit; (c) overshoot margin (Section 3) | Event detection on the 3-DOF trajectory with `find_altitude_crossing` semantics (upward crossing) | classification, see below |
 | C5 *(optional)* | Peak dynamic pressure | `max ½ρV²` [kPa] | Free from the same trajectory | user input |
 
 Skip-out (C4) classification:
 
 * `captured` — altitude never returns above EI before the end condition
   (e.g. h < 30 km or V_rel < 1 km/s, i.e. parachute regime is *not* modelled).
-* `skip_bounded` — exits above EI with negative Earth-relative specific
-  energy: a second entry will occur (intentional for Orion-style skip entry,
-  but it is a separate, guided problem and is reported as "not assessed").
-* `skip_escape` — exits with non-negative energy: hard failure.
+* `skip_bounded` — exits above EI with negative geocentric **inertial**
+  specific energy: a second entry will occur (intentional for Orion-style
+  skip entry, but it is a separate, guided problem and is reported as "not
+  assessed").
+* `skip_escape` — exits with non-negative inertial energy: hard failure.
+
+The energy test uses the geocentric inertial state at the exit crossing,
+`ε = ½|v_I|² − μ⊕/|r|`, never the atmosphere-relative speed. Two-body
+boundedness is a property of the inertial orbit; `v_rel = v_I − ω⊕ × r` is
+smaller than `|v_I|` by up to ~0.47 km/s (equatorial, prograde exit at
+EI), so an energy computed from `v_rel` can call an escaping trajectory
+bounded: at the EI radius (~6500 km) escape speed is ≈ 11.07 km/s, and an
+exit at exactly that inertial speed can have `|v_rel|` ≈ 10.6 km/s.
+`v_rel` is for aerodynamics and heating only.
+
+NAIF inertial-state requirement: `r`, `v_I` must be Earth-centred
+coordinates in an inertial frame (ECLIPJ2000 or J2000, i.e. the propagation
+frame). If the 3-DOF integration runs in the Earth-fixed frame
+(`IAU_EARTH`/`ITRF93`), convert the exit state back with the full 6×6 state
+transformation (`sxform`, which adds the `ω⊕ × r` transport term), not the
+3×3 position rotation (`pxform`) applied to the velocity; a rotated `v_rel`
+is still a relative velocity. The report records the frame used for `ε`.
 
 ## 3. Corridor bounds instead of a fixed band (recommended)
 
@@ -223,6 +241,10 @@ Data hand-off details:
 * Skip-out: a lifting vehicle at a sufficiently shallow γ with lift-up
   produces `skip_bounded`; lift-down at the same γ is `captured` or is
   closer to capture (overshoot-boundary existence).
+* Skip-out energy frame: a synthetic prograde equatorial exit state with
+  inertial speed just above escape at EI (so `|v_rel|` is below it) must be
+  `skip_escape`; the same state rebuilt from an Earth-fixed state with
+  `sxform` must classify identically.
 * Corridor bounds: `steepest < shallowest`, and both boundaries move in the
   expected direction when L/D increases (corridor widens).
 * Regression: the converged #144 free-return case assessed with an
