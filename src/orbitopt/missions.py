@@ -141,24 +141,52 @@ def _load_artemis2() -> dict:
     return cached_scene("artemis2", _compute)
 
 
+# The config-driven built-ins run through the unified mission pipeline
+# (orbitopt.pipeline) -- the same code path as `orbitopt run <config>` and the
+# Python API -- from these minimal configs. Every omitted section falls back
+# to the builder's own defaults, so the scenes are identical to the
+# zero-argument compute_and_export_*_mission() calls. The GOES high-fidelity
+# re-fly is off, matching what the GUI has always shown (it's a ~minute of
+# extra tudatpy work; `orbitopt run` a config to get it).
+BUILTIN_MISSION_CONFIGS = {
+    "goes": {
+        "schemaVersion": "1.0",
+        "mission": {"id": "goes-gto-geo", "title": "GOES — GTO to GEO Raising", "kind": "geo-raising"},
+        "verification": {"enabled": False},
+        "output": {"scene_file": "goes.json"},
+    },
+    "mars": {
+        "schemaVersion": "1.0",
+        "mission": {"id": "mars-transfer", "title": "Mars — Earth to Orbit Insertion", "kind": "mars-transfer"},
+        "output": {"scene_file": "mars.json"},
+    },
+}
+
+
+def builtin_mission_config(id: str) -> dict:
+    """A fresh copy of the mission config a config-driven built-in mission
+    ("goes", "mars") runs through orbitopt.pipeline.run_pipeline."""
+    import copy
+
+    return copy.deepcopy(BUILTIN_MISSION_CONFIGS[id])
+
+
+def _run_builtin_pipeline(id: str) -> dict:
+    from orbitopt.pipeline import run_pipeline
+
+    return run_pipeline(builtin_mission_config(id)).scene
+
+
 def _load_goes() -> dict:
     from orbitopt.scene_cache import cached_scene
 
-    def _compute() -> dict:
-        from orbitopt.viz.geo_raising import compute_and_export_geo_mission
-        return compute_and_export_geo_mission()
-
-    return cached_scene("goes", _compute)
+    return cached_scene("goes", lambda: _run_builtin_pipeline("goes"))
 
 
 def _load_mars() -> dict:
     from orbitopt.scene_cache import cached_scene
 
-    def _compute() -> dict:
-        from orbitopt.viz.mars_transfer import compute_and_export_mars_mission
-        return compute_and_export_mars_mission()
-
-    return cached_scene("mars", _compute)
+    return cached_scene("mars", lambda: _run_builtin_pipeline("mars"))
 
 
 register("solar-system", "Solar System", _load_solar_system)

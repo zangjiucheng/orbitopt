@@ -81,6 +81,7 @@ python examples/14_mars2020_replay.py      # the end-to-end walkthrough above
 | `orbitopt missions` | list registered missions (built-in and plugins) |
 | `orbitopt validate config.yaml` | schema-check a mission config, no compute |
 | `orbitopt run config.yaml` | run a config: optimize, verify, write scene + `.verification.json` |
+| `orbitopt view config.yaml` | run a config (cached) and open the 3D viewer |
 | `orbitopt launch-window <site> ...` | daily launch windows into an orbit plane (`--inclination`, `--raan`/`--ltan`, `--dogleg`) or along a departure asymptote (`--rla/--dla`) |
 
 ## Mission configs
@@ -96,8 +97,16 @@ campaign_search: { n_burns: { min: 2, max: 6 } }
 output: { scene_file: scenes/my-geo-mission.json }
 ```
 
-Supported kinds: `geo-raising` and `mars-transfer`. Schemas are in
-`src/orbitopt/schemas/`.
+Supported kinds: `geo-raising`, `mars-transfer` and `lunar-free-return`
+(Artemis II; see `examples/artemis2_free_return.yaml`). Schemas are in
+`src/orbitopt/schemas/`. `orbitopt view config.yaml` runs a config and opens
+the result; the scene is cached like the built-in missions' scenes and is
+recomputed when the config or orbitopt's source changes.
+
+The Solar System scene is not a config kind. It is a near-instant ephemeris
+export with no optimizer, targeting or verification stage, so there is
+nothing for a config to tune or for `run` to verify. It stays a built-in
+(`orbitopt view solar-system`).
 
 ## Verification reports
 
@@ -212,9 +221,11 @@ Root causes are written up in
   orbit, good for spans of up to ~10 days from its SPICE seed.
 - Missions end at orbit insertion, with no EDL. The TCM/MOI targeters are
   not guaranteed to converge for every geometry. When the TCM doesn't
-  close, the Mars pipeline moves on to the next candidate. It never exports
-  a trajectory that hits Mars, and any failed check shows up in the
-  verification report.
+  close, or a flown candidate's verification is failed / not checked, the
+  Mars pipeline moves on to the next candidate. It never exports a trajectory
+  that hits Mars, and an export where no candidate passed verification is
+  flagged best-effort (`success: false` plus a warning in the pipeline result,
+  scene and CLI output).
 
 ## License
 

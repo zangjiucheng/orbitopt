@@ -6,6 +6,7 @@ the single-scene 3D viewer directly, without going through examples/.
     orbitopt view               # single-scene viewer, solar system
     orbitopt view artemis2      # a built-in mission (see `orbitopt view --help`)
     orbitopt view scene.json    # any exported SceneData JSON file
+    orbitopt view my_mission.yaml       # run (or load cached) a mission config, then view it
     orbitopt export goes -o goes.json   # cache a built-in mission's scene JSON
     orbitopt validate my_mission.yaml   # schema-check a mission config (no compute)
     orbitopt run my_mission.yaml        # run a mission config, write + verify its scene
@@ -30,14 +31,25 @@ from orbitopt.missions import list_missions
 from orbitopt.scene_format import read_scene
 
 
+_CONFIG_SUFFIXES = (".yaml", ".yml")
+
+
 def resolve_scene(name: str) -> dict:
     """Return a SceneData dict for a registered mission id (built-in or a
-    third-party plugin -- see orbitopt.missions) or a JSON file path."""
+    third-party plugin -- see orbitopt.missions), a mission config YAML path
+    (see orbitopt.mission_config), or a scene JSON file path."""
     from orbitopt.missions import get
 
     try:
         mission = get(name)
     except KeyError:
+        if Path(name).suffix.lower() in _CONFIG_SUFFIXES:
+            from orbitopt.mission_config import cached_scene_from_config
+
+            config = _load_and_validate_config(name)
+            print(f"Computing the {config['mission']['id']!r} scene from {name} "
+                  "(cached after the first run)...")
+            return cached_scene_from_config(config)
         return read_scene(name)
     if mission.id != "solar-system":
         print(f"Computing the {mission.id!r} scene -- this can take a few seconds...")
@@ -89,14 +101,9 @@ def _cmd_validate(args):
     print(f"OK: {mission['id']} (kind: {mission['kind']})")
 
 
-def _report_path_for(scene_path) -> str:
-    p = Path(scene_path)
-    return str(p.with_name(p.stem + ".verification.json"))
-
-
 def _cmd_run(args):
-    from orbitopt.mission_config import build_scene_from_config
-    from orbitopt.scene_format import write_scene
+    from orbitopt.pipeline import run_pipeline
+    from orbitopt.verify.report import RESULT_PASSED, format_status, status_result
 
     config = _load_and_validate_config(args.config)
     if args.skip_verify:
@@ -104,24 +111,20 @@ def _cmd_run(args):
 
     mission = config["mission"]
     print(f"Running {mission['id']!r} (kind: {mission['kind']})...")
-    scene = build_scene_from_config(config)
-
-    from orbitopt.verify.report import (
-        RESULT_PASSED, bundle, format_status, pop_from_scene, status_result, write_report,
-    )
-
-    reports = pop_from_scene(scene)
-    out = args.out or config["output"]["scene_file"]
-    write_scene(scene, out)
-    print(f"wrote {out} ({len(scene.get('bodies', []))} bodies)")
-    if reports:
-        # One machine-readable verification report per run (task #137),
-        # next to the scene unless output.verification_report says otherwise.
-        report_out = config["output"].get("verification_report") or _report_path_for(out)
-        doc = reports[0] if len(reports) == 1 else bundle(reports, label=mission["id"])
-        write_report(doc, report_out)
+    # The same unified pipeline (orbitopt.pipeline) the GUI and Python API
+    # use: MissionConfig -> Constraints -> Search -> Optimize -> Refine ->
+    # Verify -> Export, writing the scene, its verification report (task
+    # #137) and the standardized pipeline result next to each other.
+    result = run_pipeline(config, write_outputs=True, scene_path=args.out)
+    scene = result.scene
+    print(f"wrote {result.outputs['scene_file']} ({len(scene.get('bodies', []))} bodies)")
+    if "verification_report" in result.outputs:
+        doc = result.verification_document()
         print(("" if status_result(doc["status"]) == RESULT_PASSED else "WARNING: ")
-              + f"wrote verification report {report_out} ({format_status(doc['status'])})")
+              + f"wrote verification report {result.outputs['verification_report']} "
+              f"({format_status(doc['status'])})")
+    print(f"wrote pipeline result {result.outputs['pipeline_result']}")
+    print(result.summary())
     # build_from_config appends its verification summary as trailing
     # subtitle lines -- surface it here too, so a non-convergence WARNING
     # is visible in the terminal, not just in the scene the UI shows later.
@@ -130,6 +133,13 @@ def _cmd_run(args):
             bad = "DID NOT CONVERGE" in line or (
                 line.startswith("Verification report") and ": PASSED (" not in line)
             print(("WARNING: " if bad else "") + line)
+    # Verification Gate (task #171): a failed / not_checked / best-effort
+    # export is never reported as a success -- make that impossible to miss.
+    if result.warnings:
+        bar = "!" * 78
+        print(bar, *(f"WARNING: {w}" for w in result.warnings), bar, sep="\n")
+    print("verification gate: " + ("SUCCESS -- exported candidate passed verification" if result.success
+                                   else f"NOT SUCCESSFUL (verification: {result.gate.result})"))
 
 
 def _cmd_launch_window(args):
@@ -186,7 +196,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     view = sub.add_parser("view", help="open the single-scene 3D viewer")
     view.add_argument("scene", nargs="?", default="solar-system",
-                      help=f"a mission id ({mission_ids}) or path/to/scene.json")
+                      help=f"a mission id ({mission_ids}), path/to/mission.yaml or path/to/scene.json")
 
     export = sub.add_parser("export", help="write a mission's SceneData JSON to a file")
     export.add_argument("scene", help=f"a mission id ({mission_ids})")

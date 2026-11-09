@@ -1,0 +1,28 @@
+# Artemis II free return as a mission config -- the same mission the
+# `artemis2` built-in runs, with every default spelled out so it can be edited.
+#   orbitopt validate examples/artemis2_free_return.yaml
+#   orbitopt run examples/artemis2_free_return.yaml   # scene + verification JSON
+#   orbitopt view examples/artemis2_free_return.yaml  # cached by config + source
+schemaVersion: "1.0"
+mission:
+  id: artemis2
+  title: "Artemis II — Free Return"
+  kind: lunar-free-return
+departure:
+  date: [2026, 8, 1]          # TLI epoch, 00:00 TDB-ish MJD2000 (see bodies.mjd2000_from_date)
+parking_orbit:
+  altitude_km: 185.0
+transfer:
+  coast_days_guess: 3.5       # Lambert seed: TLI -> lunar arrival
+  theta_deg: 142.0            # TLI point behind the Moon's arrival direction
+lunar_flyby:
+  perilune_altitude_km: 6545.0
+entry:
+  target_fpa_deg: -6.0        # inside the [-7, -5] deg skip-entry corridor
+propagation:
+  total_days: 12.0
+  step_size_s: 60.0
+  max_output_points: 700
+output:
+  scene_file: out/artemis2.json
+  verification_report: out/artemis2.verification.json

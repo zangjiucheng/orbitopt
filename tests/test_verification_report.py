@@ -205,29 +205,46 @@ def test_finalize_writes_to_env_dir_and_scene_roundtrip(tmp_path, monkeypatch):
     assert bundle["status"]["passed"]
 
 
-def test_cli_run_writes_verification_report_next_to_scene(tmp_path, monkeypatch, capsys):
-    """`orbitopt run` pops the reports a mission adapter attached to the scene
-    and writes them (bundled if several) as <scene>.verification.json."""
+def _run_cli_with_fake_builder(monkeypatch, tmp_path, report):
+    """`orbitopt run` now goes through orbitopt.pipeline: register a fake
+    geo-raising builder (pipeline signature) that attaches ``report`` to a
+    valid scene, feed a schema-complete config, and stub the scene writer.
+    Returns the dict the written scene lands in."""
+    import sys
+
     import orbitopt.mission_config as mc
     import orbitopt.scene_format as sf
     from orbitopt.cli import main
+    from orbitopt.viz.scene import body_entry, scene_document
 
-    period = 2 * np.pi * np.sqrt(R_GEO**3 / MU_EARTH)
-    rep = _report(propagate(_geo_state(), [{"type": "coast", "duration": period}]))
+    def fake_builder(config, recorder=None):
+        trail = {"times": [0.0, 1.0], "positions": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]}
+        scene = scene_document("m", "M", [body_entry("spacecraft", "Probe", "#ffffff", "spacecraft", trail=trail)],
+                               distance_unit="km")
+        return vr.attach_to_scene(scene, report)
+
     written = {}
 
-    def fake_build(config):
-        return vr.attach_to_scene({"bodies": []}, rep)
-
-    def fake_write(scene, path):
+    def fake_write(scene, path, validate=True):
         written["scene"] = scene
 
-    monkeypatch.setattr(mc, "build_scene_from_config", fake_build)
+    monkeypatch.setattr(sys.modules[__name__], "_fake_cli_builder", fake_builder, raising=False)
+    monkeypatch.setitem(mc._KIND_BUILDERS, "geo-raising", (__name__, "_fake_cli_builder"))
     monkeypatch.setattr(sf, "write_scene", fake_write)
     monkeypatch.setattr("orbitopt.cli._load_and_validate_config",
-                        lambda path: {"mission": {"id": "m", "kind": "geo-raising"},
+                        lambda path: {"schemaVersion": "1.0",
+                                      "mission": {"id": "m", "title": "M", "kind": "geo-raising"},
                                       "output": {"scene_file": str(tmp_path / "scene.json")}})
     main(["run", "cfg.yaml"])
+    return written
+
+
+def test_cli_run_writes_verification_report_next_to_scene(tmp_path, monkeypatch, capsys):
+    """`orbitopt run` pops the reports a mission adapter attached to the scene
+    and writes them (bundled if several) as <scene>.verification.json."""
+    period = 2 * np.pi * np.sqrt(R_GEO**3 / MU_EARTH)
+    rep = _report(propagate(_geo_state(), [{"type": "coast", "duration": period}]))
+    written = _run_cli_with_fake_builder(monkeypatch, tmp_path, rep)
     assert vr.SCENE_REPORTS_KEY not in written["scene"]
     out = tmp_path / "scene.verification.json"
     assert out.exists()
@@ -316,16 +333,7 @@ def test_attach_to_scene_shows_status_in_subtitle():
 
 
 def test_cli_warns_on_not_checked_report(tmp_path, monkeypatch, capsys):
-    import orbitopt.mission_config as mc
-    import orbitopt.scene_format as sf
-    from orbitopt.cli import main
-
     rep = vr.build_report("t", "none", propagations=[])
-    monkeypatch.setattr(mc, "build_scene_from_config", lambda config: vr.attach_to_scene({"bodies": []}, rep))
-    monkeypatch.setattr(sf, "write_scene", lambda scene, path: None)
-    monkeypatch.setattr("orbitopt.cli._load_and_validate_config",
-                        lambda path: {"mission": {"id": "m", "kind": "geo-raising"},
-                                      "output": {"scene_file": str(tmp_path / "scene.json")}})
-    main(["run", "cfg.yaml"])
+    _run_cli_with_fake_builder(monkeypatch, tmp_path, rep)
     out = capsys.readouterr().out
     assert "WARNING: wrote verification report" in out and "NOT CHECKED" in out

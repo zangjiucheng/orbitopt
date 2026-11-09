@@ -423,6 +423,7 @@ def propagate_multi_arc(
     integrator=DEFAULT_INTEGRATOR,
     rtol=VERIFY_RTOL,
     atol=VERIFY_ATOL,
+    central_gravity=None,
 ) -> PropagationResult:
     """Propagate a spacecraft through a sequence of ``arcs`` -- coasts and
     instantaneous impulsive burns -- meant for a multi-phase mission like
@@ -454,7 +455,7 @@ def propagate_multi_arc(
     propagator = ReusableCoastPropagator(
         central_body=central_body, perturbing_bodies=perturbing_bodies,
         step_size=step_size, earth_spherical_harmonic=earth_spherical_harmonic,
-        integrator=integrator, rtol=rtol, atol=atol,
+        integrator=integrator, rtol=rtol, atol=atol, central_gravity=central_gravity,
     )
 
     current_state = np.concatenate([np.asarray(r0, dtype=float), np.asarray(v0, dtype=float)])
@@ -504,7 +505,7 @@ def propagate_multi_arc(
     def rerun(**overrides):
         kw = dict(central_body=central_body, perturbing_bodies=perturbing_bodies, step_size=step_size,
                   earth_spherical_harmonic=earth_spherical_harmonic, integrator=integrator,
-                  rtol=rtol, atol=atol)
+                  rtol=rtol, atol=atol, central_gravity=central_gravity)
         kw.update(overrides)
         return propagate_multi_arc(r0, v0, initial_epoch, arcs, **kw)
 

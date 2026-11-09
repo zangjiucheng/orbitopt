@@ -24,6 +24,7 @@ from orbitopt.bodies import (
     moon_state,
 )
 from orbitopt.lambert.cpu import solve_lambert_single
+from orbitopt.verify import report as verification_report
 from orbitopt.verify.differential_correction import (
     LUNAR_RETURN_ENTRY_CORRIDOR_DEG,
     LUNAR_RETURN_ENTRY_FPA_DEG,
@@ -153,6 +154,8 @@ def compute_and_export_mission(
     parking_altitude_km=185.0,
     max_output_points=700,
     entry_fpa_target_deg=LUNAR_RETURN_ENTRY_FPA_DEG,
+    transfer_theta_deg=DEFAULT_TRANSFER_THETA_DEG,
+    perilune_altitude_km=ARTEMIS_II_PERILUNE_ALTITUDE_KM,
 ):
     """Solve the free return with the joint lunar B-plane + Earth-return
     entry-corridor targeter (verify.differential_correction.
@@ -173,6 +176,30 @@ def compute_and_export_mission(
     correctness comes from the step size used during integration, not from
     how many of those already-correct points get kept for the animation.
     """
+    scene, _targeting = _build_artemis2_mission(
+        departure_mjd2000=departure_mjd2000, coast_days_guess=coast_days_guess,
+        total_days=total_days, step_seconds=step_seconds,
+        parking_altitude_km=parking_altitude_km, max_output_points=max_output_points,
+        entry_fpa_target_deg=entry_fpa_target_deg, transfer_theta_deg=transfer_theta_deg,
+        perilune_altitude_km=perilune_altitude_km,
+    )
+    return scene
+
+
+def _build_artemis2_mission(
+    departure_mjd2000=None,
+    coast_days_guess=3.5,
+    total_days=12.0,
+    step_seconds=60.0,
+    parking_altitude_km=185.0,
+    max_output_points=700,
+    entry_fpa_target_deg=LUNAR_RETURN_ENTRY_FPA_DEG,
+    transfer_theta_deg=DEFAULT_TRANSFER_THETA_DEG,
+    perilune_altitude_km=ARTEMIS_II_PERILUNE_ALTITUDE_KM,
+):
+    """compute_and_export_mission's body; also returns the
+    FreeReturnTargetingResult so build_from_config can attach its
+    machine-readable verification report to the scene."""
     if departure_mjd2000 is None:
         departure_mjd2000 = mjd2000_from_date(2026, 8, 1)
 
@@ -183,9 +210,10 @@ def compute_and_export_mission(
     r_moon_arrival = np.asarray(r_moon_arrival)
     v_moon_arrival = np.asarray(v_moon_arrival)
 
-    target_distance_km = ARTEMIS_II_PERILUNE_ALTITUDE_KM + MOON_RADIUS_KM
+    target_distance_km = perilune_altitude_km + MOON_RADIUS_KM
 
-    r0, v0 = _plane_aligned_parking_orbit(r_moon_arrival, v_moon_arrival, parking_altitude_km, mu_earth)
+    r0, v0 = _plane_aligned_parking_orbit(
+        r_moon_arrival, v_moon_arrival, parking_altitude_km, mu_earth, theta_deg=transfer_theta_deg)
     moon_h_hat = np.cross(r_moon_arrival, v_moon_arrival)
     moon_h_hat /= np.linalg.norm(moon_h_hat)
     along_track_hat = np.cross(moon_h_hat, r_moon_arrival / np.linalg.norm(r_moon_arrival))
@@ -344,4 +372,60 @@ def compute_and_export_mission(
             "events": events,
             "referenceEpochEt": reference_et,
         },
-    )
+    ), targeting
+
+
+def build_from_config(config: dict, recorder=None) -> dict:
+    """orbitopt.mission_config adapter for mission.kind == "lunar-free-return"
+    (the Artemis II free return; schema mission-lunar-free-return-1.0.json).
+    Every omitted field falls back to compute_and_export_mission's defaults,
+    i.e. the "artemis2" built-in mission.
+
+    The free-return targeter is itself TudatPy-verified (perilune, return
+    perigee and entry corridor are checked on a full propagation), so there
+    is no separate re-fly stage to skip: ``verification.enabled: false``
+    (``orbitopt run --skip-verify``) only drops the machine-readable report
+    from the output -- the corridor check still gates the export.
+
+    ``recorder`` (an orbitopt.pipeline.StageRecorder) is accepted for the
+    unified pipeline's builder signature; this kind does not report
+    per-stage results, so those stages stay "not run" in the pipeline
+    result."""
+    mission = config["mission"]
+    departure = config.get("departure", {})
+    parking_orbit = config.get("parking_orbit", {})
+    transfer = config.get("transfer", {})
+    flyby = config.get("lunar_flyby", {})
+    entry = config.get("entry", {})
+    propagation = config.get("propagation", {})
+    verification = config.get("verification", {})
+
+    kwargs = {}
+    if "date" in departure:
+        kwargs["departure_mjd2000"] = mjd2000_from_date(*departure["date"])
+    elif "mjd2000" in departure:
+        kwargs["departure_mjd2000"] = float(departure["mjd2000"])
+    if "altitude_km" in parking_orbit:
+        kwargs["parking_altitude_km"] = parking_orbit["altitude_km"]
+    if "coast_days_guess" in transfer:
+        kwargs["coast_days_guess"] = transfer["coast_days_guess"]
+    if "theta_deg" in transfer:
+        kwargs["transfer_theta_deg"] = transfer["theta_deg"]
+    if "perilune_altitude_km" in flyby:
+        kwargs["perilune_altitude_km"] = flyby["perilune_altitude_km"]
+    if "target_fpa_deg" in entry:
+        kwargs["entry_fpa_target_deg"] = entry["target_fpa_deg"]
+    if "total_days" in propagation:
+        kwargs["total_days"] = propagation["total_days"]
+    if "step_size_s" in propagation:
+        kwargs["step_seconds"] = propagation["step_size_s"]
+    if "max_output_points" in propagation:
+        kwargs["max_output_points"] = propagation["max_output_points"]
+
+    scene, targeting = _build_artemis2_mission(**kwargs)
+    scene["id"] = mission["id"]
+    scene["title"] = mission["title"]
+    if verification.get("enabled", True) and targeting.report is not None:
+        # Popped and written next to the scene by `orbitopt run`.
+        verification_report.attach_to_scene(scene, targeting.report)
+    return scene

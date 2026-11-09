@@ -19,7 +19,7 @@ do.
 """
 from __future__ import annotations
 
-import importlib
+import hashlib
 import json
 from functools import lru_cache
 from importlib import resources
@@ -34,16 +34,19 @@ import yaml
 _KIND_SCHEMAS = {
     "geo-raising": "mission-geo-raising-1.0.json",
     "mars-transfer": "mission-mars-transfer-1.0.json",
+    "lunar-free-return": "mission-lunar-free-return-1.0.json",
 }
 
-# mission.kind -> (module, attribute) of a `build_from_config(config: dict)
-# -> dict` callable. Imported lazily (only once a config of that kind is
+# mission.kind -> (module, attribute) of a `build_from_config(config: dict,
+# recorder=None) -> dict` callable (``recorder``: an
+# orbitopt.pipeline.StageRecorder the builder reports its stage results to). Imported lazily (only once a config of that kind is
 # actually built, not merely validated) via importlib, not a module-level
 # import, so validating a config never requires that kind's compute stack
 # (pykep/pygmo/tudatpy) to be installed -- only jsonschema + pyyaml.
 _KIND_BUILDERS = {
     "geo-raising": ("orbitopt.viz.geo_raising", "build_from_config"),
     "mars-transfer": ("orbitopt.viz.mars_transfer", "build_from_config"),
+    "lunar-free-return": ("orbitopt.viz.mission_timeline", "build_from_config"),
 }
 
 
@@ -108,13 +111,47 @@ def load_mission_config(path, *, validate: bool = True) -> dict:
 
 
 def build_scene_from_config(config: dict) -> dict:
-    """Validate ``config`` and run its mission kind's builder, returning a
-    SceneData dict (see orbitopt.scene_format) ready for ``write_scene`` or
-    the viewer. The kind's module -- and whatever compute stack it needs --
-    is only imported here, at call time, not at import time of this module."""
+    """Validate ``config`` and run it through the unified mission pipeline
+    (orbitopt.pipeline.run_pipeline), returning just the SceneData dict (see
+    orbitopt.scene_format) ready for ``write_scene`` or the viewer, with any
+    verification reports still attached under
+    ``orbitopt.verify.report.SCENE_REPORTS_KEY`` (``pop_from_scene`` them).
+    Use ``run_pipeline`` directly for the standardized per-stage result.
+
+    The kind's module -- and whatever compute stack it needs -- is only
+    imported at call time, not at import time of this module."""
+    from orbitopt.pipeline import run_pipeline
+
+    result = run_pipeline(config)
+    scene = result.scene
+    if result.verification_reports:
+        from orbitopt.verify.report import SCENE_REPORTS_KEY
+
+        scene[SCENE_REPORTS_KEY] = list(result.verification_reports)
+    return scene
+
+
+def config_digest(config: dict) -> str:
+    """Short SHA-256 of a config's canonical JSON form -- two configs with
+    the same content (regardless of key order / YAML formatting) share it."""
+    text = json.dumps(config, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+
+
+def cached_scene_from_config(config: dict) -> dict:
+    """``build_scene_from_config`` for viewing: verification reports are
+    stripped (the viewer has no use for them) and the scene is served from
+    orbitopt.scene_cache -- the same source-fingerprint cache the built-in
+    missions use -- keyed by the mission id plus a digest of the config, so
+    editing either the YAML or orbitopt's source recomputes."""
+    from orbitopt.scene_cache import cached_scene
+    from orbitopt.verify.report import pop_from_scene
+
     validate_mission_config(config)
-    kind = config["mission"]["kind"]
-    module_name, attr = _KIND_BUILDERS[kind]
-    module = importlib.import_module(module_name)
-    builder = getattr(module, attr)
-    return builder(config)
+
+    def _compute() -> dict:
+        scene = build_scene_from_config(config)
+        pop_from_scene(scene)
+        return scene
+
+    return cached_scene(f"config-{config['mission']['id']}-{config_digest(config)}", _compute)

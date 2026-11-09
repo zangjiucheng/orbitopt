@@ -385,3 +385,61 @@ Measured change of the computed ephemeris epoch:
   inertial position). These are now the correct values; the Mars 2020 replay
   and tudat-backed verifications need the conda compute stack to re-fly and
   should be re-run there to confirm the downstream trajectory deltas.
+
+## Unified mission pipeline (task #170)
+
+Every config-driven mission runs one lifecycle, implemented in
+`src/orbitopt/pipeline.py`:
+
+`mission_config → constraints → search → optimize → select → refine → verify → export`
+
+`run_pipeline(config)` returns a `PipelineResult`; `to_dict()` is a
+`pipeline-result-1.0` document (`src/orbitopt/schemas/pipeline-result-1.0.json`)
+with the same structure for every mission kind. Each stage reports candidate
+trajectories, convergence status, constraint violations, the physical model,
+numerical error estimates and wall-clock time. Stages a kind doesn't have are
+`skipped`; stages after a failure are `not_run`.
+
+The CLI (`orbitopt run`, which now also writes `<scene>.pipeline.json`), the
+Python API (`mission_config.build_scene_from_config`, `pipeline.run_pipeline`)
+and the GUI's built-in `goes` / `mars` missions (`missions.builtin_mission_config`)
+all call the same `run_pipeline`.
+
+Migration is incremental. A kind's `build_from_config(config, recorder=None)`
+reports its stages to the `StageRecorder` it gets (`with recorder.stage("search")
+as st: ...`, `recorder.add_time(...)`, `recorder.skip(...)`); the pipeline
+handles config validation, the verify summary from verification reports, and
+export. `geo-raising` and `mars-transfer` are migrated.
+
+## Candidate Selection and the Verification Gate (task #171)
+
+`src/orbitopt/candidate_selection.py` adds two explicit steps between the
+cheap search/optimize stages and the high-fidelity verify stage.
+
+- **Candidate Selection** (`select_candidates`, the `select` pipeline stage):
+  drops infeasible (non-finite cost) candidates, removes near-duplicates
+  (within a per-coordinate tolerance of a cheaper one), ranks by cost and,
+  when the list is cut to `max_candidates`, fills it first with *diverse*
+  candidates (at least one `min_separation` ellipse from every cheaper pick).
+  Each input candidate is recorded on the `select` stage with its status
+  (`selected` / `duplicate` / `infeasible` / `truncated`) and the reason.
+  Mars transfer uses 1 d / 2 d duplicate tolerance, the multistart basin
+  separation (20 d / 40 d) as the diversity scale and `MAX_TUDAT_CANDIDATES`.
+- **Verification Gate** (`VerificationGate`, `walk_candidates`): every selected
+  candidate gets a verdict: `rejected` (refinement didn't hold up, with the
+  reason), `accepted` (tri-state verification result `passed`), `degraded`
+  (flown, but `failed` or `not_checked`, with the failing / unchecked reports)
+  or `not_evaluated`. A degraded candidate is never a success, so Mars keeps
+  trying the next candidate. If none passes, the best-ranked degraded
+  candidate is exported. If every candidate was rejected, the Lambert-best one
+  is re-flown without requiring TCM convergence. Either way the export is
+  `best_effort` and carries `BEST_EFFORT_WARNING` in the pipeline result's
+  `gate.warnings`, the scene's `warnings` and first subtitle line, the CLI
+  output and the log.
+
+The pipeline result gains `success` (completed **and** the exported candidate
+passed the gate) next to the execution `status`, and a `gate` block with the
+per-candidate verdicts. Builders that don't drive the gate get a generic one in
+which the exported scene's verification reports decide: `failed` is
+best-effort, and `not_checked` is "not verified" (warned, but not a success).
+
