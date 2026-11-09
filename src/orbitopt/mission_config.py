@@ -19,6 +19,7 @@ do.
 """
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 from functools import lru_cache
@@ -34,6 +35,7 @@ import yaml
 _KIND_SCHEMAS = {
     "geo-raising": "mission-geo-raising-1.0.json",
     "mars-transfer": "mission-mars-transfer-1.0.json",
+    "lunar-free-return": "mission-lunar-free-return-1.0.json",
 }
 
 # mission.kind -> (module, attribute) of a `build_from_config(config: dict)
@@ -44,6 +46,7 @@ _KIND_SCHEMAS = {
 _KIND_BUILDERS = {
     "geo-raising": ("orbitopt.viz.geo_raising", "build_from_config"),
     "mars-transfer": ("orbitopt.viz.mars_transfer", "build_from_config"),
+    "lunar-free-return": ("orbitopt.viz.mission_timeline", "build_from_config"),
 }
 
 
@@ -118,3 +121,29 @@ def build_scene_from_config(config: dict) -> dict:
     module = importlib.import_module(module_name)
     builder = getattr(module, attr)
     return builder(config)
+
+
+def config_digest(config: dict) -> str:
+    """Short SHA-256 of a config's canonical JSON form -- two configs with
+    the same content (regardless of key order / YAML formatting) share it."""
+    text = json.dumps(config, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+
+
+def cached_scene_from_config(config: dict) -> dict:
+    """``build_scene_from_config`` for viewing: verification reports are
+    stripped (the viewer has no use for them) and the scene is served from
+    orbitopt.scene_cache -- the same source-fingerprint cache the built-in
+    missions use -- keyed by the mission id plus a digest of the config, so
+    editing either the YAML or orbitopt's source recomputes."""
+    from orbitopt.scene_cache import cached_scene
+    from orbitopt.verify.report import pop_from_scene
+
+    validate_mission_config(config)
+
+    def _compute() -> dict:
+        scene = build_scene_from_config(config)
+        pop_from_scene(scene)
+        return scene
+
+    return cached_scene(f"config-{config['mission']['id']}-{config_digest(config)}", _compute)

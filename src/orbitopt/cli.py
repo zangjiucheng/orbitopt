@@ -6,6 +6,7 @@ the single-scene 3D viewer directly, without going through examples/.
     orbitopt view               # single-scene viewer, solar system
     orbitopt view artemis2      # a built-in mission (see `orbitopt view --help`)
     orbitopt view scene.json    # any exported SceneData JSON file
+    orbitopt view my_mission.yaml       # run (or load cached) a mission config, then view it
     orbitopt export goes -o goes.json   # cache a built-in mission's scene JSON
     orbitopt validate my_mission.yaml   # schema-check a mission config (no compute)
     orbitopt run my_mission.yaml        # run a mission config, write + verify its scene
@@ -30,14 +31,25 @@ from orbitopt.missions import list_missions
 from orbitopt.scene_format import read_scene
 
 
+_CONFIG_SUFFIXES = (".yaml", ".yml")
+
+
 def resolve_scene(name: str) -> dict:
     """Return a SceneData dict for a registered mission id (built-in or a
-    third-party plugin -- see orbitopt.missions) or a JSON file path."""
+    third-party plugin -- see orbitopt.missions), a mission config YAML path
+    (see orbitopt.mission_config), or a scene JSON file path."""
     from orbitopt.missions import get
 
     try:
         mission = get(name)
     except KeyError:
+        if Path(name).suffix.lower() in _CONFIG_SUFFIXES:
+            from orbitopt.mission_config import cached_scene_from_config
+
+            config = _load_and_validate_config(name)
+            print(f"Computing the {config['mission']['id']!r} scene from {name} "
+                  "(cached after the first run)...")
+            return cached_scene_from_config(config)
         return read_scene(name)
     if mission.id != "solar-system":
         print(f"Computing the {mission.id!r} scene -- this can take a few seconds...")
@@ -186,7 +198,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     view = sub.add_parser("view", help="open the single-scene 3D viewer")
     view.add_argument("scene", nargs="?", default="solar-system",
-                      help=f"a mission id ({mission_ids}) or path/to/scene.json")
+                      help=f"a mission id ({mission_ids}), path/to/mission.yaml or path/to/scene.json")
 
     export = sub.add_parser("export", help="write a mission's SceneData JSON to a file")
     export.add_argument("scene", help=f"a mission id ({mission_ids})")

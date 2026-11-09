@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zangjiucheng/orbitopt/schemas/mission-lunar-free-return-1.0.json",
+  "title": "orbitopt lunar free-return (Artemis II) mission config v1.0",
+  "description": "A user-editable YAML/JSON config for the Artemis-II-like lunar free return (orbitopt.viz.mission_timeline.build_from_config): TLI from an Earth parking orbit, a lunar flyby at a targeted perilune altitude, and an unpowered return to the Earth entry interface inside the lunar-return skip-entry corridor. Same strictness convention as the other mission configs (additionalProperties: false everywhere). Every section besides `mission` and `output` is optional; omitted fields fall back to the values the 'artemis2' built-in mission uses. Not a reproduction of the flown mission -- NASA hasn't published navigation-grade state vectors.",
+  "type": "object",
+  "required": ["schemaVersion", "mission", "output"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0",
+      "description": "Which version of this mission-config schema the document was written against."
+    },
+    "mission": {
+      "type": "object",
+      "required": ["id", "title", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Stable slug for the produced scene, e.g. 'artemis2'." },
+        "title": { "type": "string", "minLength": 1 },
+        "kind": { "const": "lunar-free-return", "description": "Selects the lunar free-return adapter (orbitopt.viz.mission_timeline.build_from_config)." }
+      }
+    },
+    "departure": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 1,
+      "description": "TLI epoch: give either `date` or `mjd2000`, not both. Default 2026-08-01 00:00 (the built-in mission).",
+      "properties": {
+        "date": {
+          "type": "array", "items": { "type": "integer" }, "minItems": 3, "maxItems": 3,
+          "description": "[year, month, day], 00:00 on that day."
+        },
+        "mjd2000": { "type": "number", "description": "TLI epoch in MJD2000 days." }
+      }
+    },
+    "parking_orbit": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Circular Earth parking orbit TLI departs from. Default 185 km.",
+      "properties": {
+        "altitude_km": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "transfer": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Seed geometry for the free-return targeter.",
+      "properties": {
+        "coast_days_guess": { "type": "number", "exclusiveMinimum": 0, "description": "TLI-to-lunar-arrival time used for the Lambert seed and the Moon's arrival position. Default 3.5 d." },
+        "theta_deg": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 360, "description": "Parking-orbit transfer angle behind the Moon's arrival direction, i.e. where TLI happens. Default 142 deg." }
+      }
+    },
+    "lunar_flyby": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "perilune_altitude_km": { "type": "number", "exclusiveMinimum": 0, "description": "Targeted closest-approach altitude above the lunar surface. Default 6545 km (Artemis II)." }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target_fpa_deg": {
+          "type": "number", "minimum": -7.0, "maximum": -5.0,
+          "description": "Inertial flight-path angle targeted at the 121.92 km entry interface. Must lie inside the lunar-return skip-entry corridor [-7, -5] deg, which the exported trajectory is re-checked against. Default -6 deg."
+        }
+      }
+    },
+    "propagation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "total_days": { "type": "number", "exclusiveMinimum": 0, "description": "Upper bound on the exported span (it is cut at the entry interface anyway). Default 12 d." },
+        "step_size_s": { "type": "number", "exclusiveMinimum": 0, "description": "Export propagation step. Default 60 s; much coarser steps give unphysical flybys." },
+        "max_output_points": { "type": "integer", "minimum": 2, "description": "Decimate the exported trail to at most this many samples. Default 700." }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The free-return targeter is itself TudatPy-verified and the exported trajectory's entry corridor is always re-checked; `enabled: false` (or `orbitopt run --skip-verify`) only omits the machine-readable verification report.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true }
+      }
+    },
+    "output": {
+      "type": "object",
+      "required": ["scene_file"],
+      "additionalProperties": false,
+      "properties": {
+        "scene_file": {
+          "type": "string", "minLength": 1,
+          "description": "Where `orbitopt run` writes the produced scene-1.0.json document; overridable with --out."
+        },
+        "verification_report": {
+          "type": "string", "minLength": 1,
+          "description": "Where `orbitopt run` writes the machine-readable verification report (verification-report-1.0.json schema). Default: next to the scene as <scene stem>.verification.json."
+        }
+      }
+    }
+  }
+}
