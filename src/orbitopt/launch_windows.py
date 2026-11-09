@@ -36,14 +36,15 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Callable, Sequence
 
 import numpy as np
 
 from orbitopt.launch_sites import LaunchSite, get_launch_site
+from orbitopt.timescales import MJD2000_EPOCH_UTC, mjd2000_to_utc_datetime, utc_datetime_to_mjd2000
 
-MJD2000_EPOCH = datetime(2000, 1, 1, tzinfo=timezone.utc)
+MJD2000_EPOCH = MJD2000_EPOCH_UTC
 SECONDS_PER_DAY = 86400.0
 MU_EARTH_KM3_S2 = 398600.4418
 R_EARTH_KM = 6378.137
@@ -69,15 +70,14 @@ _EXTEND_LIMIT_DAYS = 1.05
 # --------------------------------------------------------------------------
 
 def datetime_to_mjd2000(dt: datetime) -> float:
-    """UTC datetime (naive = UTC) -> MJD2000 days (0 = 2000-01-01 00:00 UTC,
-    the pykep convention)."""
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return (dt - MJD2000_EPOCH).total_seconds() / SECONDS_PER_DAY
+    """UTC datetime (naive = UTC) -> MJD2000 UTC days (0 = 2000-01-01 00:00
+    UTC, the pykep convention). See :mod:`orbitopt.timescales`."""
+    return utc_datetime_to_mjd2000(dt)
 
 
 def mjd2000_to_datetime(mjd2000: float) -> datetime:
-    return MJD2000_EPOCH + timedelta(seconds=round(float(mjd2000) * SECONDS_PER_DAY, 3))
+    """MJD2000 UTC days -> aware UTC datetime."""
+    return mjd2000_to_utc_datetime(mjd2000)
 
 
 def as_mjd2000(t) -> float:

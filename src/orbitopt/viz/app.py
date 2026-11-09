@@ -2350,10 +2350,9 @@ class MissionControlWindow(QMainWindow):
 
 
 def _epoch_to_date_string(reference_et: float, day_offset: float) -> str:
-    import datetime
+    from orbitopt.timescales import tdb_seconds_to_utc_datetime
 
-    et2000 = datetime.datetime(2000, 1, 1, 11, 58, 55, 816000, tzinfo=datetime.timezone.utc)
-    dt = et2000 + datetime.timedelta(seconds=reference_et + day_offset * 86400.0)
+    dt = tdb_seconds_to_utc_datetime(reference_et + day_offset * 86400.0)
     return dt.strftime("%Y-%m-%d %H:%M UTC")
 
 

@@ -13,9 +13,13 @@
     "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "status": {
       "type": "object",
-      "required": ["passed", "checks"],
+      "required": ["result", "passed", "checks"],
       "properties": {
-        "passed": { "type": "boolean" },
+        "result": {
+          "enum": ["passed", "failed", "not_checked"],
+          "description": "passed: at least one check ran and all passed; failed: some check failed; not_checked: no check evidence (never treated as success)."
+        },
+        "passed": { "type": "boolean", "description": "Legacy boolean; true only when result is \"passed\"." },
         "checks": { "type": "object", "additionalProperties": { "type": "boolean" } }
       }
     },

@@ -514,7 +514,47 @@ def _status(propagations, residuals, targets) -> dict:
             checks[f"residual.{r['name']}"] = bool(r["within_tolerance"])
     if isinstance(targets, Mapping) and "converged" in targets:
         checks["targeting.converged"] = bool(targets["converged"])
-    return {"passed": all(checks.values()) if checks else True, "checks": checks}
+    return status_from_checks(checks)
+
+
+# Tri-state verification outcome (task #162). "No checks ran" is *not* a
+# pass: a report without evidence is ``not_checked``, and ``passed`` (kept
+# as a boolean for existing consumers) is true only for RESULT_PASSED.
+RESULT_PASSED = "passed"
+RESULT_FAILED = "failed"
+RESULT_NOT_CHECKED = "not_checked"
+RESULTS = (RESULT_PASSED, RESULT_FAILED, RESULT_NOT_CHECKED)
+
+
+def status_from_checks(checks: Mapping) -> dict:
+    """Status block for a mapping of ``check name -> bool``: ``failed`` if any
+    check failed, ``passed`` if there is at least one check and all passed,
+    ``not_checked`` if there are no checks at all."""
+    checks = {str(k): bool(v) for k, v in checks.items()}
+    if not checks:
+        result = RESULT_NOT_CHECKED
+    elif all(checks.values()):
+        result = RESULT_PASSED
+    else:
+        result = RESULT_FAILED
+    return {"result": result, "passed": result == RESULT_PASSED, "checks": checks}
+
+
+def status_result(status: Mapping) -> str:
+    """Tri-state result of a status block (falls back to recomputing it from
+    ``checks`` for documents written before the ``result`` field existed)."""
+    result = status.get("result")
+    if result in RESULTS:
+        return result
+    return status_from_checks(status.get("checks") or {})["result"]
+
+
+def format_status(status: Mapping) -> str:
+    """Human-readable one-liner, e.g. ``PASSED (5/5 checks)``."""
+    checks = status.get("checks") or {}
+    n_ok = sum(bool(v) for v in checks.values())
+    label = status_result(status).replace("_", " ").upper()
+    return f"{label} ({n_ok}/{len(checks)} checks passed)"
 
 
 def build_report(
@@ -601,6 +641,12 @@ SCENE_REPORTS_KEY = "_verificationReports"
 
 def attach_to_scene(scene: dict, report: Mapping) -> dict:
     scene.setdefault(SCENE_REPORTS_KEY, []).append(report)
+    # Surface the tri-state outcome in the subtitle the GUI shows (and the
+    # CLI echoes), so "not checked" is never mistaken for "verified".
+    status = report.get("status") or {}
+    line = (f"Verification report {report.get('kind', '?')}:{report.get('label', '?')}: "
+            f"{format_status(status)}")
+    scene["subtitle"] = (scene.get("subtitle", "") + "\n" + line) if scene.get("subtitle") else line
     return scene
 
 
@@ -611,14 +657,22 @@ def pop_from_scene(scene: dict) -> list:
 def bundle(reports: Sequence[Mapping], label: str) -> dict:
     """Combine several reports (one per verification stage) into one file."""
     reports = [to_jsonable(r) for r in reports]
+    results = [status_result(r["status"]) for r in reports]
+    # A sub-report that was not checked contributes no check (it is neither
+    # a pass nor a failure); it does keep the bundle from being "passed".
+    checks = {f"{r['kind']}:{r['label']}": res == RESULT_PASSED
+              for r, res in zip(reports, results) if res != RESULT_NOT_CHECKED}
+    if RESULT_FAILED in results:
+        result = RESULT_FAILED
+    elif not results or RESULT_NOT_CHECKED in results:
+        result = RESULT_NOT_CHECKED
+    else:
+        result = RESULT_PASSED
     doc = {
         "schemaVersion": SCHEMA_VERSION,
         "kind": "bundle",
         "label": str(label),
-        "status": {
-            "passed": all(r["status"]["passed"] for r in reports),
-            "checks": {f"{r['kind']}:{r['label']}": bool(r["status"]["passed"]) for r in reports},
-        },
+        "status": {"result": result, "passed": result == RESULT_PASSED, "checks": checks},
         "reports": reports,
         "provenance": provenance(),
     }

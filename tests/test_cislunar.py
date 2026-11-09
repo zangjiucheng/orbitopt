@@ -103,7 +103,14 @@ def test_target_lunar_flyby_hits_artemis_ii_perilune_altitude():
     r_moon_arrival = np.asarray(r_moon_arrival)
 
     r0, v0 = _plane_aligned_parking_orbit(r_moon_arrival, altitude_km=185.0, mu_earth=mu_earth)
-    (v1, _v2), = solve_lambert_single(r0, r_moon_arrival, coast_days * 86400.0, mu=mu_earth, max_revs=0)[:1]
+    # This parking orbit's plane contains the ecliptic pole, so r0 x r_moon
+    # has a z component of pure rounding noise and pykep's default
+    # prograde/retrograde choice is arbitrary (a ~69 s epoch change flipped
+    # it). Pin the transfer sense to the parking orbit's own motion.
+    (v1, _v2), = solve_lambert_single(
+        r0, r_moon_arrival, coast_days * 86400.0, mu=mu_earth, max_revs=0,
+        plane_normal=np.cross(r0, v0),
+    )[:1]
     dv_guess = v1 - v0
 
     target_distance_km = ARTEMIS_II_PERILUNE_ALTITUDE_KM + MOON_RADIUS_KM

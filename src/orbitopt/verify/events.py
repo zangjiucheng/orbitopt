@@ -172,6 +172,8 @@ def locate_events(
     refine_iterations: int = 2,
     xtol: float = 1e-3,
     first_only: bool = False,
+    g_rate: Optional[Callable[[float, np.ndarray], float]] = None,
+    graze_depth: int = 2,
 ) -> list:
     """Find every root of ``g(t, state)`` along a saved history.
 
@@ -182,10 +184,21 @@ def locate_events(
     refine_points``) and re-solved, ``refine_iterations`` times, each time
     shrinking the window to the two refined samples around the root.
 
-    Note: an event whose g goes - -> + -> - entirely between two saved
-    samples (e.g. a graze shorter than one output step) is invisible to sign
-    bracketing; for closest approach, ``find_closest_approach_event`` also
-    checks the sample-wise distance minimum to catch that case.
+    Short-lived events: a pair of roots that lies entirely between two saved
+    samples (e.g. an entry-interface graze or a very close flyby shorter than
+    one output step) produces no sign change and is invisible to sign
+    bracketing. When ``g_rate`` -- any function with the sign of dg/dt (for a
+    sphere crossing, the range rate) -- is given, every interval without a
+    sign change whose end-point rates show an interior extremum of g heading
+    toward zero (rate - -> + while g > 0, or + -> - while g < 0) is
+    inspected: the extremum is located on the dense output and, if g changes
+    sign there *or* the extremum lies closer to zero than the depth of the
+    dip itself (Hermite error is a fraction of that), the interval is
+    adaptively subdivided -- re-propagated with ``refine`` and searched again
+    (recursively, at most ``graze_depth`` levels), or, without ``refine``,
+    split at the extremum and both halves root-solved on the dense output.
+    For closest approach, ``find_closest_approach_event`` additionally checks
+    the sample-wise distance minimum.
     """
     epochs = np.asarray(epochs, dtype=float)
     states = np.asarray(states, dtype=float)
@@ -195,14 +208,68 @@ def locate_events(
     # never mistaken for a root of the continuous trajectory.
     ga = _g_samples(dense.epochs[:-1], dense.states[:-1], g)
     gb = _g_samples(dense.epochs[1:], dense.states_left[1:], g)
+    bracketed = set(_brackets(ga, gb, direction).tolist())
+    graze_candidates = set()
+    if g_rate is not None:
+        # an interior extremum is only possible where g has the same strict
+        # sign at both ends of the interval
+        same = ((ga > 0.0) & (gb > 0.0)) | ((ga < 0.0) & (gb < 0.0))
+        if np.any(same):
+            ra = _g_samples(dense.epochs[:-1], dense.states[:-1], g_rate)
+            rb = _g_samples(dense.epochs[1:], dense.states_left[1:], g_rate)
+            toward = ((ga > 0.0) & (ra < 0.0) & (rb > 0.0)) | ((ga < 0.0) & (ra > 0.0) & (rb < 0.0))
+            graze_candidates = set(np.nonzero(same & toward)[0].tolist())
+    kw = dict(refine_points=refine_points, refine_iterations=refine_iterations, xtol=xtol)
     events = []
-    for i in _brackets(ga, gb, direction):
-        ev = _locate_in_interval(dense, g, i, ga, refine, refine_points, refine_iterations, xtol)
-        if ev is not None:
-            events.append(ev)
-            if first_only:
-                break
+    for i in sorted(bracketed | graze_candidates):
+        if i in bracketed:
+            ev = _locate_in_interval(dense, g, i, ga, refine, refine_points, refine_iterations, xtol)
+            found = [] if ev is None else [ev]
+        else:
+            found = _locate_graze(dense, g, g_rate, i, float(ga[i]), float(gb[i]), direction, refine, graze_depth, kw)
+        events.extend(found)
+        if first_only and events:
+            return events[:1]
     return events
+
+
+def _locate_graze(dense, g, g_rate, i, g_a, g_b, direction, refine, depth, kw):
+    """Roots of g hidden inside saved interval ``i`` (no sign change at its
+    ends, but an interior extremum heading toward zero). See locate_events."""
+    ta, tb = float(dense.epochs[i]), float(dense.epochs[i + 1])
+    xtol = kw["xtol"]
+    t_ext = _solve_on(dense, g_rate, ta, tb, xtol, i)
+    if t_ext is None:
+        return []
+    g_ext = g(t_ext, dense(t_ext, i))
+    crossed = np.sign(g_ext) != np.sign(g_a)
+    dip = min(abs(g_a), abs(g_b)) - abs(g_ext)
+    suspicious = crossed or abs(g_ext) < dip
+    if not suspicious:
+        return []
+    if refine is not None and depth > 0:
+        span = tb - ta
+        r_epochs, r_states = refine(dense.states[i].copy(), ta, span, span / float(kw["refine_points"]))
+        r_epochs = np.asarray(r_epochs, dtype=float)
+        r_states = np.asarray(r_states, dtype=float)
+        if r_epochs.size >= 2:
+            # the high-fidelity re-propagation is authoritative: whatever it
+            # (recursively) finds -- including nothing -- is the answer
+            return locate_events(
+                r_epochs, r_states, g, direction=direction, refine=refine,
+                g_rate=g_rate, graze_depth=depth - 1, **kw,
+            )
+    if not crossed:
+        return []
+    out = []
+    first_dir = -1 if g_a > 0.0 else 1  # g_a > 0: dips below (down, then up)
+    for (lo, hi, d) in ((ta, t_ext, first_dir), (t_ext, tb, -first_dir)):
+        if direction != 0 and d != direction:
+            continue
+        t = _solve_on(dense, g, lo, hi, xtol, i)
+        if t is not None:
+            out.append(Event(epoch=float(t), state=dense(t, i), direction=d, value=float("nan")))
+    return out
 
 
 def _locate_in_interval(dense, g, i, gv, refine, refine_points, refine_iterations, xtol):
@@ -330,8 +397,13 @@ def find_sphere_crossings(
 ) -> list:
     """Crossings of a sphere of ``radius_km`` around a body (SOI entry/exit,
     entry interface, ...). direction=-1 -> inbound only, +1 -> outbound only.
-    ``value`` is the distance from the body centre in km (== radius_km)."""
+    Crossing pairs that fall entirely between two saved samples (grazing
+    entry, very close flyby, coarse output) are found via the range rate
+    (pass ``g_rate=None`` to disable). ``value`` is the distance from the body centre in km (== radius_km)."""
     g = sphere_crossing_event(float(radius_km) * 1000.0, body_state_fn, epoch_offset)
+    # range rate has the sign of dg/dt: lets locate_events catch a graze /
+    # close pass that dips through the sphere between two saved samples
+    kw.setdefault("g_rate", range_rate_event(body_state_fn, epoch_offset))
     events = locate_events(epochs, states, g, direction=direction, refine=refine, **kw)
     for ev in events:
         b = np.asarray(body_state_fn(epoch_offset + ev.epoch), dtype=float)

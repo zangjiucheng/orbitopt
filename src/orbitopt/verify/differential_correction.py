@@ -632,7 +632,9 @@ degrees flown; anything much steeper than ~-7 degrees means unsurvivable
 deceleration loads, much shallower than ~-5 degrees risks skipping out)."""
 LUNAR_RETURN_ENTRY_CORRIDOR_DEG = (-7.0, -5.0)
 """(steepest, shallowest) inertial entry flight-path angle accepted as
-inside the safe lunar-return corridor."""
+inside the lunar-return corridor. This is a vacuum, inertial-FPA geometric
+check only -- it does not assess heating, loads or skip-out, and must not be
+read as a survivable-entry claim (see docs/reentry_safety_constraints.md)."""
 
 
 @dataclass

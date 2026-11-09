@@ -116,6 +116,35 @@ def _plane_aligned_parking_orbit(r_moon_arrival, v_moon_arrival, altitude_km, mu
     return r0, v0
 
 
+def _verify_entry_corridor(full, corridor_deg=LUNAR_RETURN_ENTRY_CORRIDOR_DEG):
+    """Independently verify the exported trajectory: its first downward
+    crossing of the entry interface must exist and its inertial flight-path
+    angle must lie inside ``corridor_deg`` (steepest, shallowest). Returns the
+    crossing; raises RuntimeError otherwise.
+
+    This deliberately re-checks the full re-propagated trajectory instead of
+    trusting ``targeting.in_corridor``: the export propagation uses its own
+    step size and span, so a solution that was in-corridor inside the
+    targeter can still land outside it here.
+    """
+    entry = find_altitude_crossing(
+        full, central_body_radius_km=EARTH_RADIUS_KM, threshold_altitude_km=EARTH_ENTRY_INTERFACE_ALTITUDE_KM,
+    )
+    steepest, shallowest = corridor_deg
+    if entry is None:
+        raise RuntimeError(
+            "Re-propagated free-return trajectory never reaches the "
+            f"{EARTH_ENTRY_INTERFACE_ALTITUDE_KM:.2f} km entry interface; refusing to export it."
+        )
+    fpa = flight_path_angle_deg(entry.spacecraft_state)
+    if not steepest <= fpa <= shallowest:
+        raise RuntimeError(
+            f"Re-propagated free-return trajectory enters at {fpa:.2f} deg, outside the "
+            f"[{steepest}, {shallowest}] deg lunar-return entry corridor; refusing to export it."
+        )
+    return entry
+
+
 def compute_and_export_mission(
     departure_mjd2000=None,
     coast_days_guess=3.5,
@@ -174,10 +203,20 @@ def compute_and_export_mission(
         target_entry_fpa_deg=entry_fpa_target_deg,
         earth_radius_km=EARTH_RADIUS_KM,
         entry_interface_altitude_km=EARTH_ENTRY_INTERFACE_ALTITUDE_KM,
+        entry_corridor_deg=LUNAR_RETURN_ENTRY_CORRIDOR_DEG,
     )
-    if not targeting.converged:
+    # ``converged`` only means the Newton residuals (perilune, return perigee)
+    # met tolerance; ``in_corridor`` is the separate check that the verified
+    # entry flight-path angle is survivable. Both must hold -- a numerically
+    # converged solution that skips out or burns up is not a free return.
+    if not targeting.converged or not targeting.in_corridor:
+        fpa = targeting.entry_flight_path_angle_deg
         raise RuntimeError(
-            "Free-return entry-corridor targeting did not converge; adjust departure_mjd2000 or coast_days_guess."
+            "Free-return entry-corridor targeting rejected "
+            f"(converged={targeting.converged}, in_corridor={targeting.in_corridor}, "
+            f"entry flight-path angle={'n/a' if fpa is None else f'{fpa:.2f} deg'}, "
+            f"corridor={LUNAR_RETURN_ENTRY_CORRIDOR_DEG} deg); "
+            "adjust departure_mjd2000, coast_days_guess or entry_fpa_target_deg."
         )
 
     # No need to integrate days past the (already verified) entry interface
@@ -201,31 +240,18 @@ def compute_and_export_mission(
     # Earth and swings back out on another multi-day arc, which is not what a
     # real mission does and reads as an obviously broken shape in the 3D
     # view. Truncate at the genuine end of the free-return leg -- the entry-
-    # interface crossing (or, defensively, the return leg's own closest
-    # approach to Earth if it somehow misses the interface).
-    entry = find_altitude_crossing(
-        full, central_body_radius_km=EARTH_RADIUS_KM, threshold_altitude_km=EARTH_ENTRY_INTERFACE_ALTITUDE_KM,
-    )
-    return_perigee = None
-    if entry is not None:
-        cutoff_epoch, cutoff_state = entry.epoch, entry.spacecraft_state
-    else:
-        after_perilune = full.epochs > targeting.perilune_epoch
-        if after_perilune.any():
-            radii_km = np.linalg.norm(full.states[:, :3], axis=1) / 1000.0
-            idx = int(np.argmin(np.where(after_perilune, radii_km, np.inf)))
-            cutoff_epoch, cutoff_state = float(full.epochs[idx]), full.states[idx]
-            return_perigee = {"distance_km": radii_km[idx]}
-        else:
-            cutoff_epoch = None
+    # interface crossing -- after independently re-checking the corridor on
+    # this re-propagated trajectory rather than trusting the targeter's own
+    # internal verification run.
+    entry = _verify_entry_corridor(full)
+    cutoff_epoch, cutoff_state = entry.epoch, entry.spacecraft_state
 
-    if cutoff_epoch is not None:
-        keep_before_cutoff = full.epochs <= cutoff_epoch
-        full = PropagationResult(
-            epochs=np.append(full.epochs[keep_before_cutoff], cutoff_epoch),
-            states=np.vstack([full.states[keep_before_cutoff], cutoff_state]),
-            final_state=cutoff_state,
-        )
+    keep_before_cutoff = full.epochs <= cutoff_epoch
+    full = PropagationResult(
+        epochs=np.append(full.epochs[keep_before_cutoff], cutoff_epoch),
+        states=np.vstack([full.states[keep_before_cutoff], cutoff_state]),
+        final_state=cutoff_state,
+    )
 
     perilune_day = round(targeting.perilune_epoch / 86400.0, 4)
     perilune_idx_fine = int(np.argmin(np.abs(full.epochs - targeting.perilune_epoch)))
@@ -257,34 +283,17 @@ def compute_and_export_mission(
                     f"B-plane angle {targeting.b_plane_angle_deg:.1f} degrees",
         },
     ]
-    if entry is not None:
-        entry_speed = np.linalg.norm(entry.spacecraft_state[3:])
-        entry_flight_path_angle_deg = flight_path_angle_deg(entry.spacecraft_state)
-        # Targeted, not incidental: the joint B-plane/entry-corridor solve
-        # aims this angle. Still state plainly whether this (independently
-        # re-propagated) crossing lands inside the corridor rather than
-        # silently calling it a safe free return.
-        steepest, shallowest = LUNAR_RETURN_ENTRY_CORRIDOR_DEG
-        corridor_note = (
-            f"inside the {abs(shallowest):.0f}-{abs(steepest):.0f} degree lunar-return skip-entry corridor"
-            if steepest <= entry_flight_path_angle_deg <= shallowest
-            else f"OUTSIDE the {abs(shallowest):.0f}-{abs(steepest):.0f} degree lunar-return entry corridor"
-        )
-        events.append({
-            "label": "Earth entry interface",
-            "time": round(entry.epoch / 86400.0, 4),
-            "note": f"free return -- {EARTH_ENTRY_INTERFACE_ALTITUDE_KM:.0f} km altitude reached "
-                    f"with no further burns, entry speed {entry_speed:.0f} m/s, "
-                    f"flight path angle {entry_flight_path_angle_deg:.1f} degrees ({corridor_note})",
-        })
-    elif return_perigee is not None:
-        events.append({
-            "label": "Closest approach to Earth (return leg)",
-            "time": round(cutoff_epoch / 86400.0, 4),
-            "note": f"{return_perigee['distance_km']:.0f} km from Earth center "
-                    f"({return_perigee['distance_km'] - EARTH_RADIUS_KM:.0f} km altitude) -- "
-                    "doesn't quite reach the atmosphere on its own",
-        })
+    entry_speed = np.linalg.norm(entry.spacecraft_state[3:])
+    entry_flight_path_angle_deg = flight_path_angle_deg(entry.spacecraft_state)
+    steepest, shallowest = LUNAR_RETURN_ENTRY_CORRIDOR_DEG
+    events.append({
+        "label": "Earth entry interface",
+        "time": round(entry.epoch / 86400.0, 4),
+        "note": f"free return -- {EARTH_ENTRY_INTERFACE_ALTITUDE_KM:.0f} km altitude reached "
+                f"with no further burns, entry speed {entry_speed:.0f} m/s, "
+                f"flight path angle {entry_flight_path_angle_deg:.1f} degrees (inside the "
+                f"{abs(shallowest):.0f}-{abs(steepest):.0f} degree lunar-return skip-entry corridor)",
+    })
 
     bodies = [
         body_entry(
