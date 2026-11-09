@@ -1,23 +1,25 @@
-"""End-to-end cislunar free-return pipeline, modelled on Artemis II: a
+"""End-to-end cislunar flyby pipeline, modelled on Artemis II: a
 patched-conic Lambert arc seeds a GPU-batched coarse global search over the
 translunar-injection burn, whose best candidate is refined by a tudatpy
-differential corrector to hit the real Artemis II perilune altitude
-(6,545 km above the lunar surface).
+differential corrector to hit Artemis II's published perilune altitude
+(6,545 km above the lunar surface), used here as a target *input*.
 
-This does NOT reproduce Artemis II's actual flown trajectory -- NASA hasn't
-published navigation-grade state vectors or SPICE kernels for it (see the
-project's research notes). It independently re-solves the same free-return
-boundary-value problem and lands on a trajectory of the same class and
-comparable magnitudes.
+This is a targeting demonstration, not a historical replay. The departure
+date (2026-08-01) is our own choice; the real Artemis II launched on
+2026-04-01. NASA hasn't published navigation-grade state vectors or SPICE
+kernels for the flight, so nothing here reproduces the actual flown
+trajectory.
 
-Known limitation, stated plainly: this pipeline targets lunar flyby
-DISTANCE only, in whatever direction the Lambert-seeded initial guess
-happens to miss by. A genuine unpowered free return additionally requires
-aiming the B-plane crossing so the post-flyby trajectory naturally
-re-intersects Earth -- that's a 2-parameter aim-point targeting problem this
-example does not attempt (see orbitopt/verify/differential_correction.py
-for the extension point). Expect this run's post-flyby trajectory to NOT
-re-enter Earth's atmosphere on its own.
+Known limitation, stated plainly: this script targets lunar flyby DISTANCE
+only (target_lunar_flyby), in whatever direction the Lambert-seeded initial
+guess happens to miss by, so its return leg is uncontrolled -- expect it
+to NOT re-enter Earth's atmosphere on its own. The genuine free return
+(lunar B-plane aim point + Earth-return entry flight-path angle solved
+jointly, verify.differential_correction.target_free_return_entry_corridor)
+is what the `artemis2` mission runs:
+    orbitopt run examples/artemis2_free_return.yaml
+This script is kept to show the GPU-screening -> high-fidelity-refinement
+layering on its own.
 
 Run: python examples/05_artemis2_free_return.py
 """
@@ -194,7 +196,8 @@ def main():
     else:
         print("  no Earth entry interface within 9.5 days: this trajectory does NOT "
               "free-return on its own -- expected, see this file's module docstring "
-              "(distance-only targeting, no B-plane aim-point control)")
+              "(distance-only targeting; run examples/artemis2_free_return.yaml "
+              "for the entry-corridor-targeted free return)")
 
 
 if __name__ == "__main__":

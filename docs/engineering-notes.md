@@ -214,47 +214,62 @@ the UX you actually want from a timeline scrubber. Covered by
 
 ## Cislunar / Artemis II free-return pipeline, in full
 
-`examples/05_artemis2_free_return.py` chains every layer of the framework:
+There are two Artemis II-like pipelines. They target different things.
+
+**Mission pipeline: genuine free return** (`orbitopt view artemis2`,
+`orbitopt run examples/artemis2_free_return.yaml`, both through
+`viz.mission_timeline`):
 
 1. **Patched-conic seed**: an Earth-only 2-body Lambert arc (`lambert.cpu`)
-   from a parking-orbit position to the Moon's real position (`bodies.moon_state`,
-   sourced from tudatpy/SPICE, not pykep -- pykep's `jpl_lp` has no Moon) at
-   the coast time, giving a plane- and energy-appropriate initial TLI burn
-   guess instead of an arbitrary kick. (An arbitrarily-oriented parking
-   orbit needs a wildly unrealistic 11+ km/s "TLI" burn to reach a
-   misaligned Moon position in the allotted time -- this isn't a solver
-   bug, it's what happens when the launch geometry doesn't match the
-   target, exactly as it constrains real launch windows.)
-2. **GPU coarse screening** (`problems.free_return.FreeReturnScreeningProblem`):
-   a pygmo population of candidate burns around that seed, batch-evaluated
-   through `dynamics.nbody_gpu`'s simplified propagator, searching for the
-   burn whose coarse closest-approach to the Moon matches the target
-   distance.
-3. **tudatpy differential correction** (`verify.differential_correction.target_lunar_flyby`):
-   Newton-Raphson refinement of the winning candidate against the real
-   SPICE-based Earth+Moon+Sun n-body model, converging to the actual
-   Artemis II perilune altitude (6,545 km above the lunar surface) to
-   within ~10 km in 3 iterations / a few seconds.
-4. **Independent fine-resolution verification**: re-propagate the converged
-   solution at a finer step than the corrector used and re-measure closest
-   approach from scratch, so the reported number isn't just "what the
-   corrector's own residual said" (see the RK4 step-size gotcha above --
-   this distinction mattered here in practice, not just in principle).
+   from a Moon-plane-aligned 185 km parking orbit (`transfer.theta_deg`,
+   default 142°) to a point `LAMBERT_AIM_OFFSET_KM` ahead of the Moon's real
+   position (`bodies.moon_state`, sourced from tudatpy/SPICE, not pykep:
+   pykep's `jpl_lp` has no Moon). Aiming at the Moon's centre would give a
+   degenerate, near-radial flyby with no usable B-plane.
+2. **Joint free-return targeting**
+   (`verify.differential_correction.target_free_return_entry_corridor`,
+   task #144): a patched-conic B-plane-angle seed, then
+   `target_lunar_b_plane` to put the flyby on the correct side of the Moon,
+   then a TudatPy (Earth+Moon+Sun) Newton solve on the TLI delta-v. That
+   solve hits the perilune (default 6,545 km altitude, ±50 km) and the
+   vacuum return perigee that gives the target inertial entry flight-path
+   angle (`entry.target_fpa_deg`, default −6°).
+3. **Independent gate**: the mission re-propagates the converged burn and
+   re-checks the entry-interface crossing itself (`_verify_entry_corridor`).
+   It does not rely on the targeter's own verification run. It rejects the
+   solution (`RuntimeError`) unless the solve converged *and* the entry
+   angle is inside the [−7°, −5°] corridor. The trajectory is exported up to
+   the entry interface. The targeting result is attached to the scene as a
+   verification report.
 
-**What this does not claim:** NASA hasn't published Artemis II's
-navigation-grade state vectors or SPICE kernels, so there is no ground
-truth to fit against -- this independently re-solves the same free-return
-boundary-value problem and lands on a trajectory of the same class and
-comparable magnitudes, not a reproduction of the actual flown mission. It
-also targets flyby *distance* only, in whatever direction the Lambert seed
-happens to miss by; a genuine unpowered free return additionally needs the
-B-plane crossing aimed so gravity alone bends the outbound trajectory back
-through Earth's atmosphere, which is a 2-parameter aim-point targeting
-problem this example doesn't attempt -- expect the example's post-flyby
-trajectory to *not* re-enter on its own within the propagated window.
-Adding that targeting (vary the B-plane aim point, not just distance, as
-the Newton unknowns) is the natural next extension of
-`differential_correction.py`.
+So the mission's return leg reaches Earth's entry interface with no
+correction burns. The corridor test is purely geometric (vacuum, inertial
+FPA). It does not assess heating, loads or skip-out; see
+`docs/reentry_safety_constraints.md`.
+
+**Legacy example: flyby distance only**
+(`examples/05_artemis2_free_return.py`): Lambert seed → GPU coarse screening
+(`problems.free_return.FreeReturnScreeningProblem`, batch-evaluated through
+`dynamics.nbody_gpu`'s simplified propagator) → `target_lunar_flyby`
+differential correction → fine-step re-propagation. It shows the
+GPU-screen-then-refine layering, but it targets the flyby *distance* only.
+Its return leg is therefore not controlled, and the script states this
+when the trajectory does not re-enter. Use the mission pipeline for a real
+free return.
+
+**What this is, and is not:** a *targeting* check, not a historical
+replay. Artemis II's published perilune altitude (6,545 km) and a
+corridor-centre entry angle are given to the solver as **inputs**. Both
+pipelines depart on **2026-08-01** (`departure.date` in the config). That
+date was chosen for this project. The real Artemis II launched on
+2026-04-01, and the 185 km circular parking orbit and departure phase angle
+are modelling choices too. NASA has not published navigation-grade state
+vectors or SPICE kernels for the flight, so there is no ground truth to fit
+against. The result is a free return of the same class as Artemis II, with
+the same perilune and a survivable entry angle. It is not a reconstruction
+of the trajectory Artemis II actually flew. The other checks in the README
+(Mars 2020 launch window, Sentinel-2, ISS) are historical replays, where
+the flown values are outputs compared after the fact, not inputs.
 
 ## Window search: one porkchop minimum is not one basin
 
