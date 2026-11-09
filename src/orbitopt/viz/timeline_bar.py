@@ -437,8 +437,9 @@ class TimelineBar(QWidget):
         t = self._state.time
         self.met_label.setText(f"T+{t:.2f} {timeline['unitLabel']}")
         ref_et = timeline.get("referenceEpochEt")
-        if ref_et is not None:
-            self.date_label.setText(epoch_to_date_string(ref_et, t))
+        # Cleared, not left alone, for a timeline with no calendar epoch:
+        # otherwise the previous mission's date stayed on screen.
+        self.date_label.setText("" if ref_et is None else epoch_to_date_string(ref_et, t))
         current = self._state.active_event()
         self.event_label.setText(f"▸ {current['label']}" if current else "")
 
