@@ -120,7 +120,7 @@ def test_build_from_config_only_enables_launch_when_configured(monkeypatch):
 
     seen = []
 
-    def fake_build(**kwargs):
+    def fake_build(recorder=None, **kwargs):  # the pipeline always hands a recorder through
         seen.append(kwargs)
         return {"id": "", "title": ""}
 

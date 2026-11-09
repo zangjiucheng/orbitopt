@@ -225,8 +225,11 @@ def test_real_missions_run_through_the_unified_pipeline(fixture):
     validate_pipeline_result(doc)
     statuses = {s["stage"]: s["status"] for s in doc["stages"]}
     assert doc["status"] == "completed"
+    # geo-raising optimizes one burn sequence -- no candidate list, so its
+    # select stage is legitimately skipped; mars-transfer selects for real.
+    skipped = {"select"} if config["mission"]["kind"] == "geo-raising" else set()
     for stage in ("mission_config", "constraints", "search", "optimize", "select", "refine", "verify", "export"):
-        assert statuses[stage] == "completed", (stage, statuses)
+        assert statuses[stage] == ("skipped" if stage in skipped else "completed"), (stage, statuses)
     assert result.stage("optimize").candidates
     assert result.stage("refine").numerical_error
     assert result.verification_reports
