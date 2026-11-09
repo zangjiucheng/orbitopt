@@ -198,7 +198,8 @@ def test_finalize_writes_to_env_dir_and_scene_roundtrip(tmp_path, monkeypatch):
     vr.attach_to_scene(scene, rep)
     vr.attach_to_scene(scene, rep)
     reports = vr.pop_from_scene(scene)
-    assert scene == {"id": "s"} and len(reports) == 2
+    assert set(scene) == {"id", "subtitle"} and len(reports) == 2
+    assert scene["subtitle"].count("Verification report test:geo: PASSED") == 2
     bundle = vr.bundle(reports, "s")
     vr.validate_report(bundle)
     assert bundle["status"]["passed"]
@@ -267,3 +268,64 @@ def test_fixed_step_convergence_compares_states_at_same_epoch():
     assert conv["compared_at_epoch_s"] == 1005.0
     assert conv["delta_position_m"] < 1e-3
     assert conv["converged"]
+
+
+def test_status_is_tri_state():
+    """Task #162: no checks is ``not_checked``, never an implicit pass."""
+    empty = vr.status_from_checks({})
+    assert empty == {"result": "not_checked", "passed": False, "checks": {}}
+    assert vr.status_from_checks({"a": True, "b": True})["result"] == "passed"
+    failed = vr.status_from_checks({"a": True, "b": False})
+    assert failed["result"] == "failed" and not failed["passed"]
+    assert vr.format_status(empty).startswith("NOT CHECKED")
+    # Legacy documents without ``result`` are re-derived from their checks.
+    assert vr.status_result({"passed": True, "checks": {}}) == "not_checked"
+
+
+def test_report_without_checks_is_not_checked_and_validates():
+    rep = vr.build_report("test", "empty", propagations=[])
+    vr.validate_report(rep)
+    assert rep["status"]["result"] == "not_checked"
+    assert not rep["status"]["passed"]
+
+
+def test_bundle_tri_state():
+    passed = vr.build_report("t", "ok", propagations=[], residuals=[
+        vr.state_residual("r", "ref", position=[0, 0, 0], reference_position=[0, 0, 0],
+                          tolerance={"position_m": 1.0})])
+    failed = vr.build_report("t", "bad", propagations=[], residuals=[
+        vr.state_residual("r", "ref", position=[10, 0, 0], reference_position=[0, 0, 0],
+                          tolerance={"position_m": 1.0})])
+    empty = vr.build_report("t", "none", propagations=[])
+    assert passed["status"]["result"] == "passed" and failed["status"]["result"] == "failed"
+
+    for reports, expected in [([passed, passed], "passed"), ([passed, failed], "failed"),
+                              ([passed, empty], "not_checked"), ([failed, empty], "failed"),
+                              ([], "not_checked")]:
+        b = vr.bundle(reports, "b")
+        vr.validate_report(b)
+        assert b["status"]["result"] == expected, (reports, expected)
+        assert b["status"]["passed"] == (expected == "passed")
+    assert "t:none" not in vr.bundle([passed, empty], "b")["status"]["checks"]
+
+
+def test_attach_to_scene_shows_status_in_subtitle():
+    empty = vr.build_report("t", "none", propagations=[])
+    scene = vr.attach_to_scene({"subtitle": "S"}, empty)
+    assert scene["subtitle"].splitlines() == ["S", "Verification report t:none: NOT CHECKED (0/0 checks passed)"]
+
+
+def test_cli_warns_on_not_checked_report(tmp_path, monkeypatch, capsys):
+    import orbitopt.mission_config as mc
+    import orbitopt.scene_format as sf
+    from orbitopt.cli import main
+
+    rep = vr.build_report("t", "none", propagations=[])
+    monkeypatch.setattr(mc, "build_scene_from_config", lambda config: vr.attach_to_scene({"bodies": []}, rep))
+    monkeypatch.setattr(sf, "write_scene", lambda scene, path: None)
+    monkeypatch.setattr("orbitopt.cli._load_and_validate_config",
+                        lambda path: {"mission": {"id": "m", "kind": "geo-raising"},
+                                      "output": {"scene_file": str(tmp_path / "scene.json")}})
+    main(["run", "cfg.yaml"])
+    out = capsys.readouterr().out
+    assert "WARNING: wrote verification report" in out and "NOT CHECKED" in out

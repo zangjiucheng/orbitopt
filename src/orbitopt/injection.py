@@ -1030,8 +1030,7 @@ def verify_injection(
         kind="launch-injection", label=f"{lv.site_id}-{target.name or target.kind}-{orbit.epoch_mjd2000:.5f}",
         propagations=[section], residuals=residuals, inputs=plan.to_dict(), targets=targets,
     )
-    report["status"]["checks"].update(extra_checks)
-    report["status"]["passed"] = all(report["status"]["checks"].values())
+    report["status"] = _report.status_from_checks({**report["status"]["checks"], **extra_checks})
     report["digest"] = _report.report_digest(report)
     _report.finalize_report(report, report_path)
 
