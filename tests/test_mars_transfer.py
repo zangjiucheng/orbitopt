@@ -153,6 +153,22 @@ def test_full_mission_pipeline_end_to_end():
     implied_speed_km_s = np.divide(dist_km, dt_s, out=np.zeros_like(dist_km), where=dt_s > 0)
     assert np.all(implied_speed_km_s < 100.0)  # generous ceiling; a real bug measured >1000 km/s here
 
+    # Velocities ride along (km/day) for Hermite playback, and every burn
+    # (TMI, TCM, MOI) is a pre-/post-burn pair at one time: same position,
+    # a velocity jump -- the interpolation-segment break.
+    velocities = np.array(trail["velocities"])
+    assert velocities.shape == positions.shape
+    pairs = np.flatnonzero(np.diff(times_days) == 0.0)
+    jumps = [k for k in pairs if np.linalg.norm(velocities[k + 1] - velocities[k]) > 1.0]
+    assert len(jumps) >= 2  # TMI and MOI at least (a TCM can be near zero)
+    for k in jumps:
+        assert np.linalg.norm(positions[k + 1] - positions[k]) < 1.0
+    # Hermite velocities agree with the sampled chords where samples are dense.
+    mid = np.flatnonzero((dt_s > 0) & (dt_s < 3600.0))
+    chord_v = (positions[mid + 1] - positions[mid]) / np.diff(times_days)[mid, None]
+    mean_v = 0.5 * (velocities[mid] + velocities[mid + 1])
+    assert np.median(np.linalg.norm(chord_v - mean_v, axis=1) / np.linalg.norm(mean_v, axis=1)) < 1e-2
+
     # The *flown* periapsis (located under full perturbed propagation) must
     # hit the TCM's periapsis target, not merely the fixed-time aim distance:
     # the old position-only targeter flew ~250 km low for this window, and

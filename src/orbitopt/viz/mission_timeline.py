@@ -34,6 +34,7 @@ from orbitopt.verify.differential_correction import (
 from orbitopt.verify.tudat_propagate import (
     PropagationResult,
     body_position_at_absolute_epoch,
+    body_velocity_at_absolute_epoch,
     find_altitude_crossing,
     propagate_multi_arc,
 )
@@ -46,6 +47,7 @@ from orbitopt.viz.scene import (
     crossing_times,
     phase_spans,
     scene_document,
+    thin_trail_indices,
 )
 
 EARTH_RADIUS_KM = 6378.0
@@ -55,6 +57,14 @@ MOON_RADIUS_KM = 1737.4
 # the timeline; the propagation itself is full three-body, no patched conics.
 MOON_SOI_RADIUS_KM = 66_100.0
 ARTEMIS_II_PERILUNE_ALTITUDE_KM = 6545.0
+# Trail/event times keep 1e-8 day (~1 ms): 1e-4 day (~8.6 s) put the
+# spacecraft up to ~95 km off its own samples near perigee (~11 km/s).
+# Positions keep 1 m, velocities 1e-3 km/day -- display data for the viewer's
+# Hermite playback, not a source for metre-level error analysis.
+TRAIL_TIME_DECIMALS = 8
+TRAIL_POSITION_DECIMALS = 3
+TRAIL_VELOCITY_DECIMALS = 3
+KM_PER_DAY_PER_M_S = 86400.0 / 1000.0
 EARTH_ENTRY_INTERFACE_ALTITUDE_KM = 121.92  # 400,000 ft, the conventional atmospheric entry interface
 
 
@@ -296,25 +306,29 @@ def _build_artemis2_mission(
         final_state=cutoff_state,
     )
 
-    perilune_day = round(targeting.perilune_epoch / 86400.0, 4)
+    perilune_day = round(targeting.perilune_epoch / 86400.0, TRAIL_TIME_DECIMALS)
     perilune_idx_fine = int(np.argmin(np.abs(full.epochs - targeting.perilune_epoch)))
 
-    n_fine = len(full.epochs)
-    if n_fine > max_output_points:
-        keep = np.unique(np.linspace(0, n_fine - 1, max_output_points - 1).round().astype(int))
-        keep = np.unique(np.concatenate([keep, [perilune_idx_fine]]))
-    else:
-        keep = np.arange(n_fine)
+    # The TLI burn is the first arc, so the exported trail is one burn-free
+    # interpolation segment; thin_trail_indices would keep any burn pair.
+    keep = thin_trail_indices(full.epochs, max_output_points - 1, keep=[perilune_idx_fine])
 
     epochs = full.epochs[keep]
-    days = (epochs / 86400.0).round(4).tolist()
+    days = (epochs / 86400.0).round(TRAIL_TIME_DECIMALS).tolist()
 
-    spacecraft_km = (full.states[keep, :3] / 1000.0).round(1)
+    spacecraft_km = (full.states[keep, :3] / 1000.0).round(TRAIL_POSITION_DECIMALS)
+    # km/day (trail distance unit per timeline unit): the viewer Hermite-
+    # interpolates between samples instead of cutting chords across the
+    # perigee and perilune arcs.
+    spacecraft_vel = (full.states[keep, 3:] * KM_PER_DAY_PER_M_S).round(TRAIL_VELOCITY_DECIMALS)
     spacecraft_distance_km = np.linalg.norm(full.states[keep, :3], axis=1) / 1000.0
 
     moon_positions_km = np.array([
         body_position_at_absolute_epoch("Moon", reference_et + t) for t in epochs
     ]) / 1000.0
+    moon_vel = np.array([
+        body_velocity_at_absolute_epoch("Moon", reference_et + t) for t in epochs
+    ]) * KM_PER_DAY_PER_M_S
 
     events = [
         {"label": "TLI burn", "time": 0.0, "note": f"delta-v {np.linalg.norm(targeting.delta_v):.0f} m/s"},
@@ -331,7 +345,7 @@ def _build_artemis2_mission(
     steepest, shallowest = LUNAR_RETURN_ENTRY_CORRIDOR_DEG
     events.append({
         "label": "Earth entry interface",
-        "time": round(entry.epoch / 86400.0, 4),
+        "time": round(entry.epoch / 86400.0, TRAIL_TIME_DECIMALS),
         "note": f"free return -- {EARTH_ENTRY_INTERFACE_ALTITUDE_KM:.0f} km altitude reached "
                 f"with no further burns, entry speed {entry_speed:.0f} m/s, "
                 f"flight path angle {entry_flight_path_angle_deg:.1f} degrees (inside the "
@@ -347,7 +361,8 @@ def _build_artemis2_mission(
         ),
         body_entry(
             "moon", "Moon", COLOR["moon"], "moon", radius_display=RADIUS_DISPLAY["moon"],
-            trail={"times": days, "positions": moon_positions_km.round(1).tolist()},
+            trail={"times": days, "positions": moon_positions_km.round(TRAIL_POSITION_DECIMALS).tolist(),
+                   "velocities": moon_vel.round(TRAIL_VELOCITY_DECIMALS).tolist()},
             # No static "Distance from Earth" row -- every body card already
             # shows a live "Distance" readout that tracks the scrubber (see
             # inspector.py's InspectorPanel); a fixed mission-start snapshot
@@ -359,7 +374,7 @@ def _build_artemis2_mission(
         ),
         body_entry(
             "spacecraft", "Orion", COLOR["spacecraft"], "spacecraft", radius_display=RADIUS_DISPLAY["spacecraft"],
-            trail={"times": days, "positions": spacecraft_km.tolist()},
+            trail={"times": days, "positions": spacecraft_km.tolist(), "velocities": spacecraft_vel.tolist()},
             info=[
                 {"label": "TLI delta-v", "value": f"{np.linalg.norm(targeting.delta_v):.0f} m/s"},
                 {"label": "Achieved perilune", "value": f"{targeting.perilune_distance_km:,.0f} km from Moon center"},

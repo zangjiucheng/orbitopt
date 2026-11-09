@@ -344,6 +344,7 @@ class PeriapsisResult:
     trajectory_epochs_et: np.ndarray  # (n,) absolute ephemeris seconds, departure_epoch_et..periapsis
     trajectory_positions_m: np.ndarray  # (n, 3) heliocentric m -- central_body="Sun" throughout,
     # so this is already heliocentric with no per-sample body-position addition needed
+    trajectory_velocities_m_s: np.ndarray | None = None  # (n, 3) heliocentric m/s, same samples
 
 
 def locate_mars_periapsis(sc_r_helio, sc_v_helio, departure_epoch_et, dv, coast_duration_guess, bulk_step_size=1800.0, fine_step_size=20.0, fine_half_window=2.0 * 86400.0) -> PeriapsisResult:
@@ -393,16 +394,24 @@ def locate_mars_periapsis(sc_r_helio, sc_v_helio, departure_epoch_et, dv, coast_
     r_rel = closest.spacecraft_state[:3] - mars_r
     v_rel = closest.spacecraft_state[3:] - mars_v
 
-    fine_keep = fine.epochs <= closest.epoch
+    # Truncated to periapsis, and ending *exactly* on the located periapsis
+    # state: the MOI burn happens there, so a caller appending the capture
+    # arc gets a clean pre-/post-burn pair at one epoch (an interpolation-
+    # segment break) instead of a short interval whose two end velocities
+    # straddle the burn.
+    fine_keep = fine.epochs < closest.epoch
     trajectory_epochs_et = np.concatenate([
         departure_epoch_et + bulk.epochs,
         bulk_end_epoch + fine.epochs[fine_keep],
+        [arrival_epoch_et],
     ])
-    trajectory_positions_m = np.concatenate([bulk.states[:, :3], fine.states[fine_keep, :3]])
+    closest_state = np.asarray(closest.spacecraft_state, dtype=float).reshape(1, 6)
+    trajectory_states = np.concatenate([bulk.states, fine.states[fine_keep], closest_state])
 
     return PeriapsisResult(
         r_rel=r_rel, v_rel=v_rel, arrival_epoch_et=arrival_epoch_et,
-        trajectory_epochs_et=trajectory_epochs_et, trajectory_positions_m=trajectory_positions_m,
+        trajectory_epochs_et=trajectory_epochs_et, trajectory_positions_m=trajectory_states[:, :3],
+        trajectory_velocities_m_s=trajectory_states[:, 3:],
     )
 
 

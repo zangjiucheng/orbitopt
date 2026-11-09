@@ -157,17 +157,17 @@
         "times": {
           "type": "array",
           "items": { "type": "number" },
-          "description": "Strictly non-decreasing timeline coordinates, same unit as timeline.unitLabel."
+          "description": "Non-decreasing timeline coordinates, same unit as timeline.unitLabel. Two consecutive samples at the same time mark an instantaneous event -- an impulsive maneuver, exported as its pre-burn then its post-burn state (same position, different velocity). They split the trail into interpolation segments: a viewer never interpolates across one, so a burn's velocity jump is not smeared into the coast on either side."
         },
         "positions": {
           "type": "array",
           "items": { "$ref": "#/$defs/vec3" },
-          "description": "Position at each corresponding `times` entry -- same length as `times`."
+          "description": "Position at each corresponding `times` entry -- same length as `times`. Display data for playback: producers may round it (orbitopt keeps 1 m for spacecraft), so it is not a source for metre-level error analysis -- use the verification reports for that."
         },
         "velocities": {
           "type": "array",
           "items": { "$ref": "#/$defs/vec3" },
-          "description": "Optional velocity at each corresponding `times` entry -- same length as `times`, in `distanceUnit` per timeline unit (e.g. km/day when timeline.unitLabel is 'days'). When present, a viewer can interpolate between samples with cubic Hermite instead of straight chords. That matters for a sparsely sampled body used as a moving reference frame: a one-day chord of Earth's orbit misses the true arc by thousands of km, which swamps a low Earth orbit drawn relative to Earth."
+          "description": "Optional velocity at each corresponding `times` entry -- same length as `times`, in `distanceUnit` per timeline unit (e.g. km/day when timeline.unitLabel is 'days'). When present, a viewer can interpolate between samples with cubic Hermite instead of straight chords (within each interpolation segment -- see `times`). That matters for a sparsely sampled body used as a moving reference frame: a one-day chord of Earth's orbit misses the true arc by thousands of km, which swamps a low Earth orbit drawn relative to Earth."
         }
       },
       "additionalProperties": true
