@@ -58,6 +58,7 @@ def test_mission_control_loads_and_switches_missions():
     assert state.scene is not None
     assert state.scene["id"] == "solar-system"
     assert not window.timeline_bar.isVisible()
+    assert window.verification_badge.isHidden()  # an ephemeris snapshot: nothing to verify
 
     sidebar.select_row(1)
     # The switch must not block: select_row() returns immediately and the
@@ -72,6 +73,17 @@ def test_mission_control_loads_and_switches_missions():
     assert state.scene["id"] == "artemis2-mission"
     assert window.timeline_bar.isVisible()
     assert sidebar.mission_list.isEnabled()
+
+    # The targeting report rides along: the badge states its tri-state result
+    # and the Verification tab shows what was checked.
+    result = state.scene["verification"]["result"]
+    assert window.verification_badge._label.text() == {
+        "passed": "VERIFIED", "failed": "VERIFY FAILED", "not_checked": "NOT CHECKED"}[result]
+    window._show_verification_tab()
+    assert window.right_tabs.currentWidget() is window.verification_panel
+    assert "Step convergence" in window.verification_panel.text()
+    assert "Verification report" not in window.scene_subtitle_label.text()
+    window.right_tabs.setCurrentWidget(window.inspector)
 
     # Scrubbing the slider moves the shared time, and the inspector follows.
     timeline = state.timeline

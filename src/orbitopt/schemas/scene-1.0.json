@@ -33,6 +33,23 @@
       "items": { "$ref": "#/$defs/body" }
     },
     "timeline": { "$ref": "#/$defs/timeline" },
+    "verification": {
+      "type": "object",
+      "required": ["result", "reports"],
+      "properties": {
+        "result": {
+          "enum": ["passed", "failed", "not_checked"],
+          "description": "Tri-state over every report: failed if any failed, not_checked if any was not checked, passed only if all passed."
+        },
+        "reports": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "The high-fidelity verification reports for this scene's trajectory, each a document of orbitopt's verification-report-1.0 schema (the same ones `orbitopt run` writes next to the scene)."
+        }
+      },
+      "additionalProperties": true,
+      "description": "Optional: how this scene's trajectory was verified. Absent means no verification ran -- a viewer should say 'not checked', never imply success."
+    },
     "candidates": {
       "type": "array",
       "items": { "$ref": "#/$defs/candidate" },

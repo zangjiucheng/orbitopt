@@ -134,6 +134,9 @@ def test_verify_stage_is_summarized_from_reports(fake_builders):
     assert verify.convergence["checks_passed"] == verify.convergence["checks_total"] == 2
     assert verify.numerical_error == {"check.final.position_residual_m": 3.0}
     assert result.to_dict()["verification"] == {"result": "passed", "reports": ["fake:check"]}
+    # The viewer-facing copy stays in the scene (the private key is popped).
+    published = result.scene[verification_report.SCENE_VERIFICATION_KEY]
+    assert published["result"] == "passed" and [r["kind"] for r in published["reports"]] == ["fake"]
     refine = result.stage("refine")
     assert refine.status == "completed" and len(refine.candidates) == 2
 
@@ -145,6 +148,8 @@ def test_disabled_verification_is_skipped_not_passed(fake_builders):
     assert doc["stages"][STAGES.index("verify")]["status"] == "skipped"
     assert doc["verification"]["result"] == "not_checked"
     validate_pipeline_result(doc)
+    # Nothing published: the viewer then shows "not checked", not a pass.
+    assert verification_report.SCENE_VERIFICATION_KEY not in run_pipeline(copy.deepcopy(config)).scene
 
 
 def minimal_builder(config, recorder=None):

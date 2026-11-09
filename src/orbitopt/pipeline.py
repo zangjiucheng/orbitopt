@@ -388,7 +388,7 @@ def run_pipeline(
         builder = getattr(importlib.import_module(module_name), attr)
         scene = builder(config, recorder=recorder)
 
-        from orbitopt.verify.report import pop_from_scene
+        from orbitopt.verify.report import pop_from_scene, publish_to_scene
 
         reports = pop_from_scene(scene)
         result.verification_reports = reports
@@ -400,6 +400,7 @@ def run_pipeline(
         elif verify.status == STATUS_NOT_RUN:
             recorder.skip(VERIFY, "no verification report produced")
         _apply_gate(recorder.gate, reports, scene)
+        publish_to_scene(scene, reports)
 
         with recorder.stage(EXPORT) as st:
             from orbitopt.scene_format import validate_scene

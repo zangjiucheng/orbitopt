@@ -97,6 +97,33 @@ QWidget#timelineBar {{
 QWidget#titleBar {{
     border-bottom: 1px solid {HAIRLINE};
 }}
+QTabWidget#rightTabs {{
+    background: {PANEL};
+}}
+QTabWidget#rightTabs::pane {{
+    border: none;
+    border-left: 1px solid {HAIRLINE};
+}}
+QTabWidget#rightTabs QTabBar {{
+    background: {PANEL};
+}}
+QTabWidget#rightTabs QTabBar::tab {{
+    background: {PANEL};
+    color: {INK_MUTED};
+    padding: 7px 12px 6px 12px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+}}
+QTabWidget#rightTabs QTabBar::tab:hover {{
+    color: {INK_SECONDARY};
+}}
+QTabWidget#rightTabs QTabBar::tab:selected {{
+    color: {INK_PRIMARY};
+    border-bottom: 2px solid {ACCENT};
+}}
 QWidget#viewStrip {{
     background: {PANEL};
     border-bottom: 1px solid {BORDER_SOFT};

@@ -654,6 +654,24 @@ def pop_from_scene(scene: dict) -> list:
     return list(scene.pop(SCENE_REPORTS_KEY, []) or [])
 
 
+# The public, viewer-facing copy of a scene's verification (see the scene
+# schema's ``verification``). Unlike SCENE_REPORTS_KEY it stays in the scene:
+# without it the viewer only had the one-line summaries in the subtitle.
+SCENE_VERIFICATION_KEY = "verification"
+
+
+def publish_to_scene(scene: dict, reports: Sequence[Mapping]) -> dict:
+    """Store ``reports`` in ``scene["verification"]`` as
+    ``{"result": <tri-state over all reports>, "reports": [...]}`` -- the
+    same documents ``orbitopt run`` writes next to the scene. A no-op for no
+    reports: the viewer then says "not checked" rather than inventing one."""
+    if not reports:
+        return scene
+    combined = bundle(reports, label=str(scene.get("id", "scene")))
+    scene[SCENE_VERIFICATION_KEY] = {"result": combined["status"]["result"], "reports": combined["reports"]}
+    return scene
+
+
 def bundle(reports: Sequence[Mapping], label: str) -> dict:
     """Combine several reports (one per verification stage) into one file."""
     reports = [to_jsonable(r) for r in reports]

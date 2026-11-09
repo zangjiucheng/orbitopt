@@ -820,7 +820,7 @@ def compute_and_export_mars_mission(**kwargs) -> dict:
     trajectory, and export it as a SceneData document. See the module
     docstring for what this does and does not model."""
     scene = _build_mars_mission(**kwargs)
-    verification_report.pop_from_scene(scene)
+    verification_report.publish_to_scene(scene, verification_report.pop_from_scene(scene))
     return scene
 
 

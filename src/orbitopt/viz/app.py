@@ -19,6 +19,7 @@ Layout of the package:
 * inspector.py    -- measure readout, maneuver list and body cards (right).
 * timeline_bar.py -- play / time-warp / event scrubber (bottom).
 * view_strip.py   -- which body the view is centered on, and body scale.
+* verification_panel.py -- the scene's verification reports (right, 2nd tab).
 * viewport.py     -- the embedded VTK view; compute.py -- background loads.
 
 This module only assembles those pieces and owns what is specific to the
@@ -51,6 +52,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSplitter,
     QStackedWidget,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -68,6 +70,7 @@ from orbitopt.viz.state import MissionState, adjacent_event, eased_speed, neares
 from orbitopt.viz.theme import BG_VOID, DANGER, STYLESHEET, SUCCESS
 from orbitopt.viz.timeline_bar import TimelineBar
 from orbitopt.viz.ui_kit import MetricRow, StatusBadge
+from orbitopt.viz.verification_panel import RESULT_BADGE, VerificationPanel, display_subtitle, scene_verification_result
 from orbitopt.viz.view_strip import ViewStrip
 from orbitopt.viz.viewport import DebouncedInteractor
 from orbitopt.viz.widgets import SpinnerWidget, ViewControlsPopover
@@ -286,10 +289,29 @@ class MissionControlWindow(QMainWindow):
         self.inspector = InspectorPanel(self.state)
         self.inspector.body_clicked.connect(self._on_card_clicked)
         self.inspector.event_clicked.connect(self._seek_to_event)
-        self.inspector.collapse_clicked.connect(self._toggle_info_panel)
+        self.verification_panel = VerificationPanel(self.state)
+        # Inspector and Verification share the right column as tabs; the
+        # collapse chevron moves to the tab bar's corner so it serves both.
+        self.inspector.collapse_btn.hide()
+        self.right_tabs = QTabWidget()
+        self.right_tabs.setObjectName("rightTabs")
+        self.right_tabs.setDocumentMode(True)
+        # Without these the native tab-bar base paints a light strip past the
+        # last tab, ignoring the dark stylesheet.
+        self.right_tabs.tabBar().setDrawBase(False)
+        self.right_tabs.setAttribute(Qt.WA_StyledBackground, True)
+        self.right_tabs.addTab(self.inspector, "Inspector")
+        self.right_tabs.addTab(self.verification_panel, "Verification")
+        collapse = QPushButton()
+        collapse.setObjectName("panelCollapse")
+        collapse.setIcon(icons.chevron_right_icon())
+        collapse.setIconSize(QSize(12, 12))
+        collapse.setToolTip("Collapse the right panel")
+        collapse.clicked.connect(self._toggle_info_panel)
+        self.right_tabs.setCornerWidget(collapse, Qt.TopRightCorner)
         self.right_rail = self._build_rail(icons.chevron_left_icon, self._toggle_info_panel, "Show body info")
         self.right_stack = QStackedWidget()
-        self.right_stack.addWidget(self.inspector)
+        self.right_stack.addWidget(self.right_tabs)
         self.right_stack.addWidget(self.right_rail)
         self.right_stack.setMinimumWidth(self._RIGHT_MIN)
         self.splitter.addWidget(self.right_stack)
@@ -365,6 +387,14 @@ class MissionControlWindow(QMainWindow):
         self.load_status_badge = StatusBadge("idle", "IDLE")
         self.load_status_badge.setToolTip("Current mission scene load state")
         row.addWidget(self.load_status_badge)
+
+        # Always on screen for a mission, so "not checked" can't be mistaken
+        # for verified; click it for the reports.
+        self.verification_badge = StatusBadge("idle", "")
+        self.verification_badge.setToolTip("High-fidelity verification of this trajectory -- click for the reports")
+        self.verification_badge.mousePressEvent = lambda _e: self._show_verification_tab()
+        self.verification_badge.setVisible(False)
+        row.addWidget(self.verification_badge)
 
         self.backend_badge = StatusBadge("idle", "…")
         self.backend_badge.setToolTip(
@@ -1111,7 +1141,11 @@ class MissionControlWindow(QMainWindow):
         self.renderer.clear_maneuver_vector()
 
         self.scene_title_label.setText(scene["title"])
-        self.scene_subtitle_label.setText(scene.get("subtitle", "").replace("\n", "  "))
+        self.scene_subtitle_label.setText(display_subtitle(scene))
+        result = scene_verification_result(scene)
+        self.verification_badge.setVisible(result is not None)
+        if result is not None:
+            self.verification_badge.set_state(*RESULT_BADGE[result])
 
         # Resets time + selection and lets the timeline bar and the inspector
         # rebuild themselves for the new scene.
@@ -1208,6 +1242,11 @@ class MissionControlWindow(QMainWindow):
         self._refresh_view()
         name = self.state.body(body_id)["name"] if body_id else "the scene's own frame"
         self.statusBar().showMessage(f"View centered on {name}")
+
+    def _show_verification_tab(self):
+        if self.right_stack.currentIndex() != 0:
+            self._toggle_info_panel()  # expand the collapsed right column first
+        self.right_tabs.setCurrentWidget(self.verification_panel)
 
     def _apply_candidate_highlight(self, render: bool = True):
         self.renderer.highlight_candidate(

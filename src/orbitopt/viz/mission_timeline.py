@@ -176,13 +176,15 @@ def compute_and_export_mission(
     correctness comes from the step size used during integration, not from
     how many of those already-correct points get kept for the animation.
     """
-    scene, _targeting = _build_artemis2_mission(
+    scene, targeting = _build_artemis2_mission(
         departure_mjd2000=departure_mjd2000, coast_days_guess=coast_days_guess,
         total_days=total_days, step_seconds=step_seconds,
         parking_altitude_km=parking_altitude_km, max_output_points=max_output_points,
         entry_fpa_target_deg=entry_fpa_target_deg, transfer_theta_deg=transfer_theta_deg,
         perilune_altitude_km=perilune_altitude_km,
     )
+    if targeting.report is not None:
+        verification_report.publish_to_scene(scene, [targeting.report])
     return scene
 
 
