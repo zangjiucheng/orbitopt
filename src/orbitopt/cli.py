@@ -133,6 +133,13 @@ def _cmd_run(args):
             bad = "DID NOT CONVERGE" in line or (
                 line.startswith("Verification report") and ": PASSED (" not in line)
             print(("WARNING: " if bad else "") + line)
+    # Verification Gate (task #171): a failed / not_checked / best-effort
+    # export is never reported as a success -- make that impossible to miss.
+    if result.warnings:
+        bar = "!" * 78
+        print(bar, *(f"WARNING: {w}" for w in result.warnings), bar, sep="\n")
+    print("verification gate: " + ("SUCCESS -- exported candidate passed verification" if result.success
+                                   else f"NOT SUCCESSFUL (verification: {result.gate.result})"))
 
 
 def _cmd_launch_window(args):

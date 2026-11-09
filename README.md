@@ -221,9 +221,11 @@ Root causes are written up in
   orbit, good for spans of up to ~10 days from its SPICE seed.
 - Missions end at orbit insertion, with no EDL. The TCM/MOI targeters are
   not guaranteed to converge for every geometry. When the TCM doesn't
-  close, the Mars pipeline moves on to the next candidate. It never exports
-  a trajectory that hits Mars, and any failed check shows up in the
-  verification report.
+  close, or a flown candidate's verification is failed / not checked, the
+  Mars pipeline moves on to the next candidate. It never exports a trajectory
+  that hits Mars, and an export where no candidate passed verification is
+  flagged best-effort (`success: false` plus a warning in the pipeline result,
+  scene and CLI output).
 
 ## License
 

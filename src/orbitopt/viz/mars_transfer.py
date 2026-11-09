@@ -45,11 +45,16 @@ from orbitopt.bodies import (
     mjd2000_to_ephemeris_seconds,
     planet,
 )
+from orbitopt.candidate_selection import (
+    mark_scene_best_effort,
+    select_candidates,
+    walk_candidates,
+)
 from orbitopt.injection import equatorial_to_ecliptic
 from orbitopt.lambert.gpu_batch import solve_lambert_batch
 from orbitopt.launch_injection import LaunchSpec, launch_to_injection
 from orbitopt.optimize.multistart import SINGLE_BASIN_HALF_WIDTH, find_diverse_basins, multistart_optimize
-from orbitopt.pipeline import CONSTRAINTS, OPTIMIZE, REFINE, SEARCH, VERIFY, StageRecorder
+from orbitopt.pipeline import CONSTRAINTS, OPTIMIZE, REFINE, SEARCH, SELECT, VERIFY, StageRecorder
 from orbitopt.problems.transfer_2body import Transfer2BodyProblem
 from orbitopt.timescales import mjd2000_to_utc_datetime
 from orbitopt.verify import report as verification_report
@@ -93,6 +98,9 @@ TOF_RANGE_DAYS = (130.0, 320.0)
 MULTISTART_MAX_BASINS = 4
 MULTISTART_BASIN_SEPARATION = (20.0, 40.0)
 MAX_TUDAT_CANDIDATES = 3
+# Candidate Selection (orbitopt.candidate_selection): two optima closer than
+# this (departure days, TOF days) are the same trajectory.
+SELECTION_DUPLICATE_TOLERANCE = (1.0, 2.0)
 
 logger = logging.getLogger(__name__)
 
@@ -279,6 +287,8 @@ def _build_mars_mission(
             t0_range, tof_range, pop_size, generations, seed,
             launch_constraints=launch_constraints, recorder=recorder,
         )
+    shortlist = _select_candidates(candidates, report, max(1, max_tudat_candidates), recorder,
+                                   pinned=launch is not None and launch.pinned)
     fly_kwargs = dict(
         parking_altitude_km=parking_altitude_km if launch is None else launch.parking_altitude_km,
         mars_tcm_target_periapsis_km=mars_tcm_target_periapsis_km,
@@ -289,6 +299,7 @@ def _build_mars_mission(
     refine = recorder[REFINE]
     refine.physical_model = {"name": "tudatpy N-body (Earth/Sun escape, Sun-centered cruise with TCM, "
                                      "Mars capture), fixed-step RK4", "fidelity": "high-fidelity"}
+    gate = recorder.gate
 
     def violations(v_inf_dep):
         if launch_constraints is None:
@@ -296,22 +307,28 @@ def _build_mars_mission(
         ev = launch_constraints.evaluate(np.asarray(v_inf_dep)[None, :])
         return {"launch_c3_km2_s2": float(ev.c3_excess[0]), "launch_dla_deg": float(ev.dla_excess_deg[0])}
 
-    def refine_attempt(i, t0, tof, v_inf_dep, **kw):
+    def refine_attempt(i, cand, strict, rejected):
+        t0, tof, v_inf_dep = cand
         entry = {"index": i, "t0_mjd2000": float(t0), "tof_days": float(tof), "selected": False}
         refine.candidates.append(entry)
         verify_s = recorder[VERIFY].elapsed_s
+        n_verified = len(recorder[VERIFY].candidates)
+        note = _search_note(report, i, rejected)
+        if not strict:
+            refine.notes.append("no candidate fully converged; flying the Lambert-best one best-effort")
+            note += " No candidate fully converged; flying the Lambert-best one."
         try:
             with recorder.stage(REFINE):
-                scene = _fly_transfer(t0, tof, v_inf_dep, **injection_for(t0, v_inf_dep), **kw, **fly_kwargs)
+                return _fly_transfer(t0, tof, v_inf_dep, **injection_for(t0, v_inf_dep),
+                                     require_tcm_converged=strict, search_note=note, **fly_kwargs)
         except RuntimeError as exc:
-            entry["rejected"] = str(exc)
-            raise
+            entry["rejected"] = f"refine: {exc}"
+            raise _CandidateRejected(entry["rejected"]) from exc
         finally:
             # The MOI verification runs inside _fly_transfer; keep stage times disjoint.
             refine.elapsed_s -= recorder[VERIFY].elapsed_s - verify_s
-        entry["selected"] = True
-        refine.constraint_violations = violations(v_inf_dep)
-        return scene
+            for v in recorder[VERIFY].candidates[n_verified:]:
+                v["index"] = i
 
     def injection_for(t0, v_inf_dep):
         if launch is None:
@@ -321,26 +338,81 @@ def _build_mars_mission(
         except ValueError as exc:  # no launch window from the site for this asymptote
             raise _CandidateRejected(str(exc)) from exc
 
-    # Hand the ranked candidates to tudatpy one by one: the first whose real,
-    # perturbed flight closes (escape reaches the SOI, TCM converges) wins.
-    # Only if none does is the Lambert-best one flown on a best-effort basis
-    # -- same behaviour the single-candidate pipeline always had.
-    rejected = []
-    for i, (t0, tof, v_inf_dep) in enumerate(candidates[:max(1, max_tudat_candidates)]):
-        try:
-            return refine_attempt(
-                i, t0, tof, v_inf_dep, require_tcm_converged=True,
-                search_note=_search_note(report, i, rejected),
-            )
-        except RuntimeError as exc:
-            logger.warning("Mars candidate #%d (t0=%.2f, tof=%.2f) rejected by tudatpy verification: %s", i, t0, tof, exc)
-            rejected.append(i)
-    t0, tof, v_inf_dep = candidates[0]
-    refine.notes.append("no candidate fully converged; flying the Lambert-best one best-effort")
-    return refine_attempt(
-        0, t0, tof, v_inf_dep, require_tcm_converged=False,
-        search_note=_search_note(report, 0, rejected) + " No candidate fully converged; flying the Lambert-best one.",
+    # Verification Gate: hand the selected candidates to tudatpy one by one.
+    # A candidate whose real, perturbed flight doesn't close (escape reaches
+    # the SOI, TCM converges, periapsis above the floor) is rejected; one that
+    # flies but whose verification reports are failed / not_checked is
+    # degraded and never counts as a success -- the next one is tried for a
+    # candidate that passes. Only if none passes is the best-ranked degraded
+    # one (or, every flight rejected, the Lambert-best one re-flown without
+    # requiring TCM convergence) exported best-effort, with a loud warning.
+    outcome = walk_candidates(
+        [(i, (t0, tof, v)) for i, t0, tof, v in shortlist],
+        refine_attempt,
+        gate=gate,
+        reports_of=lambda scene: scene.get(verification_report.SCENE_REPORTS_KEY, []),
     )
+    # Trace every attempt's verdict on the refine / verify stage records.
+    verdicts = {c["index"]: c for c in gate.candidates}
+    attempts = refine.candidates
+    for e in attempts + recorder[VERIFY].candidates:
+        g = verdicts.get(e.get("index"))
+        if g is not None:
+            e["verdict"], e["verification"] = g["verdict"], g["verification"]
+        e["selected"] = False
+    for e in reversed(attempts):  # the exported flight is the last attempt of that index
+        if e["index"] == outcome.index and "rejected" not in e:
+            e["selected"] = True
+            break
+    for e in reversed(recorder[VERIFY].candidates):
+        if e.get("index") == outcome.index:
+            e["selected"] = True
+            break
+    if outcome.best_effort:
+        refine.notes.append(f"no candidate passed verification; candidate #{outcome.index} exported best-effort")
+    refine.constraint_violations = violations(outcome.payload[2])
+    return mark_scene_best_effort(outcome.result, gate)
+
+
+def _select_candidates(candidates, report, max_candidates, recorder, pinned=False):
+    """Candidate Selection stage: dedupe, rank and diversity-filter the
+    optimizer's ``(t0, tof, v_inf_dep)`` candidates into the short list
+    tudatpy flies. Returns ``[(search_index, t0, tof, v_inf_dep), ...]``,
+    best first; every candidate's fate is recorded on the select stage and
+    the selected ones are registered with the Verification Gate."""
+    gate = recorder.gate
+    if pinned or report is None:
+        recorder.skip(SELECT, "transfer pinned by the config's launch.departure")
+        t0, tof, v = candidates[0]
+        gate.register(0, t0_mjd2000=float(t0), tof_days=float(tof), source="pinned launch.departure")
+        return [(0, t0, tof, v)]
+    items = [(i, t0, tof, v, float(report.candidates[i].value)) for i, (t0, tof, v) in enumerate(candidates)]
+    with recorder.stage(SELECT) as st:
+        sel = select_candidates(
+            items,
+            cost=lambda it: it[4],
+            coords=lambda it: (it[1], it[2]),
+            tolerance=SELECTION_DUPLICATE_TOLERANCE,
+            min_separation=MULTISTART_BASIN_SEPARATION,
+            max_candidates=max_candidates,
+            describe=lambda it: {"t0_mjd2000": float(it[1]), "tof_days": float(it[2]),
+                                 "lambert_total_dv_m_s": it[4]},
+        )
+        st.physical_model = {"name": "candidate selection: dedupe (tolerance d), rank by Lambert total dv, "
+                                     "diversity retention (min separation d)", "fidelity": "patched-conic",
+                             "duplicate_tolerance_days": list(SELECTION_DUPLICATE_TOLERANCE),
+                             "min_separation_days": list(MULTISTART_BASIN_SEPARATION),
+                             "max_candidates": int(max_candidates)}
+        st.candidates = sel.to_candidates()
+        st.convergence = {"converged": bool(sel.selected), **sel.counts()}
+        for rec in st.candidates:
+            if not rec["selected"]:
+                st.notes.append(f"candidate #{rec['index']} {rec['status']}: {rec['reason']}")
+        if not sel.selected:
+            raise RuntimeError("candidate selection kept no feasible candidate")
+    for rank, (i, t0, tof, _v, dv) in enumerate(sel.selected):
+        gate.register(i, t0_mjd2000=float(t0), tof_days=float(tof), lambert_total_dv_m_s=dv, selection_rank=rank)
+    return [(i, t0, tof, v) for i, t0, tof, v, _dv in sel.selected]
 
 
 def _fly_transfer(
@@ -532,8 +604,8 @@ def _fly_transfer(
         st.physical_model = {"name": "tudatpy Mars point mass + Sun, MOI capture-burn targeting; "
                                      "verification reports for launch injection / TCM / MOI",
                              "fidelity": "high-fidelity"}
-        st.candidates = [{"captured_orbit": moi.achieved, "moi_delta_v_m_s": float(np.linalg.norm(moi.delta_v_ms)),
-                          "selected": True}]
+        st.candidates.append({"captured_orbit": moi.achieved,
+                              "moi_delta_v_m_s": float(np.linalg.norm(moi.delta_v_ms)), "selected": False})
     events.append({
         "label": "Mars-SOI entry / approach", "time": soi_entry_time_days,
         "note": f"crosses Mars's real sphere-of-influence radius ({MARS_SOI_RADIUS_KM:,.0f} km), "
