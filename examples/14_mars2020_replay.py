@@ -13,8 +13,13 @@ database has no Atlas V 541; Atlas V 551 stands in for it.
   5. LEO parking orbit -> TMI burn, propagated with J2, Newton-corrected,
      verification report written
 
-The full tudatpy cruise (TCM + Mars orbit insertion) is the config-driven
-`orbitopt run examples/mars2020_replay.yaml`.
+Steps 4-5 (and the site / vehicle / payload / parking orbit / real
+departure used by step 3) come from the ``launch`` section of
+examples/mars2020_replay.yaml and run through the same
+orbitopt.launch_injection.launch_to_injection the config-driven pipeline
+uses, so `orbitopt run examples/mars2020_replay.yaml` reproduces this
+launch-to-injection step and then flies the full tudatpy cruise (TCM + Mars
+orbit insertion) from it.
 
 Run: python examples/14_mars2020_replay.py [--out out/mars2020]
 Needs the compute env (pykep, pygmo, scipy, matplotlib).
@@ -30,19 +35,20 @@ import numpy as np
 import pykep as pk
 
 from orbitopt.bodies import mjd2000_from_date, planet
-from orbitopt.injection import InjectionTarget, plan_departure, verify_injection
 from orbitopt.lambert.gpu_batch import solve_lambert_batch
 from orbitopt.launch_constraints import LaunchConstraints
+from orbitopt.launch_injection import LaunchSpec, launch_to_injection
 from orbitopt.launch_vehicles import OutOfPerformanceRange, get_launch_vehicle
-from orbitopt.launch_windows import (asymptote_from_v_inf, asymptote_launch_windows,
-                                     format_windows, mjd2000_to_datetime)
+from orbitopt.launch_windows import asymptote_from_v_inf, format_windows, mjd2000_to_datetime
+from orbitopt.mission_config import load_mission_config
 from orbitopt.optimize.multistart import find_diverse_basins, multistart_optimize
 from orbitopt.problems.transfer_2body import Transfer2BodyProblem
 from orbitopt.viz.porkchop import compute_porkchop
 
-SITE, VEHICLE, PAYLOAD_KG = "ksc", "atlas-v-551", 4037.0
+CONFIG = Path(__file__).with_name("mars2020_replay.yaml")
+LAUNCH = LaunchSpec.from_config(load_mission_config(CONFIG)["launch"])
+SITE, VEHICLE, PAYLOAD_KG = LAUNCH.site, LAUNCH.vehicle, LAUNCH.payload_kg
 REAL_LIFTOFF = datetime(2020, 7, 30, 11, 50, tzinfo=timezone.utc)
-REAL_TOF_DAYS = 203.4
 T0_RANGE = (mjd2000_from_date(2020, 6, 15), mjd2000_from_date(2020, 9, 15))
 TOF_RANGE = (150.0, 350.0)
 FLEET = ("falcon-9", "atlas-v-551", "long-march-5", "vulcan-vc6", "falcon-heavy")
@@ -50,12 +56,17 @@ FLEET = ("falcon-9", "atlas-v-551", "long-march-5", "vulcan-vc6", "falcon-heavy"
 earth, mars = planet("earth"), planet("mars")
 
 
-def transfer(t0, tof, lc=None):
-    """Lambert transfer summary for departure t0 [MJD2000] and tof [days]."""
+def v_inf_dep(t0, tof):
+    """Departure excess velocity [m/s, ecliptic] of the Lambert transfer."""
     r1, v1p = (np.asarray(a) for a in earth.eph(pk.epoch(t0)))
     r2, v2p = (np.asarray(a) for a in mars.eph(pk.epoch(t0 + tof)))
     res = solve_lambert_batch(r1[None], r2[None], np.array([tof * pk.DAY2SEC]), pk.MU_SUN, use_gpu=False)
-    v_inf = res.v1[0] - v1p
+    return res.v1[0] - v1p
+
+
+def transfer(t0, tof, lc=None):
+    """Lambert transfer summary for departure t0 [MJD2000] and tof [days]."""
+    v_inf = v_inf_dep(t0, tof)
     rla, dla, _ = asymptote_from_v_inf(v_inf / 1000.0, frame="ecliptic")
     out = {"departure": f"{mjd2000_to_datetime(t0):%Y-%m-%d}", "tof_days": round(tof, 1),
            "c3_km2_s2": round(float(v_inf @ v_inf) / 1e6, 3), "rla_deg": round(rla, 2), "dla_deg": round(dla, 2)}
@@ -107,7 +118,7 @@ def main():
     print(report.summary(unit="m/s"))
 
     print(f"3. launch constraints ({VEHICLE}, {PAYLOAD_KG:.0f} kg, {SITE})")
-    lc = LaunchConstraints.from_names(VEHICLE, PAYLOAD_KG, SITE)
+    lc = LAUNCH.constraints()
     constrained = search(basins, lc).best
     summary["constrained_optimum"] = transfer(constrained.x, constrained.y, lc)
     need_c3 = summary["optimum"]["c3_km2_s2"]
@@ -121,29 +132,19 @@ def main():
         print("  ", row)
     summary["fleet"] = fleet
 
-    print("4. launch windows on the real departure day")
-    real = transfer(mjd2000_from_date(2020, 7, 30), REAL_TOF_DAYS, lc)
-    windows = asymptote_launch_windows(SITE, real["rla_deg"], real["dla_deg"],
-                                       mjd2000_from_date(2020, 7, 30), 1.0, None, 30.0)
-    print(format_windows(windows))
-    nearest = min(windows, key=lambda w: abs((w.optimal_utc - REAL_LIFTOFF).total_seconds()))
+    print("4. launch windows on the real departure day (launch section of", CONFIG.name + ")")
+    t0_real, tof_real = LAUNCH.departure_mjd2000, LAUNCH.tof_days
+    real = transfer(t0_real, tof_real, lc)
+    inj = launch_to_injection(LAUNCH, v_inf_dep(t0_real, tof_real), t0_real,
+                              report_path=str(out / "injection.verification.json"))
+    print(format_windows(inj.windows))
+    nearest = inj.window
     summary["launch_window"] = {"asymptote": real, "predicted_optimum_utc": f"{nearest.optimal_utc:%H:%M:%S}",
                                 "minus_real_min": round((nearest.optimal_utc - REAL_LIFTOFF).total_seconds() / 60, 1)}
     print("   predicted optimum vs real lift-off:", summary["launch_window"])
 
     print("5. parking orbit -> TMI, verified")
-    target = InjectionTarget.from_c3_rla_dla(real["c3_km2_s2"], real["rla_deg"], real["dla_deg"], name="TMI")
-    plan = plan_departure(SITE, target, liftoff=nearest.optimal_mjd2000, altitude_km=185.0, min_coast_s=600.0)
-    v = verify_injection(plan, launch_constraints=LaunchConstraints.from_names(VEHICLE, PAYLOAD_KG, SITE, frame="equatorial"),
-                         report_path=str(out / "injection.verification.json"))
-    summary["injection"] = {
-        "parking_inclination_deg": round(plan.orbit.inclination_deg, 2),
-        "coast_min": round(plan.burn.coast_s / 60, 1), "tmi_dv_m_s": round(plan.burn.delta_v_mag_m_s, 1),
-        "residual_before": round(v.planned_error, 2), "residual_after": round(v.final_error, 3),
-        "residual_units": v.error_units, "checks_passed": f"{sum(v.report['status']['checks'].values())}"
-                                                           f"/{len(v.report['status']['checks'])}",
-        "passed": v.passed,
-    }
+    summary["injection"] = inj.summary()
     print("  ", summary["injection"])
 
     (out / "summary.json").write_text(json.dumps(summary, indent=2))

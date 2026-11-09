@@ -9,6 +9,23 @@ launch_window:
   end_date: [2020, 8, 15]
 parking_orbit:
   altitude_km: 185.0
+# Real launch: SLC-41 (KSC/Cape), Atlas V (551 stands in for the flown 541),
+# Perseverance's 4037 kg, flown on the real 2020-07-30 departure / ~203 d TOF.
+# The same section drives steps 3-5 of examples/14_mars2020_replay.py.
+# Drop `departure` to let the launch-constrained search pick the transfer.
+launch:
+  site: ksc
+  vehicle: atlas-v-551
+  payload_kg: 4037.0
+  parking_orbit:
+    altitude_km: 185.0
+    min_coast_s: 600.0
+  window:
+    days: 1.0
+    preferred_liftoff_utc: "2020-07-30T11:50:00Z"
+  departure:
+    utc: "2020-07-30"
+    tof_days: 203.4
 tof_search:
   min_days: 150.0
   max_days: 300.0
