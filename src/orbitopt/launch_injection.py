@@ -154,6 +154,7 @@ def launch_to_injection(
     *,
     window_step_s: float = DEFAULT_WINDOW_STEP_S,
     report_path=None,
+    propagator=None,
 ) -> LaunchInjection:
     """Launch windows, site -> parking orbit -> TMI plan and its numerical
     verification for a departure excess velocity (heliocentric J2000
@@ -177,6 +178,6 @@ def launch_to_injection(
                           ascent_downrange_deg=spec.ascent_downrange_deg, min_coast_s=spec.min_coast_s)
     plan.window = window
     verification = verify_injection(plan, launch_constraints=spec.constraints(frame="equatorial"),
-                                    report_path=report_path)
+                                    propagator=propagator, report_path=report_path)
     return LaunchInjection(spec=spec, c3_km2_s2=float(c3), rla_deg=float(rla), dla_deg=float(dla),
                            windows=windows, window=window, plan=plan, verification=verification)

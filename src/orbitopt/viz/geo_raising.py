@@ -545,7 +545,7 @@ def _build_geo_mission(
     final_r, final_v = states_km[-1, :3], states_km[-1, 3:]
     final_h = np.cross(final_r, final_v)
     refine = recorder.add_time(REFINE, time.perf_counter() - refine_t0)
-    refine.physical_model = {"name": "tudatpy Earth point mass, fixed-step RK4", "fidelity": "two-body",
+    refine.physical_model = {"name": "tudatpy Earth point mass, adaptive RKDP 8(7) (dop853) integrator", "fidelity": "two-body",
                              "step_size_s": float(step_size_s)}
     refine.candidates = [{"n_burns": int(n_burns), "duration_days": float(days[-1]),
                           "burns": len(burn_events), "selected": True}]

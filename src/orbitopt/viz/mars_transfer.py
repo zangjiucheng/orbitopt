@@ -50,7 +50,14 @@ from orbitopt.candidate_selection import (
     select_candidates,
     walk_candidates,
 )
-from orbitopt.injection import equatorial_to_ecliptic
+from orbitopt.injection import (
+    DEFAULT_ATOL,
+    DEFAULT_RTOL,
+    EARTH_GRAVITY,
+    TudatEarthPropagator,
+    ecliptic_to_equatorial,
+    equatorial_to_ecliptic,
+)
 from orbitopt.lambert.gpu_batch import solve_lambert_batch
 from orbitopt.launch_injection import LaunchSpec, launch_to_injection
 from orbitopt.optimize.multistart import SINGLE_BASIN_HALF_WIDTH, find_diverse_basins, multistart_optimize
@@ -204,6 +211,17 @@ def _search_note(report, flown_index, rejected):
     return "; ".join(parts) + "."
 
 
+# Third bodies of the launch-to-escape flight. The launch-injection
+# verification (which Newton-corrects the TMI burn) and the flown phase 1 must
+# integrate the *same* dynamics (Earth J2 + Sun, one Earth GM), or the corrected
+# burn is applied to a different pre-burn state than the one it was solved for.
+LAUNCH_PERTURBING_BODIES = ("Earth", "Sun")
+# Max disagreement between the verified injection chain and the flown one at
+# the TMI burn (identical models should agree to well below this).
+LAUNCH_FLIGHT_POSITION_TOL_M = 1000.0
+LAUNCH_FLIGHT_VELOCITY_TOL_M_S = 1.0
+
+
 class _CandidateRejected(RuntimeError):
     """A Lambert candidate whose high-fidelity (tudatpy) flight did not hold up."""
 
@@ -298,7 +316,7 @@ def _build_mars_mission(
     )
     refine = recorder[REFINE]
     refine.physical_model = {"name": "tudatpy N-body (Earth/Sun escape, Sun-centered cruise with TCM, "
-                                     "Mars capture), fixed-step RK4", "fidelity": "high-fidelity"}
+                                     "Mars capture), adaptive RKDP 8(7) (dop853) integrator", "fidelity": "high-fidelity"}
     gate = recorder.gate
 
     def violations(v_inf_dep):
@@ -311,6 +329,8 @@ def _build_mars_mission(
         t0, tof, v_inf_dep = cand
         entry = {"index": i, "t0_mjd2000": float(t0), "tof_days": float(tof), "selected": False}
         refine.candidates.append(entry)
+        refine.numerical_error = {}  # per attempt: never carry a previous candidate's metrics
+        refine.convergence = {"converged": None}
         verify_s = recorder[VERIFY].elapsed_s
         n_verified = len(recorder[VERIFY].candidates)
         note = _search_note(report, i, rejected)
@@ -325,6 +345,8 @@ def _build_mars_mission(
             entry["rejected"] = f"refine: {exc}"
             raise _CandidateRejected(entry["rejected"]) from exc
         finally:
+            entry["numerical_error"] = dict(refine.numerical_error)
+            entry["convergence"] = dict(refine.convergence)
             # The MOI verification runs inside _fly_transfer; keep stage times disjoint.
             refine.elapsed_s -= recorder[VERIFY].elapsed_s - verify_s
             for v in recorder[VERIFY].candidates[n_verified:]:
@@ -334,7 +356,8 @@ def _build_mars_mission(
         if launch is None:
             return {}
         try:
-            return {"injection": launch_to_injection(launch, v_inf_dep, t0)}
+            prop = TudatEarthPropagator(perturbing_bodies=LAUNCH_PERTURBING_BODIES)
+            return {"injection": launch_to_injection(launch, v_inf_dep, t0, propagator=prop)}
         except ValueError as exc:  # no launch window from the site for this asymptote
             raise _CandidateRejected(str(exc)) from exc
 
@@ -368,6 +391,11 @@ def _build_mars_mission(
         if e.get("index") == outcome.index:
             e["selected"] = True
             break
+    # Stage-level metrics describe the exported candidate, not the last one tried.
+    for e in refine.candidates:
+        if e["selected"]:
+            refine.numerical_error = dict(e.get("numerical_error", {}))
+            refine.convergence = dict(e.get("convergence", {"converged": None}))
     if outcome.best_effort:
         refine.notes.append(f"no candidate passed verification; candidate #{outcome.index} exported best-effort")
     refine.constraint_violations = violations(outcome.payload[2])
@@ -480,6 +508,10 @@ def _fly_transfer(
         ]
 
     # --- Phase 1: Earth-centered -- parking orbit -> TMI burn -> escape ---
+    phase1_model = {}
+    if injection is not None:  # same dynamics the TMI burn was verified / corrected under
+        phase1_model = dict(earth_spherical_harmonic=(2, 0), central_gravity=EARTH_GRAVITY,
+                            rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL)
     escape = propagate_multi_arc(
         phase1_r0, phase1_v0, phase1_start_et,
         arcs=[
@@ -487,8 +519,25 @@ def _fly_transfer(
             {"type": "impulsive_burn", "delta_v": tmi_dv},
             {"type": "coast", "duration": 12.0 * 86400.0},
         ],
-        central_body="Earth", perturbing_bodies=("Earth", "Sun"), step_size=60.0,
+        central_body="Earth",
+        perturbing_bodies=LAUNCH_PERTURBING_BODIES if injection is not None else ("Earth", "Sun"),
+        step_size=60.0, **phase1_model,
     )
+    if injection is not None:
+        # The flown pre-TMI state must be the verified one (and the burn the
+        # corrected one for it) -- otherwise the pipeline would report a
+        # passed injection for a trajectory that was never actually verified.
+        flown_pre = ecliptic_to_equatorial(escape.states[escape.segments[0][1] - 1])
+        dr = float(np.linalg.norm(flown_pre[:3] - ver.pre_burn_state[:3]))
+        dv_err = float(np.linalg.norm(flown_pre[3:] - ver.pre_burn_state[3:]))
+        recorder = StageRecorder() if recorder is None else recorder
+        recorder[REFINE].numerical_error["launch_flight_vs_verified_tmi_position_m"] = dr
+        recorder[REFINE].numerical_error["launch_flight_vs_verified_tmi_velocity_m_s"] = dv_err
+        if dr > LAUNCH_FLIGHT_POSITION_TOL_M or dv_err > LAUNCH_FLIGHT_VELOCITY_TOL_M_S:
+            raise _CandidateRejected(
+                f"flown pre-TMI state differs from the verified launch-injection state by {dr / 1000.0:.1f} km / "
+                f"{dv_err:.1f} m/s (limits {LAUNCH_FLIGHT_POSITION_TOL_M / 1000.0:g} km / "
+                f"{LAUNCH_FLIGHT_VELOCITY_TOL_M_S:g} m/s) -- flight and verification models disagree")
     escape_epochs_rel = escape.epochs + phase1_start_rel_s  # seconds, relative to reference_et
     radii_km = np.linalg.norm(escape.states[:, :3], axis=1) / 1000.0
     soi_idx = int(np.argmax(radii_km >= EARTH_SOI_RADIUS_KM))
@@ -546,10 +595,10 @@ def _fly_transfer(
     recorder = StageRecorder() if recorder is None else recorder
     refine = recorder[REFINE]
     refine.convergence = {"converged": bool(tcm.converged), "tcm_iterations": int(tcm.iterations)}
-    refine.numerical_error = {
+    refine.numerical_error.update({
         "tcm_final_miss_km": float(tcm.final_miss_km),
         "tcm_periapsis_error_km": float(abs(tcm.predicted_periapsis_km - mars_tcm_target_periapsis_km)),
-    }
+    })
     if require_tcm_converged and not tcm.converged:
         raise _CandidateRejected(f"TCM did not converge (final miss {tcm.final_miss_km:,.0f} km)")
     events.append({
