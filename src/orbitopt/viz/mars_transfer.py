@@ -375,6 +375,13 @@ def _build_mars_mission(
         gate=gate,
         reports_of=lambda scene: scene.get(verification_report.SCENE_REPORTS_KEY, []),
     )
+    # A rejected attempt marks its stage failed; once a candidate was exported
+    # the stages did complete -- rejections stay recorded per candidate (gate
+    # reasons, refine entries), not as a stale stage failure.
+    for name in (REFINE, VERIFY):
+        stage_result = recorder[name]
+        if stage_result.status == "failed":
+            stage_result.status, stage_result.error = "completed", None
     # Trace every attempt's verdict on the refine / verify stage records.
     verdicts = {c["index"]: c for c in gate.candidates}
     attempts = refine.candidates
