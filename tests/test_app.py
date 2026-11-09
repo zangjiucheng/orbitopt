@@ -52,35 +52,78 @@ def test_mission_control_loads_and_switches_missions():
     window.show()
     _pump_until(app, lambda: not window._loading)
 
-    assert window.mission_list.count() == 4  # Solar System, Artemis II, GOES GTO->GEO, Mars
-    assert window._current_scene is not None
-    assert window._current_scene["id"] == "solar-system"
+    sidebar = window.sidebar
+    state = window.state
+    assert sidebar.count() == 4  # Solar System, Artemis II, GOES GTO->GEO, Mars
+    assert state.scene is not None
+    assert state.scene["id"] == "solar-system"
     assert not window.timeline_bar.isVisible()
 
-    window.mission_list.setCurrentRow(1)
-    # The switch must not block: setCurrentRow() returns immediately and the
+    sidebar.select_row(1)
+    # The switch must not block: select_row() returns immediately and the
     # mission list is disabled (not destroyed/frozen) while the background
     # thread computes the new scene -- this is exactly the "UI gets stuck
     # when switching missions" behavior that was reported and fixed.
     assert window._loading
-    assert not window.mission_list.isEnabled()
+    assert not sidebar.mission_list.isEnabled()
 
     _pump_until(app, lambda: not window._loading)
 
-    assert window._current_scene["id"] == "artemis2-mission"
+    assert state.scene["id"] == "artemis2-mission"
     assert window.timeline_bar.isVisible()
-    assert window.mission_list.isEnabled()
+    assert sidebar.mission_list.isEnabled()
 
-    timeline = window._current_scene["timeline"]
+    # Scrubbing the slider moves the shared time, and the inspector follows.
+    timeline = state.timeline
     perilune_day = next(e["time"] for e in timeline["events"] if "approach" in e["label"].lower())
     frac = (perilune_day - timeline["min"]) / (timeline["max"] - timeline["min"])
-    window.time_slider.setValue(int(frac * window.time_slider.maximum()))
+    slider = window.timeline_bar.time_slider
+    slider.setValue(int(frac * slider.maximum()))
     for _ in range(5):
         app.processEvents()
 
-    assert abs(window._current_time - perilune_day) < 0.05
-    orion_distance_text = window._body_cards["spacecraft"]["dist_val"].text()
-    assert "km" in orion_distance_text
+    assert abs(state.time - perilune_day) < 0.05
+    assert "km" in window.inspector.distance_text("spacecraft")
+    assert window.timeline_bar.met_label.text().startswith(f"T+{state.time:.2f}")
+
+    # Moving time through the state (not the slider) moves the slider too.
+    state.set_time(timeline["min"])
+    app.processEvents()
+    assert slider.value() == 0
+
+    # Clicking a maneuver row seeks to it. Artemis II's events carry no burn
+    # vectors, so this is the seek-only path (no auto-frame/selection).
+    event = timeline["events"][-1]
+    assert "vector" not in event
+    window.inspector.event_clicked.emit(event)
+    app.processEvents()
+    assert abs(state.time - event["time"]) < 1e-9
+    assert window.timeline_bar.event_label.text() == f"▸ {event['label']}"
+
+    window.inspector.body_clicked.emit("spacecraft", False)
+    app.processEvents()
+    assert state.selected_body_id == "spacecraft"
+
+    # Measuring: ⌘/Ctrl-click a second body shows the measure card.
+    other = next(b["id"] for b in state.scene["bodies"] if b["id"] != "spacecraft")
+    window.inspector.body_clicked.emit(other, True)
+    app.processEvents()
+    assert state.measure_body_id == other
+    assert not window.inspector.measure_card.isHidden()
+
+    # Playback ticks advance time through the same state.
+    state.set_time(timeline["min"])
+    before = state.time
+    window._set_playing(True)
+    _pump_until(app, lambda: state.time > before, timeout=5.0)
+    window._set_playing(False)
+
+    # Switching back to a cached scene resets selection and hides the bar.
+    sidebar.select_row(0)
+    _pump_until(app, lambda: not window._loading)
+    assert state.scene["id"] == "solar-system"
+    assert state.selected_body_id is None and state.measure_body_id is None
+    assert window.inspector.measure_card.isHidden()
 
     window.plotter.close()  # release the VTK/OpenGL context before Qt tears down the widget
     window.close()

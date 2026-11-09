@@ -1,5 +1,5 @@
 """Initializer for Mission Control's compute worker process (see
-orbitopt.viz.app.ComputePool). Kept in its own stdlib-only module so the
+orbitopt.viz.compute.ComputePool). Kept in its own stdlib-only module so the
 spawned worker can import it without pulling in Qt or VTK."""
 from __future__ import annotations
 

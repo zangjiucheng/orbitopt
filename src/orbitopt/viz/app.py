@@ -10,19 +10,31 @@ map view was the reference point for what that chrome should *do*
 (a vessel/mission list you switch between, a time-warp control strip, a
 per-body info readout), not a literal skin to imitate.
 
+Layout of the package:
+
+* state.py        -- MissionState: the loaded scene, current time and body
+                     selection, shared by every panel through Qt signals.
+* sidebar.py      -- the mission list (left).
+* inspector.py    -- measure readout, maneuver list and body cards (right).
+* timeline_bar.py -- play / time-warp / event scrubber (bottom).
+* viewport.py     -- the embedded VTK view; compute.py -- background loads.
+
+This module only assembles those pieces and owns what is specific to the
+3D view: camera presets, tracking/face-lock/focus, viewport picking, the
+maneuver arrow, and the playback timer.
+
 Run: orbitopt  (or orbitopt-app / python -m orbitopt); main() is the entry point.
 """
 from __future__ import annotations
 
-import math
 import os
 import sys
 import time
 
 os.environ.setdefault("QT_API", "pyside6")
 
-from PySide6.QtCore import QObject, QRectF, QSize, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QKeySequence, QPainter, QPainterPath, QPen
+from PySide6.QtCore import QSize, Qt, QThread, QTimer
+from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -32,42 +44,29 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QScrollArea,
-    QSizePolicy,
-    QSlider,
     QSplitter,
     QStackedWidget,
-    QStyle,
-    QStyleOptionSlider,
     QVBoxLayout,
     QWidget,
 )
-from pyvistaqt import QtInteractor
-from vtkmodules.vtkRenderingCore import vtkRenderWindow
 
 from orbitopt.missions import list_missions
 from orbitopt.viz import icons
+from orbitopt.viz.compute import BackendProbeWorker, ComputePool, SceneLoader
 from orbitopt.viz.icon import app_icon
+from orbitopt.viz.inspector import InspectorPanel
 from orbitopt.viz.pv_viewer import load_scene
 from orbitopt.viz.scene_renderer import SceneRenderer
-from orbitopt.viz.theme import ACCENT, BG_VOID, DANGER, INK_MUTED, INK_SECONDARY, STYLESHEET, SUCCESS
+from orbitopt.viz.sidebar import MissionSidebar
+from orbitopt.viz.state import MissionState, adjacent_event, eased_speed, nearest_maneuver, timeline_span
+from orbitopt.viz.theme import BG_VOID, DANGER, STYLESHEET, SUCCESS
+from orbitopt.viz.timeline_bar import TimelineBar
 from orbitopt.viz.ui_kit import MetricRow, StatusBadge
-
-# Time-warp speed is a continuous log-scale control (0.001x .. 1000x), not
-# fixed presets, so it can be fine-tuned to any rate. self._speed is in
-# simulated *days* per real second (see _on_tick), so even the old floor of
-# 0.1x still meant 1 simulated hour flew by in under half a real second --
-# too fast to watch a close lunar flyby unfold. At the current floor,
-# 0.001x, 1 simulated hour takes ~41.7 real seconds and 1 simulated minute
-# takes <1 real second, actually slow enough to watch closely.
-SPEED_MIN = 0.001
-SPEED_MAX = 1000.0
-SPEED_SLIDER_STEPS = 1000
+from orbitopt.viz.viewport import DebouncedInteractor
+from orbitopt.viz.widgets import SpinnerWidget, ViewControlsPopover
 
 # Minimum spacing between two timeline-scrub scene refreshes (~60 Hz). A
 # slider drag emits valueChanged once per mouse-move event -- often several
@@ -80,21 +79,9 @@ SCRUB_MIN_INTERVAL_MS = 16.0
 # actually matter -- the window is a *fraction* of the mission's own timeline
 # span (matching _maneuver_window's existing precedent, see _apply_scene),
 # not a fixed day count, since a short and a long mission should each get a
-# proportionally-sized "slow down here" zone.
-#
-# This has to clamp to an ABSOLUTE speed near the event, not just scale the
-# current speed down by a fixed ratio -- a first version did the latter
-# (effective = self._speed * 0.15) and it was imperceptible at any real
-# fast-forward rate: 15% of 1000x is still 150x, which crosses a sub-day
-# window in a few milliseconds of real time, i.e. no visible slowdown at
-# exactly the speeds where this feature matters. EVENT_SLOWDOWN_TARGET_SPEED
-# is a comfortably-watchable absolute pace (simulated days per real second,
-# same units as self._speed) that playback eases toward as the scrubber
-# nears an event, regardless of how high self._speed itself is -- but never
-# *speeds up* a deliberately slower self._speed (see the min() in
-# _event_proximity_effective_speed), so a user who already set 0.01x doesn't
-# get sped up just for approaching an event. The smoothstep ramp (not linear)
-# avoids an audible/visible speed "snap" at the window boundary.
+# proportionally-sized "slow down here" zone. Playback eases toward
+# EVENT_SLOWDOWN_TARGET_SPEED, an absolute pace (simulated days per real
+# second), not a ratio of the chosen speed -- see state.eased_speed for why.
 EVENT_SLOWDOWN_WINDOW_FRACTION = 0.05
 EVENT_SLOWDOWN_TARGET_SPEED = 0.02
 
@@ -125,442 +112,8 @@ ROTATION_SIM_HOURS_PER_REAL_SECOND = 1.0
 EVENT_ZOOM_ARROW_MULTIPLE = 3.0
 
 
-class DebouncedInteractor(QtInteractor):
-    """QtInteractor renders synchronously on *every* resizeEvent (see
-    pyvistaqt.rwi.QVTKRenderWindowInteractor.resizeEvent -> self.update() ->
-    paintEvent -> Iren.Render()). On Windows, a live edge-drag delivers
-    resizeEvent for every intermediate size through the OS's own native
-    modal message loop (WM_ENTERSIZEMOVE..WM_EXITSIZEMOVE), which won't hand
-    control back to the rest of the app until each repaint finishes -- so a
-    scene with anti-aliasing, orbit trails and point labels compounds into
-    the whole window reading as frozen for the length of the drag. Measured
-    ~45ms/intermediate-size even with anti-aliasing off, which isn't the
-    render cost itself (that dropped from ~20ms to ~2ms) but Qt/VTK resize
-    bookkeeping run on every single one of dozens of events during a drag.
-    Fix: keep the VTK render window's size/DPI in sync on every event
-    (cheap), but defer the actual repaint until resizing has been idle for a
-    short settle period -- the 3D view visually lags slightly behind the
-    window edge during the drag itself, but the app never stops responding.
-    """
-
-    _RESIZE_SETTLE_MS = 120
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._resize_settle_timer = QTimer(self)
-        self._resize_settle_timer.setSingleShot(True)
-        self._resize_settle_timer.setInterval(self._RESIZE_SETTLE_MS)
-        self._resize_settle_timer.timeout.connect(self._render_after_resize_settles)
-        self._install_dynamic_clipping()
-
-    def resizeEvent(self, event):  # noqa: N802 -- Qt override signature
-        if self._RenderWindow is None:
-            return
-        scale = self._getPixelRatio()
-        w = int(round(scale * self.width()))
-        h = int(round(scale * self.height()))
-        self._RenderWindow.SetDPI(int(round(72 * scale)))
-        vtkRenderWindow.SetSize(self._RenderWindow, w, h)
-        self._Iren.SetSize(w, h)
-        self._Iren.ConfigureEvent()
-        self._resize_settle_timer.start()
-
-    def _render_after_resize_settles(self):
-        # Guard against firing after the widget is closed: pyvistaqt swaps _Iren
-        # for a stub with no Render() during teardown, so a still-pending settle
-        # timer would otherwise raise on quit (Cmd+Q).
-        iren = self._Iren
-        if iren is not None and hasattr(iren, "Render"):
-            iren.Render()
-
-    # KSP-style dynamic depth range. VTK's default fit-to-scene clipping can't
-    # pull the near plane closer than a fixed fraction of the WHOLE scene's far
-    # plane, so in a scene tens of thousands of km across (a GEO ring) or many
-    # AU (the solar system), zooming in to inspect a local stretch of orbit
-    # shoves the geometry inside the near plane and it just vanishes -- capping
-    # how far you can usefully zoom. Instead we set the near plane proportional
-    # to the live camera-to-focal distance, so you can keep zooming in
-    # arbitrarily close (tracking-station style) with the focus staying visible,
-    # while the far plane still reaches the scene's far corner so distant bodies
-    # keep drawing. This has to catch BOTH ways the range gets reset: pyvista's
-    # wheel-zoom calls reset_camera_clipping_range() (overridden below), while
-    # track_body / zoom_to_body / reset_camera just move the camera and render,
-    # so we also recompute on the camera's own ModifiedEvent -- setting the
-    # range there, before the render, means VTK's fit never runs.
-    _CLIP_NEAR_FRACTION = 1.0e-3
-
-    def _install_dynamic_clipping(self) -> None:
-        self._clipping_busy = False
-        try:
-            self.camera.AddObserver("ModifiedEvent", lambda *_a: self._apply_dynamic_clipping())
-        except Exception:  # noqa: BLE001 -- no camera yet is fine; the override still covers zoom
-            pass
-
-    def _apply_dynamic_clipping(self) -> None:
-        if getattr(self, "_clipping_busy", False):
-            return  # our own SetClippingRange re-fires ModifiedEvent -- don't recurse
-        self._clipping_busy = True
-        try:
-            camera = self.camera
-            fx, fy, fz = camera.focal_point
-            px, py, pz = camera.position
-            distance = math.sqrt((px - fx) ** 2 + (py - fy) ** 2 + (pz - fz) ** 2)
-            xmin, xmax, ymin, ymax, zmin, zmax = self.bounds
-            if distance <= 0.0 or not all(
-                math.isfinite(b) for b in (xmin, xmax, ymin, ymax, zmin, zmax)
-            ):
-                super().reset_camera_clipping_range()
-                return
-            far_corner = max(
-                math.sqrt((px - x) ** 2 + (py - y) ** 2 + (pz - z) ** 2)
-                for x in (xmin, xmax) for y in (ymin, ymax) for z in (zmin, zmax)
-            )
-            near = max(distance * self._CLIP_NEAR_FRACTION, 1.0e-9)
-            far = far_corner * 1.05 + near
-            if far <= near:
-                super().reset_camera_clipping_range()
-                return
-            camera.SetClippingRange(near, far)
-        except Exception:  # noqa: BLE001 -- clipping is cosmetic; never break a render over it
-            super().reset_camera_clipping_range()
-        finally:
-            self._clipping_busy = False
-
-    def reset_camera_clipping_range(self):  # noqa: N802 -- overrides pyvista's snake_case method
-        self._apply_dynamic_clipping()
-
-
-def _is_picklable(fn) -> bool:
-    import pickle
-
-    try:
-        pickle.dumps(fn)
-    except Exception:  # noqa: BLE001 -- lambdas/closures (e.g. File > Open) just run in-thread
-        return False
-    return True
-
-
-class ComputePool:
-    """A single persistent worker *process* for mission compute.
-
-    A QThread alone does not keep the UI responsive here: the loaders
-    (pykep/pygmo Python callbacks, small-array numpy, tudatpy bindings) hold
-    the GIL nearly the whole time, so the main thread is starved. Measured
-    while computing Artemis II with no scene cache: a 16 ms main-thread timer
-    fired 63 times in 20 s instead of ~1,260, with gaps up to 1.08 s. A
-    separate process has its own GIL. SceneLoader still runs on a QThread,
-    but that thread only blocks in ``future.result()``, which releases the GIL.
-
-    ``spawn`` (not fork): forking a process that already holds Qt, VTK and an
-    OpenGL context is unsafe on macOS. The worker is started lazily on the
-    first submit and reused, so heavy imports are paid once per session.
-    ``ORBITOPT_INPROCESS_COMPUTE=1`` disables it (debugging, profilers).
-    """
-
-    def __init__(self):
-        self._executor = None
-
-    @staticmethod
-    def enabled() -> bool:
-        return os.environ.get("ORBITOPT_INPROCESS_COMPUTE", "") != "1"
-
-    def run(self, fn):
-        """Call ``fn()`` in the worker process and return its result (blocking)."""
-        from concurrent.futures.process import BrokenProcessPool
-
-        if self._executor is None:
-            import multiprocessing as mp
-            from concurrent.futures import ProcessPoolExecutor
-
-            from orbitopt._compute_worker import watch_parent
-
-            self._executor = ProcessPoolExecutor(
-                max_workers=1, mp_context=mp.get_context("spawn"),
-                initializer=watch_parent, initargs=(os.getpid(),),
-            )
-        try:
-            return self._executor.submit(fn).result()
-        except BrokenProcessPool as exc:
-            # The worker died (crash in native code, or terminate() on quit).
-            # Drop the broken executor so the next load starts a fresh one.
-            self._executor = None
-            raise RuntimeError("the compute process exited unexpectedly") from exc
-
-    def terminate(self):
-        """Kill the worker immediately (on quit) -- a mission compute can run for
-        minutes and must not hold the app open."""
-        executor, self._executor = self._executor, None
-        if executor is None:
-            return
-        for proc in list(getattr(executor, "_processes", {}).values()):
-            try:
-                proc.terminate()
-            except Exception:  # noqa: BLE001 -- best-effort teardown
-                pass
-        executor.shutdown(wait=False, cancel_futures=True)
-
-
-class SceneLoader(QObject):
-    """Runs a scene loader (e.g. compute_and_export_mission, ~10s of pure
-    Python/numpy/tudatpy work) off the UI thread: picklable loaders (every
-    registered mission) in the ComputePool worker process, anything else
-    (e.g. File > Open's lambda, a fast JSON read) directly on this QThread.
-    moveToThread + signals is the standard PySide
-    pattern for this, not a raw threading.Thread, because Qt needs the
-    result handed back via a queued signal/slot connection to land safely
-    on the main thread rather than touching any Qt/VTK objects directly
-    from the worker thread (which isn't thread-safe). The loader itself
-    must stay pure-Python -- it must never touch self.plotter/self.renderer,
-    both of which live on the main thread.
-    """
-
-    # (name, scene) rather than just (scene): the name has to travel with the
-    # signal itself, not via a Python closure. A `lambda scene: cb(name, scene)`
-    # connected to a cross-thread signal is invoked *directly on the emitting
-    # (worker) thread* -- PySide can only infer "this needs to be queued to
-    # the receiver's thread" when the receiver is a bound method of a QObject;
-    # a plain lambda has no thread affinity of its own, so AutoConnection
-    # silently falls back to a direct call. That let _on_scene_loaded (which
-    # touches self.renderer/self.plotter, i.e. VTK's OpenGL context) run on
-    # the background thread, fighting the main thread for the same Win32 GL
-    # context -- observed as `wglMakeCurrent failed ... resource in use` and
-    # the whole app hanging. Emitting (name, scene) and connecting straight to
-    # the bound method (no lambda) lets Qt detect the correct thread and queue
-    # the call properly; the connections below also pass QueuedConnection
-    # explicitly so this doesn't regress silently if a lambda creeps back in.
-    finished = Signal(str, object)
-    failed = Signal(str, str)
-
-    def __init__(self, name, loader, pool: ComputePool | None = None):
-        super().__init__()
-        self._name = name
-        self._loader = loader
-        self._pool = pool
-
-    def run(self):
-        try:
-            if self._pool is not None and ComputePool.enabled() and _is_picklable(self._loader):
-                scene = self._pool.run(self._loader)
-            else:
-                scene = self._loader()
-        except Exception as exc:  # noqa: BLE001 -- reported to the user via the failed signal
-            self.failed.emit(self._name, str(exc))
-            return
-        self.finished.emit(self._name, scene)
-
-
-class BackendProbeWorker(QObject):
-    """One-shot check of orbitopt.core.gpu.GPU_AVAILABLE, run on a background
-    QThread the same way SceneLoader is: importing cupy and querying the CUDA
-    runtime is cheap when cupy isn't installed at all (the common case for a
-    pip-only ``orbitopt[viewer]`` install) but can take a couple hundred ms
-    the first time in a full conda/CUDA environment -- not worth risking a
-    startup hitch for, given the same cross-thread-signal machinery already
-    exists for scene loading."""
-
-    finished = Signal(bool)
-
-    def run(self):
-        try:
-            from orbitopt.core.gpu import GPU_AVAILABLE
-        except Exception:  # noqa: BLE001 -- absence of the compute stack just means "CPU"
-            GPU_AVAILABLE = False
-        self.finished.emit(GPU_AVAILABLE)
-
-
-def _format_distance(value: float, unit: str) -> str:
-    if unit == "AU":
-        return f"{value:,.3f} AU"
-    return f"{value:,.0f} km"
-
-
 def _norm3(v) -> float:
     return (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) ** 0.5
-
-
-class SpinnerWidget(QWidget):
-    """A rotating-arc spinner painted with QPainter and driven by a QTimer.
-
-    It animates while the Qt event loop is free -- i.e. throughout the ~10s
-    background scene *computation* (which runs on a QThread, see SceneLoader)
-    -- and simply holds its last painted frame during the short synchronous
-    VTK scene rebuild that follows (SceneRenderer.load has to run on the main
-    thread). That rebuild is the brief stutter the user reported; showing this
-    over the view for the whole switch is the "loading effect" that makes the
-    stutter read as deliberate progress rather than a freeze.
-    """
-
-    def __init__(self, parent=None, diameter: int = 64, color: str = ACCENT):
-        super().__init__(parent)
-        self._angle = 0
-        self._color = QColor(color)
-        self.setFixedSize(diameter, diameter)
-        self._timer = QTimer(self)
-        self._timer.setInterval(33)
-        self._timer.timeout.connect(self._advance)
-
-    def start(self):
-        if not self._timer.isActive():
-            self._timer.start()
-
-    def stop(self):
-        self._timer.stop()
-
-    def _advance(self):
-        self._angle = (self._angle + 12) % 360
-        self.update()
-
-    def paintEvent(self, event):  # noqa: N802 -- Qt override signature
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        margin = 5
-        rect = QRectF(margin, margin, self.width() - 2 * margin, self.height() - 2 * margin)
-
-        track = QPen(QColor(self._color.red(), self._color.green(), self._color.blue(), 40), 4)
-        track.setCapStyle(Qt.RoundCap)
-        painter.setPen(track)
-        painter.drawArc(rect, 0, 360 * 16)
-
-        arc = QPen(self._color, 4)
-        arc.setCapStyle(Qt.RoundCap)
-        painter.setPen(arc)
-        painter.drawArc(rect, -self._angle * 16, 100 * 16)
-
-
-class EventSlider(QSlider):
-    """The timeline scrubber, with a marker painted over the groove at each
-    mission event (burns, flybys, insertions). Hovering near a marker shows
-    every event within reach (not just one -- events that land within a few
-    pixels of each other, e.g. a burn immediately followed by an SOI-exit
-    note, used to be visually indistinguishable and only the first-added one
-    was ever reachable by click); clicking snaps to whichever is nearest.
-    Falls back to a plain slider when the scene has no timeline events."""
-
-    _HIT_TOLERANCE_PX = 7
-    # A normal marker's own triangle is ~6px wide (see paintEvent's `half`),
-    # so anything closer than that already visually overlaps -- clustering
-    # only below 3px (an earlier value here) left genuinely-touching markers
-    # rendered as two separate, ambiguous shapes instead of one clear
-    # cluster mark. Confirmed empirically against a real rendered frame, not
-    # assumed: the Mars mission's Mars-SOI-entry/MOI events, ~4.8px apart in
-    # practice, looked like touching-but-unmerged marks at the old value.
-    _CLUSTER_TOLERANCE_PX = 6
-
-    def __init__(self, parent=None):
-        super().__init__(Qt.Horizontal, parent)
-        self._events = []  # list of (slider_value:int, label:str, note:str)
-        self.setMouseTracking(True)
-
-    def set_events(self, events, t_min, t_max):
-        self._events = []
-        span = (t_max - t_min) or 1.0
-        lo, hi = self.minimum(), self.maximum()
-        for e in events:
-            frac = min(1.0, max(0.0, (e.get("time", t_min) - t_min) / span))
-            self._events.append((int(round(lo + frac * (hi - lo))),
-                                 e.get("label", ""), e.get("note", "")))
-        self.update()
-
-    def _groove(self):
-        opt = QStyleOptionSlider()
-        self.initStyleOption(opt)
-        return self.style().subControlRect(QStyle.CC_Slider, opt, QStyle.SC_SliderGroove, self)
-
-    def _value_to_x(self, value):
-        groove = self._groove()
-        span = (self.maximum() - self.minimum()) or 1
-        return groove.left() + int((value - self.minimum()) / span * groove.width())
-
-    def _events_near(self, x, tol):
-        """Every event within `tol` px of `x`, nearest first -- not just the
-        first one added, so a click/hover near a cluster of close-together
-        events reaches all of them instead of being stuck on whichever
-        happened to be first in the scene's event list."""
-        near = sorted(
-            ((abs(self._value_to_x(ev[0]) - x), ev) for ev in self._events),
-            key=lambda pair: pair[0],
-        )
-        return [ev for dist, ev in near if dist <= tol]
-
-    def _event_near(self, x, tol=None):
-        near = self._events_near(x, self._HIT_TOLERANCE_PX if tol is None else tol)
-        return near[0] if near else None
-
-    def paintEvent(self, event):  # noqa: N802
-        super().paintEvent(event)
-        if not self._events:
-            return
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        cy = self.height() // 2
-
-        # Bucket by rounded pixel position so events within
-        # _CLUSTER_TOLERANCE_PX draw as one bolder cluster mark instead of
-        # silently overlapping into what looks like (and, before this fix,
-        # behaved as) a single ordinary event.
-        buckets: dict[int, list] = {}
-        for value, label, note in self._events:
-            x = self._value_to_x(value)
-            buckets.setdefault(round(x / self._CLUSTER_TOLERANCE_PX), []).append(x)
-        centers = {key: round(sum(xs) / len(xs)) for key, xs in buckets.items()}
-        counts = {key: len(xs) for key, xs in buckets.items()}
-
-        for key, x in centers.items():
-            clustered = counts[key] > 1
-            painter.setPen(QPen(QColor(ACCENT), 1.8 if clustered else 1.4))
-            painter.setBrush(QColor(ACCENT))
-            painter.drawLine(x, 7, x, cy + 2)
-            half = 4.2 if clustered else 3.0
-            tri = QPainterPath()
-            tri.moveTo(x - half, 1.0)
-            tri.lineTo(x + half, 1.0)
-            tri.lineTo(x, 7.0)
-            tri.closeSubpath()
-            painter.drawPath(tri)
-            if clustered:
-                # A small dot below the marker's guide line signals "more
-                # than one event here" at a glance, without needing to hover
-                # first. Below, not above: the widget's actual rendered
-                # height is ~16px (QSlider::handle's 15px + a hair), so a
-                # mark above y=0 is silently clipped by Qt's paint-event
-                # clip rect -- confirmed empirically by grabbing a real
-                # rendered frame and finding zero accent-colored pixels in
-                # that band, not assumed from the geometry alone.
-                painter.drawEllipse(QRectF(x - 1.6, cy + 4.0, 3.2, 3.2))
-        painter.end()
-
-    def mouseMoveEvent(self, event):  # noqa: N802
-        near = self._events_near(int(event.position().x()), self._HIT_TOLERANCE_PX)
-        text = "\n\n".join(f"{label}\n{note}".strip() for _value, label, note in near)
-        self.setToolTip(text)
-        super().mouseMoveEvent(event)
-
-    def mousePressEvent(self, event):  # noqa: N802
-        ev = self._event_near(int(event.position().x()))
-        if ev is not None:
-            self.setValue(ev[0])  # snap to the nearest event
-            return
-        super().mousePressEvent(event)
-
-
-class ViewControlsPopover(QFrame):
-    """Compact popover for the less-frequently-used view settings (see
-    MissionControlWindow._build_view_controls_popover). A plain Qt.Popup
-    window rather than a QMenu with QWidgetAction rows: a QComboBox (the
-    face-lock control) embedded in a QMenu has flaky click-through behavior
-    on some platforms, where a normal popup window doesn't. Qt.Popup already
-    closes on any click outside it; Escape is wired explicitly below since
-    Qt.Popup doesn't bind that key on its own (design brief: "支持 Escape 关闭")."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent, Qt.Popup)
-        self.setObjectName("viewControlsPopover")
-
-    def keyPressEvent(self, event):  # noqa: N802 -- Qt override signature
-        if event.key() == Qt.Key_Escape:
-            self.close()
-            return
-        super().keyPressEvent(event)
 
 
 class MissionControlWindow(QMainWindow):
@@ -571,11 +124,12 @@ class MissionControlWindow(QMainWindow):
         self._size_to_screen()
         self.setStyleSheet(STYLESHEET)
 
+        # The scene, current time and body selection live here; every panel
+        # subscribes to its signals (see state.py).
+        self.state = MissionState(self)
+
         self._scene_cache: dict[str, dict] = {}
         self._loaders: dict[str, callable] = {}
-        self._current_scene: dict | None = None
-        self._current_time = 0.0
-        self._speed = 1.0
         self._playing = False
 
         self._loading = False
@@ -587,18 +141,14 @@ class MissionControlWindow(QMainWindow):
         self._backend_probe_worker: BackendProbeWorker | None = None
         self._closing = False
 
-        self._mission_items: dict[str, QListWidgetItem] = {}
+        # 3D-view-only state (camera behavior, not mission data).
         self._viewport_press_pos: tuple[int, int] | None = None
-        self._selected_body_id: str | None = None
-        self._measure_body_id: str | None = None
         self._tracking = False
         self._lock_reference_body_id: str | None = None
         self._view_axis: str | None = None
         self._view_negative = False
         self._focus_zoomed = False
         self._pre_focus_camera: tuple | None = None
-        self._events: list[dict] = []
-        self._event_slowdown_enabled = True
         self._maneuver_base_len = 0.0
         self._maneuver_max_dv = 1.0
         self._maneuver_window = 0.0
@@ -607,11 +157,15 @@ class MissionControlWindow(QMainWindow):
         self._timer.setInterval(33)
         self._timer.timeout.connect(self._on_tick)
         self._last_tick_ms = None
+        # Set only while _on_tick is moving time, so _on_time_changed knows to
+        # refresh immediately (with this dt for camera-tracking smoothing)
+        # instead of going through the scrub throttle.
+        self._tick_dt: float | None = None
 
-        # Scrub render throttle (see _on_slider_moved): a drag can emit
-        # valueChanged far faster than the screen refreshes, so at most one
-        # scene refresh+render runs per SCRUB_MIN_INTERVAL_MS; anything in
-        # between is coalesced into one trailing refresh at the latest value.
+        # Scrub render throttle (see _on_time_changed): a drag can move time
+        # far faster than the screen refreshes, so at most one scene
+        # refresh+render runs per SCRUB_MIN_INTERVAL_MS; anything in between
+        # is coalesced into one trailing refresh at the latest time.
         self._scrub_timer = QTimer(self)
         self._scrub_timer.setSingleShot(True)
         self._scrub_timer.timeout.connect(self._apply_scrub)
@@ -627,6 +181,8 @@ class MissionControlWindow(QMainWindow):
         self._rotation_timer.start()
 
         self._build_ui()
+        self.state.time_changed.connect(self._on_time_changed)
+        self.state.selection_changed.connect(self._update_measure)
         self._populate_builtin_missions()
         self._start_backend_probe()
 
@@ -676,7 +232,10 @@ class MissionControlWindow(QMainWindow):
         self.splitter.setChildrenCollapsible(False)
         self.splitter.setHandleWidth(4)
 
-        self.sidebar = self._build_sidebar()
+        self.sidebar = MissionSidebar()
+        self.sidebar.mission_activated.connect(self._on_mission_activated)
+        self.sidebar.open_file_clicked.connect(self._open_file)
+        self.sidebar.collapse_clicked.connect(self._toggle_sidebar)
         self.left_rail = self._build_rail(icons.chevron_right_icon, self._toggle_sidebar, "Show missions")
         self.left_stack = QStackedWidget()
         self.left_stack.addWidget(self.sidebar)
@@ -707,14 +266,19 @@ class MissionControlWindow(QMainWindow):
         self.center_stack.addWidget(self._build_loading_page())
         center_layout.addWidget(self.center_stack, stretch=1)
 
-        self.timeline_bar = self._build_timeline_bar()
+        self.timeline_bar = TimelineBar(self.state)
+        self.timeline_bar.play_clicked.connect(self._toggle_play)
+        self.timeline_bar.auto_slow_toggled.connect(self._on_auto_slow_toggled)
         center_layout.addWidget(self.timeline_bar)
         self.splitter.addWidget(center)
 
-        self.info_panel = self._build_info_panel()
+        self.inspector = InspectorPanel(self.state)
+        self.inspector.body_clicked.connect(self._on_card_clicked)
+        self.inspector.event_clicked.connect(self._seek_to_event)
+        self.inspector.collapse_clicked.connect(self._toggle_info_panel)
         self.right_rail = self._build_rail(icons.chevron_left_icon, self._toggle_info_panel, "Show body info")
         self.right_stack = QStackedWidget()
-        self.right_stack.addWidget(self.info_panel)
+        self.right_stack.addWidget(self.inspector)
         self.right_stack.addWidget(self.right_rail)
         self.right_stack.setMinimumWidth(self._RIGHT_MIN)
         self.splitter.addWidget(self.right_stack)
@@ -750,51 +314,6 @@ class MissionControlWindow(QMainWindow):
         layout.addWidget(btn, alignment=Qt.AlignHCenter | Qt.AlignTop)
         layout.addStretch(1)
         return rail
-
-    def _build_sidebar(self) -> QWidget:
-        sidebar = QWidget()
-        sidebar.setObjectName("sidebar")
-        layout = QVBoxLayout(sidebar)
-        layout.setContentsMargins(8, 10, 8, 10)
-        layout.setSpacing(0)
-
-        title = QLabel("ORBITOPT MISSION CONTROL")
-        title.setObjectName("appTitle")
-        # The sidebar (default ~220px, narrower once the splitter is dragged)
-        # is well short of this string's unwrapped width at 14px/700 weight --
-        # it was silently clipped mid-word with no ellipsis. Wrap instead of
-        # widening the sidebar just to fit a static branding string.
-        title.setWordWrap(True)
-        layout.addWidget(title)
-
-        header_row = QHBoxLayout()
-        header = QLabel("MISSIONS")
-        header.setObjectName("sectionHeader")
-        self.sidebar_collapse = QPushButton()
-        self.sidebar_collapse.setObjectName("panelCollapse")
-        self.sidebar_collapse.setIcon(icons.chevron_left_icon())
-        self.sidebar_collapse.setIconSize(QSize(12, 12))
-        self.sidebar_collapse.setToolTip("Collapse missions panel")
-        self.sidebar_collapse.clicked.connect(self._toggle_sidebar)
-        header_row.addWidget(header)
-        header_row.addStretch(1)
-        header_row.addWidget(self.sidebar_collapse)
-        layout.addLayout(header_row)
-
-        self.mission_list = QListWidget()
-        # Unlike the info panel's QScrollArea, this never had its horizontal
-        # scrollbar explicitly turned off -- Qt's native, unthemed scrollbar
-        # showed up as a stray gray line under the mission rows whenever an
-        # item's content requested slightly more width than available.
-        self.mission_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.mission_list.currentRowChanged.connect(self._on_mission_selected)
-        layout.addWidget(self.mission_list, stretch=1)
-
-        self._open_file_btn = QPushButton("Open scene file…")
-        self._open_file_btn.clicked.connect(self._open_file)
-        layout.addWidget(self._open_file_btn)
-
-        return sidebar
 
     def _build_title_bar(self) -> QWidget:
         bar = QWidget()
@@ -916,7 +435,7 @@ class MissionControlWindow(QMainWindow):
         row.addWidget(self.shortcuts_btn)
         return box
 
-    def _build_view_controls_popover(self) -> "ViewControlsPopover":
+    def _build_view_controls_popover(self) -> ViewControlsPopover:
         popover = ViewControlsPopover(self)
         # Qt.Popup makes this its own top-level window, which (like
         # _show_shortcuts_dialog's QDialog) does not inherit self's
@@ -991,153 +510,6 @@ class MissionControlWindow(QMainWindow):
         popover.move(anchor)
         popover.show()
 
-    def _build_timeline_bar(self) -> QWidget:
-        bar = QWidget()
-        bar.setObjectName("timelineBar")
-        bar.setFixedHeight(72)
-        layout = QHBoxLayout(bar)
-        layout.setContentsMargins(16, 8, 16, 8)
-        layout.setSpacing(12)
-
-        self.play_btn = QPushButton()
-        self.play_btn.setObjectName("playButton")
-        self.play_btn.setIcon(icons.play_icon())
-        self.play_btn.setIconSize(QSize(15, 15))
-        self.play_btn.clicked.connect(self._toggle_play)
-        layout.addWidget(self.play_btn)
-
-        speed_col = QVBoxLayout()
-        speed_col.setSpacing(2)
-        speed_header = QHBoxLayout()
-        speed_header.addWidget(QLabel("TIME WARP"))
-        self.auto_slow_btn = QPushButton()
-        self.auto_slow_btn.setObjectName("autoSlowButton")
-        self.auto_slow_btn.setIcon(icons.clock_icon(ACCENT))
-        self.auto_slow_btn.setIconSize(QSize(12, 12))
-        self.auto_slow_btn.setCheckable(True)
-        self.auto_slow_btn.setChecked(True)
-        self.auto_slow_btn.setToolTip(
-            "Auto-slow near timeline events (on by default) -- click to play "
-            "through events at full speed instead"
-        )
-        self.auto_slow_btn.toggled.connect(self._set_event_slowdown_enabled)
-        speed_header.addWidget(self.auto_slow_btn)
-        speed_header.addStretch(1)
-        self.speed_value_label = QLabel(self._format_speed(self._speed))
-        self.speed_value_label.setObjectName("speedValue")
-        speed_header.addWidget(self.speed_value_label)
-        speed_col.addLayout(speed_header)
-
-        self.speed_slider = QSlider(Qt.Horizontal)
-        self.speed_slider.setObjectName("speedSlider")
-        self.speed_slider.setRange(0, SPEED_SLIDER_STEPS)
-        self.speed_slider.setValue(self._slider_from_speed(self._speed))
-        self.speed_slider.setFixedWidth(150)
-        self.speed_slider.valueChanged.connect(self._on_speed_slider)
-        speed_col.addWidget(self.speed_slider)
-        layout.addLayout(speed_col)
-
-        slider_col = QVBoxLayout()
-        slider_col.setSpacing(2)
-        readout_row = QHBoxLayout()
-        self.met_label = QLabel("T+0.00")
-        self.met_label.setObjectName("metReadout")
-        self.date_label = QLabel("")
-        self.date_label.setObjectName("dateReadout")
-        self.event_label = QLabel("")
-        self.event_label.setObjectName("eventReadout")
-        readout_row.addWidget(self.met_label)
-        readout_row.addWidget(self.date_label)
-        readout_row.addStretch(1)
-        readout_row.addWidget(self.event_label)
-        slider_col.addLayout(readout_row)
-
-        self.time_slider = EventSlider()
-        self.time_slider.setRange(0, 10000)
-        self.time_slider.valueChanged.connect(self._on_slider_moved)
-        slider_col.addWidget(self.time_slider)
-
-        # Fixed start/end scale reference under the bar: the MET readout above
-        # only ever shows the *current* scrubbed position, so there was no way
-        # to tell at a glance how long the whole mission span is -- easy to
-        # misjudge for a mission like Mars (300+ days) where nearly every event
-        # piles up within the first/last ~1% of the bar.
-        scale_row = QHBoxLayout()
-        scale_row.setContentsMargins(0, 0, 0, 0)
-        self.scale_start_label = QLabel("")
-        self.scale_start_label.setObjectName("scaleReadout")
-        self.scale_end_label = QLabel("")
-        self.scale_end_label.setObjectName("scaleReadout")
-        self.scale_end_label.setAlignment(Qt.AlignRight)
-        scale_row.addWidget(self.scale_start_label)
-        scale_row.addStretch(1)
-        scale_row.addWidget(self.scale_end_label)
-        slider_col.addLayout(scale_row)
-
-        layout.addLayout(slider_col, stretch=1)
-
-        return bar
-
-    def _build_info_panel(self) -> QWidget:
-        panel = QWidget()
-        panel.setObjectName("infoPanel")
-        outer = QVBoxLayout(panel)
-        outer.setContentsMargins(10, 10, 10, 10)
-        outer.setSpacing(8)
-
-        header_row = QHBoxLayout()
-        self.info_collapse = QPushButton()
-        self.info_collapse.setObjectName("panelCollapse")
-        self.info_collapse.setIcon(icons.chevron_right_icon())
-        self.info_collapse.setIconSize(QSize(12, 12))
-        self.info_collapse.setToolTip("Collapse body-info panel")
-        self.info_collapse.clicked.connect(self._toggle_info_panel)
-        header = QLabel("BODIES")
-        header.setObjectName("sectionHeader")
-        header_row.addWidget(self.info_collapse)
-        header_row.addWidget(header)
-        header_row.addStretch(1)
-        outer.addLayout(header_row)
-
-        # Distance-between-two-bodies readout, shown only while measuring.
-        self.measure_card = QFrame()
-        self.measure_card.setObjectName("measureCard")
-        mlay = QVBoxLayout(self.measure_card)
-        mlay.setContentsMargins(10, 7, 10, 7)
-        mlay.setSpacing(2)
-        self.measure_pair_label = QLabel("")
-        self.measure_pair_label.setObjectName("measurePair")
-        self.measure_dist_label = QLabel("")
-        self.measure_dist_label.setObjectName("measureDist")
-        mlay.addWidget(self.measure_pair_label)
-        mlay.addWidget(self.measure_dist_label)
-        self.measure_card.setVisible(False)
-        outer.addWidget(self.measure_card)
-
-        # The body cards go in a scroll area, not straight into the panel: a
-        # scene with ~10 bodies stacks that many fixed-height cards, and without
-        # this the panel's minimum height is the sum of all of them -- which
-        # forced the whole window's minimum height taller than the screen (so it
-        # opened oversized and couldn't be shrunk). Scrolling keeps the panel's
-        # minimum height bounded so the window stays freely resizable.
-        scroll = QScrollArea()
-        scroll.setObjectName("infoScroll")
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-
-        cards_host = QWidget()
-        cards_host.setObjectName("infoCards")
-        self.info_layout = QVBoxLayout(cards_host)
-        self.info_layout.setContentsMargins(0, 0, 0, 0)
-        self.info_layout.setSpacing(8)
-        self.info_layout.addStretch(1)
-        scroll.setWidget(cards_host)
-        outer.addWidget(scroll, stretch=1)
-
-        self._body_cards: dict[str, dict] = {}
-        return panel
-
     def _build_loading_page(self) -> QWidget:
         page = QWidget()
         page.setObjectName("loadingPage")
@@ -1174,8 +546,8 @@ class MissionControlWindow(QMainWindow):
         play_menu.addAction("Step back", lambda: self._step_time(-1)).setShortcut(QKeySequence(Qt.Key_Left))
         play_menu.addAction("Restart", self._restart_timeline).setShortcut(QKeySequence(Qt.Key_Home))
         play_menu.addSeparator()
-        play_menu.addAction("Faster", lambda: self._cycle_speed(+1)).setShortcut(QKeySequence("]"))
-        play_menu.addAction("Slower", lambda: self._cycle_speed(-1)).setShortcut(QKeySequence("["))
+        play_menu.addAction("Faster", lambda: self.timeline_bar.nudge_speed(+1)).setShortcut(QKeySequence("]"))
+        play_menu.addAction("Slower", lambda: self.timeline_bar.nudge_speed(-1)).setShortcut(QKeySequence("["))
         play_menu.addSeparator()
         next_event_action = play_menu.addAction("Next event", lambda: self._seek_relative_event(+1))
         next_event_action.setShortcut(QKeySequence("Shift+Right"))
@@ -1339,65 +711,44 @@ class MissionControlWindow(QMainWindow):
         getattr(self.plotter, f"view_{axis}")(negative=self._view_negative)
         self.plotter.render()
 
-    def _on_card_clicked(self, event, body_id: str):
+    def _on_card_clicked(self, body_id: str, measure: bool):
         """Plain click selects (focus/track anchor); ⌘/Ctrl-click picks the
         second body to measure a distance to."""
-        if event.modifiers() & (Qt.ControlModifier | Qt.MetaModifier):
-            self._set_measure_partner(body_id)
+        if measure:
+            self.state.toggle_measure_partner(body_id)
         else:
             self._select_body(body_id)
 
     def _select_body(self, body_id: str):
-        """Select a body (clicking its card): highlight the card, remember it as
-        the focus/track target, and center the camera on it once. A plain select
-        also clears any pending distance measurement."""
-        self._selected_body_id = body_id
-        self._measure_body_id = None
+        """Select a body: remember it as the focus/track target (the inspector
+        highlights its card from state.selection_changed) and center the
+        camera on it once. A plain select also clears any pending distance
+        measurement."""
         # A plain select recenters but doesn't zoom (that's what M is for) --
         # if a previous M-zoom is still active for a different body, drop it
         # rather than leave a stale "press M to restore" state pointing at
         # a camera position framed for a body that's no longer selected.
         self._focus_zoomed = False
         self._pre_focus_camera = None
-        self._refresh_card_highlights()
-        self.renderer.track_body(body_id, self._current_time, reference_body_id=self._lock_reference_body_id)
-        self._update_measure()
+        self.state.select_body(body_id)
+        self.renderer.track_body(body_id, self.state.time, reference_body_id=self._lock_reference_body_id)
         self.statusBar().showMessage(
-            f"Focused {self._body_cards[body_id]['name']} — ⌘/Ctrl-click another to measure"
+            f"Focused {self.state.body(body_id)['name']} — ⌘/Ctrl-click another to measure"
         )
-
-    def _set_measure_partner(self, body_id: str):
-        """Pick (or unpick) the second body for a distance measurement."""
-        if body_id == self._selected_body_id:
-            return  # can't measure a body against itself
-        self._measure_body_id = None if body_id == self._measure_body_id else body_id
-        self._refresh_card_highlights()
-        self._update_measure()
-
-    def _refresh_card_highlights(self):
-        for bid, card in self._body_cards.items():
-            frame = card["frame"]
-            frame.setProperty("selected", bid == self._selected_body_id)
-            frame.setProperty("measure", bid == self._measure_body_id)
-            frame.style().unpolish(frame)
-            frame.style().polish(frame)
 
     def _update_measure(self, render: bool = True):
         """Redraw the measurement line + readout for the current (A, B) pair, or
         clear it if a full pair isn't selected. Called on selection changes and
         every timeline step so the distance tracks the bodies as they move.
-        ``render=False`` for the hot playback-tick path -- see _on_tick, which
-        batches its scene mutations into one render instead of one each."""
-        a, b = self._selected_body_id, self._measure_body_id
-        cards = self._body_cards
-        if a and b and a in cards and b in cards:
-            dist = self.renderer.measure_line(a, b, self._current_time, render=render)
-            self.measure_pair_label.setText(f"{cards[a]['name']}  ↔  {cards[b]['name']}")
-            self.measure_dist_label.setText(_format_distance(dist, cards[a]["unit"]))
-            self.measure_card.setVisible(True)
+        ``render=False`` for the hot playback-tick path -- see _refresh_view,
+        which batches its scene mutations into one render instead of one each."""
+        a, b = self.state.selected_body_id, self.state.measure_body_id
+        if a and b:
+            dist = self.renderer.measure_line(a, b, self.state.time, render=render)
+            self.inspector.show_measure(dist)
         else:
             self.renderer.clear_measure_line(render=render)
-            self.measure_card.setVisible(False)
+            self.inspector.hide_measure()
 
     def _focus_selected(self):
         """KSP-style focus (the M shortcut): the first press zooms the camera
@@ -1407,7 +758,8 @@ class MissionControlWindow(QMainWindow):
         _select_body) or loading a new scene (see _apply_scene) drops the
         saved state, so M always starts a fresh zoom-in on whatever's
         currently selected rather than "restoring" an unrelated old view."""
-        if not (self._selected_body_id and self._selected_body_id in self._body_cards):
+        selected = self.state.selected_body_id
+        if not selected:
             self.statusBar().showMessage("Select a body first — click its card")
             return
         if self._focus_zoomed:
@@ -1423,7 +775,7 @@ class MissionControlWindow(QMainWindow):
         else:
             cam = self.plotter.camera
             self._pre_focus_camera = (tuple(cam.position), tuple(cam.focal_point), tuple(cam.up))
-            self.renderer.zoom_to_body(self._selected_body_id, self._current_time)
+            self.renderer.zoom_to_body(selected, self.state.time)
             self._focus_zoomed = True
 
     # ------------------------------------------------------- Viewport click
@@ -1455,7 +807,7 @@ class MissionControlWindow(QMainWindow):
     def _on_viewport_left_release(self, *_args):
         press_pos = self._viewport_press_pos
         self._viewport_press_pos = None
-        if press_pos is None or self._current_scene is None:
+        if press_pos is None or self.state.scene is None:
             return
         x, y = self.plotter.iren.interactor.GetEventPosition()
         if (x - press_pos[0]) ** 2 + (y - press_pos[1]) ** 2 > self._VIEWPORT_CLICK_TOLERANCE_PX ** 2:
@@ -1463,10 +815,10 @@ class MissionControlWindow(QMainWindow):
         picker = self.plotter.iren.picker
         picker.Pick(x, y, 0, self.plotter.renderer)
         body_id = self.renderer.body_id_for_actor(picker.GetActor())
-        if body_id is None or body_id not in self._body_cards:
+        if self.state.body(body_id) is None:
             return
         if QApplication.keyboardModifiers() & (Qt.ControlModifier | Qt.MetaModifier):
-            self._set_measure_partner(body_id)
+            self.state.toggle_measure_partner(body_id)
             return
         # Same lightweight-select-then-toggle-focus composition as pressing M
         # after clicking a card, just in one gesture: selecting a *different*
@@ -1474,7 +826,7 @@ class MissionControlWindow(QMainWindow):
         # clicking the *same*, already-focused body again toggles back out,
         # matching the M shortcut's own zoom in/out toggle instead of
         # zooming in further on every repeat click.
-        if body_id != self._selected_body_id:
+        if body_id != self.state.selected_body_id:
             self._select_body(body_id)
         self._focus_selected()
 
@@ -1487,11 +839,10 @@ class MissionControlWindow(QMainWindow):
             w.setChecked(self._tracking)
             w.blockSignals(False)
         if self._tracking:
-            if self._selected_body_id and self._selected_body_id in self._body_cards:
-                self.renderer.track_body(
-                    self._selected_body_id, self._current_time, reference_body_id=self._lock_reference_body_id
-                )
-                self.statusBar().showMessage(f"Tracking {self._body_cards[self._selected_body_id]['name']}")
+            selected = self.state.selected_body_id
+            if selected:
+                self.renderer.track_body(selected, self.state.time, reference_body_id=self._lock_reference_body_id)
+                self.statusBar().showMessage(f"Tracking {self.state.body(selected)['name']}")
             else:
                 self.statusBar().showMessage("Select a body to track — click its card")
         else:
@@ -1504,19 +855,19 @@ class MissionControlWindow(QMainWindow):
         continuous Track is on, so e.g. picking "Earth" here re-orients an
         already M-zoomed view right away."""
         self._lock_reference_body_id = self.lock_combo.currentData()
-        if self._selected_body_id and self._selected_body_id in self._body_cards:
-            self.renderer.track_body(
-                self._selected_body_id, self._current_time, reference_body_id=self._lock_reference_body_id
-            )
+        selected = self.state.selected_body_id
+        if selected:
+            self.renderer.track_body(selected, self.state.time, reference_body_id=self._lock_reference_body_id)
 
     def _update_tracking(self, dt: float | None = None, render: bool = True):
         """Follow the tracked body after a timeline change, if tracking is on.
         ``dt`` is passed through for smoothing on continuous playback ticks;
         omitted (snaps instantly) for a manual slider drag. ``render=False``
-        for the hot playback-tick path -- see _on_tick."""
-        if self._tracking and self._selected_body_id and self._selected_body_id in self._body_cards:
+        for the hot playback-tick path -- see _refresh_view."""
+        selected = self.state.selected_body_id
+        if self._tracking and selected:
             self.renderer.track_body(
-                self._selected_body_id, self._current_time, dt=dt,
+                selected, self.state.time, dt=dt,
                 reference_body_id=self._lock_reference_body_id, render=render,
             )
 
@@ -1527,26 +878,9 @@ class MissionControlWindow(QMainWindow):
         # here with no separate list to keep in sync.
         for mission in list_missions():
             self._loaders[mission.title] = mission.load
-            item = QListWidgetItem(mission.title)
-            item.setData(Qt.UserRole, mission.title)
-            # A long title (e.g. "Mars — Earth to Orbit Insertion") elides
-            # with "…" now that the list's horizontal scrollbar is off --
-            # the tooltip is the only way to read it in full at a narrow
-            # sidebar width.
-            item.setToolTip(mission.title)
-            # Neutral marker until this mission has actually been loaded once
-            # (or fails to) -- see _set_mission_status_icon, driven by the
-            # real SceneLoader finished/failed signals, not a static icon.
-            item.setIcon(icons.mission_marker_icon(INK_MUTED))
-            self.mission_list.addItem(item)
-            self._mission_items[mission.title] = item
-        if self.mission_list.count():
-            self.mission_list.setCurrentRow(0)
-
-    def _set_mission_status_icon(self, key: str, color: str):
-        item = self._mission_items.get(key)
-        if item is not None:
-            item.setIcon(icons.mission_marker_icon(color))
+            self.sidebar.add_mission(mission.title, mission.title, mission.title)
+        if self.sidebar.count():
+            self.sidebar.select_row(0)
 
     def _open_file(self):
         if self._loading:
@@ -1559,24 +893,15 @@ class MissionControlWindow(QMainWindow):
         # folders) would otherwise collide in _loaders/_scene_cache, with the
         # second load silently overwriting the first's cache entry. The list
         # item's *displayed* text stays the short filename -- only the lookup
-        # key (stashed on the item via Qt.UserRole) is the full path.
+        # key is the full path.
         key = os.path.abspath(path)
-        label = os.path.basename(path)
         self._loaders[key] = (lambda p=path: load_scene(p))
-        item = QListWidgetItem(label)
-        item.setData(Qt.UserRole, key)
-        item.setToolTip(path)
-        item.setIcon(icons.mission_marker_icon(INK_MUTED))
-        self.mission_list.addItem(item)
-        self._mission_items[key] = item
-        self.mission_list.setCurrentRow(self.mission_list.count() - 1)
+        self.sidebar.add_mission(key, os.path.basename(path), path)
+        self.sidebar.select_row(self.sidebar.count() - 1)
 
-    def _on_mission_selected(self, row: int):
-        if row < 0 or self._loading:
+    def _on_mission_activated(self, key: str, label: str):
+        if self._loading:
             return
-        item = self.mission_list.item(row)
-        key = item.data(Qt.UserRole)
-        label = item.text()
         self._set_playing(False)
 
         if key in self._scene_cache:
@@ -1594,13 +919,10 @@ class MissionControlWindow(QMainWindow):
         self._start_loading(key, label)
 
     def _begin_switch(self, message: str):
-        import time as _time
-
         self._loading = True
-        self._load_start_ts = _time.perf_counter()
+        self._load_start_ts = time.perf_counter()
         self.load_status_badge.set_state("loading", "LOADING")
-        self.mission_list.setEnabled(False)
-        self._open_file_btn.setEnabled(False)
+        self.sidebar.set_busy(True)
         # No wait cursor: on macOS 27 (PySide6 6.11 / VTK 9.6) setting any
         # cursor on a window that contains the pyvistaqt QtInteractor
         # segfaults -- QApplication.setOverrideCursor and widget.setCursor
@@ -1612,8 +934,7 @@ class MissionControlWindow(QMainWindow):
 
     def _end_switch(self):
         self._hide_loading()
-        self.mission_list.setEnabled(True)
-        self._open_file_btn.setEnabled(True)
+        self.sidebar.set_busy(False)
         self._loading = False
         self.statusBar().showMessage("Ready")
 
@@ -1633,7 +954,7 @@ class MissionControlWindow(QMainWindow):
         QTimer.singleShot(0, self._refit_camera)
 
     def _refit_camera(self):
-        if self._current_scene is not None:
+        if self.state.scene is not None:
             self.plotter.reset_camera()
             self.plotter.render()
 
@@ -1644,7 +965,7 @@ class MissionControlWindow(QMainWindow):
         # disabled, requiring an app restart to recover.
         try:
             self._apply_scene(scene)
-            self._set_mission_status_icon(key, SUCCESS)
+            self.sidebar.set_status(key, SUCCESS)
         finally:
             self._end_switch()
 
@@ -1683,10 +1004,10 @@ class MissionControlWindow(QMainWindow):
         Lambert-solve + differential-correction + tudatpy propagation, and
         running that inline (as an earlier version of this app did) froze
         the whole window -- no repaints, no input, Windows marks it "Not
-        Responding" -- for the entire computation. The sidebar/open-file
-        button stay disabled and the cursor shows busy for the same reason
-        the mission list itself is guarded above: re-entering this while a
-        load is already in flight would leak a second thread/worker pair.
+        Responding" -- for the entire computation. The sidebar stays
+        disabled for the same reason _on_mission_activated is guarded:
+        re-entering this while a load is already in flight would leak a
+        second thread/worker pair.
 
         The loading page (with its spinner) is shown for the whole switch --
         it animates during this background compute, then holds while the
@@ -1734,58 +1055,29 @@ class MissionControlWindow(QMainWindow):
         # Applied while the loading page is still up (plotter hidden); the swap
         # back to the view happens in _on_load_thread_finished -> _end_switch.
         self._apply_scene(scene)
-        self._set_mission_status_icon(name, SUCCESS)
+        self.sidebar.set_status(name, SUCCESS)
 
     def _on_scene_load_failed(self, name: str, error_msg: str):
         if self._closing:
             return
         self.load_status_badge.set_state("failed", "FAILED")
-        self._set_mission_status_icon(name, DANGER)
+        self.sidebar.set_status(name, DANGER)
         QMessageBox.critical(self, f"Failed to load {name}", error_msg)
         self.statusBar().showMessage("Ready")
 
     def _apply_scene(self, scene: dict):
-        import time as _time
-
-        self._current_scene = scene
         self.renderer.load(scene)
 
-        # A new scene has different bodies -- drop the old selection/measurement
-        # and stop tracking so we never chase a body id that no longer exists.
+        # Camera state belongs to the old scene's bodies: stop tracking so we
+        # never chase a body id that no longer exists, drop the face-lock, and
+        # forget the M-key "pre-focus" camera (it framed bodies that are gone).
         # (renderer.load already cleared the measure line via plotter.clear.)
-        self._selected_body_id = None
-        self._measure_body_id = None
-        self.measure_card.setVisible(False)
         if self._tracking:
             self._set_tracking(False)
         self._lock_reference_body_id = None
-        # Same reasoning for the M-key focus-zoom toggle: a saved "pre-focus"
-        # camera state from the old scene means nothing once the bodies (and
-        # their positions) it was framing are gone.
         self._focus_zoomed = False
         self._pre_focus_camera = None
-
-        self.scene_title_label.setText(scene["title"])
-        self.scene_subtitle_label.setText(scene.get("subtitle", "").replace("\n", "  "))
-
-        timeline = scene.get("timeline")
-        self.timeline_bar.setVisible(timeline is not None)
-        self._events = timeline.get("events", []) if timeline else []
-        if timeline:
-            self._current_time = timeline["min"]
-            self.time_slider.blockSignals(True)
-            self.time_slider.setValue(0)
-            self.time_slider.set_events(self._events, timeline["min"], timeline["max"])
-            self.time_slider.blockSignals(False)
-            unit = timeline.get("unitLabel", "")
-            self.scale_start_label.setText(f"{timeline['min']:.1f} {unit}".strip())
-            self.scale_end_label.setText(f"{timeline['max']:.1f} {unit}".strip())
-        else:
-            self._current_time = 0.0
-            self.time_slider.set_events([], 0.0, 1.0)
-            self.scale_start_label.setText("")
-            self.scale_end_label.setText("")
-        self.event_label.setText("")
+        self._rebuild_lock_combo(scene)
 
         # Precompute the maneuver-arrow display scale: physical delta-v (m/s) is
         # invisible next to orbit radii (km), so arrows are drawn at a fraction of
@@ -1796,21 +1088,24 @@ class MissionControlWindow(QMainWindow):
         # swamp the very body it's drawn from. The arrow only appears while the
         # scrubber is within _maneuver_window of a burn, so it flashes past each
         # maneuver instead of hanging on screen the whole time.
-        vectors = [e["vector"] for e in self._events if "vector" in e]
+        timeline = scene.get("timeline")
+        events = timeline.get("events", []) if timeline else []
+        vectors = [e["vector"] for e in events if "vector" in e]
         if vectors:
             self._maneuver_max_dv = max(_norm3(v["deltaV"]) for v in vectors) or 1.0
             self._maneuver_base_len = 0.22 * max(_norm3(v["position"]) for v in vectors)
         else:
             self._maneuver_max_dv, self._maneuver_base_len = 1.0, 0.0
-        if timeline:
-            self._maneuver_window = 0.05 * ((timeline["max"] - timeline["min"]) or 1.0)
-        else:
-            self._maneuver_window = 0.0
+        self._maneuver_window = 0.05 * timeline_span(timeline) if timeline else 0.0
         self.renderer.clear_maneuver_vector()
 
-        self._rebuild_body_cards(scene)
-        self._refresh_readouts(self.renderer.set_time(self._current_time))
-        self.plotter.render()
+        self.scene_title_label.setText(scene["title"])
+        self.scene_subtitle_label.setText(scene.get("subtitle", "").replace("\n", "  "))
+
+        # Resets time + selection and lets the timeline bar and the inspector
+        # rebuild themselves for the new scene.
+        self.state.set_scene(scene)
+        self._refresh_view()
 
         # Set last, after everything above has succeeded -- these two are the
         # "this load fully worked" signal for the title bar (this badge) and
@@ -1820,16 +1115,9 @@ class MissionControlWindow(QMainWindow):
         # KeyError/etc. anywhere above would leave it stuck on READY while the
         # mission's list marker never left NEUTRAL.
         self.load_status_badge.set_state("ready", "READY")
-        start = getattr(self, "_load_start_ts", None)
-        if start is not None:
-            self.load_time_metric.set_value(f"{_time.perf_counter() - start:.1f}")
+        self.load_time_metric.set_value(f"{time.perf_counter() - self._load_start_ts:.1f}")
 
-    # --------------------------------------------------------------- Cards
-    def _rebuild_body_cards(self, scene: dict):
-        for card in self._body_cards.values():
-            card["frame"].deleteLater()
-        self._body_cards = {}
-
+    def _rebuild_lock_combo(self, scene: dict):
         self.lock_combo.blockSignals(True)
         self.lock_combo.clear()
         self.lock_combo.addItem("None", None)
@@ -1837,166 +1125,25 @@ class MissionControlWindow(QMainWindow):
             self.lock_combo.addItem(body["name"], body["id"])
         self.lock_combo.setCurrentIndex(0)
         self.lock_combo.blockSignals(False)
-        for widget in getattr(self, "_event_widgets", []):
-            widget.deleteLater()
-        self._event_widgets = []
-        self._event_rows = []
 
-        stretch_item = self.info_layout.takeAt(self.info_layout.count() - 1)
-        del stretch_item
+    # ------------------------------------------------------- Scene refresh
+    def _refresh_view(self, dt: float | None = None):
+        """Bring the 3D view and the inspector's distances up to state.time.
+        Every mutation below skips its own render and the view renders once
+        at the end: separate renders per call made per-frame cost noisy
+        enough to read as playback jitter/stutter."""
+        distances = self.renderer.set_time(self.state.time, render=False)
+        self.inspector.set_distances(distances)
+        self._update_maneuver_arrow()
+        self._update_tracking(dt=dt, render=False)
+        self._update_measure(render=False)
+        self.plotter.render()
 
-        timeline = scene.get("timeline")
-        events = timeline.get("events", []) if timeline else []
-        if events:
-            header = QLabel("MANEUVERS")
-            header.setObjectName("sectionHeader")
-            self.info_layout.addWidget(header)
-            self._event_widgets.append(header)
-            unit = timeline.get("unitLabel", "")
-            for e in events:
-                row = self._make_maneuver_row(e, unit)
-                self.info_layout.addWidget(row)
-                self._event_widgets.append(row)
-                self._event_rows.append((e, row))
-
-            bodies_header = QLabel("BODIES")
-            bodies_header.setObjectName("sectionHeader")
-            self.info_layout.addWidget(bodies_header)
-            self._event_widgets.append(bodies_header)
-
-        for body in scene["bodies"]:
-            frame = QFrame()
-            frame.setObjectName("bodyCard")
-            v = QVBoxLayout(frame)
-            v.setContentsMargins(10, 8, 10, 8)
-            v.setSpacing(3)
-
-            name_row = QHBoxLayout()
-            dot = QLabel("●")
-            dot.setStyleSheet(f"color: {body['color']}; font-size: 13px;")
-            name_label = QLabel(body["name"])
-            name_label.setObjectName("bodyName")
-            name_row.addWidget(dot)
-            name_row.addWidget(name_label)
-            name_row.addStretch(1)
-            v.addLayout(name_row)
-
-            dist_row = QHBoxLayout()
-            dist_key = QLabel("Distance")
-            dist_key.setObjectName("bodyStat")
-            dist_val = QLabel("—")
-            dist_val.setObjectName("bodyStatValue")
-            dist_val.setWordWrap(True)
-            dist_val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            dist_row.addWidget(dist_key)
-            dist_row.addStretch(1)
-            dist_row.addWidget(dist_val)
-            v.addLayout(dist_row)
-
-            for row in body.get("info", []):
-                r = QHBoxLayout()
-                k = QLabel(row["label"])
-                k.setObjectName("bodyStat")
-                val = QLabel(row["value"])
-                val.setObjectName("bodyStatValue")
-                # Without word-wrap, a long value (e.g. "8,312 km from Moon
-                # center") reports its full unwrapped width as this row's
-                # (and so the whole scrollable card column's) minimum width --
-                # wider than the actual panel, with horizontal scrolling off,
-                # so the overflow silently became invisible instead of
-                # visibly clipped. Confirmed against a real rendered frame:
-                # the scroll content measured 318px against a 260px-wide
-                # panel, and even *short* values on unrelated rows vanished
-                # because addStretch pushed them into the same off-panel
-                # region. Word-wrap keeps every row's width bounded by the
-                # panel instead of by its longest value.
-                val.setWordWrap(True)
-                val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                r.addWidget(k)
-                r.addStretch(1)
-                r.addWidget(val)
-                v.addLayout(r)
-
-            frame.setToolTip("Click to focus · ⌘/Ctrl-click to measure distance")
-            frame.mousePressEvent = lambda e, bid=body["id"]: self._on_card_clicked(e, bid)
-
-            self.info_layout.addWidget(frame)
-            self._body_cards[body["id"]] = {
-                "frame": frame,
-                "dist_val": dist_val,
-                "unit": scene["distanceUnit"],
-                "name": body["name"],
-            }
-
-        self.info_layout.addStretch(1)
-
-    def _make_maneuver_row(self, event: dict, unit: str) -> QFrame:
-        row = QFrame()
-        row.setObjectName("maneuverRow")
-        row.setProperty("active", False)
-        v = QVBoxLayout(row)
-        v.setContentsMargins(9, 6, 9, 6)
-        v.setSpacing(2)
-
-        top = QHBoxLayout()
-        name = QLabel(event.get("label", ""))
-        name.setObjectName("maneuverName")
-        time_label = QLabel(f"T+{event.get('time', 0.0):.2f} {unit}")
-        time_label.setObjectName("maneuverTime")
-        top.addWidget(name)
-        top.addStretch(1)
-        top.addWidget(time_label)
-        v.addLayout(top)
-
-        note = event.get("note")
-        if note:
-            note_label = QLabel(note)
-            note_label.setObjectName("maneuverNote")
-            note_label.setWordWrap(True)
-            v.addWidget(note_label)
-
-        row.setToolTip("Jump to this event and zoom in on the burn")
-        row.mousePressEvent = lambda _e, ev=event: self._seek_to_event(ev)
-        return row
-
-    def _refresh_readouts(self, distances: dict[str, float]):
-        for body_id, card in self._body_cards.items():
-            if body_id in distances:
-                card["dist_val"].setText(_format_distance(distances[body_id], card["unit"]))
-
-        timeline = self._current_scene.get("timeline") if self._current_scene else None
-        if timeline:
-            self.met_label.setText(f"T+{self._current_time:.2f} {timeline['unitLabel']}")
-            ref_et = timeline.get("referenceEpochEt")
-            if ref_et is not None:
-                self.date_label.setText(_epoch_to_date_string(ref_et, self._current_time))
-            self._refresh_active_event()
-
-    def _refresh_active_event(self):
-        """Name the most recent event at or before the current time, so the
-        readout says which maneuver the spacecraft is on (e.g. just after a
-        burn). Highlights that event's row in the maneuver list too."""
-        current = None
-        for e in self._events:
-            if e.get("time", 0.0) <= self._current_time + 1e-9:
-                current = e
-        self.event_label.setText(f"▸ {current['label']}" if current else "")
-        active_id = id(current) if current else None
-        for e, row in getattr(self, "_event_rows", []):
-            row.setProperty("active", id(e) == active_id)
-            row.style().unpolish(row)
-            row.style().polish(row)
-
-        # Draw a maneuver's delta-v vector only while the scrubber is close (in
-        # time) to that burn -- the nearest one within _maneuver_window -- so the
-        # arrow flashes past each maneuver rather than hanging on the whole time.
-        maneuver, nearest_dt = None, None
-        for e in self._events:
-            if "vector" not in e:
-                continue
-            dt = abs(e.get("time", 0.0) - self._current_time)
-            if nearest_dt is None or dt < nearest_dt:
-                maneuver, nearest_dt = e, dt
+    def _update_maneuver_arrow(self):
+        """Draw a maneuver's delta-v vector only while the scrubber is close (in
+        time) to that burn -- the nearest one within _maneuver_window -- so the
+        arrow flashes past each maneuver rather than hanging on the whole time."""
+        maneuver, nearest_dt = nearest_maneuver(self.state.events, self.state.time)
         if (maneuver is not None and self._maneuver_base_len > 0.0
                 and nearest_dt <= self._maneuver_window):
             vec = maneuver["vector"]
@@ -2006,92 +1153,19 @@ class MissionControlWindow(QMainWindow):
         else:
             self.renderer.clear_maneuver_vector()
 
-    def _primary_spacecraft_id(self) -> str | None:
-        """The scene's main spacecraft body (kind == "spacecraft") -- GOES,
-        Orion, the Mars probe -- provided it's a real selectable body (has a
-        card). The auto-frame on a maneuver click (see _seek_to_event) points
-        the camera at this body, since that's what every burn is applied to."""
-        scene = self._current_scene
-        if not scene:
-            return None
-        for body in scene.get("bodies", []):
-            if body.get("kind") == "spacecraft" and body.get("id") in self._body_cards:
-                return body["id"]
-        return None
-
-    def _seek_to_event(self, event: dict):
-        """Jump the scrubber to a maneuver's time AND auto-frame its burn --
-        zoom the camera in on the spacecraft at that instant, so clicking a
-        maneuver row takes you right up to the burn (and its delta-v arrow)
-        instead of only moving the clock. An event with no burn vector (e.g.
-        the terminal "insertion" marker) just seeks. The zoom is to an
-        absolute distance (see EVENT_ZOOM_ARROW_MULTIPLE) so clicking rows in
-        succession lands on the same framing each time rather than diving in
-        further on every click."""
-        sc_id = self._primary_spacecraft_id()
-        zoom = sc_id is not None and "vector" in event and self._maneuver_base_len > 0.0
-        # Remember the pre-zoom framing so the M-key focus toggle can zoom back
-        # out to it -- the same contract _focus_selected sets up for its zoom.
-        if zoom:
-            cam = self.plotter.camera
-            pre_camera = (tuple(cam.position), tuple(cam.focal_point), tuple(cam.up))
-        self._seek_to_time(event.get("time", 0.0))
-        if not zoom:
+    def _on_time_changed(self, _t: float):
+        if self._tick_dt is not None:
+            # A playback tick: already paced by the 33 ms timer, so refresh
+            # now and pass dt through for camera-tracking smoothing.
+            self._refresh_view(dt=self._tick_dt)
             return
-        self._selected_body_id = sc_id
-        self._measure_body_id = None
-        self._refresh_card_highlights()
-        self._update_measure()
-        self.renderer.zoom_to_body(
-            sc_id, self._current_time,
-            distance_km=self._maneuver_base_len * EVENT_ZOOM_ARROW_MULTIPLE,
-        )
-        self._pre_focus_camera = pre_camera
-        self._focus_zoomed = True
-        self.statusBar().showMessage(f"▸ {event.get('label', 'maneuver')} — framed the burn")
-
-    def _seek_relative_event(self, direction: int):
-        """Shift+Right / Shift+Left: jump to the next/previous mission event
-        relative to the current scrubber time -- distinct from
-        _refresh_active_event's "most recent event at or before now" lookup,
-        which only ever looks backward and is used for the readout label,
-        not navigation."""
-        if not self._events:
-            return
-        ordered = sorted(self._events, key=lambda e: e.get("time", 0.0))
-        if direction > 0:
-            candidates = [e for e in ordered if e.get("time", 0.0) > self._current_time + 1e-9]
-            target = candidates[0] if candidates else None
-        else:
-            candidates = [e for e in ordered if e.get("time", 0.0) < self._current_time - 1e-9]
-            target = candidates[-1] if candidates else None
-        if target is not None:
-            self._seek_to_event(target)
-
-    def _seek_to_time(self, day: float):
-        """Move the scrubber to a specific timeline time (used by the maneuver
-        list rows)."""
-        timeline = self._current_scene.get("timeline") if self._current_scene else None
-        if not timeline:
-            return
-        span = (timeline["max"] - timeline["min"]) or 1.0
-        frac = min(1.0, max(0.0, (day - timeline["min"]) / span))
-        self.time_slider.setValue(int(round(frac * self.time_slider.maximum())))
-
-    # -------------------------------------------------------------- Timing
-    def _on_slider_moved(self, value: int):
-        timeline = self._current_scene.get("timeline") if self._current_scene else None
-        if not timeline:
-            return
-        frac = value / self.time_slider.maximum()
-        self._current_time = timeline["min"] + frac * (timeline["max"] - timeline["min"])
-        # Throttled: _current_time is always up to date (anything reading it
-        # right after setValue() sees the new time), but the 3D refresh +
-        # render runs at most once per SCRUB_MIN_INTERVAL_MS. The first event
-        # of a burst applies immediately (leading edge, so a single click or
+        # Throttled: state.time is always up to date (anything reading it
+        # right after a scrub sees the new time), but the 3D refresh + render
+        # runs at most once per SCRUB_MIN_INTERVAL_MS. The first change of a
+        # burst applies immediately (leading edge, so a single click or
         # keyboard step has no added latency); the rest coalesce into one
-        # trailing refresh at the latest slider value, so the final frame
-        # always matches where the drag stopped.
+        # trailing refresh at the latest time, so the final frame always
+        # matches where the drag stopped.
         if self._scrub_timer.isActive():
             return
         elapsed_ms = time.monotonic() * 1000.0 - self._last_scrub_render_ms
@@ -2101,126 +1175,99 @@ class MissionControlWindow(QMainWindow):
             self._scrub_timer.start(max(1, int(SCRUB_MIN_INTERVAL_MS - elapsed_ms)))
 
     def _apply_scrub(self):
-        if not (self._current_scene and self._current_scene.get("timeline")):
+        if self.state.timeline is None:
             return
         self._last_scrub_render_ms = time.monotonic() * 1000.0
-        # Batched into a single render, same fix _on_tick already applies to
-        # playback: set_time/_update_tracking/_update_measure each doing
-        # their own render made dragging visibly jankier than playback at
-        # the same effective rate.
-        self._refresh_readouts(self.renderer.set_time(self._current_time, render=False))
-        self._update_tracking(render=False)
-        self._update_measure(render=False)
-        self.plotter.render()
+        self._refresh_view()
 
-    @staticmethod
-    def _format_speed(speed: float) -> str:
-        if speed >= 10:
-            return f"{speed:.0f}×"
-        if speed >= 1:
-            return f"{speed:.1f}×"
-        # Below 1x: a fixed 2 decimals (the old behavior) reads fine down to
-        # SPEED_MIN's old floor of 0.1, but prints as "0.00×" for anything
-        # under 0.005 -- indistinguishable from stopped now that SPEED_MIN
-        # goes as low as 0.001. Scale the decimal count to keep ~2
-        # significant figures visible at any speed below 1x instead.
-        decimals = max(2, -int(math.floor(math.log10(speed))) + 1)
-        return f"{speed:.{decimals}f}×"
+    # ------------------------------------------------------- Event seeking
+    def _seek_to_event(self, event: dict):
+        """Jump to a maneuver's time AND auto-frame its burn -- zoom the camera
+        in on the spacecraft at that instant, so clicking a maneuver row takes
+        you right up to the burn (and its delta-v arrow) instead of only
+        moving the clock. An event with no burn vector (e.g. the terminal
+        "insertion" marker) just seeks. The zoom is to an absolute distance
+        (see EVENT_ZOOM_ARROW_MULTIPLE) so clicking rows in succession lands
+        on the same framing each time rather than diving in further on every
+        click."""
+        sc_id = self.state.primary_spacecraft_id()
+        zoom = sc_id is not None and "vector" in event and self._maneuver_base_len > 0.0
+        # Remember the pre-zoom framing so the M-key focus toggle can zoom back
+        # out to it -- the same contract _focus_selected sets up for its zoom.
+        if zoom:
+            cam = self.plotter.camera
+            pre_camera = (tuple(cam.position), tuple(cam.focal_point), tuple(cam.up))
+        self.state.set_time(event.get("time", 0.0))
+        if not zoom:
+            return
+        self.state.select_body(sc_id)
+        self.renderer.zoom_to_body(
+            sc_id, self.state.time,
+            distance_km=self._maneuver_base_len * EVENT_ZOOM_ARROW_MULTIPLE,
+        )
+        self._pre_focus_camera = pre_camera
+        self._focus_zoomed = True
+        self.statusBar().showMessage(f"▸ {event.get('label', 'maneuver')} — framed the burn")
 
-    def _speed_from_slider(self, value: int) -> float:
-        frac = value / SPEED_SLIDER_STEPS
-        return SPEED_MIN * (SPEED_MAX / SPEED_MIN) ** frac
+    def _seek_relative_event(self, direction: int):
+        """Shift+Right / Shift+Left: jump to the next/previous mission event
+        relative to the current time -- distinct from the "most recent event
+        at or before now" lookup the readouts use, which only ever looks
+        backward."""
+        target = adjacent_event(self.state.events, self.state.time, direction)
+        if target is not None:
+            self._seek_to_event(target)
 
-    def _slider_from_speed(self, speed: float) -> int:
-        speed = min(SPEED_MAX, max(SPEED_MIN, speed))
-        frac = math.log(speed / SPEED_MIN) / math.log(SPEED_MAX / SPEED_MIN)
-        return int(round(frac * SPEED_SLIDER_STEPS))
-
-    def _on_speed_slider(self, value: int):
-        self._speed = self._speed_from_slider(value)
-        self._sync_speed_readout(self._speed)
-
-    def _set_speed(self, speed: float):
-        self._speed = min(SPEED_MAX, max(SPEED_MIN, float(speed)))
-        if hasattr(self, "speed_slider"):
-            self.speed_slider.blockSignals(True)
-            self.speed_slider.setValue(self._slider_from_speed(self._speed))
-            self.speed_slider.blockSignals(False)
-            self._sync_speed_readout(self._speed)
-
-    def _cycle_speed(self, direction: int):
-        """Fine multiplicative nudge of the time-warp rate (the [ / ] shortcuts);
-        a continuous log step, not a jump between fixed presets."""
-        self._set_speed(self._speed * (1.25 ** direction))
-
+    # -------------------------------------------------------------- Timing
     def _step_time(self, direction: int):
-        """Nudge the scrubber one step (2% of the span) forward/back."""
-        if not (self._current_scene and self._current_scene.get("timeline")):
+        """Nudge the current time one step (2% of the span) forward/back."""
+        timeline = self.state.timeline
+        if not timeline:
             return
         self._set_playing(False)
-        step = max(1, int(round(0.02 * self.time_slider.maximum())))
-        self.time_slider.setValue(
-            max(0, min(self.time_slider.maximum(), self.time_slider.value() + direction * step))
-        )
+        self.state.set_time(self.state.time + direction * 0.02 * timeline_span(timeline))
 
     def _restart_timeline(self):
-        if not (self._current_scene and self._current_scene.get("timeline")):
+        timeline = self.state.timeline
+        if not timeline:
             return
         self._set_playing(False)
-        self.time_slider.setValue(0)
+        self.state.set_time(timeline["min"])
 
     def _toggle_play(self):
-        if not (self._current_scene and self._current_scene.get("timeline")):
+        if not self.state.timeline:
             return
         self._set_playing(not self._playing)
 
     def _set_playing(self, playing: bool):
         self._playing = playing
-        self.play_btn.setIcon(icons.pause_icon() if playing else icons.play_icon())
+        self.timeline_bar.set_playing(playing)
         if playing:
             self._last_tick_ms = None
             self._timer.start()
         else:
             self._timer.stop()
-            self._sync_speed_readout(self._speed)  # drop any leftover "eased" display
+            # Drop any leftover "eased" auto-slow display.
+            self.timeline_bar.show_effective_speed(self.timeline_bar.speed)
 
-    def _set_event_slowdown_enabled(self, on: bool):
-        self._event_slowdown_enabled = bool(on)
-        self.auto_slow_btn.setIcon(icons.clock_icon(ACCENT if self._event_slowdown_enabled else INK_MUTED))
+    def _on_auto_slow_toggled(self, on: bool):
         if not self._playing:
-            self._sync_speed_readout(self._speed)
-        self.statusBar().showMessage(
-            "Auto-slow near events: on" if self._event_slowdown_enabled else "Auto-slow near events: off"
+            self.timeline_bar.show_effective_speed(self.timeline_bar.speed)
+        self.statusBar().showMessage("Auto-slow near events: on" if on else "Auto-slow near events: off")
+
+    def _effective_speed(self, timeline: dict) -> float:
+        """The chosen time-warp rate, eased down near events when auto-slow is
+        on (see state.eased_speed)."""
+        speed = self.timeline_bar.speed
+        if not self.timeline_bar.auto_slow_enabled:
+            return speed
+        return eased_speed(
+            speed, self.state.events, self.state.time, timeline_span(timeline),
+            EVENT_SLOWDOWN_WINDOW_FRACTION, EVENT_SLOWDOWN_TARGET_SPEED,
         )
 
-    def _event_proximity_effective_speed(self, timeline) -> float:
-        """self._speed, eased toward EVENT_SLOWDOWN_TARGET_SPEED (an absolute
-        days-per-real-second pace, not a ratio of self._speed -- see that
-        constant's comment for why a ratio doesn't work) as the scrubber
-        nears the closest timeline event, over EVENT_SLOWDOWN_WINDOW_FRACTION
-        of the mission's own span. min() means this only ever slows playback
-        down, never speeds it up past whatever the user actually chose.
-        Returns self._speed unchanged (no easing) if there are no events or
-        the user has switched auto-slow off via the timeline bar's toggle.
-        """
-        if not self._events or not self._event_slowdown_enabled:
-            return self._speed
-        span = (timeline["max"] - timeline["min"]) or 1.0
-        window = EVENT_SLOWDOWN_WINDOW_FRACTION * span
-        if window <= 0.0:
-            return self._speed
-        nearest_dt = min(abs(e.get("time", 0.0) - self._current_time) for e in self._events)
-        if nearest_dt >= window:
-            return self._speed
-        near_speed = min(self._speed, EVENT_SLOWDOWN_TARGET_SPEED)
-        t = nearest_dt / window
-        smoothstep = t * t * (3.0 - 2.0 * t)
-        return near_speed + (self._speed - near_speed) * smoothstep
-
     def _on_tick(self):
-        import time as _time
-
-        now_ms = _time.monotonic() * 1000.0
+        now_ms = time.monotonic() * 1000.0
         if self._last_tick_ms is None:
             self._last_tick_ms = now_ms
             return
@@ -2232,54 +1279,31 @@ class MissionControlWindow(QMainWindow):
         # treated as a hitch to smooth over rather than catch up on exactly.
         dt = min(dt, 0.1)
 
-        timeline = self._current_scene.get("timeline") if self._current_scene else None
+        timeline = self.state.timeline
         if not timeline:
             self._set_playing(False)
             return
 
-        effective_speed = self._event_proximity_effective_speed(timeline)
-        self._sync_speed_readout(effective_speed)
-        self._current_time += dt * effective_speed
-        if self._current_time >= timeline["max"]:
-            self._current_time = timeline["max"]
+        effective_speed = self._effective_speed(timeline)
+        self.timeline_bar.show_effective_speed(effective_speed)
+        new_time = min(timeline["max"], self.state.time + dt * effective_speed)
+        self._tick_dt = dt
+        try:
+            self.state.set_time(new_time)
+        finally:
+            self._tick_dt = None
+        if new_time >= timeline["max"]:
             self._set_playing(False)
 
-        frac = (self._current_time - timeline["min"]) / (timeline["max"] - timeline["min"])
-        self.time_slider.blockSignals(True)
-        self.time_slider.setValue(int(frac * self.time_slider.maximum()))
-        self.time_slider.blockSignals(False)
-        # Batched into a single render at the end instead of one render per
-        # call (set_time/track_body/measure_line each used to render on their
-        # own) -- three separate GPU submits every 33ms tick made per-tick
-        # cost noisy enough to read as playback jitter/stutter.
-        self._refresh_readouts(self.renderer.set_time(self._current_time, render=False))
-        self._update_tracking(dt=dt, render=False)
-        self._update_measure(render=False)
-        self.plotter.render()
-
-    def _sync_speed_readout(self, effective_speed: float):
-        """Keep the TIME WARP label showing what's *actually* playing back,
-        not just the slider-set self._speed -- without this the label kept
-        reading (e.g.) "10x" while auto-slow had actually eased playback down
-        to 0.02x near an event, which looked like the readout and the real
-        playback rate had drifted out of sync with each other."""
-        eased = effective_speed < self._speed - 1e-9
-        self.speed_value_label.setText(self._format_speed(effective_speed))
-        self.speed_value_label.setProperty("eased", eased)
-        self.speed_value_label.style().unpolish(self.speed_value_label)
-        self.speed_value_label.style().polish(self.speed_value_label)
-
     def _on_rotation_tick(self):
-        import time as _time
-
-        now_ms = _time.monotonic() * 1000.0
+        now_ms = time.monotonic() * 1000.0
         if self._last_rotation_tick_ms is None:
             self._last_rotation_tick_ms = now_ms
             return
         dt = (now_ms - self._last_rotation_tick_ms) / 1000.0
         self._last_rotation_tick_ms = now_ms
 
-        if self._current_scene is not None:
+        if self.state.scene is not None:
             self.renderer.advance_rotation(dt * ROTATION_SIM_HOURS_PER_REAL_SECOND)
 
     def closeEvent(self, event):  # noqa: N802 -- Qt override signature
@@ -2293,7 +1317,7 @@ class MissionControlWindow(QMainWindow):
         self._timer.stop()
         self._scrub_timer.stop()
         self._rotation_timer.stop()
-        self._spinner._timer.stop()  # the spinner has its own QTimer, independent of self._timer
+        self._spinner.stop()  # the spinner has its own QTimer, independent of self._timer
         self.plotter._resize_settle_timer.stop()  # so it can't fire post-teardown
         # Set *before* touching the load thread, unconditionally -- not just on
         # a wait() timeout. disconnect() below is best-effort hygiene, not the
@@ -2347,13 +1371,6 @@ class MissionControlWindow(QMainWindow):
         except Exception:  # noqa: BLE001 -- best-effort teardown, never block quit
             pass
         super().closeEvent(event)
-
-
-def _epoch_to_date_string(reference_et: float, day_offset: float) -> str:
-    from orbitopt.timescales import tdb_seconds_to_utc_datetime
-
-    dt = tdb_seconds_to_utc_datetime(reference_et + day_offset * 86400.0)
-    return dt.strftime("%Y-%m-%d %H:%M UTC")
 
 
 def main():

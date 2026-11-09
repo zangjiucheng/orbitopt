@@ -113,8 +113,8 @@ def export_solar_system_data(epoch_mjd2000=None, n_samples=240):
             position=[round(r_now[0] / AU_M, 6), round(r_now[1] / AU_M, 6), round(r_now[2] / AU_M, 6)],
             info=[
                 # No separate "Distance from Sun" row -- every body card
-                # already shows a live "Distance" readout (app.py's
-                # _rebuild_body_cards), which for this heliocentric scene is
+                # already shows a live "Distance" readout (inspector.py's
+                # InspectorPanel), which for this heliocentric scene is
                 # exactly the same number; a second, always-identical row
                 # was pure duplication (confirmed against a real rendered
                 # frame, not assumed).

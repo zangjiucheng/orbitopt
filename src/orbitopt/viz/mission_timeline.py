@@ -335,7 +335,7 @@ def _build_artemis2_mission(
             trail={"times": days, "positions": moon_positions_km.round(1).tolist()},
             # No static "Distance from Earth" row -- every body card already
             # shows a live "Distance" readout that tracks the scrubber (see
-            # app.py's _rebuild_body_cards); a fixed mission-start snapshot
+            # inspector.py's InspectorPanel); a fixed mission-start snapshot
             # here duplicated it at t=0 and went stale (misleadingly) the
             # moment the timeline moved.
             texture=TEXTURE["moon"], radius=MOON_RADIUS_KM,
