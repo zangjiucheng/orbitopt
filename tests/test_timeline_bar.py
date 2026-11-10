@@ -35,7 +35,6 @@ def test_date_readout_is_cleared_for_a_timeline_without_an_epoch():
 def test_warp_is_ksp_style_real_time_multiplier():
     from orbitopt.viz.timeline_bar import (
         WARP_LEVELS,
-        default_warp,
         format_rate,
         format_warp,
         slider_from_warp,
@@ -55,15 +54,11 @@ def test_warp_is_ksp_style_real_time_multiplier():
     assert step_warp(1.0e7, +1) == 1.0e7  # clamps at the top
     for w in (0.1, 3.7, 1234.0, 1.0e7):
         assert warp_from_slider(slider_from_warp(w)) == pytest.approx(w, rel=0.01)
-    # Default: the level that plays the whole timeline in about a minute.
-    assert default_warp(23.5 * 3600) == 1_000.0      # Starship Flight 15
-    assert default_warp(7.5 * 86400) == 10_000.0     # Artemis II
-    assert default_warp(303 * 86400) == 1_000_000.0  # Mars
     assert timeline_unit_seconds("days") == 86400.0 and timeline_unit_seconds("hours") == 3600.0
     assert timeline_unit_seconds(None) == 86400.0
 
 
-def test_timeline_bar_picks_the_scene_default_warp_and_steps():
+def test_timeline_bar_opens_at_real_time_and_steps():
     from PySide6.QtWidgets import QApplication
 
     from orbitopt.viz.state import MissionState
@@ -72,12 +67,12 @@ def test_timeline_bar_picks_the_scene_default_warp_and_steps():
     QApplication.instance() or QApplication([])
     state = MissionState()
     bar = TimelineBar(state)
-    state.set_scene(_scene())  # 4 days
-    assert bar.warp == 10_000.0
-    bar.step_warp(+1)
-    assert bar.warp == 100_000.0 and bar.speed_value_label.text().startswith("100k×")
-    bar.set_warp(1.0)
+    bar.set_warp(10_000.0)
+    state.set_scene(_scene())  # 4 days: every scene opens at real time
+    assert bar.warp == 1.0 and bar.real_time_btn.isChecked()
     assert bar.speed_value_label.text() == "1× · 1 s/s"
+    bar.step_warp(+1)
+    assert bar.warp == 5.0 and bar.speed_value_label.text().startswith("5×")
 
 
 def test_typing_a_time_jumps_there_and_the_track_zooms_and_follows():
@@ -154,8 +149,10 @@ def test_warp_ladder_picks_levels_and_one_click_returns_to_real_time():
     state = MissionState()
     bar = TimelineBar(state)
     bar.show()
-    state.set_scene(_scene())  # 4 days -> 10,000x
+    state.set_scene(_scene())  # 4 days, opens at 1x
     app.processEvents()
+    assert bar.warp == 1.0 and bar.real_time_btn.isChecked()
+    bar.set_warp(10_000.0)
     ladder = bar.warp_ladder
     assert bar.warp == 10_000.0 and not bar.real_time_btn.isChecked()
     assert "Whole mission at this warp: 34.6 s" in bar.speed_value_label.toolTip()

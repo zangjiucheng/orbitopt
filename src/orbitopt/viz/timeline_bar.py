@@ -72,7 +72,6 @@ WARP_MIN = 0.1
 WARP_MAX = 1.0e7
 WARP_LEVELS = (0.1, 1.0, 5.0, 10.0, 50.0, 100.0, 1_000.0, 10_000.0, 100_000.0, 1_000_000.0, 10_000_000.0)
 WARP_SLIDER_STEPS = 1000
-DEFAULT_PLAYBACK_REAL_S = 60.0  # a scene's default warp plays its whole timeline in about this long
 
 # Seconds in one timeline unit (timeline.unitLabel); unknown labels fall back
 # to days, the unit every orbitopt exporter writes.
@@ -121,13 +120,6 @@ def step_warp(warp: float, direction: int) -> float:
     if direction > 0:
         return next((w for w in WARP_LEVELS if w > warp * (1 + 1e-9)), WARP_LEVELS[-1])
     return next((w for w in reversed(WARP_LEVELS) if w < warp * (1 - 1e-9)), WARP_LEVELS[0])
-
-
-def default_warp(span_seconds: float, playback_real_s: float = DEFAULT_PLAYBACK_REAL_S) -> float:
-    """The warp level (nearest on a log scale) that plays ``span_seconds`` of
-    timeline in about ``playback_real_s`` real seconds."""
-    target = max(span_seconds, 1e-9) / playback_real_s
-    return min(WARP_LEVELS[1:], key=lambda w: abs(math.log(w) - math.log(target)))
 
 
 
@@ -694,7 +686,7 @@ class TimelineBar(QWidget):
     def __init__(self, state: MissionState, parent: QWidget | None = None):
         super().__init__(parent)
         self._state = state
-        self._warp = 1_000.0  # replaced per scene by default_warp() in _on_scene_changed
+        self._warp = 1.0  # every scene opens at real time (_on_scene_changed)
         self.setObjectName("timelineBar")
         # A QWidget *subclass* only paints its stylesheet background/border
         # with this attribute set (a plain QWidget gets it implicitly).
@@ -838,8 +830,8 @@ class TimelineBar(QWidget):
         timeline = self._state.timeline
         self.setVisible(timeline is not None)
         if timeline is not None:
-            span_s = (timeline["max"] - timeline["min"]) * self.unit_seconds
-            self.set_warp(default_warp(span_s))
+            # Real time (1×), as in KSP: warp up with "." or the ladder.
+            self.set_warp(1.0)
         self._fit_height()
         self.event_label.setText("")
         self._refresh_readouts()
