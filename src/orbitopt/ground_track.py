@@ -125,3 +125,23 @@ def site_passes(times_s, lat_deg, lon_deg, site_lat_deg: float, site_lon_deg: fl
         passes.append(SitePass(time_s=float(t_min), distance_km=float(max(d_min, 0.0)),
                                north_of_site=bool(lat[i] > site_lat_deg), heading_deg=heading))
     return passes
+
+
+# Sidereal rotation period implied by gmst_deg's rate (360.98564736629 deg per
+# solar day), so a renderer spinning Earth at this period stays in step with
+# eci_to_ecef / ecef_to_eci.
+GMST_SIDEREAL_PERIOD_HOURS = 24.0 * 360.0 / 360.98564736629
+
+
+def gmst_earth_basis_ecliptic(utc_mjd2000: float) -> np.ndarray:
+    """3x3 matrix taking Earth-fixed vectors (this module's GMST model: x to
+    Greenwich, z to the pole) to ECLIPJ2000 at ``utc_mjd2000`` -- the
+    ``orientationBasis`` for an Earth whose texture must line up with ground
+    tracks and sites computed here. SPICE's IAU_EARTH (bodies.
+    body_fixed_to_eclipj2000_matrix) includes precession since J2000 and
+    puts the ground ~0.36 deg of longitude away (2026) from the GMST frame,
+    which drew Starbase ~38 km off its spot on the texture."""
+    from orbitopt.injection import equatorial_to_ecliptic
+
+    ecef_to_eq = ecef_to_eci(np.eye(3), np.full(3, float(utc_mjd2000)))  # rows: axes in the equator frame
+    return np.column_stack([equatorial_to_ecliptic(ecef_to_eq[i]) for i in range(3)])

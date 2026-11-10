@@ -230,6 +230,16 @@ def _sphere_actor(plotter, body: dict, name: str):
         normals[:, 2] /= squash * squash
         normals /= np.linalg.norm(normals, axis=1)[:, None]
         sphere.point_data.active_normals = normals.astype(np.float32)
+        # Map texture rows to *geodetic* latitude, as equirectangular maps are
+        # drawn: after the squash a vertex's mesh angle is the reduced
+        # latitude beta, and tan(phi) = tan(beta) / (1 - f). Without this a
+        # mid-latitude feature sat ~3 km (Earth, 45 deg) off its true spot.
+        r_xy = np.hypot(points[:, 0], points[:, 1])
+        beta = np.arctan2(points[:, 2] / squash, r_xy)
+        phi = np.arctan(np.tan(beta) / squash)
+        tcoords = np.asarray(sphere.active_texture_coordinates).copy()
+        tcoords[:, 1] = (0.5 + phi / np.pi).astype(np.float32)
+        sphere.active_texture_coordinates = tcoords
     # A star is its own light source -- lighting=False renders its raw
     # texture colors with no shading falloff, so it reads as uniformly
     # bright regardless of viewing angle instead of having an implausible

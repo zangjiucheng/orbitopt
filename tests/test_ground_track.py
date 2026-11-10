@@ -55,3 +55,19 @@ def test_site_passes_refines_minimum_and_reports_side_and_heading():
     assert p.north_of_site and p.signed_miss_km > 0
     assert p.direction == "E" and p.heading_deg == pytest.approx(90.0, abs=1e-6)
     assert site_passes(t, lat, lon, 30.0, 0.0, max_distance_km=500.0) == []
+
+
+def test_gmst_earth_basis_matches_the_ground_track_frame():
+    from orbitopt.ground_track import GMST_SIDEREAL_PERIOD_HOURS, gmst_earth_basis_ecliptic
+    from orbitopt.injection import equatorial_to_ecliptic
+
+    t = 9813.99
+    basis = gmst_earth_basis_ecliptic(t)
+    assert np.allclose(basis.T @ basis, np.eye(3))
+    p = geodetic_to_ecef(25.997, -97.157, 0.0)
+    np.testing.assert_allclose(basis @ p, equatorial_to_ecliptic(ecef_to_eci(p[None, :], [t])[0]), atol=1e-6)
+    # Spinning at the GMST sidereal period keeps the basis in step a day later.
+    from orbitopt.viz.scene_renderer import _rotation_z
+
+    later = basis @ _rotation_z(360.0 * 24.0 / GMST_SIDEREAL_PERIOD_HOURS)
+    np.testing.assert_allclose(later, gmst_earth_basis_ecliptic(t + 1.0), atol=1e-9)

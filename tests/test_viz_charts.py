@@ -201,8 +201,16 @@ def test_flattened_body_renders_as_an_ellipsoid():
     plotter = pv.Plotter(off_screen=True)
     try:
         SceneRenderer(plotter).load(scene)
-        pts = np.asarray(plotter.renderer.actors["marker-earth"].mapper.dataset.points)
+        mesh = plotter.renderer.actors["marker-earth"].mapper.dataset
+        pts = np.asarray(mesh.points)
         assert np.abs(pts[:, 2]).max() == pytest.approx(6378.137 * (1.0 - f), rel=1e-6)
         assert np.hypot(pts[:, 0], pts[:, 1]).max() == pytest.approx(6378.137, rel=1e-6)
+        # Texture rows map to geodetic latitude: a vertex's v is 0.5 + phi / pi
+        # where phi is the latitude of the ellipsoid normal there.
+        v = np.asarray(mesh.active_texture_coordinates)[:, 1]
+        normals = pts.copy()
+        normals[:, 2] /= (1.0 - f) ** 2
+        phi = np.arctan2(normals[:, 2], np.hypot(normals[:, 0], normals[:, 1]))
+        np.testing.assert_allclose(v, 0.5 + phi / np.pi, atol=1e-6)
     finally:
         plotter.close()
