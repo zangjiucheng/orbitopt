@@ -85,6 +85,7 @@ def test_free_return_fitness_identical_between_modes():
     kw = dict(
         r0_km=r_park, v0_pre_burn_km_s=v_park, epoch0_seconds=EPOCH0,
         target_distance_km=8_000.0, coast_days=6.0, n_steps=80, use_gpu=False,
+        backend="numpy",  # compares output modes; backends: test_free_return_backends.py
     )
     fast = FreeReturnScreeningProblem(**kw)  # default: closest_approach
     full = FreeReturnScreeningProblem(**kw, propagation_output="history")
