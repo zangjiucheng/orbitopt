@@ -14,6 +14,7 @@ downloads all the same as last time) and is polled by the window's timer.
 from __future__ import annotations
 
 import math
+import time
 from collections import OrderedDict
 
 import numpy as np
@@ -24,6 +25,11 @@ from orbitopt.viz import earth_tiles as et
 
 _KEEP_ACTORS = 320  # hidden tile actors kept around (GPU textures) before eviction
 _ATTRIBUTION_NAME = "eox-attribution"
+_BUILD_BUDGET_S = 0.012
+"""Main-thread time per update() for building new tile actors (each decodes
+a JPEG and uploads a mesh). Building every newly arrived tile at once froze
+the window for up to ~0.9 s when a close-up's 160 tiles came in; the rest
+are built on the next ticks, coarse first, the globe showing beneath."""
 
 
 def _np_matrix(m: vtk.vtkMatrix4x4) -> np.ndarray:
@@ -41,6 +47,8 @@ class EarthTileLayer:
         self._shown: set[et.Tile] = set()
         self._last_key = None
         self._attribution = None
+        self._property = None  # shared tile material, see _make_actor
+        self._deferred = False
 
     @property
     def cache(self) -> et.TileCache:
@@ -52,6 +60,12 @@ class EarthTileLayer:
     def shown(self) -> set[et.Tile]:
         return set(self._shown)
 
+    @property
+    def pending(self) -> bool:
+        """Tiles are on disk but not built yet (the build budget ran out):
+        poll again soon."""
+        return self._deferred
+
     # ------------------------------------------------------------ lifecycle
     def reset(self) -> None:
         """Forget every actor (the plotter was just cleared)."""
@@ -60,6 +74,7 @@ class EarthTileLayer:
         self._earth = None
         self._attribution = None
         self._last_key = None
+        self._deferred = False
 
     def attach(self, earth_actor, body: dict) -> None:
         self._earth = earth_actor
@@ -140,14 +155,24 @@ class EarthTileLayer:
             if actor is not None:
                 actor.SetVisibility(False)
         matrix = self._earth.GetMatrix() if self._earth is not None else None
-        for tile in show:
-            actor = self._actors.get(tile) or self._make_actor(tile)
+        deadline = time.perf_counter() + _BUILD_BUDGET_S
+        deferred = False
+        for tile in sorted(show):  # coarse levels first
+            actor = self._actors.get(tile)
+            if actor is None:
+                if time.perf_counter() > deadline:
+                    deferred = True
+                    continue
+                actor = self._make_actor(tile)
             if actor is None:
                 continue
             self._actors.move_to_end(tile)
             actor.SetUserMatrix(matrix)
             actor.SetVisibility(True)
-        self._shown = {t for t in show if t in self._actors}
+        self._shown = {t for t in show if t in self._actors and self._actors[t].GetVisibility()}
+        self._deferred = deferred
+        if deferred:
+            self._last_key = None  # finish building on the next tick
         self._evict()
         self._show_attribution(bool(self._shown))
         return changed
@@ -177,9 +202,25 @@ class EarthTileLayer:
         mesh = pv.PolyData(points, faces)
         mesh.active_texture_coordinates = tcoords
         mesh.point_data.active_normals = normals
-        z, row, col = tile
-        actor = self.plotter.add_mesh(mesh, texture=texture, name=f"eox-{z}-{row}-{col}", pickable=False,
-                                      smooth_shading=True, reset_camera=False, render=False)
+        if self._property is None:
+            # The first tile through pyvista, for its material (smooth
+            # shading, theme lighting); the rest share that vtkProperty and
+            # skip add_mesh, whose Python overhead (~2.5 ms) was most of a
+            # tile's build time.
+            z, row, col = tile
+            actor = self.plotter.add_mesh(mesh, texture=texture, name=f"eox-{z}-{row}-{col}", pickable=False,
+                                          smooth_shading=True, reset_camera=False, render=False)
+            self._property = actor.GetProperty()
+        else:
+            mapper = vtk.vtkPolyDataMapper()
+            mapper.SetInputData(mesh)
+            mapper.ScalarVisibilityOff()
+            actor = vtk.vtkActor()
+            actor.SetMapper(mapper)
+            actor.SetProperty(self._property)
+            actor.SetTexture(texture)
+            actor.PickableOff()
+            self.plotter.renderer.AddActor(actor)
         # No polygon offset on the tiles: on macOS's OpenGL one offset
         # "unit" is far larger than the depth-buffer step, and any offset
         # put the imagery in front of trajectories hundreds of metres up.

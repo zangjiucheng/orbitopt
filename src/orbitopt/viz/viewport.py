@@ -36,6 +36,33 @@ class DebouncedInteractor(QtInteractor):
         self._resize_settle_timer.timeout.connect(self._render_after_resize_settles)
         self._install_dynamic_clipping()
 
+    # One draw per event-loop turn. pyvistaqt's render() draws once per call
+    # (on macOS via a new thread each time), and a playback tick or a camera
+    # step asks several times -- trails, labels, arrow, tracking, the
+    # timeline. Each draw waits for the display's vsync (~8 ms at 120 Hz),
+    # so a tick cost 3-4 refresh intervals: measured 29-42 ms per tick and up
+    # to 46 ms per camera step before this, playback topping out near 25 fps.
+    def render(self):
+        self._rendered = True  # pyvista's own "has rendered" bookkeeping
+        if getattr(self, "_render_pending", False):
+            return
+        self._render_pending = True
+        QTimer.singleShot(0, self._flush_render)
+
+    def _flush_render(self):
+        self._render_pending = False
+        if getattr(self, "_closed", False) or self.render_window is None:
+            return
+        try:
+            self._render()
+        except (RuntimeError, AttributeError):  # widget torn down while the request was queued
+            pass
+
+    def render_now(self):
+        """Draw immediately (screenshots, tests reading pixels)."""
+        self._render_pending = False
+        self._render()
+
     def resizeEvent(self, event):  # noqa: N802 -- Qt override signature
         if self._RenderWindow is None:
             return

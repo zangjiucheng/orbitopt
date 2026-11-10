@@ -181,8 +181,9 @@
 <b>orbitopt view my_mission.yaml</b>     # run a config, then open it</pre>
       <p>Built-in missions: <code>solar-system</code>, <code>artemis2</code>, <code>goes</code>,
         <code>mars</code> and <code>starship-flight-15</code>. Pick one in the left sidebar to load it.
-        The first load of a mission computes it (Mars takes several minutes); after that it opens from
-        the scene cache in a second or two.</p>
+        Every built-in ships precomputed, so it opens in about a second. If you change orbitopt's code, the
+        mission still opens at once from the shipped scene and the title bar offers <b>Precomputed by older code ·
+        Recompute</b>; recomputing Starship takes several minutes, and the result is cached afterwards.</p>
     </section>
 
     <section id="window">
@@ -337,6 +338,12 @@
       <p>The title bar's badge always says <b>VERIFIED</b>, <b>VERIFY FAILED</b> or <b>NOT CHECKED</b>. The <i>Verification</i>
         tab lists every check with its residual and tolerance, the force model, integrator step convergence and conservation
         checks. GOES loads unverified by default (the TudatPy re-fly takes about a minute); its tab has a button to run it.</p>
+      <p>Starship Flight 15 carries four reports: an independent re-fly of the return with other integrators, guided recovery
+        from eight dispersions (air density, burn timing and Δv, lift-to-drag), loads and propellant against assumed limits,
+        and SpaceX's published timeline. Each check shows the measured value and its limit. It reads <b>VERIFY FAILED</b>
+        on purpose: with 10% less lift than assumed the ship cannot reach Starbase, because the nominal entry already uses
+        all of its cross-range at the assumed 30.5° inclination. The report also gives the inclinations at which the entry
+        alone reaches Starbase (up to 29.97°; up to 29.09° with 10% less lift).</p>
     </section>
 
     <section id="own">
@@ -347,7 +354,9 @@
 <b>orbitopt run my_mission.yaml</b>        # optimize, verify, write scene + report
 <b>orbitopt view my_mission.yaml</b>       # run (cached) and open</pre>
       <p>Any scene JSON (<code>orbitopt export</code>, or written by your own code) opens with
-        <i>File › Open scene file…</i>. See the <a href="https://github.com/zangjiucheng/orbitopt/blob/main/README.md#mission-configs" target="_blank" rel="noopener">README</a> for the config format.</p>
+        <i>File › Open scene file…</i>. Editing orbitopt's code while Mission Control is open shows a
+        <b>Code changed · Reload</b> button in the title bar; it (or <kbd>⌘R</kbd> / <kbd>Ctrl+R</kbd>) restarts the
+        compute worker with the new code and recomputes the current mission. See the <a href="https://github.com/zangjiucheng/orbitopt/blob/main/README.md#mission-configs" target="_blank" rel="noopener">README</a> for the config format.</p>
     </section>
 
     <section id="keys">
@@ -371,6 +380,7 @@
         <tr><td><kbd>R</kbd></td><td>Reset camera</td></tr>
         <tr><td><kbd>I</kbd></td><td>Toggle the right panel</td></tr>
         <tr><td><kbd>F1</kbd></td><td>Shortcut reference</td></tr>
+        <tr><td><kbd>⌘R</kbd> / <kbd>Ctrl+R</kbd></td><td>Reload the mission with edited code</td></tr>
         <tr><td><kbd>⌘Q</kbd> / <kbd>Ctrl+Q</kbd></td><td>Quit</td></tr>
       </table></div>
     </section>
@@ -378,8 +388,9 @@
     <section id="trouble">
       <h2><span class="num">11</span>Troubleshooting</h2>
       <ul>
-        <li><b>A mission takes minutes to open.</b> It is being computed; the scene is cached afterwards. The cache is keyed on
-          orbitopt's source, so after updating orbitopt the first open computes again.</li>
+        <li><b>A mission takes minutes to open.</b> It is being computed (after <i>Recompute</i>, or for your own
+          configs); the scene is cached afterwards, keyed on orbitopt's source. Built-in missions otherwise open from
+          the precomputed scenes shipped with orbitopt.</li>
         <li><b>No satellite imagery near Earth.</b> Check <i>View › High-res Earth imagery</i>, the network, and that
           <code>ORBITOPT_EARTH_TILES</code> isn't <code>off</code>. Imagery appears only within a few Earth radii.</li>
         <li><b>The 3D view is black in a screenshot.</b> Window captures miss the OpenGL view; use

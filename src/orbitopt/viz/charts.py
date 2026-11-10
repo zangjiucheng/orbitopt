@@ -366,7 +366,7 @@ def distance_series(scene: dict) -> tuple[np.ndarray, list[dict]]:
         if ref is not None and body["id"] == ref.body_id:
             # Around a planet, distance from its centre is an altitude in
             # disguise (a flat ~6,650 km line for LEO): show the altitude.
-            km = np.array([ref.altitude(r) for r in sc_pos - pos])
+            km = ref.altitudes(sc_pos - pos)
             label = f"altitude above {body['name']}"
         series.append({"id": body["id"], "name": body["name"], "label": label, "color": body["color"], "km": km})
     return times, series
@@ -454,11 +454,18 @@ class DistanceChart(_CachedChart):
                 p.drawLine(QPointF(x, r.bottom() - 5), QPointF(x, r.bottom()))
 
         # One 2 px line per body in its scene color; legend in ink text.
+        # Pixel coordinates in numpy (the per-point _x/_y calls cost ~60 ms
+        # a paint for a 4,000-sample trail); same mapping as _x / _y.
         step = max(1, len(self._times) // int(max(1.0, r.width() * 2)))
-        xs = [self._x(t) for t in self._times[::step]]
+        times = self._times[::step]
+        span = (self._times[-1] - self._times[0]) or 1.0
+        xs = (r.left() + (times - self._times[0]) / span * r.width()).tolist()
+        log_lo, log_hi = math.log10(self._lo), math.log10(self._hi)
         legend_x = r.left()
         for s in self._series:
-            poly = QPolygonF([QPointF(x, self._y(km)) for x, km in zip(xs, s["km"][::step])])
+            km = np.maximum(np.asarray(s["km"][::step], dtype=float), self._lo)
+            ys = (r.bottom() - (np.log10(km) - log_lo) / (log_hi - log_lo) * r.height()).tolist()
+            poly = QPolygonF([QPointF(x, y) for x, y in zip(xs, ys)])
             p.setPen(QPen(QColor(s["color"]), 2.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
             p.drawPolyline(poly)
             p.setBrush(QColor(s["color"]))

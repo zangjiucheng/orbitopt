@@ -552,6 +552,7 @@ class SceneRenderer:
         self._flight_labels = {}
         self.plotter.clear()
         self.tiles.reset()
+        self._arrow_actor = None  # cleared with the plotter
         self.scene = scene
         self._moving = {}
         self._static_positions = {}
@@ -1195,16 +1196,40 @@ class SceneRenderer:
         if length_km <= 0.0:
             self.clear_maneuver_vector()
             return
-        arrow = pv.Arrow(
-            start=pos, direction=dv / mag, scale=length_km,
-            tip_length=0.28, tip_radius=0.09, shaft_radius=0.032,
-        )
-        self.plotter.add_mesh(arrow, color=MANEUVER_COLOR, name="maneuver-vector",
-                              pickable=False, specular=0.3)
+        # One unit arrow (+x, from the origin), placed by its matrix: this
+        # runs every playback tick near a burn, and rebuilding the mesh and
+        # re-adding the actor each time cost ~5 ms a tick.
+        actor = getattr(self, "_arrow_actor", None)
+        if actor is None:
+            arrow = pv.Arrow(start=(0.0, 0.0, 0.0), direction=(1.0, 0.0, 0.0), scale=1.0,
+                             tip_length=0.28, tip_radius=0.09, shaft_radius=0.032)
+            actor = self.plotter.add_mesh(arrow, color=MANEUVER_COLOR, name="maneuver-vector",
+                                          pickable=False, specular=0.3, render=False, reset_camera=False)
+            self._arrow_actor = actor
+        x = dv / mag
+        helper = np.array([0.0, 0.0, 1.0]) if abs(x[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
+        y = np.cross(helper, x)
+        y /= np.linalg.norm(y)
+        z = np.cross(x, y)
+        m = np.eye(4)
+        m[:3, 0], m[:3, 1], m[:3, 2], m[:3, 3] = x * length_km, y * length_km, z * length_km, pos
+        actor.SetUserMatrix(pv.vtkmatrix_from_array(m))
+        actor.SetVisibility(True)
         self.plotter.render()
 
+    def maneuver_vector_tip(self) -> np.ndarray | None:
+        """World-frame tip of the drawn burn arrow, or None (tests)."""
+        actor = getattr(self, "_arrow_actor", None)
+        if actor is None or not actor.GetVisibility():
+            return None
+        m = pv.array_from_vtkmatrix(actor.GetUserMatrix())
+        return m[:3, 3] + m[:3, 0]
+
     def clear_maneuver_vector(self) -> None:
-        self.plotter.remove_actor("maneuver-vector", render=True)
+        actor = getattr(self, "_arrow_actor", None)
+        if actor is not None and actor.GetVisibility():
+            actor.SetVisibility(False)
+            self.plotter.render()
 
     # Camera-follow smoothing rate (1/s) applied when track_body is called
     # with a ``dt`` -- i.e. every timeline tick during playback. Hard-snapping

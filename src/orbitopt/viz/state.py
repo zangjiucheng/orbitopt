@@ -187,6 +187,14 @@ class AltitudeReference:
         sin_lat = float(np.dot(r, self.pole)) / rn
         return rn - self.radius * (1.0 - self.flattening * sin_lat * sin_lat)
 
+    def altitudes(self, positions) -> np.ndarray:
+        """altitude() for an (N, 3) array of positions, vectorised."""
+        r = np.asarray(positions, dtype=float)
+        rn = np.linalg.norm(r, axis=1)
+        safe = np.where(rn == 0.0, 1.0, rn)
+        sin_lat = (r @ np.asarray(self.pole, dtype=float)) / safe
+        return np.where(rn == 0.0, -self.radius, rn - self.radius * (1.0 - self.flattening * sin_lat * sin_lat))
+
 
 def altitude_reference(scene: dict | None) -> AltitudeReference | None:
     """The scene's central planet or moon, when it is drawn with a known
