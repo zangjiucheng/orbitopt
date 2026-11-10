@@ -86,8 +86,9 @@ pytest tests/
 ```
 
 On Windows, `.\scripts\setup_env.ps1` (add `-Gpu` for CUDA) does the same.
-See [`envs/README.md`](envs/README.md) for regenerating the lockfiles and the
-GPU CI job.
+The CPU lock also covers macOS (native `osx-arm64` and `osx-64`; no GPU env on
+macOS). See [`envs/README.md`](envs/README.md) for macOS notes, regenerating
+the lockfiles and the GPU CI job.
 
 ```bash
 orbitopt                                   # Mission Control

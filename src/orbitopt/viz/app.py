@@ -155,6 +155,13 @@ class MissionControlWindow(QMainWindow):
 
         self._loading = False
         self._compute_pool = ComputePool()
+        # closeEvent terminates the worker, but an app.quit() that never closes
+        # this window (or a window that was never shown) would not; then
+        # concurrent.futures' exit hook joins the executor and waits out a
+        # possibly minutes-long compute. aboutToQuit covers that path.
+        app = QApplication.instance()
+        if app is not None:
+            app.aboutToQuit.connect(self._compute_pool.terminate)
         self._load_thread: QThread | None = None
         self._load_worker: SceneLoader | None = None
         self._load_start_ts: float = 0.0
@@ -1538,6 +1545,12 @@ class MissionControlWindow(QMainWindow):
 
 
 def main():
+    # No-op except in a frozen Windows build (PyInstaller etc.), where the
+    # spawned compute worker re-runs this executable and must not open a
+    # second window.
+    import multiprocessing
+
+    multiprocessing.freeze_support()
     app = QApplication(sys.argv)
     # App-level icon drives the macOS Dock tile / taskbar entry; the window
     # inherits it for its title bar too.

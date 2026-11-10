@@ -15,6 +15,43 @@ import numpy as np
 from orbitopt.core.gpu import get_array_module
 
 
+class BackendUsage:
+    """Per-backend tally of the candidates a problem's batch_fitness() has
+    evaluated, plus the backend of the most recent call.
+
+    pygmo deep-copies a Python UDP (into ``pg.problem``, the population and
+    each batch-evaluator call), so plain attributes set inside
+    batch_fitness() never reach the caller's object. ``__deepcopy__``
+    returns ``self``: every copy of the problem shares one tally, which is
+    how run_optimization() reports the backend that actually ran. (Pickled
+    copies, e.g. in multiprocessing islands, get their own tally.)
+    """
+
+    def __init__(self):
+        self.candidates = {}
+        self.calls = {}
+        self.last = None
+
+    def record(self, backend, n):
+        self.candidates[backend] = self.candidates.get(backend, 0) + int(n)
+        self.calls[backend] = self.calls.get(backend, 0) + 1
+        self.last = backend
+
+    def snapshot(self):
+        return dict(self.candidates)
+
+    def since(self, snapshot):
+        """Candidates per backend evaluated since ``snapshot()``."""
+        return {
+            k: v - snapshot.get(k, 0)
+            for k, v in self.candidates.items()
+            if v - snapshot.get(k, 0) > 0
+        }
+
+    def __deepcopy__(self, memo):
+        return self
+
+
 class OrbitOptProblem(abc.ABC):
     """Common base for all trajectory-optimization UDPs in this framework."""
 

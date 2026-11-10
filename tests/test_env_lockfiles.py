@@ -15,7 +15,9 @@ import yaml
 
 ENVS = Path(__file__).resolve().parent.parent / "envs"
 FLAVORS = ("cpu", "gpu")
-PLATFORMS = {"linux-64", "win-64"}
+GPU_PLATFORMS = {"linux-64", "win-64"}
+# macOS has no CUDA, so only the CPU env is locked for osx-64 / osx-arm64.
+PLATFORMS = {"cpu": GPU_PLATFORMS | {"osx-64", "osx-arm64"}, "gpu": GPU_PLATFORMS}
 
 
 def _spec(flavor):
@@ -41,9 +43,9 @@ def _ver(v):
 @pytest.mark.parametrize("flavor", FLAVORS)
 def test_lockfile_covers_every_spec_package_on_every_platform(flavor):
     spec, lock = _spec(flavor), _lock(flavor)
-    assert set(lock["metadata"]["platforms"]) == PLATFORMS
+    assert set(lock["metadata"]["platforms"]) == PLATFORMS[flavor]
     assert not [d for d in spec["dependencies"] if not isinstance(d, str)], "no unlocked pip: section"
-    for platform in PLATFORMS:
+    for platform in PLATFORMS[flavor]:
         locked = _locked(lock, platform)
         missing = _spec_names(spec) - set(locked)
         assert not missing, f"{flavor}/{platform} lock lacks {missing}"
@@ -52,7 +54,7 @@ def test_lockfile_covers_every_spec_package_on_every_platform(flavor):
 
 @pytest.mark.parametrize("flavor", FLAVORS)
 def test_locked_versions_honour_the_declared_constraints(flavor):
-    for platform in PLATFORMS:
+    for platform in PLATFORMS[flavor]:
         locked = _locked(_lock(flavor), platform)
         assert locked["python"]["version"].startswith("3.10.")
         # numpy: tudatpy 1.0.0's own conda pin is numpy<2.0; with every
@@ -67,10 +69,12 @@ def test_locked_versions_honour_the_declared_constraints(flavor):
 
 
 def test_cpu_env_has_no_cuda_and_gpu_env_pins_cuda13_cupy():
-    for platform in PLATFORMS:
+    for platform in PLATFORMS["cpu"]:
         cpu = _locked(_lock("cpu"), platform)
-        gpu = _locked(_lock("gpu"), platform)
         assert "cupy" not in cpu and "cupy-core" not in cpu
+        assert "cuda-version" not in cpu
+    for platform in PLATFORMS["gpu"]:
+        gpu = _locked(_lock("gpu"), platform)
         assert "cupy" in gpu
         assert gpu["cuda-version"]["version"].startswith("13.")
 
@@ -86,3 +90,12 @@ def test_gpu_spec_is_cpu_spec_plus_cuda():
     cpu, gpu = _spec("cpu"), _spec("gpu")
     assert cpu["channels"] == gpu["channels"]
     assert gpu["dependencies"] == cpu["dependencies"] + ["cupy", "cuda-version=13"]
+
+
+def test_macos_locks_pin_native_builds_for_each_arch():
+    # osx-arm64 (Apple Silicon) and osx-64 (Intel) are separate native
+    # solves; each must only pull packages built for its own subdir.
+    lock = _lock("cpu")
+    for platform in ("osx-64", "osx-arm64"):
+        for pkg in _locked(lock, platform).values():
+            assert f"/{platform}/" in pkg["url"] or "/noarch/" in pkg["url"], pkg["url"]

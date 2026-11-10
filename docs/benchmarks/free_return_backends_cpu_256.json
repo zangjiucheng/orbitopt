@@ -1,0 +1,70 @@
+{
+  "meta": {
+    "pop": 256,
+    "generations": 25,
+    "steps": 300,
+    "repeat": 3,
+    "python": "3.13.18",
+    "numpy": "2.5.4",
+    "machine": "x86_64",
+    "cpu_count": 8,
+    "gpu": {
+      "gpu_available": false
+    },
+    "numba": "0.68.1",
+    "numba_threads": 8
+  },
+  "results": {
+    "auto": {
+      "first_call_s": 1.3578038450796157,
+      "resolved_backend": "numba-cpu",
+      "max_abs_diff_vs_numpy_km": 1.131265889853239e-07,
+      "max_abs_diff_vs_numpy_km_subsurface": 0.737356192432344,
+      "n_subsurface_candidates": 61,
+      "batch_fitness_s": 0.01254214090295136,
+      "run_optimization_backend": "numba-cpu",
+      "run_optimization_backend_usage": {
+        "numba-cpu": 6656
+      },
+      "run_optimization_champion_f": 330.4829247121879,
+      "run_optimization_s": 0.23412572778761387,
+      "batch_fitness_speedup_vs_numpy": 14.563729692637116,
+      "run_optimization_speedup_vs_numpy": 15.444147557498434
+    },
+    "numpy": {
+      "first_call_s": 0.13879143493250012,
+      "resolved_backend": "numpy",
+      "max_abs_diff_vs_numpy_km": 0.0,
+      "max_abs_diff_vs_numpy_km_subsurface": 0.0,
+      "n_subsurface_candidates": 61,
+      "batch_fitness_s": 0.1826603498775512,
+      "run_optimization_backend": "numpy",
+      "run_optimization_backend_usage": {
+        "numpy": 6656
+      },
+      "run_optimization_champion_f": 330.4822499604579,
+      "run_optimization_s": 3.61587228695862,
+      "batch_fitness_speedup_vs_numpy": 1.0,
+      "run_optimization_speedup_vs_numpy": 1.0
+    },
+    "numba-cpu": {
+      "first_call_s": 0.0058259351644665,
+      "resolved_backend": "numba-cpu",
+      "max_abs_diff_vs_numpy_km": 1.131265889853239e-07,
+      "max_abs_diff_vs_numpy_km_subsurface": 0.737356192432344,
+      "n_subsurface_candidates": 61,
+      "batch_fitness_s": 0.005506857996806502,
+      "run_optimization_backend": "numba-cpu",
+      "run_optimization_backend_usage": {
+        "numba-cpu": 6656
+      },
+      "run_optimization_champion_f": 330.4829247121879,
+      "run_optimization_s": 0.20606472087092698,
+      "batch_fitness_speedup_vs_numpy": 33.169613231987874,
+      "run_optimization_speedup_vs_numpy": 17.547265110088876
+    },
+    "cupy": {
+      "skipped": "CuPy/CUDA unavailable"
+    }
+  }
+}
