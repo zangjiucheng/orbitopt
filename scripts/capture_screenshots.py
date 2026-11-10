@@ -110,10 +110,34 @@ def shot_goes(app, w):
     _settle(app, 1.0)
 
 
+def shot_starship(app, w):
+    """Starship Flight 15 at the predicted return pass: the ship over the
+    Gulf approach, Starbase on the rotating Earth, and the distance-to-
+    Starbase chart with every pass as a dip."""
+    _open_mission(app, w, "Starship")
+    ret = next(e for e in w.state.events if e["label"] == "Return pass (predicted)")
+    w.state.set_time(ret["time"])
+    _settle(app, 0.3)
+    # Look straight down on the ship (and so on its approach to Starbase)
+    # rather than from the default iso corner, which faces the far side.
+    import numpy as np
+
+    pos = np.asarray(w.renderer.body_display_position("spacecraft", w.state.time), dtype=float)
+    cam = w.plotter.camera
+    cam.focal_point = tuple(0.55 * pos)
+    cam.position = tuple(pos / np.linalg.norm(pos) * 6378.0 * 2.6)
+    cam.up = (0.0, 0.0, 1.0)
+    w.chart_panel.setCurrentWidget(w.chart_panel.distance)
+    w.right_tabs.setCurrentWidget(w.inspector)
+    w.plotter.render()
+    _settle(app, 1.0)
+
+
 SHOTS = {
     "mission-control-mars.png": shot_mars,
     "mission-control-artemis.png": shot_artemis,
     "mission-control-goes.png": shot_goes,
+    "mission-control-starship.png": shot_starship,
 }
 
 

@@ -245,3 +245,16 @@ register("solar-system", "Solar System", _load_solar_system)
 register("artemis2", "Artemis II — Free Return", _load_artemis2)
 register("goes", "GOES — GTO to GEO", _load_goes)
 register("mars", "Mars — Earth to Orbit Insertion", _load_mars)
+
+
+def _load_starship_flight15() -> dict:
+    from orbitopt.scene_cache import cached_scene
+
+    def compute() -> dict:
+        from orbitopt.viz.starship_flight import compute_and_export_flight15
+        return compute_and_export_flight15()
+
+    return cached_scene("starship-flight-15", compute)
+
+
+register("starship-flight-15", "Starship Flight 15 — Starbase return (prediction)", _load_starship_flight15)

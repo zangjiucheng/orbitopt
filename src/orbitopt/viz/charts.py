@@ -32,7 +32,9 @@ SEQUENTIAL_BLUE = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598
                    "#2a78d6", "#256abf", "#1c5cab", "#184f95", "#104281", "#0d366b"]
 CANDIDATE_SELECTED = "#5ec8ff"  # same as the selected arc in 3D (scene_renderer)
 _HIT_PX = 12
-_NATURAL_KINDS = {"sun", "star", "planet", "dwarf-planet", "moon"}
+# Bodies the distance chart measures the spacecraft against: natural bodies,
+# plus ground sites (e.g. a landing site riding on the rotating Earth).
+_NATURAL_KINDS = {"sun", "star", "planet", "dwarf-planet", "moon", "site"}
 
 
 def _ramp_rgb(t: np.ndarray) -> np.ndarray:

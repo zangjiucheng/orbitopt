@@ -54,7 +54,7 @@ def test_mission_control_loads_and_switches_missions():
 
     sidebar = window.sidebar
     state = window.state
-    assert sidebar.count() == 4  # Solar System, Artemis II, GOES GTO->GEO, Mars
+    assert sidebar.count() == 5  # Solar System, Artemis II, GOES GTO->GEO, Mars, Starship Flight 15
     assert state.scene is not None
     assert state.scene["id"] == "solar-system"
     assert not window.timeline_bar.isVisible()

@@ -75,8 +75,10 @@ def _cmd_export(args):
 
 
 def _cmd_missions(_args):
-    for mission in list_missions():
-        print(f"{mission.id:<16} {mission.title}")
+    missions = list_missions()
+    width = max([16] + [len(m.id) for m in missions])  # a long plugin id must not break the column
+    for mission in missions:
+        print(f"{mission.id:<{width}} {mission.title}")
 
 
 def _load_and_validate_config(path):
