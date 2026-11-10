@@ -73,13 +73,19 @@ Ascent, deorbit burn and entry are not modelled.
 | Entry interface to landing burn | 18.4 min | earlier flights: ~17–18 min entry to splashdown |
 | Deorbit burn (Raptor) | T+21:50:28, 100 m/s, 60 m/s of it out of plane | pending |
 | Landing burn (Raptor) | 27 s from 1 km, ~335 m/s incl. gravity loss | pending |
+| Ship tower catch | T+22:33:18 | SpaceX plan: T+22:32:34 |
+| Super Heavy catch (boostback solved, drag, landing burn) | T+6:24 | SpaceX plan: T+6:35 |
 
 The return to the tower is solved, not drawn: a 3-DOF point-mass entry
 ([`orbitopt.entry`](src/orbitopt/entry.py): J2 gravity, a co-rotating
 US Standard Atmosphere, lift and drag at a constant bank angle) with the
 deorbit-burn time and bank angle chosen so the ship reaches the landing-burn
 height over Starbase. Starship's mass and aerodynamics are not public, so
-they are assumptions (150 t, 400 m², flat-plate L/D 0.47). With Flight 14's
+they are assumptions (150 t, 400 m², flat-plate L/D 0.47). The ascent is an
+illustrative profile through the published event times (MECO, hot staging),
+not a powered-flight simulation; the booster's return is solved -- boostback
+speed so that its fall under gravity and drag ends over the tower, then a
+landing burn lit as late as it can be. With Flight 14's
 inclination the entry's cross-range falls ~29 km short of Starbase at the
 best constant bank (46.6°), so the solve adds an out-of-plane component to
 the deorbit burn. `orbitopt view starship-flight-15` opens the scene;

@@ -107,3 +107,28 @@ def test_full_scene_shows_the_raptor_burns(prediction, solution):
     assert "Tower catch (predicted)" in events
     labels = [p["label"] for p in scene["timeline"]["phases"]]
     assert "Entry (3-DOF, assumed aero)" in labels and "Landing burn (Raptor)" in labels
+
+
+@pytest.mark.slow
+def test_full_scene_has_the_ascent_and_the_booster(prediction, solution):
+    import numpy as np
+
+    from orbitopt.launch_sites import get_launch_site
+    from orbitopt.scene_format import validate_scene
+    from orbitopt.viz import starship_ascent as sa
+    from orbitopt.viz.starship_flight import SECO_S
+
+    ascent = sa.build_ascent(get_launch_site("starbase"), prediction.azimuth_deg, prediction.liftoff_mjd2000,
+                             SECO_S, prediction.states_eq[0])
+    scene = build_flight15_scene(prediction, solution=solution, ascent=ascent)
+    validate_scene(scene)
+    ids = [b["id"] for b in scene["bodies"]]
+    assert ids.index("spacecraft") < ids.index("booster")  # the ship stays "the" spacecraft
+    ship = next(b for b in scene["bodies"] if b["id"] == "spacecraft")
+    assert ship["trail"]["times"][0] == 0.0
+    assert np.linalg.norm(ship["trail"]["positions"][0]) < 6380.0  # on the pad at lift-off, not in orbit
+    events = {e["label"]: e for e in scene["timeline"]["events"]}
+    assert {"MECO", "Hot staging", "Booster catch (predicted)"} <= set(events)
+    assert "vector" in events["Boostback burn (Raptor)"] and "vector" in events["Booster landing burn (Raptor)"]
+    earth = next(b for b in scene["bodies"] if b["id"] == "earth")
+    assert earth["flattening"] == pytest.approx(1.0 / 298.257223563)

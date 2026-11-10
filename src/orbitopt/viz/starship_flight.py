@@ -30,8 +30,15 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from orbitopt.bodies import body_fixed_to_eclipj2000_matrix
-from orbitopt.ground_track import ecef_to_eci, ecef_to_geodetic, eci_to_ecef, geodetic_to_ecef, site_passes
+from orbitopt.ground_track import (
+    GMST_SIDEREAL_PERIOD_HOURS,
+    ecef_to_eci,
+    ecef_to_geodetic,
+    eci_to_ecef,
+    geodetic_to_ecef,
+    gmst_earth_basis_ecliptic,
+    site_passes,
+)
 from orbitopt.injection import (
     DEFAULT_ATOL,
     DEFAULT_RTOL,
@@ -43,7 +50,8 @@ from orbitopt.injection import (
 from orbitopt.launch_sites import get_launch_site
 from orbitopt.launch_windows import as_mjd2000
 from orbitopt.timescales import mjd2000_to_utc_datetime
-from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, ROTATION_PERIOD_HOURS, TEXTURE, body_entry, phase_spans, scene_document
+from orbitopt.viz import starship_ascent as ascent_mod
+from orbitopt.viz.scene import COLOR, RADIUS_DISPLAY, TEXTURE, body_entry, phase_spans, scene_document
 
 # ---------------------------------------------------------------- inputs
 # Each value: what it is, and where it came from (accessed 2026-11).
@@ -347,13 +355,23 @@ def _pass_text(p) -> str:
     return f"{p.distance_km:,.0f} km {side} of Starbase, heading {p.direction}"
 
 
-def _ship_track(pred: ReturnPrediction, sol: ReturnSolution | None):
-    """(times_s, states_eq) of the ship: the orbit up to the deorbit burn, the
-    entry, the landing burn, then riding the tower on the rotating Earth for a
-    minute (so the marker stays on the pad instead of freezing in inertial
-    space while Starbase rotates away). Without a solution: the orbit only."""
+def _ascent_states(pred: ReturnPrediction, ascent) -> tuple[np.ndarray, np.ndarray]:
+    """The ship's ascent (stack to MECO, then the ship to engine cutoff) as
+    inertial states, ending just before the orbit's first sample."""
+    t = np.concatenate([ascent.stack_times_s, ascent.ship_times_s[:-1]])
+    r = np.vstack([ascent.stack_r_ecef, ascent.ship_r_ecef[:-1]])
+    return t, ascent_mod.ecef_path_to_eci_states(t, r, pred.liftoff_mjd2000)
+
+
+def _ship_track(pred: ReturnPrediction, sol: ReturnSolution | None, ascent=None):
+    """(times_s, states_eq) of the ship: the ascent (if given), the orbit up
+    to the deorbit burn, the entry, the landing burn, then riding the tower
+    on the rotating Earth for a minute (so the marker stays on the pad
+    instead of freezing in inertial space while Starbase rotates away).
+    Without a solution: the orbit only."""
+    head_t, head_x = (np.empty(0), np.empty((0, 6))) if ascent is None else _ascent_states(pred, ascent)
     if sol is None:
-        return pred.times_s, pred.states_eq
+        return np.concatenate([head_t, pred.times_s]), np.vstack([head_x, pred.states_eq])
     keep = pred.times_s < sol.burn_time_s
     burn_state = _hermite_state(pred.times_s, pred.states_eq, sol.burn_time_s)
     entry_t = sol.burn_time_s + sol.entry.times_s
@@ -365,9 +383,21 @@ def _ship_track(pred: ReturnPrediction, sol: ReturnSolution | None):
     tower = geodetic_to_ecef(site.latitude_deg, site.longitude_deg, CATCH_HEIGHT_M)
     after_pos = ecef_to_eci(np.repeat(tower[None, :], len(after_t), axis=0), pred.liftoff_mjd2000 + after_t / 86400.0)
     after_vel = np.cross([0.0, 0.0, 7.2921150e-5], after_pos)
-    times = np.concatenate([pred.times_s[keep], entry_t, land_t, after_t])
-    states = np.vstack([pred.states_eq[keep], entry_x, land_x, np.column_stack([after_pos, after_vel])])
+    times = np.concatenate([head_t, pred.times_s[keep], entry_t, land_t, after_t])
+    states = np.vstack([head_x, pred.states_eq[keep], entry_x, land_x, np.column_stack([after_pos, after_vel])])
     return times, states
+
+
+def _booster_track(pred: ReturnPrediction, ascent, end_s: float) -> tuple[np.ndarray, np.ndarray]:
+    """The booster: the stack to MECO, its return, then on the tower to the
+    end of the timeline (sampled every 5 min -- it just rides the Earth)."""
+    b = ascent.booster
+    site = get_launch_site(SITE_ID)
+    tower = geodetic_to_ecef(site.latitude_deg, site.longitude_deg, ascent_mod.TOWER_CATCH_HEIGHT_M)
+    after_t = np.unique(np.concatenate([np.arange(b.catch_s + 30.0, end_s, 300.0), [end_s]]))
+    t = np.concatenate([ascent.stack_times_s, b.times_s[1:], after_t])
+    r = np.vstack([ascent.stack_r_ecef, b.r_ecef[1:], np.repeat(tower[None, :], len(after_t), axis=0)])
+    return t, ascent_mod.ecef_path_to_eci_states(t, r, pred.liftoff_mjd2000)
 
 
 def _vector_event(label: str, time_s: float, position_eq, dv_eq, note: str) -> dict:
@@ -377,13 +407,91 @@ def _vector_event(label: str, time_s: float, position_eq, dv_eq, note: str) -> d
                        "deltaV": np.round(equatorial_to_ecliptic(np.asarray(dv_eq)), 2).tolist()}}
 
 
+BOOSTER_COLOR = "#c4c9d4"  # stainless steel; distinct from the ship's amber
+
+
+def _ascent_phases(ascent):
+    if ascent is None:
+        return [("Ascent (not modelled)", 0.0, SECO_S / 86400.0, "booster boostback and catch not modelled either")]
+    return [("Stack ascent (illustrative)", 0.0, ascent_mod.MECO_S / 86400.0, "through the published MECO time"),
+            ("Ship ascent (illustrative)", ascent_mod.HOT_STAGING_S / 86400.0, SECO_S / 86400.0,
+             "hot staging to engine cutoff; the booster flies home meanwhile")]
+
+
+def _ecef_dv_to_eq(dv_ecef, utc):
+    return ecef_to_eci(np.asarray(dv_ecef)[None, :], [utc])[0]
+
+
+def _booster_events(pred: ReturnPrediction, ascent) -> list[dict]:
+    b = ascent.booster
+    t0 = pred.liftoff_mjd2000
+    site = get_launch_site(SITE_ID)
+    meco_eq = ecef_to_eci(ascent.meco_r_ecef[None, :], [t0 + ascent_mod.MECO_S / 86400.0])[0]
+    # Boostback: the Earth-fixed velocity it removes and replaces (MECO -> back toward the pad).
+    i_bb = int(np.searchsorted(b.times_s, ascent_mod.BOOSTBACK_END_S))
+    v_back = (b.r_ecef[min(i_bb + 1, len(b.r_ecef) - 1)] - b.r_ecef[i_bb]) / max(
+        b.times_s[min(i_bb + 1, len(b.times_s) - 1)] - b.times_s[i_bb], 1e-9)
+    dv_bb = v_back - ascent.meco_v_ecef
+    i_lb = int(np.searchsorted(b.times_s, b.landing_burn_start_s))
+    lb_r = b.r_ecef[min(i_lb, len(b.r_ecef) - 1)]
+    up = lb_r / np.linalg.norm(lb_r)
+    t_lb_utc = t0 + b.landing_burn_start_s / 86400.0
+    return [
+        {"label": "MECO", "time": round(ascent_mod.MECO_S / 86400.0, 8),
+         "note": f"T+{ascent_mod.MECO_S // 60}:{ascent_mod.MECO_S % 60:02d} (published). Assumed ~"
+                 f"{ascent_mod.MECO_ALTITUDE_M / 1000:.0f} km, {ascent_mod.MECO_SPEED_M_S * 3.6:,.0f} km/h -- "
+                 "earlier flights' telemetry, not published for Flight 15."},
+        {"label": "Hot staging", "time": round(ascent_mod.HOT_STAGING_S / 86400.0, 8),
+         "note": f"T+{ascent_mod.HOT_STAGING_S // 60}:{ascent_mod.HOT_STAGING_S % 60:02d} (published)."},
+        _vector_event("Boostback burn (Raptor)", ascent_mod.BOOSTBACK_START_S, meco_eq[:3],
+                      _ecef_dv_to_eq(dv_bb, t0 + ascent_mod.BOOSTBACK_START_S / 86400.0),
+                      f"T+2:26-3:02 (published). Turns the booster's {ascent_mod.MECO_SPEED_M_S * math.cos(math.radians(ascent_mod.MECO_FLIGHT_PATH_DEG)):,.0f} m/s "
+                      f"downrange into {abs(b.boostback_end_ground_speed):,.0f} m/s back toward Starbase -- solved so the fall "
+                      f"ends over the tower; apogee {b.apogee_m / 1000:.0f} km."),
+        _vector_event("Booster landing burn (Raptor)", b.landing_burn_start_s,
+                      ecef_to_eci(lb_r[None, :], [t_lb_utc])[0],
+                      _ecef_dv_to_eq(up * b.landing_burn_dv_m_s, t_lb_utc),
+                      f"T+{int(b.landing_burn_start_s) // 60}:{int(b.landing_burn_start_s) % 60:02d}: lit as late as it can be "
+                      f"and still stop at the tower -- {b.landing_burn_start_height_m / 1000:.1f} km at "
+                      f"{b.landing_burn_speed_m_s:,.0f} m/s, {b.catch_s - b.landing_burn_start_s:.0f} s "
+                      f"(assumed {ascent_mod.BOOSTER_LANDING_DECEL_G:.1f} g net)."),
+        {"label": "Booster catch (predicted)", "time": round(b.catch_s / 86400.0, 8),
+         "note": f"T+{int(b.catch_s) // 60}:{int(b.catch_s) % 60:02d}, {b.catch_s - ascent_mod.BOOSTER_CATCH_ANNOUNCED_S:+.0f} s "
+                 f"from SpaceX's planned T+6:35 (not an input). At {site.name}."},
+    ]
+
+
+def _booster_body(pred: ReturnPrediction, ascent, end_s: float) -> dict:
+    b = ascent.booster
+    t, x = _booster_track(pred, ascent, end_s)
+    km_per_day = 86400.0 / 1000.0
+    pos = equatorial_to_ecliptic(x[:, :3]) / 1000.0
+    vel = equatorial_to_ecliptic(x[:, 3:]) * km_per_day
+    info = [
+        {"label": "Boostback", "value": f"to {abs(b.boostback_end_ground_speed):,.0f} m/s back toward the pad (solved)"},
+        {"label": "Apogee", "value": f"{b.apogee_m / 1000:.0f} km"},
+        {"label": "Landing burn", "value": f"from {b.landing_burn_start_height_m / 1000:.1f} km at {b.landing_burn_speed_m_s:,.0f} m/s, "
+                                           f"{b.catch_s - b.landing_burn_start_s:.0f} s, ~{b.landing_burn_dv_m_s:,.0f} m/s"},
+        {"label": "Catch", "value": f"T+{int(b.catch_s) // 60}:{int(b.catch_s) % 60:02d} "
+                                    f"({b.catch_s - ascent_mod.BOOSTER_CATCH_ANNOUNCED_S:+.0f} s vs SpaceX's T+6:35)"},
+        {"label": "Assumed", "value": f"{ascent_mod.BOOSTER_MASS_KG / 1000:.0f} t, engines-first "
+                                      f"{ascent_mod.BOOSTER_AREA_M2:.0f} m² x CD {ascent_mod.BOOSTER_CD:.1f} (no grid-fin or "
+                                      "body lift -- the landing-burn delta-v is likely high)"},
+    ]
+    return body_entry("booster", "Super Heavy (Booster 22)", BOOSTER_COLOR, "spacecraft",
+                      radius_display=RADIUS_DISPLAY["spacecraft"],
+                      trail={"times": np.round(t / 86400.0, 8).tolist(), "positions": np.round(pos, 3).tolist(),
+                             "velocities": np.round(vel, 3).tolist()},
+                      info=info)
+
+
 def build_flight15_scene(prediction: ReturnPrediction | None = None, convergence: dict | None = None,
-                         solution: ReturnSolution | None = None) -> dict:
+                         solution: ReturnSolution | None = None, ascent=None) -> dict:
     pred = prediction if prediction is not None else predict_return()
     sol = solution
     site = get_launch_site(SITE_ID)
     t0 = pred.liftoff_mjd2000
-    times_s, states = _ship_track(pred, sol)
+    times_s, states = _ship_track(pred, sol, ascent)
     days = times_s / 86400.0
     km_per_day = 86400.0 / 1000.0
     sc_pos = equatorial_to_ecliptic(states[:, :3]) / 1000.0
@@ -404,10 +512,13 @@ def build_flight15_scene(prediction: ReturnPrediction | None = None, convergence
         {"label": "Liftoff", "time": 0.0,
          "note": f"Starbase, azimuth {pred.azimuth_deg:.1f} deg "
                  f"({'inside' if pred.azimuth_in_corridor else 'OUTSIDE'} the site's corridor). "
-                 "Ascent and booster catch are not modelled."},
+                 + ("The ascent is an illustrative profile through the published event times, not a "
+                    "powered-flight simulation." if ascent is not None else "Ascent not modelled.")},
         {"label": "Ship engine cutoff", "time": round(SECO_S / 86400.0, 8),
-         "note": f"T+0:08:09 per SpaceX's timeline; the trajectory starts here, {ASCENT_DOWNRANGE_DEG:.0f} deg downrange (assumed)."},
+         "note": f"T+0:08:09 per SpaceX's timeline; the orbit is propagated from here, {ASCENT_DOWNRANGE_DEG:.0f} deg downrange (assumed)."},
     ]
+    if ascent is not None:
+        events += _booster_events(pred, ascent)
     for p in pred.passes:
         if ret is not None and p is ret:
             continue
@@ -448,14 +559,16 @@ def build_flight15_scene(prediction: ReturnPrediction | None = None, convergence
             f"{sol.landing_end_s - sol.landing_start_s:.0f} s, ~{sol.landing_dv_m_s:.0f} m/s incl. gravity loss "
             "(constant-deceleration estimate)."))
         events.append({"label": "Tower catch (predicted)", "time": round(sol.landing_end_s / 86400.0, 8),
-                       "note": f"{_fmt_met(sol.landing_end_s)}: at Starbase"
+                       "note": f"{_fmt_met(sol.landing_end_s)}: at Starbase, "
+                               f"{sol.landing_end_s - ascent_mod.SHIP_CATCH_ANNOUNCED_S:+.0f} s from SpaceX's planned "
+                               f"{_fmt_met(ascent_mod.SHIP_CATCH_ANNOUNCED_S)} (not an input)"
                                + ("" if sol.converged else f" -- NOT converged, {sol.miss_m / 1000.0:.1f} km off") + "."})
     events.sort(key=lambda e: e["time"])
 
     if sol is not None:
         ei = sol.entry_interface_s if sol.entry_interface_s is not None else sol.landing_start_s
         phases = phase_spans([
-            ("Ascent (not modelled)", 0.0, SECO_S / 86400.0, "booster boostback and catch not modelled either"),
+            *_ascent_phases(ascent),
             ("Orbital coast", SECO_S / 86400.0, sol.burn_time_s / 86400.0,
              f"{(sol.burn_time_s - SECO_S) / pred.period_s:.1f} orbits"),
             ("Deorbit coast", sol.burn_time_s / 86400.0, ei / 86400.0, "after the Raptor deorbit burn"),
@@ -467,7 +580,7 @@ def build_flight15_scene(prediction: ReturnPrediction | None = None, convergence
     else:
         entry_day = ANNOUNCED_ENTRY_S / 86400.0
         phases = phase_spans([
-            ("Ascent (not modelled)", 0.0, SECO_S / 86400.0, "booster boostback and catch not modelled either"),
+            *_ascent_phases(ascent),
             ("Orbital coast", SECO_S / 86400.0, entry_day, f"~{pred.orbits_by_announced_entry:.1f} orbits to the announced entry"),
             ("Orbit continued (hypothetical)", entry_day, end_day, "no return modelled"),
         ])
@@ -492,6 +605,9 @@ def build_flight15_scene(prediction: ReturnPrediction | None = None, convergence
             {"label": "Peak deceleration", "value": f"{entry.aero_g.max():.2f} g, "
                                                     f"{entry.dynamic_pressure_pa.max() / 1000.0:.1f} kPa"},
             {"label": "Landing burn", "value": f"{sol.landing_end_s - sol.landing_start_s:.0f} s, ~{sol.landing_dv_m_s:.0f} m/s"},
+            {"label": "Tower catch", "value": f"{_fmt_met(sol.landing_end_s)} "
+                                              f"({sol.landing_end_s - ascent_mod.SHIP_CATCH_ANNOUNCED_S:+.0f} s vs SpaceX's "
+                                              f"{_fmt_met(ascent_mod.SHIP_CATCH_ANNOUNCED_S)})"},
             {"label": "Entry vehicle (assumed)",
              "value": f"{ENTRY_MASS_KG / 1000:.0f} t, {ENTRY_AREA_M2:.0f} m², L/D {veh.lift_to_drag:.2f} "
                       f"(flat plate at {ENTRY_ALPHA_DEG:.0f} deg), ballistic coeff. {veh.ballistic_coefficient:.0f} kg/m²"},
@@ -508,8 +624,12 @@ def build_flight15_scene(prediction: ReturnPrediction | None = None, convergence
     bodies = [
         body_entry("earth", "Earth", COLOR["earth"], "planet", radius_display=RADIUS_DISPLAY["earth"],
                    position=[0.0, 0.0, 0.0], texture=TEXTURE["earth"], radius=EARTH_RADIUS_KM,
-                   rotation_period_hours=ROTATION_PERIOD_HOURS["earth"],
-                   orientation_basis=body_fixed_to_eclipj2000_matrix("Earth", t0).tolist()),
+                   # Oriented by the same GMST model the trajectory, ground
+                   # track and Starbase use (not SPICE's IAU_EARTH, ~0.36 deg
+                   # away in 2026), so the texture's Starbase is where the
+                   # marker and the catches are.
+                   rotation_period_hours=GMST_SIDEREAL_PERIOD_HOURS,
+                   orientation_basis=gmst_earth_basis_ecliptic(t0).tolist()),
         body_entry("starbase", "Starbase", SITE_COLOR, "site", radius_display=2.6,
                    trail={"times": np.round(site_days, 8).tolist(), "positions": np.round(site_pos, 3).tolist(),
                           "velocities": np.round(site_vel, 3).tolist()},
@@ -519,6 +639,9 @@ def build_flight15_scene(prediction: ReturnPrediction | None = None, convergence
                    trail={"times": np.round(days, 8).tolist(), "positions": np.round(sc_pos, 3).tolist(),
                           "velocities": np.round(sc_vel, 3).tolist()},
                    info=info),
+        # After the ship: "the" spacecraft (distance chart, burn framing) is the
+        # first one listed.
+        *([] if ascent is None else [_booster_body(pred, ascent, times_s[-1])]),
     ]
     returned = ("Return modelled with assumptions: Raptor deorbit burn, 3-DOF belly-first entry (assumed mass "
                 "and aero), landing burn to the tower." if sol is not None else
@@ -528,7 +651,9 @@ def build_flight15_scene(prediction: ReturnPrediction | None = None, convergence
         title="Starship Flight 15 — return to Starbase (prediction)",
         subtitle=(f"Pre-flight prediction, not a replay. Lift-off {liftoff_dt:%Y-%m-%d %H:%M} UTC (NET) into a "
                   f"{pred.altitude_km:.0f} km / {pred.inclination_deg:.1f} deg orbit (Flight 14's inclination; "
-                  "Flight 15's is unpublished),\npropagated with tudatpy (Earth J2, Moon, Sun). Ascent not modelled. "
+                  "Flight 15's is unpublished),\npropagated with tudatpy (Earth J2, Moon, Sun). "
+                  + ("Ascent: an illustrative profile through the published timeline; booster return solved "
+                     "(boostback, drag, landing burn). " if ascent is not None else "Ascent not modelled. ")
                   + returned),
         distance_unit="km",
         central_body_id="earth",
@@ -551,4 +676,6 @@ def compute_and_export_flight15() -> dict:
     if pred.return_pass is not None and tight.return_pass is not None:
         convergence = {"dt_s": abs(pred.return_pass.time_s - tight.return_pass.time_s),
                        "dmiss_km": abs(pred.return_pass.distance_km - tight.return_pass.distance_km)}
-    return build_flight15_scene(pred, convergence, solve_return(pred))
+    ascent = ascent_mod.build_ascent(get_launch_site(SITE_ID), pred.azimuth_deg, pred.liftoff_mjd2000,
+                                     SECO_S, pred.states_eq[0])
+    return build_flight15_scene(pred, convergence, solve_return(pred), ascent)
