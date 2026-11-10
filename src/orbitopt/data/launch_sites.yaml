@@ -96,6 +96,35 @@ sites:
         accuracy: "+/-1 deg; Western Range limits as reproduced in a secondary reference, actual per-mission limits set by the range"
         as_of: "2004"
 
+  - id: starbase
+    name: SpaceX Starbase (Boca Chica)
+    aliases: [Starbase, Boca Chica, OLP-1, OLP-2, Orbital Launch Pad, Starship]
+    country: USA
+    reference_pad: Orbital Launch Pad (OLP-1/OLP-2)
+    latitude_deg: 25.997
+    longitude_deg: -97.157
+    altitude_m: 5
+    rotation_speed_gain_m_s: 418.3
+    azimuth_corridors_deg:
+      - [40.0, 115.0]
+    confidence: approximate
+    sources:
+      - covers: [rotation_speed_gain]
+        ref: "Derived: omega_E * (N(phi) + h) * cos(phi), omega_E = 7.2921150e-5 rad/s (IERS Conventions 2010), WGS-84 ellipsoid (NGA TR8350.2)"
+        provenance: derived
+        accuracy: "<1 m/s (loader recomputes and rejects >1 m/s disagreement)"
+        as_of: "2026"
+      - covers: [location, altitude]
+        ref: "Orbital launch pad position from orbitalradar.com 'Starbase' site guide geodata (25.997, -97.158); Wikipedia 'SpaceX Starbase' gives the wider complex at 25.9875 N, 97.1864 W (accessed 2026-11). No official survey published."
+        provenance: public_estimate
+        accuracy: "~500 m horizontal (OLP-1 and OLP-2 are a few hundred metres apart); altitude +/-5 m"
+        as_of: "2026-11"
+      - covers: [azimuth_corridors]
+        ref: "Launch azimuths 40-115 deg for Starship-Super Heavy at the Boca Chica launch site, as reported by Space Law Journal on the FAA Starbase PEIS (Federal Register 2026-20963, 2026-10-14); not checked against the FAA document itself"
+        provenance: public_estimate
+        accuracy: "single secondary source; actual per-mission limits set in each FAA license"
+        as_of: "2026-10"
+
   - id: kourou
     name: Guiana Space Centre (Kourou)
     aliases: [CSG, Guiana Space Centre, Centre Spatial Guyanais, ELA-3, ELA-4]

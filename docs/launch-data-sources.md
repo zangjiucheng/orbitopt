@@ -93,13 +93,16 @@ Launch vehicles
 
 Launch sites
 
-- Pad coordinates mostly come from public compilations (about 100 m).
+- Pad coordinates mostly come from public compilations (about 100 m;
+  Starbase about 500 m, since no source separates its two orbital pads).
   That is plenty for the rotation gain and for launch-window timing, but
   it is not survey grade. Each site is represented by one reference pad.
 - Only Kourou's corridors come from a launch-provider document. The
   Eastern and Western Range corridors come from a secondary reference
   (2004). The corridors for the Chinese sites and Baikonur were rebuilt
-  from flown inclinations (about ±5°). Real range-safety limits are set
+  from flown inclinations (about ±5°). Starbase's 40–115° comes from a
+  single secondary report on the FAA's 2026 Starbase PEIS, not the FAA
+  document itself. Real range-safety limits are set
   per mission, depend on the vehicle and drop zones, and are not public.
 - Inclinations are for direct ascent only. Dog-leg manoeuvres, which
   real vehicles do fly, are not part of the corridor model.
