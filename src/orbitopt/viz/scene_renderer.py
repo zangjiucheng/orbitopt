@@ -296,7 +296,16 @@ def _sample_trail(
     With ``velocities`` (n, 3) the position between samples is cubic Hermite;
     without, a straight chord. The chord is fine for a densely sampled path
     but not for a sparsely sampled one used as a moving frame origin -- see
-    the scene schema's ``trail.velocities``."""
+    the scene schema's ``trail.velocities``.
+
+    Interpolation is piecewise per segment. A repeated time (an impulsive
+    burn exported as its pre-burn then post-burn sample) is a segment break:
+    ``searchsorted`` puts a time before the burn in the interval ending at
+    the pre-burn sample and a time after it in the interval starting at the
+    post-burn sample, so no Hermite cubic ever mixes the velocities from the
+    two sides of a burn -- the zero-length interval between the pair is
+    never interpolated. Producers must keep both halves of the pair (see
+    viz.scene.thin_trail_indices)."""
     idx = int(np.searchsorted(times, t))
     if t <= times[0]:
         return idx, positions[0].copy()
