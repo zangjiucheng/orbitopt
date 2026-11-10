@@ -1,5 +1,9 @@
-"""The right-hand inspector panel: the distance-measure readout, the mission's
-maneuver list, and one card per body with its live distance and info rows.
+"""The right-hand inspector panel: the distance-measure readout, then up to
+three framed sections -- the selected candidate, the mission's maneuver
+list, and one card per body with its live distance and info rows -- each
+with its own header and its own scroll, in a vertical splitter so their
+share of the height can be dragged. (They used to share one scroll area,
+so scrolling to a body card carried the maneuver list away with it.)
 
 It rebuilds itself from MissionState.scene_changed and re-highlights from
 selection_changed / time_changed; clicks are reported as signals and never
@@ -8,8 +12,17 @@ measure, seek-and-frame).
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
+)
 
 from orbitopt.viz import icons
 from orbitopt.viz.candidate_panel import (
@@ -21,6 +34,8 @@ from orbitopt.viz.candidate_panel import (
     format_dv,
 )
 from orbitopt.viz.state import MissionState, altitude_reference
+from orbitopt.viz.timeline_bar import timeline_unit_seconds
+from orbitopt.viz.timeline_view import format_met
 
 
 def format_distance(value: float, unit: str) -> str:
@@ -32,6 +47,69 @@ def format_distance(value: float, unit: str) -> str:
 def _repolish(widget: QWidget) -> None:
     widget.style().unpolish(widget)
     widget.style().polish(widget)
+
+
+class InspectorSection(QFrame):
+    """A framed section: header (title + item count) over its own scroll area.
+
+    The cards go in a scroll area, not straight into the panel: a scene with
+    ~10 bodies stacks that many fixed-height cards, and without it the
+    panel's minimum height is the sum of all of them -- which forced the
+    whole window taller than the screen. Each section scrolling on its own
+    keeps that bound and lets the maneuver list stay put while the body
+    cards scroll (and the reverse)."""
+
+    def __init__(self, title: str, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("inspectorSection")
+        v = QVBoxLayout(self)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
+        header = QWidget()
+        header.setObjectName("inspectorSectionHeader")
+        h = QHBoxLayout(header)
+        h.setContentsMargins(10, 6, 10, 6)
+        self.title_label = QLabel(title)
+        self.title_label.setObjectName("sectionHeader")
+        self.count_label = QLabel("")
+        self.count_label.setObjectName("sectionCount")
+        h.addWidget(self.title_label)
+        h.addStretch(1)
+        h.addWidget(self.count_label)
+        v.addWidget(header)
+
+        self.scroll = QScrollArea()
+        self.scroll.setObjectName("infoScroll")
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        host = QWidget()
+        host.setObjectName("infoCards")
+        self.items = QVBoxLayout(host)
+        self.items.setContentsMargins(4, 2, 4, 6)  # narrow: the panel can be dragged down to 200 px
+        self.items.setSpacing(6)
+        self.items.addStretch(1)
+        self.scroll.setWidget(host)
+        v.addWidget(self.scroll, stretch=1)
+
+    def add(self, widget: QWidget) -> None:
+        self.items.insertWidget(self.items.count() - 1, widget)  # above the trailing stretch
+
+    def clear(self) -> None:
+        while self.items.count() > 1:
+            item = self.items.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+            elif item.layout() is not None:
+                _clear_layout(item.layout())
+
+    def set_count(self, n: int | None) -> None:
+        self.count_label.setText("" if n is None else str(n))
+
+    def item_count(self) -> int:
+        return self.items.count() - 1
 
 
 class InspectorPanel(QWidget):
@@ -50,7 +128,6 @@ class InspectorPanel(QWidget):
         super().__init__(parent)
         self._state = state
         self._body_cards: dict[str, dict] = {}
-        self._event_widgets: list[QWidget] = []
         self._event_rows: list[tuple[dict, QFrame]] = []
         self._active_event_id: int | None = None
         self._candidate_card: QFrame | None = None
@@ -76,7 +153,7 @@ class InspectorPanel(QWidget):
         self.collapse_btn.setIconSize(QSize(12, 12))
         self.collapse_btn.setToolTip("Collapse body-info panel")
         self.collapse_btn.clicked.connect(self.collapse_clicked)
-        header = QLabel("BODIES")
+        header = QLabel("INSPECTOR")
         header.setObjectName("sectionHeader")
         header_row.addWidget(self.collapse_btn)
         header_row.addWidget(header)
@@ -98,26 +175,18 @@ class InspectorPanel(QWidget):
         self.measure_card.setVisible(False)
         outer.addWidget(self.measure_card)
 
-        # The body cards go in a scroll area, not straight into the panel: a
-        # scene with ~10 bodies stacks that many fixed-height cards, and without
-        # this the panel's minimum height is the sum of all of them -- which
-        # forced the whole window's minimum height taller than the screen (so it
-        # opened oversized and couldn't be shrunk). Scrolling keeps the panel's
-        # minimum height bounded so the window stays freely resizable.
-        scroll = QScrollArea()
-        scroll.setObjectName("infoScroll")
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-
-        cards_host = QWidget()
-        cards_host.setObjectName("infoCards")
-        self.info_layout = QVBoxLayout(cards_host)
-        self.info_layout.setContentsMargins(0, 0, 0, 0)
-        self.info_layout.setSpacing(8)
-        self.info_layout.addStretch(1)
-        scroll.setWidget(cards_host)
-        outer.addWidget(scroll, stretch=1)
+        self.candidate_section = InspectorSection("CANDIDATE")
+        self.maneuver_section = InspectorSection("MANEUVERS")
+        self.body_section = InspectorSection("BODIES")
+        self.sections = QSplitter(Qt.Vertical)
+        self.sections.setObjectName("inspectorSplitter")
+        self.sections.setChildrenCollapsible(False)
+        self.sections.setHandleWidth(8)
+        for k, section in enumerate((self.candidate_section, self.maneuver_section, self.body_section)):
+            section.setMinimumHeight(90)
+            self.sections.addWidget(section)
+            self.sections.setStretchFactor(k, 1)
+        outer.addWidget(self.sections, stretch=1)
 
     # ------------------------------------------------------------ public
     def altitude_body_ids(self) -> list[str]:
@@ -159,62 +228,65 @@ class InspectorPanel(QWidget):
         # setParent(None) takes each old widget out of the panel right away;
         # deleteLater alone waits for the event loop, and until then the old
         # cards still show above the new ones.
-        for card in self._body_cards.values():
-            card["frame"].setParent(None)
-            card["frame"].deleteLater()
+        for section in (self.candidate_section, self.maneuver_section, self.body_section):
+            section.clear()
         self._body_cards = {}
-        for widget in self._event_widgets:
-            widget.setParent(None)
-            widget.deleteLater()
-        self._event_widgets = []
         self._event_rows = []
         self._active_event_id = None
         self._candidate_card = None
         self.measure_card.setVisible(False)
 
-        stretch_item = self.info_layout.takeAt(self.info_layout.count() - 1)
-        del stretch_item
-
-        if scene is None:
-            self.info_layout.addStretch(1)
+        scene_ok = scene is not None
+        has_candidates = scene_ok and bool(self._state.candidates)
+        events = self._state.events if scene_ok else []
+        self.candidate_section.setVisible(has_candidates)
+        self.maneuver_section.setVisible(bool(events))
+        self.body_section.setVisible(scene_ok)
+        if not scene_ok:
             return
 
-        if self._state.candidates:
-            header = QLabel("CANDIDATE")
-            header.setObjectName("sectionHeader")
-            self.info_layout.addWidget(header)
-            self._event_widgets.append(header)
+        if has_candidates:
             self._candidate_card = QFrame()
             self._candidate_card.setObjectName("bodyCard")
             QVBoxLayout(self._candidate_card).setContentsMargins(10, 8, 10, 8)
-            self.info_layout.addWidget(self._candidate_card)
-            self._event_widgets.append(self._candidate_card)
+            self.candidate_section.add(self._candidate_card)
+            self.candidate_section.set_count(None)
             self._fill_candidate_card()
 
-        timeline = scene.get("timeline")
-        events = self._state.events
         if events:
-            header = QLabel("MANEUVERS")
-            header.setObjectName("sectionHeader")
-            self.info_layout.addWidget(header)
-            self._event_widgets.append(header)
-            unit = timeline.get("unitLabel", "")
+            unit = scene["timeline"].get("unitLabel", "")
             for e in events:
                 row = self._make_maneuver_row(e, unit)
-                self.info_layout.addWidget(row)
-                self._event_widgets.append(row)
+                self.maneuver_section.add(row)
                 self._event_rows.append((e, row))
-
-            bodies_header = QLabel("BODIES")
-            bodies_header.setObjectName("sectionHeader")
-            self.info_layout.addWidget(bodies_header)
-            self._event_widgets.append(bodies_header)
+            self.maneuver_section.set_count(len(events))
 
         for body in scene["bodies"]:
             self._add_body_card(body)
-
-        self.info_layout.addStretch(1)
+        self.body_section.set_count(len(scene["bodies"]))
+        self._balance_sections()
+        # Again once Qt has laid the new cards out (their size hints and the
+        # splitter's height are only final then).
+        QTimer.singleShot(0, self._balance_sections)
         self._refresh_active_event()
+
+    def _balance_sections(self) -> None:
+        """Share the height by content: a short list gets just what it needs,
+        the rest goes to the longer ones (the user can drag from there)."""
+        visible = [s for s in (self.candidate_section, self.maneuver_section, self.body_section) if s.isVisibleTo(self)]
+        if not visible:
+            return
+        total = max(self.sections.height(), 300)
+        wants = [s.items.sizeHint().height() + 34 for s in visible]
+        share = total / len(visible)
+        sizes = []
+        spare = sum(max(0.0, share - w) for w in wants)
+        greedy = sum(1 for w in wants if w > share) or 1
+        for w in wants:
+            sizes.append(int(w if w <= share else share + spare / greedy))
+        it = iter(sizes)
+        self.sections.setSizes([next(it) if s in visible else 0
+                                for s in (self.candidate_section, self.maneuver_section, self.body_section)])
 
     def candidate_card_text(self) -> str:
         """Every label's text in the candidate card (for tests)."""
@@ -370,7 +442,7 @@ class InspectorPanel(QWidget):
             bid, bool(e.modifiers() & (Qt.ControlModifier | Qt.MetaModifier))
         )
 
-        self.info_layout.addWidget(frame)
+        self.body_section.add(frame)
         self._body_cards[body["id"]] = {"frame": frame, "dist_val": dist_val, "minus": minus}
 
     def _make_maneuver_row(self, event: dict, unit: str) -> QFrame:
@@ -388,7 +460,9 @@ class InspectorPanel(QWidget):
         # otherwise set a minimum width wider than the panel, and with
         # horizontal scrolling off every card got clipped on the right.
         name.setWordWrap(True)
-        time_label = QLabel(f"T+{event.get('time', 0.0):.2f} {unit}")
+        # MET, not "T+0.00 days": a day-unit timeline put every ascent event
+        # of a Starship flight at the same "T+0.00".
+        time_label = QLabel(format_met(event.get("time", 0.0) * timeline_unit_seconds(unit)))
         time_label.setObjectName("maneuverTime")
         top.addWidget(name)
         top.addStretch(1)
@@ -428,6 +502,9 @@ class InspectorPanel(QWidget):
         for e, row in self._event_rows:
             row.setProperty("active", id(e) == active_id)
             _repolish(row)
+            if id(e) == active_id:
+                # Its own scroll now: keep the current event in view.
+                self.maneuver_section.scroll.ensureWidgetVisible(row, 0, 24)
 
 
 def _clear_layout(layout) -> None:

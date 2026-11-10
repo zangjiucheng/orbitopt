@@ -14,6 +14,7 @@ module's job stops at the 3D content and a small data API
 """
 from __future__ import annotations
 
+import math
 from functools import lru_cache
 from importlib import resources
 
@@ -21,6 +22,8 @@ import numpy as np
 import pyvista as pv
 import vtk
 from vtkmodules.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray
+
+from orbitopt.viz.state import altitude_reference
 
 _MARKER_BASE_SIZE = 8.0
 _MARKER_WEIGHT_SIZE = 1.1
@@ -32,6 +35,7 @@ _SPHERE_RESOLUTION = 128
 # small on screen; anisotropic filtering keeps it sharp at grazing angles
 # (looking along the horizon from orbit).
 _TEXTURE_ANISOTROPY = 16.0
+_EARTH_TEXTURE = "earth_daymap.jpg"  # viz.scene.TEXTURE["earth"]: the body the EOX tiles drape over
 
 # _equirectangular_sphere places texture longitude 0 (a body's prime meridian)
 # at the mesh's local -X (azimuth 180); an IAU body-fixed frame puts it at +X.
@@ -526,6 +530,16 @@ class SceneRenderer:
         # module's other add_mesh calls), so click-to-select in the viewport
         # (app.py's viewport pick handler) can only ever land on a body.
         self._actor_body_ids: dict = {}
+        # Streamed high-resolution imagery over the Earth sphere (EOX
+        # Sentinel-2 cloudless, see earth_tiles / tile_layer).
+        from orbitopt.viz.tile_layer import EarthTileLayer
+
+        self.tiles = EarthTileLayer(plotter)
+
+    def update_tiles(self) -> bool:
+        """Refresh the Earth imagery tiles for the current camera; True when
+        the view needs a render."""
+        return self.tiles.update()
 
     def body_id_for_actor(self, actor) -> str | None:
         """Map a VTK actor (as returned by a picker's GetActor()) back to the
@@ -534,9 +548,10 @@ class SceneRenderer:
 
     def load(self, scene: dict) -> None:
         for actor in self._flight_labels.values():
-            self.plotter.renderer.RemoveActor(actor)
+            self._label_layer().RemoveActor(actor)
         self._flight_labels = {}
         self.plotter.clear()
+        self.tiles.reset()
         self.scene = scene
         self._moving = {}
         self._static_positions = {}
@@ -582,6 +597,8 @@ class SceneRenderer:
                     sphere_actor.position = tuple(float(c) for c in pos0)
                     self._register_rotation(body, sphere_actor)
                     self._actor_body_ids[sphere_actor] = body["id"]
+                    if body.get("texture") == _EARTH_TEXTURE:
+                        self.tiles.attach(sphere_actor, body)
                 else:
                     point_poly = pv.PolyData(pos0.reshape(1, 3))
                     marker_actor = self.plotter.add_mesh(
@@ -623,6 +640,8 @@ class SceneRenderer:
                     sphere_actor.position = tuple(float(c) for c in pos)
                     self._register_rotation(body, sphere_actor)
                     self._actor_body_ids[sphere_actor] = body["id"]
+                    if body.get("texture") == _EARTH_TEXTURE:
+                        self.tiles.attach(sphere_actor, body)
                 else:
                     marker = pv.PolyData(pos.reshape(1, 3))
                     marker_actor = self.plotter.add_mesh(
@@ -796,6 +815,7 @@ class SceneRenderer:
 
         if self._has_timeline:
             self._apply_rotation_for_time(t)
+        self.tiles.sync_transform()
 
         if render:
             self.plotter.render()
@@ -866,9 +886,13 @@ class SceneRenderer:
         lose theirs. Billboard text: it faces the camera and keeps a fixed
         pixel offset from the body, and lives in the VTK scene (a Qt widget
         over the native GL view does not composite reliably)."""
+        layer = self._label_layer()
+        # Behind the planet (seen from the camera) a label would float over
+        # the globe: drop it, as if occluded.
+        labels = {b: text for b, text in labels.items() if not self._behind_planet(b, t)}
         for body_id in list(self._flight_labels):
             if body_id not in labels:
-                self.plotter.renderer.RemoveActor(self._flight_labels.pop(body_id))
+                layer.RemoveActor(self._flight_labels.pop(body_id))
         for body_id, text in labels.items():
             actor = self._flight_labels.get(body_id)
             if actor is None:
@@ -882,11 +906,55 @@ class SceneRenderer:
                 prop.SetBackgroundOpacity(0.72)
                 prop.SetFrame(False)
                 prop.SetLineSpacing(1.15)
-                self.plotter.renderer.AddActor(actor)
+                layer.AddActor(actor)
                 self._flight_labels[body_id] = actor
             actor.SetInput(text)
             actor.SetPosition(*(float(c) for c in self.body_display_position(body_id, t)))
         self._declutter_labels(labels)
+
+    def _label_layer(self):
+        """The overlay renderer the flight labels draw in: a second layer on
+        the same camera, with its own (cleared) depth buffer -- so a label is
+        never cut by terrain in front of its vehicle. In the main renderer,
+        the label quad sits at the vehicle's depth, and at an oblique view of
+        a vehicle on the ground (Super Heavy on the tower) the near terrain
+        hid the lower half of the box."""
+        ren_win = self.plotter.ren_win
+        layer = getattr(self, "_label_renderer", None)
+        if layer is None or not ren_win.HasRenderer(layer):
+            layer = vtk.vtkRenderer()
+            layer.SetLayer(1)
+            layer.InteractiveOff()
+            ren_win.SetNumberOfLayers(max(2, ren_win.GetNumberOfLayers()))
+            ren_win.AddRenderer(layer)
+            self._label_renderer = layer
+        main = self.plotter.renderer
+        layer.SetActiveCamera(main.GetActiveCamera())  # pyvista may swap the camera object
+        layer.SetViewport(*main.GetViewport())
+        return layer
+
+    def _behind_planet(self, body_id: str, t: float) -> bool:
+        """Whether the planet the scene is centered on hides ``body_id`` from
+        the camera (the sight line passes through its polar-radius sphere)."""
+        ref = altitude_reference(self.scene)
+        if ref is None or body_id == ref.body_id:
+            return False
+        center = self.body_display_position(ref.body_id, t)
+        radius = ref.radius * (1.0 - (ref.flattening or 0.0)) * 0.999
+        cam = np.asarray(self.plotter.camera.position, dtype=float)
+        target = self.body_display_position(body_id, t)
+        d = target - cam
+        length = float(np.linalg.norm(d))
+        if length == 0.0:
+            return False
+        d /= length
+        oc = cam - center
+        b = float(np.dot(oc, d))
+        disc = b * b - (float(np.dot(oc, oc)) - radius * radius)
+        if disc <= 0.0:
+            return False
+        near = -b - math.sqrt(disc)
+        return 0.0 < near < length
 
     # Rough label box from the text: 13 pt text with 1.15 line spacing.
     _LABEL_CHAR_PX = 7.6

@@ -34,13 +34,14 @@ from __future__ import annotations
 import os
 import sys
 import time
+from pathlib import Path
 
 import numpy as np
 
 os.environ.setdefault("QT_API", "pyside6")
 
-from PySide6.QtCore import QSize, Qt, QThread, QTimer
-from PySide6.QtGui import QKeySequence
+from PySide6.QtCore import QSize, Qt, QThread, QTimer, QUrl
+from PySide6.QtGui import QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -98,6 +99,9 @@ from orbitopt.viz.widgets import SpinnerWidget, ViewControlsPopover
 # hundred Hz on a high-rate mouse -- and every extra refresh beyond what the
 # display can show is pure CPU/GPU cost that made fast scrubbing stutter.
 SCRUB_MIN_INTERVAL_MS = 16.0
+
+WEBSITE_URL = "https://zangjiucheng.github.io/orbitopt/"
+REPOSITORY_URL = "https://github.com/zangjiucheng/orbitopt"
 
 # Auto-slow near a timeline event (TLI burn, closest approach, entry interface,
 # ...) so fast-forwarding through a mission doesn't blow past the moments that
@@ -164,6 +168,7 @@ class MissionControlWindow(QMainWindow):
         self._verified_keys: set[str] = set()
         self._loaders: dict[str, callable] = {}
         self._playing = False
+        self._play_direction = 1  # +1 forward, -1 backwards
 
         self._loading = False
         self._compute_pool = ComputePool()
@@ -222,6 +227,14 @@ class MissionControlWindow(QMainWindow):
 
         self._build_ui()
         self.state.time_changed.connect(self._on_time_changed)
+
+        # Streamed Earth imagery: re-pick tiles for the camera and show the
+        # ones that finished downloading. Cheap when nothing changed (see
+        # tile_layer.EarthTileLayer.update), so it simply polls.
+        self._tile_timer = QTimer(self)
+        self._tile_timer.setInterval(200)
+        self._tile_timer.timeout.connect(self._on_tile_tick)
+        self._tile_timer.start()
         self.state.selection_changed.connect(self._update_measure)
         self.state.frame_changed.connect(self._on_frame_changed)
         self.state.candidate_changed.connect(self._on_candidate_changed)
@@ -327,7 +340,8 @@ class MissionControlWindow(QMainWindow):
         center_layout.addWidget(self.center_splitter, stretch=1)
 
         self.timeline_bar = TimelineBar(self.state)
-        self.timeline_bar.play_clicked.connect(self._toggle_play)
+        self.timeline_bar.play_clicked.connect(lambda: self._toggle_play(+1))
+        self.timeline_bar.reverse_clicked.connect(lambda: self._toggle_play(-1))
         self.timeline_bar.auto_slow_toggled.connect(self._on_auto_slow_toggled)
         self.timeline_bar.event_step_requested.connect(self._seek_relative_event)
         center_layout.addWidget(self.timeline_bar)
@@ -637,10 +651,14 @@ class MissionControlWindow(QMainWindow):
         quit_action.triggered.connect(self.close)
 
         play_menu = self.menuBar().addMenu("&Playback")
-        self.play_action = play_menu.addAction("Play / Pause", self._toggle_play)
+        self.play_action = play_menu.addAction("Play / Pause", lambda: self._toggle_play(+1))
         self.play_action.setShortcut(QKeySequence(Qt.Key_Space))
+        play_menu.addAction("Play backwards / Pause", lambda: self._toggle_play(-1)).setShortcut(
+            QKeySequence("Shift+Space"))
         play_menu.addAction("Step forward", lambda: self._step_time(+1)).setShortcut(QKeySequence(Qt.Key_Right))
         play_menu.addAction("Step back", lambda: self._step_time(-1)).setShortcut(QKeySequence(Qt.Key_Left))
+        play_menu.addAction("Step forward (fine)", lambda: self._step_time(+0.1)).setShortcut(QKeySequence("Alt+Right"))
+        play_menu.addAction("Step back (fine)", lambda: self._step_time(-0.1)).setShortcut(QKeySequence("Alt+Left"))
         play_menu.addAction("Restart", self._restart_timeline).setShortcut(QKeySequence(Qt.Key_Home))
         play_menu.addSeparator()
         # KSP's warp keys: . / , step through the warp levels, / is real time.
@@ -682,6 +700,12 @@ class MissionControlWindow(QMainWindow):
         self.labels_action.setChecked(True)
         self.labels_action.setShortcut(QKeySequence("L"))
         self.labels_action.toggled.connect(lambda _on: self._refresh_view())
+        self.imagery_action = view_menu.addAction("High-res Earth imagery (EOX Sentinel-2)")
+        self.imagery_action.setCheckable(True)
+        self.imagery_action.setChecked(self.renderer.tiles.enabled)
+        self.imagery_action.setToolTip("Stream 10 m satellite imagery for the part of Earth in view "
+                                       "(downloads tiles, cached on disk)")
+        self.imagery_action.toggled.connect(self._on_imagery_toggled)
         # KSP map view: Tab / Shift+Tab cycle the focus target.
         focus_next = view_menu.addAction("Focus next (Tab)", lambda: self._cycle_focus(+1))
         focus_next.setShortcut(QKeySequence(Qt.Key_Tab))
@@ -697,6 +721,10 @@ class MissionControlWindow(QMainWindow):
         help_menu = self.menuBar().addMenu("&Help")
         shortcuts_action = help_menu.addAction("Keyboard Shortcuts…", self._show_shortcuts_dialog)
         shortcuts_action.setShortcut(QKeySequence(Qt.Key_F1))
+        help_menu.addSeparator()
+        self.guide_action = help_menu.addAction("User Guide", lambda: self._open_help_link("guide"))
+        help_menu.addAction("orbitopt Website", lambda: self._open_help_link("website"))
+        help_menu.addAction("README on GitHub", lambda: self._open_help_link("readme"))
 
     # ----------------------------------------------------------------- Help
     # Every entry here matches an actual wired shortcut (see _build_menu
@@ -704,8 +732,10 @@ class MissionControlWindow(QMainWindow):
     # one static list so this panel can't silently drift out of sync with
     # what the app actually does.
     _SHORTCUTS = [
-        ("Space", "Play / pause"),
+        ("Space / ⇧Space", "Play / play backwards (the same key again pauses)"),
         ("← / →", "Step back / forward (1% of the visible timeline)"),
+        ("Alt+← / →", "Fine step (0.1% of the visible timeline)"),
+        ("Shift-drag on timeline", "Scrub 10× finer; drag the playhead to nudge it"),
         ("Shift+← / →", "Previous / next mission event"),
         ("Home", "Restart timeline"),
         ("= / - / 0", "Zoom the timeline in / out / fit the whole mission"),
@@ -725,6 +755,24 @@ class MissionControlWindow(QMainWindow):
         ("Click", "Select a body"),
         ("Ctrl/⌘-click", "Measure distance to another body"),
     ]
+
+    def help_url(self, which: str) -> QUrl:
+        """Where Help > User Guide / Website / README points: the guide is
+        read from the source checkout when there is one (it works offline
+        and matches this version), else from the website."""
+        if which == "guide":
+            local = Path(__file__).resolve().parents[3] / "docs" / "guide.html"
+            if local.is_file():
+                return QUrl.fromLocalFile(str(local))
+            return QUrl(f"{WEBSITE_URL}guide.html")
+        if which == "website":
+            return QUrl(WEBSITE_URL)
+        return QUrl(f"{REPOSITORY_URL}/blob/main/README.md")
+
+    def _open_help_link(self, which: str) -> None:
+        url = self.help_url(which)
+        if not QDesktopServices.openUrl(url):
+            self.statusBar().showMessage(f"Could not open {url.toString()}")
 
     def _show_shortcuts_dialog(self):
         """A QDialog is its own top-level window, so it does not inherit
@@ -1526,7 +1574,7 @@ class MissionControlWindow(QMainWindow):
             self._seek_to_event(target)
 
     # -------------------------------------------------------------- Timing
-    def _step_time(self, direction: int):
+    def _step_time(self, direction: float):
         """Nudge the current time one step forward/back: 1% of the visible
         timeline, so the step gets finer as the timeline zooms in."""
         timeline = self.state.timeline
@@ -1542,14 +1590,27 @@ class MissionControlWindow(QMainWindow):
         self._set_playing(False)
         self.state.set_time(timeline["min"])
 
-    def _toggle_play(self):
-        if not self.state.timeline:
+    def _toggle_play(self, direction: int = 1):
+        """Space plays forward, Shift+Space backwards; the key of the
+        direction already playing pauses, the other one turns around."""
+        timeline = self.state.timeline
+        if not timeline:
             return
-        self._set_playing(not self._playing)
+        if self._playing and direction == self._play_direction:
+            self._set_playing(False)
+            return
+        # From the end it can only go back, from the start only forward: start
+        # over from the other end rather than doing nothing.
+        if direction > 0 and self.state.time >= timeline["max"]:
+            self.state.set_time(timeline["min"])
+        elif direction < 0 and self.state.time <= timeline["min"]:
+            self.state.set_time(timeline["max"])
+        self._play_direction = 1 if direction > 0 else -1
+        self._set_playing(True)
 
     def _set_playing(self, playing: bool):
         self._playing = playing
-        self.timeline_bar.set_playing(playing)
+        self.timeline_bar.set_playing(playing, self._play_direction)
         if playing:
             self._last_tick_ms = None
             self._timer.start()
@@ -1597,13 +1658,14 @@ class MissionControlWindow(QMainWindow):
         # Warp is in simulated seconds per real second; the timeline counts
         # in its own unit (days for every orbitopt exporter).
         unit_s = timeline_unit_seconds(timeline.get("unitLabel"))
-        new_time = min(timeline["max"], self.state.time + dt * effective_speed / unit_s)
+        step = self._play_direction * dt * effective_speed / unit_s
+        new_time = min(timeline["max"], max(timeline["min"], self.state.time + step))
         self._tick_dt = dt
         try:
             self.state.set_time(new_time)
         finally:
             self._tick_dt = None
-        if new_time >= timeline["max"]:
+        if new_time >= timeline["max"] or new_time <= timeline["min"]:
             self._set_playing(False)
 
     def _on_rotation_tick(self):
@@ -1617,6 +1679,16 @@ class MissionControlWindow(QMainWindow):
         if self.state.scene is not None:
             self.renderer.advance_rotation(dt * ROTATION_SIM_HOURS_PER_REAL_SECOND)
 
+    def _on_tile_tick(self):
+        if self._loading or self.renderer.scene is None:
+            return
+        if self.renderer.update_tiles():
+            self.plotter.render()
+
+    def _on_imagery_toggled(self, on: bool):
+        self.renderer.tiles.set_enabled(on)
+        self._on_tile_tick()
+
     def closeEvent(self, event):  # noqa: N802 -- Qt override signature
         """Tear down cleanly on quit (incl. Cmd+Q). The embedded VTK render
         window has to release its native OpenGL context *before* Qt destroys the
@@ -1628,6 +1700,8 @@ class MissionControlWindow(QMainWindow):
         self._timer.stop()
         self._scrub_timer.stop()
         self._rotation_timer.stop()
+        self._tile_timer.stop()
+        self.renderer.tiles.shutdown()
         self._spinner.stop()  # the spinner has its own QTimer, independent of self._timer
         self.plotter._resize_settle_timer.stop()  # so it can't fire post-teardown
         # Set *before* touching the load thread, unconditionally -- not just on

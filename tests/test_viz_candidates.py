@@ -338,6 +338,49 @@ def test_inspector_fits_its_minimum_width_with_long_maneuver_names():
     inspector.show()
     state.set_scene(scene)
     app.processEvents()
-    host = inspector.findChild(QWidget, "infoCards")
-    assert host.minimumSizeHint().width() <= host.parentWidget().width()
+    hosts = inspector.findChildren(QWidget, "infoCards")
+    assert len(hosts) == 3  # candidate, maneuvers, bodies: each scrolls on its own
+    for host in hosts:
+        assert host.minimumSizeHint().width() <= host.parentWidget().width()
     inspector.close()
+
+
+def test_inspector_sections_scroll_independently():
+    """Candidate, maneuvers and bodies are separate framed sections, each with
+    its own header count and scroll area (they used to share one scroll)."""
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+
+    from orbitopt.viz.inspector import InspectorPanel
+    from orbitopt.viz.state import MissionState
+    from orbitopt.viz.theme import STYLESHEET
+
+    app = QApplication.instance() or QApplication([])
+    scene = {"id": "s", "title": "S", "distanceUnit": "km",
+             "bodies": [{"id": f"b{k}", "name": f"Body {k}", "color": "#e8a23e", "kind": "planet",
+                         "position": [k, 0, 0]} for k in range(12)],
+             "timeline": {"min": 0.0, "max": 30.0, "unitLabel": "days",
+                          "events": [{"label": f"Burn {k}", "time": float(k)} for k in range(25)]}}
+    state = MissionState()
+    panel = InspectorPanel(state)
+    panel.setStyleSheet(STYLESHEET)
+    panel.resize(260, 700)
+    panel.show()
+    state.set_scene(scene)
+    for _ in range(3):
+        app.processEvents()
+    assert panel.candidate_section.isHidden()  # no candidates in this scene
+    assert panel.maneuver_section.item_count() == 25 and panel.maneuver_section.count_label.text() == "25"
+    assert panel.body_section.item_count() == 12 and panel.body_section.count_label.text() == "12"
+    ms, bs = panel.maneuver_section.scroll, panel.body_section.scroll
+    assert ms is not bs and ms.verticalScrollBar().maximum() > 0 and bs.verticalScrollBar().maximum() > 0
+    bs.verticalScrollBar().setValue(bs.verticalScrollBar().maximum())
+    assert ms.verticalScrollBar().value() == 0  # scrolling the bodies leaves the maneuvers alone
+
+    # The active maneuver is scrolled into view in its own section.
+    state.set_time(24.0)
+    app.processEvents()
+    assert ms.verticalScrollBar().value() > 0
+    state.set_scene(None)
+    assert panel.maneuver_section.isHidden() and panel.body_section.isHidden()
+    panel.close()

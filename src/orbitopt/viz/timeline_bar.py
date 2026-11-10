@@ -9,7 +9,9 @@ continuous -- scrubbing at the deepest zoom moves it by milliseconds, where
 the old 10,000-step slider moved it by eight seconds on Starship's timeline
 and by forty minutes on a Mars cruise.
 
-Mouse: drag on the track to scrub, scroll to zoom about the cursor (scroll
+Mouse: drag on the track to scrub (Shift-drag: ten times finer; grabbing
+the playhead nudges it from where it is instead of jumping), scroll to zoom
+about the cursor (scroll
 sideways, or right-drag, to pan), drag the bracket in the overview strip to
 pan, double-click a phase or an event to zoom to it. Keys (window menu):
 = / - zoom, 0 fit, G focus the time box.
@@ -29,7 +31,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
-    QSlider,
     QToolTip,
     QVBoxLayout,
     QWidget,
@@ -164,6 +165,8 @@ class TimelineTrack(QWidget):
     EVENT_H = 22
     GAP = 3
     _HIT_TOLERANCE_PX = 7
+    _PLAYHEAD_GRAB_PX = 6
+    FINE_SCRUB = 0.1  # Shift-drag moves time at a tenth of the pointer's rate
     _WHEEL_ZOOM_PER_NOTCH = 1.25  # one 120-unit wheel notch
 
     def __init__(self, state: MissionState, parent: QWidget | None = None):
@@ -174,6 +177,7 @@ class TimelineTrack(QWidget):
         self._phases: list[dict] = []
         self._drag: str | None = None  # "scrub" | "pan" | "overview"
         self._drag_anchor = (0.0, 0.0)  # (x, window start) when a pan began
+        self._scrub_anchor = (0.0, 0.0, False)  # (x, time, fine) the scrub is measured from
         self._hover_x: float | None = None
         self.setMouseTracking(True)
         self.setMinimumHeight(self._height(False))
@@ -472,18 +476,29 @@ class TimelineTrack(QWidget):
                 self._state.set_time(phase["start"])
             return
         near = self.events_near(x)
-        if row == "events" and near:
+        on_playhead = abs(x - self.x_of(self._state.time)) <= self._PLAYHEAD_GRAB_PX
+        if row == "events" and near and not on_playhead:
             self._state.set_time(near[0].get("time", 0.0))  # snap to the event
             return
         self._drag = "scrub"
-        self._state.set_time(self.time_at(x))
+        if not on_playhead:  # grabbing the playhead nudges it from where it is: no jump
+            self._state.set_time(self.time_at(x))
+        self._scrub_anchor = (x, self._state.time, bool(event.modifiers() & Qt.ShiftModifier))
 
     def mouseMoveEvent(self, event):  # noqa: N802
         if self.window is None:
             return
         x, y = event.position().x(), event.position().y()
         if self._drag == "scrub":
-            self._state.set_time(self.time_at(x))
+            fine = bool(event.modifiers() & Qt.ShiftModifier)
+            x0, t0, was_fine = self._scrub_anchor
+            if fine != was_fine:  # Shift pressed / released mid-drag: carry on from here
+                x0, t0 = x, self._state.time
+                self._scrub_anchor = (x0, t0, fine)
+            # Relative to where the drag started, at 1/10 the rate with Shift.
+            gain = self.FINE_SCRUB if fine else 1.0
+            t = t0 + (x - x0) / self.track_width * self.window.span * gain
+            self._state.set_time(min(self.window.hi, max(self.window.lo, t)))
         elif self._drag == "pan":
             x_anchor, start = self._drag_anchor
             dt = -(x - x_anchor) / self.track_width * self.window.span
@@ -564,6 +579,98 @@ class TimelineTrack(QWidget):
                 QToolTip.showText(event.globalPosition().toPoint(), text, self)
 
 
+class WarpLadder(QWidget):
+    """KSP-style warp selector: one bar per warp level (WARP_LEVELS), evenly
+    spaced and rising with the warp, filled up to the current one. Click or
+    drag along it to pick a level, scroll to fine-tune between levels. The
+    1x bar carries a tick underneath so real time is easy to find.
+
+    Even spacing is the point: on the old log slider 0.1x..10Mx was squeezed
+    into 170 px, so landing on 1x (or any round level) took several tries."""
+
+    level_picked = Signal(float)
+    nudged = Signal(int)
+
+    BAR_W = 9
+    GAP = 3
+    H = 26
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._warp = 1.0
+        n = len(WARP_LEVELS)
+        self.setFixedSize(n * self.BAR_W + (n - 1) * self.GAP + 2, self.H)
+        self.setMouseTracking(True)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def set_warp(self, warp: float):
+        self._warp = warp
+        self.update()
+
+    def index_at(self, x: float) -> int:
+        step = self.BAR_W + self.GAP
+        return min(len(WARP_LEVELS) - 1, max(0, int((x - 1) // step)))
+
+    def bar_rect(self, i: int) -> QRectF:
+        n = len(WARP_LEVELS)
+        h = 7.0 + (self.H - 13.0) * i / (n - 1)
+        x = 1 + i * (self.BAR_W + self.GAP)
+        return QRectF(x, self.H - 6.0 - h, self.BAR_W, h)
+
+    def paintEvent(self, _event):  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        log_w = math.log(self._warp)
+        for i, level in enumerate(WARP_LEVELS):
+            rect = self.bar_rect(i)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(SURFACE_HOVER))
+            p.drawRoundedRect(rect, 1.5, 1.5)
+            # Filled up to the warp; the bar above a between-levels warp
+            # (after a fine nudge) fills in proportion, on the log scale.
+            if level <= self._warp * (1 + 1e-9):
+                fill = 1.0
+            elif i > 0 and WARP_LEVELS[i - 1] < self._warp:
+                lo = math.log(WARP_LEVELS[i - 1])
+                fill = (log_w - lo) / (math.log(level) - lo)
+            else:
+                fill = 0.0
+            if fill > 0:
+                part = QRectF(rect.left(), rect.bottom() - rect.height() * fill, rect.width(), rect.height() * fill)
+                p.setBrush(QColor(ACCENT))
+                p.drawRoundedRect(part, 1.5, 1.5)
+            if level == 1.0:
+                p.setBrush(QColor(INK_PRIMARY if abs(self._warp - 1.0) < 1e-9 else INK_MUTED))
+                cx = rect.center().x()
+                tri = QPainterPath()
+                tri.moveTo(cx - 3.0, self.H - 0.5)
+                tri.lineTo(cx + 3.0, self.H - 0.5)
+                tri.lineTo(cx, self.H - 4.0)
+                tri.closeSubpath()
+                p.drawPath(tri)
+        p.end()
+
+    def _pick(self, x: float):
+        self.level_picked.emit(WARP_LEVELS[self.index_at(x)])
+
+    def mousePressEvent(self, event):  # noqa: N802
+        if event.button() == Qt.LeftButton:
+            self._pick(event.position().x())
+
+    def mouseMoveEvent(self, event):  # noqa: N802
+        i = self.index_at(event.position().x())
+        self.setToolTip(f"{format_warp(WARP_LEVELS[i])} · {format_rate(WARP_LEVELS[i])}\n"
+                        "Click a bar for that warp · scroll to fine-tune")
+        if event.buttons() & Qt.LeftButton:
+            self._pick(event.position().x())
+
+    def wheelEvent(self, event):  # noqa: N802
+        delta = event.angleDelta().y() or event.pixelDelta().y()
+        if delta:
+            self.nudged.emit(1 if delta > 0 else -1)
+        event.accept()
+
+
 class TimelineBar(QWidget):
     """Controls row (play, previous / next event, the time box, the zoom
     controls, time warp) over the zoomable track.
@@ -575,12 +682,13 @@ class TimelineBar(QWidget):
     """
 
     play_clicked = Signal()
+    reverse_clicked = Signal()
     auto_slow_toggled = Signal(bool)
     # The previous / next event buttons: the window seeks (and frames a burn)
     # the same way as for Shift+arrow.
     event_step_requested = Signal(int)
 
-    _CONTROLS_H = 34
+    _CONTROLS_H = 44
     _MARGINS = (16, 6, 16, 6)
 
     def __init__(self, state: MissionState, parent: QWidget | None = None):
@@ -605,6 +713,13 @@ class TimelineBar(QWidget):
         row.setSpacing(8)
         outer.addLayout(row)
 
+        self.reverse_btn = QPushButton()
+        self.reverse_btn.setObjectName("playButton")
+        self.reverse_btn.setIcon(icons.play_icon(INK_SECONDARY, reverse=True))
+        self.reverse_btn.setIconSize(QSize(15, 15))
+        self.reverse_btn.setToolTip("Play backwards / pause (Shift+Space)")
+        self.reverse_btn.clicked.connect(self.reverse_clicked)
+        row.addWidget(self.reverse_btn)
         self.play_btn = QPushButton()
         self.play_btn.setObjectName("playButton")
         self.play_btn.setIcon(icons.play_icon())
@@ -678,17 +793,22 @@ class TimelineBar(QWidget):
         speed_header.addWidget(self.speed_value_label)
         speed_col.addLayout(speed_header)
 
-        self.speed_slider = QSlider(Qt.Horizontal)
-        self.speed_slider.setObjectName("speedSlider")
-        self.speed_slider.setRange(0, WARP_SLIDER_STEPS)
-        self.speed_slider.setValue(slider_from_warp(self._warp))
-        self.speed_slider.setToolTip(
-            "Time warp, 0.1x to 10,000,000x (1x = real time). "
-            ", / . step through the KSP warp levels, / returns to 1x, [ / ] fine-tune"
-        )
-        self.speed_slider.setFixedWidth(170)
-        self.speed_slider.valueChanged.connect(self._on_speed_slider)
-        speed_col.addWidget(self.speed_slider)
+        warp_row = QHBoxLayout()
+        warp_row.setSpacing(4)
+        self.warp_down_btn = self._tool_button(None, "Slower: previous warp level (,)", "«")
+        self.warp_down_btn.clicked.connect(lambda: self.step_warp(-1))
+        self.warp_ladder = WarpLadder()
+        self.warp_ladder.level_picked.connect(self.set_warp)
+        self.warp_ladder.nudged.connect(self.nudge_speed)
+        self.warp_up_btn = self._tool_button(None, "Faster: next warp level (.)", "»")
+        self.warp_up_btn.clicked.connect(lambda: self.step_warp(+1))
+        self.real_time_btn = self._tool_button(None, "Real time, 1× (/)", "1×")
+        self.real_time_btn.setObjectName("realTimeButton")
+        self.real_time_btn.setCheckable(True)
+        self.real_time_btn.clicked.connect(lambda: self.set_warp(1.0))
+        for w in (self.warp_down_btn, self.warp_ladder, self.warp_up_btn, self.real_time_btn):
+            warp_row.addWidget(w, 0, Qt.AlignVCenter)
+        speed_col.addLayout(warp_row)
         row.addLayout(speed_col)
 
         self.track = TimelineTrack(self._state)
@@ -784,8 +904,12 @@ class TimelineBar(QWidget):
         return 0.0 if w is None else 0.01 * w.span
 
     # -------------------------------------------------------- playback
-    def set_playing(self, playing: bool):
-        self.play_btn.setIcon(icons.pause_icon() if playing else icons.play_icon())
+    def set_playing(self, playing: bool, direction: int = 1):
+        """Pause icon on the button of the direction that is playing."""
+        forward, backward = playing and direction > 0, playing and direction < 0
+        self.play_btn.setIcon(icons.pause_icon() if forward else icons.play_icon())
+        self.reverse_btn.setIcon(icons.pause_icon() if backward
+                                 else icons.play_icon(INK_SECONDARY, reverse=True))
 
     @property
     def warp(self) -> float:
@@ -798,9 +922,10 @@ class TimelineBar(QWidget):
 
     def set_warp(self, warp: float):
         self._warp = min(WARP_MAX, max(WARP_MIN, float(warp)))
-        self.speed_slider.blockSignals(True)
-        self.speed_slider.setValue(slider_from_warp(self._warp))
-        self.speed_slider.blockSignals(False)
+        self.warp_ladder.set_warp(self._warp)
+        self.real_time_btn.setChecked(abs(self._warp - 1.0) < 1e-9)
+        self.warp_down_btn.setEnabled(self._warp > WARP_LEVELS[0] * (1 + 1e-9))
+        self.warp_up_btn.setEnabled(self._warp < WARP_LEVELS[-1] * (1 - 1e-9))
         self.show_effective_speed(self._warp)
 
     def nudge_speed(self, direction: int):
@@ -811,10 +936,6 @@ class TimelineBar(QWidget):
         """Jump to the next KSP warp level up or down (the . / , shortcuts)."""
         self.set_warp(step_warp(self._warp, direction))
 
-    def _on_speed_slider(self, value: int):
-        self._warp = warp_from_slider(value)
-        self.show_effective_speed(self._warp)
-
     def show_effective_speed(self, effective_speed: float):
         """Keep the TIME WARP label showing what's *actually* playing back,
         not just the slider-set speed -- without this the label kept reading
@@ -824,6 +945,14 @@ class TimelineBar(QWidget):
         eased = effective_speed < self._warp * (1 - 1e-9)
         self.speed_value_label.setText(f"{format_warp(effective_speed)} · {format_rate(effective_speed)}")
         self.speed_value_label.setProperty("eased", eased)
+        timeline = self._state.timeline
+        tip = "Time warp: simulated time per real second (1× = real time)"
+        if timeline:
+            span_s = (timeline["max"] - timeline["min"]) * self.unit_seconds
+            tip += f"\nWhole mission at this warp: {format_view_span(span_s / effective_speed)}"
+        if eased:
+            tip += f"\nEased down near an event (auto-slow); set to {format_warp(self._warp)}"
+        self.speed_value_label.setToolTip(tip)
         self.speed_value_label.style().unpolish(self.speed_value_label)
         self.speed_value_label.style().polish(self.speed_value_label)
 

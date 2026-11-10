@@ -22,3 +22,17 @@ No texture is bundled for Pluto (not available from this source) or
 spacecraft (a synthetic marker, not a real body with imagery) -- both fall
 back to the point-marker rendering, same as any body with no `texture` field
 at all.
+
+## Streamed Earth imagery (not bundled)
+
+Close to Earth, Mission Control drapes tiles of
+[EOX Sentinel-2 cloudless 2024](https://s2maps.eu) over the globe: up to
+~10 m per pixel, picked for the current camera and downloaded on demand
+(`orbitopt.viz.earth_tiles`), cached under `~/Library/Caches/orbitopt/tiles`
+(macOS) or `~/.cache/orbitopt/tiles` (`ORBITOPT_TILE_CACHE` overrides).
+"Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains
+modified Copernicus Sentinel data 2024)", licensed
+[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/):
+non-commercial use only; the attribution is shown in the view while tiles
+are drawn. View > High-res Earth imagery turns it off, and
+`ORBITOPT_EARTH_TILES=off` disables the network access entirely.

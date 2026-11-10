@@ -446,7 +446,25 @@ QPushButton#timelineTextButton {{
     border-radius: 2px;
     color: {INK_SECONDARY};
 }}
-QPushButton#timelineToolButton:hover, QPushButton#timelineTextButton:hover {{
+QPushButton#realTimeButton {{
+    min-width: 30px;
+    max-width: 30px;
+    min-height: 22px;
+    max-height: 22px;
+    padding: 0;
+    font-family: {FONT_MONO};
+    font-size: 10.5px;
+    background: transparent;
+    border: 1px solid {HAIRLINE};
+    border-radius: 2px;
+    color: {INK_SECONDARY};
+}}
+QPushButton#realTimeButton:checked {{
+    color: {ACCENT};
+    background: {ACCENT_DIM};
+    border-color: {ACCENT_MID};
+}}
+QPushButton#realTimeButton:hover, QPushButton#timelineToolButton:hover, QPushButton#timelineTextButton:hover {{
     color: {INK_PRIMARY};
     background: {SURFACE_HOVER};
 }}
@@ -595,6 +613,26 @@ QScrollArea#infoScroll > QWidget > QWidget {{
 }}
 QWidget#infoCards {{
     background: transparent;
+}}
+QFrame#inspectorSection {{
+    background: {PANEL};
+    border: 1px solid {HAIRLINE};
+    border-radius: 3px;
+}}
+QWidget#inspectorSectionHeader {{
+    background: transparent;
+    border-bottom: 1px solid {BORDER_SOFT};
+}}
+QLabel#sectionCount {{
+    font-family: {FONT_MONO};
+    font-size: 10px;
+    color: {INK_MUTED};
+}}
+QSplitter#inspectorSplitter::handle {{
+    background: transparent;
+}}
+QSplitter#inspectorSplitter::handle:hover {{
+    background: {HAIRLINE};
 }}
 
 QWidget#loadingPage {{

@@ -17,6 +17,11 @@ import pytest
 
 REQUIRE_GPU = os.environ.get("ORBITOPT_REQUIRE_GPU", "0") == "1"
 
+# No network from the test suite: the Mission Control window would otherwise
+# stream Earth imagery tiles (viz.earth_tiles) whenever a test's camera is
+# near Earth. Tests of the tile code pass their own fetcher.
+os.environ["ORBITOPT_EARTH_TILES"] = "off"
+
 
 def _gpu_available() -> bool:
     from orbitopt.core.gpu import GPU_AVAILABLE

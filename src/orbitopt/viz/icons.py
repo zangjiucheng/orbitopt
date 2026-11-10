@@ -72,15 +72,21 @@ def _chevron_icon(color: str, size: int, direction: int) -> QIcon:
     return _icon(px, p)
 
 
-def play_icon(color: str = ACCENT, size: int = 16) -> QIcon:
+def play_icon(color: str = ACCENT, size: int = 16, reverse: bool = False) -> QIcon:
+    """A play triangle; ``reverse`` points it left (play backwards)."""
     px, p = _new_painter(size)
     s = float(size)
     p.setPen(Qt.NoPen)
     p.setBrush(QColor(color))
     tri = QPainterPath()
-    tri.moveTo(s * 0.32, s * 0.22)
-    tri.lineTo(s * 0.32, s * 0.78)
-    tri.lineTo(s * 0.80, s * 0.5)
+    if reverse:
+        tri.moveTo(s * 0.68, s * 0.22)
+        tri.lineTo(s * 0.68, s * 0.78)
+        tri.lineTo(s * 0.20, s * 0.5)
+    else:
+        tri.moveTo(s * 0.32, s * 0.22)
+        tri.lineTo(s * 0.32, s * 0.78)
+        tri.lineTo(s * 0.80, s * 0.5)
     tri.closeSubpath()
     p.drawPath(tri)
     return _icon(px, p)

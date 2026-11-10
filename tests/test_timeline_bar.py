@@ -134,3 +134,90 @@ def test_typing_a_time_jumps_there_and_the_track_zooms_and_follows():
     assert track.window.is_fit and not bar.fit_btn.isEnabled()
     assert not bar.grab().isNull()
     bar.close()
+
+
+def test_warp_ladder_picks_levels_and_one_click_returns_to_real_time():
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication
+
+    from orbitopt.viz.state import MissionState
+    from orbitopt.viz.timeline_bar import WARP_LEVELS, TimelineBar
+
+    app = QApplication.instance() or QApplication([])
+    state = MissionState()
+    bar = TimelineBar(state)
+    bar.show()
+    state.set_scene(_scene())  # 4 days -> 10,000x
+    app.processEvents()
+    ladder = bar.warp_ladder
+    assert bar.warp == 10_000.0 and not bar.real_time_btn.isChecked()
+    assert "Whole mission at this warp: 34.6 s" in bar.speed_value_label.toolTip()
+
+    # Every level is its own bar: clicking one sets exactly that warp.
+    for i in (0, 4, len(WARP_LEVELS) - 1):
+        center = ladder.bar_rect(i).center()
+        QTest.mouseClick(ladder, Qt.LeftButton, Qt.NoModifier, QPoint(round(center.x()), ladder.height() - 8))
+        assert bar.warp == WARP_LEVELS[i]
+    assert not bar.warp_up_btn.isEnabled() and bar.warp_down_btn.isEnabled()
+
+    bar.real_time_btn.click()
+    assert bar.warp == 1.0 and bar.real_time_btn.isChecked()
+    assert bar.speed_value_label.text() == "1× · 1 s/s"
+    bar.warp_up_btn.click()
+    assert bar.warp == 5.0 and not bar.real_time_btn.isChecked()
+    bar.warp_down_btn.click()
+    bar.warp_down_btn.click()
+    assert bar.warp == 0.1 and not bar.warp_down_btn.isEnabled()
+    # Scroll fine-tunes between levels.
+    ladder.nudged.emit(+1)
+    assert bar.warp == pytest.approx(0.125)
+    assert not bar.grab().isNull()
+    bar.close()
+
+
+def _mouse(kind, x, y, buttons, modifiers):
+    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+
+    button = Qt.LeftButton if kind != QMouseEvent.Type.MouseMove else Qt.NoButton
+    return QMouseEvent(kind, QPointF(x, y), QPointF(x, y), button, buttons, modifiers)
+
+
+def test_shift_drag_scrubs_finely_and_grabbing_the_playhead_does_not_jump():
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtWidgets import QApplication
+
+    from orbitopt.viz.state import MissionState
+    from orbitopt.viz.timeline_bar import TimelineBar
+
+    app = QApplication.instance() or QApplication([])
+    state = MissionState()
+    bar = TimelineBar(state)
+    bar.resize(1000, 140)
+    bar.show()
+    state.set_scene(_scene())  # 0..4 days
+    app.processEvents()
+    track = bar.track
+    y = 0.5 * sum(track._rows()["ruler"])
+    per_px = track.window.span / track.track_width
+
+    state.set_time(2.0)
+    x = track.x_of(2.0) + 3  # on the playhead, a few px off its center
+    track.mousePressEvent(_mouse(QMouseEvent.Type.MouseButtonPress, x, y, Qt.LeftButton, Qt.NoModifier))
+    assert state.time == 2.0  # grabbed, not jumped to the pointer
+    track.mouseMoveEvent(_mouse(QMouseEvent.Type.MouseMove, x + 50, y, Qt.LeftButton, Qt.NoModifier))
+    assert state.time == pytest.approx(2.0 + 50 * per_px)
+    t1 = state.time
+    # Shift mid-drag: carries on from here at a tenth of the rate.
+    track.mouseMoveEvent(_mouse(QMouseEvent.Type.MouseMove, x + 50, y, Qt.LeftButton, Qt.ShiftModifier))
+    assert state.time == pytest.approx(t1)
+    track.mouseMoveEvent(_mouse(QMouseEvent.Type.MouseMove, x + 150, y, Qt.LeftButton, Qt.ShiftModifier))
+    assert state.time == pytest.approx(t1 + 100 * per_px * track.FINE_SCRUB)
+    track.mouseReleaseEvent(_mouse(QMouseEvent.Type.MouseButtonRelease, x + 150, y, Qt.NoButton, Qt.NoModifier))
+
+    # Away from the playhead a click still jumps there.
+    track.mousePressEvent(_mouse(QMouseEvent.Type.MouseButtonPress, track.x_of(1.0), y, Qt.LeftButton, Qt.NoModifier))
+    assert state.time == pytest.approx(1.0, abs=per_px)
+    bar.close()

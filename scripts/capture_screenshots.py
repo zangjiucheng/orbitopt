@@ -13,7 +13,9 @@ docs/engineering-notes.md). So each shot is a composite -- the Qt chrome from
 An OS-level screen capture is deliberately not used: it can pick up whatever
 window has focus instead of the app.
 
-Needs a display (VTK's OpenGL context fails under QT_QPA_PLATFORM=offscreen).
+Needs a display (VTK's OpenGL context fails under QT_QPA_PLATFORM=offscreen),
+and the network for the Starship landing shot's Earth imagery (EOX tiles,
+cached on disk after the first run).
 """
 from __future__ import annotations
 
@@ -133,11 +135,88 @@ def shot_starship(app, w):
     _settle(app, 1.0)
 
 
+def _look_down_at(w, body_ids, height_km, back_km):
+    """Camera ``height_km`` above the mean of the bodies' positions, pulled
+    ``back_km`` to the south so the view is oblique, north up."""
+    import numpy as np
+
+    w._set_tracking(False)
+    pts = [np.asarray(w.renderer.body_display_position(b, w.state.time), dtype=float) for b in body_ids]
+    c = np.mean(pts, axis=0)
+    up = c / np.linalg.norm(c)
+    north = np.array([0.0, 0.0, 1.0]) - up * up[2]
+    north /= np.linalg.norm(north)
+    cam = w.plotter.camera
+    cam.focal_point = tuple(c)
+    cam.position = tuple(c + up * height_km - north * back_km)
+    cam.up = tuple(north)
+    w._refresh_view()
+    w._resize_maneuver_arrow()
+
+
+def _wait_for_imagery(app, w, timeout=90.0):
+    """Let the EOX tiles for this view download (or come from the disk
+    cache) and draw."""
+    t0 = time.time()
+    _settle(app, 1.0)
+    while time.time() - t0 < timeout:
+        _settle(app, 0.5)
+        if not w.renderer.tiles.cache.busy:
+            _settle(app, 1.0)
+            if not w.renderer.tiles.cache.busy:
+                break
+    w.plotter.render()
+    _settle(app, 0.5)
+
+
+def shot_starship_ascent(app, w):
+    """Flight 15 four and a half minutes in: Super Heavy on its way back to
+    the tower and the ship still climbing, each with its flight-data label,
+    and the timeline zoomed to the ascent."""
+    _open_mission(app, w, "Starship")
+    w.labels_action.setChecked(True)
+    w.state.set_time(270.0 / 86400.0)
+    _settle(app, 0.3)
+    _look_down_at(w, ["spacecraft", "booster"], 900.0, 630.0)
+    w.timeline_bar.track.set_view(0.0, 480.0 / 86400.0)
+    w.chart_panel.setCurrentWidget(w.chart_panel.distance)
+    w.right_tabs.setCurrentWidget(w.inspector)
+    _wait_for_imagery(app, w)
+
+
+def shot_starship_landing(app, w):
+    """The ship's landing burn over Starbase, on 10 m Sentinel-2 imagery,
+    with its label (height, speed, delta-v, the burn in progress) and the
+    timeline zoomed to the last two minutes."""
+    _open_mission(app, w, "Starship")
+    w.labels_action.setChecked(True)
+    burn = next(e for e in w.state.events if e["label"].startswith("Flip"))
+    w.state.set_time(burn["time"] + 3.0 / 86400.0)
+    _settle(app, 0.3)
+    _look_down_at(w, ["spacecraft"], 10.0, 14.0)
+    w.timeline_bar.track.zoom_to_event(burn)
+    w.chart_panel.setCurrentWidget(w.chart_panel.distance)
+    w.right_tabs.setCurrentWidget(w.inspector)
+    _wait_for_imagery(app, w)
+
+
+def shot_shortcuts(app, w):
+    """The keyboard-shortcut panel (F1), on its own."""
+    w._show_shortcuts_dialog()
+    _settle(app, 0.8)
+    image = w._shortcuts_dialog.grab().toImage()
+    w._shortcuts_dialog.close()
+    return image
+
+
 SHOTS = {
     "mission-control-mars.png": shot_mars,
     "mission-control-artemis.png": shot_artemis,
     "mission-control-goes.png": shot_goes,
     "mission-control-starship.png": shot_starship,
+    "mission-control-starship-ascent.png": shot_starship_ascent,
+    "mission-control-starship-landing.png": shot_starship_landing,
+    "mission-control-shortcuts.png": shot_shortcuts,
 }
 
 
@@ -163,8 +242,11 @@ def main(argv=None) -> int:
         for name, setup in SHOTS.items():
             if args.only and name not in args.only:
                 continue
-            setup(app, window)
-            image = _composite(window).scaledToWidth(args.width, Qt.SmoothTransformation)
+            own = setup(app, window)  # a shot of another window returns its own image
+            if own is not None:
+                image = own
+            else:
+                image = _composite(window).scaledToWidth(args.width, Qt.SmoothTransformation)
             path = args.out / name
             image.save(str(path))
             print(f"wrote {path} ({image.width()}x{image.height()})", flush=True)

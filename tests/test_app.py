@@ -116,13 +116,36 @@ def test_mission_control_loads_and_switches_missions():
         window._set_tracking(False)
         window.state.select_body(None)
 
-        # Flight-data label next to the spacecraft (L toggles it).
+        # Flight-data label next to the spacecraft (L toggles it). From a camera
+        # beyond the spacecraft, looking back at Earth -- the label hides when
+        # Earth is in the way (checked below), so the view has to be known.
+        import numpy as np
+
+        sc = np.asarray(window.renderer.body_display_position("spacecraft", state.time))
+        earth = np.asarray(window.renderer.body_display_position("earth", state.time))
+        window.plotter.camera.position = tuple(sc + (sc - earth) * 2.0)
+        window.plotter.camera.focal_point = tuple(earth)
+        window._refresh_view()
         label = window.renderer.flight_label_text("spacecraft")
         assert label is not None and "\nH " in label and "\nV " in label
         assert "\nΔv " not in label  # Artemis II's events carry no burn vectors: no Δv line
         window.labels_action.setChecked(False)
         assert window.renderer.flight_label_text("spacecraft") is None
         window.labels_action.setChecked(True)
+        # Help > User Guide: the checkout's own guide page; the others go online.
+        guide = window.help_url("guide")
+        assert guide.isLocalFile() and guide.toLocalFile().endswith("docs/guide.html")
+        assert window.help_url("website").toString() == "https://zangjiucheng.github.io/orbitopt/"
+        assert window.help_url("readme").toString().endswith("/blob/main/README.md")
+        # Seen from the far side of Earth the spacecraft is hidden, and so is its label.
+        saved = window.plotter.camera_position
+        window.plotter.camera.position = tuple(earth - (sc - earth) * 3.0)
+        window.plotter.camera.focal_point = tuple(earth)
+        window._refresh_view()
+        assert window.renderer.flight_label_text("spacecraft") is None
+        window.plotter.camera_position = saved
+        window._refresh_view()
+        assert window.renderer.flight_label_text("spacecraft") is not None
 
         # Linked charts: Artemis II has no launch-window screen, only distances.
         charts = window.chart_panel
@@ -160,6 +183,21 @@ def test_mission_control_loads_and_switches_missions():
         app.processEvents()
         assert abs(state.time - event["time"]) < 1e-9
         assert window.timeline_bar.event_label.text() == f"▸ {event['label']}"
+
+        # Playback runs backwards too (Shift+Space), and the same key pauses.
+        state.set_time(event["time"])
+        window._toggle_play(-1)
+        assert window._playing and window._play_direction == -1
+        window._last_tick_ms = time.monotonic() * 1000.0 - 50.0
+        window._on_tick()
+        assert state.time < event["time"]
+        window._toggle_play(+1)  # the other direction turns around
+        assert window._playing and window._play_direction == 1
+        window._toggle_play(+1)
+        assert not window._playing
+        window.play_action.trigger()  # the menu passes checked=False: still forward
+        assert window._playing and window._play_direction == 1
+        window._toggle_play(+1)
 
         window.inspector.body_clicked.emit("spacecraft", False)
         app.processEvents()
