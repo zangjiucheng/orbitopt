@@ -69,10 +69,20 @@ Ascent, deorbit burn and entry are not modelled.
 | First pass after the announced entry that reaches Starbase | T+22:26:39, 16 min after the announced entry | pending |
 | That pass's ground track | 350 km north of Starbase, heading east (with 29.5–31.5°: 280–400 km north) | pending |
 | Depends on the launch time? | No: the ground track is fixed by the site and azimuth | — |
+| Entry interface (120 km), solved return to the tower | T+22:14:35, 3.8 min after the announced entry | pending |
+| Entry interface to landing burn | 18.4 min | earlier flights: ~17–18 min entry to splashdown |
+| Deorbit burn (Raptor) | T+21:50:28, 100 m/s, 60 m/s of it out of plane | pending |
+| Landing burn (Raptor) | 27 s from 1 km, ~335 m/s incl. gravity loss | pending |
 
-If the inclination matches Flight 14's, the ship has to close roughly
-300–400 km of cross-range during entry, or with an out-of-plane deorbit
-burn. `orbitopt view starship-flight-15` opens the scene;
+The return to the tower is solved, not drawn: a 3-DOF point-mass entry
+([`orbitopt.entry`](src/orbitopt/entry.py): J2 gravity, a co-rotating
+US Standard Atmosphere, lift and drag at a constant bank angle) with the
+deorbit-burn time and bank angle chosen so the ship reaches the landing-burn
+height over Starbase. Starship's mass and aerodynamics are not public, so
+they are assumptions (150 t, 400 m², flat-plate L/D 0.47). With Flight 14's
+inclination the entry's cross-range falls ~29 km short of Starbase at the
+best constant bank (46.6°), so the solve adds an out-of-plane component to
+the deorbit burn. `orbitopt view starship-flight-15` opens the scene;
 [`src/orbitopt/viz/starship_flight.py`](src/orbitopt/viz/starship_flight.py)
 lists every assumption with its source.
 
@@ -252,8 +262,10 @@ playing it. Every panel follows the same selection and mission time:
 <img src="docs/assets/mission-control-shortcuts.png" alt="Mission Control keyboard shortcuts" width="320" align="right">
 
 Shortcuts: Space play/pause · ←/→ step · Shift+←/→ previous/next event ·
-Home restart · `[` `]` time warp · T track body · M focus body ·
-I toggle the right panel · F1 shortcut reference.
+Home restart · `,` `.` time warp down/up a KSP level (1× = real time, up to
+10,000,000×) · `/` back to real time · `[` `]` fine-tune warp ·
+Tab / Shift+Tab cycle focus (spacecraft first, as in KSP's map view) ·
+T track body · M focus body · I toggle the right panel · F1 shortcut reference.
 
 The screenshots are regenerated with `scripts/capture_screenshots.py`.
 
