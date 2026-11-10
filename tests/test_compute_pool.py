@@ -285,7 +285,19 @@ def qt_core():
     pytest.importorskip("PySide6")
     from PySide6.QtCore import QCoreApplication
 
-    return QCoreApplication.instance() or QCoreApplication([])
+    app = QCoreApplication.instance()
+    if app is not None:
+        return app
+    # Qt allows one application object per process and it cannot be upgraded.
+    # A bare QCoreApplication created here would be returned by the widget
+    # tests' ``QApplication.instance() or QApplication([])`` and the first
+    # QWidget would SIGABRT the whole pytest run, so create the full
+    # QApplication whenever QtWidgets is importable.
+    try:
+        from PySide6.QtWidgets import QApplication
+    except ImportError:  # headless box without the GUI libs: core is enough
+        return QCoreApplication([])
+    return QApplication([])
 
 
 def _run_loader(loader):
