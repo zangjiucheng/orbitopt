@@ -677,8 +677,8 @@
     </div>
    </div>
 
-    <div class="hero-verify" role="group" aria-label="orbitopt results checked against flown missions">
-      <div class="hv-head"><span class="live">Verified vs flown</span><a href="#replay">injection.verification.json · <b>9/9 PASS</b> · passed: true →</a></div>
+    <div class="hero-verify" role="group" aria-label="orbitopt results checked against real missions: historical replays and targeting checks">
+      <div class="hv-head"><span class="live">Verified vs real missions</span><a href="#replay">injection.verification.json · <b>9/9 PASS</b> · passed: true →</a></div>
       <div class="hv-grid">
         <div class="hv-cell">
           <div class="hv-mission"><i style="background:var(--mars)"></i>Mars 2020</div>
@@ -694,9 +694,9 @@
         </div>
         <div class="hv-cell">
           <div class="hv-mission"><i style="background:var(--accent)"></i>Artemis II</div>
-          <div class="hv-metric">lunar perilune altitude residual</div>
-          <div class="hv-ours">~10 km</div>
-          <div class="hv-real">of 6,545 km</div>
+          <div class="hv-metric">targeted perilune (input), free return</div>
+          <div class="hv-ours">&le;50 km</div>
+          <div class="hv-real">of 6,545 km target</div>
         </div>
         <div class="hv-cell">
           <div class="hv-mission"><i style="background:var(--saturn)"></i>Sentinel-2A/2B</div>
@@ -964,9 +964,10 @@
       </div>
       <div class="ticket">
         <div class="thead"><span class="tdot" style="color:#e8a23e;background:#e8a23e"></span><h3>Artemis II Free Return</h3></div>
-        <p>Lambert-seeded, GPU-screened, tudatpy-refined Earth–Moon free return.
-          Independently re-solved, not fit to unpublished flight data.</p>
-        <div class="fact">perilune target 6,545&nbsp;km — <b>~10&nbsp;km</b> in 3 Newton iterations</div>
+        <p>Lambert-seeded, B-plane and entry-corridor targeted Earth–Moon free return,
+          verified in tudatpy. Artemis II's perilune is the target input and the
+          departure date is chosen; this is not a reconstruction of the flown trajectory.</p>
+        <div class="fact">perilune target 6,545&nbsp;km (&le;50&nbsp;km) · entry <b>−6°</b> in [−7°, −5°]</div>
       </div>
       <div class="ticket">
         <div class="thead"><span class="tdot" style="color:#2fa97a;background:#2fa97a"></span><h3>GOES — GTO to GEO</h3></div>

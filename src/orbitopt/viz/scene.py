@@ -246,6 +246,36 @@ def crossing_times(times, distances, radius):
     return t_in, t_out
 
 
+def thin_trail_indices(times, max_points, keep=()):
+    """Sorted indices of ``times`` to export when thinning a trail to about
+    ``max_points`` samples, evenly spaced by index -- but never dropping a
+    sample a viewer needs to place the body correctly:
+
+    * the first and last samples;
+    * every sample that shares its time with a neighbour. That is how a
+      trail marks an impulsive maneuver: the pre-burn and the post-burn
+      state at the same instant (same position, different velocity). The
+      pair is an interpolation-segment break -- the renderer's Hermite
+      never spans it (see scene_renderer._sample_trail) -- so dropping
+      either half would splice the burn's velocity jump into a smooth
+      cubic and misplace the body around the burn;
+    * any explicit ``keep`` indices (e.g. a perilune or periapsis sample).
+
+    The protected samples come on top of ``max_points``, so the result can
+    be slightly longer than ``max_points``.
+    """
+    import numpy as np
+
+    t = np.asarray(times, dtype=float)
+    n = len(t)
+    if n <= max_points:
+        return np.arange(n)
+    even = np.linspace(0, n - 1, max(int(max_points), 2)).round().astype(int)
+    same = np.flatnonzero(np.diff(t) == 0.0)
+    protected = np.concatenate([same, same + 1, np.asarray(list(keep), dtype=int)])
+    return np.unique(np.concatenate([even, protected, [0, n - 1]]))
+
+
 def scene_document(scene_id, title, bodies, distance_unit="AU", subtitle=None, central_body_id=None, timeline=None):
     doc = {
         "schemaVersion": SCHEMA_VERSION,

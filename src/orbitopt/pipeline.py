@@ -1,6 +1,6 @@
 """The unified mission pipeline: one stage lifecycle and one standardized
 result document for every config-driven mission kind, shared by the CLI
-(``orbitopt run``), the GUI (the built-in "goes"/"mars" missions in
+(``orbitopt run``), the GUI (the built-in "artemis2"/"goes"/"mars" missions in
 orbitopt.missions) and the Python API.
 
     MissionConfig -> Constraints -> Search -> Optimize -> Select -> Refine -> Verify -> Export

@@ -215,7 +215,7 @@ def test_cli_run_goes_through_the_pipeline(fake_builders, tmp_path, capsys):
 def test_builtin_gui_missions_have_valid_pipeline_configs():
     from orbitopt.missions import builtin_mission_config
 
-    for mission_id in ("goes", "mars"):
+    for mission_id in ("artemis2", "goes", "mars"):
         mission_config.validate_mission_config(builtin_mission_config(mission_id))
 
 

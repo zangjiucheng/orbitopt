@@ -86,11 +86,24 @@ from orbitopt.viz.scene import (
     body_entry,
     phase_spans,
     scene_document,
+    thin_trail_indices,
 )
 
 EARTH_RADIUS_KM = 6378.0
 MARS_RADIUS_KM = 3389.5
 AU_KM = 1.495978707e8
+
+# Trail and event times keep 1e-8 day (~1 ms). Rounding to 1e-4 day (~8.6 s)
+# put up to ~130 km of time/position mismatch on Earth (30 km/s) -- the same
+# size as the parking-orbit features an Earth-centered view has to show --
+# and placed every burn/periapsis event marker up to ~4 s off its sample.
+TRAIL_TIME_DECIMALS = 8
+# Spacecraft trail positions keep 1e-3 km (1 m) and velocities 1e-3 km/day.
+# The trail is display data for the viewer's Hermite playback; it is not the
+# source for metre-level error analysis (verification reports carry that).
+TRAIL_POSITION_DECIMALS = 3
+TRAIL_VELOCITY_DECIMALS = 3
+KM_PER_DAY_PER_M_S = 86400.0 / 1000.0
 
 PARKING_ALTITUDE_KM = 185.0  # matches mission_timeline.py's Artemis II convention
 EARTH_SOI_RADIUS_KM = 924000.0  # real Earth sphere-of-influence radius
@@ -267,10 +280,11 @@ def _hyperbolic_departure_state(v_inf_dep, parking_radius_m, mu_earth):
 
 
 def _decimate(epochs, states, points_per_arc=150):
-    if len(epochs) > points_per_arc:
-        keep = np.unique(np.linspace(0, len(epochs) - 1, points_per_arc).round().astype(int))
-        return epochs[keep], states[keep]
-    return epochs, states
+    """Thin ``(epochs, states)`` to about ``points_per_arc`` samples, always
+    keeping both halves of every impulsive burn (pre- and post-burn state at
+    the same epoch) -- see scene.thin_trail_indices."""
+    keep = thin_trail_indices(epochs, points_per_arc)
+    return epochs[keep], states[keep]
 
 
 def _build_mars_mission(
@@ -531,7 +545,7 @@ def _fly_transfer(
                      f"(optimum of the {injection.window.direction} launch window, azimuth "
                      f"{plan.launch.azimuth_deg:.1f} deg), {spec.payload_kg:,.0f} kg payload. The ascent "
                      "itself isn't drawn -- the trail starts at parking-orbit insertion."},
-            {"label": "Parking-orbit insertion", "time": round(phase1_start_rel_s / 86400.0, 4),
+            {"label": "Parking-orbit insertion", "time": round(phase1_start_rel_s / 86400.0, TRAIL_TIME_DECIMALS),
              "note": f"{plan.orbit.altitude_km:.0f} km circular parking orbit, inclination "
                      f"{plan.orbit.inclination_deg:.2f} deg (plane through the site and the departure asymptote)."},
         ]
@@ -587,9 +601,9 @@ def _fly_transfer(
                     f"{ver.final_error:.3f} {ver.error_units} v-infinity residual "
                     f"(launch-injection verification {'passed' if ver.passed else 'NOT passed'}). {search_note}")
     events.append({
-        "label": "TMI burn", "time": round(tmi_rel_time_s / 86400.0, 4),
+        "label": "TMI burn", "time": round(tmi_rel_time_s / 86400.0, TRAIL_TIME_DECIMALS),
         "note": tmi_note.rstrip(),
-        "vector": {"position": (tmi_r_helio / 1000.0).round(1).tolist(), "deltaV": tmi_dv.round(2).tolist()},
+        "vector": {"position": (tmi_r_helio / 1000.0).round(TRAIL_POSITION_DECIMALS).tolist(), "deltaV": tmi_dv.round(2).tolist()},
     })
 
     keep_idx = np.arange(soi_idx + 1)
@@ -600,7 +614,7 @@ def _fly_transfer(
     soi_exit_epoch_et = reference_et + float(escape_epochs_rel[soi_idx])
     soi_exit_state_earth = escape.states[soi_idx]
     events.append({
-        "label": "Earth-SOI exit", "time": round(float(escape_epochs_rel[soi_idx]) / 86400.0, 4),
+        "label": "Earth-SOI exit", "time": round(float(escape_epochs_rel[soi_idx]) / 86400.0, TRAIL_TIME_DECIMALS),
         "note": f"{EARTH_SOI_RADIUS_KM:,.0f} km from Earth center (real Earth sphere-of-influence radius)."})
 
     earth_r_helio = body_position_at_absolute_epoch("Earth", soi_exit_epoch_et, central_body="Sun")
@@ -608,11 +622,16 @@ def _fly_transfer(
     sc_r_helio = earth_r_helio + soi_exit_state_earth[:3]
     sc_v_helio = earth_v_helio + soi_exit_state_earth[3:]
 
+    # Heliocentric position [km] and velocity [km/day] at every sample, so
+    # the viewer Hermite-interpolates the spacecraft like it does Earth/Mars.
     phase1_helio_positions_km = np.empty((len(phase1_epochs_rel), 3))
+    phase1_helio_velocities_km_d = np.empty((len(phase1_epochs_rel), 3))
     for i, t_rel in enumerate(phase1_epochs_rel):
         et = reference_et + float(t_rel)
         earth_pos_m = body_position_at_absolute_epoch("Earth", et, central_body="Sun")
+        earth_vel_m_s = body_velocity_at_absolute_epoch("Earth", et, central_body="Sun")
         phase1_helio_positions_km[i] = (earth_pos_m + phase1_states[i, :3]) / 1000.0
+        phase1_helio_velocities_km_d[i] = (earth_vel_m_s + phase1_states[i, 3:]) * KM_PER_DAY_PER_M_S
 
     # --- Phase 2: heliocentric cruise, with a real trajectory-correction burn ---
     remaining_tof_s = tof * 86400.0 - departure_offset_s - float(escape_epochs_rel[soi_idx])
@@ -631,12 +650,12 @@ def _fly_transfer(
     if require_tcm_converged and not tcm.converged:
         raise _CandidateRejected(f"TCM did not converge (final miss {tcm.final_miss_km:,.0f} km)")
     events.append({
-        "label": "Trajectory-correction maneuver", "time": round((soi_exit_epoch_et - reference_et) / 86400.0, 4),
+        "label": "Trajectory-correction maneuver", "time": round((soi_exit_epoch_et - reference_et) / 86400.0, TRAIL_TIME_DECIMALS),
         "note": f"closes the gap between the idealized Lambert departure and the real, "
                 f"perturbed trajectory -- {'converged' if tcm.converged else 'best effort, did not fully converge'} "
                 f"to a {tcm.predicted_periapsis_km:,.0f} km Mars periapsis radius "
                 f"({tcm.predicted_periapsis_km - MARS_RADIUS_KM:,.0f} km altitude).",
-        "vector": {"position": (sc_r_helio / 1000.0).round(1).tolist(), "deltaV": tcm.delta_v.round(2).tolist()},
+        "vector": {"position": (sc_r_helio / 1000.0).round(TRAIL_POSITION_DECIMALS).tolist(), "deltaV": tcm.delta_v.round(2).tolist()},
     })
 
     # --- Phase 3 setup: locate the true periapsis under real perturbed
@@ -652,7 +671,10 @@ def _fly_transfer(
 
     cruise_epochs_rel = periapsis.trajectory_epochs_et - reference_et  # absolute -> mission-relative seconds
     cruise_positions_km = periapsis.trajectory_positions_m / 1000.0  # central_body="Sun" -> already heliocentric
-    cruise_epochs_rel, cruise_positions_km = _decimate(cruise_epochs_rel, cruise_positions_km, points_per_arc=500)
+    cruise_velocities_km_d = periapsis.trajectory_velocities_m_s * KM_PER_DAY_PER_M_S
+    cruise_epochs_rel, cruise_pv = _decimate(
+        cruise_epochs_rel, np.hstack([cruise_positions_km, cruise_velocities_km_d]), points_per_arc=500)
+    cruise_positions_km, cruise_velocities_km_d = cruise_pv[:, :3], cruise_pv[:, 3:]
 
     # Mars-SOI-entry event: first cruise sample inside Mars's real sphere of
     # influence (~577,000 km) -- same threshold-crossing search phase1 uses
@@ -664,9 +686,9 @@ def _fly_transfer(
     ])
     if np.any(cruise_mars_dist_km <= MARS_SOI_RADIUS_KM):
         soi_entry_idx = int(np.argmax(cruise_mars_dist_km <= MARS_SOI_RADIUS_KM))
-        soi_entry_time_days = round(float(cruise_epochs_rel[soi_entry_idx]) / 86400.0, 4)
+        soi_entry_time_days = round(float(cruise_epochs_rel[soi_entry_idx]) / 86400.0, TRAIL_TIME_DECIMALS)
     else:
-        soi_entry_time_days = round((arrival_epoch_et - reference_et) / 86400.0, 4)
+        soi_entry_time_days = round((arrival_epoch_et - reference_et) / 86400.0, TRAIL_TIME_DECIMALS)
 
     periapsis_km = float(np.linalg.norm(r_rel)) / 1000.0
     if periapsis_km - MARS_RADIUS_KM < MARS_MIN_PERIAPSIS_ALT_KM:
@@ -695,13 +717,13 @@ def _fly_transfer(
 
     moi_r_helio = body_position_at_absolute_epoch("Mars", arrival_epoch_et, central_body="Sun") + r_rel
     events.append({
-        "label": "Mars orbit insertion", "time": round((arrival_epoch_et - reference_et) / 86400.0, 4),
+        "label": "Mars orbit insertion", "time": round((arrival_epoch_et - reference_et) / 86400.0, TRAIL_TIME_DECIMALS),
         "note": f"apsis-preserving capture burn at {periapsis_km:,.0f} km from Mars center "
                 f"({periapsis_km - MARS_RADIUS_KM:,.0f} km altitude) -> "
                 f"{a_captured_km:,.0f} x {moi.achieved['e']:.3f} captured orbit. "
                 "Mission ends here -- this framework has no atmosphere model, so a descent "
                 "to the surface isn't simulated (see the module docstring).",
-        "vector": {"position": (moi_r_helio / 1000.0).round(1).tolist(), "deltaV": moi.delta_v_ms.round(2).tolist()},
+        "vector": {"position": (moi_r_helio / 1000.0).round(TRAIL_POSITION_DECIMALS).tolist(), "deltaV": moi.delta_v_ms.round(2).tolist()},
     })
 
     # The cruise trail above already carries the trajectory through periapsis
@@ -721,27 +743,37 @@ def _fly_transfer(
     phase3_epochs_rel, phase3_states = _decimate(phase3_epochs_rel, phase3_states, points_per_arc=300)
 
     phase3_helio_positions_km = np.empty((len(phase3_epochs_rel), 3))
+    phase3_helio_velocities_km_d = np.empty((len(phase3_epochs_rel), 3))
     for i, t_rel in enumerate(phase3_epochs_rel):
         et = reference_et + float(t_rel)
         phase3_helio_positions_km[i] = (
             body_position_at_absolute_epoch("Mars", et, central_body="Sun") + phase3_states[i, :3]
         ) / 1000.0
+        phase3_helio_velocities_km_d[i] = (
+            body_velocity_at_absolute_epoch("Mars", et, central_body="Sun") + phase3_states[i, 3:]
+        ) * KM_PER_DAY_PER_M_S
 
     # --- Assemble the one continuous heliocentric-km trail ---
     all_epochs_rel = np.concatenate([phase1_epochs_rel, cruise_epochs_rel, phase3_epochs_rel])
     all_positions_km = np.concatenate([phase1_helio_positions_km, cruise_positions_km, phase3_helio_positions_km])
+    all_velocities_km_d = np.concatenate(
+        [phase1_helio_velocities_km_d, cruise_velocities_km_d, phase3_helio_velocities_km_d])
 
-    if len(all_epochs_rel) > max_output_points:
-        keep = np.unique(np.linspace(0, len(all_epochs_rel) - 1, max_output_points).round().astype(int))
-        all_epochs_rel = all_epochs_rel[keep]
-        all_positions_km = all_positions_km[keep]
-
-    # Trail times keep 1e-8 day (~1 ms). Rounding to 1e-4 day (~8.6 s) put up
-    # to ~130 km of time/position mismatch on Earth (30 km/s) -- the same size
-    # as the parking-orbit features an Earth-centered view has to show.
-    trail_time_decimals = 8
-    days = (all_epochs_rel / 86400.0).round(trail_time_decimals).tolist()
-    spacecraft_positions = all_positions_km.round(1).tolist()
+    # Each maneuver (TMI inside phase 1; TCM at the phase1->cruise seam; MOI
+    # at the cruise->capture seam) is a pre-/post-burn sample pair at one
+    # epoch, i.e. an interpolation-segment break the viewer never Hermite-
+    # interpolates across. Thinning must keep both halves of each pair.
+    # Thinned on the exported (rounded) days: the seams join epochs computed
+    # along different float paths, which agree to ~1e-7 s, not bit for bit.
+    trail_time_decimals = TRAIL_TIME_DECIMALS
+    all_days = (all_epochs_rel / 86400.0).round(trail_time_decimals)
+    keep = thin_trail_indices(all_days, max_output_points)
+    all_epochs_rel = all_epochs_rel[keep]
+    all_positions_km = all_positions_km[keep]
+    all_velocities_km_d = all_velocities_km_d[keep]
+    days = all_days[keep].tolist()
+    spacecraft_positions = all_positions_km.round(TRAIL_POSITION_DECIMALS).tolist()
+    spacecraft_velocities = all_velocities_km_d.round(TRAIL_VELOCITY_DECIMALS).tolist()
 
     events.sort(key=lambda e: e["time"])
 
@@ -758,7 +790,7 @@ def _fly_transfer(
     # straight chord between daily Earth samples misses the real arc by
     # ~5,500 km -- invisible heliocentrically, but it would wreck the parking
     # orbit and escape hyperbola when the view is centered on Earth.
-    km_per_day = 86400.0 / 1000.0
+    km_per_day = KM_PER_DAY_PER_M_S
     earth_vel = np.array([
         body_velocity_at_absolute_epoch("Earth", reference_et + d * 86400.0, central_body="Sun") for d in earth_orbit_days
     ]) * km_per_day
@@ -786,7 +818,7 @@ def _fly_transfer(
         body_entry(
             "spacecraft", "Mars probe", COLOR["spacecraft"], "spacecraft",
             radius_display=RADIUS_DISPLAY["spacecraft"],
-            trail={"times": days, "positions": spacecraft_positions},
+            trail={"times": days, "positions": spacecraft_positions, "velocities": spacecraft_velocities},
             info=[
                 {"label": "TMI delta-v", "value": f"{np.linalg.norm(tmi_dv):.0f} m/s"},
                 {"label": "TCM delta-v", "value": f"{np.linalg.norm(tcm.delta_v):.0f} m/s"},

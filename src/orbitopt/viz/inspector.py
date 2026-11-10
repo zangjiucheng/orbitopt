@@ -12,7 +12,14 @@ from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from orbitopt.viz import icons
-from orbitopt.viz.candidate_panel import candidate_status, format_date, format_dv
+from orbitopt.viz.candidate_panel import (
+    FLOWN_FIDELITY_LABEL,
+    SCREENING_FIDELITY_LABEL,
+    candidate_status,
+    exported_candidate,
+    format_date,
+    format_dv,
+)
 from orbitopt.viz.state import MissionState
 
 
@@ -237,7 +244,11 @@ class InspectorPanel(QWidget):
         departure = cand.get("departureMjd2000")
         tof = cand.get("tofDays")
         rank = cand.get("rank")
+        exported = bool(cand.get("exported"))
         rows = [
+            ("Role", "Exported trajectory" if exported else "Selected candidate (screening)"),
+            ("Screening fidelity", SCREENING_FIDELITY_LABEL),
+            ("Flown fidelity", FLOWN_FIDELITY_LABEL if exported else "not exported — no high-fidelity flight"),
             ("Departure", format_date(departure)),
             ("Arrival", format_date(None if departure is None or tof is None else departure + tof)),
             ("Time of flight", "—" if tof is None else f"{tof:.1f} days"),
@@ -259,13 +270,13 @@ class InspectorPanel(QWidget):
             layout.addLayout(r)
 
         notes = list(cand.get("verdictReasons") or [])
-        if cand.get("exported"):
+        if exported:
             notes.append("This is the mission trajectory (amber): flown in high fidelity; "
                          "the cyan arc is its two-body screening estimate.")
         else:
-            flown = next((c for c in self._state.candidates if c.get("exported")), None)
+            flown = exported_candidate(self._state.candidates)
             notes.append("Screening arc only (two-body Lambert) -- not flown in high fidelity."
-                         + (f" The timeline and maneuvers are {flown['label']}'s." if flown else ""))
+                         + (f" The timeline, maneuvers and verification are {flown['label']}'s." if flown else ""))
         for text in notes:
             note = QLabel(text)
             note.setObjectName("maneuverNote")

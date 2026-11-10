@@ -28,7 +28,14 @@ why a trajectory was chosen and how well it was verified.
 Built-in missions: **Artemis II** free return, **GOES** GTO→GEO raising,
 **Earth → Mars** orbit insertion, and the solar system.
 
-## Validated against flown missions
+## Checked against real missions
+
+Two different kinds of check, and they should not be read the same way.
+
+**Historical replays.** orbitopt is given only the physics and the real
+constraints of the time (launch site, vehicle, departure window) and
+predicts what was actually flown. The flown values are *not* inputs, so
+these are independent comparisons.
 
 | Mission | orbitopt | Real |
 |---|---|---|
@@ -36,7 +43,25 @@ Built-in missions: **Artemis II** free return, **GOES** GTO→GEO raising,
 | Mars 2020: lowest-C3 departure in the 2020 window | Jul 18 (C3 13.2 km²/s²) | launch period opened Jul 17 |
 | Sentinel-2A/2B: Kourou SSO launch time | within 6–9 min | actual lift-off |
 | ISS: KSC launch azimuth / daily window drift | 44.9°, ~23 min earlier per day | same |
-| Artemis II: lunar perilune altitude after differential correction | within ~10 km | 6,545 km |
+
+**Targeting checks.** A published mission figure is fed in as a *target*
+and orbitopt checks that its solvers hit it under high-fidelity dynamics.
+They show the targeters work. They do not show that orbitopt reproduces the
+real trajectory.
+
+| Mission | Input (target) | orbitopt result |
+|---|---|---|
+| Artemis II-like lunar free return | 6,545 km perilune altitude (Artemis II's published figure); entry flight-path angle −6° | perilune within the 50 km targeting tolerance, and the unpowered return reaches the entry interface inside the [−7°, −5°] corridor (TudatPy Earth+Moon+Sun) |
+
+The Artemis II mission (`orbitopt view artemis2`,
+[`examples/artemis2_free_return.yaml`](examples/artemis2_free_return.yaml))
+departs on a date we chose, **2026-08-01**. The real Artemis II launched on
+2026-04-01. Its parking orbit (185 km circular) and departure geometry are
+modelling choices too. The run solves a free return of the same class as
+Artemis II, with the same perilune and a survivable entry angle. It is not
+an independent reconstruction of the flown trajectory: NASA has not
+published navigation-grade state vectors to compare against. See
+[`docs/engineering-notes.md`](docs/engineering-notes.md#cislunar--artemis-ii-free-return-pipeline-in-full).
 
 The Mars 2020 numbers come from
 [`examples/14_mars2020_replay.py`](examples/14_mars2020_replay.py), which runs
@@ -100,7 +125,7 @@ output: { scene_file: scenes/my-geo-mission.json }
 ```
 
 Supported kinds: `geo-raising`, `mars-transfer` and `lunar-free-return`
-(Artemis II; see `examples/artemis2_free_return.yaml`). Schemas are in
+(an Artemis II-like free return; see `examples/artemis2_free_return.yaml`). Schemas are in
 `src/orbitopt/schemas/`. `orbitopt view config.yaml` runs a config and opens
 the result; the scene is cached like the built-in missions' scenes and is
 recomputed when the config or orbitopt's source changes.
@@ -189,6 +214,13 @@ playing it. Every panel follows the same selection and mission time:
   every check, residuals against their tolerances, force model, integrator
   step convergence, conservation. The title bar always shows VERIFIED,
   VERIFY FAILED or NOT CHECKED.
+  **GOES loads unverified by default** (the TudatPy re-fly adds about a
+  minute of compute): its badge reads NOT CHECKED, and a smooth animation
+  does not mean it passed high-fidelity verification. The Verification tab
+  says so and has a **Run high-fidelity verification (TudatPy)** button that
+  re-runs GOES with verification on and shows the resulting report (cached
+  after the first run). From the CLI, `orbitopt run` a `geo-raising` config
+  with `verification.enabled: true`.
 - **Timeline** (bottom). Time warp, events, and the mission's phases
   (parking orbit, cruise, lunar flyby, ...); click a phase to jump to it.
 

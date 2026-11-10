@@ -58,7 +58,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from orbitopt.missions import list_missions
+from orbitopt.missions import high_fidelity_loader, list_missions, verification_off_note
 from orbitopt.viz import icons
 from orbitopt.viz.candidate_panel import CandidatePanel
 from orbitopt.viz.charts import ChartPanel
@@ -72,7 +72,12 @@ from orbitopt.viz.state import MissionState, adjacent_event, eased_speed, neares
 from orbitopt.viz.theme import BG_VOID, DANGER, STYLESHEET, SUCCESS
 from orbitopt.viz.timeline_bar import TimelineBar
 from orbitopt.viz.ui_kit import MetricRow, StatusBadge
-from orbitopt.viz.verification_panel import RESULT_BADGE, VerificationPanel, display_subtitle, scene_verification_result
+from orbitopt.viz.verification_panel import (
+    VerificationPanel,
+    display_subtitle,
+    selection_badge_state,
+    verification_badge_state,
+)
 from orbitopt.viz.view_strip import ViewStrip
 from orbitopt.viz.viewport import DebouncedInteractor
 from orbitopt.viz.widgets import SpinnerWidget, ViewControlsPopover
@@ -138,6 +143,13 @@ class MissionControlWindow(QMainWindow):
         self.state = MissionState(self)
 
         self._scene_cache: dict[str, dict] = {}
+        # Sidebar key -> registry mission id (built-ins/plugins only; File >
+        # Open scenes have none), the active key, and the keys whose loader
+        # was switched to its high-fidelity-verification variant.
+        self._mission_ids: dict[str, str] = {}
+        self._active_key: str | None = None
+        self._active_label: str | None = None
+        self._verified_keys: set[str] = set()
         self._loaders: dict[str, callable] = {}
         self._playing = False
 
@@ -312,6 +324,7 @@ class MissionControlWindow(QMainWindow):
         self.inspector.body_clicked.connect(self._on_card_clicked)
         self.inspector.event_clicked.connect(self._seek_to_event)
         self.verification_panel = VerificationPanel(self.state)
+        self.verification_panel.verify_requested.connect(self._run_high_fidelity_verification)
         # Inspector and Verification share the right column as tabs; the
         # collapse chevron moves to the tab bar's corner so it serves both.
         self.inspector.collapse_btn.hide()
@@ -417,6 +430,14 @@ class MissionControlWindow(QMainWindow):
         self.verification_badge.mousePressEvent = lambda _e: self._show_verification_tab()
         self.verification_badge.setVisible(False)
         row.addWidget(self.verification_badge)
+
+        # Shown only while a candidate other than the exported trajectory is
+        # selected: its arc is screening fidelity and was never verified, so
+        # the verification badge beside it must not read as its status.
+        self.selection_badge = StatusBadge("warning", "")
+        self.selection_badge.mousePressEvent = lambda _e: self._show_verification_tab()
+        self.selection_badge.setVisible(False)
+        row.addWidget(self.selection_badge)
 
         self.backend_badge = StatusBadge("idle", "…")
         self.backend_badge.setToolTip(
@@ -941,6 +962,7 @@ class MissionControlWindow(QMainWindow):
         # here with no separate list to keep in sync.
         for mission in list_missions():
             self._loaders[mission.title] = mission.load
+            self._mission_ids[mission.title] = mission.id
             self.sidebar.add_mission(mission.title, mission.title, mission.title)
         if self.sidebar.count():
             self.sidebar.select_row(0)
@@ -966,6 +988,7 @@ class MissionControlWindow(QMainWindow):
         if self._loading:
             return
         self._set_playing(False)
+        self._active_key, self._active_label = key, label
 
         if key in self._scene_cache:
             # A cached scene skips the ~10s compute but still stutters: applying
@@ -1128,7 +1151,34 @@ class MissionControlWindow(QMainWindow):
         QMessageBox.critical(self, f"Failed to load {name}", error_msg)
         self.statusBar().showMessage("Ready")
 
+    def _verify_offer_note(self) -> str | None:
+        """The Verification tab's "not verified by default -- run it" note for
+        the active mission, or None (no offer: not such a built-in, or it was
+        already re-run with verification on)."""
+        key = self._active_key
+        mission_id = self._mission_ids.get(key) if key is not None else None
+        if mission_id is None or key in self._verified_keys:
+            return None
+        return verification_off_note(mission_id)
+
+    def _run_high_fidelity_verification(self):
+        """One-click entry from the Verification tab: re-run the active
+        built-in mission with high-fidelity verification enabled, replacing
+        its sidebar entry's scene with the verified one."""
+        key = self._active_key
+        mission_id = self._mission_ids.get(key) if key is not None else None
+        loader = high_fidelity_loader(mission_id) if mission_id is not None else None
+        if self._loading or loader is None:
+            return
+        self._set_playing(False)
+        self._loaders[key] = loader
+        self._verified_keys.add(key)
+        self._scene_cache.pop(key, None)
+        self._start_loading(key, f"{self._active_label or key} with high-fidelity verification")
+
     def _apply_scene(self, scene: dict):
+        verify_offer = self._verify_offer_note()
+        self.verification_panel.set_verify_offer(verify_offer)
         self.renderer.load(scene)
 
         # Camera state belongs to the old scene's bodies: stop tracking so we
@@ -1164,14 +1214,20 @@ class MissionControlWindow(QMainWindow):
 
         self.scene_title_label.setText(scene["title"])
         self.scene_subtitle_label.setText(display_subtitle(scene))
-        result = scene_verification_result(scene)
-        self.verification_badge.setVisible(result is not None)
-        if result is not None:
-            self.verification_badge.set_state(*RESULT_BADGE[result])
+        badge = verification_badge_state(scene)
+        self.verification_badge.setVisible(badge is not None)
+        if badge is not None:
+            state, text, tooltip = badge
+            self.verification_badge.set_state(state, text)
+            if verify_offer and not scene.get("verification"):
+                tooltip = ("NOT VERIFIED: high-fidelity verification is off by default for this mission. "
+                           "Click to open the Verification tab and run it.")
+            self.verification_badge.setToolTip(tooltip)
 
         # Resets time + selection and lets the timeline bar and the inspector
         # rebuild themselves for the new scene.
         self.state.set_scene(scene)
+        self._refresh_selection_badge()
         self._apply_candidate_highlight(render=False)
         self._refresh_view()
 
@@ -1275,13 +1331,24 @@ class MissionControlWindow(QMainWindow):
             self.state.candidate_id, show_all=self.candidate_panel.show_all_box.isChecked(), render=render,
         )
 
+    def _refresh_selection_badge(self):
+        badge = selection_badge_state(self.state.scene, self.state.candidate())
+        self.selection_badge.setVisible(badge is not None)
+        if badge is not None:
+            state, text, tooltip = badge
+            self.selection_badge.set_state(state, text)
+            self.selection_badge.setToolTip(tooltip)
+
     def _on_candidate_changed(self, _candidate_id):
         self._apply_candidate_highlight()
+        self._refresh_selection_badge()
         cand = self.state.candidate()
         if cand is not None:
             self.statusBar().showMessage(
-                f"{cand['label']} highlighted" + ("" if self.state.frame_body_id is None
-                                                  else " — screening arcs show in the scene's own frame")
+                f"{cand['label']} highlighted"
+                + ("" if cand.get("exported") else " — screening arc only; verification shows the exported trajectory")
+                + ("" if self.state.frame_body_id is None or self.renderer.candidate_in_frame(cand["id"])
+                   else " — no ephemeris for this frame at its dates; its arc shows in the scene's own frame")
             )
 
     # ------------------------------------------------------- Event seeking

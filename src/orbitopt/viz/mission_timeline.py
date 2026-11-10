@@ -14,6 +14,8 @@ minimal-plane-change choice, not an arbitrary or forced value.
 """
 from __future__ import annotations
 
+import time
+
 import numpy as np
 import pykep as pk
 
@@ -24,6 +26,15 @@ from orbitopt.bodies import (
     moon_state,
 )
 from orbitopt.lambert.cpu import solve_lambert_single
+from orbitopt.pipeline import (
+    CONSTRAINTS,
+    OPTIMIZE,
+    REFINE,
+    SEARCH,
+    SELECT,
+    VERIFY,
+    StageRecorder,
+)
 from orbitopt.verify import report as verification_report
 from orbitopt.verify.differential_correction import (
     LUNAR_RETURN_ENTRY_CORRIDOR_DEG,
@@ -32,9 +43,12 @@ from orbitopt.verify.differential_correction import (
     target_free_return_entry_corridor,
 )
 from orbitopt.verify.tudat_propagate import (
+    DEFAULT_INTEGRATOR,
     PropagationResult,
     body_position_at_absolute_epoch,
+    body_velocity_at_absolute_epoch,
     find_altitude_crossing,
+    integrator_description,
     propagate_multi_arc,
 )
 from orbitopt.viz.scene import (
@@ -46,6 +60,7 @@ from orbitopt.viz.scene import (
     crossing_times,
     phase_spans,
     scene_document,
+    thin_trail_indices,
 )
 
 EARTH_RADIUS_KM = 6378.0
@@ -55,6 +70,14 @@ MOON_RADIUS_KM = 1737.4
 # the timeline; the propagation itself is full three-body, no patched conics.
 MOON_SOI_RADIUS_KM = 66_100.0
 ARTEMIS_II_PERILUNE_ALTITUDE_KM = 6545.0
+# Trail/event times keep 1e-8 day (~1 ms): 1e-4 day (~8.6 s) put the
+# spacecraft up to ~95 km off its own samples near perigee (~11 km/s).
+# Positions keep 1 m, velocities 1e-3 km/day -- display data for the viewer's
+# Hermite playback, not a source for metre-level error analysis.
+TRAIL_TIME_DECIMALS = 8
+TRAIL_POSITION_DECIMALS = 3
+TRAIL_VELOCITY_DECIMALS = 3
+KM_PER_DAY_PER_M_S = 86400.0 / 1000.0
 EARTH_ENTRY_INTERFACE_ALTITUDE_KM = 121.92  # 400,000 ft, the conventional atmospheric entry interface
 
 
@@ -159,6 +182,40 @@ def _verify_entry_corridor(full, corridor_deg=LUNAR_RETURN_ENTRY_CORRIDOR_DEG):
     return entry
 
 
+def _record_targeting(st, targeting, target_distance_km, corridor_deg):
+    """Optimize-stage contents of a FreeReturnTargetingResult."""
+    steepest, shallowest = corridor_deg
+    fpa = targeting.entry_flight_path_angle_deg
+    seed = targeting.b_plane_seed
+    st.candidates = [{
+        "delta_v_m_s": np.asarray(targeting.delta_v).tolist(),
+        "delta_v_magnitude_m_s": float(np.linalg.norm(targeting.delta_v)),
+        "perilune_distance_km": targeting.perilune_distance_km,
+        "b_plane_angle_deg": targeting.b_plane_angle_deg,
+        "return_perigee_km": targeting.return_perigee_km,
+        "entry_fpa_deg": fpa,
+        "entry_epoch_s": targeting.entry_epoch,
+        "selected": True,
+    }]
+    st.convergence = {
+        "converged": bool(targeting.converged),
+        "in_corridor": bool(targeting.in_corridor),
+        "iterations": int(targeting.iterations),
+        "b_plane_seed_iterations": None if seed is None else int(seed.iterations),
+        "b_plane_seed_converged": None if seed is None else bool(seed.converged),
+        "residual_history_km": [list(r) for r in targeting.residual_history_km],
+    }
+    st.constraint_violations = {
+        "entry_corridor_deg": None if fpa is None else max(0.0, steepest - fpa, fpa - shallowest),
+    }
+    last = targeting.residual_history_km[-1] if targeting.residual_history_km else [None, None]
+    st.numerical_error = {
+        "perilune_residual_km": None if last[0] is None else abs(float(last[0])),
+        "return_perigee_residual_km": None if last[1] is None else abs(float(last[1])),
+        "perilune_vs_target_km": abs(float(targeting.perilune_distance_km) - float(target_distance_km)),
+    }
+
+
 def compute_and_export_mission(
     departure_mjd2000=None,
     coast_days_guess=3.5,
@@ -169,6 +226,7 @@ def compute_and_export_mission(
     entry_fpa_target_deg=LUNAR_RETURN_ENTRY_FPA_DEG,
     transfer_theta_deg=DEFAULT_TRANSFER_THETA_DEG,
     perilune_altitude_km=ARTEMIS_II_PERILUNE_ALTITUDE_KM,
+    recorder=None,
 ):
     """Solve the free return with the joint lunar B-plane + Earth-return
     entry-corridor targeter (verify.differential_correction.
@@ -194,7 +252,7 @@ def compute_and_export_mission(
         total_days=total_days, step_seconds=step_seconds,
         parking_altitude_km=parking_altitude_km, max_output_points=max_output_points,
         entry_fpa_target_deg=entry_fpa_target_deg, transfer_theta_deg=transfer_theta_deg,
-        perilune_altitude_km=perilune_altitude_km,
+        perilune_altitude_km=perilune_altitude_km, recorder=recorder,
     )
     if targeting.report is not None:
         verification_report.publish_to_scene(scene, [targeting.report])
@@ -211,71 +269,143 @@ def _build_artemis2_mission(
     entry_fpa_target_deg=LUNAR_RETURN_ENTRY_FPA_DEG,
     transfer_theta_deg=DEFAULT_TRANSFER_THETA_DEG,
     perilune_altitude_km=ARTEMIS_II_PERILUNE_ALTITUDE_KM,
+    recorder=None,
+    publish_report=True,
 ):
     """compute_and_export_mission's body; also returns the
     FreeReturnTargetingResult so build_from_config can attach its
-    machine-readable verification report to the scene."""
+    machine-readable verification report to the scene. ``publish_report=False``
+    (``verification.enabled: false``) leaves the report out of the gate.
+
+    ``recorder`` (orbitopt.pipeline.StageRecorder) receives every stage of
+    the unified pipeline this kind has:
+
+    - constraints: perilune target, entry-interface altitude and corridor;
+    - search: the offset-Lambert TLI seed (two-body);
+    - optimize: the joint B-plane + entry-corridor targeter (Newton
+      iterations, final residuals, corridor violation);
+    - select: the single targeted solution entering the Verification Gate
+      (or its rejection when the targeter didn't converge / left the corridor);
+    - refine: the fine-step export re-propagation, truncated at entry
+      interface and decimated, with its drift from the targeter's solution;
+    - verify: the independent entry-corridor re-check of that trajectory
+      plus the targeter's TudatPy report, driving the gate verdict.
+    """
+    recorder = StageRecorder() if recorder is None else recorder
+    gate = recorder.gate
     if departure_mjd2000 is None:
         departure_mjd2000 = mjd2000_from_date(2026, 8, 1)
+
+    steepest, shallowest = LUNAR_RETURN_ENTRY_CORRIDOR_DEG
+    target_distance_km = perilune_altitude_km + MOON_RADIUS_KM
+    with recorder.stage(CONSTRAINTS) as st:
+        st.physical_model = {"name": "free-return mission targets", "fidelity": "none"}
+        st.candidates = [{
+            "departure_mjd2000": float(departure_mjd2000),
+            "parking_altitude_km": float(parking_altitude_km),
+            "perilune_altitude_km": float(perilune_altitude_km),
+            "target_perilune_distance_km": float(target_distance_km),
+            "entry_interface_altitude_km": EARTH_ENTRY_INTERFACE_ALTITUDE_KM,
+            "entry_fpa_target_deg": float(entry_fpa_target_deg),
+            "entry_corridor_deg": [steepest, shallowest],
+        }]
+        st.constraint_violations = {
+            "entry_fpa_target_outside_corridor_deg": max(0.0, steepest - entry_fpa_target_deg,
+                                                         entry_fpa_target_deg - shallowest),
+        }
 
     reference_et = mjd2000_to_ephemeris_seconds(departure_mjd2000)
     mu_earth = pk.MU_EARTH
 
-    r_moon_arrival, v_moon_arrival = moon_state(departure_mjd2000 + coast_days_guess)
-    r_moon_arrival = np.asarray(r_moon_arrival)
-    v_moon_arrival = np.asarray(v_moon_arrival)
+    with recorder.stage(SEARCH) as st:
+        st.physical_model = {"name": "offset-aim Lambert arc to the Moon (pykep)", "fidelity": "two-body"}
+        r_moon_arrival, v_moon_arrival = moon_state(departure_mjd2000 + coast_days_guess)
+        r_moon_arrival = np.asarray(r_moon_arrival)
+        v_moon_arrival = np.asarray(v_moon_arrival)
 
-    target_distance_km = perilune_altitude_km + MOON_RADIUS_KM
+        r0, v0 = _plane_aligned_parking_orbit(
+            r_moon_arrival, v_moon_arrival, parking_altitude_km, mu_earth, theta_deg=transfer_theta_deg)
+        moon_h_hat = np.cross(r_moon_arrival, v_moon_arrival)
+        moon_h_hat /= np.linalg.norm(moon_h_hat)
+        along_track_hat = np.cross(moon_h_hat, r_moon_arrival / np.linalg.norm(r_moon_arrival))
+        lambert_aim = r_moon_arrival + LAMBERT_AIM_OFFSET_KM * 1000.0 * along_track_hat
+        (v1, _v2), = solve_lambert_single(r0, lambert_aim, coast_days_guess * 86400.0, mu=mu_earth, max_revs=0)[:1]
+        dv_guess = v1 - v0
+        st.candidates = [{
+            "transfer_theta_deg": float(transfer_theta_deg),
+            "coast_days_guess": float(coast_days_guess),
+            "lambert_aim_offset_km": LAMBERT_AIM_OFFSET_KM,
+            "dv_guess_m_s": np.asarray(dv_guess).tolist(),
+            "dv_guess_magnitude_m_s": float(np.linalg.norm(dv_guess)),
+            "selected": True,
+        }]
+        st.convergence = {"converged": bool(np.all(np.isfinite(dv_guess))), "lambert_revolutions": 0}
+        st.notes.append("single Lambert seed aimed ahead of the Moon; the targeter does the real search")
 
-    r0, v0 = _plane_aligned_parking_orbit(
-        r_moon_arrival, v_moon_arrival, parking_altitude_km, mu_earth, theta_deg=transfer_theta_deg)
-    moon_h_hat = np.cross(r_moon_arrival, v_moon_arrival)
-    moon_h_hat /= np.linalg.norm(moon_h_hat)
-    along_track_hat = np.cross(moon_h_hat, r_moon_arrival / np.linalg.norm(r_moon_arrival))
-    lambert_aim = r_moon_arrival + LAMBERT_AIM_OFFSET_KM * 1000.0 * along_track_hat
-    (v1, _v2), = solve_lambert_single(r0, lambert_aim, coast_days_guess * 86400.0, mu=mu_earth, max_revs=0)[:1]
-    dv_guess = v1 - v0
     # Joint lunar B-plane + Earth-return entry-corridor targeting: perilune at
     # the Artemis II altitude AND the return leg crossing the entry interface
     # at a survivable skip-entry flight-path angle, verified by TudatPy.
-    targeting = target_free_return_entry_corridor(
-        r0=r0, v0_pre_burn=v0, initial_epoch=0.0,
-        dv_guess=dv_guess, coast_duration_guess=coast_days_guess * 86400.0,
-        target_periapsis_km=target_distance_km,
-        reference_epoch_ephemeris_seconds=reference_et,
-        target_entry_fpa_deg=entry_fpa_target_deg,
-        earth_radius_km=EARTH_RADIUS_KM,
-        entry_interface_altitude_km=EARTH_ENTRY_INTERFACE_ALTITUDE_KM,
-        entry_corridor_deg=LUNAR_RETURN_ENTRY_CORRIDOR_DEG,
-    )
+    with recorder.stage(OPTIMIZE) as st:
+        st.physical_model = {"name": "joint lunar B-plane + entry-corridor Newton (TudatPy Earth/Moon/Sun)",
+                             "fidelity": "high-fidelity"}
+        targeting = target_free_return_entry_corridor(
+            r0=r0, v0_pre_burn=v0, initial_epoch=0.0,
+            dv_guess=dv_guess, coast_duration_guess=coast_days_guess * 86400.0,
+            target_periapsis_km=target_distance_km,
+            reference_epoch_ephemeris_seconds=reference_et,
+            target_entry_fpa_deg=entry_fpa_target_deg,
+            earth_radius_km=EARTH_RADIUS_KM,
+            entry_interface_altitude_km=EARTH_ENTRY_INTERFACE_ALTITUDE_KM,
+            entry_corridor_deg=LUNAR_RETURN_ENTRY_CORRIDOR_DEG,
+        )
+        _record_targeting(st, targeting, target_distance_km, LUNAR_RETURN_ENTRY_CORRIDOR_DEG)
+
     # ``converged`` only means the Newton residuals (perilune, return perigee)
     # met tolerance; ``in_corridor`` is the separate check that the verified
     # entry flight-path angle is survivable. Both must hold -- a numerically
     # converged solution that skips out or burns up is not a free return.
-    if not targeting.converged or not targeting.in_corridor:
+    with recorder.stage(SELECT) as st:
+        st.physical_model = {"name": "targeter acceptance (converged and in corridor)", "fidelity": "none"}
         fpa = targeting.entry_flight_path_angle_deg
-        raise RuntimeError(
-            "Free-return entry-corridor targeting rejected "
-            f"(converged={targeting.converged}, in_corridor={targeting.in_corridor}, "
-            f"entry flight-path angle={'n/a' if fpa is None else f'{fpa:.2f} deg'}, "
-            f"corridor={LUNAR_RETURN_ENTRY_CORRIDOR_DEG} deg); "
-            "adjust departure_mjd2000, coast_days_guess or entry_fpa_target_deg."
-        )
+        candidate = {"index": 0, "converged": bool(targeting.converged), "in_corridor": bool(targeting.in_corridor),
+                     "entry_fpa_deg": fpa, "delta_v_m_s": float(np.linalg.norm(targeting.delta_v))}
+        st.candidates = [candidate]
+        gate.register(0, source="free-return entry-corridor targeter")
+        if not targeting.converged or not targeting.in_corridor:
+            reason = (
+                "Free-return entry-corridor targeting rejected "
+                f"(converged={targeting.converged}, in_corridor={targeting.in_corridor}, "
+                f"entry flight-path angle={'n/a' if fpa is None else f'{fpa:.2f} deg'}, "
+                f"corridor={LUNAR_RETURN_ENTRY_CORRIDOR_DEG} deg)"
+            )
+            gate.reject(0, reason)
+            st.convergence = {"converged": False}
+            raise RuntimeError(reason + "; adjust departure_mjd2000, coast_days_guess or entry_fpa_target_deg.")
+        candidate["selected"] = True
+        st.convergence = {"converged": True, "kept": 1, "considered": 1}
+        st.notes.append("one targeted solution per run; no ranking needed")
 
     # No need to integrate days past the (already verified) entry interface
     # only to truncate them below; half a day of margin keeps the crossing
     # comfortably inside the exported span.
-    export_duration_s = total_days * 86400.0
-    if targeting.entry_epoch is not None:
-        export_duration_s = min(export_duration_s, targeting.entry_epoch + 0.5 * 86400.0)
-    full = propagate_multi_arc(
-        r0, v0, reference_et,
-        arcs=[
-            {"type": "impulsive_burn", "delta_v": targeting.delta_v},
-            {"type": "coast", "duration": export_duration_s},
-        ],
-        perturbing_bodies=("Earth", "Moon", "Sun"), step_size=step_seconds,
-    )
+    with recorder.stage(REFINE) as st:
+        # propagate_multi_arc's default integrator is adaptive RKDP 8(7);
+        # step_seconds is only its maximum step, not a fixed step.
+        st.physical_model = {"name": f"adaptive RKDP 8(7) TudatPy re-propagation "
+                                     f"(max step {step_seconds:g} s; Earth/Moon/Sun)",
+                             "fidelity": "high-fidelity",
+                             "integrator": integrator_description(DEFAULT_INTEGRATOR, step_seconds)}
+        export_duration_s = total_days * 86400.0
+        if targeting.entry_epoch is not None:
+            export_duration_s = min(export_duration_s, targeting.entry_epoch + 0.5 * 86400.0)
+        full = propagate_multi_arc(
+            r0, v0, reference_et,
+            arcs=[
+                {"type": "impulsive_burn", "delta_v": targeting.delta_v},
+                {"type": "coast", "duration": export_duration_s},
+            ],
+            perturbing_bodies=("Earth", "Moon", "Sun"), step_size=step_seconds,
+        )
 
     # The targeter aims the return leg at the entry interface, but this
     # propagator has no solid Earth or atmosphere model, so past the entry
@@ -286,7 +416,36 @@ def _build_artemis2_mission(
     # interface crossing -- after independently re-checking the corridor on
     # this re-propagated trajectory rather than trusting the targeter's own
     # internal verification run.
-    entry = _verify_entry_corridor(full)
+    with recorder.stage(VERIFY) as st:
+        st.physical_model = {"name": "entry-corridor re-check on the export propagation + targeter TudatPy report",
+                             "fidelity": "high-fidelity"}
+        try:
+            entry = _verify_entry_corridor(full)
+        except RuntimeError as exc:
+            gate.reject(0, str(exc))
+            st.convergence = {"converged": False, "entry_corridor": False}
+            raise
+        entry_fpa = flight_path_angle_deg(entry.spacecraft_state)
+        reports = [targeting.report] if publish_report and targeting.report is not None else []
+        if not publish_report:
+            st.notes.append("verification.enabled is false: corridor re-checked, no report published")
+        verdict = gate.evaluate(0, reports, entry_fpa_deg=entry_fpa)
+        # Only a *failed* verification makes the export best-effort; a
+        # not_checked one (report disabled) is exported with a warning.
+        gate.export(0, best_effort=verdict["verification"] == "failed")
+        st.candidates = [{"index": 0, "verification": verdict["verification"], "verdict": verdict["verdict"],
+                          "entry_fpa_deg": entry_fpa, "entry_epoch_s": float(entry.epoch), "selected": True}]
+        st.constraint_violations = {
+            "entry_corridor_deg": max(0.0, steepest - entry_fpa, entry_fpa - shallowest),
+        }
+        st.convergence = {"converged": bool(reports) and verdict["verification"] == "passed",
+                          "entry_corridor": True}
+        if targeting.entry_flight_path_angle_deg is not None:
+            st.numerical_error["entry_fpa_vs_targeter_deg"] = abs(entry_fpa - targeting.entry_flight_path_angle_deg)
+        if targeting.entry_epoch is not None:
+            st.numerical_error["entry_epoch_vs_targeter_s"] = abs(float(entry.epoch) - float(targeting.entry_epoch))
+
+    refine_t0 = time.perf_counter()
     cutoff_epoch, cutoff_state = entry.epoch, entry.spacecraft_state
 
     keep_before_cutoff = full.epochs <= cutoff_epoch
@@ -296,25 +455,43 @@ def _build_artemis2_mission(
         final_state=cutoff_state,
     )
 
-    perilune_day = round(targeting.perilune_epoch / 86400.0, 4)
+    n_fine = len(full.epochs)
+    perilune_day = round(targeting.perilune_epoch / 86400.0, TRAIL_TIME_DECIMALS)
     perilune_idx_fine = int(np.argmin(np.abs(full.epochs - targeting.perilune_epoch)))
 
-    n_fine = len(full.epochs)
-    if n_fine > max_output_points:
-        keep = np.unique(np.linspace(0, n_fine - 1, max_output_points - 1).round().astype(int))
-        keep = np.unique(np.concatenate([keep, [perilune_idx_fine]]))
-    else:
-        keep = np.arange(n_fine)
+    # The TLI burn is the first arc, so the exported trail is one burn-free
+    # interpolation segment; thin_trail_indices would keep any burn pair.
+    keep = thin_trail_indices(full.epochs, max_output_points - 1, keep=[perilune_idx_fine])
 
     epochs = full.epochs[keep]
-    days = (epochs / 86400.0).round(4).tolist()
+    days = (epochs / 86400.0).round(TRAIL_TIME_DECIMALS).tolist()
 
-    spacecraft_km = (full.states[keep, :3] / 1000.0).round(1)
+    spacecraft_km = (full.states[keep, :3] / 1000.0).round(TRAIL_POSITION_DECIMALS)
+    # km/day (trail distance unit per timeline unit): the viewer Hermite-
+    # interpolates between samples instead of cutting chords across the
+    # perigee and perilune arcs.
+    spacecraft_vel = (full.states[keep, 3:] * KM_PER_DAY_PER_M_S).round(TRAIL_VELOCITY_DECIMALS)
     spacecraft_distance_km = np.linalg.norm(full.states[keep, :3], axis=1) / 1000.0
 
     moon_positions_km = np.array([
         body_position_at_absolute_epoch("Moon", reference_et + t) for t in epochs
     ]) / 1000.0
+    moon_vel = np.array([
+        body_velocity_at_absolute_epoch("Moon", reference_et + t) for t in epochs
+    ]) * KM_PER_DAY_PER_M_S
+
+    refine = recorder.add_time(REFINE, time.perf_counter() - refine_t0)
+    sampled_perilune_km = float(np.min(np.linalg.norm(
+        full.states[keep, :3] / 1000.0 - moon_positions_km, axis=1)))
+    refine.candidates = [{
+        "index": 0, "fine_samples": int(n_fine), "exported_samples": len(keep),
+        "export_duration_s": float(export_duration_s), "cutoff_epoch_s": float(cutoff_epoch), "selected": True,
+    }]
+    refine.convergence = {"converged": True}
+    refine.numerical_error = {
+        "perilune_distance_vs_targeter_km": abs(sampled_perilune_km - float(targeting.perilune_distance_km)),
+    }
+    refine.notes.append("truncated at the entry-interface crossing, decimated to max_output_points")
 
     events = [
         {"label": "TLI burn", "time": 0.0, "note": f"delta-v {np.linalg.norm(targeting.delta_v):.0f} m/s"},
@@ -331,7 +508,7 @@ def _build_artemis2_mission(
     steepest, shallowest = LUNAR_RETURN_ENTRY_CORRIDOR_DEG
     events.append({
         "label": "Earth entry interface",
-        "time": round(entry.epoch / 86400.0, 4),
+        "time": round(entry.epoch / 86400.0, TRAIL_TIME_DECIMALS),
         "note": f"free return -- {EARTH_ENTRY_INTERFACE_ALTITUDE_KM:.0f} km altitude reached "
                 f"with no further burns, entry speed {entry_speed:.0f} m/s, "
                 f"flight path angle {entry_flight_path_angle_deg:.1f} degrees (inside the "
@@ -347,7 +524,8 @@ def _build_artemis2_mission(
         ),
         body_entry(
             "moon", "Moon", COLOR["moon"], "moon", radius_display=RADIUS_DISPLAY["moon"],
-            trail={"times": days, "positions": moon_positions_km.round(1).tolist()},
+            trail={"times": days, "positions": moon_positions_km.round(TRAIL_POSITION_DECIMALS).tolist(),
+                   "velocities": moon_vel.round(TRAIL_VELOCITY_DECIMALS).tolist()},
             # No static "Distance from Earth" row -- every body card already
             # shows a live "Distance" readout that tracks the scrubber (see
             # inspector.py's InspectorPanel); a fixed mission-start snapshot
@@ -359,7 +537,7 @@ def _build_artemis2_mission(
         ),
         body_entry(
             "spacecraft", "Orion", COLOR["spacecraft"], "spacecraft", radius_display=RADIUS_DISPLAY["spacecraft"],
-            trail={"times": days, "positions": spacecraft_km.tolist()},
+            trail={"times": days, "positions": spacecraft_km.tolist(), "velocities": spacecraft_vel.tolist()},
             info=[
                 {"label": "TLI delta-v", "value": f"{np.linalg.norm(targeting.delta_v):.0f} m/s"},
                 {"label": "Achieved perilune", "value": f"{targeting.perilune_distance_km:,.0f} km from Moon center"},
@@ -422,10 +600,11 @@ def build_from_config(config: dict, recorder=None) -> dict:
     (``orbitopt run --skip-verify``) only drops the machine-readable report
     from the output -- the corridor check still gates the export.
 
-    ``recorder`` (an orbitopt.pipeline.StageRecorder) is accepted for the
-    unified pipeline's builder signature; this kind does not report
-    per-stage results, so those stages stay "not run" in the pipeline
-    result."""
+    ``recorder`` (an orbitopt.pipeline.StageRecorder) receives the
+    constraints, search, optimize, select, refine and verify stage results
+    and drives the Verification Gate (see _build_artemis2_mission). With
+    ``verification.enabled: false`` the corridor check still runs, but no
+    report is published, so the gate records the candidate as not_checked."""
     mission = config["mission"]
     departure = config.get("departure", {})
     parking_orbit = config.get("parking_orbit", {})
@@ -457,7 +636,11 @@ def build_from_config(config: dict, recorder=None) -> dict:
     if "max_output_points" in propagation:
         kwargs["max_output_points"] = propagation["max_output_points"]
 
-    scene, targeting = _build_artemis2_mission(**kwargs)
+    if not verification.get("enabled", True):
+        # Report-less gate verdict: the corridor re-check still guards the
+        # export, but nothing machine-readable says the run was verified.
+        kwargs["publish_report"] = False
+    scene, targeting = _build_artemis2_mission(recorder=recorder, **kwargs)
     scene["id"] = mission["id"]
     scene["title"] = mission["title"]
     if verification.get("enabled", True) and targeting.report is not None:

@@ -22,6 +22,14 @@
 > into `examples/10_gto_geo_orbit_raising.py`, the Mission Control GOES scene
 > and `orbitopt run` for `geo-raising` configs. Not yet modelled: SRP and
 > finite (non-impulsive) burns.
+>
+> **Mission Control loads GOES with verification OFF by default**
+> (`BUILTIN_MISSION_CONFIGS["goes"]` in `missions.py`, to keep loading fast),
+> so the default scene is NOT CHECKED: its animation is the
+> screening/optimization solution, not a TudatPy-verified trajectory. The
+> Verification tab states this and offers a one-click **Run high-fidelity
+> verification (TudatPy)** that re-runs the mission with
+> `verification.enabled: true` and displays the generated report.
 
 # GOES Launch-to-GEO Mission Plan Design
 
