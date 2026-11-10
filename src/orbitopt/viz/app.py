@@ -1799,7 +1799,6 @@ class MissionControlWindow(QMainWindow):
         self._tile_timer.stop()
         self.renderer.tiles.shutdown()
         self._spinner.stop()  # the spinner has its own QTimer, independent of self._timer
-        self.plotter._resize_settle_timer.stop()  # so it can't fire post-teardown
         # Set *before* touching the load thread, unconditionally -- not just on
         # a wait() timeout. disconnect() below is best-effort hygiene, not the
         # real guard: SceneLoader.run() emits finished/failed as its very last

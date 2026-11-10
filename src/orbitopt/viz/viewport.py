@@ -5,35 +5,24 @@ import math
 
 from PySide6.QtCore import QTimer
 from pyvistaqt import QtInteractor
-from vtkmodules.vtkRenderingCore import vtkRenderWindow
 
 
 class DebouncedInteractor(QtInteractor):
-    """QtInteractor renders synchronously on *every* resizeEvent (see
-    pyvistaqt.rwi.QVTKRenderWindowInteractor.resizeEvent -> self.update() ->
-    paintEvent -> Iren.Render()). On Windows, a live edge-drag delivers
-    resizeEvent for every intermediate size through the OS's own native
-    modal message loop (WM_ENTERSIZEMOVE..WM_EXITSIZEMOVE), which won't hand
-    control back to the rest of the app until each repaint finishes -- so a
-    scene with anti-aliasing, orbit trails and point labels compounds into
-    the whole window reading as frozen for the length of the drag. Measured
-    ~45ms/intermediate-size even with anti-aliasing off, which isn't the
-    render cost itself (that dropped from ~20ms to ~2ms) but Qt/VTK resize
-    bookkeeping run on every single one of dozens of events during a drag.
-    Fix: keep the VTK render window's size/DPI in sync on every event
-    (cheap), but defer the actual repaint until resizing has been idle for a
-    short settle period -- the 3D view visually lags slightly behind the
-    window edge during the drag itself, but the app never stops responding.
-    """
+    """QtInteractor with one draw per event-loop turn (see render()) and a
+    near plane that follows the camera (see _apply_dynamic_clipping).
 
-    _RESIZE_SETTLE_MS = 120
+    Resizing is left to pyvistaqt's QOpenGLWidget. An override from the
+    older native-window interactor used to replace resizeEvent to defer
+    repaints during a live Windows edge-drag. On QOpenGLWidget that skipped
+    the framebuffer resize: after the view shrank (opening Starship halves
+    its height) frames were copied into the old, taller framebuffer and
+    shown scaled, squashed into the bottom half with the top half black.
+    QOpenGLWidget repaints through update(), already at most once per
+    event-loop turn.
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._resize_settle_timer = QTimer(self)
-        self._resize_settle_timer.setSingleShot(True)
-        self._resize_settle_timer.setInterval(self._RESIZE_SETTLE_MS)
-        self._resize_settle_timer.timeout.connect(self._render_after_resize_settles)
         self._install_dynamic_clipping()
 
     # One draw per event-loop turn. pyvistaqt's render() draws once per call
@@ -62,43 +51,6 @@ class DebouncedInteractor(QtInteractor):
         """Draw immediately (screenshots, tests reading pixels)."""
         self._render_pending = False
         self._render()
-
-    def resizeEvent(self, event):  # noqa: N802 -- Qt override signature
-        if self._RenderWindow is None:
-            return
-        # Qt's own ratio: pyvistaqt 0.13 dropped the private _getPixelRatio
-        # helper this used to call (0.12 computed the same screen ratio).
-        scale = self.devicePixelRatioF()
-        w = int(round(scale * self.width()))
-        h = int(round(scale * self.height()))
-        self._RenderWindow.SetDPI(int(round(72 * scale)))
-        vtkRenderWindow.SetSize(self._RenderWindow, w, h)
-        self._Iren.SetSize(w, h)
-        self._Iren.ConfigureEvent()
-        self._update_gl_surface()
-        self._resize_settle_timer.start()
-
-    def _update_gl_surface(self):
-        """macOS: resize the OpenGL context's drawable to the view.
-
-        The base-class SetSize above (pyvistaqt's own choice, so VTK does not
-        fight Qt over the NSView's frame) skips vtkCocoaRenderWindow's resize
-        handling, and the NSOpenGLContext keeps its old drawable. Frames then
-        render at the new size into the old surface and the window shows them
-        scaled: opening Starship halves the view's height, and the scene came
-        out squashed into the bottom half with the top half black."""
-        rw = self._RenderWindow
-        if rw is not None and hasattr(rw, "UpdateContext") and rw.GetContextId():
-            rw.UpdateContext()
-
-    def _render_after_resize_settles(self):
-        # Guard against firing after the widget is closed: pyvistaqt swaps _Iren
-        # for a stub with no Render() during teardown, so a still-pending settle
-        # timer would otherwise raise on quit (Cmd+Q).
-        iren = self._Iren
-        if iren is not None and hasattr(iren, "Render"):
-            self._update_gl_surface()
-            iren.Render()
 
     # KSP-style dynamic depth range. VTK's default fit-to-scene clipping can't
     # pull the near plane closer than a fixed fraction of the WHOLE scene's far

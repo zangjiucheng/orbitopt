@@ -1,70 +1,76 @@
-"""DebouncedInteractor's resize path (orbitopt.viz.viewport), on stand-ins
-for the Qt widget and VTK window so it runs without a display."""
+"""The Mission Control 3D view (orbitopt.viz.viewport) after a resize."""
 from __future__ import annotations
 
-from types import SimpleNamespace
+import ctypes
+import ctypes.util
+import sys
 
 import pytest
 
+pytest.importorskip("PySide6")
 pytest.importorskip("pyvistaqt")
 
-from orbitopt.viz.viewport import DebouncedInteractor  # noqa: E402
+_GL_FRAMEBUFFER = 0x8D40
+_GL_COLOR_ATTACHMENT0 = 0x8CE0
+_GL_ATTACHMENT_TYPE, _GL_ATTACHMENT_NAME = 0x8CD0, 0x8CD1
+_GL_TEXTURE, _GL_TEXTURE_2D = 0x1702, 0x0DE1
+_GL_TEXTURE_WIDTH, _GL_TEXTURE_HEIGHT = 0x1000, 0x1001
 
 
-class _CocoaWindow:
-    """Records calls like a vtkCocoaRenderWindow (base-class SetSize, DPI,
-    the context's UpdateContext)."""
-
-    def __init__(self, context=1):
-        self.calls, self.context = [], context
-
-    def SetDPI(self, dpi):  # noqa: N802 -- VTK names
-        self.calls.append(("dpi", dpi))
-
-    def SetSize(self, w, h):  # noqa: N802
-        self.calls.append(("size", w, h))
-
-    def GetContextId(self):  # noqa: N802
-        return self.context
-
-    def UpdateContext(self):  # noqa: N802
-        self.calls.append(("update",))
+def _libgl():
+    path = ("/System/Library/Frameworks/OpenGL.framework/OpenGL" if sys.platform == "darwin"
+            else ctypes.util.find_library("GL"))
+    if not path:
+        pytest.skip("no OpenGL library to query the framebuffer with")
+    return ctypes.CDLL(path)
 
 
-def _widget(rw):
-    iren = SimpleNamespace(SetSize=lambda w, h: None, ConfigureEvent=lambda: None,
-                           Render=lambda: rw.calls.append(("render",)))
-    w = SimpleNamespace(_RenderWindow=rw, _Iren=iren, devicePixelRatioF=lambda: 2.0,
-                        width=lambda: 1067, height=lambda: 414,
-                        _resize_settle_timer=SimpleNamespace(start=lambda: rw.calls.append(("settle",))))
-    w._update_gl_surface = lambda: DebouncedInteractor._update_gl_surface(w)
-    return w
+def _framebuffer_size(view):
+    """Size of the texture behind the QOpenGLWidget's framebuffer -- what Qt
+    scales onto the widget."""
+    gl = _libgl()
+    view.makeCurrent()
+    try:
+        gl.glBindFramebuffer(_GL_FRAMEBUFFER, view.defaultFramebufferObject())
+        kind, name = ctypes.c_int(), ctypes.c_int()
+        gl.glGetFramebufferAttachmentParameteriv(_GL_FRAMEBUFFER, _GL_COLOR_ATTACHMENT0,
+                                                 _GL_ATTACHMENT_TYPE, ctypes.byref(kind))
+        if kind.value != _GL_TEXTURE:
+            pytest.skip("the widget's framebuffer is not texture-backed here")
+        gl.glGetFramebufferAttachmentParameteriv(_GL_FRAMEBUFFER, _GL_COLOR_ATTACHMENT0,
+                                                 _GL_ATTACHMENT_NAME, ctypes.byref(name))
+        w, h = ctypes.c_int(), ctypes.c_int()
+        gl.glBindTexture(_GL_TEXTURE_2D, name.value)
+        gl.glGetTexLevelParameteriv(_GL_TEXTURE_2D, 0, _GL_TEXTURE_WIDTH, ctypes.byref(w))
+        gl.glGetTexLevelParameteriv(_GL_TEXTURE_2D, 0, _GL_TEXTURE_HEIGHT, ctypes.byref(h))
+        return w.value, h.value
+    finally:
+        view.doneCurrent()
 
 
-def test_resize_updates_the_gl_surface_before_any_draw(monkeypatch):
-    """Opening Starship halves the view's height. Without UpdateContext the
-    macOS context kept its old drawable and frames showed squashed into the
+def test_shrinking_the_view_shrinks_its_framebuffer():
+    """Opening Starship halves the 3D view's height. A resizeEvent override
+    (from the old native-window interactor) skipped QOpenGLWidget's own, so
+    the framebuffer kept its old height: frames landed in its bottom half and
+    Qt scaled the whole buffer onto the widget -- the scene squashed into the
     bottom half, the top half black."""
-    import orbitopt.viz.viewport as vp
+    from PySide6.QtWidgets import QApplication
 
-    monkeypatch.setattr(vp, "vtkRenderWindow", SimpleNamespace(SetSize=lambda rw, w, h: rw.SetSize(w, h)))
-    rw = _CocoaWindow()
-    w = _widget(rw)
-    DebouncedInteractor.resizeEvent(w, None)
-    assert ("size", 2134, 828) in rw.calls
-    assert rw.calls.index(("update",)) > rw.calls.index(("size", 2134, 828))
-    DebouncedInteractor._render_after_resize_settles(w)
-    assert rw.calls[-2:] == [("update",), ("render",)]
+    from orbitopt.viz.viewport import DebouncedInteractor
 
-
-def test_no_context_yet_or_no_cocoa_window_is_left_alone():
-    rw = _CocoaWindow(context=0)  # not drawn yet: no context to update
-    DebouncedInteractor._update_gl_surface(SimpleNamespace(_RenderWindow=rw))
-    assert rw.calls == []
-
-    class _X11Window:  # no UpdateContext on other platforms
-        def GetContextId(self):  # noqa: N802
-            return 1
-
-    DebouncedInteractor._update_gl_surface(SimpleNamespace(_RenderWindow=_X11Window()))
-    DebouncedInteractor._update_gl_surface(SimpleNamespace(_RenderWindow=None))
+    app = QApplication.instance() or QApplication([])
+    view = DebouncedInteractor()
+    try:
+        view.resize(400, 400)
+        view.show()
+        for _ in range(5):
+            app.processEvents()
+        if view.context() is None or not view.context().isValid():
+            pytest.skip("no OpenGL context (headless / software GL)")
+        view.resize(400, 200)
+        for _ in range(5):
+            app.processEvents()
+        dpr = view.devicePixelRatioF()
+        assert _framebuffer_size(view) == (round(400 * dpr), round(200 * dpr))
+    finally:
+        view.close()
