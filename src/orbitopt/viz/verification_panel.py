@@ -345,7 +345,19 @@ class VerificationPanel(QWidget):
         v.addWidget(_label(report.get("label", ""), "maneuverNote"))
 
         checks = status.get("checks") or {}
-        if checks:
+        metrics = (report.get("targets") or {}).get("metrics") if isinstance(report.get("targets"), dict) else None
+        if metrics:
+            # Reports that carry their numbers (Starship's): each check with
+            # what was measured and the limit it was held to.
+            v.addWidget(_label("CHECKS", "sectionHeader", wrap=False))
+            for m in metrics:
+                ok = m.get("ok")
+                mark, color = ("✓", SUCCESS) if ok else (("✗", DANGER) if ok is False else ("—", INK_MUTED))
+                v.addWidget(_label(f"{mark}  {m.get('name', '')}", "maneuverNote", color))
+                detail = " · ".join(x for x in (m.get("value", ""), f"limit {m['limit']}" if m.get("limit") else "") if x)
+                if detail:
+                    v.addWidget(_label(f"    {detail}", "maneuverNote"))
+        elif checks:
             v.addWidget(_label("CHECKS", "sectionHeader", wrap=False))
             for name, ok in checks.items():
                 v.addWidget(_label(f"{'✓' if ok else '✗'}  {_humanize(name)}", "maneuverNote",

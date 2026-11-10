@@ -66,3 +66,28 @@ def test_no_atmosphere_no_burn_stays_in_orbit():
     vehicle = EntryVehicle(150_000.0, 400.0, 1.5, 0.7)
     traj = fly_entry(_deorbited_state(dv=0.0), vehicle, bank_deg=0.0, max_time_s=600.0)
     assert not traj.ended_at_height and traj.heights_m.min() > 250e3
+
+
+def test_bank_reversal_and_density_scale():
+    cd, cl = flat_plate_coefficients(65.0)
+    vehicle = EntryVehicle(150_000.0, 400.0, cd, cl)
+    right = fly_entry(_deorbited_state(), vehicle, bank_deg=45.0)
+    # Reversed from the start = banked the other way: a mirror image in z.
+    left = fly_entry(_deorbited_state(), vehicle, bank_deg=45.0, bank_reversal_s=0.0)
+    mirror = fly_entry(_deorbited_state(), vehicle, bank_deg=-45.0)
+    assert right.states[-1, 2] == pytest.approx(-left.states[-1, 2], rel=1e-6)
+    assert left.states[-1, :3] == pytest.approx(mirror.states[-1, :3], abs=1.0)
+    # Reversing part-way lands in between.
+    half = fly_entry(_deorbited_state(), vehicle, bank_deg=45.0, bank_reversal_s=0.5 * right.times_s[-1])
+    assert left.states[-1, 2] < half.states[-1, 2] < right.states[-1, 2] or \
+        right.states[-1, 2] < half.states[-1, 2] < left.states[-1, 2]
+    # Thinner air: the same entry comes down further along; another integrator agrees.
+    thin = fly_entry(_deorbited_state(), vehicle, bank_deg=45.0, density_scale=0.8)
+
+    def range_angle(traj):
+        a, b = traj.states[0, :3], traj.states[-1, :3]
+        return math.acos(a @ b / np.linalg.norm(a) / np.linalg.norm(b))
+
+    assert range_angle(thin) > range_angle(right)
+    rk45 = fly_entry(_deorbited_state(), vehicle, bank_deg=45.0, method="RK45", rtol=1e-11, atol=1e-5, max_step_s=10.0)
+    assert np.linalg.norm(rk45.states[-1, :3] - right.states[-1, :3]) < 50.0

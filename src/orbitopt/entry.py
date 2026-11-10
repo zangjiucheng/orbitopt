@@ -98,13 +98,15 @@ def _gravity(r: np.ndarray) -> np.ndarray:
     return np.array([f * x * (1.0 + k * (1.0 - zz)), f * y * (1.0 + k * (1.0 - zz)), f * z * (1.0 + k * (3.0 - zz))])
 
 
-def _accelerations(r: np.ndarray, v: np.ndarray, vehicle: EntryVehicle, bank_rad: float):
-    """(total acceleration, aerodynamic acceleration) at state (r, v)."""
+def _accelerations(r: np.ndarray, v: np.ndarray, vehicle: EntryVehicle, bank_rad: float,
+                   density_scale: float = 1.0):
+    """(total acceleration, aerodynamic acceleration) at state (r, v).
+    ``density_scale`` multiplies the model atmosphere (dispersion studies)."""
     g = _gravity(r)
     omega = np.array([0.0, 0.0, OMEGA_EARTH_RAD_S])
     v_air = v - np.cross(omega, r)
     speed = float(np.linalg.norm(v_air))
-    rho = density_kg_m3(height_m(r))
+    rho = density_scale * density_kg_m3(height_m(r))
     if rho < 1e-14 or speed < 1e-6:
         return g, np.zeros(3)
     q = 0.5 * rho * speed * speed
@@ -141,13 +143,23 @@ class EntryTrajectory:
 
 
 def fly_entry(state0, vehicle: EntryVehicle, bank_deg: float, stop_height_m: float = 1000.0,
-              max_time_s: float = 7200.0, sample_s: float = 2.0, rtol: float = 1e-9, atol: float = 1e-6) -> EntryTrajectory:
+              max_time_s: float = 7200.0, sample_s: float = 2.0, rtol: float = 1e-9, atol: float = 1e-6,
+              *, density_scale: float = 1.0, bank_reversal_s: float | None = None,
+              method: str = "DOP853", max_step_s: float = 60.0) -> EntryTrajectory:
     """Integrate from ``state0`` (inertial, m and m/s) with a constant bank
-    angle until the vehicle descends to ``stop_height_m``."""
-    bank = math.radians(bank_deg)
+    angle until the vehicle descends to ``stop_height_m``.
 
-    def rhs(_t, y):
-        a, _aero = _accelerations(y[:3], y[3:], vehicle, bank)
+    ``bank_reversal_s``: flip the bank to the other side at that time (one
+    bank reversal, the way entry guidance trims cross-range).
+    ``density_scale`` scales the atmosphere; ``method`` / ``max_step_s``
+    choose the scipy integrator (verification re-flies with another one)."""
+
+    def bank_at(t):
+        b = math.radians(bank_deg)
+        return -b if bank_reversal_s is not None and t >= bank_reversal_s else b
+
+    def rhs(t, y):
+        a, _aero = _accelerations(y[:3], y[3:], vehicle, bank_at(t), density_scale)
         return np.concatenate([y[3:], a])
 
     def reached(_t, y):
@@ -155,17 +167,17 @@ def fly_entry(state0, vehicle: EntryVehicle, bank_deg: float, stop_height_m: flo
     reached.terminal = True
     reached.direction = -1
 
-    sol = solve_ivp(rhs, (0.0, max_time_s), np.asarray(state0, dtype=float), method="DOP853",
-                    rtol=rtol, atol=atol, events=reached, dense_output=True, max_step=60.0)
+    sol = solve_ivp(rhs, (0.0, max_time_s), np.asarray(state0, dtype=float), method=method,
+                    rtol=rtol, atol=atol, events=reached, dense_output=True, max_step=max_step_s)
     t_end = float(sol.t[-1])
     times = np.unique(np.concatenate([np.arange(0.0, t_end, sample_s), [t_end]]))
     states = sol.sol(times).T
     heights = np.array([height_m(s[:3]) for s in states])
     aero_g, qbar = [], []
-    for s in states:
-        _a, aero = _accelerations(s[:3], s[3:], vehicle, bank)
+    for t, s in zip(times, states):
+        _a, aero = _accelerations(s[:3], s[3:], vehicle, bank_at(t), density_scale)
         aero_g.append(np.linalg.norm(aero) / G0_M_S2)
         v_air = s[3:] - np.cross([0.0, 0.0, OMEGA_EARTH_RAD_S], s[:3])
-        qbar.append(0.5 * density_kg_m3(height_m(s[:3])) * float(v_air @ v_air))
+        qbar.append(0.5 * density_scale * density_kg_m3(height_m(s[:3])) * float(v_air @ v_air))
     return EntryTrajectory(times_s=times, states=states, heights_m=heights, aero_g=np.array(aero_g),
                            dynamic_pressure_pa=np.array(qbar), ended_at_height=bool(sol.t_events[0].size))

@@ -149,3 +149,44 @@ def test_full_scene_has_the_ascent_and_the_booster(prediction, solution):
     assert "vector" in events["Boostback burn (Raptor)"] and "vector" in events["Booster landing burn (Raptor)"]
     earth = next(b for b in scene["bodies"] if b["id"] == "earth")
     assert earth["flattening"] == pytest.approx(1.0 / 298.257223563)
+
+
+@pytest.mark.slow
+def test_return_verification_reports(prediction, solution):
+    """The four reports validate, and say what they found: the numerics hold,
+    the loads and timeline are fine, and only a 10% lift shortfall cannot be
+    recovered -- the nominal already flies at the entry's full cross-range."""
+    from orbitopt.injection import DEFAULT_ATOL, DEFAULT_RTOL
+    from orbitopt.verify.report import publish_to_scene, validate_report
+    from orbitopt.viz.starship_verify import verify_return
+
+    tight = predict_return(rtol=DEFAULT_RTOL * 0.01, atol=DEFAULT_ATOL * 0.01)
+    reports = verify_return(prediction, tight, solution, inclinations={"nominal": 29.97, "lift_low": None})
+    for r in reports:
+        validate_report(r)
+    result = {r["kind"]: r["status"]["result"] for r in reports}
+    assert result == {"starship_return_refly": "passed", "starship_return_dispersions": "failed",
+                      "starship_entry_limits": "passed", "starship_timeline_consistency": "passed"}
+    failed = [k for k, ok in reports[1]["status"]["checks"].items() if not ok]
+    assert failed == ["lift_low.recoverable"]
+    lift_high = next(m for m in reports[1]["targets"]["metrics"] if m["name"] == "Lift-to-drag +10%")
+    assert lift_high["ok"] and "reversal" in lift_high["value"]  # overshoot fixed by one bank reversal
+
+    info = {m["name"]: m for m in reports[1]["targets"]["metrics"] if m["ok"] is None}
+    assert info["Entry alone reaches Starbase"]["value"] == "inclination <= 29.97 deg"
+    assert "not in the searched range" in info["... also with lift-to-drag -10%"]["value"]
+    assert reports[1]["status"]["checks"].keys() == {f"{c}.recoverable" for c in (
+        "density_low", "density_high", "burn_late", "burn_early", "dv_high", "dv_low", "lift_low", "lift_high")}
+
+    scene = publish_to_scene(build_flight15_scene(prediction, solution=solution), reports)
+    assert scene["verification"]["result"] == "failed" and len(scene["verification"]["reports"]) == 4
+
+
+@pytest.mark.slow
+def test_entry_alone_reaches_starbase_below_about_30_deg(prediction):
+    """Flight 14's 30.5 deg needs an out-of-plane burn; somewhat lower the bank
+    alone suffices (29.5 deg: bank ~34 deg, no burn; 30.0: still ~3 m/s)."""
+    from orbitopt.viz.starship_verify import entry_reach_inclination
+
+    inc = entry_reach_inclination(prediction, xtol_deg=0.1)
+    assert inc is not None and 29.5 < inc < 30.1

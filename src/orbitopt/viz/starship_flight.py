@@ -218,17 +218,21 @@ def _entry_vehicle():
     return EntryVehicle(ENTRY_MASS_KG, ENTRY_AREA_M2, cd, cl)
 
 
-def _fly_from(pred: ReturnPrediction, burn_time_s: float, bank_deg: float, dv_normal_m_s: float = 0.0):
-    """Deorbit burn at ``burn_time_s`` -- DEORBIT_DV_M_S retrograde plus an
-    optional out-of-plane component along the orbit normal -- then entry."""
+def _fly_from(pred: ReturnPrediction, burn_time_s: float, bank_deg: float, dv_normal_m_s: float = 0.0, *,
+              deorbit_dv_m_s: float = DEORBIT_DV_M_S, vehicle=None, **entry_options):
+    """Deorbit burn at ``burn_time_s`` -- ``deorbit_dv_m_s`` retrograde plus an
+    optional out-of-plane component along the orbit normal -- then entry.
+    ``vehicle`` and ``entry_options`` (fly_entry's keywords) are for the
+    verification's dispersed and re-flown cases."""
     from orbitopt.entry import fly_entry
 
     state = _hermite_state(pred.times_s, pred.states_eq, burn_time_s)
     v = state[3:]
     h = np.cross(state[:3], v)
-    dv = -DEORBIT_DV_M_S * v / np.linalg.norm(v) + dv_normal_m_s * h / np.linalg.norm(h)
+    dv = -deorbit_dv_m_s * v / np.linalg.norm(v) + dv_normal_m_s * h / np.linalg.norm(h)
     state = np.concatenate([state[:3], v + dv])
-    return fly_entry(state, _entry_vehicle(), bank_deg, stop_height_m=LANDING_BURN_START_M), dv
+    vehicle = vehicle if vehicle is not None else _entry_vehicle()
+    return fly_entry(state, vehicle, bank_deg, stop_height_m=LANDING_BURN_START_M, **entry_options), dv
 
 
 def _miss_vector_km(pred: ReturnPrediction, burn_time_s: float, trajectory) -> np.ndarray:
@@ -250,25 +254,27 @@ def _miss_vector_km(pred: ReturnPrediction, burn_time_s: float, trajectory) -> n
     return np.array([e * math.sin(psi) + n * math.cos(psi), e * math.cos(psi) - n * math.sin(psi)])
 
 
-def solve_return(pred: ReturnPrediction) -> ReturnSolution:
-    """Deorbit-burn time and constant bank angle that bring the ship to the
-    landing-burn height directly above Starbase; then the landing burn to
-    the tower.
+@dataclass
+class _BankSearch:
+    t_guess: float
+    miss: object             # (dt_min, bank, dv_n=0) -> (downrange, crossrange) km
+    downrange_solved: object  # bank -> (burn time [min from t_guess], miss)
+    reach: object            # bank -> cross-range past Starbase [km], downrange solved
+    side: float
+    b_max: float             # |bank| of maximum reach
 
-    Stage 1 searches the one real choice, the bank angle, directly: for each
-    bank the burn time is solved for downrange (one variable, nearly linear),
-    leaving the cross-range miss as a function of bank alone. Cross-range
-    reach rises with bank and then falls (steep banks cost range), so the
-    bank of maximum reach is found by a bounded 1-D search; if that reach
-    passes Starbase, the bank is the shallower root below it, else the
-    vehicle's best reach. (A 2-D least-squares over burn time and bank
-    stalled from some starting guesses -- from 60 deg it never moved the
-    bank -- and on x86-64 macOS the default guess stopped short, giving a
-    burn time 48 s off.) Stage 2, when the bank cannot reach: keep that
-    bank and solve burn time + an out-of-plane component of the deorbit
-    burn. (A single 3-control solve was tried first: its bank / out-of-plane
-    split depended on the solver tolerances.)"""
-    from scipy.optimize import brentq, minimize_scalar
+    @property
+    def max_reach_km(self) -> float:
+        """> 0: the entry alone carries the ship past Starbase sideways."""
+        return self.reach(self.side * self.b_max)
+
+
+def _bank_search(pred: ReturnPrediction, vehicle=None) -> _BankSearch:
+    """Stage 1 of solve_return: for each bank the burn time is solved for
+    downrange, leaving the cross-range miss a function of bank alone; finds
+    the bank side and the bank of maximum cross-range reach. ``vehicle``
+    overrides the assumed entry vehicle (dispersion studies)."""
+    from scipy.optimize import minimize_scalar
 
     if pred.return_pass is None:
         raise ValueError("no return pass to target")
@@ -277,7 +283,7 @@ def solve_return(pred: ReturnPrediction) -> ReturnSolution:
     # Burn time is handled as *minutes from t_guess*: every variable is O(1).
     def miss(dt_min, bank, dv_n=0.0):
         burn_t = t_guess + 60.0 * dt_min
-        traj, _dv = _fly_from(pred, burn_t, bank, dv_n)
+        traj, _dv = _fly_from(pred, burn_t, bank, dv_n, vehicle=vehicle)
         return _miss_vector_km(pred, burn_t, traj)
 
     warm = {"dt": 0.0}
@@ -312,7 +318,32 @@ def solve_return(pred: ReturnPrediction) -> ReturnSolution:
     side = 1.0 if reach(45.0) >= reach(-45.0) else -1.0
     best = minimize_scalar(lambda b: -reach(side * b), bounds=(1.0, 85.0), method="bounded",
                            options={"xatol": 0.02})
-    b_max = float(best.x)
+    return _BankSearch(t_guess, miss, downrange_solved, reach, side, float(best.x))
+
+
+def solve_return(pred: ReturnPrediction) -> ReturnSolution:
+    """Deorbit-burn time and constant bank angle that bring the ship to the
+    landing-burn height directly above Starbase; then the landing burn to
+    the tower.
+
+    Stage 1 searches the one real choice, the bank angle, directly: for each
+    bank the burn time is solved for downrange (one variable, nearly linear),
+    leaving the cross-range miss as a function of bank alone. Cross-range
+    reach rises with bank and then falls (steep banks cost range), so the
+    bank of maximum reach is found by a bounded 1-D search; if that reach
+    passes Starbase, the bank is the shallower root below it, else the
+    vehicle's best reach. (A 2-D least-squares over burn time and bank
+    stalled from some starting guesses -- from 60 deg it never moved the
+    bank -- and on x86-64 macOS the default guess stopped short, giving a
+    burn time 48 s off.) Stage 2, when the bank cannot reach: keep that
+    bank and solve burn time + an out-of-plane component of the deorbit
+    burn. (A single 3-control solve was tried first: its bank / out-of-plane
+    split depended on the solver tolerances.)"""
+    from scipy.optimize import brentq
+
+    search = _bank_search(pred)
+    miss, downrange_solved, reach = search.miss, search.downrange_solved, search.reach
+    side, b_max, t_guess = search.side, search.b_max, search.t_guess
     if reach(side * b_max) >= 0.0:
         bank = side * float(brentq(lambda b: reach(side * b), 1.0, b_max, xtol=1e-3))
     else:
@@ -714,4 +745,13 @@ def compute_and_export_flight15() -> dict:
                        "dmiss_km": abs(pred.return_pass.distance_km - tight.return_pass.distance_km)}
     ascent = ascent_mod.build_ascent(get_launch_site(SITE_ID), pred.azimuth_deg, pred.liftoff_mjd2000,
                                      SECO_S, pred.states_eq[0])
-    return build_flight15_scene(pred, convergence, solve_return(pred), ascent)
+    solution = solve_return(pred)
+    scene = build_flight15_scene(pred, convergence, solution, ascent)
+    if solution.converged and tight.return_pass is not None:
+        from orbitopt.verify.report import publish_to_scene
+        from orbitopt.viz.starship_verify import verify_return
+
+        from orbitopt.viz.starship_verify import inclination_limits
+
+        publish_to_scene(scene, verify_return(pred, tight, solution, inclination_limits(pred)))
+    return scene
