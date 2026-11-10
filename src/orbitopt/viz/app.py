@@ -367,6 +367,9 @@ class MissionControlWindow(QMainWindow):
         self.timeline_bar.reverse_clicked.connect(lambda: self._toggle_play(-1))
         self.timeline_bar.auto_slow_toggled.connect(self._on_auto_slow_toggled)
         self.timeline_bar.event_step_requested.connect(self._seek_relative_event)
+        # Dragging the playhead pauses: playback kept moving it out from under
+        # the pointer. It stays paused when the drag ends.
+        self.timeline_bar.scrub_started.connect(lambda: self._playing and self._set_playing(False))
         center_layout.addWidget(self.timeline_bar)
         self.splitter.addWidget(center)
 
@@ -1799,6 +1802,7 @@ class MissionControlWindow(QMainWindow):
         self._tile_timer.stop()
         self.renderer.tiles.shutdown()
         self._spinner.stop()  # the spinner has its own QTimer, independent of self._timer
+        self.plotter._resize_settle_timer.stop()  # so it can't fire post-teardown
         # Set *before* touching the load thread, unconditionally -- not just on
         # a wait() timeout. disconnect() below is best-effort hygiene, not the
         # real guard: SceneLoader.run() emits finished/failed as its very last

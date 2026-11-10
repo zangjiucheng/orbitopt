@@ -9,7 +9,7 @@ continuous -- scrubbing at the deepest zoom moves it by milliseconds, where
 the old 10,000-step slider moved it by eight seconds on Starship's timeline
 and by forty minutes on a Mars cruise.
 
-Mouse: drag on the track to scrub (Shift-drag: ten times finer; grabbing
+Mouse: drag on the track to scrub, pausing playback (Shift-drag: ten times finer; grabbing
 the playhead nudges it from where it is instead of jumping), scroll to zoom
 about the cursor (scroll
 sideways, or right-drag, to pan), drag the bracket in the overview strip to
@@ -149,6 +149,9 @@ class TimelineTrack(QWidget):
     """The zoomable, painted timeline (see the module docstring)."""
 
     view_changed = Signal()
+    # A drag-to-scrub began: the window pauses playback, which would
+    # otherwise carry the playhead away from under the pointer.
+    scrub_started = Signal()
 
     PAD_X = 10
     OVERVIEW_H = 10
@@ -473,6 +476,7 @@ class TimelineTrack(QWidget):
             self._state.set_time(near[0].get("time", 0.0))  # snap to the event
             return
         self._drag = "scrub"
+        self.scrub_started.emit()
         if not on_playhead:  # grabbing the playhead nudges it from where it is: no jump
             self._state.set_time(self.time_at(x))
         self._scrub_anchor = (x, self._state.time, bool(event.modifiers() & Qt.ShiftModifier))
@@ -679,6 +683,7 @@ class TimelineBar(QWidget):
     # The previous / next event buttons: the window seeks (and frames a burn)
     # the same way as for Shift+arrow.
     event_step_requested = Signal(int)
+    scrub_started = Signal()  # forwarded from the track
 
     _CONTROLS_H = 44
     _MARGINS = (16, 6, 16, 6)
@@ -805,6 +810,7 @@ class TimelineBar(QWidget):
 
         self.track = TimelineTrack(self._state)
         self.track.view_changed.connect(self._on_view_changed)
+        self.track.scrub_started.connect(self.scrub_started)
         outer.addWidget(self.track)
 
     def _tool_button(self, icon, tip: str, text: str = "") -> QPushButton:

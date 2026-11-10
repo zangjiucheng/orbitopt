@@ -230,7 +230,21 @@ def test_mission_control_loads_and_switches_missions(tmp_path):
         assert not window._playing
         window.play_action.trigger()  # the menu passes checked=False: still forward
         assert window._playing and window._play_direction == 1
-        window._toggle_play(+1)
+
+        # Dragging on the track pauses (playback carried the playhead away
+        # from the pointer), and it stays paused after the drag.
+        from PySide6.QtCore import QPoint
+        from PySide6.QtTest import QTest
+
+        track = window.timeline_bar.track
+        top, bottom = track._rows()["ruler"]
+        at = QPoint(int(track.x_of(state.time) + 40), int((top + bottom) / 2))
+        QTest.mousePress(track, Qt.LeftButton, Qt.NoModifier, at)
+        assert not window._playing
+        QTest.mouseMove(track, at + QPoint(30, 0))
+        QTest.mouseRelease(track, Qt.LeftButton, Qt.NoModifier, at + QPoint(30, 0))
+        app.processEvents()
+        assert not window._playing
 
         window.inspector.body_clicked.emit("spacecraft", False)
         app.processEvents()

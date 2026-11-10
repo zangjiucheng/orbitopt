@@ -348,7 +348,7 @@ def test_inspector_fits_its_minimum_width_with_long_maneuver_names():
 def test_inspector_info_rows_never_clip_a_word():
     """Starship's "Orbits by announced entry" key left its value a column too
     narrow for one word: "(SpaceX:" drew as "aceX:". Key and value now each
-    keep room for their longest word, at the panel's narrowest width too."""
+    keep room for their widest unbreakable piece, at the narrowest panel too."""
     from PySide6.QtWidgets import QApplication, QLabel
 
     from orbitopt.viz.inspector import InspectorPanel
@@ -371,9 +371,10 @@ def test_inspector_info_rows_never_clip_a_word():
     for label in inspector.findChildren(QLabel):
         if label.objectName() not in ("bodyStat", "bodyStatValue") or not label.isVisible():
             continue
-        fm = label.fontMetrics()
-        widest = max(fm.horizontalAdvance(word) for word in label.text().split())
-        assert label.contentsRect().width() >= widest, (label.text(), label.width(), widest)
+        # Qt's own floor for a wrapped label: its widest unbreakable piece
+        # (it also breaks after a hyphen: "Two-body Lambert" needs "Lambert").
+        need = label.minimumSizeHint().width()
+        assert label.width() >= need, (label.text(), label.width(), need)
         checked += 1
     assert checked >= 4
     inspector.close()

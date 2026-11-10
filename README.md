@@ -287,7 +287,7 @@ drive it. Every panel follows the same selection and mission time:
 - **Timeline** (bottom). A zoomable track, from the whole mission down to
   two seconds across: scroll to zoom about the cursor, scroll sideways or
   right-drag to pan, drag to scrub (continuous time, so sub-second at the
-  deepest zoom). An overview strip above the ruler brackets the visible
+  deepest zoom; a drag pauses playback). An overview strip above the ruler brackets the visible
   window. Below it are the mission's phases (parking orbit, cruise, lunar
   flyby, ...) and the events with their names; click one to jump to it,
   double-click to zoom to it. Type in the time box (G) to jump to

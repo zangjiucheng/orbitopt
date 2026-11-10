@@ -56,8 +56,11 @@ def test_shrinking_the_view_shrinks_its_framebuffer():
     bottom half, the top half black."""
     from PySide6.QtWidgets import QApplication
 
+    from orbitopt.viz import viewport
     from orbitopt.viz.viewport import DebouncedInteractor
 
+    if not viewport._draws_into_qopenglwidget():
+        pytest.skip("pyvistaqt < 0.13: a native VTK window, no QOpenGLWidget framebuffer")
     app = QApplication.instance() or QApplication([])
     view = DebouncedInteractor()
     try:
@@ -74,3 +77,26 @@ def test_shrinking_the_view_shrinks_its_framebuffer():
         assert _framebuffer_size(view) == (round(400 * dpr), round(200 * dpr))
     finally:
         view.close()
+
+
+def test_native_window_resize_defers_the_repaint(monkeypatch):
+    """pyvistaqt 0.12 (the locked env): sizes follow every resize event, the
+    repaint waits for the settle timer (Windows live edge-drags)."""
+    from types import SimpleNamespace
+
+    from orbitopt.viz import viewport
+
+    calls = []
+    rw = SimpleNamespace(SetDPI=lambda dpi: calls.append(("dpi", dpi)))
+    monkeypatch.setattr(viewport, "vtkRenderWindow",
+                        SimpleNamespace(SetSize=lambda _rw, w, h: calls.append(("size", w, h))))
+    w = SimpleNamespace(
+        _DEFER_RESIZE=True, _RenderWindow=rw, devicePixelRatioF=lambda: 2.0,
+        width=lambda: 1067, height=lambda: 414,
+        _Iren=SimpleNamespace(SetSize=lambda w, h: None, ConfigureEvent=lambda: None,
+                              Render=lambda: calls.append(("render",))),
+        _resize_settle_timer=SimpleNamespace(start=lambda: calls.append(("settle",))))
+    viewport.DebouncedInteractor.resizeEvent(w, None)
+    assert calls == [("dpi", 144), ("size", 2134, 828), ("settle",)]  # no draw yet
+    viewport.DebouncedInteractor._render_after_resize_settles(w)
+    assert calls[-1] == ("render",)
