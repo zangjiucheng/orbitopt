@@ -135,6 +135,13 @@ def validate_scene(scene: dict) -> None:
                 f"screening path with {n_t} times and {n_p} positions; it needs at least one "
                 "point and one position per time."
             )
+        for body_id, body_positions in (path.get("bodyPositions") or {}).items():
+            if len(body_positions) != n_t:
+                raise ValueError(
+                    f"scene document is invalid: candidate {cand.get('id', '<unknown>')!r} has "
+                    f"{len(body_positions)} {body_id!r} bodyPositions for {n_t} screening path "
+                    "times; it needs one per time."
+                )
 
 
 def is_valid_scene(scene: dict) -> bool:

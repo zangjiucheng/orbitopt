@@ -197,7 +197,12 @@
           "properties": {
             "fidelity": { "type": "string", "description": "Human-readable model the path comes from (e.g. two-body Lambert). Never a flown trajectory." },
             "times": { "type": "array", "items": { "type": "number" }, "description": "Timeline coordinates; may fall outside the timeline when the candidate departs on another date." },
-            "positions": { "type": "array", "items": { "$ref": "#/$defs/vec3" }, "description": "Same length as `times`, scene frame and distanceUnit." }
+            "positions": { "type": "array", "items": { "$ref": "#/$defs/vec3" }, "description": "Same length as `times`, scene frame and distanceUnit." },
+            "bodyPositions": {
+              "type": "object",
+              "additionalProperties": { "type": "array", "items": { "$ref": "#/$defs/vec3" } },
+              "description": "Optional, keyed by body id: that body's position (scene frame, distanceUnit) at each `times` entry, same length as `times`, from the same ephemeris as `positions`. Lets a viewer show the path in a body-centered frame at the candidate's own dates, which may fall outside the body's trail."
+            }
           },
           "additionalProperties": true
         }

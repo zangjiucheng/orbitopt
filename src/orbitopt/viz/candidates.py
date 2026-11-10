@@ -11,6 +11,12 @@ the two-body Lambert arc (Sun point mass, JPL low-precision ephemerides)
 those numbers describe. The path is labeled as screening fidelity so a viewer
 never presents it as a flown trajectory; the exported candidate additionally
 names the body whose trail is its high-fidelity flight.
+
+Each path also carries ``bodyPositions``: Earth's and Mars's positions at
+every one of the path's own sample times, from the same ephemeris as the arc.
+Candidates depart on other dates than the flown mission, outside the span the
+scene's planet trails cover, so a viewer centering on a planet subtracts these
+per-candidate positions (r_arc(t_i) - r_planet(t_i)) instead of the trails'.
 """
 from __future__ import annotations
 
@@ -28,6 +34,17 @@ SCREENING_POINTS = 160
 # Selection statuses that are distinct trajectories worth drawing. Duplicates
 # repeat a better candidate's path; infeasible ones have no path.
 _DRAWN_STATUSES = ("selected", "truncated")
+
+# Bodies a viewer can center on (the Mars scene's planet ids, also pykep names).
+FRAME_BODY_IDS = ("earth", "mars")
+
+
+def body_positions_km(body_id: str, mjd2000: np.ndarray) -> np.ndarray:
+    """(n, 3) heliocentric ecliptic positions [km] of ``body_id`` at each
+    epoch in ``mjd2000`` -- the JPL low-precision ephemerides lambert_arc_km
+    uses, so an arc starts exactly on Earth and ends on Mars in their frames."""
+    body = planet(body_id)
+    return np.array([body.eph(pk.epoch(float(t)))[0] for t in np.asarray(mjd2000, dtype=float)]) / 1000.0
 
 
 def lambert_arc_km(t0_mjd2000: float, tof_days: float, n_points: int = SCREENING_POINTS) -> np.ndarray:
@@ -55,6 +72,8 @@ def build_candidate_entries(
     reference_et: float,
     flown_body_id: str,
     arc_fn: Callable[[float, float], np.ndarray] = lambert_arc_km,
+    body_fn: Callable[[str, np.ndarray], np.ndarray] = body_positions_km,
+    frame_body_ids: Sequence[str] = FRAME_BODY_IDS,
 ) -> list[dict]:
     """Scene ``candidates`` entries, best rank first.
 
@@ -64,7 +83,9 @@ def build_candidate_entries(
     Verification Gate's (``index``, ``verdict``, ``verification``,
     ``reasons``). With no selection records (a pinned transfer skips that
     stage) the gate's candidates stand in. Path times are on the scene
-    timeline: days since ``reference_et``.
+    timeline: days since ``reference_et``. ``body_fn(body_id, mjd2000s)``
+    gives each of ``frame_body_ids`` at the path's own epochs (see
+    ``screeningPath.bodyPositions``).
     """
     gate = {c["index"]: c for c in gate_candidates}
     records = [r for r in selection_records if r.get("status") in _DRAWN_STATUSES]
@@ -83,7 +104,12 @@ def build_candidate_entries(
         t0, tof = float(rec["t0_mjd2000"]), float(rec["tof_days"])
         path = arc_fn(t0, tof)
         start_days = (mjd2000_to_ephemeris_seconds(t0) - reference_et) / 86400.0
-        times = start_days + np.linspace(0.0, tof, len(path))
+        offsets = np.linspace(0.0, tof, len(path))
+        times = start_days + offsets
+        body_positions = {
+            body_id: np.round(np.asarray(body_fn(body_id, t0 + offsets), dtype=float), 1).tolist()
+            for body_id in frame_body_ids
+        }
         g = gate.get(index, {})
         dv = rec.get("lambert_total_dv_m_s", rec.get("cost"))
         entry = {
@@ -106,6 +132,7 @@ def build_candidate_entries(
                 "fidelity": SCREENING_FIDELITY,
                 "times": np.round(times, 8).tolist(),
                 "positions": np.round(path, 1).tolist(),
+                "bodyPositions": body_positions,
             },
         }
         if index == exported_index:
