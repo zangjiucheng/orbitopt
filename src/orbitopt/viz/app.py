@@ -64,6 +64,7 @@ from orbitopt.missions import high_fidelity_loader, list_missions, verification_
 from orbitopt.viz import icons
 from orbitopt.viz.candidate_panel import CandidatePanel
 from orbitopt.viz.charts import ChartPanel
+from orbitopt.viz.flight_labels import label_text, labelled_bodies
 from orbitopt.viz.compute import BackendProbeWorker, ComputePool, SceneLoader
 from orbitopt.viz.icon import app_icon
 from orbitopt.viz.inspector import InspectorPanel
@@ -328,6 +329,7 @@ class MissionControlWindow(QMainWindow):
         self.timeline_bar = TimelineBar(self.state)
         self.timeline_bar.play_clicked.connect(self._toggle_play)
         self.timeline_bar.auto_slow_toggled.connect(self._on_auto_slow_toggled)
+        self.timeline_bar.event_step_requested.connect(self._seek_relative_event)
         center_layout.addWidget(self.timeline_bar)
         self.splitter.addWidget(center)
 
@@ -652,6 +654,12 @@ class MissionControlWindow(QMainWindow):
         next_event_action.setShortcut(QKeySequence("Shift+Right"))
         prev_event_action = play_menu.addAction("Previous event", lambda: self._seek_relative_event(-1))
         prev_event_action.setShortcut(QKeySequence("Shift+Left"))
+        play_menu.addSeparator()
+        # The zoomable timeline track (timeline_bar.TimelineTrack).
+        play_menu.addAction("Zoom timeline in", lambda: self.timeline_bar.track.zoom(2)).setShortcut(QKeySequence("="))
+        play_menu.addAction("Zoom timeline out", lambda: self.timeline_bar.track.zoom(0.5)).setShortcut(QKeySequence("-"))
+        play_menu.addAction("Fit whole mission", lambda: self.timeline_bar.track.fit()).setShortcut(QKeySequence("0"))
+        play_menu.addAction("Go to time…", self.timeline_bar.focus_time_box).setShortcut(QKeySequence("G"))
 
         view_menu = self.menuBar().addMenu("&View")
         view_menu.addAction("Top view", self._view_top)
@@ -668,6 +676,12 @@ class MissionControlWindow(QMainWindow):
         self.track_action.setCheckable(True)
         self.track_action.setShortcut(QKeySequence("T"))
         self.track_action.toggled.connect(self._set_tracking)
+        # KSP-style flight data (height, speed, delta-v) next to each vehicle.
+        self.labels_action = view_menu.addAction("Flight data labels")
+        self.labels_action.setCheckable(True)
+        self.labels_action.setChecked(True)
+        self.labels_action.setShortcut(QKeySequence("L"))
+        self.labels_action.toggled.connect(lambda _on: self._refresh_view())
         # KSP map view: Tab / Shift+Tab cycle the focus target.
         focus_next = view_menu.addAction("Focus next (Tab)", lambda: self._cycle_focus(+1))
         focus_next.setShortcut(QKeySequence(Qt.Key_Tab))
@@ -691,14 +705,18 @@ class MissionControlWindow(QMainWindow):
     # what the app actually does.
     _SHORTCUTS = [
         ("Space", "Play / pause"),
-        ("← / →", "Step back / forward"),
+        ("← / →", "Step back / forward (1% of the visible timeline)"),
         ("Shift+← / →", "Previous / next mission event"),
         ("Home", "Restart timeline"),
+        ("= / - / 0", "Zoom the timeline in / out / fit the whole mission"),
+        ("G", "Go to time: type T+22:32:34, +30s, 6m35s or a UTC date"),
+        ("Scroll on timeline", "Zoom about the cursor (sideways / right-drag: pan)"),
         (", / .", "Time warp down / up a KSP level (1×, 5×, 10×, 50×, … 10M×)"),
         ("/", "Back to real time (1×)"),
         ("[ / ]", "Fine-tune time warp"),
         ("Tab / ⇧Tab", "Cycle focus: spacecraft, then bodies (KSP map view)"),
         ("T", "Track selected body"),
+        ("L", "Flight data labels (height, speed, Δv) on / off"),
         ("M", "Focus (zoom to) selected body"),
         ("R", "Reset camera"),
         ("I", "Toggle inspector (body-info) panel"),
@@ -1352,6 +1370,7 @@ class MissionControlWindow(QMainWindow):
         at the end: separate renders per call made per-frame cost noisy
         enough to read as playback jitter/stutter."""
         distances = self.renderer.set_time(self.state.time, render=False)
+        self._update_flight_labels()
         t = self.state.time
         self.inspector.set_distances(distances, {bid: self.renderer.body_world_position(bid, t)
                                                  for bid in self.inspector.altitude_body_ids()})
@@ -1364,6 +1383,20 @@ class MissionControlWindow(QMainWindow):
         if self.state.scene is not None and self.state.events:
             self._update_maneuver_arrow()
             self.plotter.render()
+
+    def _update_flight_labels(self):
+        scene = self.state.scene
+        if scene is None or not self.labels_action.isChecked():
+            self.renderer.set_flight_labels({}, self.state.time)
+            return
+        t = self.state.time
+        texts = {
+            body_id: label_text(scene, body_id, t,
+                                lambda tt, bid=body_id: self.renderer.body_world_position(bid, tt),
+                                self._maneuver_windows)
+            for body_id in labelled_bodies(scene)
+        }
+        self.renderer.set_flight_labels(texts, t)
 
     def _update_maneuver_arrow(self):
         """Draw a maneuver's delta-v vector only while the scrubber is close (in
@@ -1494,12 +1527,13 @@ class MissionControlWindow(QMainWindow):
 
     # -------------------------------------------------------------- Timing
     def _step_time(self, direction: int):
-        """Nudge the current time one step (2% of the span) forward/back."""
+        """Nudge the current time one step forward/back: 1% of the visible
+        timeline, so the step gets finer as the timeline zooms in."""
         timeline = self.state.timeline
         if not timeline:
             return
         self._set_playing(False)
-        self.state.set_time(self.state.time + direction * 0.02 * timeline_span(timeline))
+        self.state.set_time(self.state.time + direction * (self.timeline_bar.step_size() or 0.01 * timeline_span(timeline)))
 
     def _restart_timeline(self):
         timeline = self.state.timeline

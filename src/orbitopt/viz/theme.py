@@ -402,9 +402,57 @@ QLabel#bodyStatValue {{
     color: {INK_PRIMARY};
 }}
 
-QLabel#metReadout {{
+QLineEdit#metReadout {{
+    font-family: {FONT_MONO};
     font-size: 13px;
     color: {INK_PRIMARY};
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    padding: 2px 4px;
+    selection-background-color: {ACCENT_MID};
+}}
+QLineEdit#metReadout:hover {{
+    border-color: {HAIRLINE};
+}}
+QLineEdit#metReadout:focus {{
+    background: {PANEL_RAISED};
+    border-color: {ACCENT_MID};
+}}
+QLineEdit#metReadout[invalid="true"] {{
+    border-color: {DANGER};
+}}
+QPushButton#timelineToolButton {{
+    min-width: 24px;
+    max-width: 24px;
+    min-height: 24px;
+    max-height: 24px;
+    padding: 0;
+    font-family: {FONT_MONO};
+    font-size: 14px;
+    background: transparent;
+    border: 1px solid {HAIRLINE};
+    border-radius: 2px;
+    color: {INK_SECONDARY};
+}}
+QPushButton#timelineTextButton {{
+    min-height: 24px;
+    max-height: 24px;
+    padding: 0 8px;
+    font-family: {FONT_MONO};
+    font-size: 10.5px;
+    background: transparent;
+    border: 1px solid {HAIRLINE};
+    border-radius: 2px;
+    color: {INK_SECONDARY};
+}}
+QPushButton#timelineToolButton:hover, QPushButton#timelineTextButton:hover {{
+    color: {INK_PRIMARY};
+    background: {SURFACE_HOVER};
+}}
+QPushButton#timelineToolButton:disabled, QPushButton#timelineTextButton:disabled {{
+    color: {INK_MUTED};
+    border-color: {BORDER_SOFT};
 }}
 QLabel#eventReadout {{
     font-size: 11px;

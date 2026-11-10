@@ -85,36 +85,32 @@ def test_phase_strip_highlights_current_phase_and_seeks_on_click():
     from PySide6.QtWidgets import QApplication
 
     from orbitopt.viz.state import MissionState
-    from orbitopt.viz.timeline_bar import TimelineBar
+    from orbitopt.viz.timeline_bar import TimelineBar, TimelineTrack
 
     app = QApplication.instance() or QApplication([])
     state = MissionState()
     bar = TimelineBar(state)
-    bar.resize(900, 100)
+    bar.resize(900, 140)
     bar.show()
     state.set_scene(_scene(phase_spans([("Outbound", 0.0, 4.0), ("Flyby", 4.0, 6.0), ("Return", 6.0, 10.0)])))
     app.processEvents()
-    strip = bar.phase_strip
-    assert strip.isVisible() and bar.height() == TimelineBar._BASE_HEIGHT + strip.HEIGHT + 2
+    track = bar.track
+    assert "phases" in track._rows()
+    assert track.height() == track._height(True) and bar.height() > track.height()
 
-    # Bands sit on the scrubber's own x scale: phase boundaries line up with
-    # the slider groove's on-screen ends.
-    groove = bar.time_slider._groove()
-    left = strip.mapFromGlobal(bar.time_slider.mapToGlobal(groove.topLeft())).x()
-    assert strip._x(0.0) == pytest.approx(left, abs=1.0)
-    assert strip._x(10.0) == pytest.approx(left + groove.width(), abs=1.0)
-    # Inside the strip. Not "> 0": whether the groove has a left margin is up
-    # to the Qt style (macOS insets it; Fusion, offscreen and Linux CI don't).
-    assert 0 <= strip._x(0.0) < strip._x(10.0) <= strip.width()
+    # Phases sit on the track's own x scale.
+    assert track.x_of(0.0) == pytest.approx(track.track_left)
+    assert track.x_of(10.0) == pytest.approx(track.track_left + track.track_width)
 
     state.set_time(5.0)
-    assert strip.current_phase()["label"] == "Flyby"
-    x_return = 0.5 * (strip._x(6.0) + strip._x(10.0))
-    assert strip.phase_at(x_return)["label"] == "Return"
-    strip._state.set_time(strip.phase_at(x_return)["start"])
-    assert state.time == 6.0
-    assert not strip.grab().isNull()
+    assert track.current_phase()["label"] == "Flyby"
+    x_return = 0.5 * (track.x_of(6.0) + track.x_of(10.0))
+    assert track.phase_at(x_return)["label"] == "Return"
+    track.zoom_to_phase(track.phase_at(x_return))
+    assert track.window.start < 6.0 and track.window.end == pytest.approx(10.0)
+    assert track.phase_at(track.x_of(8.0))["label"] == "Return"  # still right when zoomed
+    assert not track.grab().isNull()
 
-    state.set_scene(_scene([]))  # no phases: strip hidden, bar back to its base height
-    assert strip.isHidden() and bar.height() == TimelineBar._BASE_HEIGHT
+    state.set_scene(_scene([]))  # no phases: the lane goes, the track shrinks
+    assert "phases" not in track._rows() and track.height() == TimelineTrack._height(track, False)
     bar.close()

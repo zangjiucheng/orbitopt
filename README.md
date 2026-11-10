@@ -260,18 +260,29 @@ playing it. Every panel follows the same selection and mission time:
   re-runs GOES with verification on and shows the resulting report (cached
   after the first run). From the CLI, `orbitopt run` a `geo-raising` config
   with `verification.enabled: true`.
-- **Timeline** (bottom). Time warp, events, and the mission's phases
-  (parking orbit, cruise, lunar flyby, ...); click a phase to jump to it.
+- **Timeline** (bottom). A zoomable track, from the whole mission down to
+  two seconds across: scroll to zoom about the cursor, scroll sideways or
+  right-drag to pan, drag to scrub (continuous time, so sub-second at the
+  deepest zoom). An overview strip above the ruler brackets the visible
+  window. Below it are the mission's phases (parking orbit, cruise, lunar
+  flyby, ...) and the events with their names; click one to jump to it,
+  double-click to zoom to it. Type in the time box (G) to jump to
+  `T+22:32:34`, `6m35s`, `+30s` or a UTC date. Time warp and auto-slow
+  sit on the right.
+- **Flight data labels** (L). Next to each vehicle: height above the
+  ellipsoid, speed (and surface-relative speed below 120 km), delta-v
+  spent so far, and the burn in progress.
 
 ![Artemis II centered on the Moon at closest approach: the lunar-flyby phase lit on the timeline, the distance chart dipping at the Moon, and the Verification tab listing the checks the free return passed](docs/assets/mission-control-artemis.png)
 
 <img src="docs/assets/mission-control-shortcuts.png" alt="Mission Control keyboard shortcuts" width="320" align="right">
 
-Shortcuts: Space play/pause · ←/→ step · Shift+←/→ previous/next event ·
-Home restart · `,` `.` time warp down/up a KSP level (1× = real time, up to
+Shortcuts: Space play/pause · ←/→ step (1% of the visible timeline) ·
+Shift+←/→ previous/next event · Home restart · `=` `-` `0` zoom the
+timeline in/out/fit · G go to time · `,` `.` time warp down/up a KSP level (1× = real time, up to
 10,000,000×) · `/` back to real time · `[` `]` fine-tune warp ·
 Tab / Shift+Tab cycle focus (spacecraft first, as in KSP's map view) ·
-T track body · M focus body · I toggle the right panel · F1 shortcut reference.
+T track body · L flight labels · M focus body · I toggle the right panel · F1 shortcut reference.
 
 The screenshots are regenerated with `scripts/capture_screenshots.py`.
 

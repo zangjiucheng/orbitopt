@@ -91,7 +91,7 @@ def test_mission_control_loads_and_switches_missions():
         window.right_tabs.setCurrentWidget(window.inspector)
 
         # Phases: the lunar flyby is the Moon-SOI crossing and contains perilune.
-        phases = window.timeline_bar.phase_strip.phases
+        phases = window.timeline_bar.track.phases
         flyby = next(p for p in phases if p["label"] == "Lunar flyby")
         closest = next(e["time"] for e in state.events if "approach" in e["label"].lower())
         assert flyby["start"] < closest < flyby["end"]
@@ -116,6 +116,14 @@ def test_mission_control_loads_and_switches_missions():
         window._set_tracking(False)
         window.state.select_body(None)
 
+        # Flight-data label next to the spacecraft (L toggles it).
+        label = window.renderer.flight_label_text("spacecraft")
+        assert label is not None and "\nH " in label and "\nV " in label
+        assert "\nΔv " not in label  # Artemis II's events carry no burn vectors: no Δv line
+        window.labels_action.setChecked(False)
+        assert window.renderer.flight_label_text("spacecraft") is None
+        window.labels_action.setChecked(True)
+
         # Linked charts: Artemis II has no launch-window screen, only distances.
         charts = window.chart_panel
         assert not charts.isHidden()
@@ -125,19 +133,24 @@ def test_mission_control_loads_and_switches_missions():
         timeline = state.timeline
         perilune_day = next(e["time"] for e in timeline["events"] if "approach" in e["label"].lower())
         frac = (perilune_day - timeline["min"]) / (timeline["max"] - timeline["min"])
-        slider = window.timeline_bar.time_slider
-        slider.setValue(int(frac * slider.maximum()))
+        track = window.timeline_bar.track
+        from PySide6.QtCore import QPoint
+        from PySide6.QtTest import QTest
+
+        x = track.track_left + frac * track.track_width
+        y = 0.5 * sum(track._rows()["ruler"])
+        QTest.mouseClick(track, Qt.LeftButton, Qt.NoModifier, QPoint(round(x), round(y)))
         for _ in range(5):
             app.processEvents()
 
         assert abs(state.time - perilune_day) < 0.05
         assert "km" in window.inspector.distance_text("spacecraft")
-        assert window.timeline_bar.met_label.text().startswith(f"T+{state.time:.2f}")
+        assert window.timeline_bar.met_edit.text() == window.timeline_bar.met_text()
 
-        # Moving time through the state (not the slider) moves the slider too.
+        # Moving time through the state (not the track) moves the playhead too.
         state.set_time(timeline["min"])
         app.processEvents()
-        assert slider.value() == 0
+        assert window.timeline_bar.met_edit.text() == "T+0:00:00"
 
         # Clicking a maneuver row seeks to it. Artemis II's events carry no burn
         # vectors, so this is the seek-only path (no auto-frame/selection).

@@ -29,7 +29,7 @@ def test_date_readout_is_cleared_for_a_timeline_without_an_epoch():
     state.set_scene(_scene())
     assert bar.date_label.text() == ""
     state.set_time(2.0)
-    assert bar.date_label.text() == "" and bar.met_label.text() == "T+2.00 days"
+    assert bar.date_label.text() == "" and bar.met_edit.text() == "T+2d 00:00:00"
 
 
 def test_warp_is_ksp_style_real_time_multiplier():
@@ -78,3 +78,59 @@ def test_timeline_bar_picks_the_scene_default_warp_and_steps():
     assert bar.warp == 100_000.0 and bar.speed_value_label.text().startswith("100k×")
     bar.set_warp(1.0)
     assert bar.speed_value_label.text() == "1× · 1 s/s"
+
+
+def test_typing_a_time_jumps_there_and_the_track_zooms_and_follows():
+    from PySide6.QtWidgets import QApplication
+
+    from orbitopt.viz.state import MissionState
+    from orbitopt.viz.timeline_bar import TimelineBar
+
+    app = QApplication.instance() or QApplication([])
+    state = MissionState()
+    bar = TimelineBar(state)
+    bar.resize(1000, 140)
+    bar.show()
+    scene = _scene(ref_et=838814469.0)
+    scene["timeline"]["events"] = [{"time": 1.0, "label": "Burn", "vector": {"deltaV": [0.0, 0.01, 0.0]}},
+                                   {"time": 1.0 + 30.0 / 86400.0, "label": "Note"}]
+    state.set_scene(scene)
+    app.processEvents()
+    track = bar.track
+    assert track.window.is_fit and bar.zoom_label.text() == "4 d"
+
+    bar.met_edit.setText("T+1d 06:00:00")
+    bar.met_edit.returnPressed.emit()
+    assert state.time == pytest.approx(1.25)
+    bar.met_edit.setText("-6h")  # relative to now
+    bar.met_edit.returnPressed.emit()
+    assert state.time == pytest.approx(1.0)
+    bar.met_edit.setText("not a time")
+    bar.met_edit.returnPressed.emit()
+    assert state.time == pytest.approx(1.0) and bar.met_edit.property("invalid") is True
+
+    # Zoom in on the playhead: the ruler, step and readout get finer.
+    step_fit = bar.step_size()
+    track.zoom(1000)
+    assert track.window.span == pytest.approx(4.0 / 1000)
+    assert track.window.start <= state.time <= track.window.end
+    assert bar.step_size() == pytest.approx(step_fit / 1000)
+    assert bar.zoom_label.text() == "5.76 min"
+    # Scrubbing at this zoom is sub-second.
+    x = track.x_of(state.time)
+    assert track.time_at(x + 1) - track.time_at(x) < 1.0 / 86400.0
+    # The event lane snaps to the burn; double-clicking frames it.
+    assert track.events_near(track.x_of(1.0))[0]["label"] == "Burn"
+    track.zoom_to_event(scene["timeline"]["events"][0])
+    assert track.window.start < 1.0 < track.window.end and track.window.span < 1.0 / 24
+
+    # Playback running off the right edge pages the view along.
+    state.set_time(track.window.end + 0.1 * track.window.span)
+    assert track.window.start <= state.time <= track.window.end
+    # A far jump centers on it.
+    state.set_time(3.5)
+    assert track.window.start < 3.5 < track.window.end
+    track.fit()
+    assert track.window.is_fit and not bar.fit_btn.isEnabled()
+    assert not bar.grab().isNull()
+    bar.close()

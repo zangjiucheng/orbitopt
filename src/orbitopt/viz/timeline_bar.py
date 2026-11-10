@@ -1,36 +1,62 @@
-"""The mission timeline strip under the 3D view: play/pause, the time-warp
-rate, and the event-marked scrubber with its MET / date / active-event
-readouts. It reads and writes the current time through MissionState only, so
-anything else that moves time (playback, a maneuver click, a keyboard step)
-moves this bar too without the window having to update it by hand."""
+"""The mission timeline under the 3D view: play / event-step buttons, a time
+box you can type into, the time-warp control, and a zoomable track.
+
+The track (TimelineTrack) shows a window of the mission that zooms from the
+whole span down to two seconds (timeline_view.TimeWindow): an overview strip
+with the visible window bracketed, a ruler with MET ticks that adapt to the
+zoom, the mission phases, and the events with their names. Time is
+continuous -- scrubbing at the deepest zoom moves it by milliseconds, where
+the old 10,000-step slider moved it by eight seconds on Starship's timeline
+and by forty minutes on a Mars cruise.
+
+Mouse: drag on the track to scrub, scroll to zoom about the cursor (scroll
+sideways, or right-drag, to pan), drag the bracket in the overview strip to
+pan, double-click a phase or an event to zoom to it. Keys (window menu):
+= / - zoom, 0 fit, G focus the time box.
+
+It reads and writes the current time through MissionState only, so anything
+else that moves time (playback, a maneuver click, a keyboard step) moves the
+track too without the window having to update it by hand.
+"""
 from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QSlider,
-    QStyle,
-    QStyleOptionSlider,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
 
 from orbitopt.viz import icons
-from orbitopt.viz.state import MissionState, time_to_fraction
+from orbitopt.viz.state import MissionState, maneuver_windows
 from orbitopt.viz.theme import (
     ACCENT,
     ACCENT_DIM,
+    ACCENT_MID,
     HAIRLINE,
     INK_MUTED,
     INK_PRIMARY,
     INK_SECONDARY,
+    PANEL,
     PANEL_RAISED,
     SURFACE_HOVER,
+)
+from orbitopt.viz.timeline_view import (
+    TimeWindow,
+    format_met,
+    format_ruler_label,
+    minor_step_s,
+    parse_time_input,
+    tick_step_s,
+    ticks,
 )
 
 # KSP-style time warp: the multiplier is simulated seconds per real second,
@@ -103,152 +129,106 @@ def default_warp(span_seconds: float, playback_real_s: float = DEFAULT_PLAYBACK_
     return min(WARP_LEVELS[1:], key=lambda w: abs(math.log(w) - math.log(target)))
 
 
-# Resolution of the time scrubber (slider steps across the whole timeline).
-TIME_SLIDER_STEPS = 10000
-
 
 def epoch_to_date_string(reference_et: float, day_offset: float) -> str:
     from orbitopt.timescales import tdb_seconds_to_utc_datetime
 
     dt = tdb_seconds_to_utc_datetime(reference_et + day_offset * 86400.0)
-    return dt.strftime("%Y-%m-%d %H:%M UTC")
+    return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-class EventSlider(QSlider):
-    """The timeline scrubber, with a marker painted over the groove at each
-    mission event (burns, flybys, insertions). Hovering near a marker shows
-    every event within reach (not just one -- events that land within a few
-    pixels of each other, e.g. a burn immediately followed by an SOI-exit
-    note, used to be visually indistinguishable and only the first-added one
-    was ever reachable by click); clicking snaps to whichever is nearest.
-    Falls back to a plain slider when the scene has no timeline events."""
+def format_view_span(seconds: float) -> str:
+    """The zoom readout: '2 s', '45 s', '6.5 min', '3.2 h', '12 d'."""
+    for unit, size in (("d", 86400.0), ("h", 3600.0), ("min", 60.0)):
+        if seconds >= 1.5 * size:
+            return f"{_sig(seconds / size)} {unit}"
+    return f"{_sig(seconds)} s"
 
+
+def _mono_font(point_size: float) -> QFont:
+    font = QFont()
+    font.setFamilies(["IBM Plex Mono", "SF Mono", "Menlo", "Consolas", "monospace"])
+    font.setPointSizeF(point_size)
+    return font
+
+
+class TimelineTrack(QWidget):
+    """The zoomable, painted timeline (see the module docstring)."""
+
+    view_changed = Signal()
+
+    PAD_X = 10
+    OVERVIEW_H = 10
+    RULER_H = 22
+    PHASE_H = 16
+    EVENT_H = 22
+    GAP = 3
     _HIT_TOLERANCE_PX = 7
-    # A normal marker's own triangle is ~6px wide (see paintEvent's `half`),
-    # so anything closer than that already visually overlaps -- clustering
-    # only below 3px (an earlier value here) left genuinely-touching markers
-    # rendered as two separate, ambiguous shapes instead of one clear
-    # cluster mark. Confirmed empirically against a real rendered frame, not
-    # assumed: the Mars mission's Mars-SOI-entry/MOI events, ~4.8px apart in
-    # practice, looked like touching-but-unmerged marks at the old value.
-    _CLUSTER_TOLERANCE_PX = 6
+    _WHEEL_ZOOM_PER_NOTCH = 1.25  # one 120-unit wheel notch
 
-    def __init__(self, parent=None):
-        super().__init__(Qt.Horizontal, parent)
-        self._events = []  # list of (slider_value:int, label:str, note:str)
-        self.setMouseTracking(True)
-
-    def set_events(self, events, t_min, t_max):
-        self._events = []
-        span = (t_max - t_min) or 1.0
-        lo, hi = self.minimum(), self.maximum()
-        for e in events:
-            frac = min(1.0, max(0.0, (e.get("time", t_min) - t_min) / span))
-            self._events.append((int(round(lo + frac * (hi - lo))),
-                                 e.get("label", ""), e.get("note", "")))
-        self.update()
-
-    def _groove(self):
-        opt = QStyleOptionSlider()
-        self.initStyleOption(opt)
-        return self.style().subControlRect(QStyle.CC_Slider, opt, QStyle.SC_SliderGroove, self)
-
-    def _value_to_x(self, value):
-        groove = self._groove()
-        span = (self.maximum() - self.minimum()) or 1
-        return groove.left() + int((value - self.minimum()) / span * groove.width())
-
-    def _events_near(self, x, tol):
-        """Every event within `tol` px of `x`, nearest first -- not just the
-        first one added, so a click/hover near a cluster of close-together
-        events reaches all of them instead of being stuck on whichever
-        happened to be first in the scene's event list."""
-        near = sorted(
-            ((abs(self._value_to_x(ev[0]) - x), ev) for ev in self._events),
-            key=lambda pair: pair[0],
-        )
-        return [ev for dist, ev in near if dist <= tol]
-
-    def _event_near(self, x, tol=None):
-        near = self._events_near(x, self._HIT_TOLERANCE_PX if tol is None else tol)
-        return near[0] if near else None
-
-    def paintEvent(self, event):  # noqa: N802
-        super().paintEvent(event)
-        if not self._events:
-            return
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        cy = self.height() // 2
-
-        # Bucket by rounded pixel position so events within
-        # _CLUSTER_TOLERANCE_PX draw as one bolder cluster mark instead of
-        # silently overlapping into what looks like (and, before this fix,
-        # behaved as) a single ordinary event.
-        buckets: dict[int, list] = {}
-        for value, label, note in self._events:
-            x = self._value_to_x(value)
-            buckets.setdefault(round(x / self._CLUSTER_TOLERANCE_PX), []).append(x)
-        centers = {key: round(sum(xs) / len(xs)) for key, xs in buckets.items()}
-        counts = {key: len(xs) for key, xs in buckets.items()}
-
-        for key, x in centers.items():
-            clustered = counts[key] > 1
-            painter.setPen(QPen(QColor(ACCENT), 1.8 if clustered else 1.4))
-            painter.setBrush(QColor(ACCENT))
-            painter.drawLine(x, 7, x, cy + 2)
-            half = 4.2 if clustered else 3.0
-            tri = QPainterPath()
-            tri.moveTo(x - half, 1.0)
-            tri.lineTo(x + half, 1.0)
-            tri.lineTo(x, 7.0)
-            tri.closeSubpath()
-            painter.drawPath(tri)
-            if clustered:
-                # A small dot below the marker's guide line signals "more
-                # than one event here" at a glance, without needing to hover
-                # first. Below, not above: the widget's actual rendered
-                # height is ~16px (QSlider::handle's 15px + a hair), so a
-                # mark above y=0 is silently clipped by Qt's paint-event
-                # clip rect -- confirmed empirically by grabbing a real
-                # rendered frame and finding zero accent-colored pixels in
-                # that band, not assumed from the geometry alone.
-                painter.drawEllipse(QRectF(x - 1.6, cy + 4.0, 3.2, 3.2))
-        painter.end()
-
-    def mouseMoveEvent(self, event):  # noqa: N802
-        near = self._events_near(int(event.position().x()), self._HIT_TOLERANCE_PX)
-        text = "\n\n".join(f"{label}\n{note}".strip() for _value, label, note in near)
-        self.setToolTip(text)
-        super().mouseMoveEvent(event)
-
-    def mousePressEvent(self, event):  # noqa: N802
-        ev = self._event_near(int(event.position().x()))
-        if ev is not None:
-            self.setValue(ev[0])  # snap to the nearest event
-            return
-        super().mousePressEvent(event)
-
-
-
-class PhaseStrip(QWidget):
-    """The scene's mission phases as bands under the scrubber, on the same x
-    scale as its groove: the current phase in the accent tint, the others in
-    two alternating neutrals (phases differ per mission, so they get no
-    categorical colors). Hover names the span; click jumps to its start."""
-
-    HEIGHT = 18
-
-    def __init__(self, slider: QSlider, state: MissionState, parent: QWidget | None = None):
+    def __init__(self, state: MissionState, parent: QWidget | None = None):
         super().__init__(parent)
-        self._slider = slider
         self._state = state
+        self.window: TimeWindow | None = None
+        self._unit_s = 86400.0
         self._phases: list[dict] = []
-        self.setFixedHeight(self.HEIGHT)
+        self._drag: str | None = None  # "scrub" | "pan" | "overview"
+        self._drag_anchor = (0.0, 0.0)  # (x, window start) when a pan began
+        self._hover_x: float | None = None
         self.setMouseTracking(True)
+        self.setMinimumHeight(self._height(False))
         state.scene_changed.connect(self._on_scene_changed)
-        state.time_changed.connect(lambda _t: self.update())
+        state.time_changed.connect(self._on_time_changed)
 
+    # ------------------------------------------------------------ layout
+    def _height(self, phases: bool) -> int:
+        return (self.OVERVIEW_H + self.GAP + self.RULER_H + self.EVENT_H
+                + ((self.PHASE_H + self.GAP) if phases else 0) + 2)
+
+    def _rows(self) -> dict[str, tuple[float, float]]:
+        """(top, bottom) of each row in widget coordinates."""
+        y = 0.0
+        rows = {"overview": (y, y + self.OVERVIEW_H)}
+        y += self.OVERVIEW_H + self.GAP
+        rows["ruler"] = (y, y + self.RULER_H)
+        y += self.RULER_H
+        if self._phases:
+            rows["phases"] = (y + 1, y + 1 + self.PHASE_H)
+            y += self.PHASE_H + self.GAP
+        rows["events"] = (y, y + self.EVENT_H)
+        return rows
+
+    def _row_at(self, y: float) -> str | None:
+        for name, (top, bottom) in self._rows().items():
+            if top - 1 <= y <= bottom + 1:
+                return name
+        return None
+
+    @property
+    def track_left(self) -> float:
+        return float(self.PAD_X)
+
+    @property
+    def track_width(self) -> float:
+        return max(1.0, self.width() - 2.0 * self.PAD_X)
+
+    def x_of(self, t: float) -> float:
+        """Widget x of timeline time ``t`` on the zoomed rows."""
+        return self.track_left + self.window.to_fraction(t) * self.track_width
+
+    def time_at(self, x: float) -> float:
+        f = (x - self.track_left) / self.track_width
+        return min(self.window.hi, max(self.window.lo, self.window.from_fraction(f)))
+
+    def _overview_x(self, t: float) -> float:
+        w = self.window
+        return self.track_left + (t - w.lo) / w.full_span * self.track_width
+
+    def _overview_time(self, x: float) -> float:
+        w = self.window
+        return w.lo + (x - self.track_left) / self.track_width * w.full_span
+
+    # ------------------------------------------------------------ state
     @property
     def phases(self) -> list[dict]:
         return self._phases
@@ -256,79 +236,352 @@ class PhaseStrip(QWidget):
     def _on_scene_changed(self, _scene):
         timeline = self._state.timeline
         self._phases = list((timeline or {}).get("phases", []))
-        self.setVisible(bool(self._phases))
+        if timeline is None:
+            self.window = None
+        else:
+            self._unit_s = timeline_unit_seconds(timeline.get("unitLabel"))
+            self.window = TimeWindow.fit(timeline["min"], timeline["max"], self._unit_s)
+        self.setFixedHeight(self._height(bool(self._phases)))
+        self.view_changed.emit()
         self.update()
 
-    def _x(self, t: float) -> float:
-        groove = self._slider._groove()
-        # The slider is a sibling, not an ancestor: go through global
-        # coordinates (QWidget.mapTo needs a parent).
-        origin = self.mapFromGlobal(self._slider.mapToGlobal(groove.topLeft())).x()
-        return origin + time_to_fraction(self._state.timeline, t) * groove.width()
+    def _on_time_changed(self, t: float):
+        if self.window is not None and self._drag != "scrub" and self.window.follow(t):
+            self.view_changed.emit()
+        self.update()
 
     def current_phase(self) -> dict | None:
         t = self._state.time
         return next((p for p in self._phases if p["start"] <= t <= p["end"]), None)
 
     def phase_at(self, x: float) -> dict | None:
-        return next((p for p in self._phases if self._x(p["start"]) <= x <= self._x(p["end"])), None)
+        if self.window is None:
+            return None
+        t = self.time_at(x)
+        return next((p for p in self._phases if p["start"] <= t <= p["end"]), None)
 
-    def paintEvent(self, _event):  # noqa: N802
-        if not self._phases or self._state.timeline is None:
+    def events_near(self, x: float, tol: float | None = None) -> list[dict]:
+        """Events within ``tol`` px of ``x`` on the zoomed rows, nearest first."""
+        if self.window is None:
+            return []
+        tol = self._HIT_TOLERANCE_PX if tol is None else tol
+        near = sorted(((abs(self.x_of(e.get("time", 0.0)) - x), k, e)
+                       for k, e in enumerate(self._state.events)), key=lambda p: (p[0], p[1]))
+        return [e for d, _k, e in near if d <= tol]
+
+    # ------------------------------------------------------------ view
+    def set_view(self, start: float, end: float):
+        if self.window is not None:
+            self.window.set(start, end)
+            self.view_changed.emit()
+            self.update()
+
+    def zoom(self, factor: float, anchor: float | None = None):
+        """Zoom by ``factor`` about ``anchor`` (default: the playhead when it
+        is in view, else the window's center)."""
+        if self.window is None:
             return
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        font = painter.font()
-        font.setPointSizeF(8.5)
-        painter.setFont(font)
-        current = self.current_phase()
+        if anchor is None:
+            t = self._state.time
+            anchor = t if self.window.start <= t <= self.window.end else None
+        self.window.zoom(factor, anchor)
+        self.view_changed.emit()
+        self.update()
+
+    def fit(self):
+        if self.window is not None:
+            self.window.reset()
+            self.view_changed.emit()
+            self.update()
+
+    def zoom_to_phase(self, phase: dict):
+        pad = 0.04 * (phase["end"] - phase["start"])
+        self.set_view(phase["start"] - pad, phase["end"] + pad)
+
+    def zoom_to_event(self, event: dict):
+        """Frame an event with its neighbourhood: its burn-arrow window (half
+        the gap to the nearest other event, capped), at least a minute."""
+        if self.window is None:
+            return
+        windows = maneuver_windows(self._state.events, self.window.full_span)
+        half = max(windows.get(id(event), 0.0) * 1.5, 60.0 / self._unit_s)
+        t = event.get("time", 0.0)
+        self.set_view(t - half, t + half)
+
+    # ------------------------------------------------------------ paint
+    def paintEvent(self, _event):  # noqa: N802
+        if self.window is None:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        rows = self._rows()
+        self._paint_overview(p, *rows["overview"])
+        self._paint_ruler(p, *rows["ruler"])
+        if "phases" in rows:
+            self._paint_phases(p, *rows["phases"])
+        self._paint_events(p, *rows["events"])
+        self._paint_playhead(p, rows["ruler"][0], rows["events"][1])
+        p.end()
+
+    def _paint_overview(self, p: QPainter, top: float, bottom: float):
+        w, left, width = self.window, self.track_left, self.track_width
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(PANEL_RAISED))
+        p.drawRoundedRect(QRectF(left, top, width, bottom - top), 2, 2)
         for k, phase in enumerate(self._phases):
-            x0, x1 = self._x(phase["start"]), self._x(phase["end"])
-            rect = QRectF(x0, 2.0, max(1.0, x1 - x0), self.height() - 4.0)
+            x0, x1 = self._overview_x(phase["start"]), self._overview_x(phase["end"])
+            p.setBrush(QColor(SURFACE_HOVER if k % 2 else HAIRLINE))
+            p.drawRect(QRectF(x0, top + 3, max(1.0, x1 - x0), bottom - top - 6))
+        p.setPen(QPen(QColor(ACCENT_MID), 1.0))
+        for e in self._state.events:
+            x = self._overview_x(e.get("time", 0.0))
+            p.drawLine(QPointF(x, top + 1), QPointF(x, bottom - 1))
+        # The visible window, bracketed (the whole strip at fit).
+        x0, x1 = self._overview_x(w.start), self._overview_x(w.end)
+        x1 = max(x1, x0 + 3.0)  # stays grabbable however deep the zoom
+        p.setPen(QPen(QColor(INK_SECONDARY if not w.is_fit else HAIRLINE), 1.2))
+        p.setBrush(QColor(255, 255, 255, 18 if not w.is_fit else 0))
+        p.drawRoundedRect(QRectF(x0, top + 0.5, x1 - x0, bottom - top - 1), 2, 2)
+        xt = self._overview_x(self._state.time)
+        p.setPen(QPen(QColor(ACCENT), 1.6))
+        p.drawLine(QPointF(xt, top - 1), QPointF(xt, bottom + 1))
+
+    def _paint_ruler(self, p: QPainter, top: float, bottom: float):
+        w = self.window
+        span_s = w.span * self._unit_s
+        major = tick_step_s(span_s, self.track_width)
+        minor = minor_step_s(major)
+        p.setPen(QPen(QColor(HAIRLINE), 1.0))
+        p.drawLine(QPointF(self.track_left, bottom), QPointF(self.track_left + self.track_width, bottom))
+        for t in ticks(w.start, w.end, self._unit_s, minor):
+            x = self.x_of(t)
+            p.drawLine(QPointF(x, bottom - 4), QPointF(x, bottom))
+        p.setFont(_mono_font(8.5))
+        fm = p.fontMetrics()
+        for t in ticks(w.start, w.end, self._unit_s, major):
+            x = self.x_of(t)
+            p.setPen(QPen(QColor(INK_MUTED), 1.0))
+            p.drawLine(QPointF(x, bottom - 9), QPointF(x, bottom))
+            text = format_ruler_label(t * self._unit_s, major)
+            tw = fm.horizontalAdvance(text)
+            tx = min(max(x + 3, self.track_left), self.track_left + self.track_width - tw)
+            p.setPen(QColor(INK_SECONDARY))
+            p.drawText(QPointF(tx, top + fm.ascent() + 1), text)
+        if self._hover_x is not None and self.track_left <= self._hover_x <= self.track_left + self.track_width:
+            p.setPen(QPen(QColor(INK_MUTED), 1.0, Qt.DashLine))
+            p.drawLine(QPointF(self._hover_x, top), QPointF(self._hover_x, self._rows()["events"][1]))
+
+    def _paint_phases(self, p: QPainter, top: float, bottom: float):
+        current = self.current_phase()
+        font = QFont(self.font())
+        font.setPointSizeF(8.5)
+        p.setFont(font)
+        left, right = self.track_left, self.track_left + self.track_width
+        for k, phase in enumerate(self._phases):
+            x0, x1 = max(self.x_of(phase["start"]), left), min(self.x_of(phase["end"]), right)
+            if x1 <= x0:
+                continue
+            rect = QRectF(x0, top, max(1.0, x1 - x0), bottom - top)
             active = phase is current
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(ACCENT_DIM if active else (PANEL_RAISED if k % 2 == 0 else SURFACE_HOVER)))
-            painter.drawRect(rect)
-            painter.setPen(QPen(QColor(HAIRLINE), 1.0))
-            painter.drawLine(rect.topLeft(), rect.bottomLeft())
-            text = painter.fontMetrics().elidedText(phase["label"], Qt.ElideRight, int(rect.width() - 8))
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(ACCENT_DIM if active else (PANEL_RAISED if k % 2 == 0 else SURFACE_HOVER)))
+            p.drawRect(rect)
+            p.setPen(QPen(QColor(HAIRLINE), 1.0))
+            p.drawLine(rect.topLeft(), rect.bottomLeft())
+            text = p.fontMetrics().elidedText(phase["label"], Qt.ElideRight, int(rect.width() - 8))
             if text and text != "…":
-                painter.setPen(QColor(INK_PRIMARY if active else INK_SECONDARY))
-                painter.drawText(rect.adjusted(4, 0, -4, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
-        painter.end()
+                p.setPen(QColor(INK_PRIMARY if active else INK_SECONDARY))
+                p.drawText(rect.adjusted(4, 0, -4, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
+
+    def _paint_events(self, p: QPainter, top: float, bottom: float):
+        left, right = self.track_left, self.track_left + self.track_width
+        visible = sorted(((self.x_of(e.get("time", 0.0)), e) for e in self._state.events
+                          if left - 1 <= self.x_of(e.get("time", 0.0)) <= right + 1), key=lambda p_: p_[0])
+        font = QFont(self.font())
+        font.setPointSizeF(8.5)
+        p.setFont(font)
+        fm = p.fontMetrics()
+        active = self._state.active_event()
+        cy = top + 7.0
+        label_end = -1e9  # right edge of the last label drawn, so labels never overlap
+        for k, (x, e) in enumerate(visible):
+            burn = "vector" in e
+            p.setPen(QPen(QColor(ACCENT), 1.3))
+            p.setBrush(QColor(ACCENT) if burn else QColor(PANEL))
+            if burn:
+                tri = QPainterPath()
+                tri.moveTo(x - 4.0, cy - 5.0)
+                tri.lineTo(x + 4.0, cy - 5.0)
+                tri.lineTo(x, cy + 2.0)
+                tri.closeSubpath()
+                p.drawPath(tri)
+            else:
+                p.drawEllipse(QRectF(x - 3.0, cy - 4.5, 6.0, 6.0))
+            next_x = visible[k + 1][0] if k + 1 < len(visible) else right + 1e9
+            room = min(next_x - x - 10.0, right - x - 6.0)
+            if x - 2 < label_end or room < 24:
+                continue
+            text = fm.elidedText(e.get("label", ""), Qt.ElideRight, int(room))
+            if not text or text == "…":
+                continue
+            p.setPen(QColor(INK_PRIMARY if e is active else INK_SECONDARY))
+            p.drawText(QPointF(x + 6.0, top + 7.0 + fm.ascent() - 1), text)
+            label_end = x + 6.0 + fm.horizontalAdvance(text)
+
+    def _paint_playhead(self, p: QPainter, top: float, bottom: float):
+        t = self._state.time
+        if not (self.window.start <= t <= self.window.end):
+            return
+        x = self.x_of(t)
+        p.setPen(QPen(QColor(ACCENT), 1.6))
+        p.drawLine(QPointF(x, top + 4), QPointF(x, bottom))
+        head = QPainterPath()
+        head.moveTo(x - 5.0, top)
+        head.lineTo(x + 5.0, top)
+        head.lineTo(x, top + 6.0)
+        head.closeSubpath()
+        p.setBrush(QColor(ACCENT))
+        p.setPen(Qt.NoPen)
+        p.drawPath(head)
+
+    # ------------------------------------------------------------ mouse
+    def mousePressEvent(self, event):  # noqa: N802
+        if self.window is None:
+            return
+        x, y = event.position().x(), event.position().y()
+        row = self._row_at(y)
+        if event.button() in (Qt.RightButton, Qt.MiddleButton) or (
+                event.button() == Qt.LeftButton and event.modifiers() & Qt.AltModifier):
+            self._drag, self._drag_anchor = "pan", (x, self.window.start)
+            self.setCursor(Qt.ClosedHandCursor)
+            return
+        if event.button() != Qt.LeftButton:
+            return
+        if row == "overview":
+            w = self.window
+            x0, x1 = self._overview_x(w.start), self._overview_x(w.end)
+            if not (x0 - 3 <= x <= max(x1, x0 + 3) + 3):
+                w.center_on(self._overview_time(x))
+                self.view_changed.emit()
+            self._drag, self._drag_anchor = "overview", (x, self.window.start)
+            self.update()
+            return
+        if row == "phases":
+            phase = self.phase_at(x)
+            if phase is not None:
+                self._state.set_time(phase["start"])
+            return
+        near = self.events_near(x)
+        if row == "events" and near:
+            self._state.set_time(near[0].get("time", 0.0))  # snap to the event
+            return
+        self._drag = "scrub"
+        self._state.set_time(self.time_at(x))
 
     def mouseMoveEvent(self, event):  # noqa: N802
-        phase = self.phase_at(event.position().x())
-        if phase is None:
-            self.setToolTip("")
-        else:
-            unit = self._state.timeline.get("unitLabel", "")
-            tip = f"{phase['label']}\nT+{phase['start']:.2f} – T+{phase['end']:.2f} {unit}"
-            if phase.get("note"):
-                tip += f"\n{phase['note']}"
-            self.setToolTip(tip + "\nClick to jump to its start")
-        super().mouseMoveEvent(event)
+        if self.window is None:
+            return
+        x, y = event.position().x(), event.position().y()
+        if self._drag == "scrub":
+            self._state.set_time(self.time_at(x))
+        elif self._drag == "pan":
+            x_anchor, start = self._drag_anchor
+            dt = -(x - x_anchor) / self.track_width * self.window.span
+            self.window.pan(start + dt - self.window.start)
+            self.view_changed.emit()
+        elif self._drag == "overview":
+            x_anchor, start = self._drag_anchor
+            dt = (x - x_anchor) / self.track_width * self.window.full_span
+            self.window.pan(start + dt - self.window.start)
+            self.view_changed.emit()
+        self._hover_x = x
+        self._update_tooltip(x, y, event)
+        self.update()
 
-    def mousePressEvent(self, event):  # noqa: N802
-        phase = self.phase_at(event.position().x())
-        if phase is not None:
-            self._state.set_time(phase["start"])
+    def mouseReleaseEvent(self, _event):  # noqa: N802
+        self._drag = None
+        self.unsetCursor()
+
+    def mouseDoubleClickEvent(self, event):  # noqa: N802
+        if self.window is None:
+            return
+        x, row = event.position().x(), self._row_at(event.position().y())
+        near = self.events_near(x)
+        if row == "events" and near:
+            self.zoom_to_event(near[0])
+        elif row == "phases" and self.phase_at(x) is not None:
+            self.zoom_to_phase(self.phase_at(x))
+        elif row == "overview":
+            self.fit()
+
+    def leaveEvent(self, _event):  # noqa: N802
+        self._hover_x = None
+        self.update()
+
+    def wheelEvent(self, event):  # noqa: N802
+        if self.window is None:
+            return
+        pixel, angle = event.pixelDelta(), event.angleDelta()
+        dx = pixel.x() if not pixel.isNull() else angle.x() / 4.0
+        dy = pixel.y() if not pixel.isNull() else angle.y() / 4.0
+        if event.modifiers() & Qt.ShiftModifier and not dx:
+            dx, dy = dy, 0.0
+        if abs(dx) > abs(dy):  # sideways: pan
+            self.window.pan(-dx / self.track_width * self.window.span)
+        else:  # vertical: zoom about the cursor (one notch = 30 px here)
+            factor = self._WHEEL_ZOOM_PER_NOTCH ** (dy / 30.0)
+            self.window.zoom(factor, self.time_at(event.position().x()))
+        self.view_changed.emit()
+        self.update()
+        event.accept()
+
+    def _update_tooltip(self, x: float, y: float, event):
+        row = self._row_at(y)
+        tips = []
+        if row == "phases":
+            phase = self.phase_at(x)
+            if phase is not None:
+                tips.append(f"{phase['label']}\n{format_met(phase['start'] * self._unit_s)} – "
+                            f"{format_met(phase['end'] * self._unit_s)}")
+                if phase.get("note"):
+                    tips.append(phase["note"])
+                tips.append("Click: jump to its start · double-click: zoom to it")
+        elif row == "events":
+            for e in self.events_near(x):
+                tips.append(f"{e.get('label', '')}  {format_met(e.get('time', 0.0) * self._unit_s)}"
+                            + (f"\n{e['note']}" if e.get("note") else ""))
+            if tips:
+                tips.append("Click: jump · double-click: zoom to it")
+        elif row == "overview":
+            tips.append("Whole mission · drag the bracket to pan · double-click: fit")
+        if row in ("ruler", "events", "phases") and not tips:
+            res = self.window.span * self._unit_s / self.track_width
+            tips.append(format_met(self.time_at(x) * self._unit_s, res))
+        text = "\n\n".join(tips) if len(tips) > 1 and row == "events" else "\n".join(tips)
+        if text != self.toolTip():
+            self.setToolTip(text)
+            if text:
+                QToolTip.showText(event.globalPosition().toPoint(), text, self)
 
 
 class TimelineBar(QWidget):
-    """Play button, time-warp control and the event-marked scrubber.
+    """Controls row (play, previous / next event, the time box, the zoom
+    controls, time warp) over the zoomable track.
 
-    Time flows one way: the scrubber writes to ``state`` when the *user*
-    drags it, and follows ``state.time_changed`` otherwise (with its own
-    signals blocked, so following never writes back). The bar owns the
-    time-warp setting (``speed``) and the auto-slow toggle; the playback
-    timer that consumes them lives in the window.
+    Time flows one way: the track and the time box write to ``state`` when
+    the *user* acts, and follow ``state.time_changed`` otherwise. The bar
+    owns the time-warp setting (``warp``) and the auto-slow toggle; the
+    playback timer that consumes them lives in the window.
     """
 
     play_clicked = Signal()
     auto_slow_toggled = Signal(bool)
+    # The previous / next event buttons: the window seeks (and frames a burn)
+    # the same way as for Shift+arrow.
+    event_step_requested = Signal(int)
 
-    _BASE_HEIGHT = 72
+    _CONTROLS_H = 34
+    _MARGINS = (16, 6, 16, 6)
 
     def __init__(self, state: MissionState, parent: QWidget | None = None):
         super().__init__(parent)
@@ -338,26 +591,73 @@ class TimelineBar(QWidget):
         # A QWidget *subclass* only paints its stylesheet background/border
         # with this attribute set (a plain QWidget gets it implicitly).
         self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setFixedHeight(self._BASE_HEIGHT)
         self._build()
         state.scene_changed.connect(self._on_scene_changed)
         state.time_changed.connect(self._on_time_changed)
+        self._fit_height()
 
     # ------------------------------------------------------------- build
     def _build(self):
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 8, 16, 8)
-        layout.setSpacing(12)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(*self._MARGINS)
+        outer.setSpacing(4)
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        outer.addLayout(row)
 
         self.play_btn = QPushButton()
         self.play_btn.setObjectName("playButton")
         self.play_btn.setIcon(icons.play_icon())
         self.play_btn.setIconSize(QSize(15, 15))
+        self.play_btn.setToolTip("Play / pause (Space)")
         self.play_btn.clicked.connect(self.play_clicked)
-        layout.addWidget(self.play_btn)
+        row.addWidget(self.play_btn)
+
+        self.prev_event_btn = self._tool_button(icons.chevron_left_icon(), "Previous event (Shift+←)")
+        self.prev_event_btn.clicked.connect(lambda: self.event_step_requested.emit(-1))
+        self.next_event_btn = self._tool_button(icons.chevron_right_icon(), "Next event (Shift+→)")
+        self.next_event_btn.clicked.connect(lambda: self.event_step_requested.emit(+1))
+        row.addWidget(self.prev_event_btn)
+        row.addWidget(self.next_event_btn)
+
+        self.met_edit = QLineEdit("T+0:00:00")
+        self.met_edit.setObjectName("metReadout")
+        self.met_edit.setToolTip(
+            "Mission elapsed time -- type to jump (G): T+22:32:34, T+6m35s, "
+            "+30s / -5m (relative), 395 s, or a UTC date 2026-11-14 03:12"
+        )
+        self.met_edit.setFixedWidth(150)
+        self.met_edit.returnPressed.connect(self._on_met_entered)
+        self.met_edit.editingFinished.connect(self._refresh_readouts)
+        row.addWidget(self.met_edit)
+
+        self.date_label = QLabel("")
+        self.date_label.setObjectName("dateReadout")
+        row.addWidget(self.date_label)
+        row.addStretch(1)
+        self.event_label = QLabel("")
+        self.event_label.setObjectName("eventReadout")
+        row.addWidget(self.event_label)
+        row.addSpacing(10)
+
+        self.zoom_out_btn = self._tool_button(None, "Zoom out (-)", "−")
+        self.zoom_out_btn.clicked.connect(lambda: self.track.zoom(1 / 2))
+        self.zoom_label = QLabel("")
+        self.zoom_label.setObjectName("scaleReadout")
+        self.zoom_label.setMinimumWidth(56)
+        self.zoom_label.setAlignment(Qt.AlignCenter)
+        self.zoom_label.setToolTip("Visible span of the timeline -- scroll on the track to zoom")
+        self.zoom_in_btn = self._tool_button(None, "Zoom in (=)", "+")
+        self.zoom_in_btn.clicked.connect(lambda: self.track.zoom(2))
+        self.fit_btn = self._tool_button(None, "Fit the whole mission (0)", "Fit")
+        self.fit_btn.setObjectName("timelineTextButton")
+        self.fit_btn.clicked.connect(lambda: self.track.fit())
+        for w in (self.zoom_out_btn, self.zoom_label, self.zoom_in_btn, self.fit_btn):
+            row.addWidget(w)
+        row.addSpacing(10)
 
         speed_col = QVBoxLayout()
-        speed_col.setSpacing(2)
+        speed_col.setSpacing(0)
         speed_header = QHBoxLayout()
         speed_header.addWidget(QLabel("TIME WARP"))
         self.auto_slow_btn = QPushButton()
@@ -386,104 +686,102 @@ class TimelineBar(QWidget):
             "Time warp, 0.1x to 10,000,000x (1x = real time). "
             ", / . step through the KSP warp levels, / returns to 1x, [ / ] fine-tune"
         )
-        self.speed_slider.setFixedWidth(150)
+        self.speed_slider.setFixedWidth(170)
         self.speed_slider.valueChanged.connect(self._on_speed_slider)
         speed_col.addWidget(self.speed_slider)
-        layout.addLayout(speed_col)
+        row.addLayout(speed_col)
 
-        slider_col = QVBoxLayout()
-        slider_col.setSpacing(2)
-        readout_row = QHBoxLayout()
-        self.met_label = QLabel("T+0.00")
-        self.met_label.setObjectName("metReadout")
-        self.date_label = QLabel("")
-        self.date_label.setObjectName("dateReadout")
-        self.event_label = QLabel("")
-        self.event_label.setObjectName("eventReadout")
-        readout_row.addWidget(self.met_label)
-        readout_row.addWidget(self.date_label)
-        readout_row.addStretch(1)
-        readout_row.addWidget(self.event_label)
-        slider_col.addLayout(readout_row)
+        self.track = TimelineTrack(self._state)
+        self.track.view_changed.connect(self._on_view_changed)
+        outer.addWidget(self.track)
 
-        self.time_slider = EventSlider()
-        self.time_slider.setRange(0, TIME_SLIDER_STEPS)
-        self.time_slider.valueChanged.connect(self._on_time_slider)
-        slider_col.addWidget(self.time_slider)
+    def _tool_button(self, icon, tip: str, text: str = "") -> QPushButton:
+        btn = QPushButton(text)
+        btn.setObjectName("timelineToolButton")
+        if icon is not None:
+            btn.setIcon(icon)
+            btn.setIconSize(QSize(14, 14))
+        btn.setToolTip(tip)
+        btn.setFocusPolicy(Qt.NoFocus)
+        return btn
 
-        self.phase_strip = PhaseStrip(self.time_slider, self._state)
-        slider_col.addWidget(self.phase_strip)
-
-        # Fixed start/end scale reference under the bar: the MET readout above
-        # only ever shows the *current* scrubbed position, so there was no way
-        # to tell at a glance how long the whole mission span is -- easy to
-        # misjudge for a mission like Mars (300+ days) where nearly every event
-        # piles up within the first/last ~1% of the bar.
-        scale_row = QHBoxLayout()
-        scale_row.setContentsMargins(0, 0, 0, 0)
-        self.scale_start_label = QLabel("")
-        self.scale_start_label.setObjectName("scaleReadout")
-        self.scale_end_label = QLabel("")
-        self.scale_end_label.setObjectName("scaleReadout")
-        self.scale_end_label.setAlignment(Qt.AlignRight)
-        scale_row.addWidget(self.scale_start_label)
-        scale_row.addStretch(1)
-        scale_row.addWidget(self.scale_end_label)
-        slider_col.addLayout(scale_row)
-
-        layout.addLayout(slider_col, stretch=1)
+    def _fit_height(self):
+        top, bottom = self._MARGINS[1], self._MARGINS[3]
+        self.setFixedHeight(top + self._CONTROLS_H + 4 + self.track.minimumHeight() + bottom)
 
     # ------------------------------------------------------- state sync
+    @property
+    def unit_seconds(self) -> float:
+        return timeline_unit_seconds((self._state.timeline or {}).get("unitLabel"))
+
     def _on_scene_changed(self, _scene):
         timeline = self._state.timeline
         self.setVisible(timeline is not None)
         if timeline is not None:
-            span_s = (timeline["max"] - timeline["min"]) * timeline_unit_seconds(timeline.get("unitLabel"))
+            span_s = (timeline["max"] - timeline["min"]) * self.unit_seconds
             self.set_warp(default_warp(span_s))
-        has_phases = bool((timeline or {}).get("phases"))
-        self.setFixedHeight(self._BASE_HEIGHT + (PhaseStrip.HEIGHT + 2 if has_phases else 0))
-        self.time_slider.blockSignals(True)
-        self.time_slider.setValue(0)
-        if timeline:
-            self.time_slider.set_events(self._state.events, timeline["min"], timeline["max"])
-            unit = timeline.get("unitLabel", "")
-            self.scale_start_label.setText(f"{timeline['min']:.1f} {unit}".strip())
-            self.scale_end_label.setText(f"{timeline['max']:.1f} {unit}".strip())
-        else:
-            self.time_slider.set_events([], 0.0, 1.0)
-            self.scale_start_label.setText("")
-            self.scale_end_label.setText("")
-        self.time_slider.blockSignals(False)
+        self._fit_height()
         self.event_label.setText("")
         self._refresh_readouts()
 
-    def _on_time_changed(self, t: float):
-        timeline = self._state.timeline
-        if timeline is None:
-            return
-        value = int(round(time_to_fraction(timeline, t) * self.time_slider.maximum()))
-        if value != self.time_slider.value():
-            self.time_slider.blockSignals(True)
-            self.time_slider.setValue(value)
-            self.time_slider.blockSignals(False)
+    def _on_time_changed(self, _t: float):
         self._refresh_readouts()
 
-    def _on_time_slider(self, value: int):
-        # The user dragged (or clicked an event marker on) the scrubber.
-        self._state.set_fraction(value / self.time_slider.maximum())
+    def _on_view_changed(self):
+        w = self.track.window
+        self.zoom_label.setText("" if w is None else format_view_span(w.span * self.unit_seconds))
+        if w is not None:
+            self.zoom_in_btn.setEnabled(w.span > w.min_span * (1 + 1e-9))
+            self.zoom_out_btn.setEnabled(not w.is_fit)
+            self.fit_btn.setEnabled(not w.is_fit)
+
+    def met_text(self) -> str:
+        timeline = self._state.timeline
+        if not timeline:
+            return ""
+        w = self.track.window
+        res = 1.0 if w is None else w.span * self.unit_seconds / self.track.track_width
+        return format_met(self._state.time * self.unit_seconds, res)
 
     def _refresh_readouts(self):
         timeline = self._state.timeline
         if not timeline:
             return
         t = self._state.time
-        self.met_label.setText(f"T+{t:.2f} {timeline['unitLabel']}")
+        if not self.met_edit.hasFocus():  # don't overwrite what's being typed
+            self.met_edit.setText(self.met_text())
         ref_et = timeline.get("referenceEpochEt")
         # Cleared, not left alone, for a timeline with no calendar epoch:
         # otherwise the previous mission's date stayed on screen.
-        self.date_label.setText("" if ref_et is None else epoch_to_date_string(ref_et, t))
+        self.date_label.setText("" if ref_et is None else epoch_to_date_string(ref_et, t / 86400.0 * self.unit_seconds))
         current = self._state.active_event()
         self.event_label.setText(f"▸ {current['label']}" if current else "")
+
+    def _on_met_entered(self):
+        timeline = self._state.timeline
+        if not timeline:
+            return
+        unit_s = self.unit_seconds
+        seconds = parse_time_input(self.met_edit.text(), self._state.time * unit_s, unit_s,
+                                   timeline.get("referenceEpochEt"))
+        if seconds is None:
+            self.met_edit.setProperty("invalid", True)
+        else:
+            self.met_edit.setProperty("invalid", False)
+            self._state.set_time(seconds / unit_s)
+            self.met_edit.clearFocus()
+        self.met_edit.style().unpolish(self.met_edit)
+        self.met_edit.style().polish(self.met_edit)
+        self._refresh_readouts()
+
+    def focus_time_box(self):
+        self.met_edit.setFocus(Qt.ShortcutFocusReason)
+        self.met_edit.selectAll()
+
+    def step_size(self) -> float:
+        """The ←/→ step: 1% of the visible span, so it gets finer as you zoom."""
+        w = self.track.window
+        return 0.0 if w is None else 0.01 * w.span
 
     # -------------------------------------------------------- playback
     def set_playing(self, playing: bool):
