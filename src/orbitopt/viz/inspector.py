@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -347,13 +348,16 @@ class InspectorPanel(QWidget):
             r = QHBoxLayout()
             k = QLabel(key)
             k.setObjectName("bodyStat")
+            k.setWordWrap(True)  # only squeezed at the narrowest panel ("Screening fidelity" on Linux fonts)
             val = QLabel(value)
             val.setObjectName("bodyStatValue")
             val.setWordWrap(True)
             val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            # The value takes what the key leaves: keys stay on one line
+            # whenever they fit, values wrap first.
+            val.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
             r.addWidget(k)
-            r.addStretch(1)
-            r.addWidget(val)
+            r.addWidget(val, 1)
             layout.addLayout(r)
 
         notes = list(cand.get("verdictReasons") or [])
@@ -417,6 +421,7 @@ class InspectorPanel(QWidget):
             r = QHBoxLayout()
             k = QLabel(row["label"])
             k.setObjectName("bodyStat")
+            k.setWordWrap(True)  # only squeezed at the narrowest panel ("Screening fidelity" on Linux fonts)
             val = QLabel(row["value"])
             val.setObjectName("bodyStatValue")
             # Without word-wrap, a long value (e.g. "8,312 km from Moon
@@ -432,9 +437,11 @@ class InspectorPanel(QWidget):
             # panel instead of by its longest value.
             val.setWordWrap(True)
             val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            # The value takes what the key leaves: keys stay on one line
+            # whenever they fit, values wrap first.
+            val.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
             r.addWidget(k)
-            r.addStretch(1)
-            r.addWidget(val)
+            r.addWidget(val, 1)
             v.addLayout(r)
 
         frame.setToolTip("Click to focus · ⌘/Ctrl-click to measure distance")
