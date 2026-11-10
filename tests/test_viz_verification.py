@@ -18,7 +18,10 @@ from orbitopt.viz.verification_panel import (  # noqa: E402
     force_model_text,
     format_length_m,
     scene_verification_result,
+    selection_badge_state,
     step_convergence_text,
+    verification_badge_state,
+    verification_scope,
 )
 
 # Shaped like the real Artemis II targeting report (trimmed).
@@ -143,3 +146,54 @@ def test_panel_says_not_checked_without_reports(app):
     state.set_scene({"id": "s", "title": "S", "distanceUnit": "AU", "bodies": []})
     text = panel.text()
     assert "ephemeris snapshot" in text and "NOT CHECKED" not in text  # old content is gone at once
+
+
+# ------------------------------------------- candidates vs the exported trajectory
+def _candidates_scene():
+    def cand(index, exported, verdict, verification):
+        return {"id": f"candidate-{index}", "label": f"Candidate #{index}", "searchIndex": index,
+                "exported": exported, "verdict": verdict, "verification": verification}
+    return vr.publish_to_scene(_mission_scene(candidates=[
+        cand(1, False, "rejected", None), cand(0, True, "accepted", "passed")]), [REPORT])
+
+
+def test_badges_scope_verification_to_the_exported_trajectory():
+    scene = _candidates_scene()
+    exported, other = scene["candidates"][1], scene["candidates"][0]
+    state, text, tooltip = verification_badge_state(scene)
+    assert (state, text) == ("verified", "EXPORTED VERIFIED")
+    assert "Candidate #0" in tooltip and "TudatPy N-body" in tooltip and "Two-body Lambert" in tooltip
+    assert selection_badge_state(scene, exported) is None
+    state, text, _ = selection_badge_state(scene, other)
+    assert state == "warning" and text == "Candidate #1 · SCREENING ONLY" and "VERIFIED" not in text
+    # No candidates: the one trajectory is the one verified, badge unchanged.
+    plain = vr.publish_to_scene(_mission_scene(), [REPORT])
+    assert verification_badge_state(plain)[:2] == ("verified", "VERIFIED")
+    assert selection_badge_state(plain, None) is None and verification_scope(plain, None) == []
+    assert verification_badge_state({"bodies": []}) is None
+
+
+def test_scope_rows_name_both_trajectories_and_fidelities():
+    scene = _candidates_scene()
+    rows = {k: (v, c) for k, v, c in verification_scope(scene, scene["candidates"][0])}
+    assert rows["Exported Trajectory"][0].startswith("Candidate #0")
+    assert rows["Selected Candidate"] == ("Candidate #1 — screening trajectory, NOT verified in high fidelity",
+                                          WARNING)
+    assert rows["Screening Fidelity"][0] == "Two-body Lambert"
+    assert rows["Flown Fidelity"][0] == "TudatPy N-body"
+    rows = {k: v for k, v, _c in verification_scope(scene, scene["candidates"][1])}
+    assert rows["Selected Candidate"] == "Candidate #0 — the exported trajectory"
+
+
+def test_panel_follows_the_candidate_selection(app):
+    state = MissionState()
+    panel = VerificationPanel(state)
+    state.set_scene(_candidates_scene())
+    text = panel.text()
+    assert "VERIFICATION · EXPORTED TRAJECTORY" in text
+    assert "Candidate #0 — the exported trajectory" in text and "NOT verified" not in text
+    state.select_candidate("candidate-1")
+    text = panel.text()
+    assert "Candidate #1 — screening trajectory, NOT verified in high fidelity" in text
+    assert "Exported Trajectory\nCandidate #0" in text  # the reports stay the exported one's
+    assert "PASSED — 1 of 1 report(s) passed" in text
