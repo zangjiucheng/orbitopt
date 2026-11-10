@@ -52,8 +52,15 @@ def resolve_scene(name: str) -> dict:
             return cached_scene_from_config(config)
         return read_scene(name)
     if mission.id != "solar-system":
-        print(f"Computing the {mission.id!r} scene -- this can take a few seconds...")
-    return mission.load()
+        print(f"Loading the {mission.id!r} scene (precomputed or cached, else computed -- "
+              "that can take minutes)...")
+    from orbitopt.scene_cache import ENV_RECOMPUTE, pop_shipped_marker
+
+    scene = mission.load()
+    if pop_shipped_marker(scene) is not None:
+        print(f"Note: this is the shipped precomputed {mission.id!r} scene, made by different orbitopt code. "
+              f"Set {ENV_RECOMPUTE}={mission.id} to recompute it with yours.")
+    return scene
 
 
 def _cmd_app(_args):

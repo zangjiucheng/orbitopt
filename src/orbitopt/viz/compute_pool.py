@@ -106,6 +106,16 @@ class ComputePool:
         if executor is not None:
             _kill_and_reap(executor)
 
+    def restart(self):
+        """Kill the worker but keep the pool open: the next run() starts a
+        fresh process, which imports the code as it is on disk now (reload
+        after a source edit). Call it only while no run() is in flight --
+        that run would fail with RuntimeError."""
+        with self._lock:
+            executor, self._executor = self._executor, None
+        if executor is not None:
+            _kill_and_reap(executor)
+
     # ------------------------------------------------------------ internals
     def _live_executor(self):
         """The current executor, replacing it first if its worker has died

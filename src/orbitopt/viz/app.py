@@ -67,6 +67,7 @@ from orbitopt.viz.candidate_panel import CandidatePanel
 from orbitopt.viz.charts import ChartPanel
 from orbitopt.viz.flight_labels import label_text, labelled_bodies
 from orbitopt.viz.compute import BackendProbeWorker, ComputePool, SceneLoader
+from orbitopt.viz.source_watch import SourceWatch
 from orbitopt.viz.icon import app_icon
 from orbitopt.viz.inspector import InspectorPanel
 from orbitopt.viz.pv_viewer import load_scene
@@ -199,7 +200,12 @@ class MissionControlWindow(QMainWindow):
         self._maneuver_windows: dict[int, float] = {}
 
         self._timer = QTimer(self)
-        self._timer.setInterval(33)
+        # ~60 fps playback. It was 33 ms (30 fps) while each tick drew the
+        # view 3-4 times; with renders coalesced (viewport.render) a tick
+        # costs well under a frame. A PreciseTimer: the default coarse timer
+        # may fire up to 5% late, which shows as uneven frame pacing.
+        self._timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._timer.setInterval(16)
         self._timer.timeout.connect(self._on_tick)
         self._last_tick_ms = None
         # Set only while _on_tick is moving time, so _on_time_changed knows to
@@ -235,6 +241,23 @@ class MissionControlWindow(QMainWindow):
         self._tile_timer.setInterval(200)
         self._tile_timer.timeout.connect(self._on_tile_tick)
         self._tile_timer.start()
+
+        # Hot reload: missions are computed by a worker process that imported
+        # the code once, so an edited source file changes nothing until that
+        # worker is replaced. Poll for edits and offer a reload (title bar
+        # button, Cmd/Ctrl+R) -- never recompute on our own, a Starship
+        # compute takes minutes.
+        self._source_watch = SourceWatch()
+        self._source_changed = False
+        self._source_change_text = ""
+        # Sidebar keys whose scene is a shipped precomputed one made by older
+        # code (scene_cache.SHIPPED_STALE_KEY): the same button offers to
+        # recompute them.
+        self._stale_keys: set[str] = set()
+        self._source_timer = QTimer(self)
+        self._source_timer.setInterval(1500)
+        self._source_timer.timeout.connect(self._check_source)
+        self._source_timer.start()
         self.state.selection_changed.connect(self._update_measure)
         self.state.frame_changed.connect(self._on_frame_changed)
         self.state.candidate_changed.connect(self._on_candidate_changed)
@@ -450,6 +473,13 @@ class MissionControlWindow(QMainWindow):
         self.load_status_badge.setToolTip("Current mission scene load state")
         row.addWidget(self.load_status_badge)
 
+        # Shown once orbitopt's source changed on disk (see _check_source).
+        self.reload_button = QPushButton("Code changed · Reload")
+        self.reload_button.setObjectName("reloadBanner")
+        self.reload_button.clicked.connect(self._reload_mission)
+        self.reload_button.setVisible(False)
+        row.addWidget(self.reload_button)
+
         # Always on screen for a mission, so "not checked" can't be mistaken
         # for verified; click it for the reports.
         self.verification_badge = StatusBadge("idle", "")
@@ -646,6 +676,9 @@ class MissionControlWindow(QMainWindow):
         file_menu = self.menuBar().addMenu("&File")
         open_action = file_menu.addAction("Open scene file…")
         open_action.triggered.connect(self._open_file)
+        self.reload_action = file_menu.addAction("Reload mission with edited code")
+        self.reload_action.setShortcut(QKeySequence("Ctrl+R"))  # Cmd+R on macOS
+        self.reload_action.triggered.connect(self._reload_mission)
         quit_action = file_menu.addAction("Quit")
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)  # Cmd+Q / Ctrl+Q
         quit_action.triggered.connect(self.close)
@@ -751,6 +784,7 @@ class MissionControlWindow(QMainWindow):
         ("R", "Reset camera"),
         ("I", "Toggle inspector (body-info) panel"),
         ("F1", "Show this panel"),
+        ("Ctrl+R / ⌘R", "Reload the mission with edited code (new compute worker)"),
         ("Ctrl+Q / ⌘Q", "Quit"),
         ("Click", "Select a body"),
         ("Ctrl/⌘-click", "Measure distance to another body"),
@@ -1086,6 +1120,7 @@ class MissionControlWindow(QMainWindow):
             return
         self._set_playing(False)
         self._active_key, self._active_label = key, label
+        self._update_reload_button()
 
         if key in self._scene_cache:
             # A cached scene skips the ~10s compute but still stutters: applying
@@ -1284,6 +1319,57 @@ class MissionControlWindow(QMainWindow):
         self._load_worker = worker
         thread.start()
 
+    def _check_source(self):
+        """Offer a reload once the code on disk is not the code the compute
+        worker runs."""
+        if self._source_changed:
+            return
+        changed = self._source_watch.changed_files()
+        if changed:
+            self._source_changed = True
+            shown = ", ".join(changed[:4]) + (f" and {len(changed) - 4} more" if len(changed) > 4 else "")
+            self._source_change_text = f"Edited: {shown}."
+            self._update_reload_button()
+
+    def _update_reload_button(self):
+        """One button, two reasons: edited code (reload) or a shipped
+        precomputed scene made by older code (recompute)."""
+        stale = self._active_key in self._stale_keys
+        if self._source_changed:
+            self.reload_button.setText("Code changed · Reload")
+            self.reload_button.setToolTip(f"{self._source_change_text}\nReload (⌘R / Ctrl+R) restarts the compute "
+                                          "worker with the new code and recomputes this mission.")
+        elif stale:
+            self.reload_button.setText("Precomputed by older code · Recompute")
+            self.reload_button.setToolTip("This is the scene shipped with orbitopt, computed by a different version "
+                                          "of the code. Recompute (⌘R / Ctrl+R) runs your code -- for some missions "
+                                          "that takes minutes.")
+        self.reload_button.setVisible(self._source_changed or stale)
+
+    def _reload_mission(self):
+        """Pick up edited mission code: a fresh compute worker (the new code),
+        every in-memory scene dropped (all computed by the old code), and the
+        current mission recomputed. The disk cache is keyed on the source, so
+        it misses by itself. GUI code itself is not reloaded."""
+        if self._loading:
+            return
+        self._source_watch.accept()
+        self._source_changed = False
+        mission_id = self._mission_ids.get(self._active_key) if self._active_key is not None else None
+        if self._active_key in self._stale_keys and mission_id is not None:
+            # Skip its shipped scene from now on (the worker reads this at
+            # load time; it is spawned after this point, so it inherits it).
+            from orbitopt.scene_cache import ENV_RECOMPUTE
+
+            ids = {x for x in os.environ.get(ENV_RECOMPUTE, "").split(",") if x}
+            os.environ[ENV_RECOMPUTE] = ",".join(sorted(ids | {mission_id}))
+            self._stale_keys.discard(self._active_key)
+        self.reload_button.setVisible(False)
+        self._compute_pool.restart()
+        self._scene_cache.clear()
+        if self._active_key is not None and self._active_key in self._loaders:
+            self._start_loading(self._active_key, self._active_label)
+
     def _on_load_thread_finished(self):
         self._end_switch()
         self._load_thread = None
@@ -1298,6 +1384,13 @@ class MissionControlWindow(QMainWindow):
             # real guard against touching self.plotter/self.renderer after
             # closeEvent has closed them; the disconnect there is just hygiene.
             return
+        from orbitopt.scene_cache import pop_shipped_marker
+
+        if pop_shipped_marker(scene) is not None:
+            self._stale_keys.add(name)
+        else:
+            self._stale_keys.discard(name)
+        self._update_reload_button()
         self._scene_cache[name] = scene
         # Applied while the loading page is still up (plotter hidden); the swap
         # back to the view happens in _on_load_thread_finished -> _end_switch.
@@ -1684,6 +1777,9 @@ class MissionControlWindow(QMainWindow):
             return
         if self.renderer.update_tiles():
             self.plotter.render()
+        # Arrived tiles are built a few per tick (tile_layer._BUILD_BUDGET_S):
+        # poll fast until they are all up, then back to the idle rate.
+        self._tile_timer.setInterval(40 if self.renderer.tiles.pending else 200)
 
     def _on_imagery_toggled(self, on: bool):
         self.renderer.tiles.set_enabled(on)

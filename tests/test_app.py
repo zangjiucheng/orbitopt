@@ -42,8 +42,9 @@ def _pump_until(app, predicate, timeout=LOAD_TIMEOUT_S):
 
 
 @pytest.mark.slow
-def test_mission_control_loads_and_switches_missions():
+def test_mission_control_loads_and_switches_missions(tmp_path):
     from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeySequence
     from PySide6.QtWidgets import QApplication
 
     from orbitopt.viz.app import MissionControlWindow
@@ -64,6 +65,38 @@ def test_mission_control_loads_and_switches_missions():
         assert not window.timeline_bar.isVisible()
         assert window.verification_badge.isHidden()  # an ephemeris snapshot: nothing to verify
         assert window.chart_panel.isHidden()  # ...and nothing to chart
+
+        # Renders are coalesced: five requests in one event-loop turn are one
+        # draw (each draw waits for vsync; a tick used to draw 3-4 times).
+        real_render, drawn = window.plotter._render, []
+        window.plotter._render = lambda *a, **k: (drawn.append(1), real_render(*a, **k))
+        try:
+            for _ in range(5):
+                window.plotter.render()
+            assert drawn == []  # queued, not drawn yet
+            app.processEvents()
+            assert 1 <= len(drawn) <= 2  # 1; a timer firing in the same turn may add one
+        finally:
+            window.plotter._render = real_render
+
+        # Hot reload: an edited source file shows the reload button; ⌘R
+        # restarts the compute worker and recomputes the current mission.
+        from orbitopt.viz.source_watch import SourceWatch
+
+        (tmp_path / "mission.py").write_text("x = 1\n")
+        window._source_watch = SourceWatch(tmp_path)
+        window._check_source()
+        assert not window.reload_button.isVisible()
+        (tmp_path / "mission.py").write_text("x = 2  # edited\n")
+        window._check_source()
+        assert window.reload_button.isVisible() and "mission.py" in window.reload_button.toolTip()
+        assert window.reload_action.shortcut() == QKeySequence("Ctrl+R")
+        old_workers = window._compute_pool.worker_pids()
+        window.reload_action.trigger()
+        assert window._loading and not window.reload_button.isVisible()
+        _pump_until(app, lambda: not window._loading)
+        assert state.scene["id"] == "solar-system"
+        assert not set(old_workers) & set(window._compute_pool.worker_pids())
 
         sidebar.select_row(1)
         # The switch must not block: select_row() returns immediately and the

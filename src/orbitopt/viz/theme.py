@@ -210,6 +210,19 @@ QPushButton:pressed, QPushButton:checked {{
     border-color: {ACCENT};
 }}
 
+QPushButton#reloadBanner {{
+    background: {ACCENT_DIM};
+    color: {ACCENT};
+    border: 1px solid {ACCENT};
+    border-radius: 2px;
+    padding: 3px 10px;
+    font-weight: 600;
+}}
+QPushButton#reloadBanner:hover {{
+    background: {ACCENT};
+    color: {PANEL};
+}}
+
 QPushButton#playButton {{
     border-radius: 2px;
     min-width: 32px;

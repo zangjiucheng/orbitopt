@@ -378,3 +378,14 @@ def test_ui_timer_stays_responsive_during_worker_compute(qt_core, pool):
     expected = compute_s / 0.016
     assert len(ticks) > 0.3 * expected, f"only {len(ticks)} of ~{expected:.0f} ticks"
     assert max(gaps) < 0.5, f"main thread stalled for {max(gaps):.2f}s"
+
+
+def test_restart_replaces_the_worker_and_keeps_the_pool_open(pool):
+    """Hot reload: restart() kills the worker (its imported code is stale);
+    the next run gets a fresh process instead of failing like terminate()."""
+    pid = pool.run(os.getpid)
+    pool.restart()
+    _wait_until(lambda: not _pid_alive(pid))
+    new_pid = pool.run(os.getpid)
+    assert new_pid != pid and not pool.closed
+    assert pool.worker_pids() == [new_pid]
