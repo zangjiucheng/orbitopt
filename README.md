@@ -61,7 +61,8 @@ into the orbit SpaceX describes (~275 km; Flight 14's 30.5° inclination,
 since Flight 15's is unpublished), propagates it with TudatPy (Earth J2,
 Moon, Sun; no drag) and finds the ground-track pass that can bring it home.
 SpaceX's announced entry time is used only as a check, never as an input.
-Ascent, deorbit burn and entry are not modelled.
+The deorbit burn, the entry and both vehicles' returns to the tower are
+solved (below); the ascent is an illustrative profile.
 
 | Flight 15 | orbitopt prediction | Real |
 |---|---|---|
@@ -233,7 +234,9 @@ The package has three layers, and only the last needs conda:
 ## Mission Control
 
 A desktop app (PySide6 + pyvistaqt) for working through a mission, not just
-playing it. Every panel follows the same selection and mission time:
+playing it. **[User guide](https://zangjiucheng.github.io/orbitopt/guide.html)**
+([source](docs/guide.html); also *Help > User Guide* in the app) covers how to
+drive it. Every panel follows the same selection and mission time:
 
 - **Missions and trajectories** (left). Switch missions without relaunching;
   `File > Open scene file...` opens any scene JSON. For an optimized mission
@@ -248,8 +251,10 @@ playing it. Every panel follows the same selection and mission time:
   screened, with the candidates on it; click one to select it. *Distance*:
   the spacecraft's distance to each body over the mission; click or drag to
   move the mission time.
-- **Inspector and Verification** (right). Body readouts, maneuvers and the
-  selected candidate's numbers; and the high-fidelity verification reports:
+- **Inspector and Verification** (right). The selected candidate's
+  numbers, the maneuvers (times as MET, the current one kept in view) and
+  the body readouts, each a framed section with its own scroll, sized by
+  dragging the borders between them; and the high-fidelity verification reports:
   every check, residuals against their tolerances, force model, integrator
   step convergence, conservation. The title bar always shows VERIFIED,
   VERIFY FAILED or NOT CHECKED.
@@ -267,17 +272,35 @@ playing it. Every panel follows the same selection and mission time:
   window. Below it are the mission's phases (parking orbit, cruise, lunar
   flyby, ...) and the events with their names; click one to jump to it,
   double-click to zoom to it. Type in the time box (G) to jump to
-  `T+22:32:34`, `6m35s`, `+30s` or a UTC date. Time warp and auto-slow
-  sit on the right.
+  `T+22:32:34`, `6m35s`, `+30s` or a UTC date. Near the playhead it
+  adjusts precisely: grabbing the playhead nudges it from where it is,
+  Shift-drag scrubs ten times finer, Alt+←/→ steps 0.1% of the view.
+  Playback runs both ways (Space forward, Shift+Space backwards).
+- **Time warp** (bottom right). A KSP-style ladder with one bar per warp
+  level, 0.1× to 10,000,000×, so each is a single click; a 1× button for
+  real time; `«` `»` step a level, scrolling on the ladder fine-tunes.
+  Auto-slow (the clock) eases playback down near events. The readout
+  shows the rate (`16.7 min/s`), and its tooltip how long the whole
+  mission takes at that warp.
+- **High-res Earth imagery** (View menu). Near Earth, satellite tiles
+  (EOX Sentinel-2 cloudless, ~10 m per pixel) stream in for the part of
+  the planet in view, sharper the closer the camera, and are cached on
+  disk. CC BY-NC-SA 4.0, non-commercial; `ORBITOPT_EARTH_TILES=off`
+  disables the download.
 - **Flight data labels** (L). Next to each vehicle: height above the
   ellipsoid, speed (and surface-relative speed below 120 km), delta-v
   spent so far, and the burn in progress.
+
+![Starship Flight 15 at the landing burn over Starbase: the ship's flight-data label (height, speed, surface speed, delta-v, the burn in progress) on 10 m Sentinel-2 imagery of Boca Chica, the timeline zoomed to the last two minutes, and the maneuver list](docs/assets/mission-control-starship-landing.png)
+
+![Starship Flight 15 at T+4:30: Super Heavy heading back to the tower and the ship still climbing, each labelled, with the timeline zoomed to the eight-minute ascent](docs/assets/mission-control-starship-ascent.png)
 
 ![Artemis II centered on the Moon at closest approach: the lunar-flyby phase lit on the timeline, the distance chart dipping at the Moon, and the Verification tab listing the checks the free return passed](docs/assets/mission-control-artemis.png)
 
 <img src="docs/assets/mission-control-shortcuts.png" alt="Mission Control keyboard shortcuts" width="320" align="right">
 
-Shortcuts: Space play/pause · ←/→ step (1% of the visible timeline) ·
+Shortcuts: Space play/pause · Shift+Space play backwards ·
+←/→ step (1% of the visible timeline; Alt: 0.1%) ·
 Shift+←/→ previous/next event · Home restart · `=` `-` `0` zoom the
 timeline in/out/fit · G go to time · `,` `.` time warp down/up a KSP level (1× = real time, up to
 10,000,000×) · `/` back to real time · `[` `]` fine-tune warp ·

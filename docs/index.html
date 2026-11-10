@@ -397,6 +397,19 @@
     border-top: 1px solid var(--hairline-soft); padding-top: 12px;
   }
   .ticket .fact b { color: var(--accent); font-weight: 600; }
+  .gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  @media (max-width: 760px) { .gallery { grid-template-columns: 1fr; } }
+  .viewer-notes {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 28px;
+    font-size: 13.8px; color: var(--ink-2);
+  }
+  @media (max-width: 1080px) { .viewer-notes { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 640px) { .viewer-notes { grid-template-columns: 1fr; } }
+  .viewer-notes div { border-top: 1px solid var(--hairline); padding-top: 12px; }
+  .viewer-notes b {
+    display: block; font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px;
+  }
   .manifest-hint {
     font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted); margin-top: 4px;
     display: flex; align-items: center; gap: 6px;
@@ -635,7 +648,8 @@
       <a href="#missions">missions</a><span class="sep">/</span>
       <a href="#results">results</a><span class="sep">/</span>
       <a href="#architecture">architecture</a><span class="sep">/</span>
-      <a href="#start">start</a>
+      <a href="#start">start</a><span class="sep">/</span>
+      <a href="guide.html">guide</a>
     </div>
     <a class="nav-gh" href="https://github.com/zangjiucheng/orbitopt" target="_blank" rel="noopener">
       <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -717,7 +731,7 @@
       <div><div class="hs-v">4.7×</div><div class="hs-k">GPU Lambert</div><div class="hs-n">2M independent solves, CuPy vs vectorized numpy</div></div>
       <div><div class="hs-v">1.08<small>s</small></div><div class="hs-k">90k-cell porkchop</div><div class="hs-n">Earth–Mars grid in one batched call</div></div>
       <div><div class="hs-v">6<small>sites</small> · 7<small>vehicles</small></div><div class="hs-k">Launch database</div><div class="hs-n">every value sourced, accuracy-tagged</div></div>
-      <div><div class="hs-v">4</div><div class="hs-k">Missions in Mission Control</div><div class="hs-n">Solar system · Artemis II · GOES · Mars</div></div>
+      <div><div class="hs-v">5</div><div class="hs-k">Missions in Mission Control</div><div class="hs-n">Solar system · Artemis II · GOES · Mars · Starship Flight 15</div></div>
     </div>
   </div>
 </header>
@@ -957,6 +971,13 @@
 
     <div class="manifest">
       <div class="ticket">
+        <div class="thead"><span class="tdot" style="color:#c9c6d8;background:#c9c6d8"></span><h3>Starship Flight 15</h3><span class="newpill">NEW</span></div>
+        <p>An open prediction for the first return of the ship to Starbase:
+          ~14 orbits, a solved deorbit burn and 3-DOF entry to the tower, and
+          Super Heavy's boostback and catch. Published before the flight.</p>
+        <div class="fact">ship catch <b>T+22:33:18</b> · SpaceX plan T+22:32:34</div>
+      </div>
+      <div class="ticket">
         <div class="thead"><span class="tdot" style="color:#4c8eff;background:#4c8eff"></span><h3>Solar System</h3></div>
         <p>Live heliocentric snapshot of the Sun and eight planets — real 2K
           textures, true sidereal spin rates, positions from pykep ephemerides.</p>
@@ -999,6 +1020,31 @@
       <img src="assets/mission-control-mars.png" alt="Mission Control on the Earth-to-Mars transfer: candidate trajectories, the heliocentric transfer in 3D, the launch-window porkchop with the candidates on it, and the selected candidate's numbers" loading="lazy" />
       <figcaption><span class="fignum">FIG. 1</span> — Mission Control on Earth→Mars: the optimizer's candidates, the launch-window screen they came from, and the verified flight</figcaption>
     </figure>
+    <div class="gallery">
+      <figure class="figure">
+        <img src="assets/mission-control-starship-landing.png" alt="Starship Flight 15 at the landing burn over Starbase: the ship's flight-data label on 10 m Sentinel-2 imagery of Boca Chica, the timeline zoomed to the last two minutes" loading="lazy" />
+        <figcaption><span class="fignum">FIG. 1A</span> — Starship Flight 15, landing burn over Starbase: height, speed and Δv beside the ship, on streamed 10 m imagery (Sentinel-2 cloudless 2024 by EOX, contains modified Copernicus Sentinel data 2024, CC BY-NC-SA 4.0)</figcaption>
+      </figure>
+      <figure class="figure">
+        <img src="assets/mission-control-starship-ascent.png" alt="Starship Flight 15 at T+4:30: Super Heavy heading back to the tower and the ship climbing, each with its flight-data label, the timeline zoomed to the ascent" loading="lazy" />
+        <figcaption><span class="fignum">FIG. 1B</span> — T+4:30: Super Heavy on its boostback to the tower, the ship still climbing; the timeline zoomed to eight minutes</figcaption>
+      </figure>
+      <figure class="figure">
+        <img src="assets/mission-control-artemis.png" alt="Artemis II centered on the Moon at closest approach: the lunar-flyby phase lit on the timeline, the distance chart, and the Verification tab" loading="lazy" />
+        <figcaption><span class="fignum">FIG. 1C</span> — Artemis II-class free return, centered on the Moon at perilune, with its verification report</figcaption>
+      </figure>
+      <figure class="figure">
+        <img src="assets/mission-control-goes.png" alt="GOES GTO-to-GEO apogee-raising campaign mid-way through its burns, with the distance chart" loading="lazy" />
+        <figcaption><span class="fignum">FIG. 1D</span> — GOES, GTO to GEO: the apogee-raising burns mid-campaign</figcaption>
+      </figure>
+    </div>
+    <p class="phase-sub" style="margin-top:28px">How to drive it: the <a href="guide.html" style="color:var(--verify)">Mission Control user guide</a>.</p>
+    <div class="viewer-notes" style="margin-top:14px">
+      <div><b>Timeline</b>Zooms from the whole mission to two seconds across. Scrub continuously, Shift-drag ten times finer, type <code>T+22:32:34</code> to jump, play forward or backwards.</div>
+      <div><b>Time warp</b>KSP-style: one bar per level from 0.1× to 10,000,000×, a one-click 1× for real time, auto-slow near events.</div>
+      <div><b>Flight labels</b>Beside each vehicle: height above the WGS-84 ellipsoid, inertial and surface speed, Δv spent, and the burn in progress.</div>
+      <div><b>Earth imagery</b>Near Earth, EOX Sentinel-2 cloudless tiles stream in for the part in view, down to 10 m per pixel, cached on disk.</div>
+    </div>
   </div>
 </section>
 
@@ -1212,6 +1258,7 @@
       </div>
       <div class="flinks">
         <a href="https://github.com/zangjiucheng/orbitopt" target="_blank" rel="noopener">GitHub</a>
+        <a href="guide.html">User guide</a>
         <a href="https://github.com/zangjiucheng/orbitopt/blob/main/README.md" target="_blank" rel="noopener">README</a>
         <a href="https://github.com/zangjiucheng/orbitopt/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
       </div>

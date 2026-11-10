@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mission Control Guide</title>
+<meta name="description" content="How to use orbitopt's Mission Control: opening missions, moving around in 3D, the zoomable timeline and time warp, flight-data labels, Earth imagery, charts, verification and keyboard shortcuts." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2306050c'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='6' fill='none' stroke='%23e8a23e' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='%235ec8ff'/%3E%3Ccircle cx='27' cy='16' r='2.2' fill='%23e8a23e'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* The same tracking-station palette as index.html (from Mission Control's
+     own theme.py). The site is dark by design, in both color schemes. */
+  :root {
+    --void: #050409;
+    --panel: #0b0916;
+    --card: #14111f;
+    --hairline: #262239;
+    --hairline-soft: #1a1728;
+    --ink: #f4f2ea;
+    --ink-2: #a9a6bb;
+    --ink-muted: #6f6c85;
+    --accent: #e8a23e;
+    --accent-dim: #3a2e17;
+    --verify: #5ec8ff;
+    --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+    --font-body: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", "Cascadia Code", "Consolas", ui-monospace, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+  body {
+    margin: 0; background: var(--void); color: var(--ink);
+    font-family: var(--font-body); font-size: 16px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  img { max-width: 100%; display: block; }
+  a { color: var(--verify); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ::selection { background: var(--accent-dim); color: var(--accent); }
+  :focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
+  code, kbd { font-family: var(--font-mono); font-size: 0.88em; }
+  code { color: var(--ink); background: var(--card); border: 1px solid var(--hairline-soft); padding: 1px 5px; }
+  kbd {
+    display: inline-block; min-width: 1.6em; text-align: center; color: var(--ink);
+    background: var(--card); border: 1px solid var(--hairline); border-bottom-width: 2px;
+    padding: 0 6px; line-height: 1.6;
+  }
+  pre {
+    font-family: var(--font-mono); font-size: 13.5px; line-height: 1.6; color: var(--ink-2);
+    background: var(--panel); border: 1px solid var(--hairline); padding: 14px 16px; overflow-x: auto;
+  }
+  pre b { color: var(--ink); font-weight: 500; }
+
+  .nav {
+    position: sticky; top: 0; z-index: 10; background: rgba(5, 4, 9, 0.9);
+    backdrop-filter: blur(10px); border-bottom: 1px solid var(--hairline-soft);
+  }
+  .nav-inner { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 20px; height: 56px; padding: 0 24px; }
+  .brand { display: flex; align-items: center; gap: 9px; margin-right: auto; color: var(--ink); }
+  .brand:hover { text-decoration: none; }
+  .brand svg { width: 22px; height: 22px; flex: none; }
+  .brand-word { font-family: var(--font-mono); font-weight: 600; font-size: 14.5px; }
+  .brand-word .slash { color: var(--ink-muted); }
+  .nav a.navlink { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-2); }
+  .nav a.navlink:hover { color: var(--accent); text-decoration: none; }
+  @media (max-width: 640px) {
+    .nav-inner { padding: 0 16px; gap: 14px; }
+    .nav a.navlink.secondary { display: none; }
+    h2 { font-size: 28px; }
+  }
+
+  .layout { max-width: 1180px; margin: 0 auto; padding: 0 24px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0 16px; } }
+  .toc { position: sticky; top: 76px; align-self: start; padding: 28px 0; max-height: calc(100vh - 80px); overflow-y: auto; }
+  @media (max-width: 900px) { .toc { position: static; max-height: none; padding: 20px 0 0; } }
+  .toc .label { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.14em; color: var(--ink-muted); margin-bottom: 10px; }
+  .toc ol { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  .toc li { counter-increment: s; }
+  .toc a { display: block; padding: 4px 0 4px 12px; border-left: 1px solid var(--hairline); color: var(--ink-2); font-size: 14px; }
+  .toc a::before { content: counter(s, decimal-leading-zero) "  "; font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted); }
+  .toc a:hover { color: var(--accent); border-left-color: var(--accent); text-decoration: none; }
+
+  main { padding: 28px 0 80px; min-width: 0; }
+  .kicker { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.14em; color: var(--accent); }
+  h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(40px, 6vw, 64px); line-height: 0.95; margin: 8px 0 14px; letter-spacing: 0.01em; }
+  .lede { color: var(--ink-2); font-size: 17px; max-width: 62ch; margin: 0 0 26px; }
+  section { border-top: 1px solid var(--hairline-soft); padding-top: 34px; margin-top: 40px; }
+  h2 { font-family: var(--font-display); font-weight: 700; font-size: 34px; line-height: 1; margin: 0 0 14px; letter-spacing: 0.01em; }
+  h2 .num { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--ink-muted); margin-right: 10px; vertical-align: middle; }
+  h3 { font-size: 17px; font-weight: 600; margin: 26px 0 8px; }
+  p, li { color: var(--ink-2); max-width: 72ch; }
+  p b, li b { color: var(--ink); font-weight: 600; }
+  ul { padding-left: 20px; }
+  li { margin: 4px 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 8px; font-size: 14.5px; }
+  th { text-align: left; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; font-weight: 500; color: var(--ink-muted); padding: 8px 10px; border-bottom: 1px solid var(--hairline); }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--hairline-soft); color: var(--ink-2); vertical-align: top; }
+  td:first-child { white-space: nowrap; color: var(--ink); }
+  .table-scroll { overflow-x: auto; }
+
+  figure { margin: 18px 0; border: 1px solid var(--hairline); background: var(--card); }
+  figcaption { padding: 11px 14px; font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted); border-top: 1px solid var(--hairline-soft); }
+
+  .callout { border-left: 2px solid var(--accent); background: var(--panel); padding: 12px 16px; margin: 16px 0; }
+  .callout p { margin: 0; }
+  .callout.info { border-left-color: var(--verify); }
+
+  .layout-map { display: grid; grid-template-columns: 1fr 2.4fr 1.2fr; grid-template-rows: auto auto auto; gap: 6px; margin: 16px 0; font-family: var(--font-mono); font-size: 12px; }
+  .layout-map div { border: 1px solid var(--hairline); background: var(--panel); padding: 10px 12px; color: var(--ink-2); }
+  .layout-map b { display: block; color: var(--accent); font-weight: 600; font-size: 11px; letter-spacing: 0.1em; margin-bottom: 2px; }
+  .lm-left { grid-row: 1 / 3; }
+  .lm-right { grid-row: 1 / 3; grid-column: 3; }
+  .lm-bottom { grid-column: 1 / 4; }
+  @media (max-width: 640px) {
+    .layout-map { grid-template-columns: 1fr; }
+    .lm-left, .lm-right, .lm-bottom { grid-row: auto; grid-column: auto; }
+  }
+
+  footer { border-top: 1px solid var(--hairline-soft); padding: 26px 0 50px; font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted); }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html">
+      <svg viewBox="0 0 32 32" fill="none"><ellipse cx="16" cy="16" rx="12.5" ry="6.5" stroke="#e8a23e" stroke-width="2"/><circle cx="16" cy="16" r="2.6" fill="#5ec8ff"/><circle cx="27.3" cy="16" r="2.1" fill="#e8a23e"/></svg>
+      <span class="brand-word">orbitopt<span class="slash">/guide</span></span>
+    </a>
+    <a class="navlink" href="index.html">flight log</a>
+    <a class="navlink secondary" href="https://github.com/zangjiucheng/orbitopt/blob/main/README.md" target="_blank" rel="noopener">readme</a>
+    <a class="navlink secondary" href="https://github.com/zangjiucheng/orbitopt" target="_blank" rel="noopener">github</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="toc" aria-label="Contents">
+    <div class="label">CONTENTS</div>
+    <ol>
+      <li><a href="#start">Install and open</a></li>
+      <li><a href="#window">The window</a></li>
+      <li><a href="#3d">Moving around in 3D</a></li>
+      <li><a href="#time">Time and the timeline</a></li>
+      <li><a href="#warp">Time warp</a></li>
+      <li><a href="#data">Reading the flight</a></li>
+      <li><a href="#imagery">Earth imagery</a></li>
+      <li><a href="#candidates">Candidates and verification</a></li>
+      <li><a href="#own">Your own missions</a></li>
+      <li><a href="#keys">Keyboard shortcuts</a></li>
+      <li><a href="#trouble">Troubleshooting</a></li>
+    </ol>
+  </aside>
+
+  <main>
+    <div class="kicker">USER GUIDE · MISSION CONTROL</div>
+    <h1>Using Mission Control</h1>
+    <p class="lede">Mission Control is orbitopt's desktop app for working through a mission: the
+      trajectory in 3D, every burn on a timeline you can zoom to the second, live height, speed and
+      Δv beside each vehicle, and the verification behind the numbers. This page covers what each
+      part does and how to drive it.</p>
+
+    <figure>
+      <img src="assets/mission-control-starship-landing.png" alt="Mission Control on Starship Flight 15 at the landing burn over Starbase, with the ship's flight-data label on satellite imagery and the timeline zoomed to the last two minutes" />
+      <figcaption>Starship Flight 15 at the landing burn. Imagery: Sentinel-2 cloudless 2024 by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2024), CC BY-NC-SA 4.0</figcaption>
+    </figure>
+
+    <section id="start">
+      <h2><span class="num">01</span>Install and open</h2>
+      <p>The compute stack (pykep, pygmo, tudatpy) comes from conda-forge, so install into the locked
+        environment, then run <code>orbitopt</code>:</p>
+<pre><b>micromamba create -n orbitopt -f envs/cpu.conda-lock.yml</b>
+<b>micromamba activate orbitopt</b>
+<b>pip install -e . --no-deps</b>
+
+<b>orbitopt</b>                       # Mission Control, all missions in the sidebar
+<b>orbitopt view starship-flight-15</b>  # one mission in the single-scene viewer
+<b>orbitopt view my_mission.yaml</b>     # run a config, then open it</pre>
+      <p>Built-in missions: <code>solar-system</code>, <code>artemis2</code>, <code>goes</code>,
+        <code>mars</code> and <code>starship-flight-15</code>. Pick one in the left sidebar to load it.
+        The first load of a mission computes it (Mars takes several minutes); after that it opens from
+        the scene cache in a second or two.</p>
+    </section>
+
+    <section id="window">
+      <h2><span class="num">02</span>The window</h2>
+      <p>Every panel follows the same mission time and the same selected body, so scrubbing the timeline,
+        clicking a chart or picking a maneuver moves all of them together.</p>
+      <div class="layout-map" role="img" aria-label="Window layout: missions on the left, 3D view in the middle with charts below, inspector on the right, timeline along the bottom">
+        <div class="lm-left"><b>MISSIONS</b>missions list · candidate trajectories</div>
+        <div><b>3D VIEW</b>CENTER strip on top: re-center on a body</div>
+        <div class="lm-right"><b>INSPECTOR</b>candidate · maneuvers · bodies<br /><br /><b>VERIFICATION</b>reports and checks</div>
+        <div><b>CHARTS</b>distance · launch window</div>
+        <div class="lm-bottom"><b>TIMELINE</b>play ◂ ▸ · time box · zoomable track · time warp</div>
+      </div>
+      <ul>
+        <li><b>Missions</b> (left): switch missions without relaunching. <i>File › Open scene file…</i> opens any scene JSON.</li>
+        <li><b>3D view</b> (middle): the trajectory, bodies and burns. The <b>CENTER</b> strip above it re-centers the view
+          on the Sun, Earth, Mars or the Moon, so an Earth departure and a Mars capture are visible at their own scale.</li>
+        <li><b>Charts</b> (below the view): <i>Distance</i>, the spacecraft's distance to each body over the mission; click or
+          drag on it to move the time. <i>Launch window</i>, the porkchop grid the optimizer screened.</li>
+        <li><b>Inspector</b> (right): three framed sections, each scrolling on its own; drag the borders between them to
+          share the height. <i>Verification</i> is the second tab.</li>
+        <li><b>Timeline</b> (bottom): playback, the time box, the zoomable track and time warp. See <a href="#time">Time</a>.</li>
+      </ul>
+      <p>Collapse the side panels with the chevrons in their headers, or <kbd>I</kbd> for the right one.</p>
+    </section>
+
+    <section id="3d">
+      <h2><span class="num">03</span>Moving around in 3D</h2>
+      <div class="table-scroll"><table>
+        <tr><th>DO</th><th>TO</th></tr>
+        <tr><td>Left-drag</td><td>Rotate the view about its focus</td></tr>
+        <tr><td>Scroll / right-drag</td><td>Zoom in and out</td></tr>
+        <tr><td>Shift-drag or middle-drag</td><td>Pan</td></tr>
+        <tr><td>Click a body</td><td>Select it (its card lights up in the inspector)</td></tr>
+        <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd>-click a second body</td><td>Measure the distance between the two</td></tr>
+        <tr><td><kbd>Tab</kbd> / <kbd>⇧Tab</kbd></td><td>Focus the next / previous body, spacecraft first (as in KSP's map view); the planet stays locked behind it</td></tr>
+        <tr><td><kbd>T</kbd></td><td>Track the selected body: the camera follows it as time moves</td></tr>
+        <tr><td><kbd>M</kbd></td><td>Zoom to the selected body</td></tr>
+        <tr><td><kbd>R</kbd></td><td>Reset the camera</td></tr>
+      </table></div>
+      <p><i>View</i> also has top, front, side and isometric views. Clicking a maneuver in the inspector jumps to it
+        and frames the burn, with its Δv arrow drawn in the view.</p>
+    </section>
+
+    <section id="time">
+      <h2><span class="num">04</span>Time and the timeline</h2>
+      <p>The timeline along the bottom shows a window of the mission that zooms from the whole mission down to
+        <b>two seconds across</b>, so a 30-second landing burn is as easy to scrub as a 300-day cruise.</p>
+      <h3>Playing</h3>
+      <ul>
+        <li><kbd>Space</kbd> or ▸ plays forward; <kbd>⇧Space</kbd> or ◂ plays <b>backwards</b>. The same key again pauses,
+          the other key turns around. Playback stops at either end.</li>
+        <li>The ‹ › buttons (and <kbd>⇧←</kbd> / <kbd>⇧→</kbd>) jump to the previous / next event.</li>
+        <li><kbd>Home</kbd> goes back to the start.</li>
+      </ul>
+      <h3>The track</h3>
+      <p>From the top, the track shows an <b>overview strip</b> of the whole mission with the visible part bracketed,
+        a <b>ruler</b> in mission elapsed time (MET), the mission's <b>phases</b>, and the <b>events</b> with their names.
+        Burns are filled triangles, other events open circles; the amber line is the playhead.</p>
+      <div class="table-scroll"><table>
+        <tr><th>DO</th><th>TO</th></tr>
+        <tr><td>Scroll up / down on the track</td><td>Zoom in / out about the cursor</td></tr>
+        <tr><td>Scroll sideways, or right-drag</td><td>Pan the visible window</td></tr>
+        <tr><td>Drag the bracket in the overview strip</td><td>Pan; click elsewhere in the strip to center there</td></tr>
+        <tr><td>Click or drag on the ruler</td><td>Move time there</td></tr>
+        <tr><td>Grab the playhead and drag</td><td>Nudge time from where it is, without jumping</td></tr>
+        <tr><td><kbd>⇧</kbd>-drag</td><td>Scrub <b>ten times finer</b> (press or release Shift mid-drag; it carries on from there)</td></tr>
+        <tr><td>Click an event / a phase</td><td>Jump to it / to the phase's start</td></tr>
+        <tr><td>Double-click an event / a phase</td><td>Zoom the track to it</td></tr>
+        <tr><td><kbd>=</kbd> <kbd>-</kbd> <kbd>0</kbd></td><td>Zoom in, zoom out, fit the whole mission (also the − Fit + buttons)</td></tr>
+        <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Step 1% of the visible window; with <kbd>Alt</kbd>, 0.1%. Steps get finer as you zoom in</td></tr>
+      </table></div>
+      <p>While playing, the track pages along when the playhead reaches its edge; a jump elsewhere re-centers it.</p>
+      <h3>Going to a time</h3>
+      <p>Click the MET readout (or press <kbd>G</kbd>), type a time and press <kbd>Return</kbd>:</p>
+      <div class="table-scroll"><table>
+        <tr><th>TYPE</th><th>MEANS</th></tr>
+        <tr><td><code>T+22:32:34</code></td><td>Mission elapsed time, h:mm:ss (<code>T-10s</code> before liftoff)</td></tr>
+        <tr><td><code>6m35s</code>, <code>1d 2h</code>, <code>395 s</code>, <code>1.5h</code></td><td>MET in units</td></tr>
+        <tr><td><code>1d 02:00:00</code>, <code>6:35</code></td><td>MET with days, or m:ss</td></tr>
+        <tr><td><code>+30s</code>, <code>-5m</code></td><td>Relative to the current time</td></tr>
+        <tr><td><code>2026-11-14 03:12</code></td><td>A UTC date and time (missions with a calendar epoch)</td></tr>
+        <tr><td><code>2</code></td><td>A bare number, in the timeline's own unit (days for every built-in mission)</td></tr>
+      </table></div>
+      <p>An entry it can&rsquo;t read gets a red outline; clicking away restores the current time.</p>
+    </section>
+
+    <section id="warp">
+      <h2><span class="num">05</span>Time warp</h2>
+      <p>Warp is simulated time per real second, as in KSP: <b>1× is real time</b>, 1,000× plays 16.7 minutes a second,
+        10,000,000× crosses a Mars cruise in about three seconds. Each mission opens at the warp that plays it in about a minute.</p>
+      <ul>
+        <li>The <b>ladder</b> has one bar per level (0.1×, 1×, 5×, 10×, 50×, 100×, 1k, 10k, 100k, 1M, 10M). Click a bar
+          for that warp; scroll on it to fine-tune between levels. The small triangle marks 1×.</li>
+        <li><b>1×</b> returns to real time in one click (<kbd>/</kbd>); it lights up while you're at 1×.</li>
+        <li><b>« »</b> step a level down / up (<kbd>,</kbd> <kbd>.</kbd>); <kbd>[</kbd> <kbd>]</kbd> fine-tune.</li>
+        <li>The <b>clock</b> toggles auto-slow: playback eases down near events so a burn doesn't flash past, and the readout
+          shows the warp actually playing. Hover the readout for how long the whole mission takes at this warp.</li>
+      </ul>
+    </section>
+
+    <section id="data">
+      <h2><span class="num">06</span>Reading the flight</h2>
+      <h3>Flight-data labels</h3>
+      <p>Beside each vehicle (toggle with <kbd>L</kbd>):</p>
+      <ul>
+        <li><b>H</b>: height above the WGS-84 ellipsoid (or <b>R</b>, distance from the scene's center, away from a planet).</li>
+        <li><b>V</b>: inertial speed; below 120 km also <b>surf</b>, speed relative to the rotating ground, the one that matters for entry and landing.</li>
+        <li><b>Δv</b>: delta-v spent in burns so far, shown from the vehicle's first burn.</li>
+        <li><b>» burn</b>: the burn in progress and its size.</li>
+      </ul>
+      <figure>
+        <img src="assets/mission-control-starship-ascent.png" alt="Starship Flight 15 at T+4:30 with labels beside Super Heavy and the ship, and the timeline zoomed to the ascent" loading="lazy" />
+        <figcaption>T+4:30 on Flight 15: Super Heavy returning to the tower, the ship climbing, the timeline zoomed to the ascent</figcaption>
+      </figure>
+      <h3>Inspector</h3>
+      <ul>
+        <li><b>Maneuvers</b>: every event with its MET; the current one is highlighted and kept in view. Click one to jump there and frame the burn.</li>
+        <li><b>Bodies</b>: one card per body with its live altitude or distance and its facts. Click to select; <kbd>⌘</kbd>/<kbd>Ctrl</kbd>-click to measure.</li>
+        <li><b>Candidate</b> (optimized missions): the selected candidate's dates, Δv and verification.</li>
+      </ul>
+      <h3>Charts</h3>
+      <p><i>Distance</i> plots distance to each body over the whole mission (Starship's shows every pass near Starbase as a dip);
+        the vertical line is the current time, and clicking or dragging moves it.</p>
+    </section>
+
+    <section id="imagery">
+      <h2><span class="num">07</span>Earth imagery</h2>
+      <p>The bundled Earth map is about 5 km per pixel: fine from orbit, a blur from a few km up. Close to Earth,
+        Mission Control streams <b>Sentinel-2 cloudless</b> satellite tiles for the part of the planet in view,
+        down to about 10 m per pixel, and drapes them over the globe. Sharper tiles replace coarser ones as they arrive.</p>
+      <ul>
+        <li>Turn it on or off in <i>View › High-res Earth imagery</i>.</li>
+        <li>Tiles are cached on disk (<code>~/Library/Caches/orbitopt/tiles</code> on macOS, <code>~/.cache/orbitopt/tiles</code>
+          on Linux; <code>ORBITOPT_TILE_CACHE</code> moves it), so a view loads in a second or two the second time.</li>
+        <li><code>ORBITOPT_EARTH_TILES=off</code> turns off all downloading.</li>
+      </ul>
+      <div class="callout"><p>Imagery: Sentinel-2 cloudless 2024 by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2024),
+        licensed <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener">CC BY-NC-SA 4.0</a>:
+        <b>non-commercial use only</b>. The credit is shown in the view whenever tiles are drawn.</p></div>
+    </section>
+
+    <section id="candidates">
+      <h2><span class="num">08</span>Candidates and verification</h2>
+      <p>For an optimized mission (Mars), the left panel's <b>Trajectories</b> list shows each distinct candidate the
+        optimizer found and what happened to it at the verification gate. Selecting one highlights its two-body
+        screening arc in 3D and fills the inspector's candidate card; the amber trajectory is the one flown in high fidelity.</p>
+      <figure>
+        <img src="assets/mission-control-mars.png" alt="Mission Control on the Earth-to-Mars transfer: candidate trajectories, the 3D transfer, the porkchop chart and the selected candidate" loading="lazy" />
+        <figcaption>Earth→Mars: candidates on the left and on the launch-window chart, the selected one's numbers on the right</figcaption>
+      </figure>
+      <p>The title bar's badge always says <b>VERIFIED</b>, <b>VERIFY FAILED</b> or <b>NOT CHECKED</b>. The <i>Verification</i>
+        tab lists every check with its residual and tolerance, the force model, integrator step convergence and conservation
+        checks. GOES loads unverified by default (the TudatPy re-fly takes about a minute); its tab has a button to run it.</p>
+    </section>
+
+    <section id="own">
+      <h2><span class="num">09</span>Your own missions</h2>
+      <p>Describe a mission in YAML (kinds <code>geo-raising</code>, <code>mars-transfer</code>, <code>lunar-free-return</code>);
+        omitted fields fall back to the built-in mission's values.</p>
+<pre><b>orbitopt validate my_mission.yaml</b>   # schema check, no compute
+<b>orbitopt run my_mission.yaml</b>        # optimize, verify, write scene + report
+<b>orbitopt view my_mission.yaml</b>       # run (cached) and open</pre>
+      <p>Any scene JSON (<code>orbitopt export</code>, or written by your own code) opens with
+        <i>File › Open scene file…</i>. See the <a href="https://github.com/zangjiucheng/orbitopt/blob/main/README.md#mission-configs" target="_blank" rel="noopener">README</a> for the config format.</p>
+    </section>
+
+    <section id="keys">
+      <h2><span class="num">10</span>Keyboard shortcuts</h2>
+      <p><kbd>F1</kbd> shows these in the app.</p>
+      <div class="table-scroll"><table>
+        <tr><th>KEY</th><th>DOES</th></tr>
+        <tr><td><kbd>Space</kbd> / <kbd>⇧Space</kbd></td><td>Play / play backwards (the same key again pauses)</td></tr>
+        <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Step 1% of the visible timeline (<kbd>Alt</kbd>: 0.1%)</td></tr>
+        <tr><td><kbd>⇧←</kbd> <kbd>⇧→</kbd></td><td>Previous / next event</td></tr>
+        <tr><td><kbd>Home</kbd></td><td>Restart</td></tr>
+        <tr><td><kbd>=</kbd> <kbd>-</kbd> <kbd>0</kbd></td><td>Zoom the timeline in / out / fit</td></tr>
+        <tr><td><kbd>G</kbd></td><td>Go to time</td></tr>
+        <tr><td><kbd>,</kbd> <kbd>.</kbd></td><td>Warp down / up a level</td></tr>
+        <tr><td><kbd>/</kbd></td><td>Real time (1×)</td></tr>
+        <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>Fine-tune warp</td></tr>
+        <tr><td><kbd>Tab</kbd> / <kbd>⇧Tab</kbd></td><td>Focus next / previous body</td></tr>
+        <tr><td><kbd>T</kbd></td><td>Track selected body</td></tr>
+        <tr><td><kbd>M</kbd></td><td>Focus (zoom to) selected body</td></tr>
+        <tr><td><kbd>L</kbd></td><td>Flight-data labels on / off</td></tr>
+        <tr><td><kbd>R</kbd></td><td>Reset camera</td></tr>
+        <tr><td><kbd>I</kbd></td><td>Toggle the right panel</td></tr>
+        <tr><td><kbd>F1</kbd></td><td>Shortcut reference</td></tr>
+        <tr><td><kbd>⌘Q</kbd> / <kbd>Ctrl+Q</kbd></td><td>Quit</td></tr>
+      </table></div>
+    </section>
+
+    <section id="trouble">
+      <h2><span class="num">11</span>Troubleshooting</h2>
+      <ul>
+        <li><b>A mission takes minutes to open.</b> It is being computed; the scene is cached afterwards. The cache is keyed on
+          orbitopt's source, so after updating orbitopt the first open computes again.</li>
+        <li><b>No satellite imagery near Earth.</b> Check <i>View › High-res Earth imagery</i>, the network, and that
+          <code>ORBITOPT_EARTH_TILES</code> isn't <code>off</code>. Imagery appears only within a few Earth radii.</li>
+        <li><b>The 3D view is black in a screenshot.</b> Window captures miss the OpenGL view; use
+          <code>scripts/capture_screenshots.py</code>, which composites it.</li>
+        <li><b>Something else.</b> <a href="https://github.com/zangjiucheng/orbitopt/issues" target="_blank" rel="noopener">Open an issue</a>
+          with the mission, what you did and what you saw.</li>
+      </ul>
+    </section>
+
+    <footer>orbitopt · Mission Control guide · <a href="index.html">flight log</a> · <a href="https://github.com/zangjiucheng/orbitopt" target="_blank" rel="noopener">GitHub</a></footer>
+  </main>
+</div>
+</body>
+</html>
