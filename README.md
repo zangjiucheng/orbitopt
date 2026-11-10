@@ -26,7 +26,8 @@ why a trajectory was chosen and how well it was verified.
 | **Visualize** | Versioned scene file format, single-scene viewer, Mission Control: planet-centered views, candidate comparison, verification reports, linked porkchop / distance charts | `scene_format.py`, `viz/` |
 
 Built-in missions: **Artemis II** free return, **GOES** GTO→GEO raising,
-**Earth → Mars** orbit insertion, and the solar system.
+**Earth → Mars** orbit insertion, **Starship Flight 15** return-pass
+prediction, and the solar system.
 
 ## Checked against real missions
 
@@ -52,6 +53,28 @@ real trajectory.
 | Mission | Input (target) | orbitopt result |
 |---|---|---|
 | Artemis II-like lunar free return | 6,545 km perilune altitude (Artemis II's published figure); entry flight-path angle −6° | perilune within the 50 km targeting tolerance, and the unpowered return reaches the entry interface inside the [−7°, −5°] corridor (TudatPy Earth+Moon+Sun) |
+
+**Open prediction.** Published before the flight, to be checked against
+it afterwards. Starship Flight 15 (NET 2026-11-13) is planned as the first
+return of the ship to Starbase. orbitopt launches the ship from Starbase
+into the orbit SpaceX describes (~275 km; Flight 14's 30.5° inclination,
+since Flight 15's is unpublished), propagates it with TudatPy (Earth J2,
+Moon, Sun; no drag) and finds the ground-track pass that can bring it home.
+SpaceX's announced entry time is used only as a check, never as an input.
+Ascent, deorbit burn and entry are not modelled.
+
+| Flight 15 | orbitopt prediction | Real |
+|---|---|---|
+| Orbits by the announced entry (T+22:10:46) | 14.74 | SpaceX: "approximately 14" |
+| First pass after the announced entry that reaches Starbase | T+22:26:39, 16 min after the announced entry | pending |
+| That pass's ground track | 350 km north of Starbase, heading east (with 29.5–31.5°: 280–400 km north) | pending |
+| Depends on the launch time? | No: the ground track is fixed by the site and azimuth | — |
+
+If the inclination matches Flight 14's, the ship has to close roughly
+300–400 km of cross-range during entry, or with an out-of-plane deorbit
+burn. `orbitopt view starship-flight-15` opens the scene;
+[`src/orbitopt/viz/starship_flight.py`](src/orbitopt/viz/starship_flight.py)
+lists every assumption with its source.
 
 The Artemis II mission (`orbitopt view artemis2`,
 [`examples/artemis2_free_return.yaml`](examples/artemis2_free_return.yaml))
