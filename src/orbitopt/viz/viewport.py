@@ -75,7 +75,21 @@ class DebouncedInteractor(QtInteractor):
         vtkRenderWindow.SetSize(self._RenderWindow, w, h)
         self._Iren.SetSize(w, h)
         self._Iren.ConfigureEvent()
+        self._update_gl_surface()
         self._resize_settle_timer.start()
+
+    def _update_gl_surface(self):
+        """macOS: resize the OpenGL context's drawable to the view.
+
+        The base-class SetSize above (pyvistaqt's own choice, so VTK does not
+        fight Qt over the NSView's frame) skips vtkCocoaRenderWindow's resize
+        handling, and the NSOpenGLContext keeps its old drawable. Frames then
+        render at the new size into the old surface and the window shows them
+        scaled: opening Starship halves the view's height, and the scene came
+        out squashed into the bottom half with the top half black."""
+        rw = self._RenderWindow
+        if rw is not None and hasattr(rw, "UpdateContext") and rw.GetContextId():
+            rw.UpdateContext()
 
     def _render_after_resize_settles(self):
         # Guard against firing after the widget is closed: pyvistaqt swaps _Iren
@@ -83,6 +97,7 @@ class DebouncedInteractor(QtInteractor):
         # timer would otherwise raise on quit (Cmd+Q).
         iren = self._Iren
         if iren is not None and hasattr(iren, "Render"):
+            self._update_gl_surface()
             iren.Render()
 
     # KSP-style dynamic depth range. VTK's default fit-to-scene clipping can't

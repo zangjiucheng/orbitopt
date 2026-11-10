@@ -345,6 +345,40 @@ def test_inspector_fits_its_minimum_width_with_long_maneuver_names():
     inspector.close()
 
 
+def test_inspector_info_rows_never_clip_a_word():
+    """Starship's "Orbits by announced entry" key left its value a column too
+    narrow for one word: "(SpaceX:" drew as "aceX:". Key and value now each
+    keep room for their longest word, at the panel's narrowest width too."""
+    from PySide6.QtWidgets import QApplication, QLabel
+
+    from orbitopt.viz.inspector import InspectorPanel
+    from orbitopt.viz.theme import STYLESHEET
+
+    app = QApplication.instance() or QApplication([])
+    scene = _scene()
+    scene["bodies"][0]["info"] = [
+        {"label": "Orbits by announced entry", "value": "14.74 (SpaceX: ~14)"},
+        {"label": "Return pass", "value": "T+22:26:39, 350 km north of Starbase, heading E"},
+    ]
+    state = MissionState()
+    inspector = InspectorPanel(state)
+    inspector.setStyleSheet(STYLESHEET)
+    inspector.resize(200, 800)  # app._RIGHT_MIN
+    inspector.show()
+    state.set_scene(scene)
+    app.processEvents()
+    checked = 0
+    for label in inspector.findChildren(QLabel):
+        if label.objectName() not in ("bodyStat", "bodyStatValue") or not label.isVisible():
+            continue
+        fm = label.fontMetrics()
+        widest = max(fm.horizontalAdvance(word) for word in label.text().split())
+        assert label.contentsRect().width() >= widest, (label.text(), label.width(), widest)
+        checked += 1
+    assert checked >= 4
+    inspector.close()
+
+
 def test_inspector_sections_scroll_independently():
     """Candidate, maneuvers and bodies are separate framed sections, each with
     its own header count and scroll area (they used to share one scroll)."""

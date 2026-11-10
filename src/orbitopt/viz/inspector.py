@@ -50,6 +50,27 @@ def _repolish(widget: QWidget) -> None:
     widget.style().polish(widget)
 
 
+
+# A stat row: key left, value right, both wrapping at word boundaries and
+# each shrinking no narrower than its longest word, so nothing is clipped.
+# The value used to ignore its own size (QSizePolicy.Ignored) and take only
+# what the key left: a long key ("Orbits by announced entry") left it a
+# sliver too narrow for one word, and "(SpaceX:" drew as "aceX:". A wrapped
+# label's minimum is its longest word, not its one-line width, so neither
+# widens the panel (the unwrapped values once did, hiding them off-panel).
+def _stat_row(key: str, value: str) -> QHBoxLayout:
+    row = QHBoxLayout()
+    k = QLabel(key)
+    k.setObjectName("bodyStat")
+    val = QLabel(value)
+    val.setObjectName("bodyStatValue")
+    val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+    for label in (k, val):
+        label.setWordWrap(True)
+    row.addWidget(k)
+    row.addWidget(val, 1)
+    return row
+
 class InspectorSection(QFrame):
     """A framed section: header (title + item count) over its own scroll area.
 
@@ -348,20 +369,7 @@ class InspectorPanel(QWidget):
             ("Verification", (cand.get("verification") or "not flown").replace("_", " ")),
         ]
         for key, value in rows:
-            r = QHBoxLayout()
-            k = QLabel(key)
-            k.setObjectName("bodyStat")
-            k.setWordWrap(True)  # only squeezed at the narrowest panel ("Screening fidelity" on Linux fonts)
-            val = QLabel(value)
-            val.setObjectName("bodyStatValue")
-            val.setWordWrap(True)
-            val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            # The value takes what the key leaves: keys stay on one line
-            # whenever they fit, values wrap first.
-            val.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-            r.addWidget(k)
-            r.addWidget(val, 1)
-            layout.addLayout(r)
+            layout.addLayout(_stat_row(key, value))
 
         notes = list(cand.get("verdictReasons") or [])
         if exported:
@@ -422,31 +430,7 @@ class InspectorPanel(QWidget):
             v.addLayout(dist_row)
 
         for row in body.get("info", []):
-            r = QHBoxLayout()
-            k = QLabel(row["label"])
-            k.setObjectName("bodyStat")
-            k.setWordWrap(True)  # only squeezed at the narrowest panel ("Screening fidelity" on Linux fonts)
-            val = QLabel(row["value"])
-            val.setObjectName("bodyStatValue")
-            # Without word-wrap, a long value (e.g. "8,312 km from Moon
-            # center") reports its full unwrapped width as this row's
-            # (and so the whole scrollable card column's) minimum width --
-            # wider than the actual panel, with horizontal scrolling off,
-            # so the overflow silently became invisible instead of
-            # visibly clipped. Confirmed against a real rendered frame:
-            # the scroll content measured 318px against a 260px-wide
-            # panel, and even *short* values on unrelated rows vanished
-            # because addStretch pushed them into the same off-panel
-            # region. Word-wrap keeps every row's width bounded by the
-            # panel instead of by its longest value.
-            val.setWordWrap(True)
-            val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            # The value takes what the key leaves: keys stay on one line
-            # whenever they fit, values wrap first.
-            val.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-            r.addWidget(k)
-            r.addWidget(val, 1)
-            v.addLayout(r)
+            v.addLayout(_stat_row(row["label"], row["value"]))
 
         frame.setToolTip("Click to focus · ⌘/Ctrl-click to measure distance")
         frame.mousePressEvent = lambda e, bid=body["id"]: self.body_clicked.emit(
