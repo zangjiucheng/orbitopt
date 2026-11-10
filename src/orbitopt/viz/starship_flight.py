@@ -400,9 +400,10 @@ def _booster_track(pred: ReturnPrediction, ascent, end_s: float) -> tuple[np.nda
     return t, ascent_mod.ecef_path_to_eci_states(t, r, pred.liftoff_mjd2000)
 
 
-def _vector_event(label: str, time_s: float, position_eq, dv_eq, note: str) -> dict:
-    """A timeline event carrying a burn arrow (drawn by the viewer)."""
-    return {"label": label, "time": round(time_s / 86400.0, 8), "note": note,
+def _vector_event(label: str, time_s: float, position_eq, dv_eq, note: str, body_id: str = "spacecraft") -> dict:
+    """A timeline event carrying a burn arrow (drawn by the viewer), owned by
+    ``body_id`` -- whose delta-v tally it counts toward."""
+    return {"label": label, "time": round(time_s / 86400.0, 8), "note": note, "bodyId": body_id,
             "vector": {"position": np.round(equatorial_to_ecliptic(np.asarray(position_eq)) / 1000.0, 3).tolist(),
                        "deltaV": np.round(equatorial_to_ecliptic(np.asarray(dv_eq)), 2).tolist()}}
 
@@ -447,14 +448,14 @@ def _booster_events(pred: ReturnPrediction, ascent) -> list[dict]:
                       _ecef_dv_to_eq(dv_bb, t0 + ascent_mod.BOOSTBACK_START_S / 86400.0),
                       f"T+2:26-3:02 (published). Turns the booster's {ascent_mod.MECO_SPEED_M_S * math.cos(math.radians(ascent_mod.MECO_FLIGHT_PATH_DEG)):,.0f} m/s "
                       f"downrange into {abs(b.boostback_end_ground_speed):,.0f} m/s back toward Starbase -- solved so the fall "
-                      f"ends over the tower; apogee {b.apogee_m / 1000:.0f} km."),
+                      f"ends over the tower; apogee {b.apogee_m / 1000:.0f} km.", body_id="booster"),
         _vector_event("Booster landing burn (Raptor)", b.landing_burn_start_s,
                       ecef_to_eci(lb_r[None, :], [t_lb_utc])[0],
                       _ecef_dv_to_eq(up * b.landing_burn_dv_m_s, t_lb_utc),
                       f"T+{int(b.landing_burn_start_s) // 60}:{int(b.landing_burn_start_s) % 60:02d}: lit as late as it can be "
                       f"and still stop at the tower -- {b.landing_burn_start_height_m / 1000:.1f} km at "
                       f"{b.landing_burn_speed_m_s:,.0f} m/s, {b.catch_s - b.landing_burn_start_s:.0f} s "
-                      f"(assumed {ascent_mod.BOOSTER_LANDING_DECEL_G:.1f} g net)."),
+                      f"(assumed {ascent_mod.BOOSTER_LANDING_DECEL_G:.1f} g net).", body_id="booster"),
         {"label": "Booster catch (predicted)", "time": round(b.catch_s / 86400.0, 8),
          "note": f"T+{int(b.catch_s) // 60}:{int(b.catch_s) % 60:02d}, {b.catch_s - ascent_mod.BOOSTER_CATCH_ANNOUNCED_S:+.0f} s "
                  f"from SpaceX's planned T+6:35 (not an input). At {site.name}."},

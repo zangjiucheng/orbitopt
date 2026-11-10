@@ -79,6 +79,14 @@ def nearest_maneuver(events: list[dict], t: float) -> tuple[dict | None, float |
     return best, best_dt
 
 
+def burn_owner(scene: dict | None, event: dict) -> str | None:
+    """The body a burn event belongs to: its ``bodyId``, else the scene's
+    first spacecraft (older scenes carry one vehicle)."""
+    if event.get("bodyId"):
+        return event["bodyId"]
+    return next((b["id"] for b in (scene or {}).get("bodies", []) if b.get("kind") == "spacecraft"), None)
+
+
 def maneuver_windows(events: list[dict], span: float, fraction: float = 0.05) -> dict[int, float]:
     """``{id(event): window}`` for each burn event (one with a ``vector``):
     how close in time the scrubber must be for its arrow to show. Half the

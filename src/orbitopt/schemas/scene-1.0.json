@@ -274,7 +274,8 @@
         "label": { "type": "string" },
         "time": { "type": "number" },
         "note": { "type": "string" },
-        "vector": { "$ref": "#/$defs/maneuverVector" }
+        "vector": { "$ref": "#/$defs/maneuverVector" },
+        "bodyId": { "type": "string", "description": "Optional: the body a burn (an event with a vector) belongs to, e.g. a booster's boostback. Absent: the scene's first spacecraft." }
       },
       "additionalProperties": true
     },

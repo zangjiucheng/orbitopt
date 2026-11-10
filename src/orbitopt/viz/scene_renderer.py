@@ -503,6 +503,7 @@ class SceneRenderer:
         self._candidates: dict[str, dict] = {}
         self._candidate_id: str | None = None
         self._candidates_show_all = True
+        self._flight_labels: dict[str, object] = {}
         self._rotating: list[dict] = []
         self._rotation_elapsed_hours = 0.0
         self._has_timeline = False
@@ -532,6 +533,9 @@ class SceneRenderer:
         return self._actor_body_ids.get(actor) if actor is not None else None
 
     def load(self, scene: dict) -> None:
+        for actor in self._flight_labels.values():
+            self.plotter.renderer.RemoveActor(actor)
+        self._flight_labels = {}
         self.plotter.clear()
         self.scene = scene
         self._moving = {}
@@ -853,6 +857,78 @@ class SceneRenderer:
         self.set_time(self._time, render=render)
 
     # --------------------------------------------------------- candidates
+    # ------------------------------------------------------ flight labels
+    _LABEL_OFFSET_PX = (14, 10)
+
+    def set_flight_labels(self, labels: dict[str, str], t: float) -> None:
+        """Text next to each body in ``labels`` (body id -> text, e.g. height /
+        speed / delta-v), at its display position at ``t``; bodies left out
+        lose theirs. Billboard text: it faces the camera and keeps a fixed
+        pixel offset from the body, and lives in the VTK scene (a Qt widget
+        over the native GL view does not composite reliably)."""
+        for body_id in list(self._flight_labels):
+            if body_id not in labels:
+                self.plotter.renderer.RemoveActor(self._flight_labels.pop(body_id))
+        for body_id, text in labels.items():
+            actor = self._flight_labels.get(body_id)
+            if actor is None:
+                actor = vtk.vtkBillboardTextActor3D()
+                actor.SetDisplayOffset(*self._LABEL_OFFSET_PX)
+                actor.PickableOff()
+                prop = actor.GetTextProperty()
+                prop.SetFontSize(13)
+                prop.SetColor(0.957, 0.949, 0.918)            # INK_PRIMARY
+                prop.SetBackgroundColor(0.043, 0.035, 0.086)  # PANEL
+                prop.SetBackgroundOpacity(0.72)
+                prop.SetFrame(False)
+                prop.SetLineSpacing(1.15)
+                self.plotter.renderer.AddActor(actor)
+                self._flight_labels[body_id] = actor
+            actor.SetInput(text)
+            actor.SetPosition(*(float(c) for c in self.body_display_position(body_id, t)))
+        self._declutter_labels(labels)
+
+    # Rough label box from the text: 13 pt text with 1.15 line spacing.
+    _LABEL_CHAR_PX = 7.6
+    _LABEL_LINE_PX = 17.0
+
+    def _declutter_labels(self, labels: dict[str, str]) -> None:
+        """Stack labels that would overlap on screen (e.g. ship and booster
+        both back at the tower), in the given order: the first keeps its
+        place, a later one that collides moves below the boxes it hits."""
+        renderer = self.plotter.renderer
+        coord = vtk.vtkCoordinate()
+        coord.SetCoordinateSystemToWorld()
+        placed: list[tuple[float, float, float, float]] = []  # x0, y0, x1, y1 in display px
+        # Display coordinates are physical pixels, and text renders at the
+        # window's DPI (144 on a 2x screen): size the boxes to match, or on
+        # a Retina display they come out half size and never collide.
+        try:
+            scale = float(self.plotter.ren_win.GetDPI()) / 72.0
+        except Exception:  # noqa: BLE001 -- no render window yet
+            scale = 1.0
+        dx, dy = self._LABEL_OFFSET_PX
+        for body_id, text in labels.items():
+            actor = self._flight_labels[body_id]
+            coord.SetValue(*actor.GetPosition())
+            ax, ay = coord.GetComputedDoubleDisplayValue(renderer)
+            lines = text.split("\n")
+            w = max(len(line) for line in lines) * self._LABEL_CHAR_PX * scale
+            h = len(lines) * self._LABEL_LINE_PX * scale
+            off_y = dy
+            for _ in range(len(placed) + 1):
+                box = (ax + dx, ay + off_y, ax + dx + w, ay + off_y + h)
+                hit = next((b for b in placed if box[0] < b[2] and b[0] < box[2] and box[1] < b[3] and b[1] < box[3]), None)
+                if hit is None:
+                    break
+                off_y = hit[1] - h - 4.0 * scale - ay  # just below the box it hit
+            actor.SetDisplayOffset(int(dx), int(round(off_y)))
+            placed.append((ax + dx, ay + off_y, ax + dx + w, ay + off_y + h))
+
+    def flight_label_text(self, body_id: str) -> str | None:
+        actor = self._flight_labels.get(body_id)
+        return None if actor is None else actor.GetInput()
+
     def highlight_candidate(self, candidate_id: str | None, show_all: bool = True, render: bool = True) -> None:
         """Emphasize one optimizer candidate's screening arc; with
         ``show_all`` False the others are hidden instead of dimmed."""
