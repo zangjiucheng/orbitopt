@@ -169,7 +169,7 @@ def test_entries_carry_frame_body_positions_at_each_candidates_own_epochs():
     for entry in entries:
         path = entry["screeningPath"]
         assert set(path["bodyPositions"]) == {"earth", "mars"}
-        for body_id, positions in path["bodyPositions"].items():
+        for positions in path["bodyPositions"].values():
             assert len(positions) == len(path["times"])
             # Sampled at the candidate's own epochs, not the mission's.
             t0, tof = entry["departureMjd2000"], entry["tofDays"]
