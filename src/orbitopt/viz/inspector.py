@@ -313,6 +313,9 @@ class InspectorPanel(QWidget):
         name_row = QHBoxLayout()
         name = QLabel(cand["label"])
         name.setObjectName("bodyName")
+        # "Candidate #0" beside its status badge set the section's minimum
+        # width (179 px on the Linux CI fonts, panel 178): let the name wrap.
+        name.setWordWrap(True)
         status_text, color = candidate_status(cand)
         status = QLabel(status_text)
         status.setStyleSheet(f"color: {color}; font-size: 10px; font-weight: 600;")
@@ -386,6 +389,7 @@ class InspectorPanel(QWidget):
         dot.setStyleSheet(f"color: {body['color']}; font-size: 13px;")
         name_label = QLabel(body["name"])
         name_label.setObjectName("bodyName")
+        name_label.setWordWrap(True)  # long vehicle names must not widen the panel
         name_row.addWidget(dot)
         name_row.addWidget(name_label)
         name_row.addStretch(1)
