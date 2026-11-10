@@ -43,10 +43,12 @@ from orbitopt.verify.differential_correction import (
     target_free_return_entry_corridor,
 )
 from orbitopt.verify.tudat_propagate import (
+    DEFAULT_INTEGRATOR,
     PropagationResult,
     body_position_at_absolute_epoch,
     body_velocity_at_absolute_epoch,
     find_altitude_crossing,
+    integrator_description,
     propagate_multi_arc,
 )
 from orbitopt.viz.scene import (
@@ -387,8 +389,12 @@ def _build_artemis2_mission(
     # only to truncate them below; half a day of margin keeps the crossing
     # comfortably inside the exported span.
     with recorder.stage(REFINE) as st:
-        st.physical_model = {"name": f"fixed-step TudatPy re-propagation ({step_seconds:g} s; Earth/Moon/Sun)",
-                             "fidelity": "high-fidelity"}
+        # propagate_multi_arc's default integrator is adaptive RKDP 8(7);
+        # step_seconds is only its maximum step, not a fixed step.
+        st.physical_model = {"name": f"adaptive RKDP 8(7) TudatPy re-propagation "
+                                     f"(max step {step_seconds:g} s; Earth/Moon/Sun)",
+                             "fidelity": "high-fidelity",
+                             "integrator": integrator_description(DEFAULT_INTEGRATOR, step_seconds)}
         export_duration_s = total_days * 86400.0
         if targeting.entry_epoch is not None:
             export_duration_s = min(export_duration_s, targeting.entry_epoch + 0.5 * 86400.0)
@@ -449,6 +455,7 @@ def _build_artemis2_mission(
         final_state=cutoff_state,
     )
 
+    n_fine = len(full.epochs)
     perilune_day = round(targeting.perilune_epoch / 86400.0, TRAIL_TIME_DECIMALS)
     perilune_idx_fine = int(np.argmin(np.abs(full.epochs - targeting.perilune_epoch)))
 
