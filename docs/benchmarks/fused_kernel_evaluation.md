@@ -34,8 +34,8 @@ by `tests/test_nbody_fused.py`. Numba CUDA runs there on the CUDA simulator.
 The prototypes are in `src/orbitopt/dynamics/nbody_fused.py`. One scalar
 per-candidate routine is compiled as plain Python, `numba.njit(parallel)`
 and `numba.cuda.jit`. The module also holds a CUDA C `RawKernel` of the same
-algorithm and a JAX `lax.fori_loop` version. None of them is wired into a
-problem class.
+algorithm and a JAX `lax.fori_loop` version. Only `numba-cpu` is wired into
+a problem class (task #164, see "Production integration" at the end).
 
 ## Results (CPU-only host)
 
@@ -134,3 +134,67 @@ the closest-approach path used by `FreeReturnScreeningProblem`.
 candidates or about 2,000 steps, or if the Moon grid moves to the device.
 In those cases fused-kernel compute becomes the dominant term. Port the
 existing `numba-cuda` prototype and re-run this benchmark on a CUDA host.
+
+## Production integration (task #164)
+
+`FreeReturnScreeningProblem` now takes
+`backend="auto"|"numpy"|"numba-cpu"|"cupy"` (default `auto`):
+
+- `auto` picks `cupy` only when `use_gpu=True` is passed explicitly. Otherwise
+  it picks `numba-cpu` when numba is installed, the output mode is
+  `closest_approach`, and the batch has at least `AUTO_NUMBA_MIN_BATCH = 64`
+  candidates (or the kernel is already loaded in the process). In every other
+  case it picks `numpy`. A numba run-time failure under `auto` raises a
+  warning and falls back to `numpy`.
+- The numba-cpu kernel is compiled with `cache=True`. It lives at module level
+  in `dynamics/_nbody_fused_numba.py` because a kernel built inside a
+  closure missed the on-disk cache in every new process. Measured cold
+  compile is ~9 s; loading from the warm cache takes ~1 s.
+- `run_optimization()` returns `OptimizationResult.backend` (the backend that
+  evaluated the most candidates) and `.backend_usage` (candidates per
+  backend). The verbose line prints the backend too. pygmo deep-copies the
+  UDP, so the per-backend tally (`core.problem.BackendUsage`) is shared
+  across copies.
+
+### End-to-end timing
+
+```bash
+PYTHONPATH=src python scripts/bench_free_return_backends.py --json out.json        # 256 x 25 gens
+PYTHONPATH=src python scripts/bench_free_return_backends.py --pop 2000 --generations 5 \
+    --repeat 1 --backends numpy,numba-cpu
+```
+
+The host has 8 logical CPUs, Python 3.13, numpy 2.5 and numba 0.68.1, and no
+CUDA device. Each figure is a median of warm runs, 300 steps, 6-day coast, no
+Sun. `run_optimization` is the full PSO run through the batch evaluator,
+pygmo overhead included. Raw JSON is in `free_return_backends_cpu_*.json`.
+
+| pop x gens | numpy `batch_fitness` | numba-cpu `batch_fitness` | numpy `run_optimization` | numba-cpu `run_optimization` |
+|---|---|---|---|---|
+| 256 x 25  | 0.18 s | 0.006-0.012 s (15-33x) | 3.6 s | 0.21-0.23 s (**~16x**) |
+| 2,000 x 5 | 0.62 s | 0.027 s (23x)          | 5.2 s | 0.21 s (**~24x**) |
+
+End to end, the whole screening run is ~16x faster at the default-like
+256-candidate population and ~24x faster at 2,000 candidates. The 20-30x
+figure above measures only the N-body closest-approach kernel. The pipeline
+gains less at small populations because the per-call Moon-grid precompute
+and pygmo's own overhead do not shrink. A new process also pays the
+one-time kernel load once: ~1 s from cache, ~9 s on a cold cache.
+
+### Fitness agreement
+
+- `tests/test_free_return_backends.py` checks `numba-cpu`, `auto`, the
+  history path and (on a GPU host) `cupy` against `numpy` at rtol 1e-9.
+- In the benchmark batches, every candidate whose trajectory stays above
+  Earth's surface agrees with numpy: to 0 km (bit-identical) at 256
+  candidates, and to <= 0.015 km at 2,000.
+- Candidates whose coarse trajectory passes *below* Earth's surface
+  (perigee < 6,378 km: 61 of 256 and 477 of 2,000) diverge by up to
+  0.74 km and 45 km respectively, out of fitness values of ~10^5 km. They
+  pass near the 1/r^3 singularity, where step-level round-off differences
+  are amplified chaotically. Neither backend is "right" for them, and they
+  are far from any optimum.
+- A PSO run therefore follows the same path only until such a candidate
+  breaks a tie. At 256 x 25 both backends converged to the same champion
+  (330.48 km). At 2,000 x 5 they diverged (81.6 km vs 88.5 km), which is an
+  artifact of the swarm's path, not a fitness bias.

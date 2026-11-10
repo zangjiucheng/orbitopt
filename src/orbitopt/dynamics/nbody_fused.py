@@ -29,8 +29,10 @@ Backends (all optional dependencies, imported lazily):
 - ``"jax"``       -- vectorized over candidates, ``lax.fori_loop`` over
   steps, compiled by XLA (``jax.jit``); enables ``jax_enable_x64``.
 
-This module is an evaluation artifact and is not wired into any problem
-class; see the decision record in the benchmark doc before doing so.
+Only ``"numba-cpu"`` is used in production: task #164 wired it into
+``orbitopt.problems.free_return.FreeReturnScreeningProblem`` (``backend=
+"auto"|"numba-cpu"``). The other backends remain evaluation artifacts; see
+the decision record in the benchmark doc before wiring them in.
 """
 from __future__ import annotations
 
@@ -220,26 +222,52 @@ def run_python(p):
 # Numba (CPU, parallel)
 # ---------------------------------------------------------------------------
 
-@lru_cache(maxsize=None)
 def _numba_cpu_kernel():
-    import numba
-
-    accel = numba.njit(inline="always")(_accel_py)
-    cand = numba.njit(inline="always")(_make_candidate(accel))
-
-    @numba.njit(parallel=True)
-    def kernel(r0, v0, dt_arr, epoch0, grid, ind, gidx, mus, n_steps, mu_earth,
-               min_d, min_t, min_s, r_out, v_out, t_out):
-        for i in numba.prange(r0.shape[0]):
-            cand(i, r0, v0, dt_arr, epoch0, grid, ind, gidx, mus, n_steps, mu_earth,
-                 min_d, min_t, min_s, r_out, v_out, t_out)
+    # Module-level jit functions in a separate module so numba's on-disk
+    # cache hits across processes (see _nbody_fused_numba's docstring).
+    from orbitopt.dynamics._nbody_fused_numba import kernel
 
     return kernel
 
 
+_NUMBA_AVAILABLE = None
+
+
+def numba_available() -> bool:
+    """True if ``numba`` is importable (the ``numba-cpu`` backend can run)
+    and hasn't been disabled by ``disable_numba()``."""
+    global _NUMBA_AVAILABLE
+    if _NUMBA_AVAILABLE is None:
+        try:
+            import numba  # noqa: F401
+        except Exception:
+            _NUMBA_AVAILABLE = False
+        else:
+            _NUMBA_AVAILABLE = True
+    return _NUMBA_AVAILABLE
+
+
+def disable_numba():
+    """Make ``numba_available()`` report False for the rest of the process
+    (used by ``backend="auto"`` callers after a numba runtime failure)."""
+    global _NUMBA_AVAILABLE
+    _NUMBA_AVAILABLE = False
+
+
+_NUMBA_CPU_WARM = False
+
+
+def numba_cpu_warm() -> bool:
+    """True once the numba-cpu kernel has run in this process (so its JIT
+    compile / on-disk cache load is already paid for)."""
+    return _NUMBA_CPU_WARM
+
+
 def run_numba_cpu(p):
+    global _NUMBA_CPU_WARM
     o = _alloc_outputs(p["r0"].shape[0])
     _numba_cpu_kernel()(*_args(p, o))
+    _NUMBA_CPU_WARM = True
     return _result(o)
 
 

@@ -4,9 +4,11 @@ GPU-backend probe. None of this touches Qt widgets or VTK -- results travel
 back to the main thread through queued signals (see SceneLoader)."""
 from __future__ import annotations
 
-import os
-
 from PySide6.QtCore import QObject, Signal
+
+from orbitopt.viz.compute_pool import ComputePool
+
+__all__ = ["BackendProbeWorker", "ComputePool", "SceneLoader"]
 
 
 def _is_picklable(fn) -> bool:
@@ -17,66 +19,6 @@ def _is_picklable(fn) -> bool:
     except Exception:  # noqa: BLE001 -- lambdas/closures (e.g. File > Open) just run in-thread
         return False
     return True
-
-
-class ComputePool:
-    """A single persistent worker *process* for mission compute.
-
-    A QThread alone does not keep the UI responsive here: the loaders
-    (pykep/pygmo Python callbacks, small-array numpy, tudatpy bindings) hold
-    the GIL nearly the whole time, so the main thread is starved. Measured
-    while computing Artemis II with no scene cache: a 16 ms main-thread timer
-    fired 63 times in 20 s instead of ~1,260, with gaps up to 1.08 s. A
-    separate process has its own GIL. SceneLoader still runs on a QThread,
-    but that thread only blocks in ``future.result()``, which releases the GIL.
-
-    ``spawn`` (not fork): forking a process that already holds Qt, VTK and an
-    OpenGL context is unsafe on macOS. The worker is started lazily on the
-    first submit and reused, so heavy imports are paid once per session.
-    ``ORBITOPT_INPROCESS_COMPUTE=1`` disables it (debugging, profilers).
-    """
-
-    def __init__(self):
-        self._executor = None
-
-    @staticmethod
-    def enabled() -> bool:
-        return os.environ.get("ORBITOPT_INPROCESS_COMPUTE", "") != "1"
-
-    def run(self, fn):
-        """Call ``fn()`` in the worker process and return its result (blocking)."""
-        from concurrent.futures.process import BrokenProcessPool
-
-        if self._executor is None:
-            import multiprocessing as mp
-            from concurrent.futures import ProcessPoolExecutor
-
-            from orbitopt._compute_worker import watch_parent
-
-            self._executor = ProcessPoolExecutor(
-                max_workers=1, mp_context=mp.get_context("spawn"),
-                initializer=watch_parent, initargs=(os.getpid(),),
-            )
-        try:
-            return self._executor.submit(fn).result()
-        except BrokenProcessPool as exc:
-            # The worker died (crash in native code, or terminate() on quit).
-            # Drop the broken executor so the next load starts a fresh one.
-            self._executor = None
-            raise RuntimeError("the compute process exited unexpectedly") from exc
-
-    def terminate(self):
-        """Kill the worker immediately (on quit) -- a mission compute can run for
-        minutes and must not hold the app open."""
-        executor, self._executor = self._executor, None
-        if executor is None:
-            return
-        for proc in list(getattr(executor, "_processes", {}).values()):
-            try:
-                proc.terminate()
-            except Exception:  # noqa: BLE001 -- best-effort teardown
-                pass
-        executor.shutdown(wait=False, cancel_futures=True)
 
 
 class SceneLoader(QObject):
