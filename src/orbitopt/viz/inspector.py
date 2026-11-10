@@ -20,7 +20,7 @@ from orbitopt.viz.candidate_panel import (
     format_date,
     format_dv,
 )
-from orbitopt.viz.state import MissionState
+from orbitopt.viz.state import MissionState, altitude_reference
 
 
 def format_distance(value: float, unit: str) -> str:
@@ -120,14 +120,29 @@ class InspectorPanel(QWidget):
         outer.addWidget(scroll, stretch=1)
 
     # ------------------------------------------------------------ public
-    def set_distances(self, distances: dict[str, float]) -> None:
+    def altitude_body_ids(self) -> list[str]:
+        """Bodies whose card shows an altitude (it needs their position, not
+        just their distance -- the ellipsoid's radius depends on latitude)."""
+        return [bid for bid, card in self._body_cards.items() if card["minus"]]
+
+    def set_distances(self, distances: dict[str, float], positions: dict | None = None) -> None:
+        """Distance cards from ``distances``; altitude cards from the scene-
+        frame ``positions`` of :meth:`altitude_body_ids` (height above the
+        central body's drawn ellipsoid)."""
         unit = self._state.scene["distanceUnit"] if self._state.scene else ""
+        ref = altitude_reference(self._state.scene)
         for body_id, card in self._body_cards.items():
-            if body_id in distances:
+            if card["dist_val"] is None:
+                continue
+            if card["minus"]:
+                if positions is not None and body_id in positions and ref is not None:
+                    card["dist_val"].setText(format_distance(ref.altitude(positions[body_id]), unit))
+            elif body_id in distances:
                 card["dist_val"].setText(format_distance(distances[body_id], unit))
 
     def distance_text(self, body_id: str) -> str:
-        return self._body_cards[body_id]["dist_val"].text()
+        label = self._body_cards[body_id]["dist_val"]
+        return "" if label is None else label.text()
 
     def show_measure(self, distance: float) -> None:
         state = self._state
@@ -300,17 +315,31 @@ class InspectorPanel(QWidget):
         name_row.addStretch(1)
         v.addLayout(name_row)
 
-        dist_row = QHBoxLayout()
-        dist_key = QLabel("Distance")
-        dist_key.setObjectName("bodyStat")
-        dist_val = QLabel("—")
-        dist_val.setObjectName("bodyStatValue")
-        dist_val.setWordWrap(True)
-        dist_val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        dist_row.addWidget(dist_key)
-        dist_row.addStretch(1)
-        dist_row.addWidget(dist_val)
-        v.addLayout(dist_row)
+        # Spacecraft around a planet read as an altitude (above the drawn
+        # sphere); a ground site gets no distance row at all (its marker is
+        # lifted for display, see its info rows); everything else reads as
+        # distance from the scene's center.
+        ref = altitude_reference(self._state.scene)
+        kind = body.get("kind")
+        dist_val, minus = None, 0.0
+        if kind != "site":
+            as_altitude = ref is not None and kind == "spacecraft"
+            minus = 1.0 if as_altitude else 0.0  # marks an altitude card (see set_distances)
+            dist_row = QHBoxLayout()
+            dist_key = QLabel("Altitude" if as_altitude else "Distance")
+            dist_key.setObjectName("bodyStat")
+            if as_altitude:
+                shape = "ellipsoid" if ref.flattening else "sphere"
+                dist_key.setToolTip(f"Height above the {self._state.body(ref.body_id)['name']} {shape} as drawn "
+                                    f"({ref.radius:,.0f} km equatorial radius)")
+            dist_val = QLabel("—")
+            dist_val.setObjectName("bodyStatValue")
+            dist_val.setWordWrap(True)
+            dist_val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            dist_row.addWidget(dist_key)
+            dist_row.addStretch(1)
+            dist_row.addWidget(dist_val)
+            v.addLayout(dist_row)
 
         for row in body.get("info", []):
             r = QHBoxLayout()
@@ -342,7 +371,7 @@ class InspectorPanel(QWidget):
         )
 
         self.info_layout.addWidget(frame)
-        self._body_cards[body["id"]] = {"frame": frame, "dist_val": dist_val}
+        self._body_cards[body["id"]] = {"frame": frame, "dist_val": dist_val, "minus": minus}
 
     def _make_maneuver_row(self, event: dict, unit: str) -> QFrame:
         row = QFrame()

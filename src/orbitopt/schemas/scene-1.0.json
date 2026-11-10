@@ -33,6 +33,16 @@
       "items": { "$ref": "#/$defs/body" }
     },
     "timeline": { "$ref": "#/$defs/timeline" },
+    "initialView": {
+      "type": "object",
+      "properties": {
+        "focusBodyId": { "type": "string", "description": "Body the viewer opens focused on (selected, tracked and framed)." },
+        "faceLockBodyId": { "type": "string", "description": "Body kept lined up behind the focused one (e.g. the planet under a spacecraft)." },
+        "distance": { "type": "number", "exclusiveMinimum": 0, "description": "Camera distance from the focused body, in distanceUnit; the viewer picks one when absent." }
+      },
+      "additionalProperties": true,
+      "description": "Optional: how a viewer should first frame the scene. A hint, not a requirement."
+    },
     "verification": {
       "type": "object",
       "required": ["result", "reports"],
@@ -101,6 +111,12 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "description": "Marker size in the viewer's display units (screen-relative, not physical radius) -- used for the point-marker fallback when `texture`/`radius` are absent, or a body's texture fails to load."
+        },
+        "flattening": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMaximum": 1,
+          "description": "Optional polar flattening f = (a - c) / a. A viewer draws the textured body as an oblate ellipsoid about its pole (the third column of orientationBasis, else +Z), with `radius` the equatorial radius a. Earth: 1/298.257223563 (WGS-84)."
         },
         "radiusExaggeration": {
           "type": "number",

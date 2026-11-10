@@ -24,7 +24,14 @@ from vtkmodules.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray
 
 _MARKER_BASE_SIZE = 8.0
 _MARKER_WEIGHT_SIZE = 1.1
-_SPHERE_RESOLUTION = 48  # theta/phi mesh resolution -- smooth enough for a close-up, cheap at ~10 bodies
+# theta/phi mesh resolution. 48 left visible flat facets and a polygonal limb
+# in a LEO close-up (Earth from a few hundred km); 128 (256 x 128 quads, ~33k
+# points) keeps the limb smooth there and is still cheap at ~10 bodies.
+_SPHERE_RESOLUTION = 128
+# Texture filtering: mipmaps stop the 8K Earth from shimmering when it is
+# small on screen; anisotropic filtering keeps it sharp at grazing angles
+# (looking along the horizon from orbit).
+_TEXTURE_ANISOTROPY = 16.0
 
 # _equirectangular_sphere places texture longitude 0 (a body's prime meridian)
 # at the mesh's local -X (azimuth 180); an IAU body-fixed frame puts it at +X.
@@ -124,7 +131,11 @@ def _load_texture(filename: str) -> pv.Texture | None:
     try:
         traversable = resources.files("orbitopt").joinpath("viz", "assets", "textures", filename)
         with resources.as_file(traversable) as path:
-            return pv.Texture(str(path))
+            texture = pv.Texture(str(path))
+            texture.interpolate = True
+            texture.mipmap = True
+            texture.SetMaximumAnisotropicFiltering(_TEXTURE_ANISOTROPY)
+            return texture
     except Exception:  # noqa: BLE001 -- any load/decode failure just means "no texture"
         return None
 
@@ -206,6 +217,19 @@ def _sphere_actor(plotter, body: dict, name: str):
         return None
 
     sphere = _equirectangular_sphere(float(radius))
+    flattening = float(body.get("flattening") or 0.0)
+    if flattening > 0.0:
+        # Oblate ellipsoid about the mesh's +Z -- which the actor orientation
+        # (orientationBasis) turns onto the body's real pole. Normals of
+        # x^2/a^2 + y^2/a^2 + z^2/c^2 = 1 are along (x, y, z a^2/c^2).
+        squash = 1.0 - flattening
+        points = np.asarray(sphere.points).copy()
+        points[:, 2] *= squash
+        sphere.points = points
+        normals = points.copy()
+        normals[:, 2] /= squash * squash
+        normals /= np.linalg.norm(normals, axis=1)[:, None]
+        sphere.point_data.active_normals = normals.astype(np.float32)
     # A star is its own light source -- lighting=False renders its raw
     # texture colors with no shading falloff, so it reads as uniformly
     # bright regardless of viewing angle instead of having an implausible

@@ -134,3 +134,21 @@ def test_selection_and_measure_partner_rules():
     state.select_body("earth")  # a plain select drops the partner
     assert state.selected_body_id == "earth" and state.measure_body_id is None
     assert log.count(("selection",)) == 5
+
+
+def test_maneuver_windows_follow_event_spacing():
+    from orbitopt.viz.state import maneuver_windows
+
+    events = [
+        {"label": "Deorbit", "time": 10.0, "vector": {}},
+        {"label": "Peak g", "time": 10.30},
+        {"label": "Landing burn", "time": 10.34, "vector": {}},
+        {"label": "Catch", "time": 10.345},
+        {"label": "SOI exit", "time": 3.0},
+        {"label": "TCM", "time": 3.0, "vector": {}},  # same time as SOI exit: that one doesn't count
+    ]
+    w = maneuver_windows(events, span=20.0)
+    assert w[id(events[2])] == pytest.approx(0.0025)    # half the 0.005 gap to the catch
+    assert w[id(events[0])] == pytest.approx(0.15)      # half the gap to peak g
+    assert w[id(events[5])] == pytest.approx(1.0)       # capped at 5% of the span (gap to deorbit is 7)
+    assert id(events[1]) not in w                       # not a burn

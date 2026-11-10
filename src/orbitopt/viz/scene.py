@@ -115,6 +115,16 @@ def earth_texture_mesh_azimuth_deg(longitude_deg: float) -> float:
     return (longitude_deg + 180.0) % 360.0
 
 
+# Polar flattening f = (a - c) / a of bodies drawn as real spheres. Earth's is
+# the WGS-84 value: its polar radius is 21 km shorter than the equatorial one,
+# so a perfect sphere of the equatorial radius put the ground at mid latitudes
+# ~4 km (at Starbase, 26 N) to ~21 km (poles) *above* the true surface --
+# anything near the ground (a landing, a launch site) was drawn inside it.
+FLATTENING = {
+    "earth": 1.0 / 298.257223563,  # WGS-84 (NGA TR8350.2)
+}
+
+
 def body_entry(
     body_id,
     name,
@@ -132,6 +142,7 @@ def body_entry(
     rotation_phase_offset_deg=None,
     orientation_basis=None,
     radius_exaggeration=None,
+    flattening=None,
 ):
     """One entry in SceneData.bodies. ``orbit``/``position``/``trail`` are
     all optional and independent: a static planet has orbit+position, a
@@ -174,6 +185,9 @@ def body_entry(
     texture is registered to the IAU frame (see
     bodies.body_fixed_to_eclipj2000_matrix).
 
+    ``flattening`` (default: FLATTENING by ``body_id`` for a textured body)
+    draws the sphere as an oblate ellipsoid about its pole.
+
     ``radius_exaggeration`` declares that ``radius`` is drawn this many times
     larger than the physical radius, so a viewer can label sizes as not to
     scale (see the schema's ``radiusExaggeration``).
@@ -201,6 +215,12 @@ def body_entry(
         entry["orientationBasis"] = orientation_basis
     if radius_exaggeration is not None:
         entry["radiusExaggeration"] = radius_exaggeration
+    # A textured body's flattening defaults from FLATTENING by id, so every
+    # exporter's Earth is the same ellipsoid without each passing it.
+    if flattening is None and texture is not None:
+        flattening = FLATTENING.get(body_id)
+    if flattening:
+        entry["flattening"] = flattening
     return entry
 
 

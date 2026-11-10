@@ -14,6 +14,9 @@ dict so they can be unit-tested without a display or a QApplication.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+import numpy as np
 from PySide6.QtCore import QObject, Signal
 
 # Two event times closer than this (in timeline units) count as "the same
@@ -76,6 +79,25 @@ def nearest_maneuver(events: list[dict], t: float) -> tuple[dict | None, float |
     return best, best_dt
 
 
+def maneuver_windows(events: list[dict], span: float, fraction: float = 0.05) -> dict[int, float]:
+    """``{id(event): window}`` for each burn event (one with a ``vector``):
+    how close in time the scrubber must be for its arrow to show. Half the
+    gap to the nearest *other* event (events at the very same time don't
+    count), capped at ``fraction`` of the timeline span -- so a burn days
+    from anything else keeps a wide window, while a landing burn seconds
+    after peak deceleration shows only around the landing. (A fixed 5% of a
+    22-hour timeline showed Starship's landing-burn arrow for over an hour.)"""
+    cap = fraction * span
+    windows = {}
+    for e in events:
+        if "vector" not in e:
+            continue
+        t = e.get("time", 0.0)
+        gaps = [abs(o.get("time", 0.0) - t) for o in events if o is not e and abs(o.get("time", 0.0) - t) > 1e-9]
+        windows[id(e)] = min(cap, 0.5 * min(gaps)) if gaps else cap
+    return windows
+
+
 def eased_speed(
     speed: float,
     events: list[dict],
@@ -131,6 +153,48 @@ def frame_options(scene: dict | None) -> list[tuple[str | None, str]]:
             continue
         options.append((body["id"], body["name"]))
     return options
+
+
+_ALTITUDE_KINDS = {"planet", "dwarf-planet", "moon"}
+
+
+@dataclass(frozen=True)
+class AltitudeReference:
+    """The planet (or moon) a scene is centered on, as drawn: equatorial
+    ``radius``, polar ``flattening`` and unit ``pole`` in the scene frame."""
+
+    body_id: str
+    radius: float
+    flattening: float
+    pole: tuple
+
+    def altitude(self, position) -> float:
+        """Height of a scene-frame ``position`` above the drawn ellipsoid,
+        to first order in the flattening: |r| - a (1 - f sin^2(lat)), with
+        the geocentric latitude from the real pole (metres-level for Earth)."""
+        r = np.asarray(position, dtype=float)
+        rn = float(np.linalg.norm(r))
+        if rn == 0.0:
+            return -self.radius
+        sin_lat = float(np.dot(r, self.pole)) / rn
+        return rn - self.radius * (1.0 - self.flattening * sin_lat * sin_lat)
+
+
+def altitude_reference(scene: dict | None) -> AltitudeReference | None:
+    """The scene's central planet or moon, when it is drawn with a known
+    ``radius`` -- then a spacecraft's distance from the origin reads better
+    as an altitude above that body's surface (the ellipsoid drawn). None for
+    a Sun-centered or radius-less scene."""
+    if not scene:
+        return None
+    central = next((b for b in scene.get("bodies", []) if b["id"] == scene.get("centralBodyId")), None)
+    if central is None or central.get("kind") not in _ALTITUDE_KINDS or not central.get("radius"):
+        return None
+    basis = central.get("orientationBasis")
+    pole = np.asarray(basis, dtype=float)[:, 2] if basis is not None else np.array([0.0, 0.0, 1.0])
+    pole = pole / np.linalg.norm(pole)
+    return AltitudeReference(central["id"], float(central["radius"]), float(central.get("flattening") or 0.0),
+                             tuple(float(c) for c in pole))
 
 
 def size_exaggeration_range(scene: dict | None) -> tuple[float, float] | None:

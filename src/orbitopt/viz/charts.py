@@ -24,7 +24,7 @@ from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPainterPath, QPen, Q
 from PySide6.QtWidgets import QTabWidget, QToolTip, QWidget
 
 from orbitopt.timescales import mjd2000_to_utc_datetime
-from orbitopt.viz.state import MissionState
+from orbitopt.viz.state import MissionState, altitude_reference
 from orbitopt.viz.theme import ACCENT, BG_VOID, HAIRLINE, INK_MUTED, INK_PRIMARY, INK_SECONDARY, PANEL
 
 # Reference sequential blue ramp, steps 100..700 (dataviz palette.md).
@@ -348,6 +348,7 @@ def distance_series(scene: dict) -> tuple[np.ndarray, list[dict]]:
     if sc is None:
         return np.empty(0), []
     times = np.asarray(sc["trail"]["times"], dtype=float)
+    ref = altitude_reference(scene)
     sc_pos = np.asarray(sc["trail"]["positions"], dtype=float)
     series = []
     for body in bodies:
@@ -360,8 +361,14 @@ def distance_series(scene: dict) -> tuple[np.ndarray, list[dict]]:
                 times, None if vel is None else np.asarray(vel, dtype=float))
         else:
             pos = np.broadcast_to(np.asarray(body.get("position", [0.0, 0.0, 0.0]), dtype=float), sc_pos.shape)
-        series.append({"id": body["id"], "name": body["name"], "color": body["color"],
-                       "km": np.linalg.norm(sc_pos - pos, axis=1)})
+        km = np.linalg.norm(sc_pos - pos, axis=1)
+        label = f"to {body['name']}"
+        if ref is not None and body["id"] == ref.body_id:
+            # Around a planet, distance from its centre is an altitude in
+            # disguise (a flat ~6,650 km line for LEO): show the altitude.
+            km = np.array([ref.altitude(r) for r in sc_pos - pos])
+            label = f"altitude above {body['name']}"
+        series.append({"id": body["id"], "name": body["name"], "label": label, "color": body["color"], "km": km})
     return times, series
 
 
@@ -458,7 +465,7 @@ class DistanceChart(_CachedChart):
             p.setPen(Qt.NoPen)
             p.drawRoundedRect(QRectF(legend_x, 7, 10, 10), 2, 2)
             p.setPen(QColor(INK_SECONDARY))
-            label = f"to {s['name']}"
+            label = s.get("label", f"to {s['name']}")
             p.drawText(QPointF(legend_x + 14, 16), label)
             legend_x += 22 + p.fontMetrics().horizontalAdvance(label)
 
@@ -483,7 +490,7 @@ class DistanceChart(_CachedChart):
     def _readout(self, t: float) -> str:
         i = int(np.clip(np.searchsorted(self._times, t), 0, len(self._times) - 1))
         lines = [f"T+{self._times[i]:.2f} {self._unit}"]
-        lines += [f"to {s['name']}: {format_km(float(s['km'][i]))}" for s in self._series]
+        lines += [f"{s.get('label', 'to ' + s['name'])}: {format_km(float(s['km'][i]))}" for s in self._series]
         return "\n".join(lines + ["Click or drag to move the mission time"])
 
     def mouseMoveEvent(self, event):  # noqa: N802

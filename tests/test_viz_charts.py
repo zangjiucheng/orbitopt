@@ -138,3 +138,71 @@ def test_charts_drive_and_follow_state(app):
     state.set_scene({"id": "s", "title": "S", "distanceUnit": "AU", "bodies": []})
     assert panel.count() == 0 and panel.isHidden()
     panel.close()
+
+
+def test_planet_centered_scene_reads_as_altitude(app):
+    from orbitopt.viz.inspector import InspectorPanel
+    from orbitopt.viz.state import altitude_reference
+
+    scene = _scene()
+    scene["bodies"][0]["radius"] = 6378.137  # Earth, the central body, now has a drawn sphere
+    ref = altitude_reference(scene)
+    assert (ref.body_id, ref.radius, ref.flattening) == ("earth", 6378.137, 0.0)
+    _times, series = distance_series(scene)
+    earth = next(s for s in series if s["id"] == "earth")
+    assert earth["label"] == "altitude above Earth"
+    assert earth["km"][0] == pytest.approx(7000.0 - 6378.137)
+    assert next(s for s in series if s["id"] == "moon")["label"] == "to Moon"  # other bodies: distance
+
+    state = MissionState()
+    inspector = InspectorPanel(state)
+    state.set_scene(scene)
+    assert inspector.altitude_body_ids() == ["spacecraft"]
+    inspector.set_distances({"spacecraft": 6653.137, "moon": 384_000.0},
+                            {"spacecraft": np.array([6653.137, 0.0, 0.0])})
+    assert inspector.distance_text("spacecraft") == "275 km"   # altitude, not 6,653 km
+    assert inspector.distance_text("moon") == "384,000 km"     # a natural body keeps its distance
+
+    sun_centered = _scene()
+    sun_centered["centralBodyId"] = None
+    assert altitude_reference(sun_centered) is None
+
+
+def test_altitude_is_measured_from_the_ellipsoid():
+    from orbitopt.viz.state import altitude_reference
+
+    f = 1.0 / 298.257223563
+    scene = _scene()
+    scene["bodies"][0].update(radius=6378.137, flattening=f)
+    ref = altitude_reference(scene)
+    polar = 6378.137 * (1.0 - f)
+    # On the ground at the pole and on the equator: both ~0, not -21 km at the pole.
+    assert ref.altitude([0.0, 0.0, polar]) == pytest.approx(0.0, abs=0.1)
+    assert ref.altitude([6378.137, 0.0, 0.0]) == pytest.approx(0.0, abs=1e-9)
+    # At Starbase's latitude a sphere of the equatorial radius put the ground ~4 km up.
+    lat = np.radians(25.997)
+    r_ground = 6378.137 * (1.0 - f * np.sin(lat) ** 2)
+    assert ref.altitude(r_ground * np.array([np.cos(lat), 0.0, np.sin(lat)])) == pytest.approx(0.0, abs=0.05)
+    # The pole follows orientationBasis (third column), not the scene's +Z.
+    scene["bodies"][0]["orientationBasis"] = [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]]
+    assert altitude_reference(scene).altitude([0.0, polar, 0.0]) == pytest.approx(0.0, abs=0.1)
+
+
+def test_flattened_body_renders_as_an_ellipsoid():
+    import pyvista as pv
+
+    from orbitopt.viz.scene_renderer import SceneRenderer
+
+    f = 1.0 / 298.257223563
+    scene = {"schemaVersion": "1.0", "id": "e", "title": "E", "distanceUnit": "km", "centralBodyId": "earth",
+             "bodies": [{"id": "earth", "name": "Earth", "color": "#4c8eff", "kind": "planet", "radiusDisplay": 4.6,
+                         "position": [0.0, 0.0, 0.0], "texture": "earth_daymap.jpg", "radius": 6378.137,
+                         "flattening": f}]}
+    plotter = pv.Plotter(off_screen=True)
+    try:
+        SceneRenderer(plotter).load(scene)
+        pts = np.asarray(plotter.renderer.actors["marker-earth"].mapper.dataset.points)
+        assert np.abs(pts[:, 2]).max() == pytest.approx(6378.137 * (1.0 - f), rel=1e-6)
+        assert np.hypot(pts[:, 0], pts[:, 1]).max() == pytest.approx(6378.137, rel=1e-6)
+    finally:
+        plotter.close()
