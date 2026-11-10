@@ -87,13 +87,30 @@ def test_return_is_solved_to_the_tower(prediction, solution):
 
 
 @pytest.mark.slow
-def test_return_solution_does_not_depend_on_the_bank_guess(prediction, solution):
-    from orbitopt.viz.starship_flight import solve_return
+def test_return_bank_is_the_best_reach(prediction, solution):
+    """Flight 14's inclination leaves Starbase out of constant-bank reach, so
+    the solved bank is the one of maximum cross-range reach: a degree either
+    way (burn time re-solved for downrange) lands farther off to the side.
+    The search is over the bank itself -- no starting guess to stall on (the
+    old 2-D solve stopped short on x86-64 macOS, 48 s off in burn time)."""
+    from orbitopt.viz import starship_flight as sf
 
-    other = solve_return(prediction, bank_guess_deg=20.0)
-    assert other.burn_time_s == pytest.approx(solution.burn_time_s, abs=2.0)
-    assert other.bank_deg == pytest.approx(solution.bank_deg, abs=0.2)
-    assert other.dv_normal_m_s == pytest.approx(solution.dv_normal_m_s, abs=1.0)
+    assert solution.dv_normal_m_s != 0.0  # stage 2 ran: the bank alone can't reach
+
+    def cross_miss_km(bank):
+        def downrange(dt_min):
+            burn_t = prediction.return_pass.time_s - 2500.0 + 60.0 * dt_min
+            traj, _ = sf._fly_from(prediction, burn_t, bank, 0.0)
+            return sf._miss_vector_km(prediction, burn_t, traj)
+
+        from scipy.optimize import brentq
+
+        dt = brentq(lambda x: downrange(x)[0], -15.0, 15.0, xtol=1e-5)
+        return abs(float(downrange(dt)[1]))
+
+    at = cross_miss_km(solution.bank_deg)
+    assert cross_miss_km(solution.bank_deg - 1.0) > at
+    assert cross_miss_km(solution.bank_deg + 1.0) > at
 
 
 @pytest.mark.slow

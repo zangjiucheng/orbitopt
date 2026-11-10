@@ -250,41 +250,76 @@ def _miss_vector_km(pred: ReturnPrediction, burn_time_s: float, trajectory) -> n
     return np.array([e * math.sin(psi) + n * math.cos(psi), e * math.cos(psi) - n * math.sin(psi)])
 
 
-def solve_return(pred: ReturnPrediction, bank_guess_deg: float = 40.0) -> ReturnSolution:
+def solve_return(pred: ReturnPrediction) -> ReturnSolution:
     """Deorbit-burn time and constant bank angle that bring the ship to the
     landing-burn height directly above Starbase; then the landing burn to
     the tower.
 
-    Two well-posed stages, each 2 controls for 2 targets (downrange,
-    crossrange): (1) burn time + bank. If the entry's cross-range cannot
-    reach (the bank saturates), (2) keep the bank stage 1 ended on -- the
-    vehicle's best constant-bank reach -- and solve burn time + an
-    out-of-plane component of the deorbit burn for the rest. A single
-    3-control solve was tried first: its bank / out-of-plane split depended
-    on the solver tolerances, so the reported delta-v was not a real answer."""
-    from scipy.optimize import least_squares
+    Stage 1 searches the one real choice, the bank angle, directly: for each
+    bank the burn time is solved for downrange (one variable, nearly linear),
+    leaving the cross-range miss as a function of bank alone. Cross-range
+    reach rises with bank and then falls (steep banks cost range), so the
+    bank of maximum reach is found by a bounded 1-D search; if that reach
+    passes Starbase, the bank is the shallower root below it, else the
+    vehicle's best reach. (A 2-D least-squares over burn time and bank
+    stalled from some starting guesses -- from 60 deg it never moved the
+    bank -- and on x86-64 macOS the default guess stopped short, giving a
+    burn time 48 s off.) Stage 2, when the bank cannot reach: keep that
+    bank and solve burn time + an out-of-plane component of the deorbit
+    burn. (A single 3-control solve was tried first: its bank / out-of-plane
+    split depended on the solver tolerances.)"""
+    from scipy.optimize import brentq, minimize_scalar
 
     if pred.return_pass is None:
         raise ValueError("no return pass to target")
     t_guess = pred.return_pass.time_s - 2500.0
-    # Burn time enters the solver as *minutes from t_guess*, not seconds
-    # since lift-off (~8e4): least_squares' xtol is relative to |x|, and with
-    # an 8e4 component it called a stalled stage 2 "converged" after one
-    # rejected step. Every variable is O(1) this way.
-    common = dict(xtol=1e-8, ftol=1e-8, gtol=1e-8, max_nfev=40, method="trf")
 
+    # Burn time is handled as *minutes from t_guess*: every variable is O(1).
     def miss(dt_min, bank, dv_n=0.0):
         burn_t = t_guess + 60.0 * dt_min
         traj, _dv = _fly_from(pred, burn_t, bank, dv_n)
         return _miss_vector_km(pred, burn_t, traj)
 
-    # Finite-difference steps sized to the physics (~3 s of burn time,
-    # ~0.4 deg of bank, ~0.5 m/s): the default (~1e-8) differences integrator
-    # / event-location noise, not the trajectory.
-    stage1 = least_squares(lambda x: miss(x[0], x[1]), x0=[0.0, bank_guess_deg],
-                           bounds=([-30.0, -85.0], [30.0, 85.0]), diff_step=[0.05, 0.01], **common)
-    dt_min, bank, dv_n = float(stage1.x[0]), float(stage1.x[1]), 0.0
-    if np.linalg.norm(stage1.fun) * 1000.0 >= 100.0:
+    warm = {"dt": 0.0}
+
+    def downrange_solved(bank):
+        """(burn time [min], miss vector) with the downrange miss under 5 m,
+        by secant from the last solution (downrange moves ~7.5 km per s of
+        burn time, almost linearly)."""
+        x0 = warm["dt"]
+        f0 = miss(x0, bank)
+        x1 = x0 + 0.05
+        for _ in range(20):
+            f1 = miss(x1, bank)
+            if abs(f1[0]) < 0.005:
+                break
+            slope = (f1[0] - f0[0]) / (x1 - x0)
+            if slope == 0.0:
+                break
+            step = float(np.clip(-f1[0] / slope, -5.0, 5.0))
+            x0, f0, x1 = x1, f1, float(np.clip(x1 + step, -30.0, 30.0))
+        warm["dt"] = x1
+        return x1, f1
+
+    # Which way to bank: the side whose lift carries the landing point toward
+    # Starbase. reach(b) > 0 means the landing point is carried past it.
+    _dt0, m0 = downrange_solved(1.0)
+    toward = -math.copysign(1.0, m0[1])
+
+    def reach(bank):
+        return toward * float(downrange_solved(bank)[1][1])
+
+    side = 1.0 if reach(45.0) >= reach(-45.0) else -1.0
+    best = minimize_scalar(lambda b: -reach(side * b), bounds=(1.0, 85.0), method="bounded",
+                           options={"xatol": 0.02})
+    b_max = float(best.x)
+    if reach(side * b_max) >= 0.0:
+        bank = side * float(brentq(lambda b: reach(side * b), 1.0, b_max, xtol=1e-3))
+    else:
+        bank = side * b_max
+    dt_min, m = downrange_solved(bank)
+    dv_n = 0.0
+    if np.linalg.norm(m) * 1000.0 >= 100.0:
         # Stage 2 is close to linear (crossrange moves ~0.5 km per m/s out of
         # plane, downrange ~7.5 km per s of burn time), so a plain damped
         # Newton step with fixed finite differences converges in a few

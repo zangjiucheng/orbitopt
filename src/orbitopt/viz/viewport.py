@@ -39,7 +39,9 @@ class DebouncedInteractor(QtInteractor):
     def resizeEvent(self, event):  # noqa: N802 -- Qt override signature
         if self._RenderWindow is None:
             return
-        scale = self._getPixelRatio()
+        # Qt's own ratio: pyvistaqt 0.13 dropped the private _getPixelRatio
+        # helper this used to call (0.12 computed the same screen ratio).
+        scale = self.devicePixelRatioF()
         w = int(round(scale * self.width()))
         h = int(round(scale * self.height()))
         self._RenderWindow.SetDPI(int(round(72 * scale)))

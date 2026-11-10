@@ -462,7 +462,14 @@ class InspectorPanel(QWidget):
         name.setWordWrap(True)
         # MET, not "T+0.00 days": a day-unit timeline put every ascent event
         # of a Starship flight at the same "T+0.00".
-        time_label = QLabel(format_met(event.get("time", 0.0) * timeline_unit_seconds(unit)))
+        seconds = event.get("time", 0.0) * timeline_unit_seconds(unit)
+        # Past a day the seconds are noise and widen the row past the panel's
+        # 200 px minimum (with Linux's wider fonts): 'T+200d 00:00'.
+        text = format_met(seconds)
+        if abs(seconds) >= 86400.0:
+            text = text.rsplit(":", 1)[0]
+        time_label = QLabel(text)
+        time_label.setToolTip(format_met(seconds))
         time_label.setObjectName("maneuverTime")
         top.addWidget(name)
         top.addStretch(1)

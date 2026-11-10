@@ -868,7 +868,10 @@ class TimelineBar(QWidget):
         if not timeline:
             return
         t = self._state.time
-        if not self.met_edit.hasFocus():  # don't overwrite what's being typed
+        # Don't overwrite what's being typed. isModified() is set only by
+        # typing (setText clears it): focus alone isn't enough, a widget can
+        # hold focus without anyone editing (it did on the macOS CI runners).
+        if not (self.met_edit.hasFocus() and self.met_edit.isModified()):
             self.met_edit.setText(self.met_text())
         ref_et = timeline.get("referenceEpochEt")
         # Cleared, not left alone, for a timeline with no calendar epoch:

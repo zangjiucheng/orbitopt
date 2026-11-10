@@ -108,6 +108,12 @@ def test_typing_a_time_jumps_there_and_the_track_zooms_and_follows():
     bar.met_edit.setText("not a time")
     bar.met_edit.returnPressed.emit()
     assert state.time == pytest.approx(1.0) and bar.met_edit.property("invalid") is True
+    # Focus alone (no typing) doesn't freeze the readout: the macOS CI runners
+    # left focus in the box, and time moved under a stale "T+0:00:00".
+    bar.met_edit.setFocus()
+    bar.met_edit.setModified(False)
+    state.set_time(2.0)
+    assert bar.met_edit.text() == "T+2d 00:00:00"
 
     # Zoom in on the playhead: the ruler, step and readout get finer.
     step_fit = bar.step_size()
