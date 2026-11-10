@@ -197,3 +197,43 @@ def test_panel_follows_the_candidate_selection(app):
     assert "Candidate #1 — screening trajectory, NOT verified in high fidelity" in text
     assert "Exported Trajectory\nCandidate #0" in text  # the reports stay the exported one's
     assert "PASSED — 1 of 1 report(s) passed" in text
+
+
+def test_goes_default_load_is_flagged_unverified_with_a_verified_variant():
+    import pickle
+
+    from orbitopt import missions
+
+    assert missions.builtin_mission_config("goes")["verification"] == {"enabled": False}
+    note = missions.verification_off_note("goes")
+    assert note and "does NOT mean" in note and "TudatPy" in note
+    loader = missions.high_fidelity_loader("goes")
+    assert loader is not None and pickle.loads(pickle.dumps(loader)) is loader  # runs in the worker process
+    # Missions whose default load already verifies get no offer.
+    for mission_id in ("artemis2", "mars", "solar-system", "nope"):
+        assert missions.verification_off_note(mission_id) is None
+        assert missions.high_fidelity_loader(mission_id) is None
+
+
+def test_panel_offers_one_click_verification_only_while_unverified(app):
+    state = MissionState()
+    panel = VerificationPanel(state)
+    requested = []
+    panel.verify_requested.connect(lambda: requested.append(True))
+
+    state.set_scene(_mission_scene())
+    assert panel.verify_button is None  # no offer set: the plain NOT CHECKED note only
+
+    panel.set_verify_offer("Verification is OFF by default for GOES.")
+    state.set_scene(_mission_scene())
+    text = panel.text()
+    assert "NOT CHECKED" in text and "NOT VERIFIED BY DEFAULT" in text
+    assert "Verification is OFF by default for GOES." in text
+    assert panel.verify_button is not None
+    panel.verify_button.click()
+    assert requested == [True]
+
+    # Once the verified scene arrives its reports are shown, not the offer.
+    state.set_scene(vr.publish_to_scene(_mission_scene(), [REPORT]))
+    assert panel.verify_button is None
+    assert "PASSED — 1 of 1 report(s) passed" in panel.text()

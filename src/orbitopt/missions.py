@@ -137,7 +137,9 @@ def _load_solar_system() -> dict:
 # to the builder's own defaults, so the scenes are identical to the
 # zero-argument compute_and_export_*_mission() calls. The GOES high-fidelity
 # re-fly is off, matching what the GUI has always shown (it's a ~minute of
-# extra tudatpy work; `orbitopt run` a config to get it). Artemis II keeps
+# extra tudatpy work); Mission Control says so in its Verification tab and
+# offers a one-click re-run with it on (high_fidelity_loader), and
+# `orbitopt run` a config gets it from the CLI. Artemis II keeps
 # its verification report (the targeter's own TudatPy check -- no extra cost).
 BUILTIN_MISSION_CONFIGS = {
     # Same scene id/title as compute_and_export_mission(), so the cached
@@ -185,6 +187,52 @@ def _load_goes() -> dict:
     from orbitopt.scene_cache import cached_scene
 
     return cached_scene("goes", lambda: _run_builtin_pipeline("goes"))
+
+
+def _load_goes_verified() -> dict:
+    """GOES with the TudatPy high-fidelity re-fly switched on -- the
+    one-click "run verification" entry in Mission Control. Cached under its
+    own id so the fast default scene stays cached alongside it."""
+    from orbitopt.pipeline import run_pipeline
+    from orbitopt.scene_cache import cached_scene
+
+    def compute() -> dict:
+        config = builtin_mission_config("goes")
+        config["verification"] = {"enabled": True}
+        return run_pipeline(config).scene
+
+    return cached_scene("goes-verified", compute)
+
+
+# Built-in missions whose default (GUI) load leaves high-fidelity verification
+# off to keep loading cheap: the note shown in place of the reports, and the
+# loader that re-runs the same mission with verification on. Module-level
+# functions, so they pickle into Mission Control's compute worker process.
+VERIFICATION_OFF_BY_DEFAULT = {
+    "goes": (
+        ("High-fidelity verification is OFF by default for GOES to keep loading fast. "
+        "The animation shows the screening/optimization solution only -- a smooth "
+        "animation does NOT mean it passed TudatPy high-fidelity verification "
+        "(J2+J22 + Sun/Moon re-fly with the final-burn targeter)."),
+        _load_goes_verified,
+    ),
+}
+
+
+def verification_off_note(id: str) -> str | None:
+    """Why mission ``id``'s default load carries no verification report, or
+    None when its default load does verify (or it isn't a built-in)."""
+    entry = VERIFICATION_OFF_BY_DEFAULT.get(id)
+    return entry[0] if entry else None
+
+
+def high_fidelity_loader(id: str) -> SceneLoader | None:
+    """A loader for mission ``id`` with high-fidelity verification enabled,
+    or None when its default load already verifies (or it isn't a built-in).
+    ``orbitopt run`` a config with ``verification.enabled: true`` is the
+    CLI equivalent."""
+    entry = VERIFICATION_OFF_BY_DEFAULT.get(id)
+    return entry[1] if entry else None
 
 
 def _load_mars() -> dict:

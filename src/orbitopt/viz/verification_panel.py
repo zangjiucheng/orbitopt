@@ -14,8 +14,8 @@ Viewer-only: reads JSON, imports no compute code.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from orbitopt.viz.candidate_panel import FLOWN_FIDELITY_LABEL, SCREENING_FIDELITY_LABEL, exported_candidate
 from orbitopt.viz.state import MissionState
@@ -196,8 +196,19 @@ def _row(layout: QVBoxLayout, key: str, value: str, color: str | None = None) ->
     layout.addWidget(_label(value, "maneuverNote", color))
 
 
+VERIFY_BUTTON_TEXT = "Run high-fidelity verification (TudatPy)"
+
+
 class VerificationPanel(QWidget):
-    """Rebuilt from MissionState.scene_changed."""
+    """Rebuilt from MissionState.scene_changed.
+
+    For a mission whose default load skips verification (e.g. GOES) the host
+    calls :meth:`set_verify_offer` with the reason before applying the scene;
+    the panel then explains it and shows a button that emits
+    ``verify_requested`` so the host can re-run the mission with high-fidelity
+    verification on."""
+
+    verify_requested = Signal()
 
     def __init__(self, state: MissionState, parent: QWidget | None = None):
         super().__init__(parent)
@@ -223,12 +234,20 @@ class VerificationPanel(QWidget):
         outer.addWidget(scroll, stretch=1)
 
         self._scene: dict | None = None
+        self._verify_offer: str | None = None
+        self.verify_button: QPushButton | None = None
         state.scene_changed.connect(self._rebuild)
         state.candidate_changed.connect(lambda _cid: self._rebuild(self._scene))
 
     def text(self) -> str:
         """All label text in the panel (for tests)."""
         return "\n".join(w.text() for w in self.findChildren(QLabel) if w.parent() is not None)
+
+    def set_verify_offer(self, note: str | None) -> None:
+        """Why the next scene(s) carry no verification report and that it can
+        be switched on (None: no offer). Shown only while the scene has no
+        reports; takes effect at the next rebuild."""
+        self._verify_offer = note
 
     # ------------------------------------------------------------ build
     def _clear(self):
@@ -241,6 +260,7 @@ class VerificationPanel(QWidget):
 
     def _rebuild(self, scene):
         self._scene = scene
+        self.verify_button = None
         self._clear()
         result = scene_verification_result(scene)
         scope = verification_scope(scene, self._state.candidate())
@@ -258,6 +278,8 @@ class VerificationPanel(QWidget):
                 "NOT CHECKED — no high-fidelity verification report came with this trajectory "
                 "(verification was off or produced nothing). Do not treat it as verified.",
                 WARNING))
+            if self._verify_offer:
+                self._layout.addWidget(self._verify_offer_card(self._verify_offer))
         else:
             reports = scene["verification"].get("reports", [])
             n_passed = sum(1 for r in reports if (r.get("status") or {}).get("result") == "passed")
@@ -277,6 +299,23 @@ class VerificationPanel(QWidget):
         v.setSpacing(3)
         for key, value, color in rows:
             _row(v, key, value, color)
+        return card
+
+    def _verify_offer_card(self, note: str) -> QFrame:
+        card = QFrame()
+        card.setObjectName("bodyCard")
+        v = QVBoxLayout(card)
+        v.setContentsMargins(10, 8, 10, 8)
+        v.setSpacing(6)
+        v.addWidget(_label("NOT VERIFIED BY DEFAULT", "sectionHeader", wrap=False))
+        v.addWidget(_label(note, "maneuverNote", WARNING))
+        button = QPushButton(VERIFY_BUTTON_TEXT)
+        button.setToolTip("Re-run this mission with the TudatPy high-fidelity re-fly enabled "
+                          "(about a minute of extra compute the first time, then cached) "
+                          "and show its verification report here.")
+        button.clicked.connect(self.verify_requested.emit)
+        v.addWidget(button)
+        self.verify_button = button
         return card
 
     def _note_card(self, text: str, color: str | None = None) -> QFrame:
