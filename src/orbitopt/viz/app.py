@@ -58,7 +58,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from orbitopt.missions import list_missions
+from orbitopt.missions import high_fidelity_loader, list_missions, verification_off_note
 from orbitopt.viz import icons
 from orbitopt.viz.candidate_panel import CandidatePanel
 from orbitopt.viz.charts import ChartPanel
@@ -143,6 +143,13 @@ class MissionControlWindow(QMainWindow):
         self.state = MissionState(self)
 
         self._scene_cache: dict[str, dict] = {}
+        # Sidebar key -> registry mission id (built-ins/plugins only; File >
+        # Open scenes have none), the active key, and the keys whose loader
+        # was switched to its high-fidelity-verification variant.
+        self._mission_ids: dict[str, str] = {}
+        self._active_key: str | None = None
+        self._active_label: str | None = None
+        self._verified_keys: set[str] = set()
         self._loaders: dict[str, callable] = {}
         self._playing = False
 
@@ -310,6 +317,7 @@ class MissionControlWindow(QMainWindow):
         self.inspector.body_clicked.connect(self._on_card_clicked)
         self.inspector.event_clicked.connect(self._seek_to_event)
         self.verification_panel = VerificationPanel(self.state)
+        self.verification_panel.verify_requested.connect(self._run_high_fidelity_verification)
         # Inspector and Verification share the right column as tabs; the
         # collapse chevron moves to the tab bar's corner so it serves both.
         self.inspector.collapse_btn.hide()
@@ -947,6 +955,7 @@ class MissionControlWindow(QMainWindow):
         # here with no separate list to keep in sync.
         for mission in list_missions():
             self._loaders[mission.title] = mission.load
+            self._mission_ids[mission.title] = mission.id
             self.sidebar.add_mission(mission.title, mission.title, mission.title)
         if self.sidebar.count():
             self.sidebar.select_row(0)
@@ -972,6 +981,7 @@ class MissionControlWindow(QMainWindow):
         if self._loading:
             return
         self._set_playing(False)
+        self._active_key, self._active_label = key, label
 
         if key in self._scene_cache:
             # A cached scene skips the ~10s compute but still stutters: applying
@@ -1134,7 +1144,34 @@ class MissionControlWindow(QMainWindow):
         QMessageBox.critical(self, f"Failed to load {name}", error_msg)
         self.statusBar().showMessage("Ready")
 
+    def _verify_offer_note(self) -> str | None:
+        """The Verification tab's "not verified by default -- run it" note for
+        the active mission, or None (no offer: not such a built-in, or it was
+        already re-run with verification on)."""
+        key = self._active_key
+        mission_id = self._mission_ids.get(key) if key is not None else None
+        if mission_id is None or key in self._verified_keys:
+            return None
+        return verification_off_note(mission_id)
+
+    def _run_high_fidelity_verification(self):
+        """One-click entry from the Verification tab: re-run the active
+        built-in mission with high-fidelity verification enabled, replacing
+        its sidebar entry's scene with the verified one."""
+        key = self._active_key
+        mission_id = self._mission_ids.get(key) if key is not None else None
+        loader = high_fidelity_loader(mission_id) if mission_id is not None else None
+        if self._loading or loader is None:
+            return
+        self._set_playing(False)
+        self._loaders[key] = loader
+        self._verified_keys.add(key)
+        self._scene_cache.pop(key, None)
+        self._start_loading(key, f"{self._active_label or key} with high-fidelity verification")
+
     def _apply_scene(self, scene: dict):
+        verify_offer = self._verify_offer_note()
+        self.verification_panel.set_verify_offer(verify_offer)
         self.renderer.load(scene)
 
         # Camera state belongs to the old scene's bodies: stop tracking so we
@@ -1175,6 +1212,9 @@ class MissionControlWindow(QMainWindow):
         if badge is not None:
             state, text, tooltip = badge
             self.verification_badge.set_state(state, text)
+            if verify_offer and not scene.get("verification"):
+                tooltip = ("NOT VERIFIED: high-fidelity verification is off by default for this mission. "
+                           "Click to open the Verification tab and run it.")
             self.verification_badge.setToolTip(tooltip)
 
         # Resets time + selection and lets the timeline bar and the inspector

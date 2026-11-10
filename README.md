@@ -213,6 +213,13 @@ playing it. Every panel follows the same selection and mission time:
   every check, residuals against their tolerances, force model, integrator
   step convergence, conservation. The title bar always shows VERIFIED,
   VERIFY FAILED or NOT CHECKED.
+  **GOES loads unverified by default** (the TudatPy re-fly adds about a
+  minute of compute): its badge reads NOT CHECKED, and a smooth animation
+  does not mean it passed high-fidelity verification. The Verification tab
+  says so and has a **Run high-fidelity verification (TudatPy)** button that
+  re-runs GOES with verification on and shows the resulting report (cached
+  after the first run). From the CLI, `orbitopt run` a `geo-raising` config
+  with `verification.enabled: true`.
 - **Timeline** (bottom). Time warp, events, and the mission's phases
   (parking orbit, cruise, lunar flyby, ...); click a phase to jump to it.
 
