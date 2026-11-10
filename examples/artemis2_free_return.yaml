@@ -1,5 +1,9 @@
-# Artemis II free return as a mission config -- the same mission the
+# Artemis II-like free return as a mission config -- the same mission the
 # `artemis2` built-in runs, with every default spelled out so it can be edited.
+# A targeting check, not a replay of the flown mission: Artemis II's published
+# 6,545 km perilune altitude is an *input*, the departure date is our own
+# choice (the real Artemis II launched 2026-04-01), and the TLI is solved so
+# the unpowered return reaches the entry interface at target_fpa_deg.
 #   orbitopt validate examples/artemis2_free_return.yaml
 #   orbitopt run examples/artemis2_free_return.yaml   # scene + verification JSON
 #   orbitopt view examples/artemis2_free_return.yaml  # cached by config + source
@@ -9,14 +13,14 @@ mission:
   title: "Artemis II — Free Return"
   kind: lunar-free-return
 departure:
-  date: [2026, 8, 1]          # TLI epoch, 00:00 TDB-ish MJD2000 (see bodies.mjd2000_from_date)
+  date: [2026, 8, 1]          # chosen TLI epoch (not Artemis II's), 00:00 TDB-ish MJD2000 (see bodies.mjd2000_from_date)
 parking_orbit:
   altitude_km: 185.0
 transfer:
   coast_days_guess: 3.5       # Lambert seed: TLI -> lunar arrival
   theta_deg: 142.0            # TLI point behind the Moon's arrival direction
 lunar_flyby:
-  perilune_altitude_km: 6545.0
+  perilune_altitude_km: 6545.0  # Artemis II's published perilune, used as the target
 entry:
   target_fpa_deg: -6.0        # inside the [-7, -5] deg skip-entry corridor
 propagation:
