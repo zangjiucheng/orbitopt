@@ -43,6 +43,7 @@ def _pump_until(app, predicate, timeout=LOAD_TIMEOUT_S):
 
 @pytest.mark.slow
 def test_mission_control_loads_and_switches_missions():
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
 
     from orbitopt.viz.app import MissionControlWindow
@@ -52,117 +53,140 @@ def test_mission_control_loads_and_switches_missions():
     window.show()
     _pump_until(app, lambda: not window._loading)
 
-    sidebar = window.sidebar
-    state = window.state
-    assert sidebar.count() == 5  # Solar System, Artemis II, GOES GTO->GEO, Mars, Starship Flight 15
-    assert state.scene is not None
-    assert state.scene["id"] == "solar-system"
-    assert not window.timeline_bar.isVisible()
-    assert window.verification_badge.isHidden()  # an ephemeris snapshot: nothing to verify
-    assert window.chart_panel.isHidden()  # ...and nothing to chart
+    # try/finally: a failed assertion must still close the window and its
+    # compute worker, or every later Qt / worker test fails on the leftovers.
+    try:
+        sidebar = window.sidebar
+        state = window.state
+        assert sidebar.count() == 5  # Solar System, Artemis II, GOES GTO->GEO, Mars, Starship Flight 15
+        assert state.scene is not None
+        assert state.scene["id"] == "solar-system"
+        assert not window.timeline_bar.isVisible()
+        assert window.verification_badge.isHidden()  # an ephemeris snapshot: nothing to verify
+        assert window.chart_panel.isHidden()  # ...and nothing to chart
 
-    sidebar.select_row(1)
-    # The switch must not block: select_row() returns immediately and the
-    # mission list is disabled (not destroyed/frozen) while the background
-    # thread computes the new scene -- this is exactly the "UI gets stuck
-    # when switching missions" behavior that was reported and fixed.
-    assert window._loading
-    assert not sidebar.mission_list.isEnabled()
+        sidebar.select_row(1)
+        # The switch must not block: select_row() returns immediately and the
+        # mission list is disabled (not destroyed/frozen) while the background
+        # thread computes the new scene -- this is exactly the "UI gets stuck
+        # when switching missions" behavior that was reported and fixed.
+        assert window._loading
+        assert not sidebar.mission_list.isEnabled()
 
-    _pump_until(app, lambda: not window._loading)
+        _pump_until(app, lambda: not window._loading)
 
-    assert state.scene["id"] == "artemis2-mission"
-    assert window.timeline_bar.isVisible()
-    assert sidebar.mission_list.isEnabled()
+        assert state.scene["id"] == "artemis2-mission"
+        assert window.timeline_bar.isVisible()
+        assert sidebar.mission_list.isEnabled()
 
-    # The targeting report rides along: the badge states its tri-state result
-    # and the Verification tab shows what was checked.
-    result = state.scene["verification"]["result"]
-    assert window.verification_badge._label.text() == {
-        "passed": "VERIFIED", "failed": "VERIFY FAILED", "not_checked": "NOT CHECKED"}[result]
-    window._show_verification_tab()
-    assert window.right_tabs.currentWidget() is window.verification_panel
-    assert "Step convergence" in window.verification_panel.text()
-    assert "Verification report" not in window.scene_subtitle_label.text()
-    window.right_tabs.setCurrentWidget(window.inspector)
+        # The targeting report rides along: the badge states its tri-state result
+        # and the Verification tab shows what was checked.
+        result = state.scene["verification"]["result"]
+        assert window.verification_badge._label.text() == {
+            "passed": "VERIFIED", "failed": "VERIFY FAILED", "not_checked": "NOT CHECKED"}[result]
+        window._show_verification_tab()
+        assert window.right_tabs.currentWidget() is window.verification_panel
+        assert "Step convergence" in window.verification_panel.text()
+        assert "Verification report" not in window.scene_subtitle_label.text()
+        window.right_tabs.setCurrentWidget(window.inspector)
 
-    # Phases: the lunar flyby is the Moon-SOI crossing and contains perilune.
-    phases = window.timeline_bar.phase_strip.phases
-    flyby = next(p for p in phases if p["label"] == "Lunar flyby")
-    closest = next(e["time"] for e in state.events if "approach" in e["label"].lower())
-    assert flyby["start"] < closest < flyby["end"]
+        # Phases: the lunar flyby is the Moon-SOI crossing and contains perilune.
+        phases = window.timeline_bar.phase_strip.phases
+        flyby = next(p for p in phases if p["label"] == "Lunar flyby")
+        closest = next(e["time"] for e in state.events if "approach" in e["label"].lower())
+        assert flyby["start"] < closest < flyby["end"]
 
-    # Linked charts: Artemis II has no launch-window screen, only distances.
-    charts = window.chart_panel
-    assert not charts.isHidden()
-    assert [charts.tabText(i) for i in range(charts.count())] == ["Distance"]
+        # KSP map-view focus: Tab goes to the spacecraft first and tracks it with
+        # Earth locked behind; Shift+Tab wraps around the other way.
+        # Checked through the menu actions, not synthetic key presses: Qt only
+        # delivers shortcuts to the active window, which this one need not be
+        # in a full test run (a key press here passed alone and failed there).
+        from PySide6.QtGui import QAction, QKeySequence
 
-    # Scrubbing the slider moves the shared time, and the inspector follows.
-    timeline = state.timeline
-    perilune_day = next(e["time"] for e in timeline["events"] if "approach" in e["label"].lower())
-    frac = (perilune_day - timeline["min"]) / (timeline["max"] - timeline["min"])
-    slider = window.timeline_bar.time_slider
-    slider.setValue(int(frac * slider.maximum()))
-    for _ in range(5):
+        actions = {a.text(): a for a in window.findChildren(QAction)}
+        focus_next, focus_prev = actions["Focus next (Tab)"], actions["Focus previous (⇧Tab)"]
+        assert focus_next.shortcut() == QKeySequence(Qt.Key_Tab)
+        focus_next.trigger()
         app.processEvents()
+        assert state.selected_body_id == "spacecraft" and window._tracking
+        assert window._lock_reference_body_id == "earth"
+        focus_prev.trigger()
+        app.processEvents()
+        assert state.selected_body_id == "moon" and window._lock_reference_body_id is None
+        window._set_tracking(False)
+        window.state.select_body(None)
 
-    assert abs(state.time - perilune_day) < 0.05
-    assert "km" in window.inspector.distance_text("spacecraft")
-    assert window.timeline_bar.met_label.text().startswith(f"T+{state.time:.2f}")
+        # Linked charts: Artemis II has no launch-window screen, only distances.
+        charts = window.chart_panel
+        assert not charts.isHidden()
+        assert [charts.tabText(i) for i in range(charts.count())] == ["Distance"]
 
-    # Moving time through the state (not the slider) moves the slider too.
-    state.set_time(timeline["min"])
-    app.processEvents()
-    assert slider.value() == 0
+        # Scrubbing the slider moves the shared time, and the inspector follows.
+        timeline = state.timeline
+        perilune_day = next(e["time"] for e in timeline["events"] if "approach" in e["label"].lower())
+        frac = (perilune_day - timeline["min"]) / (timeline["max"] - timeline["min"])
+        slider = window.timeline_bar.time_slider
+        slider.setValue(int(frac * slider.maximum()))
+        for _ in range(5):
+            app.processEvents()
 
-    # Clicking a maneuver row seeks to it. Artemis II's events carry no burn
-    # vectors, so this is the seek-only path (no auto-frame/selection).
-    event = timeline["events"][-1]
-    assert "vector" not in event
-    window.inspector.event_clicked.emit(event)
-    app.processEvents()
-    assert abs(state.time - event["time"]) < 1e-9
-    assert window.timeline_bar.event_label.text() == f"▸ {event['label']}"
+        assert abs(state.time - perilune_day) < 0.05
+        assert "km" in window.inspector.distance_text("spacecraft")
+        assert window.timeline_bar.met_label.text().startswith(f"T+{state.time:.2f}")
 
-    window.inspector.body_clicked.emit("spacecraft", False)
-    app.processEvents()
-    assert state.selected_body_id == "spacecraft"
+        # Moving time through the state (not the slider) moves the slider too.
+        state.set_time(timeline["min"])
+        app.processEvents()
+        assert slider.value() == 0
 
-    # Measuring: ⌘/Ctrl-click a second body shows the measure card.
-    other = next(b["id"] for b in state.scene["bodies"] if b["id"] != "spacecraft")
-    window.inspector.body_clicked.emit(other, True)
-    app.processEvents()
-    assert state.measure_body_id == other
-    assert not window.inspector.measure_card.isHidden()
+        # Clicking a maneuver row seeks to it. Artemis II's events carry no burn
+        # vectors, so this is the seek-only path (no auto-frame/selection).
+        event = timeline["events"][-1]
+        assert "vector" not in event
+        window.inspector.event_clicked.emit(event)
+        app.processEvents()
+        assert abs(state.time - event["time"]) < 1e-9
+        assert window.timeline_bar.event_label.text() == f"▸ {event['label']}"
 
-    # Re-centering on the Moon: the button drives state, the renderer follows,
-    # and the Moon is drawn at the origin. Back to Earth restores the scene frame.
-    strip = window.view_strip
-    assert strip.frame_button(None).text() == "Earth"
-    strip.frame_button("moon").click()
-    app.processEvents()
-    assert state.frame_body_id == "moon" == window.renderer.frame_body_id
-    assert sum(abs(c) for c in window.renderer.body_display_position("moon", state.time)) < 1e-6
-    strip.frame_button(None).click()
-    app.processEvents()
-    assert state.frame_body_id is None and window.renderer.frame_body_id is None
+        window.inspector.body_clicked.emit("spacecraft", False)
+        app.processEvents()
+        assert state.selected_body_id == "spacecraft"
 
-    # Playback ticks advance time through the same state.
-    state.set_time(timeline["min"])
-    before = state.time
-    window._set_playing(True)
-    _pump_until(app, lambda: state.time > before, timeout=5.0)
-    window._set_playing(False)
+        # Measuring: ⌘/Ctrl-click a second body shows the measure card.
+        other = next(b["id"] for b in state.scene["bodies"] if b["id"] != "spacecraft")
+        window.inspector.body_clicked.emit(other, True)
+        app.processEvents()
+        assert state.measure_body_id == other
+        assert not window.inspector.measure_card.isHidden()
 
-    # Switching back to a cached scene resets selection and hides the bar.
-    sidebar.select_row(0)
-    _pump_until(app, lambda: not window._loading)
-    assert state.scene["id"] == "solar-system"
-    assert state.selected_body_id is None and state.measure_body_id is None
-    assert window.inspector.measure_card.isHidden()
-    # The solar-system scene draws planets far larger than life and says so.
-    assert "not to scale" in window.view_strip.scale_label.text()
-    assert window.view_strip.frame_button("earth") is None  # static scene: no re-centering
+        # Re-centering on the Moon: the button drives state, the renderer follows,
+        # and the Moon is drawn at the origin. Back to Earth restores the scene frame.
+        strip = window.view_strip
+        assert strip.frame_button(None).text() == "Earth"
+        strip.frame_button("moon").click()
+        app.processEvents()
+        assert state.frame_body_id == "moon" == window.renderer.frame_body_id
+        assert sum(abs(c) for c in window.renderer.body_display_position("moon", state.time)) < 1e-6
+        strip.frame_button(None).click()
+        app.processEvents()
+        assert state.frame_body_id is None and window.renderer.frame_body_id is None
 
-    window.plotter.close()  # release the VTK/OpenGL context before Qt tears down the widget
-    window.close()
+        # Playback ticks advance time through the same state.
+        state.set_time(timeline["min"])
+        before = state.time
+        window._set_playing(True)
+        _pump_until(app, lambda: state.time > before, timeout=5.0)
+        window._set_playing(False)
+
+        # Switching back to a cached scene resets selection and hides the bar.
+        sidebar.select_row(0)
+        _pump_until(app, lambda: not window._loading)
+        assert state.scene["id"] == "solar-system"
+        assert state.selected_body_id is None and state.measure_body_id is None
+        assert window.inspector.measure_card.isHidden()
+        # The solar-system scene draws planets far larger than life and says so.
+        assert "not to scale" in window.view_strip.scale_label.text()
+        assert window.view_strip.frame_button("earth") is None  # static scene: no re-centering
+    finally:
+        window.plotter.close()  # release the VTK/OpenGL context before Qt tears down the widget
+        window.close()

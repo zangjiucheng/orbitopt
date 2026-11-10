@@ -35,6 +35,8 @@ import os
 import sys
 import time
 
+import numpy as np
+
 os.environ.setdefault("QT_API", "pyside6")
 
 from PySide6.QtCore import QSize, Qt, QThread, QTimer
@@ -68,9 +70,17 @@ from orbitopt.viz.inspector import InspectorPanel
 from orbitopt.viz.pv_viewer import load_scene
 from orbitopt.viz.scene_renderer import SceneRenderer
 from orbitopt.viz.sidebar import MissionSidebar
-from orbitopt.viz.state import MissionState, adjacent_event, eased_speed, nearest_maneuver, timeline_span
+from orbitopt.viz.state import (
+    MissionState,
+    adjacent_event,
+    altitude_reference,
+    eased_speed,
+    maneuver_windows,
+    nearest_maneuver,
+    timeline_span,
+)
 from orbitopt.viz.theme import BG_VOID, DANGER, STYLESHEET, SUCCESS
-from orbitopt.viz.timeline_bar import TimelineBar
+from orbitopt.viz.timeline_bar import TimelineBar, timeline_unit_seconds
 from orbitopt.viz.ui_kit import MetricRow, StatusBadge
 from orbitopt.viz.verification_panel import (
     VerificationPanel,
@@ -91,13 +101,14 @@ SCRUB_MIN_INTERVAL_MS = 16.0
 # Auto-slow near a timeline event (TLI burn, closest approach, entry interface,
 # ...) so fast-forwarding through a mission doesn't blow past the moments that
 # actually matter -- the window is a *fraction* of the mission's own timeline
-# span (matching _maneuver_window's existing precedent, see _apply_scene),
+# span (the same 5% that caps each burn's arrow window, see state.maneuver_windows),
 # not a fixed day count, since a short and a long mission should each get a
 # proportionally-sized "slow down here" zone. Playback eases toward
-# EVENT_SLOWDOWN_TARGET_SPEED, an absolute pace (simulated days per real
-# second), not a ratio of the chosen speed -- see state.eased_speed for why.
+# EVENT_SLOWDOWN_TARGET_WARP, an absolute warp (simulated seconds per real
+# second), not a ratio of the chosen warp -- see state.eased_speed for why.
+# 1,000x is the KSP level closest to the old 0.02 day/s (1,728x).
 EVENT_SLOWDOWN_WINDOW_FRACTION = 0.05
-EVENT_SLOWDOWN_TARGET_SPEED = 0.02
+EVENT_SLOWDOWN_TARGET_WARP = 1_000.0
 
 # Axial rotation is ambient motion for a scene with no timeline of its own
 # (the Solar System view) -- driven by this continuous wall-clock timer (see
@@ -179,7 +190,7 @@ class MissionControlWindow(QMainWindow):
         self._pre_focus_camera: tuple | None = None
         self._maneuver_base_len = 0.0
         self._maneuver_max_dv = 1.0
-        self._maneuver_window = 0.0
+        self._maneuver_windows: dict[int, float] = {}
 
         self._timer = QTimer(self)
         self._timer.setInterval(33)
@@ -630,8 +641,12 @@ class MissionControlWindow(QMainWindow):
         play_menu.addAction("Step back", lambda: self._step_time(-1)).setShortcut(QKeySequence(Qt.Key_Left))
         play_menu.addAction("Restart", self._restart_timeline).setShortcut(QKeySequence(Qt.Key_Home))
         play_menu.addSeparator()
-        play_menu.addAction("Faster", lambda: self.timeline_bar.nudge_speed(+1)).setShortcut(QKeySequence("]"))
-        play_menu.addAction("Slower", lambda: self.timeline_bar.nudge_speed(-1)).setShortcut(QKeySequence("["))
+        # KSP's warp keys: . / , step through the warp levels, / is real time.
+        play_menu.addAction("Warp up", lambda: self.timeline_bar.step_warp(+1)).setShortcut(QKeySequence("."))
+        play_menu.addAction("Warp down", lambda: self.timeline_bar.step_warp(-1)).setShortcut(QKeySequence(","))
+        play_menu.addAction("Real time (1×)", lambda: self.timeline_bar.set_warp(1.0)).setShortcut(QKeySequence("/"))
+        play_menu.addAction("Faster (fine)", lambda: self.timeline_bar.nudge_speed(+1)).setShortcut(QKeySequence("]"))
+        play_menu.addAction("Slower (fine)", lambda: self.timeline_bar.nudge_speed(-1)).setShortcut(QKeySequence("["))
         play_menu.addSeparator()
         next_event_action = play_menu.addAction("Next event", lambda: self._seek_relative_event(+1))
         next_event_action.setShortcut(QKeySequence("Shift+Right"))
@@ -653,6 +668,13 @@ class MissionControlWindow(QMainWindow):
         self.track_action.setCheckable(True)
         self.track_action.setShortcut(QKeySequence("T"))
         self.track_action.toggled.connect(self._set_tracking)
+        # KSP map view: Tab / Shift+Tab cycle the focus target.
+        focus_next = view_menu.addAction("Focus next (Tab)", lambda: self._cycle_focus(+1))
+        focus_next.setShortcut(QKeySequence(Qt.Key_Tab))
+        focus_next.setShortcutContext(Qt.ApplicationShortcut)
+        focus_prev = view_menu.addAction("Focus previous (⇧Tab)", lambda: self._cycle_focus(-1))
+        focus_prev.setShortcut(QKeySequence(Qt.SHIFT | Qt.Key_Backtab))
+        focus_prev.setShortcutContext(Qt.ApplicationShortcut)
         view_menu.addSeparator()
         view_menu.addAction("Toggle missions panel", self._toggle_sidebar)
         info_toggle_action = view_menu.addAction("Toggle body-info panel", self._toggle_info_panel)
@@ -672,7 +694,10 @@ class MissionControlWindow(QMainWindow):
         ("← / →", "Step back / forward"),
         ("Shift+← / →", "Previous / next mission event"),
         ("Home", "Restart timeline"),
-        ("[ / ]", "Slower / faster time-warp"),
+        (", / .", "Time warp down / up a KSP level (1×, 5×, 10×, 50×, … 10M×)"),
+        ("/", "Back to real time (1×)"),
+        ("[ / ]", "Fine-tune time warp"),
+        ("Tab / ⇧Tab", "Cycle focus: spacecraft, then bodies (KSP map view)"),
         ("T", "Track selected body"),
         ("M", "Focus (zoom to) selected body"),
         ("R", "Reset camera"),
@@ -884,6 +909,12 @@ class MissionControlWindow(QMainWindow):
         self.plotter.iren.picker = "cell"
         self.plotter.iren.add_observer("LeftButtonPressEvent", self._on_viewport_left_press)
         self.plotter.iren.add_observer("LeftButtonReleaseEvent", self._on_viewport_left_release)
+        # The burn arrow's length follows the camera distance; re-size it when
+        # an interaction (orbit, zoom) ends, or a zoom while paused leaves the
+        # previous, now-huge arrow filling the view.
+        self.plotter.iren.add_observer("EndInteractionEvent", lambda *_a: self._resize_maneuver_arrow())
+        self.plotter.iren.add_observer("MouseWheelForwardEvent", lambda *_a: self._resize_maneuver_arrow())
+        self.plotter.iren.add_observer("MouseWheelBackwardEvent", lambda *_a: self._resize_maneuver_arrow())
 
     def _on_viewport_left_press(self, *_args):
         self._viewport_press_pos = self.plotter.iren.interactor.GetEventPosition()
@@ -1040,9 +1071,73 @@ class MissionControlWindow(QMainWindow):
         QTimer.singleShot(0, self._refit_camera)
 
     def _refit_camera(self):
-        if self.state.scene is not None:
-            self.plotter.reset_camera()
+        if self.state.scene is None:
+            return
+        self.plotter.reset_camera()
+        view = self.state.scene.get("initialView") or {}
+        focus = view.get("focusBodyId")
+        if focus and self.state.body(focus) is not None:
+            # The scene asks to open focused on a body (KSP's map view opens
+            # on the vessel), optionally with another body locked behind it.
+            lock = view.get("faceLockBodyId")
+            self._focus_on(focus, lock_body_id=lock if self.state.body(lock) is not None else None,
+                           distance=view.get("distance"))
+        else:
             self.plotter.render()
+
+    # ---------------------------------------------------------- KSP focus
+    def _focus_targets(self) -> list[str]:
+        """Tab order: spacecraft first, then natural bodies, then ground sites
+        -- the way KSP's map view cycles vessels before planets."""
+        order = {"spacecraft": 0, "site": 2}
+        bodies = (self.state.scene or {}).get("bodies", [])
+        return [b["id"] for b in sorted(bodies, key=lambda b: order.get(b.get("kind"), 1))]
+
+    def _cycle_focus(self, direction: int):
+        targets = self._focus_targets()
+        if not targets:
+            return
+        current = self.state.selected_body_id
+        i = targets.index(current) if current in targets else -1
+        target = targets[(i + direction) % len(targets)]
+        ref = altitude_reference(self.state.scene)
+        body = self.state.body(target)
+        # A spacecraft around a planet: lock the planet behind it, so the
+        # camera looks down at the ship with the planet as the backdrop.
+        lock = ref.body_id if ref is not None and body.get("kind") == "spacecraft" else None
+        self._focus_on(target, lock_body_id=lock)
+
+    def _focus_distance(self, body_id: str) -> float:
+        """A camera distance that frames ``body_id``: a few radii for a body
+        drawn as a sphere, a fixed close-up for a spacecraft over a planet,
+        else a small fraction of its distance from the scene's center."""
+        body = self.state.body(body_id)
+        if body.get("radius") and body.get("kind") not in ("spacecraft", "site"):
+            return 4.0 * float(body["radius"])
+        r = float(np.linalg.norm(self.renderer.body_display_position(body_id, self.state.time)))
+        if altitude_reference(self.state.scene) is not None:
+            return max(1500.0, 0.25 * r)
+        return max(0.02 * r, 1e-6)
+
+    def _focus_on(self, body_id: str, lock_body_id: str | None = None, distance: float | None = None):
+        """Select, track and frame ``body_id``."""
+        self._lock_reference_body_id = lock_body_id
+        self._select_lock_combo(lock_body_id)
+        self._select_body(body_id)
+        if not self._tracking:
+            self._set_tracking(True)
+        self.renderer.track_body(body_id, self.state.time, reference_body_id=lock_body_id, render=False)
+        self.renderer.zoom_to_body(body_id, self.state.time,
+                                   distance_km=float(distance) if distance else self._focus_distance(body_id))
+        self._focus_zoomed = False
+        self._pre_focus_camera = None
+        self.statusBar().showMessage(f"Focus: {self.state.body(body_id)['name']} — Tab / ⇧Tab to cycle")
+
+    def _select_lock_combo(self, body_id: str | None):
+        index = self.lock_combo.findData(body_id)
+        self.lock_combo.blockSignals(True)
+        self.lock_combo.setCurrentIndex(max(index, 0))
+        self.lock_combo.blockSignals(False)
 
     def _finish_cached(self, scene: dict, key: str):
         # try/finally: if applying the scene raises (e.g. a malformed cached
@@ -1199,7 +1294,7 @@ class MissionControlWindow(QMainWindow):
         # camera is dollied in on the spacecraft during a burn, set_maneuver_vector
         # clamps it down to a fraction of the camera distance so the arrow doesn't
         # swamp the very body it's drawn from. The arrow only appears while the
-        # scrubber is within _maneuver_window of a burn, so it flashes past each
+        # scrubber is within that burn's window (state.maneuver_windows), so it flashes past each
         # maneuver instead of hanging on screen the whole time.
         timeline = scene.get("timeline")
         events = timeline.get("events", []) if timeline else []
@@ -1209,7 +1304,7 @@ class MissionControlWindow(QMainWindow):
             self._maneuver_base_len = 0.22 * max(_norm3(v["position"]) for v in vectors)
         else:
             self._maneuver_max_dv, self._maneuver_base_len = 1.0, 0.0
-        self._maneuver_window = 0.05 * timeline_span(timeline) if timeline else 0.0
+        self._maneuver_windows = maneuver_windows(events, timeline_span(timeline)) if timeline else {}
         self.renderer.clear_maneuver_vector()
 
         self.scene_title_label.setText(scene["title"])
@@ -1257,19 +1352,27 @@ class MissionControlWindow(QMainWindow):
         at the end: separate renders per call made per-frame cost noisy
         enough to read as playback jitter/stutter."""
         distances = self.renderer.set_time(self.state.time, render=False)
-        self.inspector.set_distances(distances)
+        t = self.state.time
+        self.inspector.set_distances(distances, {bid: self.renderer.body_world_position(bid, t)
+                                                 for bid in self.inspector.altitude_body_ids()})
         self._update_maneuver_arrow()
         self._update_tracking(dt=dt, render=False)
         self._update_measure(render=False)
         self.plotter.render()
 
+    def _resize_maneuver_arrow(self):
+        if self.state.scene is not None and self.state.events:
+            self._update_maneuver_arrow()
+            self.plotter.render()
+
     def _update_maneuver_arrow(self):
         """Draw a maneuver's delta-v vector only while the scrubber is close (in
-        time) to that burn -- the nearest one within _maneuver_window -- so the
+        time) to that burn -- the nearest one, within its own window (see
+        state.maneuver_windows) -- so the
         arrow flashes past each maneuver rather than hanging on the whole time."""
         maneuver, nearest_dt = nearest_maneuver(self.state.events, self.state.time)
         if (maneuver is not None and self._maneuver_base_len > 0.0
-                and nearest_dt <= self._maneuver_window):
+                and nearest_dt <= self._maneuver_windows.get(id(maneuver), 0.0)):
             vec = maneuver["vector"]
             magnitude_fraction = _norm3(vec["deltaV"]) / self._maneuver_max_dv
             self.renderer.set_maneuver_vector(
@@ -1419,22 +1522,22 @@ class MissionControlWindow(QMainWindow):
         else:
             self._timer.stop()
             # Drop any leftover "eased" auto-slow display.
-            self.timeline_bar.show_effective_speed(self.timeline_bar.speed)
+            self.timeline_bar.show_effective_speed(self.timeline_bar.warp)
 
     def _on_auto_slow_toggled(self, on: bool):
         if not self._playing:
-            self.timeline_bar.show_effective_speed(self.timeline_bar.speed)
+            self.timeline_bar.show_effective_speed(self.timeline_bar.warp)
         self.statusBar().showMessage("Auto-slow near events: on" if on else "Auto-slow near events: off")
 
     def _effective_speed(self, timeline: dict) -> float:
-        """The chosen time-warp rate, eased down near events when auto-slow is
-        on (see state.eased_speed)."""
-        speed = self.timeline_bar.speed
+        """The chosen time warp (simulated seconds per real second), eased
+        down near events when auto-slow is on (see state.eased_speed)."""
+        warp = self.timeline_bar.warp
         if not self.timeline_bar.auto_slow_enabled:
-            return speed
+            return warp
         return eased_speed(
-            speed, self.state.events, self.state.time, timeline_span(timeline),
-            EVENT_SLOWDOWN_WINDOW_FRACTION, EVENT_SLOWDOWN_TARGET_SPEED,
+            warp, self.state.events, self.state.time, timeline_span(timeline),
+            EVENT_SLOWDOWN_WINDOW_FRACTION, EVENT_SLOWDOWN_TARGET_WARP,
         )
 
     def _on_tick(self):
@@ -1457,7 +1560,10 @@ class MissionControlWindow(QMainWindow):
 
         effective_speed = self._effective_speed(timeline)
         self.timeline_bar.show_effective_speed(effective_speed)
-        new_time = min(timeline["max"], self.state.time + dt * effective_speed)
+        # Warp is in simulated seconds per real second; the timeline counts
+        # in its own unit (days for every orbitopt exporter).
+        unit_s = timeline_unit_seconds(timeline.get("unitLabel"))
+        new_time = min(timeline["max"], self.state.time + dt * effective_speed / unit_s)
         self._tick_dt = dt
         try:
             self.state.set_time(new_time)

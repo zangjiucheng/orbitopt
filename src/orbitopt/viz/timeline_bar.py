@@ -33,43 +33,78 @@ from orbitopt.viz.theme import (
     SURFACE_HOVER,
 )
 
-# Time-warp speed is a continuous log-scale control (0.001x .. 1000x), not
-# fixed presets, so it can be fine-tuned to any rate. Speed is in simulated
-# *days* per real second (see MissionControlWindow._on_tick), so even the old
-# floor of 0.1x still meant 1 simulated hour flew by in under half a real
-# second -- too fast to watch a close lunar flyby unfold. At the current
-# floor, 0.001x, 1 simulated hour takes ~41.7 real seconds and 1 simulated
-# minute takes <1 real second, actually slow enough to watch closely.
-SPEED_MIN = 0.001
-SPEED_MAX = 1000.0
-SPEED_SLIDER_STEPS = 1000
+# KSP-style time warp: the multiplier is simulated seconds per real second,
+# so 1x is real time. The range has to span both ends of what a scene can
+# hold -- a Starship landing burn lasts tens of seconds and is worth watching
+# at 1x, a Mars cruise lasts 300 days and needs ~10^6x to cross in seconds.
+# The slider is continuous on a log scale; `,` / `.` step through the KSP
+# warp levels (WARP_LEVELS) and `/` drops back to real time, as in KSP.
+# (Before this, "1x" meant one simulated *day* per second -- 86,400x real
+# time -- and the slowest setting was still 86x, too fast for a burn.)
+WARP_MIN = 0.1
+WARP_MAX = 1.0e7
+WARP_LEVELS = (0.1, 1.0, 5.0, 10.0, 50.0, 100.0, 1_000.0, 10_000.0, 100_000.0, 1_000_000.0, 10_000_000.0)
+WARP_SLIDER_STEPS = 1000
+DEFAULT_PLAYBACK_REAL_S = 60.0  # a scene's default warp plays its whole timeline in about this long
+
+# Seconds in one timeline unit (timeline.unitLabel); unknown labels fall back
+# to days, the unit every orbitopt exporter writes.
+_UNIT_SECONDS = {"s": 1.0, "sec": 1.0, "seconds": 1.0, "min": 60.0, "minutes": 60.0,
+                 "h": 3600.0, "hr": 3600.0, "hours": 3600.0, "d": 86400.0, "day": 86400.0, "days": 86400.0}
+
+
+def timeline_unit_seconds(unit_label: str | None) -> float:
+    return _UNIT_SECONDS.get((unit_label or "days").strip().lower(), 86400.0)
+
+
+def _sig(x: float) -> str:
+    return f"{x:,.0f}" if x >= 100 else f"{x:.3g}"
+
+
+def format_warp(warp: float) -> str:
+    """'0.1×', '1×', '50×', '1,000×', '100k×', '10M×'."""
+    if warp >= 1.0e6:
+        return f"{_sig(warp / 1.0e6)}M×"
+    if warp >= 1.0e5:
+        return f"{_sig(warp / 1.0e3)}k×"
+    return f"{_sig(warp)}×"
+
+
+def format_rate(warp: float) -> str:
+    """Simulated time per real second at ``warp``: '1 s/s', '17 min/s', '1.2 d/s'."""
+    seconds = warp
+    for unit, size in (("d", 86400.0), ("h", 3600.0), ("min", 60.0)):
+        if seconds >= size:
+            return f"{_sig(seconds / size)} {unit}/s"
+    return f"{_sig(seconds)} s/s"
+
+
+def warp_from_slider(value: int) -> float:
+    return WARP_MIN * (WARP_MAX / WARP_MIN) ** (value / WARP_SLIDER_STEPS)
+
+
+def slider_from_warp(warp: float) -> int:
+    warp = min(WARP_MAX, max(WARP_MIN, warp))
+    return int(round(math.log(warp / WARP_MIN) / math.log(WARP_MAX / WARP_MIN) * WARP_SLIDER_STEPS))
+
+
+def step_warp(warp: float, direction: int) -> float:
+    """The next KSP warp level above (``direction > 0``) or below the current
+    warp -- from an in-between value, the nearest level in that direction."""
+    if direction > 0:
+        return next((w for w in WARP_LEVELS if w > warp * (1 + 1e-9)), WARP_LEVELS[-1])
+    return next((w for w in reversed(WARP_LEVELS) if w < warp * (1 - 1e-9)), WARP_LEVELS[0])
+
+
+def default_warp(span_seconds: float, playback_real_s: float = DEFAULT_PLAYBACK_REAL_S) -> float:
+    """The warp level (nearest on a log scale) that plays ``span_seconds`` of
+    timeline in about ``playback_real_s`` real seconds."""
+    target = max(span_seconds, 1e-9) / playback_real_s
+    return min(WARP_LEVELS[1:], key=lambda w: abs(math.log(w) - math.log(target)))
+
 
 # Resolution of the time scrubber (slider steps across the whole timeline).
 TIME_SLIDER_STEPS = 10000
-
-
-def format_speed(speed: float) -> str:
-    if speed >= 10:
-        return f"{speed:.0f}×"
-    if speed >= 1:
-        return f"{speed:.1f}×"
-    # Below 1x: a fixed 2 decimals reads fine down to 0.1, but prints as
-    # "0.00×" for anything under 0.005 -- indistinguishable from stopped now
-    # that SPEED_MIN goes as low as 0.001. Scale the decimal count to keep ~2
-    # significant figures visible at any speed below 1x instead.
-    decimals = max(2, -int(math.floor(math.log10(speed))) + 1)
-    return f"{speed:.{decimals}f}×"
-
-
-def speed_from_slider(value: int) -> float:
-    frac = value / SPEED_SLIDER_STEPS
-    return SPEED_MIN * (SPEED_MAX / SPEED_MIN) ** frac
-
-
-def slider_from_speed(speed: float) -> int:
-    speed = min(SPEED_MAX, max(SPEED_MIN, speed))
-    frac = math.log(speed / SPEED_MIN) / math.log(SPEED_MAX / SPEED_MIN)
-    return int(round(frac * SPEED_SLIDER_STEPS))
 
 
 def epoch_to_date_string(reference_et: float, day_offset: float) -> str:
@@ -298,7 +333,7 @@ class TimelineBar(QWidget):
     def __init__(self, state: MissionState, parent: QWidget | None = None):
         super().__init__(parent)
         self._state = state
-        self._speed = 1.0
+        self._warp = 1_000.0  # replaced per scene by default_warp() in _on_scene_changed
         self.setObjectName("timelineBar")
         # A QWidget *subclass* only paints its stylesheet background/border
         # with this attribute set (a plain QWidget gets it implicitly).
@@ -338,15 +373,19 @@ class TimelineBar(QWidget):
         self.auto_slow_btn.toggled.connect(self._on_auto_slow_toggled)
         speed_header.addWidget(self.auto_slow_btn)
         speed_header.addStretch(1)
-        self.speed_value_label = QLabel(format_speed(self._speed))
+        self.speed_value_label = QLabel(format_warp(self._warp))
         self.speed_value_label.setObjectName("speedValue")
         speed_header.addWidget(self.speed_value_label)
         speed_col.addLayout(speed_header)
 
         self.speed_slider = QSlider(Qt.Horizontal)
         self.speed_slider.setObjectName("speedSlider")
-        self.speed_slider.setRange(0, SPEED_SLIDER_STEPS)
-        self.speed_slider.setValue(slider_from_speed(self._speed))
+        self.speed_slider.setRange(0, WARP_SLIDER_STEPS)
+        self.speed_slider.setValue(slider_from_warp(self._warp))
+        self.speed_slider.setToolTip(
+            "Time warp, 0.1x to 10,000,000x (1x = real time). "
+            ", / . step through the KSP warp levels, / returns to 1x, [ / ] fine-tune"
+        )
         self.speed_slider.setFixedWidth(150)
         self.speed_slider.valueChanged.connect(self._on_speed_slider)
         speed_col.addWidget(self.speed_slider)
@@ -398,6 +437,9 @@ class TimelineBar(QWidget):
     def _on_scene_changed(self, _scene):
         timeline = self._state.timeline
         self.setVisible(timeline is not None)
+        if timeline is not None:
+            span_s = (timeline["max"] - timeline["min"]) * timeline_unit_seconds(timeline.get("unitLabel"))
+            self.set_warp(default_warp(span_s))
         has_phases = bool((timeline or {}).get("phases"))
         self.setFixedHeight(self._BASE_HEIGHT + (PhaseStrip.HEIGHT + 2 if has_phases else 0))
         self.time_slider.blockSignals(True)
@@ -448,26 +490,32 @@ class TimelineBar(QWidget):
         self.play_btn.setIcon(icons.pause_icon() if playing else icons.play_icon())
 
     @property
-    def speed(self) -> float:
-        """The user-chosen time-warp rate, in simulated days per real second."""
-        return self._speed
+    def warp(self) -> float:
+        """The user-chosen time warp: simulated seconds per real second (1 = real time)."""
+        return self._warp
 
     @property
     def auto_slow_enabled(self) -> bool:
         return self.auto_slow_btn.isChecked()
 
-    def nudge_speed(self, direction: int):
-        """Fine multiplicative nudge of the time-warp rate (the [ / ] shortcuts);
-        a continuous log step, not a jump between fixed presets."""
-        self._speed = min(SPEED_MAX, max(SPEED_MIN, self._speed * (1.25 ** direction)))
+    def set_warp(self, warp: float):
+        self._warp = min(WARP_MAX, max(WARP_MIN, float(warp)))
         self.speed_slider.blockSignals(True)
-        self.speed_slider.setValue(slider_from_speed(self._speed))
+        self.speed_slider.setValue(slider_from_warp(self._warp))
         self.speed_slider.blockSignals(False)
-        self.show_effective_speed(self._speed)
+        self.show_effective_speed(self._warp)
+
+    def nudge_speed(self, direction: int):
+        """Fine multiplicative nudge of the warp (the [ / ] shortcuts)."""
+        self.set_warp(self._warp * (1.25 ** direction))
+
+    def step_warp(self, direction: int):
+        """Jump to the next KSP warp level up or down (the . / , shortcuts)."""
+        self.set_warp(step_warp(self._warp, direction))
 
     def _on_speed_slider(self, value: int):
-        self._speed = speed_from_slider(value)
-        self.show_effective_speed(self._speed)
+        self._warp = warp_from_slider(value)
+        self.show_effective_speed(self._warp)
 
     def show_effective_speed(self, effective_speed: float):
         """Keep the TIME WARP label showing what's *actually* playing back,
@@ -475,8 +523,8 @@ class TimelineBar(QWidget):
         (e.g.) "10x" while auto-slow had actually eased playback down to 0.02x
         near an event, which looked like the readout and the real playback
         rate had drifted out of sync with each other."""
-        eased = effective_speed < self._speed - 1e-9
-        self.speed_value_label.setText(format_speed(effective_speed))
+        eased = effective_speed < self._warp * (1 - 1e-9)
+        self.speed_value_label.setText(f"{format_warp(effective_speed)} · {format_rate(effective_speed)}")
         self.speed_value_label.setProperty("eased", eased)
         self.speed_value_label.style().unpolish(self.speed_value_label)
         self.speed_value_label.style().polish(self.speed_value_label)
