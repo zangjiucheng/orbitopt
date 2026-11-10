@@ -132,7 +132,7 @@ def test_state_starts_on_the_exported_candidate():
     assert seen == ["candidate-3"] and state.candidate()["searchIndex"] == 3
 
 
-def test_renderer_highlights_and_hides_arcs_outside_the_scene_frame():
+def test_renderer_highlights_arcs_and_keeps_them_in_planet_frames():
     plotter = pv.Plotter(off_screen=True)
     try:
         r = SceneRenderer(plotter)
@@ -145,10 +145,115 @@ def test_renderer_highlights_and_hides_arcs_outside_the_scene_frame():
         r.highlight_candidate("candidate-1", show_all=False)
         assert r.candidate_visible("candidate-1") and not r.candidate_visible("candidate-0")
 
+        # Candidate #1 departs 20 days before the scene's Earth trail starts;
+        # its exported bodyPositions still place it in Earth's frame.
         r.set_frame("earth")
-        assert not r.candidate_visible("candidate-1")
+        assert r.candidate_visible("candidate-1") and not r.candidate_visible("candidate-0")
         r.set_frame(None)
         assert r.candidate_visible("candidate-1")
+    finally:
+        plotter.close()
+
+
+def test_entries_carry_frame_body_positions_at_each_candidates_own_epochs():
+    calls = []
+
+    def body_fn(body_id, mjd2000):
+        calls.append((body_id, np.asarray(mjd2000, dtype=float)))
+        return np.column_stack([mjd2000, np.full(len(mjd2000), 1.0 if body_id == "earth" else 2.0),
+                                np.zeros(len(mjd2000))])
+
+    ref_et = mjd2000_to_ephemeris_seconds(T0 + 20)
+    entries = build_candidate_entries(_records(), _gate(), 0, ref_et, "spacecraft",
+                                      arc_fn=_fake_arc, body_fn=body_fn)
+    for entry in entries:
+        path = entry["screeningPath"]
+        assert set(path["bodyPositions"]) == {"earth", "mars"}
+        for positions in path["bodyPositions"].values():
+            assert len(positions) == len(path["times"])
+            # Sampled at the candidate's own epochs, not the mission's.
+            t0, tof = entry["departureMjd2000"], entry["tofDays"]
+            assert positions[0][0] == pytest.approx(t0) and positions[-1][0] == pytest.approx(t0 + tof)
+    assert len(calls) == 2 * len(entries)
+
+
+def test_ragged_body_positions_are_rejected():
+    scene = _scene()
+    scene["candidates"][0]["screeningPath"]["bodyPositions"]["earth"].pop()
+    with pytest.raises(ValueError, match="bodyPositions"):
+        validate_scene(scene)
+
+
+def test_real_arcs_from_different_windows_start_on_earth_and_end_on_mars_in_their_frames():
+    """Two real Lambert candidates 40 days apart: in the Earth-centered view
+    each arc starts at Earth's center at its own departure, in the
+    Mars-centered view each ends at Mars at its own arrival -- the defining
+    property of the transfer, which a single shared offset could not give."""
+    records = [
+        {"index": 0, "status": "selected", "rank": 0, "t0_mjd2000": T0, "tof_days": TOF,
+         "lambert_total_dv_m_s": 5600.0},
+        {"index": 1, "status": "selected", "rank": 1, "t0_mjd2000": T0 + 40.0, "tof_days": 220.0,
+         "lambert_total_dv_m_s": 5900.0},
+    ]
+    scene = _scene()
+    scene["candidates"] = build_candidate_entries(
+        records, [], 0, mjd2000_to_ephemeris_seconds(T0 + 20), "spacecraft",
+        arc_fn=lambda t0, tof: lambert_arc_km(t0, tof, n_points=40))
+    scene["bodies"].append({"id": "mars", "name": "Mars", "color": "#e14b3d", "kind": "planet",
+                            "radiusDisplay": 3.6, "position": [2.2e8, 0.0, 0.0]})
+    validate_scene(scene)
+    plotter = pv.Plotter(off_screen=True)
+    try:
+        r = SceneRenderer(plotter)
+        r.load(scene)
+        for cid in ("candidate-0", "candidate-1"):
+            world = r.candidate_display_positions(cid)
+            assert np.linalg.norm(world, axis=1).min() > 1e8  # heliocentric in the scene frame
+
+        r.set_frame("earth")
+        for cid in ("candidate-0", "candidate-1"):
+            local = r.candidate_display_positions(cid)
+            assert r.candidate_visible(cid)
+            assert np.linalg.norm(local[0]) < 1.0  # km: leaves from Earth's center
+            assert np.linalg.norm(local[-1]) > 5e7  # and ends far from it
+
+        # The scene's static Mars marker is replaced by the candidates' own Mars ephemeris.
+        r.set_frame("mars")
+        for cid in ("candidate-0", "candidate-1"):
+            local = r.candidate_display_positions(cid)
+            assert np.linalg.norm(local[-1]) < 50.0  # km: arrives at Mars (Kepler propagation error)
+            assert np.linalg.norm(local[0]) > 5e7
+    finally:
+        plotter.close()
+
+
+def test_arc_without_body_positions_uses_the_trail_only_inside_its_span():
+    scene = _scene()
+    for cand in scene["candidates"]:
+        del cand["screeningPath"]["bodyPositions"]
+    plotter = pv.Plotter(off_screen=True)
+    try:
+        r = SceneRenderer(plotter)
+        r.load(scene)
+        r.set_frame("earth")
+        # candidate-0 spans the trail's 0..230 days: per-time trail sampling.
+        cand = next(c for c in scene["candidates"] if c["id"] == "candidate-0")
+        earth = next(b for b in scene["bodies"] if b["id"] == "earth")
+        from orbitopt.viz.scene_renderer import position_at_time
+        expected = np.asarray(cand["screeningPath"]["positions"]) - np.array(
+            [position_at_time(earth, t) for t in cand["screeningPath"]["times"]])
+        assert r.candidate_in_frame("candidate-0")
+        assert np.allclose(r.candidate_display_positions("candidate-0"), expected, atol=1e-3)
+        # candidate-1 departs before the trail starts: hidden, not misplaced.
+        assert not r.candidate_in_frame("candidate-1") and not r.candidate_visible("candidate-1")
+        assert r.candidate_display_positions("candidate-1") is None
+        # A fixed body is the same at every date.
+        r.set_frame("sun")
+        assert r.candidate_in_frame("candidate-1")
+        r.set_frame(None)
+        assert r.candidate_visible("candidate-1")
+        assert np.allclose(r.candidate_display_positions("candidate-1"),
+                           scene["candidates"][0]["screeningPath"]["positions"])
     finally:
         plotter.close()
 

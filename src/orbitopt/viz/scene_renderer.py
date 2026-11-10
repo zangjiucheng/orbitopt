@@ -463,6 +463,10 @@ class SceneRenderer:
         self._frame_body_id: str | None = None
         self._time = 0.0
         self._candidate_actors: dict[str, object] = {}
+        # Per candidate: world-frame screening arc, its own times, the bodies'
+        # positions at those times, the drawn PolyData, and whether the arc can
+        # be placed in the current frame (see _candidate_frame_origins).
+        self._candidates: dict[str, dict] = {}
         self._candidate_id: str | None = None
         self._candidates_show_all = True
         self._rotating: list[dict] = []
@@ -502,6 +506,7 @@ class SceneRenderer:
         self._orbit_actors = []
         self._frame_body_id = None
         self._candidate_actors = {}
+        self._candidates = {}
         self._candidate_id = None
         self._rotating = []
         self._rotation_elapsed_hours = 0.0
@@ -602,11 +607,23 @@ class SceneRenderer:
                 }
 
         for cand in scene.get("candidates", []):
-            points = np.asarray(cand["screeningPath"]["positions"], dtype=float)
+            path = cand["screeningPath"]
+            points = np.asarray(path["positions"], dtype=float)
+            poly = pv.MultipleLines(points)
             self._candidate_actors[cand["id"]] = self.plotter.add_mesh(
-                pv.MultipleLines(points), color=CANDIDATE_COLOR, line_width=1.0, opacity=0.4,
+                poly, color=CANDIDATE_COLOR, line_width=1.0, opacity=0.4,
                 pickable=False, name=f"candidate-{cand['id']}",
             )
+            self._candidates[cand["id"]] = {
+                "times": np.asarray(path["times"], dtype=float),
+                "world_positions": points,
+                "body_positions": {
+                    body_id: np.asarray(positions, dtype=float)
+                    for body_id, positions in (path.get("bodyPositions") or {}).items()
+                },
+                "poly": poly,
+                "in_frame": True,
+            }
 
         timeline = scene.get("timeline")
         self.set_time(timeline["min"] if timeline else 0.0)
@@ -796,6 +813,7 @@ class SceneRenderer:
             entry["full_positions"] = display
             entry["full_poly"].points = display
             entry["past_trail"].set_positions(display)
+        self._place_candidates()
         self._place_static_geometry(self.frame_origin(self._time))
         self._apply_candidate_style()
         self.set_time(self._time, render=render)
@@ -814,14 +832,63 @@ class SceneRenderer:
         actor = self._candidate_actors.get(candidate_id)
         return bool(actor is not None and actor.GetVisibility())
 
+    def candidate_in_frame(self, candidate_id: str) -> bool:
+        """Whether the candidate's arc can be drawn in the current frame."""
+        entry = self._candidates.get(candidate_id)
+        return bool(entry is not None and entry["in_frame"])
+
+    def candidate_display_positions(self, candidate_id: str) -> np.ndarray | None:
+        """The candidate's screening arc as drawn in the current frame, or None
+        when it cannot be placed in it (and so is hidden)."""
+        entry = self._candidates.get(candidate_id)
+        if entry is None or not entry["in_frame"]:
+            return None
+        return np.asarray(entry["poly"].points, dtype=float)
+
+    def _candidate_frame_origins(self, entry: dict) -> np.ndarray | None:
+        """The frame body's world position at each of a candidate's own sample
+        times, or None if that is unknown.
+
+        A candidate departs on its own date, so the frame body is taken at the
+        candidate's times, never at the mission's: its exported
+        ``bodyPositions`` first (same ephemeris as the arc); else a fixed body;
+        else the body's trail, but only when the trail covers every candidate
+        time -- extrapolating a planet's trail by months would misplace the arc
+        by ~1e8 km, so such an arc is hidden instead."""
+        body_id = self._frame_body_id
+        times = entry["times"]
+        if body_id is None:
+            return np.zeros((len(times), 3))
+        if body_id in entry["body_positions"]:
+            return entry["body_positions"][body_id]
+        if body_id in self._static_positions:
+            return np.broadcast_to(self._static_positions[body_id], (len(times), 3))
+        trail = self._moving.get(body_id)
+        if trail is None:
+            return None
+        span = trail["times"]
+        tol = 1e-9 * max(1.0, abs(float(span[-1])))
+        if times.min() < span[0] - tol or times.max() > span[-1] + tol:
+            return None
+        return _sample_trail_many(span, trail["world_positions"], times, trail["velocities"])
+
+    def _place_candidates(self) -> None:
+        """Move every screening arc into the current frame point by point:
+        r_display(t_i) = r_arc(t_i) - r_frame(t_i) at the candidate's own t_i.
+        In float64 before VTK, like the trails. Runs once per frame switch."""
+        for entry in self._candidates.values():
+            origins = self._candidate_frame_origins(entry)
+            entry["in_frame"] = origins is not None
+            if origins is not None:
+                entry["poly"].points = entry["world_positions"] - origins
+
     def _apply_candidate_style(self) -> None:
-        # Screening arcs are drawn only in the scene's own frame: they belong
-        # to other departure dates, outside the span over which the planets'
-        # trails (and so any planet-centered frame) are defined.
-        in_scene_frame = self._frame_body_id is None
+        # An arc the current frame cannot place (see _candidate_frame_origins)
+        # is hidden rather than drawn against the wrong dates.
         for cid, actor in self._candidate_actors.items():
             selected = cid == self._candidate_id
-            actor.SetVisibility(in_scene_frame and (selected or self._candidates_show_all))
+            in_frame = self.candidate_in_frame(cid)
+            actor.SetVisibility(in_frame and (selected or self._candidates_show_all))
             prop = actor.prop
             prop.color = CANDIDATE_SELECTED_COLOR if selected else CANDIDATE_COLOR
             # Kept under the mission trail's weight (2.6): the flown trajectory

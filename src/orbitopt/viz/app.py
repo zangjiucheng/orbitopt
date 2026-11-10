@@ -1300,8 +1300,8 @@ class MissionControlWindow(QMainWindow):
             self.statusBar().showMessage(
                 f"{cand['label']} highlighted"
                 + ("" if cand.get("exported") else " — screening arc only; verification shows the exported trajectory")
-                + ("" if self.state.frame_body_id is None
-                                                  else " — screening arcs show in the scene's own frame")
+                + ("" if self.state.frame_body_id is None or self.renderer.candidate_in_frame(cand["id"])
+                   else " — no ephemeris for this frame at its dates; its arc shows in the scene's own frame")
             )
 
     # ------------------------------------------------------- Event seeking
