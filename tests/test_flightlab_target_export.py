@@ -156,6 +156,15 @@ def test_constraints_and_recovery_pass_through():
     assert "no recovery plan specified" not in joined
 
 
+def test_export_without_constraints_records_gate_b_defaults():
+    t = build_target("kourou", 400e3, 400e3, 51.6, date_utc="2026-11-10",
+                     record_generator=False)
+    joined = " ".join(t.assumptions)
+    assert "Gate-B still checks" in joined
+    assert "default insertion tolerances" in joined
+    assert "using target tolerances when declared and Gate-B defaults otherwise" in joined
+
+
 def test_feasibility_report():
     r = feasibility_report("cape-canaveral", 45.0)
     assert r["feasible"] is True and r["site"] == "cape-canaveral"

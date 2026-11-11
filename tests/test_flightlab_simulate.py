@@ -40,6 +40,7 @@ from orbitopt.flightlab.contract import (
 )
 from orbitopt.flightlab.simulate import _spice_rotation, orbit_refly, simulate
 from orbitopt.flightlab.checks import evaluate
+from orbitopt.flightlab.target_export import build_target, save_target
 
 FIX = Path(__file__).parent / "fixtures" / "flightlab" / "opentsiolkovsky"
 REPO = Path(__file__).resolve().parents[1]
@@ -141,6 +142,37 @@ def test_recovery_propellant_reserve_shortfall_reported(stub, tmp_path):
     assert not res.passed and res.reason_code == "PROPELLANT_RESERVE_LOW"
     assert res.value == pytest.approx(0.0, abs=1e-6)
     assert run.verification.mission_constraints_passed is False
+
+
+def test_zero_recovery_reserve_uses_measured_check_instead_of_missing_copy(stub, tmp_path):
+    doc = yaml.safe_load(TARGET.read_text(encoding="utf-8"))
+    doc["recovery"]["min_propellant_reserve_kg"] = 0.0
+    target_path = tmp_path / "zero-reserve.yaml"
+    target_path.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    run = simulate(load_target(target_path), VEHICLE, tmp_path / "run", timeout_s=60)
+    matches = [c for c in run.verification.checks if c.id == "recovery-propellant-reserve"]
+    assert len(matches) == 1
+    assert matches[0].passed
+    assert matches[0].value is not None
+    assert matches[0].reason_code == ""
+
+
+def test_exported_target_grades_off_target_insertion_and_keeps_top_reserve(stub, tmp_path):
+    target = build_target("kourou", 400e3, 400e3, 51.6, date_utc="2026-11-10",
+                          constraints={"min_propellant_reserve_kg": 0.0}, record_generator=False)
+    target_path = tmp_path / "kourou-target.yaml"
+    save_target(target, target_path)
+    run = simulate(target, VEHICLE, tmp_path / "run", timeout_s=60)
+    matches = [c for c in run.verification.checks if c.id == "propellant-reserve"]
+    assert len(matches) == 1
+    assert matches[0].passed
+    assert matches[0].value is not None
+    assert matches[0].reason_code == ""
+    assert run.verification.mission_constraints_passed is False
+    failed_reasons = [c.reason_code for c in run.verification.checks if not c.passed]
+    assert any(code.startswith("INSERTION_") and code.endswith("_OUT_OF_TOLERANCE")
+               for code in failed_reasons)
+    assert "PROPELLANT_RESERVE_DATA_MISSING" not in failed_reasons
 
 
 def _clean_orbit_run(periapsis_m: float) -> FlightRun:

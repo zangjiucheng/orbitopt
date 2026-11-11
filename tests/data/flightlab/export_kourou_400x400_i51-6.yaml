@@ -34,10 +34,12 @@ assumptions:
 - 'vehicle block is a placeholder: no vehicle was specified at export time, the ascent
   backend''s own default vehicle model applies and no performance figure here was
   verified'
-- 'no mission constraints specified: the run uses backend defaults, no load/aero/insertion
-  limits were asserted at export time'
+- 'no mission constraints specified: no load/aero/propellant reserve limits were asserted
+  at export time; Gate-B still checks the atmosphere floor and default insertion tolerances
+  (20000 m altitude, 0.2 deg inclination)'
 - 'no recovery plan specified: recovery.kind = none (expendable first stage)'
 - 'no simulation backends/phases specified: the consumer (E2 ascent optimizer, Mission
   Control) selects them and records the choice in the run manifest'
-- 'no terminal_state: the run is graded against the target orbit elements at insertion,
-  not one fixed end-of-ascent state vector'
+- 'no terminal_state: the run is graded against the target orbit elements at insertion
+  using target tolerances when declared and Gate-B defaults otherwise, not one fixed
+  end-of-ascent state vector'

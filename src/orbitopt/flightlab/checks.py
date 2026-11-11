@@ -20,7 +20,9 @@ Which checks ``evaluate`` assesses
 * Recomputed here from the run's own GCRS tracks: the insertion orbit
   elements at SECO (periapsis / apoapsis / inclination / RAAN vs the target
   and its tolerances), and -- only when no backend value exists -- max-Q from
-  the trajectory CSV's ``dynamic_pressure_pa`` extras.
+  the trajectory CSV's ``dynamic_pressure_pa`` extras. When the target declares no
+  insertion tolerances, the Gate-B default 20 km altitude / 0.2 deg inclination
+  band applies; the atmosphere floor is always checked.
 
 ``mission_constraints_passed`` is the conjunction of the mission-constraint
 checks (see :data:`CONSTRAINT_CHECK_IDS`); data-integrity and re-fly checks
@@ -64,6 +66,14 @@ MIN_LIFTOFF_THRUST_TO_WEIGHT = 1.0
 #: RAAN tolerance applied when the target constrains RAAN (the target schema
 #: carries no RAAN-specific tolerance; 1 deg is the Flight Lab default).
 RAAN_TOLERANCE_DEG = 1.0
+#: Insertion altitude tolerance [m] applied when the target declares no
+#: orbit_altitude_tolerance_m. This is the Flight Lab default used by the
+#: packaged scenario; it keeps a target-less export honest without inventing
+#: a per-site aerodynamic/propellant limit.
+DEFAULT_ORBIT_ALTITUDE_TOLERANCE_M = 20000.0
+#: Insertion inclination tolerance [deg] applied when the target declares no
+#: inclination_tolerance_deg. Same rationale as the altitude default.
+DEFAULT_INCLINATION_TOLERANCE_DEG = 0.2
 
 #: Orbit re-fly drift limits (Gate G5). A point-mass, single-body, one-orbit
 #: re-integration of the insertion state must reproduce the osculating
@@ -319,29 +329,28 @@ def insertion_checks(run: FlightRun, target: FlightTarget,
             limit=limit, unit="m",
             reason_code="" if passed else "INSERTION_PERIAPSIS_BELOW_MINIMUM",
         ))
-    tol = constraints.orbit_altitude_tolerance_m
-    if tol is not None:
-        tol = float(tol)
-        for name, actual, want in (
-            ("periapsis", rp, float(orbit.periapsis_altitude_m)),
-            ("apoapsis", float(elements["apoapsis_altitude_m"]), float(orbit.apoapsis_altitude_m)),
-        ):
-            delta = actual - want
-            passed = abs(delta) <= tol
-            checks.append(Check(
-                id=f"insertion-{name}-within-tolerance", passed=passed, value=actual,
-                limit=want, unit="m",
-                reason_code="" if passed else f"INSERTION_{name.upper()}_OUT_OF_TOLERANCE",
-            ))
-    if constraints.inclination_tolerance_deg is not None:
-        tol = float(constraints.inclination_tolerance_deg)
-        actual = float(elements["inclination_deg"])
-        passed = abs(actual - float(orbit.inclination_deg)) <= tol
+    alt_tol = constraints.orbit_altitude_tolerance_m
+    alt_tol = DEFAULT_ORBIT_ALTITUDE_TOLERANCE_M if alt_tol is None else float(alt_tol)
+    for name, actual, want in (
+        ("periapsis", rp, float(orbit.periapsis_altitude_m)),
+        ("apoapsis", float(elements["apoapsis_altitude_m"]), float(orbit.apoapsis_altitude_m)),
+    ):
+        delta = actual - want
+        passed = abs(delta) <= alt_tol
         checks.append(Check(
-            id="insertion-inclination-within-tolerance", passed=passed, value=actual,
-            limit=float(orbit.inclination_deg), unit="deg",
-            reason_code="" if passed else "INSERTION_INCLINATION_OUT_OF_TOLERANCE",
+            id=f"insertion-{name}-within-tolerance", passed=passed, value=actual,
+            limit=want, unit="m",
+            reason_code="" if passed else f"INSERTION_{name.upper()}_OUT_OF_TOLERANCE",
         ))
+    inc_tol = constraints.inclination_tolerance_deg
+    inc_tol = DEFAULT_INCLINATION_TOLERANCE_DEG if inc_tol is None else float(inc_tol)
+    actual = float(elements["inclination_deg"])
+    passed = abs(actual - float(orbit.inclination_deg)) <= inc_tol
+    checks.append(Check(
+        id="insertion-inclination-within-tolerance", passed=passed, value=actual,
+        limit=float(orbit.inclination_deg), unit="deg",
+        reason_code="" if passed else "INSERTION_INCLINATION_OUT_OF_TOLERANCE",
+    ))
     if orbit.raan_deg is not None:
         actual = float(elements["raan_deg"])
         passed = angle_diff_deg(actual, float(orbit.raan_deg)) <= RAAN_TOLERANCE_DEG

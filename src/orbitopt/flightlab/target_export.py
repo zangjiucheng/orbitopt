@@ -40,6 +40,10 @@ from pathlib import Path
 
 import yaml
 
+from orbitopt.flightlab.checks import (
+    DEFAULT_INCLINATION_TOLERANCE_DEG,
+    DEFAULT_ORBIT_ALTITUDE_TOLERANCE_M,
+)
 from orbitopt.flightlab.contract import FlightTarget, validate_target
 from orbitopt.launch_constraints import max_abs_dla_for_site
 from orbitopt.launch_sites import LaunchSite, get_launch_site
@@ -285,16 +289,19 @@ def build_target(site_id: str, periapsis_alt_m, apoapsis_alt_m, inclination_deg,
         "backend's own default vehicle model applies and no performance figure here was verified")
     if not constraints:
         assumptions.append(
-            "no mission constraints specified: the run uses backend defaults, no load/aero/"
-            "insertion limits were asserted at export time")
+            "no mission constraints specified: no load/aero/propellant reserve limits were "
+            f"asserted at export time; Gate-B still checks the atmosphere floor and default "
+            f"insertion tolerances ({DEFAULT_ORBIT_ALTITUDE_TOLERANCE_M:.0f} m altitude, "
+            f"{DEFAULT_INCLINATION_TOLERANCE_DEG:g} deg inclination)")
     if not recovery:
         assumptions.append("no recovery plan specified: recovery.kind = none (expendable first stage)")
     assumptions.append(
         "no simulation backends/phases specified: the consumer (E2 ascent optimizer, Mission "
         "Control) selects them and records the choice in the run manifest")
     assumptions.append(
-        "no terminal_state: the run is graded against the target orbit elements at insertion, "
-        "not one fixed end-of-ascent state vector")
+        "no terminal_state: the run is graded against the target orbit elements at insertion "
+        "using target tolerances when declared and Gate-B defaults otherwise, not one fixed "
+        "end-of-ascent state vector")
 
     doc: dict = {
         "schema_version": "1.0",
