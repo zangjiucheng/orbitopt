@@ -16,6 +16,7 @@ the single-scene 3D viewer directly, without going through examples/.
     orbitopt flight validate runs/run-1  # ... or a FlightResult run directory
     orbitopt flight export-target --site kourou --orbit 400x400@51.6 \
         --date 2026-11-10 -o target.yaml  # build a FlightTarget from site/orbit/window
+    orbitopt flight to-scene runs/run-1 -o scene.json  # run dir -> viewer scene
 
 The same commands work as ``python -m orbitopt ...``. Installed as the
 ``orbitopt`` and ``orbitopt-app`` console scripts (see pyproject.toml), so
@@ -197,13 +198,18 @@ def _cmd_launch_window(args):
 
 
 def _cmd_flight(args):
-    """`orbitopt flight validate <target.yaml|run_dir>`: the Flight Lab
-    contract check (orbitopt.flightlab.contract) -- a readable pass/fail like
-    `orbitopt validate`, no compute stack, no GUI imports.
-    `orbitopt flight export-target`: build a FlightTarget YAML (FL-003)."""
+    """`orbitopt flight ...`: the Flight Lab tools (orbitopt.flightlab) --
+    readable pass/fail or a written scene JSON, no compute stack, no GUI
+    imports (orbitopt.flightlab.scene_export builds the scene itself).
+    `orbitopt flight validate <target.yaml|run_dir>`: the contract check
+    (orbitopt.flightlab.contract). `orbitopt flight export-target`: build a
+    FlightTarget YAML (FL-003)."""
+    if args.flight_command == "to-scene":
+        return _cmd_flight_to_scene(args)
     if getattr(args, "flight_command", None) == "export-target":
         _cmd_flight_export_target(args)
         return
+
     import jsonschema
 
     from orbitopt.flightlab.contract import validate_path
@@ -249,6 +255,32 @@ def _cmd_flight_export_target(args):
           f"(site {target.launch_site.name}{raan_note})")
     print("validated against flight-target-1.0.json before writing "
           f"(digest {target_digest(target.to_dict())[:12]}...)")
+
+
+def _cmd_flight_to_scene(args):
+    """`orbitopt flight to-scene <run_dir> -o scene.json`: the FL-005 scene
+    importer -- a FlightResult run dir becomes a scene-1.0 JSON that
+    `orbitopt view` (or Mission Control) opens as a multi-body Earth scene.
+    A run that fails the contract (or carries a frame scene export cannot
+    convert to GCRS) is rejected and no file is written: never render a
+    suspect run."""
+    import jsonschema
+
+    from orbitopt.flightlab.contract import read_run
+    from orbitopt.flightlab.scene_export import run_to_scene
+
+    try:
+        scene = run_to_scene(read_run(args.run_dir), earth_texture=not args.no_earth_texture)
+    except (jsonschema.ValidationError, ValueError) as exc:
+        print(f"REJECTED: {args.run_dir}\n  {exc}")
+        raise SystemExit(1) from None
+    out = args.output or f"{scene['flightRun']['runId']}.json"
+    with open(out, "w") as handle:
+        json.dump(scene, handle, indent=2)
+    n_bodies = len(scene["bodies"]) - 1  # the Earth is not a run body
+    n_events = len(scene["timeline"].get("events", []))
+    print(f"wrote {out}: {n_bodies} bodies, {n_events} events "
+          f"(open with: orbitopt view {out})")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -330,6 +362,12 @@ def build_parser() -> argparse.ArgumentParser:
                              help="same anchor with an explicit node-search window in days, e.g. 2026-11-10/5")
     flight_export.add_argument("-o", "--output", required=True, metavar="PATH",
                                help="output FlightTarget YAML path (written only after schema validation)")
+    flight_scene = flight_sub.add_parser(
+        "to-scene", help="convert a FlightResult run dir to a scene JSON (opens with `orbitopt view`)")
+    flight_scene.add_argument("run_dir", help="a run dir (manifest.json + trajectories/)")
+    flight_scene.add_argument("-o", "--output", help="output scene JSON path (default: <run_id>.json)")
+    flight_scene.add_argument("--no-earth-texture", action="store_true",
+                              help="draw Earth as a point marker instead of the textured globe")
     return parser
 
 

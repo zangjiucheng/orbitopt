@@ -118,6 +118,27 @@ def _default_view_direction(scene: dict) -> np.ndarray | None:
     ])
 
 
+# Seconds in one timeline unit (timeline.unitLabel) -- the table from
+# orbitopt.viz.timeline_bar.timeline_unit_seconds, restated here (instead of
+# importing it) because that module is a Qt widget and scene_renderer must
+# stay importable for pyvista-only use. Unknown labels fall back to days.
+_TIMELINE_UNIT_SECONDS = {"s": 1.0, "sec": 1.0, "seconds": 1.0, "min": 60.0, "minutes": 60.0,
+                          "h": 3600.0, "hr": 3600.0, "hours": 3600.0,
+                          "d": 86400.0, "day": 86400.0, "days": 86400.0}
+
+
+def _body_lifespan(body: dict) -> tuple[float | None, float | None] | None:
+    """A body's optional lifespan bounds (``tStart``/``tEnd``, in timeline
+    units) as (start, end) with either side possibly None -- the scene-1.0
+    foreign members orbitopt.flightlab.scene_export writes so a staged body
+    appears/disappears mid-timeline. None: the body always exists (every
+    scene without the fields renders exactly as before)."""
+    lo, hi = body.get("tStart"), body.get("tEnd")
+    if lo is None and hi is None:
+        return None
+    return (None if lo is None else float(lo), None if hi is None else float(hi))
+
+
 def marker_size(body: dict) -> float:
     return _MARKER_BASE_SIZE + _MARKER_WEIGHT_SIZE * body.get("radiusDisplay", 4.0)
 
@@ -511,6 +532,10 @@ class SceneRenderer:
         self._rotating: list[dict] = []
         self._rotation_elapsed_hours = 0.0
         self._has_timeline = False
+        # Seconds per timeline unit, from timeline.unitLabel (set in load()):
+        # lets _apply_rotation_for_time convert timeline t to hours for a
+        # scene whose timeline is not in days (e.g. Flight Lab's seconds).
+        self._timeline_seconds_per_unit = 86400.0
         # Keyed by the actor object itself, not id(actor) -- VTK's Python
         # wrapper objects are not guaranteed to be the same *Python* object
         # across two separate accesses to the same underlying C++ actor
@@ -573,6 +598,8 @@ class SceneRenderer:
         # the static Solar System view, where there's no "current time" for
         # rotation to be in or out of sync with).
         self._has_timeline = bool(scene.get("timeline"))
+        self._timeline_seconds_per_unit = _TIMELINE_UNIT_SECONDS.get(
+            ((scene.get("timeline") or {}).get("unitLabel") or "days").strip().lower(), 86400.0)
 
         for body in scene["bodies"]:
             color = body["color"]
@@ -594,12 +621,14 @@ class SceneRenderer:
 
                 sphere_actor = _sphere_actor(self.plotter, body, name=f"marker-{body['id']}")
                 point_poly = None
+                marker_actor = None
                 if sphere_actor is not None:
                     sphere_actor.position = tuple(float(c) for c in pos0)
                     self._register_rotation(body, sphere_actor)
                     self._actor_body_ids[sphere_actor] = body["id"]
                     if body.get("texture") == _EARTH_TEXTURE:
                         self.tiles.attach(sphere_actor, body)
+                    marker_actor = sphere_actor
                 else:
                     point_poly = pv.PolyData(pos0.reshape(1, 3))
                     marker_actor = self.plotter.add_mesh(
@@ -610,13 +639,22 @@ class SceneRenderer:
 
                 full_positions = np.asarray(trail_positions, dtype=float)
                 full_poly = pv.MultipleLines(full_positions)
-                self.plotter.add_mesh(full_poly, color=color, line_width=1.1, opacity=0.3, pickable=False)
+                full_actor = self.plotter.add_mesh(
+                    full_poly, color=color, line_width=1.1, opacity=0.3, pickable=False)
 
                 past_trail = _PastTrail(full_positions)
-                self.plotter.add_mesh(
+                past_actor = self.plotter.add_mesh(
                     past_trail.poly, color=color, line_width=2.6, opacity=0.95,
                     name=f"past-{body['id']}", pickable=False,
                 )
+
+                # Optional per-body lifespan (scene-1.0 foreign members, from
+                # orbitopt.flightlab.scene_export): the body exists on the
+                # timeline only inside [tStart, tEnd]; outside it every actor
+                # is hidden, so a staged booster vanishes at its t_end_s and
+                # a child body first appears at its t_start_s. None: always
+                # visible (every scene without the fields).
+                lifespan = _body_lifespan(body)
 
                 self._moving[body["id"]] = {
                     "body": body,
@@ -631,6 +669,9 @@ class SceneRenderer:
                     "full_positions": full_positions,
                     "full_poly": full_poly,
                     "color": color,
+                    "lifespan": lifespan,
+                    "actors": [a for a in (marker_actor, full_actor, past_actor) if a is not None],
+                    "visible": True,
                 }
             else:
                 pos = np.asarray(body.get("position", [0.0, 0.0, 0.0]), dtype=float)
@@ -759,7 +800,8 @@ class SceneRenderer:
 
     def _apply_rotation_for_time(self, t: float) -> None:
         """Spin every real-sphere body to its orientation at mission time
-        ``t`` (days, same units/origin as the scene's timeline), computed
+        ``t`` (in the scene's timeline units/origin; converted to hours via
+        timeline.unitLabel), computed
         directly as a function of ``t`` rather than accumulated tick-by-tick.
         Deterministic and idempotent in ``t``, unlike advance_rotation's
         wall-clock accumulator, so scrubbing the timeline to the same point
@@ -774,7 +816,10 @@ class SceneRenderer:
         """
         if not self._rotating:
             return
-        absolute_hours = t * 24.0
+        # t is in the scene's timeline units, not necessarily days: convert
+        # through timeline.unitLabel so a seconds-based timeline (Flight Lab
+        # ascents) spins Earth at the real rate instead of 86400x too fast.
+        absolute_hours = t * self._timeline_seconds_per_unit / 3600.0
         for entry in self._rotating:
             spin_deg = absolute_hours / entry["period_hours"] * 360.0
             self._apply_body_spin(entry, spin_deg)
@@ -796,6 +841,14 @@ class SceneRenderer:
         origin = self.frame_origin(t)
         distances = {}
         for body_id, entry in self._moving.items():
+            window = entry.get("lifespan")
+            if window is not None:
+                lo, hi = window
+                visible = (lo is None or t >= lo) and (hi is None or t <= hi)
+                if visible != entry["visible"]:
+                    entry["visible"] = visible
+                    for actor in entry["actors"]:
+                        actor.SetVisibility(visible)
             idx, world = _sample_trail(entry["times"], entry["world_positions"], t, entry["velocities"])
             pos = world - origin
             if entry["sphere_actor"] is not None:
