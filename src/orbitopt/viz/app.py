@@ -103,6 +103,8 @@ SCRUB_MIN_INTERVAL_MS = 16.0
 
 WEBSITE_URL = "https://zangjiucheng.github.io/orbitopt/"
 REPOSITORY_URL = "https://github.com/zangjiucheng/orbitopt"
+FLIGHTLAB_SIDEBAR_KEY = "__orbitopt_flightlab__"
+FLIGHTLAB_SIDEBAR_LABEL = "Flight Lab"
 
 # Auto-slow near a timeline event (TLI burn, closest approach, entry interface,
 # ...) so fast-forwarding through a mission doesn't blow past the moments that
@@ -166,6 +168,7 @@ class MissionControlWindow(QMainWindow):
         self._mission_ids: dict[str, str] = {}
         self._active_key: str | None = None
         self._active_label: str | None = None
+        self._flightlab_active = False
         self._verified_keys: set[str] = set()
         self._loaders: dict[str, callable] = {}
         self._playing = False
@@ -347,6 +350,8 @@ class MissionControlWindow(QMainWindow):
         self.center_stack = QStackedWidget()
         self.center_stack.addWidget(self.plotter)
         self.center_stack.addWidget(self._build_loading_page())
+        self.flightlab_page = self._build_flightlab_page()
+        self._flightlab_index = self.center_stack.addWidget(self.flightlab_page)
 
         # The 3D view over the linked 2D charts; the splitter lets the charts
         # be dragged smaller, never the 3D view away.
@@ -674,6 +679,11 @@ class MissionControlWindow(QMainWindow):
 
         layout.addStretch(1)
         return page
+
+    def _build_flightlab_page(self) -> QWidget:
+        from orbitopt.flightlab.ui import FlightLabReplayPage
+
+        return FlightLabReplayPage()
 
     def _build_menu(self):
         file_menu = self.menuBar().addMenu("&File")
@@ -1098,6 +1108,11 @@ class MissionControlWindow(QMainWindow):
             self._loaders[mission.title] = mission.load
             self._mission_ids[mission.title] = mission.id
             self.sidebar.add_mission(mission.title, mission.title, mission.title)
+        self.sidebar.add_mission(
+            FLIGHTLAB_SIDEBAR_KEY,
+            FLIGHTLAB_SIDEBAR_LABEL,
+            "Open a precomputed Flight Lab run directory",
+        )
         if self.sidebar.count():
             self.sidebar.select_row(0)
 
@@ -1122,6 +1137,12 @@ class MissionControlWindow(QMainWindow):
         if self._loading:
             return
         self._set_playing(False)
+        if key == FLIGHTLAB_SIDEBAR_KEY:
+            self._active_key, self._active_label = key, label
+            self._update_reload_button()
+            self._show_flightlab(label)
+            return
+        self._hide_flightlab()
         self._active_key, self._active_label = key, label
         self._update_reload_button()
 
@@ -1138,6 +1159,25 @@ class MissionControlWindow(QMainWindow):
             return
 
         self._start_loading(key, label)
+
+    def _show_flightlab(self, label: str | None = None):
+        self._set_playing(False)
+        self._flightlab_active = True
+        self._active_key = FLIGHTLAB_SIDEBAR_KEY
+        self._active_label = label or FLIGHTLAB_SIDEBAR_LABEL
+        self._update_reload_button()
+        self.chart_panel.hide()
+        self.timeline_bar.hide()
+        self.center_stack.setCurrentIndex(self._flightlab_index)
+        self.statusBar().showMessage("Flight Lab replay")
+
+    def _hide_flightlab(self):
+        self._flightlab_active = False
+        self.flightlab_page.stop_playback()
+        if self.center_stack.currentWidget() is self.flightlab_page:
+            self.center_stack.setCurrentIndex(0)
+        self.chart_panel.setVisible(self.chart_panel.count() > 0)
+        self.timeline_bar.setVisible((self.state.scene or {}).get("timeline") is not None)
 
     def _begin_switch(self, message: str):
         self._loading = True
@@ -1166,6 +1206,9 @@ class MissionControlWindow(QMainWindow):
 
     def _hide_loading(self):
         self._spinner.stop()
+        if self._flightlab_active:
+            self.center_stack.setCurrentIndex(self._flightlab_index)
+            return
         self.center_stack.setCurrentIndex(0)
         # The scene was built while the view was hidden, so SceneRenderer.load's
         # reset_camera() fit the camera to a stale/zero viewport (most visibly
@@ -1665,6 +1708,9 @@ class MissionControlWindow(QMainWindow):
         relative to the current time -- distinct from the "most recent event
         at or before now" lookup the readouts use, which only ever looks
         backward."""
+        if self._flightlab_active:
+            self.flightlab_page.seek_relative_event(direction)
+            return
         target = adjacent_event(self.state.events, self.state.time, direction)
         if target is not None:
             self._seek_to_event(target)
@@ -1673,6 +1719,9 @@ class MissionControlWindow(QMainWindow):
     def _step_time(self, direction: float):
         """Nudge the current time one step forward/back: 1% of the visible
         timeline, so the step gets finer as the timeline zooms in."""
+        if self._flightlab_active:
+            self.flightlab_page.step_time(direction)
+            return
         timeline = self.state.timeline
         if not timeline:
             return
@@ -1680,6 +1729,9 @@ class MissionControlWindow(QMainWindow):
         self.state.set_time(self.state.time + direction * (self.timeline_bar.step_size() or 0.01 * timeline_span(timeline)))
 
     def _restart_timeline(self):
+        if self._flightlab_active:
+            self.flightlab_page.restart()
+            return
         timeline = self.state.timeline
         if not timeline:
             return
@@ -1689,6 +1741,11 @@ class MissionControlWindow(QMainWindow):
     def _toggle_play(self, direction: int = 1):
         """Space plays forward, Shift+Space backwards; the key of the
         direction already playing pauses, the other one turns around."""
+        if self._flightlab_active:
+            # The mission scene is hidden behind the Flight Lab page; Space
+            # drives the replay instead of animating an invisible view.
+            self.flightlab_page.toggle_playback()
+            return
         timeline = self.state.timeline
         if not timeline:
             return
