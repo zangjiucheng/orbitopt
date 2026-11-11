@@ -1,0 +1,81 @@
+{
+  "attitude": {
+    "azimuth_deg": [
+      [
+        0.0,
+        90.0
+      ],
+      [
+        8.0,
+        90.0
+      ],
+      [
+        50.0,
+        90.0
+      ],
+      [
+        105.0,
+        90.0
+      ]
+    ],
+    "elevation_deg": [
+      [
+        0.0,
+        90.0
+      ],
+      [
+        8.0,
+        90.0
+      ],
+      [
+        50.0,
+        18.0
+      ],
+      [
+        105.0,
+        18.0
+      ]
+    ]
+  },
+  "launch": {
+    "altitude_m": 0.0,
+    "latitude_deg": 0.0,
+    "longitude_deg": 0.0,
+    "time_utc": "2026-01-01T00:00:00Z"
+  },
+  "name": "fl403-spike-stage-meco (orbitopt FL-004 / fl403-spike-stage)",
+  "simulation": {
+    "end_time_s": 105.0,
+    "integrator": {
+      "method": "rk45"
+    },
+    "output_step_s": 1.0
+  },
+  "stages": [
+    {
+      "aero": {
+        "ca": [
+          [
+            0,
+            0.0
+          ],
+          [
+            40,
+            0.0
+          ]
+        ],
+        "diameter_m": 3.7
+      },
+      "engine": {
+        "burn_end_s": 100,
+        "burn_start_s": 0,
+        "isp_vac_s": 320.0,
+        "nozzle_exit_area_m2": 9.2903e-05,
+        "thrust_vac_n": 1882876.8
+      },
+      "free_flight": "attitude_program",
+      "mass_dry_kg": 10000,
+      "mass_initial_kg": 70000
+    }
+  ]
+}
