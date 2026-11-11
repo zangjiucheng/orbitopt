@@ -40,7 +40,6 @@ from orbitopt.scene_format import validate_scene
 from orbitopt.timescales import utc_datetime_to_mjd2000, utc_mjd2000_to_tdb_seconds
 
 from orbitopt.flightlab.contract import FlightRun, _parse_utc
-from orbitopt.flightlab.frames import to_gcrs
 
 #: Earth rendering constants (the scene's distanceUnit is always km here).
 EARTH_RADIUS_KM = 6378.137  # WGS-84 equatorial radius
@@ -75,12 +74,10 @@ _EVENT_LABELS = {
 }
 
 
-def _gmst_deg(mjd2000_utc: float) -> float:
-    """Greenwich mean sidereal time [deg] at UT1 ~= UTC (IAU 1982 linear
-    term) -- the same model as orbitopt.launch_windows.gmst_deg, restated
-    with ``math`` so this package stays dependency-light."""
-    d = mjd2000_utc - 0.5  # days since J2000.0 (12:00 TT ~= 12:00 UTC)
-    return (280.46061837 + 360.98564736629 * d) % 360.0
+def _earth_orientation_basis(epoch_utc: datetime) -> list:
+    from orbitopt.flightlab.frames import itrs_to_gcrs_matrix
+
+    return itrs_to_gcrs_matrix(epoch_utc)
 
 
 def _check_track(track) -> None:
@@ -150,6 +147,13 @@ def _km(v: float) -> float:
 
 
 def _gcrs_track_state(track, epoch: datetime) -> tuple[list, list]:
+    if track.frame == "GCRS":
+        return (
+            [[_km(float(x)), _km(float(y)), _km(float(z))] for x, y, z in track.position_m],
+            [[_km(float(vx)), _km(float(vy)), _km(float(vz))] for vx, vy, vz in track.velocity_m_s],
+        )
+    from orbitopt.flightlab.frames import to_gcrs
+
     r, v = to_gcrs(track.position_m, track.velocity_m_s, track.frame, epoch, track.t_s)
     return (
         [[_km(float(x)), _km(float(y)), _km(float(z))] for x, y, z in r],
@@ -198,23 +202,24 @@ def _track_body_entry(track, color: str, positions_km: list, velocities_km_s: li
     }
 
 
-def _earth_body(earth_texture: bool, gmst_deg: float) -> dict:
+def _earth_body(earth_texture: bool, orientation_basis: list | None) -> dict:
     earth: dict[str, Any] = {
         "id": "earth", "name": "Earth", "color": EARTH_COLOR, "kind": "planet",
         "radiusDisplay": EARTH_RADIUS_DISPLAY, "position": [0.0, 0.0, 0.0],
     }
     if earth_texture:
-        # orientationBasis = Rz(GMST at the mission epoch): the equirectangular
-        # mesh's prime meridian lands on the Greenwich meridian at t=0, exactly
-        # as _apply_rotation_for_time then expects (spin from the timeline).
-        th = math.radians(gmst_deg)
-        c, s = math.cos(th), math.sin(th)
+        # orientationBasis is the same full FL-002 ITRS -> GCRS position
+        # rotation used for LAUNCH_ECI tracks, so the texture and the rendered
+        # trajectories share one Earth orientation rather than drifting by the
+        # GMST/nutation/polar-motion residual.
+        if orientation_basis is None:
+            raise ValueError("earth texture needs a frame-bridge orientation basis")
         earth.update({
             "texture": EARTH_TEXTURE,
             "radius": EARTH_RADIUS_KM,
             "flattening": EARTH_FLATTENING,
             "rotationPeriodHours": EARTH_SIDEREAL_DAY_HOURS,
-            "orientationBasis": [[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]],
+            "orientationBasis": [[float(x) for x in row] for row in orientation_basis],
         })
     return earth
 
@@ -232,9 +237,8 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True) -> dict:
     """
     epoch = _check_run(run)
     mjd2000 = utc_datetime_to_mjd2000(epoch)
-    gmst = _gmst_deg(mjd2000)
 
-    bodies = [_earth_body(earth_texture, gmst)]
+    bodies = [_earth_body(earth_texture, _earth_orientation_basis(epoch) if earth_texture else None)]
     for i, track in enumerate(run.tracks):
         # Convert once per track: km positions + km/s velocities, both in
         # GCRS (LAUNCH_ECI goes through the FL-002 frame bridge).

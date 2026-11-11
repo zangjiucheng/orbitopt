@@ -188,6 +188,13 @@ def _itrs_to_gcrs_matrix(obstime) -> np.ndarray:
     return np.asarray(out.cartesian.xyz.to_value(u.m), dtype=np.float64)
 
 
+def itrs_to_gcrs_matrix(epoch_utc: datetime) -> list[list[float]]:
+    """The full frame-bridge position rotation from Earth-fixed axes to GCRS
+    at ``epoch_utc`` as JSON-friendly row vectors (columns are the GCRS
+    representation of the ITRS unit axes)."""
+    return _itrs_to_gcrs_matrix(_tt_time(epoch_utc, None)).tolist()
+
+
 def _transform_states(r: np.ndarray, v: np.ndarray, obstime, ecef_to_gcrs: bool = True) -> tuple[np.ndarray, np.ndarray]:
     """Batch state-vector rotation between the rotating Earth-fixed frame and
     GCRS through the full astropy ITRS<->GCRS pipeline (position *and*

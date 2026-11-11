@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import math
 import shutil
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -17,8 +19,8 @@ import pytest
 
 from orbitopt.cli import main as cli_main
 from orbitopt.flightlab.contract import BodyTrack, Event, FlightRun, read_run, write_run
-from orbitopt.flightlab.frames import to_gcrs
-from orbitopt.flightlab.scene_export import _gmst_deg, run_to_scene
+from orbitopt.flightlab.frames import itrs_to_gcrs_matrix, to_gcrs
+from orbitopt.flightlab.scene_export import run_to_scene
 from orbitopt.scene_format import read_scene, validate_scene
 from orbitopt.timescales import utc_datetime_to_mjd2000
 
@@ -36,6 +38,33 @@ def _copy_run(tmp_path):
 
 def _epoch_dt():
     return datetime.fromisoformat(EPOCH.replace("Z", "+00:00"))
+
+
+def _gmst_only_basis(mjd2000_utc: float) -> list:
+    d = mjd2000_utc - 0.5
+    theta = math.radians((280.46061837 + 360.98564736629 * d) % 360.0)
+    c, s = math.cos(theta), math.sin(theta)
+    return [[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]]
+
+
+def test_base_install_flight_imports_without_numpy():
+    root = Path(__file__).resolve().parents[1]
+    code = """
+import builtins
+real_import = builtins.__import__
+def hook(name, *args, **kwargs):
+    if name == 'numpy' or name.startswith('numpy.'):
+        raise ModuleNotFoundError(f"base-install simulation: import of {name} blocked")
+    return real_import(name, *args, **kwargs)
+builtins.__import__ = hook
+import orbitopt.cli
+import orbitopt.flightlab.scene_export
+print('ok')
+"""
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                          env={"PYTHONPATH": str(root / "src")}, timeout=20)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == "ok"
 
 
 def _track(body_id, frame="GCRS", epoch=EPOCH, t=((0.0, 10.0)), mass=((1000.0, 900.0)),
@@ -120,8 +149,9 @@ def test_launch_eci_rotation_uses_frame_bridge_not_gmst_only():
     epoch_dt = _epoch_dt()
     bridge_r, _ = to_gcrs(track.position_m, track.velocity_m_s, track.frame,
                           epoch_dt, track.t_s)
-    theta = math.radians(_gmst_deg(utc_datetime_to_mjd2000(epoch_dt)))
-    c, s = math.cos(theta), math.sin(theta)
+    gmst_basis = _gmst_only_basis(utc_datetime_to_mjd2000(epoch_dt))
+    c = gmst_basis[0][0]
+    s = gmst_basis[1][0]
     gmst_moved = False
     for (x, y, z), km, (gx, gy, gz) in zip(track.position_m, stack["trail"]["positions"], bridge_r):
         assert km[0] == pytest.approx(gx / 1000.0, abs=1e-3)
@@ -155,11 +185,11 @@ def test_earth_texture_toggle():
     run = read_run(RUN_FIXTURE)
     earth = next(b for b in run_to_scene(run, earth_texture=True)["bodies"] if b["id"] == "earth")
     assert earth["texture"] == "earth_daymap.jpg" and earth["radius"] == pytest.approx(6378.137, abs=1e-3)
-    theta = math.radians(_gmst_deg(utc_datetime_to_mjd2000(_epoch_dt())))
-    c, s = math.cos(theta), math.sin(theta)
-    assert earth["orientationBasis"] == [[pytest.approx(c), pytest.approx(-s), pytest.approx(0.0)],
-                                         [pytest.approx(s), pytest.approx(c), pytest.approx(0.0)],
-                                         [pytest.approx(0.0), pytest.approx(0.0), pytest.approx(1.0)]]
+    want = itrs_to_gcrs_matrix(_epoch_dt())
+    assert earth["orientationBasis"] == [[pytest.approx(x) for x in row] for row in want]
+    gmst_basis = _gmst_only_basis(utc_datetime_to_mjd2000(_epoch_dt()))
+    assert max(abs(earth["orientationBasis"][i][j] - gmst_basis[i][j])
+               for i in range(3) for j in range(3)) > 0.003
     bare = next(b for b in run_to_scene(run, earth_texture=False)["bodies"] if b["id"] == "earth")
     assert "texture" not in bare and "orientationBasis" not in bare
     validate_scene(run_to_scene(run, earth_texture=False))  # still a valid scene
