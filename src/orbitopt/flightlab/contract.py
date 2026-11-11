@@ -45,6 +45,7 @@ import dataclasses
 import hashlib
 import io
 import json
+import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import lru_cache
@@ -534,6 +535,8 @@ def _parse_track_csv(text: str, body: Mapping[str, Any], where: str) -> BodyTrac
             nums = [float(x) for x in row]
         except ValueError as exc:
             raise ValueError(f"{where}:{lineno}: non-numeric trajectory value: {exc}") from None
+        if any(not math.isfinite(v) for v in nums):
+            raise ValueError(f"{where}:{lineno}: non-finite trajectory value -- NaN/Inf is not a valid sample")
         t, m, x, y, z, vx, vy, vz = nums[:8]
         t_s.append(t)
         mass_kg.append(m)

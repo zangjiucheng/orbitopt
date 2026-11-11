@@ -195,6 +195,16 @@ def test_run_rejects_negative_mass(tmp_path):
         read_run(run_dir)
 
 
+def test_run_rejects_non_finite_trajectory_values(tmp_path):
+    for value in ("nan", "inf"):
+        run_dir = _broken_run(tmp_path)
+        csv_path = run_dir / "trajectories" / "booster.csv"
+        text = csv_path.read_text(encoding="utf-8").replace("380000.0", value, 1)
+        csv_path.write_text(text, encoding="utf-8")
+        with pytest.raises(ValueError, match="non-finite"):
+            read_run(run_dir)
+
+
 def test_run_rejects_non_monotonic_time(tmp_path):
     run_dir = _broken_run(tmp_path)
     csv_path = run_dir / "trajectories" / "upper_stage.csv"
