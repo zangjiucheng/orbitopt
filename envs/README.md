@@ -67,6 +67,20 @@ If `micromamba info` reports `osx-64` on an Apple Silicon Mac, the shell
 or force the subdir with `CONDA_SUBDIR=osx-arm64` for the `create`.
 macOS has a real window server, so the Qt/VTK viewer tests need no xvfb.
 
+### Optional: JSBSim 6-DOF spike
+
+The Flight Lab E4 JSBSim spike (`orbitopt.flightlab.sixdof`, task #206)
+needs `jsbsim==1.3.3`, which is pip-only for our platforms (universal2
+macOS, manylinux x86_64 wheels). It is *not* part of the conda specs/locks;
+install it hash-pinned on top of the locked env:
+
+```bash
+pip install --require-hashes --no-deps -r envs/sixdof-requirements.txt
+```
+
+The hashes cover the CPython 3.10 wheels (the env's Python). Without
+jsbsim, `tests/test_flightlab_sixdof_jsbsim.py` is skipped.
+
 ## Version constraints
 
 * `python=3.10` -- tudatpy's tudat-team builds.

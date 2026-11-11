@@ -99,3 +99,13 @@ def test_macos_locks_pin_native_builds_for_each_arch():
     for platform in ("osx-64", "osx-arm64"):
         for pkg in _locked(lock, platform).values():
             assert f"/{platform}/" in pkg["url"] or "/noarch/" in pkg["url"], pkg["url"]
+
+
+def test_sixdof_spike_requirements_pin_jsbsim_with_hashes():
+    # FL-401 (#206): jsbsim is an opt-in pip dependency outside the conda
+    # locks, so it must at least be exactly pinned and hash-locked.
+    text = (ENVS / "sixdof-requirements.txt").read_text(encoding="utf-8")
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
+    assert lines[0].startswith("jsbsim==1.3.3")
+    assert len([ln for ln in lines if ln.startswith("--hash=sha256:")]) >= 2
+    assert "jsbsim" not in "".join(_spec("cpu")["dependencies"] + _spec("gpu")["dependencies"])
