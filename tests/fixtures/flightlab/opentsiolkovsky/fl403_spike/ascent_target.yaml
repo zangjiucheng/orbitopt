@@ -1,0 +1,31 @@
+# Flight Lab E4 FL-403 (#208): single-stage ascent target for the 6-DOF
+# attitude-tracking spike. The "orbit" is only illustrative metadata -- the
+# flight ends at MECO (~100 s, ~80 km); no insertion is attempted. All
+# numbers match the JSBSim spike stage (FL-401, #206).
+schema_version: '1.0'
+mission:
+  id: fl403-spike-stage-meco
+  title: FL-403 spike -- single stage ascent to MECO
+  epoch_utc: '2026-01-01T00:00:00Z'
+launch_site:
+  name: equator-range
+  latitude_deg: 0.0
+  longitude_deg: 0.0
+  altitude_wgs84_m: 0.0
+target_orbit:
+  central_body: Earth
+  periapsis_altitude_m: 80000  # illustrative: MECO altitude, not an orbit claim
+  apoapsis_altitude_m: 80000
+  inclination_deg: 0.0
+  raan_deg: null
+constraints: {}
+vehicle:
+  source: fl403_spike_vehicle.yaml
+  provenance: illustrative
+simulation:
+  ascent_backend: opentsiolkovsky
+  atmosphere_6dof_backend: jsbsim
+  enabled_phases: [ascent_3dof]
+assumptions:
+  - Illustrative synthetic stage matching the JSBSim spike_stage model; no real vehicle.
+  - Zero aerodynamics on both sides of the 3-DOF/6-DOF comparison (FL-401 spike model has none).

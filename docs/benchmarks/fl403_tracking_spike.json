@@ -1,0 +1,68 @@
+{
+  "dt0.01": {
+    "dt_s": 0.01,
+    "meco_t_s": 100.0,
+    "att_err_max_deg": 24.02088219186774,
+    "att_err_rms_deg": 7.912984386515375,
+    "p_rate_max_deg_s": 0.00324498450550008,
+    "q_rate_max_deg_s": 15.839590834456718,
+    "r_rate_max_deg_s": 14.035230929524504,
+    "gimbal_sat_fraction_of_burn": 0.0,
+    "gimbal_max_deg": 0.85529768701892,
+    "alt_climb_6dof_m": 76545.6641978696,
+    "alt_3dof_m": 81254.6540304264,
+    "d_alt_m": -4708.9898325568065,
+    "speed_6dof_m_s": 5224.0063115481,
+    "speed_3dof_m_s": 5313.783551937722,
+    "d_speed_m_s": -89.77724038962242,
+    "fpa_6dof_deg": 19.454220487869758,
+    "fpa_3dof_deg": 19.70869025965001,
+    "d_fpa_deg": -0.25446977178025065,
+    "mach_6dof": 18.176056781667416,
+    "finite": true
+  },
+  "dt0.005": {
+    "dt_s": 0.005,
+    "meco_t_s": 100.0,
+    "att_err_max_deg": 23.597430786342898,
+    "att_err_rms_deg": 7.872077747219769,
+    "p_rate_max_deg_s": 0.0032682590740156824,
+    "q_rate_max_deg_s": 15.524595466357717,
+    "r_rate_max_deg_s": 13.790611605219583,
+    "gimbal_sat_fraction_of_burn": 0.0,
+    "gimbal_max_deg": 0.8417882511822403,
+    "alt_climb_6dof_m": 76585.67780171707,
+    "alt_3dof_m": 81254.6540304264,
+    "d_alt_m": -4668.976228709333,
+    "speed_6dof_m_s": 5224.591484682045,
+    "speed_3dof_m_s": 5313.783551937722,
+    "d_speed_m_s": -89.1920672556771,
+    "fpa_6dof_deg": 19.460414072190392,
+    "fpa_3dof_deg": 19.70869025965001,
+    "d_fpa_deg": -0.24827618745961644,
+    "mach_6dof": 18.185518944158225,
+    "finite": true
+  },
+  "_meta": {
+    "task": "FL-403 (#208)",
+    "model": "spike_stage",
+    "reference": "OT 3-DOF fl403_spike fixture (e2=18 deg)",
+    "gains": {
+      "kp": 3.0,
+      "ki": 0.01,
+      "kd": 4.0,
+      "i_max_alpha_rad_s2": 0.05
+    },
+    "settled_window_t_ge_60s": {
+      "dt_0.01": {
+        "att_err_max_deg": 1.116,
+        "att_err_rms_deg": 0.515
+      },
+      "dt_0.005": {
+        "att_err_max_deg": 1.122,
+        "att_err_rms_deg": 0.516
+      }
+    },
+    "notes": "att_err_max/rms fields cover t in [0.5,100]; the large early-window numbers are the documented program-infeasibility transient near vertical (el-rate demanded at el~90 is unachievable by TVC at low speed)."
+  }
+}

@@ -127,3 +127,37 @@ With a 2e5 N.s impulse, dt = 0.01 s, 61 s coast (all measured):
 6. **`--` inside XML comments is fatal**: JSBSim's parser raises
    "not well-formed (invalid token)" on `load_model` (verified) — the child
    model comments avoid double hyphens (ASCII prose with em-dashes is fine).
+
+---
+
+# Flight Lab E4 — attitude tracking spike + go/no-go (FL-403, #208)
+
+## What was built
+
+`orbitopt/flightlab/sixdof/tracking.py`: an SO(3) geodesic attitude-error
+PID in angular-acceleration space with pitch-rate feed-forward, converted
+to gimbal angle through the *instrumented live* plant gain `T·arm/I`
+(thrust, Iyy/Izz, CG read back from the model each step — a gain schedule
+that cancels the burn's mass/CG/inertia sweep); plus the 3-DOF reference
+plumbing (OT `trajectory.csv` replay, ECEF-climb altitude comparison that
+cancels the geoid offset). Reference: `fl403_spike` fixture, a run of the
+OT vehicle mirrored from the spike stage (same masses/Isp/ṁ/burn, zero
+aero); regenerable with `scripts/fl403_record_reference.py`. Plots + all
+metrics regenerate via `scripts/fl403_run_spike.py`.
+
+## Numbers (dt = 0.01 s; full table in the ADR)
+
+Settled (t ≥ 60 s) attitude error **1.12° max / 0.52° RMS**; gimbal
+saturation **0.0 %** of burn, peak deflection 0.86° of ±5° travel; MECO
+deviation vs 3-DOF: **−4.7 km alt / −90 m/s / −0.25° FPA**; dt-halving
+agreement 40 m / 0.58 m/s / 0.006°; no non-finite states to MECO+5 s at
+Mach 18. Full-profile error peaks at 24° in the first 60 s — the 3-DOF
+program's near-vertical elevation slew is kinematically unachievable by TVC
+(cos(el) → 0), an open-loop FL-401 run shows the same lag with no controller:
+a property of the program, not of the loop. Production programs must be
+rate-limited in body rates.
+
+## Verdict
+
+**GO** — see `docs/adr/flightlab-0001-jsbsim-6dof.md` for the declared
+criteria, the evidence table and the E5 draft scope.
