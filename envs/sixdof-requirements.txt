@@ -1,0 +1,10 @@
+# Flight Lab E4 JSBSim 6-DOF spike (#196 / FL-401 #206) -- opt-in, pip only.
+# Install on top of the locked conda env (cpu or gpu):
+#     pip install --require-hashes --no-deps -r envs/sixdof-requirements.txt
+# Pinned with hashes so this stays as reproducible as the conda locks. The
+# lock specs (cpu.yml / gpu.yml) are deliberately untouched: the spike is
+# time-boxed and jsbsim only needs numpy, which the conda env already has.
+# Wheels: CPython 3.10, universal2 macOS (arm64 + x86_64) and manylinux x86_64.
+jsbsim==1.3.3 \
+    --hash=sha256:2c80423a10e774c37cf9c8fc533295ded5819aa15ddb4e96b3ffa110d2d30957 \
+    --hash=sha256:3e01c55e3137b3c81240cd1722ef5bd50a2d2ee808762992242c06b63053457b
