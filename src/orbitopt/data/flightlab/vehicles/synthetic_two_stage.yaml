@@ -4,6 +4,9 @@
 # build time); 'attitude_program' fills OT's attitude curves unless a call
 # overrides it. All figures are hand-tuned placeholders for the FL-004/FL-005
 # pipeline -- NOT a real vehicle (provenance: illustrative).
+# The 'booster:' section (FL-301) is the stage-1 recovery model read by
+# orbitopt.flightlab.recovery.propagator.BoosterModel.load; it is not passed
+# to the OT adapter.
 name: synthetic-two-stage
 provenance: illustrative
 assumptions:
@@ -65,3 +68,35 @@ stages:
         time_s: 60.0
         mass_kg: 1500.0
         ballistic_coefficient_kg_m2: 40
+booster:
+  # Stage-1 recovery article as flown by the E3 3-DOF propagator. Masses and
+  # aero mirror the stage-1 OT config (same tube-and-fins tube, same dry
+  # mass); the landing engine is a single relightable Merlin-class unit --
+  # sized so hover authority holds at dry mass with the landing reserve.
+  provenance: illustrative
+  dry_mass_kg: 30000.0
+  landing_propellant_reserve_kg:
+    value: 4200.0
+    source: sized for a boostback + entry burn + landing burn at 2x hover margin (illustrative)
+  reference_area_m2:
+    value: 10.7516
+    source: pi/4 * 3.7^2, stage-1 diameter (illustrative)
+  cd_mach:
+    source: stage-1 OT aero ca table (illustrative)
+    value: [[0.0, 0.35], [0.8, 0.38], [1.1, 0.55], [1.5, 0.5], [2.5, 0.4], [4.0, 0.32], [8.0, 0.26]]
+  engines:
+    count: 1
+    usable_for: [boostback, landing]
+    thrust_vacuum_n: 1800000.0
+    isp_sea_level_s: 282.0
+    isp_vacuum_s: 311.0
+    nozzle_exit_area_m2: 5.0
+    throttle_min: 0.4
+    throttle_max: 1.0
+    restarts_max: 3
+  assumptions:
+    - Single relightable engine may be a deep-throttled subset of the sea-level
+      engine cluster; modelled as one unit with its own vacuum thrust/Isp pair.
+    - The OT stage-1 config burns all propellant by separation, so the recovery
+      reserve is planning headroom for the E3 burn sequence, not a state the
+      FL-004 ascent scenario carries.
