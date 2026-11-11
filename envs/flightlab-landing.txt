@@ -1,0 +1,14 @@
+# FL-303 landing-burn solver stack (pip layer on top of cpu.lock).
+#
+# gfold is the primary G-FOLD solver (Rust core, Clarabel SOCP; MIT).
+# Its solver output is load-bearing for the landing-burn acceptance
+# tests, so the version is pinned exactly; orbitopt.flightlab.recovery.
+# landing checks the installed distribution against this pin at import
+# (GFOLD_VERSION_PIN) and says so if the environment drifted.
+#
+# cvxpy is the *reference* implementation only (the module keeps its own
+# lossless-convexification SOCP to cross-check gfold); it is exercised in
+# tests, never on the production path. Unclearable drift there is fine,
+# a pinned range keeps CI honest about the Clarabel/OSQP backends.
+gfold==0.3.2
+cvxpy>=1.6,<2
