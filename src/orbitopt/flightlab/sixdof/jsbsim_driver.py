@@ -34,7 +34,7 @@ import warnings
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Mapping
 
 from orbitopt.flightlab.contract import BodyTrack
 
@@ -45,6 +45,7 @@ from orbitopt.flightlab.contract import BodyTrack
 
 FT_M = 0.3048
 LBF_N = 4.4482216152605
+LB_KG = 0.45359237
 SLUG_KG = 14.593902937206364
 SLUGFT2_KGM2 = SLUG_KG * FT_M**2
 G0_M_S2 = 9.80665
@@ -176,6 +177,25 @@ class SixDofSim:
             raise RuntimeError("JSBSim run_ic() failed")
         self._samples = [self.sample()]
 
+    def initialize_ic(self, props: Mapping[str, float]) -> None:
+        """Run IC from raw JSBSim property names/values (FL-402 handoff path:
+        :mod:`orbitopt.flightlab.sixdof.staging` computes the exact
+        ``ic/...-ft`` / ``ic/*-deg`` values itself). Starts a fresh sample
+        log, like :meth:`initialize`."""
+        for name, value in props.items():
+            self.fdm[name] = float(value)
+        if not self.fdm.run_ic():
+            raise RuntimeError("JSBSim run_ic() failed")
+        self._samples = [self.sample()]
+
+    def tank_contents_kg(self) -> tuple[float, float]:
+        """(oxidizer, fuel) tank contents in kg, read through the lbs-valued
+        JSBSim properties (the Python binding writes/reads raw property
+        values without unit conversion, verified against ``inertia/mass-slugs``)."""
+        f = self.fdm
+        return (float(f["propulsion/tank[0]/contents-lbs"]) * LB_KG,
+                float(f["propulsion/tank[1]/contents-lbs"]) * LB_KG)
+
     def ignite(self, throttle: float = 1.0) -> None:
         self.fdm["propulsion/engine[0]/set-running"] = 1
         self.set_throttle(throttle)
@@ -254,19 +274,22 @@ class SixDofSim:
         return list(self._samples)
 
     def to_body_track(self, *, body_id: str = "spike_stage", epoch_utc: str = "2026-01-01T00:00:00Z",
-                      every: int = 1) -> BodyTrack:
+                      every: int = 1, parent_body_id: str | None = None,
+                      t_offset_s: float = 0.0) -> BodyTrack:
         """The samples so far as a contract ``BodyTrack`` (ECEF, provenance
-        ``illustrative``), keeping every ``every``-th sample (+ the last)."""
+        ``illustrative``), keeping every ``every``-th sample (+ the last).
+        ``t_offset_s`` re-bases the clock (post-separation children restart
+        at the separation time); ``parent_body_id`` is recorded as-is."""
         rows = self._samples[::max(1, int(every))]
         if rows[-1] is not self._samples[-1]:
             rows.append(self._samples[-1])
         return BodyTrack(
             body_id=body_id,
-            parent_body_id=None,
+            parent_body_id=parent_body_id,
             frame="ECEF",
             epoch_utc=epoch_utc,
             provenance="illustrative",
-            t_s=tuple(r["t_s"] for r in rows),
+            t_s=tuple(r["t_s"] + t_offset_s for r in rows),
             mass_kg=tuple(r["mass_kg"] for r in rows),
             position_m=tuple((r["x_m"], r["y_m"], r["z_m"]) for r in rows),
             velocity_m_s=tuple((r["vx_m_s"], r["vy_m_s"], r["vz_m_s"]) for r in rows),

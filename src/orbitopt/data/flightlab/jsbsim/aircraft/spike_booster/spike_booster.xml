@@ -1,0 +1,139 @@
+<?xml version="1.0"?>
+<!--
+  orbitopt Flight Lab E4 spike (task #207, FL-402): the AFT body of
+  the spike_stage stack after staging. Same structure as spike_stage (#206)
+  (only the mass balance and tank locations differ).
+
+  Never ignited: the staging handoff (sixdof/staging.py) writes the allocated
+  tank contents from the frozen stack state BEFORE run_ic(); the values below
+  are capacities (sized for a 100 % allocation of the stack's tanks) and the
+  declared dry-mass split. Engine/thruster and FCS definitions are kept so
+  the SixDofSim driver can sample every property it knows: with the engine
+  not running they produce zero thrust and zero flow.
+
+  Structural frame as in spike_stage: x AFT from the nose; the booster is the
+  segment x in [20, 45] m.
+-->
+<aircraft name="spike_booster" version="2.0" release="ALPHA">
+  <fileheader>
+    <author>orbitopt Flight Lab</author>
+    <description>Post-separation booster of the spike stack (Flight Lab E4 JSBSim spike, #207)</description>
+  </fileheader>
+
+  <metrics>
+    <wingarea  unit="M2"> 10.0 </wingarea>
+    <wingspan  unit="M">   3.7 </wingspan>
+    <chord     unit="M">   3.7 </chord>
+    <htailarea unit="M2">  0.0 </htailarea>
+    <htailarm  unit="M">   0.0 </htailarm>
+    <vtailarea unit="M2">  0.0 </vtailarea>
+    <vtailarm  unit="M">   0.0 </vtailarm>
+    <location name="AERORP" unit="M"> <x> 30.0 </x> <y> 0.0 </y> <z> 0.0 </z> </location>
+  </metrics>
+
+  <mass_balance>
+    <!-- AFT dry mass 4000.0 kg (the declared split of the stack's 10 t
+         dry mass); inertia of a thin-walled cylinder of the segment length
+         and loaded mass class. -->
+    <ixx unit="KG*M2"> 2.0e4 </ixx>
+    <iyy unit="KG*M2"> 8.0e5 </iyy>
+    <izz unit="KG*M2"> 8.0e5 </izz>
+    <ixy unit="KG*M2"> 0.0 </ixy>
+    <ixz unit="KG*M2"> 0.0 </ixz>
+    <iyz unit="KG*M2"> 0.0 </iyz>
+    <emptywt unit="KG"> 4000.0 </emptywt>
+    <location name="CG" unit="M"> <x> 30.0 </x> <y> 0.0 </y> <z> 0.0 </z> </location>
+  </mass_balance>
+
+  <propulsion>
+    <engine file="spike_engine">
+      <feed> 0 </feed>
+      <feed> 1 </feed>
+      <thruster file="spike_nozzle">
+        <location unit="M"> <x> 42.0 </x> <y> 0.0 </y> <z> 0.0 </z> </location>
+        <orient unit="DEG">
+          <roll>  0.0 </roll>
+          <pitch> 0.0 </pitch>
+          <yaw>   0.0 </yaw>
+        </orient>
+      </thruster>
+    </engine>
+
+    <!-- Allocated oxidizer/fuel are written by the staging driver before
+         run_ic(); capacities cover a 100 % allocation of the stack's tanks. -->
+    <tank type="OXIDIZER">
+      <location unit="M"> <x> 26.0 </x> <y> 0.0 </y> <z> 0.0 </z> </location>
+      <radius unit="M"> 1.8 </radius>
+      <capacity unit="KG"> 42857.142857 </capacity>
+      <contents unit="KG"> 0.0 </contents>
+    </tank>
+    <tank type="FUEL">
+      <location unit="M"> <x> 34.0 </x> <y> 0.0 </y> <z> 0.0 </z> </location>
+      <radius unit="M"> 1.8 </radius>
+      <capacity unit="KG"> 17142.857143 </capacity>
+      <contents unit="KG"> 0.0 </contents>
+    </tank>
+  </propulsion>
+
+  <ground_reactions>
+    <!-- None: free flight only. -->
+  </ground_reactions>
+
+  <flight_control name="spike_booster_fcs">
+    <!-- Same TVC channel set as spike_stage (driver-writable commands via
+         declared properties, lag/rate/travel-limited servos). The engine
+         never runs after separation, so these channels stay idle; kept so
+         the FL-401 driver can command and sense them unchanged. -->
+    <property value="0.0">fcs/pitch-gimbal-cmd-rad</property>
+    <property value="0.0">fcs/yaw-gimbal-cmd-rad</property>
+    <channel name="tvc-pitch">
+      <actuator name="fcs/pitch-gimbal-actuator">
+        <input>fcs/pitch-gimbal-cmd-rad</input>
+        <lag> 5.0 </lag>
+        <rate_limit> 0.35 </rate_limit>
+        <clipto><min> -0.0873 </min><max>  0.0873 </max></clipto>
+        <output>fcs/pitch-gimbal-actual-rad</output>
+      </actuator>
+      <pure_gain name="fcs/pitch-gimbal-to-engine">
+        <input>fcs/pitch-gimbal-actual-rad</input>
+        <gain> -1.0 </gain>
+        <output>propulsion/engine[0]/pitch-angle-rad</output>
+      </pure_gain>
+    </channel>
+    <channel name="tvc-yaw">
+      <actuator name="fcs/yaw-gimbal-actuator">
+        <input>fcs/yaw-gimbal-cmd-rad</input>
+        <lag> 5.0 </lag>
+        <rate_limit> 0.35 </rate_limit>
+        <clipto><min> -0.0873 </min><max>  0.0873 </max></clipto>
+        <output>fcs/yaw-gimbal-actual-rad</output>
+      </actuator>
+      <pure_gain name="fcs/yaw-gimbal-to-engine">
+        <input>fcs/yaw-gimbal-actual-rad</input>
+        <gain> -1.0 </gain>
+        <output>propulsion/engine[0]/yaw-angle-rad</output>
+      </pure_gain>
+    </channel>
+  </flight_control>
+
+  <aerodynamics>
+    <axis name="DRAG">
+      <function name="aero/coefficient/CD0">
+        <description>Zero (vacuum spike)</description>
+        <value> 0.0 </value>
+      </function>
+    </axis>
+    <axis name="SIDE">
+      <function name="aero/coefficient/CY0">
+        <description>Zero (vacuum spike)</description>
+        <value> 0.0 </value>
+      </function>
+    </axis>
+    <axis name="LIFT">
+      <function name="aero/coefficient/CL0">
+        <description>Zero (vacuum spike)</description>
+        <value> 0.0 </value>
+      </function>
+    </axis>
+  </aerodynamics>
+</aircraft>

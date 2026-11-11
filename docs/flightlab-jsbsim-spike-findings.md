@@ -69,3 +69,61 @@ Runtime: ~5 k steps/s single-threaded (whole test file ≈ 5 s).
    hash-pinned `envs/sixdof-requirements.txt` + `orbitopt[sixdof]` extra.
    Inline `<engine>`/`<thruster>` definitions were not used — engine and
    nozzle live in `engine/*.xml` referenced by `file=`.
+
+---
+
+# Flight Lab E4 — staging handoff spike (FL-402, #207)
+
+## What was built
+
+`orbitopt/flightlab/sixdof/staging.py` + two child aircraft models
+(`spike_booster`, `spike_upper` — the aft 25 m / forward 20 m segments of
+`spike_stage`). `run_staging_scenario()` flies the stack 20 s (10 s in tests),
+freezes the state (`capture_frozen_state`: ECEF position/velocity, Tec2b
+quaternion, body rates, empty+tank mass), splits dry mass and remaining
+propellant (`StageSplit`), spawns each child as a **fresh top-level
+`FGFDMExec`** initialized purely through `ic/...` properties (+ an optional
+momentum-conserving separation impulse along body +x), then steps both
+instances interleaved in one process for >= 60 s. `to_flight_run()` emits a
+valid three-body FlightResult v1 run (`stack` + two children parented to it,
+children re-based onto the stack clock).
+
+## Verdict: works — two independent instances side by side is viable
+
+With a 2e5 N.s impulse, dt = 0.01 s, 61 s coast (all measured):
+
+* **Mass closure:** children's total mass = frozen stack mass to 8.8e-4 kg
+  (1.4e-11 relative; the residual is JSBSim's internal lb rounding).
+* **Momentum residual:** 0.16 kg·m/s against |p| = 1.17e7 (1.4e-8 relative;
+  declared tolerance 1e-6 relative + 1 N.s floor). The impulse itself is
+  applied exactly bookkeeping-wise (+J upper / -J booster).
+* **Handoff continuity:** position to 2.1e-7 m, attitude bit-identical
+  (0 rad), velocity to <1e-6 m/s.
+* **Determinism:** full sample logs bit-identical across reruns.
+* **Step order:** `booster→upper` vs `upper→booster` sample logs bit-identical
+  — the instances share nothing but the process.
+* **No leakage:** a property written on one instance raises on the other;
+  throttle/gimbal commands on one leave the other's samples untouched.
+
+## Gotchas and workarounds (jsbsim 1.3.3 Python bindings)
+
+1. **No state-injection API.** `FGPropagate` exposes only `dump_state` and
+   DCM getters; everything must go through `ic/` properties + `run_ic()`.
+2. **`ic/h-sl-ft` is geoid-referenced** while the frozen state is ECEF, and
+   `ic/h-agl-ell-ft` is not recognized. Workaround: fixed-point iteration on
+   (latitude, h-sl) against the achieved ECEF position (Bowring gives the
+   start point; converges to ~1e-7 m in <= 3 `run_ic()` calls).
+3. **ECEF velocity injection** goes through `ic/vn|ve|vd-fps` (NED at the
+   freeze point); the rotating-frame ECEF match is exact (<1e-6 m/s), since
+   `velocities/ecef-*-fps` are themselves rotating-frame.
+4. **Euler IC from the quaternion** (Euler is gimbal-locked vertical): rotate
+   `Tec2b` into NED (`Tbn = Tec2b · R_n2e`) and read the 3-2-1 angles;
+   round-trips to ~1e-10 rad. Tank contents written *before* `run_ic()`
+   survive and are used — that is the mass-split injection point.
+5. **`inertia/mass-slugs` runs one frame (mdot·dt) high while the engine
+   burns** (already seen in FL-401): the frozen stack mass must be taken as
+   `inertia/empty-weight-lbs + Σ tank contents`, else the mass/momentum
+   bookkeeping shows a spurious mdot·dt (6 kg here) mismatch.
+6. **`--` inside XML comments is fatal**: JSBSim's parser raises
+   "not well-formed (invalid token)" on `load_model` (verified) — the child
+   model comments avoid double hyphens (ASCII prose with em-dashes is fine).
