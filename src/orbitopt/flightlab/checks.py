@@ -81,6 +81,7 @@ CONSTRAINT_CHECK_IDS = frozenset({
     "max-accel-within-limit",
     "liftoff-thrust-to-weight",
     "propellant-reserve",
+    "recovery-propellant-reserve",
     "insertion-above-atmosphere",
     "insertion-periapsis-above-minimum",
     "insertion-periapsis-within-tolerance",
@@ -224,16 +225,15 @@ def liftoff_thrust_to_weight_check(run: FlightRun, vehicle_doc: Mapping[str, Any
 
 def propellant_reserve_check(run: FlightRun, vehicle_doc: Mapping[str, Any],
                              target: FlightTarget) -> Check | None:
-    """Upper-stage propellant left at insertion vs the target's reserve. The
-    mass bookkeeping treats the final stage's ``mass_dry_kg`` as everything
-    that is not burnable (dry stage + payload: the vehicle file carries no
-    separate payload entry), so the reserve is conservative in the vehicle's
-    favour -- honest for the synthetic demonstrator, to be refined with real
-    vehicle models in E2. Returns None (not assessed) when neither the
-    target states a reserve nor the vehicle states a final-stage dry mass."""
+    """Upper-stage propellant left at insertion vs the target's upper-stage
+    reserve. The mass bookkeeping treats the final stage's ``mass_dry_kg`` as
+    everything that is not burnable (dry stage + payload: the vehicle file
+    carries no separate payload entry), so the reserve is conservative in the
+    vehicle's favour -- honest for the synthetic demonstrator, to be refined
+    with real vehicle models in E2. Returns None (not assessed) when the
+    target states no upper-stage reserve or the vehicle states no final-stage
+    dry mass. Recovery reserve is a separate check, below."""
     limit = target.constraints.min_propellant_reserve_kg
-    if limit is None:
-        limit = target.recovery.min_propellant_reserve_kg
     stages = vehicle_doc.get("stages") or []
     if limit is None or not stages or "mass_dry_kg" not in stages[-1]:
         return None
@@ -242,6 +242,45 @@ def propellant_reserve_check(run: FlightRun, vehicle_doc: Mapping[str, Any],
     passed = remaining >= float(limit)
     return Check(
         id="propellant-reserve", passed=passed, value=remaining, limit=float(limit),
+        unit="kg", reason_code="" if passed else "PROPELLANT_RESERVE_LOW",
+    )
+
+
+def _released_first_stage_track(run: FlightRun):
+    for track in run.tracks:
+        if track.parent_body_id == "stage1" and track.body_id.endswith("_debris"):
+            return track
+    for track in run.tracks:
+        if track.body_id == "stage1_debris":
+            return track
+    return None
+
+
+def recovery_propellant_reserve_check(run: FlightRun, vehicle_doc: Mapping[str, Any],
+                                      target: FlightTarget) -> Check | None:
+    """First-stage propellant left for recovery vs the target's recovery
+    reserve. Returns None only when recovery is disabled or the target states
+    no reserve; missing stage data is a failed check, not silence."""
+    limit = target.recovery.min_propellant_reserve_kg
+    if target.recovery.kind == "none" or limit is None:
+        return None
+    limit = float(limit)
+    stages = vehicle_doc.get("stages") or []
+    if not stages or "mass_dry_kg" not in stages[0]:
+        return Check(
+            id="recovery-propellant-reserve", passed=False, limit=limit, unit="kg",
+            reason_code="RECOVERY_PROPELLANT_RESERVE_DATA_MISSING",
+        )
+    track = _released_first_stage_track(run)
+    if track is None or not track.mass_kg:
+        return Check(
+            id="recovery-propellant-reserve", passed=False, limit=limit, unit="kg",
+            reason_code="RECOVERY_PROPELLANT_RESERVE_DATA_MISSING",
+        )
+    remaining = float(track.mass_kg[-1]) - float(stages[0]["mass_dry_kg"])
+    passed = remaining >= limit
+    return Check(
+        id="recovery-propellant-reserve", passed=passed, value=remaining, limit=limit,
         unit="kg", reason_code="" if passed else "PROPELLANT_RESERVE_LOW",
     )
 
@@ -353,6 +392,19 @@ def evaluate(run: FlightRun, target: FlightTarget) -> Verification:
         fallback = max_q_check_from_tracks(run, float(target.constraints.max_dynamic_pressure_pa))
         if fallback is not None:
             kept.append(fallback)
+        else:
+            kept.append(Check(
+                id="max-q-within-limit", passed=False,
+                limit=float(target.constraints.max_dynamic_pressure_pa), unit="Pa",
+                reason_code="MAX_Q_DATA_MISSING",
+            ))
+    if (target.constraints.max_specific_acceleration_g is not None
+            and not any(c.id == "max-accel-within-limit" for c in kept)):
+        kept.append(Check(
+            id="max-accel-within-limit", passed=False,
+            limit=float(target.constraints.max_specific_acceleration_g), unit="g",
+            reason_code="MAX_ACCEL_DATA_MISSING",
+        ))
     checks = kept + insertion_checks(run, target)
     constraints = [c for c in checks if c.id in CONSTRAINT_CHECK_IDS]
     return Verification(

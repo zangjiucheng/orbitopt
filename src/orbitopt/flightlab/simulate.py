@@ -2,10 +2,11 @@
 
 :func:`simulate` is the Gate-B pipeline: fly a :class:`FlightTarget` with the
 OpenTsiolkovsky v1.0.0 adapter (FL-004), assess the vehicle-file checks that
-need it (liftoff thrust-to-weight, propellant reserve), independently
-re-fly the upper stage's GCRS insertion state for one orbit with tudatpy,
-and hand the whole thing to :func:`orbitopt.flightlab.checks.evaluate` for
-the final three-boolean verdict. The run directory is the contract's
+need it (liftoff thrust-to-weight, upper-stage propellant reserve, and
+first-stage recovery propellant reserve), independently re-fly the upper
+stage's GCRS insertion state for one orbit with tudatpy, and hand the whole
+thing to :func:`orbitopt.flightlab.checks.evaluate` for the final
+three-boolean verdict. The run directory is the contract's
 (orbitopt.flightlab.contract.write_run), so Mission Control / FL-005 see
 exactly what flew; ``--scene`` additionally writes ``<run_dir>/scene.json``.
 
@@ -57,6 +58,33 @@ def _parse_utc(text: str) -> datetime:
     return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
+_FRAME_ALIASES = {
+    "GCRS": ("J2000", "ICRS", "ICRF"),
+    "ICRS": ("GCRS", "J2000", "ICRF"),
+    "J2000": ("GCRS", "ICRS", "ICRF"),
+    "ICRF": ("GCRS", "ICRS", "J2000"),
+}
+
+
+def _spice_frame_candidates(frame: str) -> tuple[str, ...]:
+    aliases = _FRAME_ALIASES.get(frame, ())
+    return (frame,) + tuple(alias for alias in aliases if alias != frame)
+
+
+def _spice_rotation(spice, from_frame: str, to_frame: str, et: float):
+    import numpy as np
+
+    last_error: Exception | None = None
+    for src in _spice_frame_candidates(from_frame):
+        for dst in _spice_frame_candidates(to_frame):
+            try:
+                return np.asarray(spice.compute_rotation_matrix_between_frames(src, dst, float(et)),
+                                  dtype=float)
+            except Exception as exc:
+                last_error = exc
+    raise RuntimeError(f"SPICE cannot rotate {from_frame!r} -> {to_frame!r}: {last_error}") from last_error
+
+
 def orbit_refly(run: FlightRun, *, orbits: float = 1.05,
                max_step_s: float = 300.0) -> tuple[bool | None, tuple[Check, ...], str]:
     """Independent re-fly of the run's GCRS insertion state: rotate the SECO
@@ -96,8 +124,7 @@ def orbit_refly(run: FlightRun, *, orbits: float = 1.05,
         et0 = utc_mjd2000_to_tdb_seconds(
             utc_datetime_to_mjd2000(_parse_utc(st["epoch_utc"])) + st["t_s"] / 86400.0)
         state0 = np.array([*st["position_m"], *st["velocity_m_s"]], dtype=float)
-        rot0 = np.asarray(spice.compute_rotation_matrix_between_frames("GCRS", "ECLIPJ2000", et0),
-                          dtype=float)
+        rot0 = _spice_rotation(spice, "GCRS", "ECLIPJ2000", et0)
         duration = float(orbits) * el["period_s"]
         result = propagate_two_body_leg(
             rot0 @ state0[:3], rot0 @ state0[3:], duration,
@@ -106,9 +133,9 @@ def orbit_refly(run: FlightRun, *, orbits: float = 1.05,
         )
         mu = float(result.model["central_gravitational_parameter"])
         et_f = float(result.epochs[-1])
-        rot_f = np.asarray(spice.compute_rotation_matrix_between_frames("ECLIPJ2000", "GCRS", et_f),
-                           dtype=float)
-        state_f = rot_f @ np.asarray(result.final_state, dtype=float)
+        rot_f = _spice_rotation(spice, "ECLIPJ2000", "GCRS", et_f)
+        final = np.asarray(result.final_state, dtype=float)
+        state_f = np.concatenate((rot_f @ final[:3], rot_f @ final[3:]))
         el0 = _checks.orbital_elements(state0[:3], state0[3:], mu)
         el1 = _checks.orbital_elements(state_f[:3], state_f[3:], mu)
     except Exception as exc:  # SPICE kernels missing, propagation failure: not-assessed, with the reason
@@ -157,7 +184,8 @@ def simulate(target: FlightTarget, vehicle_path: Path, out_dir: Path,
     vehicle_doc: Mapping[str, Any] = yaml.safe_load(vehicle_path.read_text(encoding="utf-8"))
 
     extra = [c for c in (_checks.liftoff_thrust_to_weight_check(run, vehicle_doc),
-                        _checks.propellant_reserve_check(run, vehicle_doc, target))
+                         _checks.propellant_reserve_check(run, vehicle_doc, target),
+                         _checks.recovery_propellant_reserve_check(run, vehicle_doc, target))
              if c is not None]
     if refly:
         physics, refly_checks, note = orbit_refly(run, orbits=refly_orbits,

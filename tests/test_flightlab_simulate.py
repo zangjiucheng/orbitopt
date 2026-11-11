@@ -20,6 +20,9 @@ import hashlib
 import json
 import math
 import shutil
+import sys
+import types
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -35,7 +38,7 @@ from orbitopt.flightlab.contract import (
     load_target,
     read_run,
 )
-from orbitopt.flightlab.simulate import simulate
+from orbitopt.flightlab.simulate import _spice_rotation, orbit_refly, simulate
 from orbitopt.flightlab.checks import evaluate
 
 FIX = Path(__file__).parent / "fixtures" / "flightlab" / "opentsiolkovsky"
@@ -64,6 +67,12 @@ def _run_id_map(run: FlightRun) -> dict:
     return {c.id: c for c in run.verification.checks}
 
 
+def _target_without_flight_loads(target):
+    constraints = replace(target.constraints, max_dynamic_pressure_pa=None,
+                          max_specific_acceleration_g=None)
+    return replace(target, constraints=constraints)
+
+
 def _hash_tree(root: Path) -> dict:
     """sha256 of every file in a run dir, keyed by relative path."""
     return {
@@ -83,12 +92,16 @@ def test_simulate_nominal_verdict_is_honest(stub, target, tmp_path):
     assert checks_by_id["insertion-apoapsis-within-tolerance"].reason_code == \
         "INSERTION_APOAPSIS_OUT_OF_TOLERANCE"
     # everything the hand-tuned program does satisfy must be green, not silent
-    for cid in ("liftoff-thrust-to-weight", "propellant-reserve", "max-q-within-limit",
+    for cid in ("liftoff-thrust-to-weight", "max-q-within-limit",
                 "max-accel-within-limit", "insertion-above-atmosphere",
                 "insertion-periapsis-above-minimum", "insertion-periapsis-within-tolerance",
                 "insertion-inclination-within-tolerance"):
         assert cid in checks_by_id, cid
         assert checks_by_id[cid].passed, cid
+    recovery = checks_by_id["recovery-propellant-reserve"]
+    assert not recovery.passed
+    assert recovery.reason_code == "PROPELLANT_RESERVE_LOW"
+    assert recovery.value == pytest.approx(0.0, abs=1e-6)
     if v.physics_verified is None:  # tudatpy missing: re-fly not assessed, never faked
         assert any(c.reason_code == "REFLY_BACKEND_MISSING" for c in v.checks)
     # the written dir round-trips through the contract reader with the same verdict
@@ -117,15 +130,15 @@ def test_underpowered_vehicle_fails_liftoff_with_reason(stub, target, tmp_path):
     assert run.verification.mission_constraints_passed is False
 
 
-def test_propellant_reserve_shortfall_reported(stub, tmp_path):
+def test_recovery_propellant_reserve_shortfall_reported(stub, tmp_path):
     doc = yaml.safe_load(TARGET.read_text(encoding="utf-8"))
     doc["recovery"]["min_propellant_reserve_kg"] = 10000.0  # more than the fixture leaves
     target_path = tmp_path / "rich-reserve.yaml"
     target_path.write_text(yaml.safe_dump(doc), encoding="utf-8")
     run = simulate(load_target(target_path), VEHICLE, tmp_path / "run", timeout_s=60)
-    res = _run_id_map(run)["propellant-reserve"]
+    res = _run_id_map(run)["recovery-propellant-reserve"]
     assert not res.passed and res.reason_code == "PROPELLANT_RESERVE_LOW"
-    assert res.value == pytest.approx(13282.392560150622 - 8500.0, rel=1e-6)
+    assert res.value == pytest.approx(0.0, abs=1e-6)
     assert run.verification.mission_constraints_passed is False
 
 
@@ -154,7 +167,7 @@ def test_evaluate_sets_mission_constraints_passed_true_on_a_clean_low_orbit(targ
     """A 400 x 400 @ 51.6 deg circular insertion state, flown on a stub-written
     run, must come back green on every insertion check (the atmosphere and
     tolerance reasons from the failing variants have to stay silent here)."""
-    vdoc = evaluate(_clean_orbit_run(400000.0), target)
+    vdoc = evaluate(_clean_orbit_run(400000.0), _target_without_flight_loads(target))
     assert vdoc.mission_constraints_passed is True
     assert vdoc.physics_verified is None and vdoc.optimizer_converged is None
     ids = {c.id for c in vdoc.checks}
@@ -163,12 +176,97 @@ def test_evaluate_sets_mission_constraints_passed_true_on_a_clean_low_orbit(targ
             "insertion-inclination-within-tolerance"} <= ids
 
 
+def test_recovery_reserve_missing_data_fails_instead_of_passing(target):
+    vehicle = {"stages": [{"mass_dry_kg": 1000.0}]}
+    c = checks.recovery_propellant_reserve_check(_clean_orbit_run(400000.0), vehicle, target)
+    assert c is not None
+    assert not c.passed
+    assert c.reason_code == "RECOVERY_PROPELLANT_RESERVE_DATA_MISSING"
+
+
+def test_spice_rotation_falls_back_when_gcrs_is_unknown():
+    class FakeSpice:
+        def __init__(self):
+            self.calls = []
+
+        def compute_rotation_matrix_between_frames(self, from_frame, to_frame, et):
+            self.calls.append((from_frame, to_frame, et))
+            if from_frame == "J2000":
+                return [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+            raise ValueError(f"unknown frame {from_frame}")
+
+    fake = FakeSpice()
+    mat = _spice_rotation(fake, "GCRS", "ECLIPJ2000", 123.0)
+    assert fake.calls[0] == ("GCRS", "ECLIPJ2000", 123.0)
+    assert fake.calls[1] == ("J2000", "ECLIPJ2000", 123.0)
+    assert mat.tolist() == [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+
+
+def test_orbit_refly_rotates_position_and_velocity_separately(monkeypatch):
+    import orbitopt.flightlab.simulate as sim
+
+    elements_calls = []
+
+    def fake_elements(pos, vel, mu=None):
+        elements_calls.append(([float(x) for x in pos], [float(x) for x in vel]))
+        return {
+            "period_s": 5600.0,
+            "semi_major_axis_m": 7000000.0,
+            "eccentricity": 0.001,
+            "inclination_deg": 51.6,
+            "raan_deg": 10.0,
+        }
+
+    monkeypatch.setattr(sim._checks, "orbital_elements", fake_elements)
+
+    def fake_rotation_matrix(from_frame, to_frame, et):
+        if from_frame == "GCRS":
+            return [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+        return [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+
+    spice_mod = types.ModuleType("tudatpy.interface.spice")
+    spice_mod.compute_rotation_matrix_between_frames = fake_rotation_matrix
+    interface_mod = types.ModuleType("tudatpy.interface")
+    interface_mod.spice = spice_mod
+    tudatpy_mod = types.ModuleType("tudatpy")
+    tudatpy_mod.interface = interface_mod
+    monkeypatch.setitem(sys.modules, "tudatpy", tudatpy_mod)
+    monkeypatch.setitem(sys.modules, "tudatpy.interface", interface_mod)
+    monkeypatch.setitem(sys.modules, "tudatpy.interface.spice", spice_mod)
+
+    def fake_propagate(pos, vel, duration, **kwargs):
+        return types.SimpleNamespace(
+            epochs=[float(kwargs["departure_epoch_ephemeris_seconds"]) + 60.0],
+            final_state=[1.0, 0.0, 0.0, 7600.0, 0.0, 0.0],
+            model={"central_gravitational_parameter": 398600441800.0},
+        )
+
+    prop_mod = types.ModuleType("orbitopt.verify.tudat_propagate")
+    prop_mod.propagate_two_body_leg = fake_propagate
+    monkeypatch.setitem(sys.modules, "orbitopt.verify.tudat_propagate", prop_mod)
+
+    physics, checks, note = orbit_refly(_clean_orbit_run(400000.0))
+    assert physics is True
+    assert not any(c.reason_code == "REFLY_BACKEND_ERROR" for c in checks)
+    assert elements_calls[2] == ([0.0, 1.0, 0.0], [0.0, 7600.0, 0.0])
+
+
+def test_missing_constraint_data_fails_instead_of_passing(target):
+    """Declared max-Q / max-accel limits without corresponding run data are an
+    honest red mission-constraint verdict, not silent acceptance."""
+    verdict = evaluate(_clean_orbit_run(400000.0), target)
+    reasons = checks.failed_reason_codes(verdict)
+    assert verdict.mission_constraints_passed is False
+    assert "MAX_Q_DATA_MISSING" in reasons
+    assert "MAX_ACCEL_DATA_MISSING" in reasons
+
+
 def test_periapsis_inside_atmosphere_is_a_hard_fail(target):
     """100 km periapsis is inside the atmosphere: mission_constraints_passed
     must be false with the exact reason code PERIAPSIS_IN_ATMOSPHERE (Gate G5:
     ~120 km ceiling) -- the atmosphere check stands alone."""
     assert checks.ATMOSPHERE_CEILING_M == 120000.0
-    verdict = evaluate(_clean_orbit_run(100000.0), target)
+    verdict = evaluate(_clean_orbit_run(100000.0), _target_without_flight_loads(target))
     assert verdict.mission_constraints_passed is False
     assert "PERIAPSIS_IN_ATMOSPHERE" in checks.failed_reason_codes(verdict)
     atmo = next(c for c in verdict.checks if c.id == "insertion-above-atmosphere")
