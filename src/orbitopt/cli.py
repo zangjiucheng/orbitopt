@@ -204,9 +204,14 @@ def _cmd_flight(args):
     `orbitopt flight validate <target.yaml|run_dir>`: the contract check
     (orbitopt.flightlab.contract). `orbitopt flight export-target`: build a
     FlightTarget YAML (FL-003). `orbitopt flight simulate`: Gate B (FL-006)
-    -- ascend, check, re-fly, honest verdict."""
+    -- ascend, check, re-fly, honest verdict. `orbitopt flight optimize`:
+    FL-202 -- pygmo ascent optimization, best flight written as a run +
+    optimization.json (conda-forge pygmo only)."""
     if getattr(args, "flight_command", None) == "simulate":
         _cmd_flight_simulate(args)
+        return
+    if getattr(args, "flight_command", None) == "optimize":
+        _cmd_flight_optimize(args)
         return
     if args.flight_command == "to-scene":
         return _cmd_flight_to_scene(args)
@@ -345,6 +350,75 @@ def _cmd_flight_simulate(args):
               "-- open with: orbitopt view that file)")
 
 
+def _cmd_flight_optimize(args):
+    """`orbitopt flight optimize <target.yaml> [--vehicle <v.yaml>] -o runs/<id>`:
+    the FL-202 ascent optimization loop (pygmo, conda-forge only) -- global
+    search over the FL-201 parametric ascent, SLSQP local refinement, and the
+    winner re-flown through the Gate-B pipeline. Prints the same three
+    independent verdicts as `flight simulate` plus the convergence report
+    written to `<RUN_DIR>/optimization.json`. Exit code: 0 when a run was
+    produced (whatever the verdict), 1 when nothing flyable came out or the
+    compute stack is missing -- always with an actionable message, never a
+    traceback."""
+    from pathlib import Path
+
+    import jsonschema
+
+    from orbitopt.flightlab.contract import load_target
+    from orbitopt.flightlab.optimize.run import OptimizeAbort, optimize_ascent
+    from orbitopt.flightlab.vehicle_source import resolve_vehicle_path
+
+    try:
+        target = load_target(args.target)
+        vehicle = resolve_vehicle_path(args.vehicle, target, args.target)
+    except (OSError, ValueError, KeyError, jsonschema.ValidationError) as exc:
+        print(f"ERROR: {exc}")
+        raise SystemExit(1) from None
+    try:
+        result = optimize_ascent(
+            target, vehicle, Path(args.output), target_path=args.target,
+            objective=args.objective, payload_kg=args.payload_kg,
+            seed=args.seed, algorithm=args.algorithm,
+            generations=args.generations, population=args.population,
+            workers=args.workers or None, local=not args.no_local,
+            refly=not args.no_refly, timeout_s=args.timeout)
+    except OptimizeAbort as exc:
+        print(f"ERROR: {exc}")
+        for code in exc.reason_codes:
+            print(f"  {code}")
+        raise SystemExit(1) from None
+    except (RuntimeError, OSError, ValueError, KeyError,
+            jsonschema.ValidationError) as exc:
+        print(f"ERROR: {exc}")
+        raise SystemExit(1) from None
+
+    run = result["run"]
+    best = result["best_fitness"]
+
+    def word(v):
+        return "not assessed" if v is None else ("PASSED" if v else "FAILED")
+
+    v = run.verification
+    print(f"run {run.run_id} -> {args.output}")
+    print(f"  optimizer_converged:        {word(v.optimizer_converged)}"
+          f"  ({result['status']})")
+    print(f"  physics_verified:           {word(v.physics_verified)}")
+    print(f"  mission_constraints_passed: {word(v.mission_constraints_passed)}")
+    print(f"  objective {result['objective']}: {-best['objective']:.6g} kg"
+          f"  [{result['algorithm']['global']}, {result['evaluations']} "
+          f"evaluations, local: {result['algorithm']['local']}]")
+    for code in result["reason_codes"]:
+        print(f"  {code}")
+    for c in v.checks:
+        if not c.passed:
+            value = "-" if c.value is None else f"{c.value:.6g} {c.unit}".strip()
+            limit = "-" if c.limit is None else f"{c.limit:.6g} {c.unit}".strip()
+            tag = "SKIP" if c.id.endswith("-not-assessed") else "FAIL"
+            print(f"  {tag} {c.id}: {value} vs limit {limit}"
+                  + (f" [{c.reason_code}]" if c.reason_code else ""))
+    print(f"  report: {Path(args.output) / 'optimization.json'}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     mission_ids = ", ".join(m.id for m in list_missions())
 
@@ -444,6 +518,36 @@ def build_parser() -> argparse.ArgumentParser:
     flight_sim.add_argument("--no-refly", action="store_true",
                             help="skip the tudatpy insertion re-fly (physics_verified stays not-assessed)")
     flight_sim.add_argument("--timeout", type=float, default=300.0, metavar="S",
+                            help="OpenTsiolkovsky subprocess timeout [s] (default 300)")
+    flight_opt = flight_sub.add_parser(
+        "optimize",
+        help="FL-202: optimize the parametric ascent toward a FlightTarget (pygmo; "
+             "conda-forge only) and write the best flight as a run + optimization.json")
+    flight_opt.add_argument("target", help="a FlightTarget YAML (see `flight export-target`)")
+    flight_opt.add_argument("--vehicle", metavar="PATH", default=None,
+                            help="vehicle YAML (default: resolve target.vehicle.source "
+                                 "against the target dir, then package data)")
+    flight_opt.add_argument("--objective", choices=("payload", "reserve", "booster_reserve"),
+                            default="payload", help="objective to maximize (default payload)")
+    flight_opt.add_argument("--payload-kg", type=float, default=0.0, metavar="KG",
+                            help="fixed payload for the reserve objectives (default 0)")
+    flight_opt.add_argument("--seed", type=int, default=42,
+                            help="RNG seed -- fixed seed gives byte-identical results (default 42)")
+    flight_opt.add_argument("-o", "--output", required=True, metavar="RUN_DIR",
+                            help="output run directory (FlightResult v1 + optimization.json)")
+    flight_opt.add_argument("--algorithm", choices=("cmaes", "pso_gen", "sade"), default="cmaes",
+                            help="global search algorithm (default cmaes; sade is serial)")
+    flight_opt.add_argument("--generations", type=int, default=60, metavar="G",
+                            help="global search generations (default 60)")
+    flight_opt.add_argument("--population", type=int, default=48, metavar="N",
+                            help="population / swarm size (default 48)")
+    flight_opt.add_argument("--workers", type=int, default=0, metavar="N",
+                            help="parallel fitness processes (default: up to 8 cores)")
+    flight_opt.add_argument("--no-local", action="store_true",
+                            help="skip the SLSQP local refinement")
+    flight_opt.add_argument("--no-refly", action="store_true",
+                            help="skip the tudatpy insertion re-fly of the winner")
+    flight_opt.add_argument("--timeout", type=float, default=300.0, metavar="S",
                             help="OpenTsiolkovsky subprocess timeout [s] (default 300)")
     return parser
 
