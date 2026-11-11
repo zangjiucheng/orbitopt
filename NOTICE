@@ -1,0 +1,41 @@
+orbitopt — third-party notices
+=============================
+
+OpenTsiolkovsky
+---------------
+
+orbitopt's Flight Lab ascent adapter (`orbitopt.flightlab.adapters.
+opentsiolkovsky`) optionally drives OpenTsiolkovsky, a 3-DOF launch
+vehicle trajectory simulator by Interstellar Technologies
+(https://github.com/istellartech/OpenTsiolkovsky), pinned to release
+v1.0.0 and installed by `scripts/fetch_opentsiolkovsky.py` into
+`~/.cache/orbitopt/bin/` (or `$ORBITOPT_OPENTSIOLKOVSKY`).
+
+The OpenTsiolkovsky binary is NOT vendored in this GPL-3.0-or-later
+repository; it is downloaded at setup time so that the MIT-licensed tool
+stays outside the GPL tree and is only invoked as a separate process.
+Recorded test fixtures under `tests/fixtures/flightlab/opentsiolkovsky/`
+were produced by OpenTsiolkovsky v1.0.0. OpenTsiolkovsky is provided
+under the MIT license:
+
+    The MIT License (MIT)
+
+    Copyright (c) 2016 Interstellar Technologies Inc.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
