@@ -210,6 +210,68 @@ def test_recovery_reserve_missing_data_fails_instead_of_passing(target):
     assert c.reason_code == "RECOVERY_PROPELLANT_RESERVE_DATA_MISSING"
 
 
+def test_evaluate_uses_latest_recovery_reserve_check_when_duplicate_missing_and_measured(target):
+    run = _clean_orbit_run(400000.0)
+    missing = Check(
+        id="recovery-propellant-reserve", passed=False, limit=1000.0, unit="kg",
+        reason_code="RECOVERY_PROPELLANT_RESERVE_DATA_MISSING",
+    )
+    measured = Check(
+        id="recovery-propellant-reserve", passed=True, value=4782.0, limit=1000.0, unit="kg",
+    )
+    run = replace(run, verification=Verification(checks=(missing, measured)))
+    t = replace(target, constraints=replace(
+        target.constraints, max_dynamic_pressure_pa=None, max_specific_acceleration_g=None))
+    v = evaluate(run, t)
+    matches = [c for c in v.checks if c.id == "recovery-propellant-reserve"]
+    assert len(matches) == 1
+    assert matches[0].value == pytest.approx(4782.0)
+    assert matches[0].passed
+    assert v.mission_constraints_passed
+
+
+def test_evaluate_uses_latest_top_stage_reserve_check_when_duplicate_missing_and_measured(target):
+    run = _clean_orbit_run(400000.0)
+    missing = Check(
+        id="propellant-reserve", passed=False, limit=1000.0, unit="kg",
+        reason_code="PROPELLANT_RESERVE_DATA_MISSING",
+    )
+    measured = Check(id="propellant-reserve", passed=True, value=4782.0, limit=1000.0, unit="kg")
+    run = replace(run, verification=Verification(checks=(missing, measured)))
+    constraints = replace(target.constraints, max_dynamic_pressure_pa=None,
+                          max_specific_acceleration_g=None, min_propellant_reserve_kg=1000.0)
+    recovery = replace(target.recovery, kind="none", min_propellant_reserve_kg=None)
+    t = replace(target, constraints=constraints, recovery=recovery)
+    v = evaluate(run, t)
+    matches = [c for c in v.checks if c.id == "propellant-reserve"]
+    assert len(matches) == 1
+    assert matches[0].value == pytest.approx(4782.0)
+    assert matches[0].passed
+    assert v.mission_constraints_passed
+
+
+def test_evaluate_keeps_measured_check_when_later_duplicate_is_missing(target):
+    run = _clean_orbit_run(400000.0)
+    measured = Check(
+        id="propellant-reserve", passed=True, value=4782.0, limit=1000.0, unit="kg",
+    )
+    missing = Check(
+        id="propellant-reserve", passed=False, limit=1000.0, unit="kg",
+        reason_code="PROPELLANT_RESERVE_DATA_MISSING",
+    )
+    run = replace(run, verification=Verification(checks=(measured, missing)))
+    constraints = replace(target.constraints, max_dynamic_pressure_pa=None,
+                          max_specific_acceleration_g=None, min_propellant_reserve_kg=1000.0)
+    recovery = replace(target.recovery, kind="none", min_propellant_reserve_kg=None)
+    t = replace(target, constraints=constraints, recovery=recovery)
+    v = evaluate(run, t)
+    matches = [c for c in v.checks if c.id == "propellant-reserve"]
+    assert len(matches) == 1
+    assert matches[0].value == pytest.approx(4782.0)
+    assert matches[0].passed
+    assert v.mission_constraints_passed
+
+
 def test_spice_rotation_falls_back_when_gcrs_is_unknown():
     class FakeSpice:
         def __init__(self):

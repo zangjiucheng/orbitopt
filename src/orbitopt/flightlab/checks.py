@@ -387,6 +387,22 @@ def _replace_or_append(checks: list[Check], replacement: Check) -> None:
     checks.append(replacement)
 
 
+def _deduplicate_checks(checks: Sequence[Check]) -> list[Check]:
+    """Collapse repeated check ids while preserving the first occurrence's
+    position. A later entry with a measured value wins over an earlier
+    data-missing placeholder; among equal-value states, the later entry wins."""
+    order: list[str] = []
+    by_id: dict[str, Check] = {}
+    for check in checks:
+        old = by_id.get(check.id)
+        if old is None:
+            order.append(check.id)
+        elif old.value is not None and check.value is None:
+            continue
+        by_id[check.id] = check
+    return [by_id[check_id] for check_id in order]
+
+
 def _reassess_limit(checks: list[Check], check_id: str, limit: float, unit: str, *,
                     greater_is_ok: bool, fail_code: str) -> Check | None:
     old = _find_check(checks, check_id)
@@ -405,8 +421,9 @@ def _reassess_limit(checks: list[Check], check_id: str, limit: float, unit: str,
 
 def evaluate(run: FlightRun, target: FlightTarget) -> Verification:
     """The Gate-B verdict for ``run`` against ``target``: keeps the run's
-    backend and re-fly checks, re-assesses every limit that ``target`` declares
-    against its stored value, recomputes the insertion checks from the tracks,
+    backend and re-fly checks, collapses duplicate ids preferring a measured
+    value over an earlier data-missing placeholder, re-assesses every limit that
+    ``target`` declares against its stored value, recomputes the insertion checks from the tracks,
     settles max-Q from the CSVs when no backend reported it, and conjoins the
     resulting mission-constraint checks into ``mission_constraints_passed``.
     Pure function of ``(run, target)`` -- never mutates the run; the booleans
@@ -431,6 +448,7 @@ def evaluate(run: FlightRun, target: FlightTarget) -> Verification:
         declared_ids.add("recovery-propellant-reserve")
     kept = [c for c in kept if c.id not in CONSTRAINT_CHECK_IDS or c.id in declared_ids
             or c.id == "liftoff-thrust-to-weight"]
+    kept = _deduplicate_checks(kept)
 
     limit = target.constraints.max_dynamic_pressure_pa
     if limit is not None:
