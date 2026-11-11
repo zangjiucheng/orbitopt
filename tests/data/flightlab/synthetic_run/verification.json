@@ -1,0 +1,23 @@
+{
+  "optimizer_converged": true,
+  "physics_verified": false,
+  "mission_constraints_passed": false,
+  "checks": [
+    {
+      "id": "csv_time_monotonic",
+      "passed": true,
+      "value": null,
+      "limit": null,
+      "unit": "",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion_periapsis",
+      "passed": false,
+      "value": 120000.0,
+      "limit": 380000.0,
+      "unit": "m",
+      "reason_code": "synthetic_fixture_below_target_by_design"
+    }
+  ]
+}

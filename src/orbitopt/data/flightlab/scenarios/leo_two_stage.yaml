@@ -1,0 +1,45 @@
+# Flight Lab scenario fixture: synthetic two-stage LEO ascent + booster RTLS.
+# All numbers are illustrative (see vehicle.provenance) -- a demonstration
+# target shaped like the Flight Lab RFC's `demo-two-stage-400km-rtls`, not a
+# claim about any real vehicle, and this epoch is a demonstration time, not a
+# validated launch window.
+schema_version: '1.0'
+mission:
+  id: leo-two-stage-400km-rtls
+  title: Synthetic two-stage LEO + booster RTLS
+  epoch_utc: '2026-11-10T12:00:00Z'
+launch_site:
+  name: selected-site
+  latitude_deg: 28.5619  # illustrative reference location, not proof of launch corridor feasibility
+  longitude_deg: -80.5772
+  altitude_wgs84_m: 3.0
+target_orbit:
+  central_body: Earth
+  periapsis_altitude_m: 400000
+  apoapsis_altitude_m: 400000
+  inclination_deg: 51.6
+  raan_deg: null  # null means unconstrained; may constrain when mission requires it
+constraints:
+  max_dynamic_pressure_pa: 60000  # DESIGN ASSUMPTION; not a universally safe limit
+  max_specific_acceleration_g: 5.0  # DESIGN ASSUMPTION
+  minimum_insertion_periapsis_m: 380000
+  orbit_altitude_tolerance_m: 20000
+  inclination_tolerance_deg: 0.2
+recovery:
+  kind: rtls
+  target: launch_site
+  max_touchdown_speed_m_s: 3.0  # DESIGN ASSUMPTION
+  max_touchdown_lateral_speed_m_s: 1.0  # DESIGN ASSUMPTION
+  min_propellant_reserve_kg: 1000  # DESIGN ASSUMPTION; set from vehicle model later
+vehicle:
+  source: scenarios/vehicles/synthetic_two_stage.yaml
+  provenance: illustrative
+simulation:
+  ascent_backend: opentsiolkovsky
+  atmosphere_6dof_backend: jsbsim
+  orbit_verify_backend: tudatpy
+  # 6dof/recovery not claimed successful until dedicated phases are implemented
+  enabled_phases: [ascent_3dof, orbit_verify]
+assumptions:
+  - Synthetic two-stage vehicle; masses/engines are illustrative placeholders, not real performance figures.
+  - Max-Q and max-acceleration limits are design assumptions, not certified vehicle structural limits.

@@ -12,6 +12,8 @@ the single-scene 3D viewer directly, without going through examples/.
     orbitopt run my_mission.yaml        # run a mission config, write + verify its scene
     orbitopt launch-window kourou --inclination 51.64 --raan 100 --epoch 2026-11-08
                                         # daily launch windows (no compute stack)
+    orbitopt flight validate target.yaml # schema-check a Flight Lab flight target ...
+    orbitopt flight validate runs/run-1  # ... or a FlightResult run directory
 
 The same commands work as ``python -m orbitopt ...``. Installed as the
 ``orbitopt`` and ``orbitopt-app`` console scripts (see pyproject.toml), so
@@ -192,6 +194,22 @@ def _cmd_launch_window(args):
     print(format_data_sources(get_launch_site(args.site).data_sources(fields)))
 
 
+def _cmd_flight(args):
+    """`orbitopt flight validate <target.yaml|run_dir>`: the Flight Lab
+    contract check (orbitopt.flightlab.contract) -- a readable pass/fail like
+    `orbitopt validate`, no compute stack, no GUI imports."""
+    import jsonschema
+
+    from orbitopt.flightlab.contract import validate_path
+
+    try:
+        summary = validate_path(args.path)
+    except (jsonschema.ValidationError, ValueError) as exc:
+        print(f"INVALID: {args.path}\n  {exc}")
+        raise SystemExit(1) from None
+    print(f"OK: {summary}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     mission_ids = ", ".join(m.id for m in list_missions())
 
@@ -246,6 +264,13 @@ def build_parser() -> argparse.ArgumentParser:
                     help="plane windows: do not filter by the site's azimuth corridors")
     lw.add_argument("--step", type=float, default=60.0, help="scan step [s] (default 60)")
     lw.add_argument("--json", action="store_true", help="print JSON instead of a table")
+
+    flight = sub.add_parser("flight", help="Flight Lab contract tools (FlightTarget / FlightResult)")
+    flight_sub = flight.add_subparsers(dest="flight_command", required=True)
+    flight_validate = flight_sub.add_parser(
+        "validate", help="schema-check a flight target YAML or a FlightResult run directory (no compute)")
+    flight_validate.add_argument("path",
+                                 help="a FlightTarget YAML/JSON file, or a run dir (manifest.json + trajectories/)")
     return parser
 
 
@@ -265,6 +290,8 @@ def main(argv=None):
         _cmd_run(args)
     elif args.command == "launch-window":
         _cmd_launch_window(args)
+    elif args.command == "flight":
+        _cmd_flight(args)
 
 
 if __name__ == "__main__":

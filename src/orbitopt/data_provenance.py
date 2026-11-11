@@ -12,13 +12,15 @@ Provenance vocabulary (see docs/launch-data-sources.md):
   reconstruction ... approximate; never present it as fact.
 * ``derived``         -- computed by orbitopt from other fields (its own
   confidence is that of its inputs, which are listed separately).
+* ``illustrative``    -- authored for demonstration (Flight Lab scenarios,
+  synthetic runs): plausible numbers, no claim to match any real vehicle.
 """
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from typing import Iterable, Sequence
 
-PROVENANCES = ("official", "public_estimate", "derived")
+PROVENANCES = ("official", "public_estimate", "derived", "illustrative")
 
 
 @dataclass(frozen=True)

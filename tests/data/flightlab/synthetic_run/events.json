@@ -1,0 +1,10 @@
+[
+  {"t_s": 0.0, "kind": "ignition", "body_id": "stack", "data": {"engines_ignited": 2}},
+  {"t_s": 2.0, "kind": "liftoff", "body_id": "stack", "data": {}},
+  {"t_s": 68.0, "kind": "max_q", "body_id": "stack", "data": {"dynamic_pressure_pa": 33000.0}},
+  {"t_s": 150.0, "kind": "meco", "body_id": "stack", "data": {}},
+  {"t_s": 160.0, "kind": "separation", "body_id": "stack", "data": {"children": ["upper_stage", "booster"], "separation_impulse_ns": 0.0}},
+  {"t_s": 300.0, "kind": "boostback_start", "body_id": "booster", "data": {}},
+  {"t_s": 420.0, "kind": "touchdown", "body_id": "booster", "data": {"speed_m_s": 2.4}},
+  {"t_s": 540.0, "kind": "seco", "body_id": "upper_stage", "data": {}}
+]
