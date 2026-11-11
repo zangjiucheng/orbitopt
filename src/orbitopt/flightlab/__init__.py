@@ -45,11 +45,14 @@ __all__ = [
 ]
 
 # target_export needs numpy (it asks orbitopt.launch_windows for node passes),
-# so its names resolve lazily: `import orbitopt.flightlab` stays stdlib-only,
-# and `from orbitopt.flightlab import build_target` works either way.
+# and the Gate-B pipeline (simulate/evaluate) pulls the adapter + frame bridge
+# (numpy), so their names resolve lazily: `import orbitopt.flightlab` stays
+# stdlib-only, and `from orbitopt.flightlab import build_target` / `simulate`
+# / `evaluate` work either way.
 _LAZY = ("build_target", "feasibility_report", "parse_orbit_spec", "parse_window_spec", "save_target")
+_SIM_LAZY = ("simulate", "evaluate", "orbit_refly")
 
-__all__ += list(_LAZY)
+__all__ += list(_LAZY) + list(_SIM_LAZY)
 
 
 def __getattr__(name):
@@ -57,4 +60,10 @@ def __getattr__(name):
         from orbitopt.flightlab import target_export
 
         return getattr(target_export, name)
+    if name in _SIM_LAZY:
+        import importlib
+
+        # importlib, not `from . import simulate`: the function name would
+        # re-enter this __getattr__ (module and function share the name).
+        return getattr(importlib.import_module("orbitopt.flightlab.simulate"), name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

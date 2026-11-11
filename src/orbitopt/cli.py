@@ -203,7 +203,11 @@ def _cmd_flight(args):
     imports (orbitopt.flightlab.scene_export builds the scene itself).
     `orbitopt flight validate <target.yaml|run_dir>`: the contract check
     (orbitopt.flightlab.contract). `orbitopt flight export-target`: build a
-    FlightTarget YAML (FL-003)."""
+    FlightTarget YAML (FL-003). `orbitopt flight simulate`: Gate B (FL-006)
+    -- ascend, check, re-fly, honest verdict."""
+    if getattr(args, "flight_command", None) == "simulate":
+        _cmd_flight_simulate(args)
+        return
     if args.flight_command == "to-scene":
         return _cmd_flight_to_scene(args)
     if getattr(args, "flight_command", None) == "export-target":
@@ -281,6 +285,57 @@ def _cmd_flight_to_scene(args):
     n_events = len(scene["timeline"].get("events", []))
     print(f"wrote {out}: {n_bodies} bodies, {n_events} events "
           f"(open with: orbitopt view {out})")
+
+
+def _cmd_flight_simulate(args):
+    """`orbitopt flight simulate <target.yaml> --vehicle <v.yaml> -o runs/<id>
+    [--scene]`: the Gate-B pipeline (FL-006) -- OpenTsiolkovsky ascent,
+    mission-constraint checks, tudatpy insertion re-fly -- printing the three
+    independent verdicts and every failing reason code. The exit code reports
+    pipeline health (0 = a run was produced and verified, whatever the
+    verdict; 1 = it could not be produced), never the verdict itself: an
+    honest red verdict exits 0. `--no-refly` skips the physics re-fly
+    (physics_verified then stays "not assessed")."""
+    from pathlib import Path
+
+    import jsonschema
+
+    from orbitopt.flightlab.contract import load_target
+    from orbitopt.flightlab.simulate import simulate
+
+    try:
+        target = load_target(args.target)
+        run = simulate(target, Path(args.vehicle), Path(args.output),
+                       refly=not args.no_refly, timeout_s=args.timeout)
+    except (OSError, ValueError, KeyError, RuntimeError, jsonschema.ValidationError) as exc:
+        # RuntimeError covers OTBinaryMissingError and every adapter subprocess failure
+        print(f"ERROR: {exc}")
+        raise SystemExit(1) from None
+
+    def word(v):
+        return "not assessed" if v is None else ("PASSED" if v else "FAILED")
+
+    v = run.verification
+    print(f"run {run.run_id} -> {args.output}")
+    print(f"  optimizer_converged:        {word(v.optimizer_converged)}"
+          "  (E1 flies a hand-tuned program; no optimizer ran)")
+    print(f"  physics_verified:           {word(v.physics_verified)}")
+    print(f"  mission_constraints_passed: {word(v.mission_constraints_passed)}")
+    for c in v.checks:
+        if not c.passed:
+            value = "-" if c.value is None else f"{c.value:.6g} {c.unit}".strip()
+            limit = "-" if c.limit is None else f"{c.limit:.6g} {c.unit}".strip()
+            tag = "SKIP" if c.id.endswith("-not-assessed") else "FAIL"
+            print(f"  {tag} {c.id}: {value} vs limit {limit}"
+                  + (f" [{c.reason_code}]" if c.reason_code else ""))
+    if args.scene:
+        from orbitopt.flightlab.scene_export import run_to_scene
+
+        scene = run_to_scene(run)
+        scene_path = Path(args.output) / "scene.json"
+        scene_path.write_text(json.dumps(scene, indent=2) + "\n", encoding="utf-8")
+        print(f"  scene: {scene_path} ({len(scene['bodies'])} bodies "
+              "-- open with: orbitopt view that file)")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -368,6 +423,21 @@ def build_parser() -> argparse.ArgumentParser:
     flight_scene.add_argument("-o", "--output", help="output scene JSON path (default: <run_id>.json)")
     flight_scene.add_argument("--no-earth-texture", action="store_true",
                               help="draw Earth as a point marker instead of the textured globe")
+    flight_sim = flight_sub.add_parser(
+        "simulate",
+        help="Gate B (FL-006): fly a FlightTarget with a vehicle file, verify constraints "
+             "and re-fly the insertion orbit with tudatpy (needs the OpenTsiolkovsky binary)")
+    flight_sim.add_argument("target", help="a FlightTarget YAML (see `flight export-target`)")
+    flight_sim.add_argument("--vehicle", required=True, metavar="PATH",
+                            help="flightlab vehicle YAML (OT stage configs + attitude program)")
+    flight_sim.add_argument("-o", "--output", required=True, metavar="RUN_DIR",
+                            help="output run directory (FlightResult v1)")
+    flight_sim.add_argument("--scene", action="store_true",
+                            help="also write <RUN_DIR>/scene.json (FL-005; opens with `orbitopt view`)")
+    flight_sim.add_argument("--no-refly", action="store_true",
+                            help="skip the tudatpy insertion re-fly (physics_verified stays not-assessed)")
+    flight_sim.add_argument("--timeout", type=float, default=300.0, metavar="S",
+                            help="OpenTsiolkovsky subprocess timeout [s] (default 300)")
     return parser
 
 
