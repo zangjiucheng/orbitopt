@@ -52,10 +52,20 @@ from orbitopt.flightlab.optimize.ascent_problem import (
     AscentProblem,
 )
 from orbitopt.flightlab.simulate import simulate
+from orbitopt.flightlab.window_targeting import (
+    DEFAULT_WINDOW_DAYS,
+    calibrate_epoch,
+    derive_in_plane_liftoff,
+    raan_report,
+    window_sensitivity,
+)
 
 __all__ = ["OptimizeAbort", "optimize_ascent"]
 
 #: INFEASIBLE_* reason code per raw residual slot (1..6), see AscentProblem.
+#: Kept for the six FL-201 slots; FL-203 adds the RAAN slot, whose code comes
+#: from ``ascent_problem.REPORT_NAMES`` (the report is keyed by check id, so
+#: the RAAN slot joining or leaving shifts no codes around).
 INFEASIBLE_CODES = {
     1: "INFEASIBLE_PERIAPSIS_OUT_OF_TOLERANCE",
     2: "INFEASIBLE_APOAPSIS_OUT_OF_TOLERANCE",
@@ -121,6 +131,7 @@ def _scaled_weights(udp: AscentProblem) -> dict[str, float]:
         "eq_rp": span / alt_tol,
         "eq_ra": span / alt_tol,
         "eq_inc": span / inc_tol,
+        "eq_raan": span / _checks.RAAN_TOLERANCE_DEG,
         "ineq_maxq": (span / float(c.max_dynamic_pressure_pa)
                       if c.max_dynamic_pressure_pa else 1.0e-4),
         "ineq_maxg": (span / float(c.max_specific_acceleration_g)
@@ -389,14 +400,41 @@ def optimize_ascent(target: FlightTarget, vehicle_path: str | Path,
                    seed: int = 42, algorithm: str = "cmaes",
                    generations: int = 60, population: int = 48,
                    workers: int | None = None, local: bool = True,
-                   refly: bool = True, timeout_s: float = 300.0) -> dict:
+                   refly: bool = True, timeout_s: float = 300.0,
+                   derive_window: bool = True,
+                   window_days: float = DEFAULT_WINDOW_DAYS,
+                   sensitivity_offsets_s: Sequence[float] | None = (-60.0, 60.0)
+                   ) -> dict:
     """Solve, refine, re-fly and write. Returns the parsed ``optimization.json``
     plus the ``run`` object. Raises :class:`OptimizeAbort` (never writes a
     run) when no candidate ever produced a valid flight, and whatever
     ``simulate`` raises for pipeline trouble. ``target_path`` is only used to
-    stamp provenance into ``optimization.json``."""
+    stamp provenance into ``optimization.json``.
+
+    FL-203 (RAAN-constrained targets): with ``derive_window`` the liftoff
+    epoch becomes the first in-plane node pass from
+    :func:`orbitopt.flightlab.window_targeting.derive_in_plane_liftoff`
+    before anything flies (an in-plane epoch is what makes the target plane
+    reachable, so the optimizer must fly *that* epoch; it is then corrected by
+    :func:`orbitopt.flightlab.window_targeting.calibrate_epoch` -- two probe
+    flights measure the sidereal RAAN-vs-liftoff slope and the epoch shifts
+    by -error/slope, because the geometric pass leaves a constant
+    ascent-vs-window-model plane tilt that no attitude change pays down but
+    the launch timing does (the tolerance itself is never touched).
+    ``optimization.json`` then carries a ``raan`` block -- achieved RAAN from
+    the Gate-B GCRS check, signed error against ``checks.RAAN_TOLERANCE_DEG``,
+    and the liftoff-window sensitivity from re-flying the winner at epochs
+    offset by ``sensitivity_offsets_s`` seconds. A RAAN-unconstrained target
+    is untouched by every one of these keywords."""
     pg = _import_pygmo()
     out = Path(out_dir)
+    derivation = None
+    epoch_calibration = None
+    if target.target_orbit.raan_deg is not None and derive_window:
+        derivation = derive_in_plane_liftoff(target, window_days=window_days)
+        calibrated, epoch_calibration = calibrate_epoch(
+            derivation, Path(vehicle_path), timeout_s=timeout_s)
+        target = calibrated.target
     udp = AscentProblem(target, Path(vehicle_path), objective,
                         payload_kg=payload_kg, timeout_s=timeout_s)
     weights = _scaled_weights(udp)
@@ -443,19 +481,31 @@ def optimize_ascent(target: FlightTarget, vehicle_path: str | Path,
                        refly=refly, timeout_s=timeout_s)
         verdict = run.verification
 
+        slot_checks = udp.eq_check_ids + _ap._INEQ_CHECKS
         by_id = {c.id: c for c in verdict.checks}
         flagged = any(not by_id[cid].passed
-                      for cid in _ap._EQ_CHECKS + _ap._INEQ_CHECKS
-                      if cid in by_id)
+                      for cid in slot_checks if cid in by_id)
         converged = bool(residual_ok and not flagged)
 
-        reason_codes = [INFEASIBLE_CODES[i] for i, v in enumerate(violations, 1)
-                        if v > 0.0]
+        reason_codes = [_ap.REPORT_NAMES[cid][2]
+                        for cid, v in zip(slot_checks, violations) if v > 0.0]
         final_failures = list(_checks.failed_reason_codes(verdict))
         assumptions = tuple(run.assumptions) + (
             f"FL-202 ascent optimization: global={algorithm} seed={seed} "
             f"generations={generations} population={population}; "
             f"local={engine}",)
+        if derivation is not None:
+            assumed = (f"FL-203 liftoff epoch {target.mission.epoch_utc} = "
+                       f"modelled in-plane node pass for target RAAN "
+                       f"{derivation.requested_raan_deg:g} deg (requested at "
+                       f"{derivation.anchor_utc})")
+            if epoch_calibration and epoch_calibration.get("correction_s"):
+                assumed += (f" corrected {epoch_calibration['correction_s']:+.1f} s "
+                            "for the measured achieved-RAAN-vs-epoch slope "
+                            "(geometric pass leaves an ascent tilt the "
+                            "attitude cannot pay down)")
+            assumptions += (assumed + "; planning-grade window model -- see "
+                            "the run assumptions and orbitopt.launch_windows",)
         run = dataclasses.replace(
             run,
             assumptions=assumptions,
@@ -464,6 +514,29 @@ def optimize_ascent(target: FlightTarget, vehicle_path: str | Path,
         write_run(out, run)
 
         write_attitude_program(prog, out / "attitude_program.csv")
+
+        raan_block = None
+        if target.target_orbit.raan_deg is not None:
+            raan_block = raan_report(run, target)
+            if derivation is not None:
+                raan_block["liftoff_window"] = {
+                    "requested_raan_deg": derivation.requested_raan_deg,
+                    "anchor_utc": derivation.anchor_utc,
+                    "geometric_pass_utc": derivation.target.mission.epoch_utc,
+                    "derived_epoch_utc": target.mission.epoch_utc,
+                    "epoch_correction": epoch_calibration,
+                    "window": derivation.window.to_dict()}
+            if sensitivity_offsets_s:
+                raan_block["window_sensitivity"] = [
+                    {"liftoff_offset_s": 0.0,
+                     "liftoff_epoch_utc": target.mission.epoch_utc,
+                     "achieved_raan_deg": raan_block["achieved_raan_deg"],
+                     "error_deg": raan_block["error_deg"],
+                     "passed_within_tolerance": raan_block["passed"]}
+                ] + window_sensitivity(target, derived, prog,
+                                       sensitivity_offsets_s,
+                                       refly_target_epoch=False,
+                                       timeout_s=timeout_s)
         doc = {
             "status": "CONVERGED" if converged else "INFEASIBLE",
             "optimizer_converged": converged,
@@ -485,19 +558,16 @@ def optimize_ascent(target: FlightTarget, vehicle_path: str | Path,
                                     ascent_param.unpack(x_best, objective)).items())},
             "best_penalty": p_best,
             "best_fitness": {name: float(v) for name, v in zip(
-                ("objective", "eq_periapsis_m", "eq_apoapsis_m",
-                 "eq_inclination_deg", "ineq_max_q_pa", "ineq_max_accel_g",
-                 "ineq_propellant_reserve_kg"),
-                [f_raw[0]] + f_raw[1:6] + [f_raw[6]])},
+                ("objective", *(_ap.REPORT_NAMES[c][0] for c in slot_checks)),
+                f_raw)},
             "residual_violations": {
-                name: float(v) for name, v in zip(
-                    ("periapsis_m", "apoapsis_m", "inclination_deg",
-                     "max_q_pa", "max_accel_g", "propellant_reserve_kg"),
-                    violations)},
+                _ap.REPORT_NAMES[c][1]: float(v)
+                for c, v in zip(slot_checks, violations)},
             "convergence_history": wrapper._log,
             "target_sha256": target_digest(target.to_dict()),
             "target_file": str(target_path) if target_path else None,
             "vehicle_file": str(vehicle_path),
+            "raan": raan_block,
             "run_id": run.run_id,
             "run_dir": Path(out).resolve().name,
             "attitude_program_file": "attitude_program.csv",
