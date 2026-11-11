@@ -93,6 +93,32 @@ print('ok')
     assert "sceneAssumptions" in scene
 
 
+def test_base_install_flight_to_scene_launch_eci_fails_cleanly(tmp_path):
+    """A LAUNCH_ECI track needs the numpy/astropy frame bridge: on a base
+    install `flight to-scene` must exit 1 with a clear message, no traceback
+    and no output file."""
+    root = Path(__file__).resolve().parents[1]
+    out = tmp_path / "scene.json"
+    code = f"""
+import builtins
+BLOCK = {{'numpy', 'scipy', 'astropy'}}
+real_import = builtins.__import__
+def hook(name, *args, **kwargs):
+    if name.split('.', 1)[0] in BLOCK:
+        raise ModuleNotFoundError(f"base-install simulation: import of {{name}} blocked")
+    return real_import(name, *args, **kwargs)
+builtins.__import__ = hook
+import orbitopt.cli
+orbitopt.cli.main(['flight', 'to-scene', {str(RUN_FIXTURE)!r}, '-o', {str(out)!r}])
+"""
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                          env={"PYTHONPATH": str(root / "src")}, timeout=20)
+    assert proc.returncode == 1
+    assert "Traceback" not in proc.stderr
+    assert "frame bridge" in proc.stdout
+    assert not out.exists()
+
+
 def _track(body_id, frame="GCRS", epoch=EPOCH, t=((0.0, 10.0)), mass=((1000.0, 900.0)),
            pos=((0.0, 0.0, 6.37e6), (0.0, 1e3, 6.4e6)), vel=((0.0, 0.0, 0.0), (0.0, 1e3, 1e3))):
     return BodyTrack(body_id=body_id, parent_body_id=None, frame=frame, epoch_utc=epoch,

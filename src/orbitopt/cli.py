@@ -278,6 +278,13 @@ def _cmd_flight_to_scene(args):
     except (jsonschema.ValidationError, ValueError) as exc:
         print(f"REJECTED: {args.run_dir}\n  {exc}")
         raise SystemExit(1) from None
+    except ImportError as exc:
+        # A non-GCRS track (e.g. LAUNCH_ECI) needs the FL-002 frame bridge,
+        # whose numpy/astropy dependencies a base install does not carry.
+        print(f"ERROR: {args.run_dir} has a track that needs the flightlab frame bridge "
+              f"to convert to GCRS, but its optional dependency is missing ({exc}). "
+              "Install numpy and astropy (or use the conda env), or export an all-GCRS run.")
+        raise SystemExit(1) from None
     out = args.output or f"{scene['flightRun']['runId']}.json"
     with open(out, "w") as handle:
         json.dump(scene, handle, indent=2)
