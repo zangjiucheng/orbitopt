@@ -89,6 +89,22 @@ macOS has a real window server, so the Qt/VTK viewer tests need no xvfb.
 `tests/test_env_lockfiles.py` checks the locks honour these constraints and
 that CuPy never appears in the CPU env.
 
+## Flight Lab landing solver stack (FL-303)
+
+The G-FOLD landing-burn solver is not a conda package (PyPI wheel only),
+so it is not part of the locked base envs. `flightlab-landing.txt` pins
+the add-on layer: `gfold==0.3.2` (exact -- the wrapper checks the
+installed distribution against this pin and refuses to run otherwise,
+since the discretization and bound semantics are solver-version
+sensitive) plus the cvxpy reference implementation. Install it on top of
+a locked env:
+
+```bash
+pip install -r envs/flightlab-landing.txt
+```
+
+Tests that need it skip cleanly when it is absent.
+
 ## Regenerating the locks
 
 After editing `cpu.yml` / `gpu.yml`:
