@@ -1,7 +1,7 @@
 # ADR flightlab-0001: JSBSim as the 6-DOF engine for Flight Lab ascent
 
 - **Status:** Accepted — **GO**
-- **Date:** 2026-11-11
+- **Date:** 2026-11-11 (FL-403 numbers corrected 2026-11-11, see "Correction")
 - **Deciders:** Flight Lab E4 spike (Epic #196; FL-401 #206, FL-402 #207, FL-403 #208)
 - **ContextDB:** `epic187/jsbsim-go-no-go`
 
@@ -38,8 +38,8 @@ the FL-401/402 test files):
    MECO+5 s (~76 km, Mach 18); dt-halving (0.01 → 0.005 s) agreement:
    MECO altitude < 300 m, speed < 20 m/s, FPA < 0.5°.
 4. **Trajectory stays near the 3-DOF reference.** At MECO: |Δalt| ≤ 6 km,
-   |Δv| ≤ 200 m/s, |ΔFPA| ≤ 1.0° (generous, transient-inclusive bounds —
-   the 6-DOF vehicle must fly its own attitude schedule, not the 3-DOF one).
+   |Δv| ≤ 200 m/s, |ΔFPA| ≤ 1.0° (generous bounds — the 6-DOF vehicle
+   must fly its own attitude schedule, not the 3-DOF one).
 5. **Separation works** (FL-402 criteria): momentum residual < 1e-6 rel,
    position continuity < 1 mm, determinism across reruns and step orders.
 
@@ -58,16 +58,17 @@ command and physics.
 
 | Criterion | Bound | dt = 0.01 s | dt = 0.005 s | Verdict |
 |---|---|---|---|---|
-| Settled attitude error max (t ≥ 60 s) | ≤ 2.0° | **1.12°** | **1.12°** | PASS |
-| Settled attitude error RMS | ≤ 0.6° | **0.52°** | **0.52°** | PASS |
+| Settled attitude error max (t ≥ 60 s) | ≤ 2.0° | **0.061°** | **0.061°** | PASS |
+| Settled attitude error RMS | ≤ 0.6° | **0.036°** | **0.036°** | PASS |
+| Whole-burn attitude error max (t ∈ [0.5, 100] s) | report (regression guard ≤ 2.0°) | 0.51° | 0.49° | PASS |
 | Gimbal saturation (actuator at ±5° limit) | 0 % of burn | **0.0 %** | **0.0 %** | PASS |
-| Peak gimbal deflection | < 5° travel | 0.86° | 0.84° | PASS |
-| Body rates (max p / q / r) | report only | ~0 / 15.8 / 14.0 °/s | ~0 / 15.5 / 13.8 °/s | report |
-| MECO altitude deviation (ECEF climb vs OT alt) | ±6 km | **−4.71 km** (76.55 vs 81.25 km) | −4.67 km | PASS |
-| MECO speed deviation | ±200 m/s | **−89.8 m/s** (5224.0 vs 5313.8) | −89.2 m/s | PASS |
-| MECO FPA deviation | ±1.0° | **−0.25°** (19.45° vs 19.71°) | −0.25° | PASS |
-| MECO Mach / altitude (stress point) | finite states | Mach 18.2 @ ~76.5 km | Mach 18.2 | PASS |
-| dt-halving: MECO altitude / speed / FPA | <300 m / <20 m/s / <0.5° | **40 m / 0.58 m/s / 0.006°** | — | PASS |
+| Peak gimbal deflection (actual; commands also < 5°) | < 5° travel | 0.42° | 0.41° | PASS |
+| Body rates (max p / q / r) | report only | ~0 / 2.35 / ~0 °/s | ~0 / 2.32 / ~0 °/s | report |
+| MECO altitude deviation (ECEF climb vs OT alt) | ±6 km | **−51 m** (81.20 vs 81.25 km) | −21 m | PASS |
+| MECO speed deviation | ±200 m/s | **−2.0 m/s** (5311.8 vs 5313.8) | −1.2 m/s | PASS |
+| MECO FPA deviation | ±1.0° | **+0.016°** (19.72° vs 19.71°) | +0.019° | PASS |
+| MECO Mach / altitude (stress point) | finite states | Mach 18.9 @ ~81.2 km | Mach 18.9 | PASS |
+| dt-halving: MECO altitude / speed / FPA | <300 m / <20 m/s / <0.5° | **30 m / 0.85 m/s / 0.003°** | — | PASS |
 | Non-finite states | none | none | none | PASS |
 | Separation (FL-402) | momentum 1e-6 rel, pos 1 mm | 1.4e-8 rel / 2.1e-7 m, bit-identical reruns & step orders | — | PASS |
 
@@ -75,19 +76,36 @@ command and physics.
 ![FL-403 gimbal commands vs actuator outputs](../assets/fl403_gimbal.png)
 ![FL-403 6-DOF vs 3-DOF trajectory](../assets/fl403_meco_deviation.png)
 
-### The one caveat, by design: the early program transient
+### Correction: the "early program transient" was a bug
 
-The full-profile (t ∈ [0.5, 100] s) error peaks at **24.0°** — *not* a
-control failure. The 3-DOF OT program ramps elevation from 90° toward 18°
-with a slew the chart law `d(el)/dt = q·cos(el) + …` makes **kinematically
-unachievable for a TVC vehicle near vertical at low speed** (cos(el) → 0
-kills the pitch authority to change elevation). The 6-DOF vehicle lags, the
-loop recovers as the program flattens, and from t = 60 s tracking is
-sub-degree and stays that way through MECO at Mach 18. FL-401's open-loop
-run shows the same lag with *no* controller — the discrepancy is a property
-of the program, not of the simulator or the loop. **Consequence:** any
-production 6-DOF program generator must rate-limit attitude commands in body
-rates, not just in chart angles.
+The first revision of this ADR reported a **24°** whole-burn error peak in
+t < 60 s and explained it as a program the TVC vehicle could not fly near
+vertical (`d(el)/dt = q·cos(el)`, "cos(el) → 0 kills pitch authority"). That
+explanation was wrong, and acceptance review traced the real cause:
+
+- `tracking.dcm_from_quat` returned the **transpose** of the matrix
+  `jsbsim_driver.quat_from_dcm` encodes (body→ECEF instead of `Tec2b`), so
+  every attitude quantity the controller and the metrics used was rotated;
+- the launch IC `(θ, ψ, φ) = (90°, 90°, 90°)` had been "empirically" tuned so
+  that this wrong matrix read zero error at liftoff; in JSBSim's real
+  attitude it sat **180° off in roll**, so the pitch-over was steered about
+  the wrong body axes (azimuth swung 59°–138° while the program held 90°).
+
+Evidence that it was never the program: the demanded pitch-over is a
+constant 1.71 °/s, body pitch rate changes elevation directly (the cos(el)
+factor belongs to azimuth), the open-loop plant is decoupled (a pitch
+gimbal step produces only q, a yaw step only r, both matching
+`T·sin δ·arm/I` to 0.1 %), and the old run used at most 0.86° of the ±5°
+gimbal while the error was 20°.
+
+With `dcm_from_quat` fixed (regression test: exact round trip with
+`quat_from_dcm`) and the IC set to `(90°, 90°, −90°)` — checked against
+JSBSim's `Tec2b` directly: body x = up, y = south, z = east, and a nose-down
+gimbal tips the nose east — the same controller and gains track the
+whole burn within 0.51°, and the MECO deviation drops from −4.7 km /
+−90 m/s to −51 m / −2 m/s. The declared GO criteria are unchanged; the
+tests now also guard the whole-burn error (≤ 2°), commands within travel,
+and tighter MECO bounds (500 m / 20 m/s / 0.2°).
 
 ## Decision: **GO**
 
@@ -97,8 +115,9 @@ the thin `SixDofSim` driver, is viable as the E4+ 6-DOF engine:
 - physics bookkeeping is exact where it is checkable (FL-401 table:
   Tsiolkovsky to 2e-4 rel, TVC moment exact to 1 %, actuator lag 0.03 %);
 - a naïve gain-scheduled PID saturates nothing and holds sub-degree tracking
-  through max-q-free (no aero), high Mach, 76 km — headroom for a real
-  controller and real aerodynamics;
+  over the whole burn (0.51° peak, 0.06° settled) through max-q-free (no
+  aero), Mach 19, 81 km — headroom for a real controller and real
+  aerodynamics;
 - two instances + a proven state-handoff recipe make staging a first-class
   contract (`to_flight_run` already emits a valid three-body FlightRun v1);
 - costs are known and bounded: first-order-in-dt convergence (one-frame
@@ -115,17 +134,21 @@ dependency.
 Negative / accepted: dt-halving convergence is first order (fine for a
 display/fidelity layer, would need care in an accuracy budget); jsbsim
 wheels exist only for CPython 3.10+/x86_64 macOS+Linux (fine per current
-targets); program feasibility (rate-limited attitude) becomes **our** job,
-not the simulator's; the 24° early transient is real and must be designed
-around, not tested away.
+targets); attitude conventions (quaternion/DCM direction, launch IC roll)
+are ours to get right and must be tested against JSBSim's own `Tec2b`,
+not against our own helpers — the FL-403 correction above is the cautionary
+example.
 
 ## Follow-up epic draft: "6-DOF ascent & recovery tracking" (E5)
 
 1. Promote the spike driver into `orbitopt.flightlab.sixdof` proper:
    contract-typed `SixDofRun`, config-driven models, no spike fixtures.
-2. **Rate-feasible attitude program generator** (body-rate limits from plant
-   authority `T·arm/I`) so the 6-DOF vehicle can fly its own commands;
-   regression = FL-403 test with the early-window bound tightened.
+2. **Attitude program generator with authority check** (body-rate and
+   angular-acceleration limits from plant authority `T·arm/I`), so programs
+   faster than FL-403's 1.71 °/s pitch-over are validated before flight.
+   Downgraded from "required": the earlier near-vertical infeasibility
+   finding was a conversion bug (see Correction), and the FL-403 program
+   is flown within 0.51° as is.
 3. Real aerodynamics: drag/ST tables on the stage, max-q regression, then
    gravity-turn ascent end-to-end vs 3-DOF with aero on both sides.
 4. Staging through the contract: E4 recipe (FL-402) + booster reuse arc and

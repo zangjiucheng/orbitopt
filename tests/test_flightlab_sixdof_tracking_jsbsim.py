@@ -6,18 +6,21 @@ closed-loop tests need the recorded 3-DOF reference fixture and ``jsbsim``
 skip cleanly when missing.
 
 Declared GO criteria (ADR docs/adr/flightlab-0001-jsbsim-6dof.md):
-* settled attitude tracking (t >= 60 s, after the program-shaping window):
-  max <= 2 deg, RMS <= 0.6 deg -- the early-window error is the documented
-  program-infeasibility transient near vertical, reported but not gating;
+* settled attitude tracking (t >= 60 s): max <= 2 deg, RMS <= 0.6 deg;
 * gimbal saturation 0 % of the burn, command never beyond travel limits;
 * stable integration: dt 0.01 vs 0.005 agree, no non-finite states;
-* MECO state deviation vs the 3-DOF reference within the (generous,
-  transient-inclusive) bounds below.
+* MECO state deviation vs the 3-DOF reference within the bounds below.
+
+Regression guards added with the quaternion->DCM fix: the whole-burn error
+bound is the same 2 deg (it was 30 deg while a transposed DCM plus a launch
+IC tuned against it produced a ~24 deg early "transient"), and the MECO
+bounds sit ~10x above the measured deviations (51 m / 2 m/s / 0.02 deg).
 """
 from __future__ import annotations
 
 import math
 import os
+import warnings
 
 import numpy as np
 import pytest
@@ -32,23 +35,33 @@ pytestmark = pytest.mark.skipif(
            "(scripts/fl403_record_reference.py)")
 
 from orbitopt.flightlab.adapters.opentsiolkovsky import AttitudePoint, Vehicle  # noqa: E402
+from orbitopt.flightlab.sixdof.jsbsim_driver import (  # noqa: E402
+    InitialConditions,
+    SixDofSim,
+    quat_from_dcm,
+)
 from orbitopt.flightlab.sixdof.tracking import (  # noqa: E402
     AttitudeProgram,
     ReferenceTrajectory,
     chart_attitude,
     chart_error_deg,
     attitude_error_body,
+    dcm_from_quat,
     run_tracking_spike,
     so3_log,
 )
 
+LAUNCH_IC = InitialConditions(lat_geod_deg=0.0, lon_deg=0.0, alt_m=0.0,
+                              pitch_deg=90.0, heading_deg=90.0, roll_deg=-90.0)
+
 SETTLE_T_S = 60.0
 SETTLED_MAX_DEG = 2.0
 SETTLED_RMS_DEG = 0.6
-FULL_MAX_DEG = 30.0            # transient-inclusive, program-shaping window
-D_ALT_TOL_M = 6000.0           # transient-inclusive MECO deviation bounds
-D_SPEED_TOL_M_S = 200.0
-D_FPA_TOL_DEG = 1.0
+FULL_MAX_DEG = 2.0             # whole burn, pitch-over kick included
+D_ALT_TOL_M = 500.0            # MECO deviation bounds vs the 3-DOF reference
+D_SPEED_TOL_M_S = 20.0
+D_FPA_TOL_DEG = 0.2
+GIMBAL_TRAVEL_DEG = 5.0
 DT_CONVERGE_ALT_M = 300.0      # dt 0.01 vs 0.005 altitude agreement
 
 
@@ -80,18 +93,54 @@ def test_so3_log_identity():
     assert np.linalg.norm(so3_log(np.eye(3))) < 1e-12
 
 
+def _tec2b(sim):
+    with warnings.catch_warnings():  # get_Tec2b returns a deprecated numpy.matrix
+        warnings.simplefilter("ignore", PendingDeprecationWarning)
+        return np.asarray(sim.fdm.get_propagate().get_Tec2b())
+
+
+def test_dcm_from_quat_inverts_quat_from_dcm():
+    # dcm_from_quat must rebuild exactly the matrix the driver encoded
+    # (Tec2b), not its transpose -- the transpose mis-steered FL-403.
+    rng = np.random.default_rng(7)
+    for _ in range(20):
+        q_mat, _ = np.linalg.qr(rng.normal(size=(3, 3)))
+        q_mat *= np.sign(np.linalg.det(q_mat))
+        assert np.allclose(dcm_from_quat(quat_from_dcm(q_mat)), q_mat, atol=1e-12)
+
+
+def test_launch_ic_matches_program_frame():
+    """Ground truth from JSBSim's own Tec2b (not through dcm_from_quat): at
+    (lat, lon) = (0, 0) ECEF x/y/z = up/east/north, and the program frame at
+    (el=90, az=90) is body x = up, y = south, z = east. A nose-down pitch
+    gimbal then tips the nose east, the program's pitch-over direction."""
+    sim = SixDofSim(0.01)
+    sim.initialize(LAUNCH_IC)
+    tec2b = _tec2b(sim)
+    assert np.allclose(tec2b, [[1, 0, 0], [0, 0, -1], [0, 1, 0]], atol=1e-6)
+    prog = AttitudeProgram.from_points([AttitudePoint(0.0, 90.0, 90.0),
+                                        AttitudePoint(1.0e6, 90.0, 90.0)])
+    assert np.linalg.norm(attitude_error_body(sim.samples[-1], prog)) < 1e-6
+    sim.ignite(1.0)
+    sim.run_for(3.0, lambda t, s: s.set_gimbal(-math.radians(0.2) if t >= 2.0 else 0.0, 0.0))
+    nose = _tec2b(sim)[0]
+    assert nose[1] > 1e-3 and abs(nose[2]) < 1e-6  # east, no north component
+
+
 def test_attitude_error_on_real_sample():
     prog, _, _ = _fixture()
-    # short no-control run: use the real sampled state (all conventions as
-    # the driver reports them) to test the error machinery, not its math
-    from orbitopt.flightlab.sixdof.jsbsim_driver import InitialConditions, SixDofSim
+    # short open-loop run: use the real sampled state (all conventions as
+    # the driver reports them) to test the error machinery, not its math.
+    # An uncontrolled vertical stage stays vertical, so a nose-down gimbal
+    # pulse tips it off the chart pole first.
     sim = SixDofSim(0.01)
-    sim.initialize(InitialConditions(lat_geod_deg=0.0, lon_deg=0.0, alt_m=0.0,
-                                     pitch_deg=90.0, heading_deg=90.0, roll_deg=90.0))
+    sim.initialize(LAUNCH_IC)
     sim.ignite(1.0)
-    sim.run_for(14.0, lambda t, s: None)  # pitch-over under way: chart not at the pole
+    sim.run_for(14.0, lambda t, s: s.set_gimbal(-math.radians(0.5) if 2.0 <= t < 4.0 else 0.0,
+                                                0.0))
     s = sim.samples[-1]
     az_a, el_a = chart_attitude(s)
+    assert math.degrees(el_a) < 85.0  # off the pole
 
     def prog_at(el_off):
         # chart_attitude reports radians; AttitudePoint takes degrees
@@ -113,7 +162,10 @@ def test_closed_loop_full_profile_tracking():
     assert m.finite
     assert m.att_err_max_deg <= FULL_MAX_DEG
     assert m.gimbal_sat_fraction_of_burn == 0.0
-    assert m.gimbal_max_deg < 5.0
+    assert m.gimbal_max_deg < GIMBAL_TRAVEL_DEG
+    burn = [s for s in res.samples if s["t_s"] <= meco]
+    assert max(max(abs(s["gimbal_pitch_cmd_rad"]), abs(s["gimbal_yaw_cmd_rad"]))
+               for s in burn) < math.radians(GIMBAL_TRAVEL_DEG)
     s_max, s_rms = _settled(res)
     assert s_max <= SETTLED_MAX_DEG
     assert s_rms <= SETTLED_RMS_DEG

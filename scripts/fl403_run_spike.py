@@ -69,16 +69,16 @@ def _plot_tracking(results):
         ts, es = _err_curve(results[dt_key])
         ax.semilogy(ts, es, style, lw=1.0, label=f"{dt_key} s (max {results[dt_key].metrics.att_err_max_deg:.1f}°)")
     ax.axvline(SETTLE_T_S, color="grey", lw=0.8)
-    ax.text(SETTLE_T_S + 0.7, 1e-2, "settled\nwindow", fontsize=7, color="grey")
+    ax.text(SETTLE_T_S + 0.7, 2e-3, "settled\nwindow", fontsize=7, color="grey")
     ax.axhline(2.0, color="tab:red", lw=0.8, ls=":")
-    ax.text(2, 2.3, "settled max bound 2°", fontsize=7, color="tab:red")
+    ax.text(2, 2.3, "max bound 2° (whole burn)", fontsize=7, color="tab:red")
     ax.set_yscale("log")
-    ax.set_ylim(1e-2, 40)
+    ax.set_ylim(1e-3, 5)
     ax.set_xlabel("t [s]")
     ax.set_ylabel("attitude error vs program [deg]")
     ax.set_title("FL-403: PID gimbal tracking of the 3-DOF attitude program\n"
-                 "early peak ~24° is the program-infeasibility transient near vertical (t<60 s); "
-                 "settled ≤1.2°", fontsize=8)
+                 f"full profile max {results['dt0.01'].metrics.att_err_max_deg:.2f}° "
+                 "(pitch-over start at t=8 s); bound 2° over the whole burn", fontsize=8)
     ax.legend(fontsize=7, loc="upper right")
     ax.grid(alpha=0.3)
 
@@ -190,9 +190,10 @@ def main() -> int:
         "reference": "OT 3-DOF fl403_spike fixture (e2=18 deg)",
         "gains": {"kp": 3.0, "ki": 0.01, "kd": 4.0, "i_max_alpha_rad_s2": 0.05},
         "settled_window_t_ge_60s": {f"dt_{k}": _settled(res) for k, res in results.items()},
-        "notes": "att_err_max/rms fields cover t in [0.5,100]; the large early-window numbers "
-                 "are the documented program-infeasibility transient near vertical (el-rate "
-                 "demanded at el~90 is unachievable by TVC at low speed).",
+        "notes": "att_err_max/rms fields cover t in [0.5,100]; the peak is the pitch-over "
+                 "kick at t=8 s (program el-rate step 0 -> -1.71 deg/s). An earlier revision "
+                 "reported a ~24 deg 'program-infeasibility transient' that was a transposed "
+                 "quaternion->DCM in tracking.py plus a launch IC tuned against it.",
     }
     OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
     OUT_JSON.write_text(json.dumps(out, indent=2) + "\n")

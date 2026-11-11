@@ -147,15 +147,26 @@ metrics regenerate via `scripts/fl403_run_spike.py`.
 
 ## Numbers (dt = 0.01 s; full table in the ADR)
 
-Settled (t ≥ 60 s) attitude error **1.12° max / 0.52° RMS**; gimbal
-saturation **0.0 %** of burn, peak deflection 0.86° of ±5° travel; MECO
-deviation vs 3-DOF: **−4.7 km alt / −90 m/s / −0.25° FPA**; dt-halving
-agreement 40 m / 0.58 m/s / 0.006°; no non-finite states to MECO+5 s at
-Mach 18. Full-profile error peaks at 24° in the first 60 s — the 3-DOF
-program's near-vertical elevation slew is kinematically unachievable by TVC
-(cos(el) → 0), an open-loop FL-401 run shows the same lag with no controller:
-a property of the program, not of the loop. Production programs must be
-rate-limited in body rates.
+Whole-burn attitude error **0.51° max** (the t = 8 s pitch-over kick),
+settled (t ≥ 60 s) **0.061° max / 0.036° RMS**; gimbal saturation **0.0 %**
+of burn, peak deflection 0.42° of ±5° travel (commands also within travel);
+MECO deviation vs 3-DOF: **−51 m alt / −2.0 m/s / +0.016° FPA**; dt-halving
+agreement 30 m / 0.85 m/s / 0.003°; no non-finite states to MECO+5 s at
+Mach 18.9.
+
+## Gotcha found in acceptance: quaternion→DCM direction
+
+The first FL-403 revision reported a 24° early error and blamed the
+program (near-vertical elevation slew "unachievable by TVC"). The real
+cause was ours: `tracking.dcm_from_quat` returned the transpose of the
+`Tec2b` that `jsbsim_driver.quat_from_dcm` encodes, and the launch IC roll
+(φ = 90°) had been tuned until that wrong matrix read zero error — in
+JSBSim's real attitude it was 180° off in roll, so pitch-over was steered
+about the wrong body axes. Fixed: exact `dcm_from_quat`/`quat_from_dcm`
+round trip, IC `(θ, ψ, φ) = (90°, 90°, −90°)` verified against `Tec2b`
+itself (body x up / y south / z east; a nose-down gimbal tips the nose
+east). Lesson: check attitude conventions against JSBSim's own matrices,
+never only against our own helpers.
 
 ## Verdict
 

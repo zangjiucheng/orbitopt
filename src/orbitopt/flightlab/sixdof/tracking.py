@@ -29,11 +29,12 @@ Controller
 geodesic attitude error :func:`attitude_error_body` (components in the
 actual body frame): ``a = kp*e + ki*I - kd*(omega - omega_ff)`` [rad/s^2]
 with the pitch channel's velocity feed-forward ``omega_ff_y = el_ff`` (the
-program's elevation slew). The chart-elevation law ``d(el)/dt = q*cos(el) +
-v_h/(R+h)*cos(el - FPA)`` near vertical makes a fast elevation ramp
-kinematically unachievable for a TVC vehicle at low speed, so early-phase
-tracking error is a property of the *program*, not the loop (spike
-finding; see the ADR); from the settled phase on, tracking is sub-degree.
+program's elevation slew; body pitch rate changes elevation directly, so
+the 1.71 deg/s pitch-over is well within TVC authority). Whole-burn
+tracking stays sub-degree (peak ~0.5 deg at the t=8 s pitch-over kick). An
+earlier revision reported a ~24 deg early "program-infeasibility transient";
+it was a transposed :func:`dcm_from_quat` plus a launch IC tuned against
+it, not a property of the program (see the ADR).
 The desired body angular acceleration is converted to a gimbal command
 with the *instruments of the moment*: ``cmd = I * alpha / (T * arm)``,
 using the live thrust, inertia and CG the model reports -- a gain schedule
@@ -80,10 +81,13 @@ def dcm_from_quat(q: tuple[float, float, float, float]) -> np.ndarray:
     """Rows = body x/y/z axes expressed in ECEF, from the FL-401 convention
     ``R(q) = Tec2b`` (so this is just ``R(q)`` reconstructed)."""
     w, x, y, z = q
+    # Exact inverse of jsbsim_driver.quat_from_dcm (standard scalar-first
+    # R(q)); the transpose here would silently swap ECEF->body for
+    # body->ECEF and mis-steer the controller.
     return np.array([
-        [1 - 2 * (y * y + z * z), 2 * (x * y + w * z), 2 * (x * z - w * y)],
-        [2 * (x * y - w * z), 1 - 2 * (x * x + z * z), 2 * (y * z + w * x)],
-        [2 * (x * z + w * y), 2 * (y * z - w * x), 1 - 2 * (x * x + y * y)],
+        [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+        [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+        [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)],
     ])
 
 
@@ -437,11 +441,13 @@ def run_tracking_spike(reference: ReferenceTrajectory, program: AttitudeProgram,
     if sim is None:
         sim = SixDofSim(dt_s)
     if ic is None:
-        # JSBSim's IC Euler->quaternion init differs from its runtime
-        # convention; (theta=90, psi=90, phi=90) is the empirically verified
-        # set that places the body on the program chart's (el=90, az=90).
+        # (theta=90, psi=90, phi=-90) puts the body exactly on the program
+        # chart's (el=90, az=90) frame, roll included: Tec2b gives body
+        # x = up, y = south, z = east at (0, 0), so a nose-down pitch tips
+        # the nose east (checked against Tec2b directly, not through
+        # dcm_from_quat -- see test_launch_ic_matches_program_frame).
         ic = InitialConditions(lat_geod_deg=0.0, lon_deg=0.0, alt_m=0.0,
-                               pitch_deg=90.0, heading_deg=90.0, roll_deg=90.0)
+                               pitch_deg=90.0, heading_deg=90.0, roll_deg=-90.0)
     sim.initialize(ic)
     r0 = math.sqrt(sim.samples[0]["x_m"] ** 2 + sim.samples[0]["y_m"] ** 2
                    + sim.samples[0]["z_m"] ** 2)

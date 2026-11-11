@@ -2,45 +2,45 @@
   "dt0.01": {
     "dt_s": 0.01,
     "meco_t_s": 100.0,
-    "att_err_max_deg": 24.02088219186774,
-    "att_err_rms_deg": 7.912984386515375,
-    "p_rate_max_deg_s": 0.00324498450550008,
-    "q_rate_max_deg_s": 15.839590834456718,
-    "r_rate_max_deg_s": 14.035230929524504,
+    "att_err_max_deg": 0.5105046872993705,
+    "att_err_rms_deg": 0.06260766006579986,
+    "p_rate_max_deg_s": 1.6005376170872166e-13,
+    "q_rate_max_deg_s": 2.354103833250849,
+    "r_rate_max_deg_s": 1.7188641592012359e-09,
     "gimbal_sat_fraction_of_burn": 0.0,
-    "gimbal_max_deg": 0.85529768701892,
-    "alt_climb_6dof_m": 76545.6641978696,
+    "gimbal_max_deg": 0.4178994996273255,
+    "alt_climb_6dof_m": 81203.53715569992,
     "alt_3dof_m": 81254.6540304264,
-    "d_alt_m": -4708.9898325568065,
-    "speed_6dof_m_s": 5224.0063115481,
+    "d_alt_m": -51.116874726489186,
+    "speed_6dof_m_s": 5311.778790987787,
     "speed_3dof_m_s": 5313.783551937722,
-    "d_speed_m_s": -89.77724038962242,
-    "fpa_6dof_deg": 19.454220487869758,
+    "d_speed_m_s": -2.0047609499351893,
+    "fpa_6dof_deg": 19.724734750151345,
     "fpa_3dof_deg": 19.70869025965001,
-    "d_fpa_deg": -0.25446977178025065,
-    "mach_6dof": 18.176056781667416,
+    "d_fpa_deg": 0.016044490501336384,
+    "mach_6dof": 18.904063908190953,
     "finite": true
   },
   "dt0.005": {
     "dt_s": 0.005,
     "meco_t_s": 100.0,
-    "att_err_max_deg": 23.597430786342898,
-    "att_err_rms_deg": 7.872077747219769,
-    "p_rate_max_deg_s": 0.0032682590740156824,
-    "q_rate_max_deg_s": 15.524595466357717,
-    "r_rate_max_deg_s": 13.790611605219583,
+    "att_err_max_deg": 0.4938508519609612,
+    "att_err_rms_deg": 0.060659587211212486,
+    "p_rate_max_deg_s": 2.3523679067398034e-13,
+    "q_rate_max_deg_s": 2.3163151324688944,
+    "r_rate_max_deg_s": 5.806357872548133e-09,
     "gimbal_sat_fraction_of_burn": 0.0,
-    "gimbal_max_deg": 0.8417882511822403,
-    "alt_climb_6dof_m": 76585.67780171707,
+    "gimbal_max_deg": 0.41005178056935987,
+    "alt_climb_6dof_m": 81233.43459775858,
     "alt_3dof_m": 81254.6540304264,
-    "d_alt_m": -4668.976228709333,
-    "speed_6dof_m_s": 5224.591484682045,
+    "d_alt_m": -21.219432667829096,
+    "speed_6dof_m_s": 5312.628769033444,
     "speed_3dof_m_s": 5313.783551937722,
-    "d_speed_m_s": -89.1920672556771,
-    "fpa_6dof_deg": 19.460414072190392,
+    "d_speed_m_s": -1.1547829042783633,
+    "fpa_6dof_deg": 19.72749163862725,
     "fpa_3dof_deg": 19.70869025965001,
-    "d_fpa_deg": -0.24827618745961644,
-    "mach_6dof": 18.185518944158225,
+    "d_fpa_deg": 0.018801378977240546,
+    "mach_6dof": 18.91402830735799,
     "finite": true
   },
   "_meta": {
@@ -55,14 +55,14 @@
     },
     "settled_window_t_ge_60s": {
       "dt_0.01": {
-        "att_err_max_deg": 1.116,
-        "att_err_rms_deg": 0.515
+        "att_err_max_deg": 0.061,
+        "att_err_rms_deg": 0.036
       },
       "dt_0.005": {
-        "att_err_max_deg": 1.122,
-        "att_err_rms_deg": 0.516
+        "att_err_max_deg": 0.061,
+        "att_err_rms_deg": 0.036
       }
     },
-    "notes": "att_err_max/rms fields cover t in [0.5,100]; the large early-window numbers are the documented program-infeasibility transient near vertical (el-rate demanded at el~90 is unachievable by TVC at low speed)."
+    "notes": "att_err_max/rms fields cover t in [0.5,100]; the peak is the pitch-over kick at t=8 s (program el-rate step 0 -> -1.71 deg/s). An earlier revision reported a ~24 deg 'program-infeasibility transient' that was a transposed quaternion->DCM in tracking.py plus a launch IC tuned against it."
   }
 }
