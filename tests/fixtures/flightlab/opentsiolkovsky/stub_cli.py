@@ -30,6 +30,7 @@ def main(argv):
         return 0
     if len(argv) > 1 and argv[1] == "run":
         out = pathlib.Path(argv[argv.index("-o") + 1])
+        out.mkdir(parents=True, exist_ok=True)  # the real CLI creates its output dir
         src = pathlib.Path(os.environ["OT_STUB_FIXTURE"])
         for item in src.iterdir():
             if item.is_dir():
