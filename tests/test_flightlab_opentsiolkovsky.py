@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import shutil
 from pathlib import Path
 
@@ -69,6 +70,23 @@ def test_version_mismatch_rejected(tmp_path, monkeypatch):
     monkeypatch.setenv("ORBITOPT_OPENTSIOLKOVSKY", str(bogus))
     with pytest.raises(OTBinaryMissingError, match="0.9.0"):
         probe_version(find_binary())
+
+
+def test_adapter_git_sha_falls_back_to_schema_valid_hex_without_git(monkeypatch):
+    from orbitopt.flightlab.adapters import opentsiolkovsky as adapter
+
+    def _fail(*args, **kwargs):
+        raise OSError("git missing")
+
+    monkeypatch.setattr(adapter.subprocess, "run", _fail)
+    adapter._git_sha.cache_clear()
+    try:
+        sha = adapter._git_sha()
+        adapter._git_sha.cache_clear()
+        assert re.fullmatch(r"[0-9a-f]{7,40}", sha)
+        assert adapter._git_sha() == sha
+    finally:
+        adapter._git_sha.cache_clear()
 
 
 def test_build_config_validates_and_wires_target(target):

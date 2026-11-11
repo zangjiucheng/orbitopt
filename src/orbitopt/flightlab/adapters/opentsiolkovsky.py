@@ -73,7 +73,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
-from importlib import resources
+from importlib import metadata, resources
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -626,14 +626,26 @@ def run_ascent(target: FlightTarget, vehicle_path: Path,
     return run
 
 
+def _git_sha_fallback() -> str:
+    try:
+        version = metadata.version("orbitopt")
+    except metadata.PackageNotFoundError:
+        version = "unknown"
+    return hashlib.sha256(f"orbitopt:{version}".encode("utf-8")).hexdigest()[:40]
+
+
+@lru_cache(maxsize=1)
 def _git_sha() -> str:
-    """HEAD sha of this checkout, or 'unknown' -- same policy (and same
-    command) as orbitopt.flightlab.target_export._git_sha."""
+    """HEAD sha of this checkout, or a deterministic schema-valid fallback when
+    the package is installed without git metadata (wheels, tarballs, shallow
+    fetches)."""
     root = Path(__file__).resolve().parents[3]
     try:
         proc = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
                               capture_output=True, text=True, timeout=5)
     except (OSError, subprocess.SubprocessError):
-        return "unknown"
+        return _git_sha_fallback()
     sha = proc.stdout.strip()
-    return sha if proc.returncode == 0 and sha else "unknown"
+    if proc.returncode == 0 and re.fullmatch(r"[0-9a-f]{7,40}", sha):
+        return sha
+    return _git_sha_fallback()
