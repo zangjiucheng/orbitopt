@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zangjiucheng/orbitopt/schemas/flight-result-1.0.json",
+  "title": "orbitopt Flight Lab flight result (FlightResult v1)",
+  "description": "Root document of a Flight Lab run directory: manifest.json. The run dir is manifest.json + trajectories/<body_id>.csv (columns t_s,mass_kg,x_m,y_m,z_m,vx_m_s,vy_m_s,vz_m_s, extra columns allowed) + events.json + verification.json; the $defs here also validate those two sidecars ($defs/events and $defs/verification). A body's frame/epoch live in the manifest (bodies[]), not in its CSV; interchange inertial states are GCRS at UTC epoch + t_s. optimizer/physics/constraint success are reported separately and may be null (= not assessed) -- a missing verdict is never a pass. Cross-file rules (every body has a CSV, events reference known bodies, t_s monotonic, mass >= 0) are checked by orbitopt.flightlab.contract.read_run, matching orbitopt.scene_format's schema-plus-extra-checks split.",
+  "type": "object",
+  "required": ["schema_version", "run_id", "target_sha256", "vehicle_sha256", "engines", "git_sha", "created_utc", "assumptions", "bodies"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "run_id": {"type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"},
+    "target_sha256": {
+      "$ref": "#/$defs/digest",
+      "description": "SHA-256 hex of the canonical JSON of the FlightTarget document this run was flown against."
+    },
+    "vehicle_sha256": {"$ref": "#/$defs/digest"},
+    "engines": {
+      "type": "object",
+      "propertyNames": {"type": "string", "minLength": 1},
+      "additionalProperties": {"type": "string", "minLength": 1},
+      "description": "Simulated engine model -> version actually used (e.g. {\"synthetic-1a\": \"1.0.0\"})."
+    },
+    "git_sha": {"type": "string", "pattern": "^[0-9a-f]{7,40}$"},
+    "created_utc": {"$ref": "#/$defs/utc_timestamp"},
+    "assumptions": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "bodies": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/body"}}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "utc_timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?(Z|[+][-]?[0-9]{2}:[0-9]{2})$"
+    },
+    "frame": {"enum": ["GCRS", "ECEF", "LAUNCH_ECI"]},
+    "provenance": {"enum": ["official", "public_estimate", "illustrative"]},
+    "body": {
+      "type": "object",
+      "required": ["body_id", "parent_body_id", "frame", "epoch_utc", "t_start_s", "t_end_s", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "body_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$"},
+        "parent_body_id": {
+          "type": ["string", "null"],
+          "description": "null for a body that existed from ignition; a body born at staging names the body it separated from."
+        },
+        "frame": {"$ref": "#/$defs/frame"},
+        "epoch_utc": {"$ref": "#/$defs/utc_timestamp"},
+        "t_start_s": {"type": "number", "minimum": 0},
+        "t_end_s": {"type": "number", "minimum": 0},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": ["t_s", "kind", "body_id", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "t_s": {"type": "number", "minimum": 0},
+        "kind": {
+          "enum": ["ignition", "liftoff", "max_q", "meco", "separation", "seco",
+                   "boostback_start", "boostback_end", "entry_start", "entry_end",
+                   "landing_start", "touchdown", "impact"]
+        },
+        "body_id": {"type": "string", "minLength": 1},
+        "data": {"type": "object"}
+      }
+    },
+    "events": {"type": "array", "items": {"$ref": "#/$defs/event"}},
+    "verification": {
+      "type": "object",
+      "required": ["optimizer_converged", "physics_verified", "mission_constraints_passed", "checks"],
+      "additionalProperties": false,
+      "properties": {
+        "optimizer_converged": {"type": ["boolean", "null"], "description": "null = no optimizer ran or its outcome was not recorded."},
+        "physics_verified": {"type": ["boolean", "null"], "description": "Independent re-flight / analytic checks corroborate the trajectory."},
+        "mission_constraints_passed": {"type": ["boolean", "null"], "description": "Every FlightTarget constraint verdict."},
+        "checks": {"type": "array", "items": {"$ref": "#/$defs/check"}}
+      }
+    },
+    "check": {
+      "type": "object",
+      "required": ["id", "passed"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "passed": {"type": "boolean"},
+        "value": {"type": ["number", "null"]},
+        "limit": {"type": ["number", "null"]},
+        "unit": {"type": "string"},
+        "reason_code": {"type": "string", "description": "Machine-readable failure cause when passed is false."}
+      }
+    }
+  }
+}
