@@ -14,6 +14,8 @@ the single-scene 3D viewer directly, without going through examples/.
                                         # daily launch windows (no compute stack)
     orbitopt flight validate target.yaml # schema-check a Flight Lab flight target ...
     orbitopt flight validate runs/run-1  # ... or a FlightResult run directory
+    orbitopt flight export-target --site kourou --orbit 400x400@51.6 \
+        --date 2026-11-10 -o target.yaml  # build a FlightTarget from site/orbit/window
 
 The same commands work as ``python -m orbitopt ...``. Installed as the
 ``orbitopt`` and ``orbitopt-app`` console scripts (see pyproject.toml), so
@@ -197,7 +199,11 @@ def _cmd_launch_window(args):
 def _cmd_flight(args):
     """`orbitopt flight validate <target.yaml|run_dir>`: the Flight Lab
     contract check (orbitopt.flightlab.contract) -- a readable pass/fail like
-    `orbitopt validate`, no compute stack, no GUI imports."""
+    `orbitopt validate`, no compute stack, no GUI imports.
+    `orbitopt flight export-target`: build a FlightTarget YAML (FL-003)."""
+    if getattr(args, "flight_command", None) == "export-target":
+        _cmd_flight_export_target(args)
+        return
     import jsonschema
 
     from orbitopt.flightlab.contract import validate_path
@@ -208,6 +214,41 @@ def _cmd_flight(args):
         print(f"INVALID: {args.path}\n  {exc}")
         raise SystemExit(1) from None
     print(f"OK: {summary}")
+
+
+def _cmd_flight_export_target(args):
+    """`orbitopt flight export-target --site <id> --orbit <peri_km>x<apo_km>@<inc_deg>
+    [--raan <deg>] (--date <UTC> | --window <UTC>[/days]) -o target.yaml`:
+    the CLI front of orbitopt.flightlab.target_export.build_target -- a
+    readable error + exit 1 on an unknown site, an infeasible inclination or
+    an empty launch-window search, never a traceback."""
+    import jsonschema
+
+    from orbitopt.flightlab.contract import target_digest
+    from orbitopt.flightlab.target_export import build_target, parse_orbit_spec, parse_window_spec, save_target
+
+    if args.date is not None:
+        anchor, window_days = args.date, None
+    else:
+        anchor, window_days = parse_window_spec(args.window)
+    try:
+        peri_m, apo_m, inc = parse_orbit_spec(args.orbit)
+        kw = {} if window_days is None else {"window_days": window_days}
+        target = build_target(args.site, peri_m, apo_m, inc, raan_deg=args.raan,
+                              date_utc=anchor, **kw)
+        save_target(target, args.output)
+    except KeyError as exc:
+        print(f"ERROR: {exc.args[0] if exc.args else exc}")  # KeyError repr would wrap the message in quotes
+        raise SystemExit(1) from None
+    except (ValueError, jsonschema.ValidationError) as exc:
+        print(f"ERROR: {exc}")
+        raise SystemExit(1) from None
+    raan_note = (f", RAAN {target.target_orbit.raan_deg:g} deg"
+                 if target.target_orbit.raan_deg is not None else ", RAAN unconstrained")
+    print(f"wrote {args.output}: {target.mission.id} @ {target.mission.epoch_utc} "
+          f"(site {target.launch_site.name}{raan_note})")
+    print("validated against flight-target-1.0.json before writing "
+          f"(digest {target_digest(target.to_dict())[:12]}...)")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -271,6 +312,24 @@ def build_parser() -> argparse.ArgumentParser:
         "validate", help="schema-check a flight target YAML or a FlightResult run directory (no compute)")
     flight_validate.add_argument("path",
                                  help="a FlightTarget YAML/JSON file, or a run dir (manifest.json + trajectories/)")
+    flight_export = flight_sub.add_parser(
+        "export-target",
+        help="build a schema-valid FlightTarget YAML from a launch site, an orbit spec and a window (FL-003)")
+    flight_export.add_argument("--site", required=True, metavar="ID",
+                               help="launch-site id from orbitopt's site database "
+                                    "(cape-canaveral, vandenberg, starbase, kourou, jiuquan, wenchang, baikonur)")
+    flight_export.add_argument("--orbit", required=True, metavar="PERIxAPO@INC",
+                               help="target orbit: <peri_km>x<apo_km>@<inclination_deg>, e.g. 400x400@51.6")
+    flight_export.add_argument("--raan", type=float, default=None, metavar="DEG",
+                               help="constrain the target RAAN [deg]; the epoch becomes the first in-plane "
+                                    "node pass (J2 regression included) inside the search window")
+    flight_when = flight_export.add_mutually_exclusive_group(required=True)
+    flight_when.add_argument("--date", metavar="UTC",
+                             help="earliest-liftoff anchor, e.g. 2026-11-10 or 2026-11-10T12:00:00Z")
+    flight_when.add_argument("--window", metavar="UTC[/DAYS]",
+                             help="same anchor with an explicit node-search window in days, e.g. 2026-11-10/5")
+    flight_export.add_argument("-o", "--output", required=True, metavar="PATH",
+                               help="output FlightTarget YAML path (written only after schema validation)")
     return parser
 
 

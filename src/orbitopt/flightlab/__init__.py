@@ -40,3 +40,18 @@ __all__ = [
     "validate_target",
     "write_run",
 ]
+
+# target_export needs numpy (it asks orbitopt.launch_windows for node passes),
+# so its names resolve lazily: `import orbitopt.flightlab` stays stdlib-only,
+# and `from orbitopt.flightlab import build_target` works either way.
+_LAZY = ("build_target", "feasibility_report", "parse_orbit_spec", "parse_window_spec", "save_target")
+
+__all__ += list(_LAZY)
+
+
+def __getattr__(name):
+    if name in _LAZY:
+        from orbitopt.flightlab import target_export
+
+        return getattr(target_export, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
