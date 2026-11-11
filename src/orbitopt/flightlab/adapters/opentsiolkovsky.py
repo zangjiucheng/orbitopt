@@ -69,8 +69,9 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from functools import lru_cache
 from importlib import metadata, resources
@@ -81,6 +82,7 @@ import jsonschema
 import yaml
 
 from orbitopt.flightlab import frames
+from orbitopt.flightlab import checks as gate_checks
 from orbitopt.flightlab.contract import (
     Event,
     FlightRun,
@@ -526,11 +528,14 @@ def _verification(summary: Mapping[str, Any], tracks: Sequence[BodyTrack],
 
 def parse_ot_outputs(ot_out_dir: Path, target: FlightTarget, vehicle: Vehicle,
                      run_id: str, git_sha: str, config_sha256: str,
-                     vehicle_sha256: str) -> FlightRun:
+                     vehicle_sha256: str,
+                     git_sha_note: str | None = None) -> FlightRun:
     """The OT output directory (trajectory.csv + summary.json + bodies/) ->
     a FlightRun object (no disk write). Exposed for tests and re-analysis of
     recorded OT runs; run_ascent is the full pipeline. Frame conversion,
-    body splitting and event mapping are documented at the module docstring."""
+    body splitting and event mapping are documented at the module docstring.
+    The returned verification is the full Gate-B verdict against ``target``;
+    OT's own adapter checks survive inside it."""
     summary = json.loads((ot_out_dir / "summary.json").read_text(encoding="utf-8"))
     main_rows = _read_ot_csv(ot_out_dir / "trajectory.csv")
     n_stages = len(vehicle.stages)
@@ -560,7 +565,9 @@ def parse_ot_outputs(ot_out_dir: Path, target: FlightTarget, vehicle: Vehicle,
     events = _mapped_events(summary, n_stages)
     known = {tr.body_id for tr in tracks}
     events = [e for e in events if e.body_id in known]  # defensive; OT ids always map
-    assumptions = (
+    if git_sha_note is None:
+        git_sha_note = _git_sha_note_for(git_sha)
+    assumptions = [
         f"OpenTsiolkovsky {OT_VERSION} (MIT, external binary -- not vendored; see NOTICE; "
         f"{PINNED_ASSET}, {PINNED_DIGEST_NOTE})",
         f"opentsiolkovsky run-config sha256 {config_sha256}",
@@ -568,19 +575,23 @@ def parse_ot_outputs(ot_out_dir: Path, target: FlightTarget, vehicle: Vehicle,
         "inertial) and converted to GCRS by orbitopt.flightlab.frames.to_gcrs at the epoch",
         "created_utc is the mission epoch: this adapter is a pure function of "
         "(target, vehicle, attitude program), so repeated calls write byte-identical runs",
-    ) + tuple(f"vehicle: {a}" for a in vehicle.assumptions) + tuple(target.assumptions)
-    return FlightRun(
+    ]
+    if git_sha_note:
+        assumptions.append(f"git_sha {git_sha}: {git_sha_note}")
+    initial = FlightRun(
         run_id=run_id,
         target_sha256=target_digest(target.to_dict()),
         vehicle_sha256=vehicle_sha256,
         git_sha=git_sha,
         created_utc=epoch_utc,
         engines={"opentsiolkovsky-cli": OT_VERSION},
-        assumptions=assumptions,
+        assumptions=tuple(assumptions + [f"vehicle: {a}" for a in vehicle.assumptions]
+                          + [f"target: {a}" for a in target.assumptions]),
         tracks=tuple(tracks),
         events=tuple(events),
         verification=_verification(summary, tracks, target),
     )
+    return replace(initial, verification=gate_checks.evaluate(initial, target))
 
 
 # --------------------------------------------------------------------------
@@ -613,9 +624,10 @@ def run_ascent(target: FlightTarget, vehicle_path: Path,
     out.mkdir(parents=True, exist_ok=True)
     scratch = Path(tempfile.mkdtemp(prefix=".ot-scratch-", dir=out))
     try:
+        git_sha, git_sha_note = _git_sha_provenance()
         _run_binary(binary, config, scratch / "ot", timeout_s)
-        run = parse_ot_outputs(scratch / "ot", target, vehicle, run_id, _git_sha(),
-                               config_sha, vehicle_sha)
+        run = parse_ot_outputs(scratch / "ot", target, vehicle, run_id, git_sha,
+                               config_sha, vehicle_sha, git_sha_note=git_sha_note)
         raw = out / _RAW_DIR
         if raw.exists():
             shutil.rmtree(raw)
@@ -626,26 +638,81 @@ def run_ascent(target: FlightTarget, vehicle_path: Path,
     return run
 
 
-def _git_sha_fallback() -> str:
+_GIT_SHA_RE = re.compile(r"[0-9a-f]{7,40}")
+
+
+def _package_version() -> str:
     try:
-        version = metadata.version("orbitopt")
-    except metadata.PackageNotFoundError:
-        version = "unknown"
-    return hashlib.sha256(f"orbitopt:{version}".encode("utf-8")).hexdigest()[:40]
+        return metadata.version("orbitopt")
+    except Exception:
+        return "unknown"
 
 
-@lru_cache(maxsize=1)
-def _git_sha() -> str:
-    """HEAD sha of this checkout, or a deterministic schema-valid fallback when
-    the package is installed without git metadata (wheels, tarballs, shallow
-    fetches)."""
+def _installed_record_digest() -> str:
+    try:
+        files = metadata.files("orbitopt") or []
+        located = sorted(str(f.locate()) for f in files)
+    except Exception:
+        return ""
+    if not located:
+        return ""
+    return hashlib.sha256("\n".join(located).encode("utf-8")).hexdigest()[:16]
+
+
+def _git_sha_fallback() -> str:
+    parts = [
+        "orbitopt-git-sha-fallback",
+        _package_version(),
+        str(Path(__file__).resolve()),
+        sys.version,
+        sys.executable,
+        _installed_record_digest(),
+    ]
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:40]
+
+
+def _git_sha_fallback_reason(sha: str) -> str:
+    root = Path(__file__).resolve().parents[3]
+    return (f"not a Git revision: orbitopt {_package_version()} installed at {root} "
+            f"exposes no usable git metadata; deterministic build-provenance fallback {sha}")
+
+
+def _git_sha_provenance_uncached() -> tuple[str, str]:
+    env_sha = (os.environ.get("ORBITOPT_GIT_SHA", "").strip()
+               or os.environ.get("GIT_SHA", "").strip()).lower()
+    if env_sha:
+        if _GIT_SHA_RE.fullmatch(env_sha):
+            return env_sha, ""
+        sha = _git_sha_fallback()
+        return sha, (f"not a Git revision: ORBITOPT_GIT_SHA/GIT_SHA is set but not a valid "
+                     f"hex revision; { _git_sha_fallback_reason(sha)[len('not a Git revision: '):]}")
     root = Path(__file__).resolve().parents[3]
     try:
         proc = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
                               capture_output=True, text=True, timeout=5)
     except (OSError, subprocess.SubprocessError):
-        return _git_sha_fallback()
-    sha = proc.stdout.strip()
-    if proc.returncode == 0 and re.fullmatch(r"[0-9a-f]{7,40}", sha):
-        return sha
-    return _git_sha_fallback()
+        proc = None
+    if proc is not None:
+        sha = proc.stdout.strip().lower()
+        if proc.returncode == 0 and _GIT_SHA_RE.fullmatch(sha):
+            return sha, ""
+    sha = _git_sha_fallback()
+    return sha, _git_sha_fallback_reason(sha)
+
+
+@lru_cache(maxsize=1)
+def _git_sha_provenance() -> tuple[str, str]:
+    """Returns ``(git_sha, provenance_note)``: HEAD sha of this checkout when git
+    metadata is usable, otherwise a deterministic schema-valid fallback plus a
+    human-readable note saying the value is not a Git revision."""
+    return _git_sha_provenance_uncached()
+
+
+@lru_cache(maxsize=1)
+def _git_sha() -> str:
+    return _git_sha_provenance()[0]
+
+
+def _git_sha_note_for(git_sha: str) -> str:
+    current, note = _git_sha_provenance()
+    return note if git_sha == current else ""

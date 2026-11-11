@@ -80,13 +80,30 @@ def test_adapter_git_sha_falls_back_to_schema_valid_hex_without_git(monkeypatch)
 
     monkeypatch.setattr(adapter.subprocess, "run", _fail)
     adapter._git_sha.cache_clear()
+    adapter._git_sha_provenance.cache_clear()
     try:
         sha = adapter._git_sha()
-        adapter._git_sha.cache_clear()
+        sha2, note = adapter._git_sha_provenance()
         assert re.fullmatch(r"[0-9a-f]{7,40}", sha)
+        assert sha2 == sha
         assert adapter._git_sha() == sha
+        assert note.startswith("not a Git revision")
     finally:
         adapter._git_sha.cache_clear()
+        adapter._git_sha_provenance.cache_clear()
+
+
+def test_run_ascent_records_fallback_git_sha_provenance(stub, target, tmp_path, monkeypatch):
+    from orbitopt.flightlab.adapters import opentsiolkovsky as adapter
+
+    sha = "f" * 40
+    note = "not a Git revision: test fallback"
+    monkeypatch.setattr(adapter, "_git_sha_provenance", lambda: (sha, note))
+    out = tmp_path / "run"
+    run_ascent(target, VEHICLE, None, out)
+    manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["git_sha"] == sha
+    assert any(a == f"git_sha {sha}: {note}" for a in manifest["assumptions"])
 
 
 def test_build_config_validates_and_wires_target(target):
@@ -144,7 +161,8 @@ def test_run_ascent_recorded_outputs(stub, target, tmp_path):
     assert checks["mass-non-negative"].passed
     assert checks["mass-continuity-stage2"].passed
     assert checks["max-q-within-limit"].value == pytest.approx(36690.2, rel=1e-3)
-    assert rr.verification.mission_constraints_passed is True
+    assert rr.verification.mission_constraints_passed is False
+    assert checks["recovery-propellant-reserve"].reason_code == "RECOVERY_PROPELLANT_RESERVE_DATA_MISSING"
     manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["engines"] == {"opentsiolkovsky-cli": "1.0.0"}
     assert any("sha256" in a for a in manifest["assumptions"])
