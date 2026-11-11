@@ -6,15 +6,14 @@ every contract event becoming a timeline marker.
 
 The contract-to-scene frame rule: a run may only be rendered once every
 sample sits in the scene's GCRS. ``GCRS`` tracks render as-is; ``LAUNCH_ECI``
-tracks are converted here with the constant Rz(+GMST(epoch)) rotation their
-definition licenses (launch-aligned, non-rotating, aligned with ECEF at the
-track's epoch -- so only the epoch's Earth-orientation angle separates it
-from GCRS, no rotating-frame velocity term). ``ECEF`` is NOT convertible here:
-its position/velocity pair needs the FL-002 frame bridge's omega-cross-r
-velocity term, so an ECEF track is rejected with a clear error rather than
-rendered wrong. Anything failing the run contract (bad frame enum, unparseable
-or missing epoch, non-monotonic time, ...) raises before a single actor is
-drawn -- a bad run must never render.
+tracks are converted through the FL-002 frame bridge (``frames.to_gcrs``), so
+the exported trail uses the same authoritative astropy/ITRS conversion as the
+contract pipeline rather than a GMST-only approximation. ``ECEF`` is NOT
+convertible here: its position/velocity pair needs the FL-002 frame bridge's
+omega-cross-r velocity term, so an ECEF track is rejected with a clear error
+rather than rendered wrong. Anything failing the run contract (bad frame enum,
+unparseable or missing epoch, non-monotonic time, mass discontinuity, ...)
+raises before a single actor is drawn -- a bad run must never render.
 
 Scene-side conventions mirror orbitopt.viz.geo_raising / starship_flight
 (km-unit Earth scene) but this module re-implements the handful of Earth
@@ -41,6 +40,7 @@ from orbitopt.scene_format import validate_scene
 from orbitopt.timescales import utc_datetime_to_mjd2000, utc_mjd2000_to_tdb_seconds
 
 from orbitopt.flightlab.contract import FlightRun, _parse_utc
+from orbitopt.flightlab.frames import to_gcrs
 
 #: Earth rendering constants (the scene's distanceUnit is always km here).
 EARTH_RADIUS_KM = 6378.137  # WGS-84 equatorial radius
@@ -149,19 +149,12 @@ def _km(v: float) -> float:
     return round(v / 1000.0, 3) + 0.0
 
 
-def _gcrs_position_km(track, c: float, s: float) -> list:
-    """Track samples in km, rotated LAUNCH_ECI -> GCRS when needed: a vector
-    expressed in a frame aligned with ECEF at epoch becomes a GCRS vector
-    through Rz(+GMST) (the frame's x-axis sits at RA = GMST)."""
-    if track.frame == "GCRS":
-        return [[_km(x), _km(y), _km(z)] for x, y, z in track.position_m]
-    return [[_km(c * x - s * y), _km(s * x + c * y), _km(z)] for x, y, z in track.position_m]
-
-
-def _gcrs_velocity_km_s(track, c: float, s: float) -> list:
-    if track.frame == "GCRS":
-        return [[_km(vx), _km(vy), _km(vz)] for vx, vy, vz in track.velocity_m_s]
-    return [[_km(c * vx - s * vy), _km(s * vx + c * vy), _km(vz)] for vx, vy, vz in track.velocity_m_s]
+def _gcrs_track_state(track, epoch: datetime) -> tuple[list, list]:
+    r, v = to_gcrs(track.position_m, track.velocity_m_s, track.frame, epoch, track.t_s)
+    return (
+        [[_km(float(x)), _km(float(y)), _km(float(z))] for x, y, z in r],
+        [[_km(float(vx)), _km(float(vy)), _km(float(vz))] for vx, vy, vz in v],
+    )
 
 
 def _fmt_t(seconds: float) -> str:
@@ -240,15 +233,12 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True) -> dict:
     epoch = _check_run(run)
     mjd2000 = utc_datetime_to_mjd2000(epoch)
     gmst = _gmst_deg(mjd2000)
-    th = math.radians(gmst)
-    c, s = math.cos(th), math.sin(th)
 
     bodies = [_earth_body(earth_texture, gmst)]
     for i, track in enumerate(run.tracks):
         # Convert once per track: km positions + km/s velocities, both in
-        # GCRS (LAUNCH_ECI rotated onto it by Rz(+GMST) at the mission epoch).
-        positions_km = _gcrs_position_km(track, c, s)
-        velocities_km_s = _gcrs_velocity_km_s(track, c, s)
+        # GCRS (LAUNCH_ECI goes through the FL-002 frame bridge).
+        positions_km, velocities_km_s = _gcrs_track_state(track, epoch)
         entry = _track_body_entry(track, TRAIL_PALETTE[i % len(TRAIL_PALETTE)],
                                   positions_km, velocities_km_s)
         bodies.append(entry)

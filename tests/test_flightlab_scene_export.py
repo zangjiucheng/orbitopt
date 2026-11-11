@@ -17,6 +17,7 @@ import pytest
 
 from orbitopt.cli import main as cli_main
 from orbitopt.flightlab.contract import BodyTrack, Event, FlightRun, read_run, write_run
+from orbitopt.flightlab.frames import to_gcrs
 from orbitopt.flightlab.scene_export import _gmst_deg, run_to_scene
 from orbitopt.scene_format import read_scene, validate_scene
 from orbitopt.timescales import utc_datetime_to_mjd2000
@@ -31,6 +32,10 @@ def _copy_run(tmp_path):
         shutil.rmtree(dest)
     shutil.copytree(RUN_FIXTURE, dest)
     return dest
+
+
+def _epoch_dt():
+    return datetime.fromisoformat(EPOCH.replace("Z", "+00:00"))
 
 
 def _track(body_id, frame="GCRS", epoch=EPOCH, t=((0.0, 10.0)), mass=((1000.0, 900.0)),
@@ -79,7 +84,7 @@ def test_bodies_appear_and_disappear(fixture_scene):
     assert by_id["upper_stage"]["tEnd"] == 540.0
 
 
-def test_gcrs_tracks_render_verbatim_launch_eci_rotates():
+def test_gcrs_tracks_render_verbatim_launch_eci_uses_frame_bridge():
     run = read_run(RUN_FIXTURE)
     by_id = {b["id"]: b for b in run_to_scene(run)["bodies"]}
     # GCRS tracks render as-is (m -> km, mm-rounded).
@@ -88,31 +93,46 @@ def test_gcrs_tracks_render_verbatim_launch_eci_rotates():
         assert km[0] == pytest.approx(raw[0] / 1000.0, abs=1e-3)
         assert km[1] == pytest.approx(raw[1] / 1000.0, abs=1e-3)
         assert km[2] == pytest.approx(raw[2] / 1000.0, abs=1e-3)
-    # LAUNCH_ECI -> GCRS is a pure rotation: |r| and z preserved (Rz only),
-    # and a sample off the z-axis moves -- so it really was rotated.
+    # LAUNCH_ECI -> GCRS goes through the FL-002 frame bridge: exported km
+    # positions must match frames.to_gcrs, not just a GMST-only Rz rotation.
     stack = next(t for t in run.tracks if t.body_id == "stack")
+    stack_gcrs, _ = to_gcrs(stack.position_m, stack.velocity_m_s, stack.frame,
+                           _epoch_dt(), stack.t_s)
     moved = False
-    for (x, y, z), (kx, ky, kz) in zip(stack.position_m, by_id["stack"]["trail"]["positions"]):
+    for raw, (kx, ky, kz), (gx, gy, gz) in zip(
+            stack.position_m, by_id["stack"]["trail"]["positions"], stack_gcrs):
+        assert kx == pytest.approx(gx / 1000.0, abs=1e-3)
+        assert ky == pytest.approx(gy / 1000.0, abs=1e-3)
+        assert kz == pytest.approx(gz / 1000.0, abs=1e-3)
         assert math.dist((0.0, 0.0, 0.0), (kx, ky, kz)) * 1000.0 == pytest.approx(
-            math.dist((0.0, 0.0, 0.0), (x, y, z)), rel=2e-4)
-        assert kz == pytest.approx(z / 1000.0, abs=1e-3)
-        moved = moved or (kx, ky) != (pytest.approx(x / 1000.0, abs=1e-3),
-                                      pytest.approx(y / 1000.0, abs=1e-3))
+            math.dist((0.0, 0.0, 0.0), raw), rel=2e-4)
+        moved = moved or math.dist((0.0, 0.0, 0.0), (kx - raw[0] / 1000.0,
+                                                       ky - raw[1] / 1000.0,
+                                                       kz - raw[2] / 1000.0)) > 1e-3
     assert moved
 
 
-def test_launch_eci_rotation_matches_expectation():
+def test_launch_eci_rotation_uses_frame_bridge_not_gmst_only():
     run = read_run(RUN_FIXTURE)
     stack = next(b for b in run_to_scene(run)["bodies"] if b["id"] == "stack")
     track = next(t for t in run.tracks if t.body_id == "stack")
     assert track.frame == "LAUNCH_ECI"
-    epoch_dt = datetime.fromisoformat(EPOCH.replace("Z", "+00:00"))
+    epoch_dt = _epoch_dt()
+    bridge_r, _ = to_gcrs(track.position_m, track.velocity_m_s, track.frame,
+                          epoch_dt, track.t_s)
     theta = math.radians(_gmst_deg(utc_datetime_to_mjd2000(epoch_dt)))
     c, s = math.cos(theta), math.sin(theta)
-    for (x, y, z), km in zip(track.position_m, stack["trail"]["positions"]):
-        assert km[0] == pytest.approx((c * x - s * y) / 1000.0, abs=1e-3)
-        assert km[1] == pytest.approx((s * x + c * y) / 1000.0, abs=1e-3)
-        assert km[2] == pytest.approx(z / 1000.0, abs=1e-3)
+    gmst_moved = False
+    for (x, y, z), km, (gx, gy, gz) in zip(track.position_m, stack["trail"]["positions"], bridge_r):
+        assert km[0] == pytest.approx(gx / 1000.0, abs=1e-3)
+        assert km[1] == pytest.approx(gy / 1000.0, abs=1e-3)
+        assert km[2] == pytest.approx(gz / 1000.0, abs=1e-3)
+        gmst_moved = gmst_moved or (
+            abs(km[0] - (c * x - s * y) / 1000.0) > 1e-3
+            or abs(km[1] - (s * x + c * y) / 1000.0) > 1e-3
+            or abs(km[2] - z / 1000.0) > 1e-3
+        )
+    assert gmst_moved
 
 
 def test_events_become_timeline_markers(fixture_scene):
@@ -135,7 +155,11 @@ def test_earth_texture_toggle():
     run = read_run(RUN_FIXTURE)
     earth = next(b for b in run_to_scene(run, earth_texture=True)["bodies"] if b["id"] == "earth")
     assert earth["texture"] == "earth_daymap.jpg" and earth["radius"] == pytest.approx(6378.137, abs=1e-3)
-    assert len(earth["orientationBasis"]) == 3  # Rz(GMST at the mission epoch)
+    theta = math.radians(_gmst_deg(utc_datetime_to_mjd2000(_epoch_dt())))
+    c, s = math.cos(theta), math.sin(theta)
+    assert earth["orientationBasis"] == [[pytest.approx(c), pytest.approx(-s), pytest.approx(0.0)],
+                                         [pytest.approx(s), pytest.approx(c), pytest.approx(0.0)],
+                                         [pytest.approx(0.0), pytest.approx(0.0), pytest.approx(1.0)]]
     bare = next(b for b in run_to_scene(run, earth_texture=False)["bodies"] if b["id"] == "earth")
     assert "texture" not in bare and "orientationBasis" not in bare
     validate_scene(run_to_scene(run, earth_texture=False))  # still a valid scene
