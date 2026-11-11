@@ -70,7 +70,8 @@ def _run_id_map(run: FlightRun) -> dict:
 def _target_without_flight_loads(target):
     constraints = replace(target.constraints, max_dynamic_pressure_pa=None,
                           max_specific_acceleration_g=None)
-    return replace(target, constraints=constraints)
+    recovery = replace(target.recovery, kind="none", min_propellant_reserve_kg=None)
+    return replace(target, constraints=constraints, recovery=recovery)
 
 
 def _hash_tree(root: Path) -> dict:
@@ -174,6 +175,31 @@ def test_evaluate_sets_mission_constraints_passed_true_on_a_clean_low_orbit(targ
     assert {"insertion-above-atmosphere", "insertion-periapsis-above-minimum",
             "insertion-apoapsis-within-tolerance", "insertion-apoapsis-within-tolerance",
             "insertion-inclination-within-tolerance"} <= ids
+
+
+def test_evaluate_declared_recovery_reserve_fails_when_missing(target):
+    t = replace(target, constraints=replace(target.constraints, max_dynamic_pressure_pa=None,
+                                             max_specific_acceleration_g=None))
+    v = evaluate(_clean_orbit_run(400000.0), t)
+    assert not v.mission_constraints_passed
+    c = {c.id: c for c in v.checks}["recovery-propellant-reserve"]
+    assert not c.passed
+    assert c.reason_code == "RECOVERY_PROPELLANT_RESERVE_DATA_MISSING"
+
+
+def test_evaluate_reassesses_existing_max_q_against_new_target_limit(target):
+    run = _clean_orbit_run(400000.0)
+    old = Check(id="max-q-within-limit", passed=True, value=36690.0,
+                limit=60000.0, unit="Pa")
+    run = replace(run, verification=Verification(checks=(old,)))
+    t = _target_without_flight_loads(target)
+    t = replace(t, constraints=replace(t.constraints, max_dynamic_pressure_pa=1.0))
+    v = evaluate(run, t)
+    c = {c.id: c for c in v.checks}["max-q-within-limit"]
+    assert not c.passed
+    assert c.value == pytest.approx(36690.0)
+    assert c.limit == pytest.approx(1.0)
+    assert not v.mission_constraints_passed
 
 
 def test_recovery_reserve_missing_data_fails_instead_of_passing(target):

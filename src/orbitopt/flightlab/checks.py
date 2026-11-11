@@ -9,16 +9,17 @@ verdict, without importing an ascent backend or a propagator.
 
 Which checks ``evaluate`` assesses
 ----------------------------------
-* Kept as-is from the run (only *re-assessed* where the run cannot speak):
+* Kept from the run, but re-assessed against the target in front of us:
   the adapter's data-integrity checks (mass bookkeeping), its max-Q / max-g
-  checks (OpenTsiolkovsky measures those continuously, so its summary beats
-  a CSV re-read), any liftoff T/W / propellant-reserve check the caller put
-  in (those need the vehicle file, which ``evaluate`` deliberately does not
-  take), and any orbit re-fly check (assessed once by ``orbit_refly`` in
-  orbitopt.flightlab.simulate).
+  checks (OpenTsiolkovsky measures those continuously, so its summary value
+  is used, but the target limit comes from the target), any liftoff T/W /
+  propellant-reserve check the caller put in (those need the vehicle file,
+  which ``evaluate`` deliberately does not take), and any orbit re-fly check
+  (assessed once by ``orbit_refly`` in orbitopt.flightlab.simulate). A target
+  limit with no stored value is a failed data-missing check, not silence.
 * Recomputed here from the run's own GCRS tracks: the insertion orbit
   elements at SECO (periapsis / apoapsis / inclination / RAAN vs the target
-  and its tolerances), and -- only when no backend settled it -- max-Q from
+  and its tolerances), and -- only when no backend value exists -- max-Q from
   the trajectory CSV's ``dynamic_pressure_pa`` extras.
 
 ``mission_constraints_passed`` is the conjunction of the mission-constraint
@@ -374,37 +375,104 @@ def max_q_check_from_tracks(run: FlightRun, limit_pa: float) -> Check | None:
 # the Gate-B verdict
 # --------------------------------------------------------------------------
 
+def _find_check(checks: Sequence[Check], check_id: str) -> Check | None:
+    return next((c for c in checks if c.id == check_id), None)
+
+
+def _replace_or_append(checks: list[Check], replacement: Check) -> None:
+    for i, c in enumerate(checks):
+        if c.id == replacement.id:
+            checks[i] = replacement
+            return
+    checks.append(replacement)
+
+
+def _reassess_limit(checks: list[Check], check_id: str, limit: float, unit: str, *,
+                    greater_is_ok: bool, fail_code: str) -> Check | None:
+    old = _find_check(checks, check_id)
+    if old is None or old.value is None:
+        return None
+    value = float(old.value)
+    limit = float(limit)
+    passed = value >= limit if greater_is_ok else value <= limit
+    new = Check(
+        id=check_id, passed=passed, value=value, limit=limit, unit=unit,
+        reason_code="" if passed else fail_code,
+    )
+    _replace_or_append(checks, new)
+    return new
+
+
 def evaluate(run: FlightRun, target: FlightTarget) -> Verification:
     """The Gate-B verdict for ``run`` against ``target``: keeps the run's
-    backend and re-fly checks, recomputes the insertion checks from the
-    tracks, settles max-Q from the CSVs when no backend reported it, and
-    conjoins the mission-constraint checks into ``mission_constraints_passed``.
+    backend and re-fly checks, re-assesses every limit that ``target`` declares
+    against its stored value, recomputes the insertion checks from the tracks,
+    settles max-Q from the CSVs when no backend reported it, and conjoins the
+    resulting mission-constraint checks into ``mission_constraints_passed``.
     Pure function of ``(run, target)`` -- never mutates the run; the booleans
-    stay independent (None = not assessed, never "passed"). See the module
-    docstring for the Gate G5 thresholds this encodes."""
+    stay independent (None = not assessed, never "passed"). A declared reserve
+    or flight-load limit with no backing value is a failed data-missing check,
+    not silence. See the module docstring for the Gate G5 thresholds this
+    encodes."""
     kept = [c for c in run.verification.checks if c.id not in {
         "insertion-above-atmosphere", "insertion-periapsis-above-minimum",
         "insertion-periapsis-within-tolerance", "insertion-apoapsis-within-tolerance",
         "insertion-inclination-within-tolerance", "insertion-raan-within-tolerance",
     }]
-    if (target.constraints.max_dynamic_pressure_pa is not None
-            and not any(c.id == "max-q-within-limit" for c in kept)):
-        fallback = max_q_check_from_tracks(run, float(target.constraints.max_dynamic_pressure_pa))
-        if fallback is not None:
-            kept.append(fallback)
-        else:
-            kept.append(Check(
-                id="max-q-within-limit", passed=False,
-                limit=float(target.constraints.max_dynamic_pressure_pa), unit="Pa",
-                reason_code="MAX_Q_DATA_MISSING",
+    declared_ids = set()
+    if target.constraints.max_dynamic_pressure_pa is not None:
+        declared_ids.add("max-q-within-limit")
+    if target.constraints.max_specific_acceleration_g is not None:
+        declared_ids.add("max-accel-within-limit")
+    if target.constraints.min_propellant_reserve_kg is not None:
+        declared_ids.add("propellant-reserve")
+    if (target.recovery.kind != "none"
+            and target.recovery.min_propellant_reserve_kg is not None):
+        declared_ids.add("recovery-propellant-reserve")
+    kept = [c for c in kept if c.id not in CONSTRAINT_CHECK_IDS or c.id in declared_ids
+            or c.id == "liftoff-thrust-to-weight"]
+
+    limit = target.constraints.max_dynamic_pressure_pa
+    if limit is not None:
+        if _reassess_limit(kept, "max-q-within-limit", limit, "Pa",
+                           greater_is_ok=False, fail_code="max_q_exceeded") is None:
+            fallback = max_q_check_from_tracks(run, float(limit))
+            if fallback is not None:
+                _replace_or_append(kept, fallback)
+            else:
+                _replace_or_append(kept, Check(
+                    id="max-q-within-limit", passed=False, limit=float(limit), unit="Pa",
+                    reason_code="MAX_Q_DATA_MISSING",
+                ))
+
+    limit = target.constraints.max_specific_acceleration_g
+    if limit is not None:
+        if _reassess_limit(kept, "max-accel-within-limit", limit, "g",
+                           greater_is_ok=False, fail_code="max_accel_exceeded") is None:
+            _replace_or_append(kept, Check(
+                id="max-accel-within-limit", passed=False, limit=float(limit), unit="g",
+                reason_code="MAX_ACCEL_DATA_MISSING",
             ))
-    if (target.constraints.max_specific_acceleration_g is not None
-            and not any(c.id == "max-accel-within-limit" for c in kept)):
-        kept.append(Check(
-            id="max-accel-within-limit", passed=False,
-            limit=float(target.constraints.max_specific_acceleration_g), unit="g",
-            reason_code="MAX_ACCEL_DATA_MISSING",
-        ))
+
+    limit = target.constraints.min_propellant_reserve_kg
+    if limit is not None:
+        if _reassess_limit(kept, "propellant-reserve", limit, "kg",
+                           greater_is_ok=True, fail_code="PROPELLANT_RESERVE_LOW") is None:
+            _replace_or_append(kept, Check(
+                id="propellant-reserve", passed=False, limit=float(limit), unit="kg",
+                reason_code="PROPELLANT_RESERVE_DATA_MISSING",
+            ))
+
+    limit = target.recovery.min_propellant_reserve_kg
+    if target.recovery.kind != "none" and limit is not None:
+        if _reassess_limit(kept, "recovery-propellant-reserve", limit, "kg",
+                           greater_is_ok=True,
+                           fail_code="PROPELLANT_RESERVE_LOW") is None:
+            _replace_or_append(kept, Check(
+                id="recovery-propellant-reserve", passed=False, limit=float(limit), unit="kg",
+                reason_code="RECOVERY_PROPELLANT_RESERVE_DATA_MISSING",
+            ))
+
     checks = kept + insertion_checks(run, target)
     constraints = [c for c in checks if c.id in CONSTRAINT_CHECK_IDS]
     return Verification(
