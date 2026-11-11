@@ -15,6 +15,11 @@ rather than rendered wrong. Anything failing the run contract (bad frame enum,
 unparseable or missing epoch, non-monotonic time, mass discontinuity, ...)
 raises before a single actor is drawn -- a bad run must never render.
 
+Earth-texture orientation uses the same authoritative frame-bridge matrix when
+its optional numpy/astropy dependencies are available. A base install may still
+export default-texture GCRS runs through the stdlib GMST fallback, and records
+that approximation as a scene assumption.
+
 Scene-side conventions mirror orbitopt.viz.geo_raising / starship_flight
 (km-unit Earth scene) but this module re-implements the handful of Earth
 constants it needs rather than importing ``orbitopt.viz``: no module in this
@@ -74,10 +79,34 @@ _EVENT_LABELS = {
 }
 
 
-def _earth_orientation_basis(epoch_utc: datetime) -> list:
-    from orbitopt.flightlab.frames import itrs_to_gcrs_matrix
+def _gmst_deg(mjd2000_utc: float) -> float:
+    """Greenwich mean sidereal time [deg] at UT1 ~= UTC (IAU 1982 linear
+    term) -- the same model as orbitopt.launch_windows.gmst_deg, restated
+    with ``math`` so this package stays dependency-light."""
+    d = mjd2000_utc - 0.5  # days since J2000.0 (12:00 TT ~= 12:00 UTC)
+    return (280.46061837 + 360.98564736629 * d) % 360.0
 
-    return itrs_to_gcrs_matrix(epoch_utc)
+
+def _gmst_only_basis(mjd2000_utc: float) -> list:
+    th = math.radians(_gmst_deg(mjd2000_utc))
+    c, s = math.cos(th), math.sin(th)
+    return [[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]]
+
+
+def _earth_orientation_basis(epoch_utc: datetime, mjd2000_utc: float) -> tuple[list, str]:
+    """Earth-texture basis, with provenance. The full FL-002 frame-bridge
+    matrix is preferred; a base install without its optional numpy/astropy
+    dependencies falls back to the stdlib GMST approximation so a GCRS run can
+    still render, while the fallback is recorded as a scene assumption."""
+    try:
+        from orbitopt.flightlab.frames import itrs_to_gcrs_matrix
+
+        return itrs_to_gcrs_matrix(epoch_utc), ""
+    except ImportError as exc:
+        return _gmst_only_basis(mjd2000_utc), (
+            "Earth texture orientation is the stdlib GMST Rz approximation because the "
+            f"optional frame bridge is unavailable ({exc})"
+        )
 
 
 def _check_track(track) -> None:
@@ -208,10 +237,9 @@ def _earth_body(earth_texture: bool, orientation_basis: list | None) -> dict:
         "radiusDisplay": EARTH_RADIUS_DISPLAY, "position": [0.0, 0.0, 0.0],
     }
     if earth_texture:
-        # orientationBasis is the same full FL-002 ITRS -> GCRS position
-        # rotation used for LAUNCH_ECI tracks, so the texture and the rendered
-        # trajectories share one Earth orientation rather than drifting by the
-        # GMST/nutation/polar-motion residual.
+        # orientationBasis is normally the full FL-002 ITRS -> GCRS position
+        # rotation used for LAUNCH_ECI tracks. A base install may instead get
+        # the stdlib GMST Rz fallback; run_to_scene records that assumption.
         if orientation_basis is None:
             raise ValueError("earth texture needs a frame-bridge orientation basis")
         earth.update({
@@ -237,8 +265,12 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True) -> dict:
     """
     epoch = _check_run(run)
     mjd2000 = utc_datetime_to_mjd2000(epoch)
+    orientation_basis = None
+    orientation_note = ""
+    if earth_texture:
+        orientation_basis, orientation_note = _earth_orientation_basis(epoch, mjd2000)
 
-    bodies = [_earth_body(earth_texture, _earth_orientation_basis(epoch) if earth_texture else None)]
+    bodies = [_earth_body(earth_texture, orientation_basis)]
     for i, track in enumerate(run.tracks):
         # Convert once per track: km positions + km/s velocities, both in
         # GCRS (LAUNCH_ECI goes through the FL-002 frame bridge).
@@ -290,5 +322,7 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True) -> dict:
             "missionConstraintsPassed": verification.mission_constraints_passed,
         },
     }
+    if orientation_note:
+        scene["sceneAssumptions"] = [orientation_note]
     validate_scene(scene)
     return scene

@@ -12,6 +12,7 @@ import math
 import shutil
 import subprocess
 import sys
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -40,6 +41,24 @@ def _epoch_dt():
     return datetime.fromisoformat(EPOCH.replace("Z", "+00:00"))
 
 
+def _all_gcrs_copy_run(tmp_path):
+    dest = tmp_path / "gcrs_run"
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(RUN_FIXTURE, dest)
+    run = read_run(dest)
+    tracks = []
+    for track in run.tracks:
+        if track.frame != "GCRS":
+            pos, vel = to_gcrs(track.position_m, track.velocity_m_s, track.frame,
+                               _epoch_dt(), track.t_s)
+            track = replace(track, frame="GCRS", position_m=tuple(pos.tolist()),
+                            velocity_m_s=tuple(vel.tolist()))
+        tracks.append(track)
+    write_run(dest, replace(run, tracks=tuple(tracks)))
+    return dest
+
+
 def _gmst_only_basis(mjd2000_utc: float) -> list:
     d = mjd2000_utc - 0.5
     theta = math.radians((280.46061837 + 360.98564736629 * d) % 360.0)
@@ -47,24 +66,31 @@ def _gmst_only_basis(mjd2000_utc: float) -> list:
     return [[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]]
 
 
-def test_base_install_flight_imports_without_numpy():
+def test_base_install_flight_to_scene_default_texture_without_numpy(tmp_path):
     root = Path(__file__).resolve().parents[1]
-    code = """
+    run_dir = _all_gcrs_copy_run(tmp_path)
+    out = tmp_path / "scene.json"
+    code = f"""
 import builtins
+BLOCK = {{'numpy', 'scipy', 'astropy'}}
 real_import = builtins.__import__
 def hook(name, *args, **kwargs):
-    if name == 'numpy' or name.startswith('numpy.'):
-        raise ModuleNotFoundError(f"base-install simulation: import of {name} blocked")
+    root = name.split('.', 1)[0]
+    if root in BLOCK:
+        raise ModuleNotFoundError(f"base-install simulation: import of {{name}} blocked")
     return real_import(name, *args, **kwargs)
 builtins.__import__ = hook
 import orbitopt.cli
-import orbitopt.flightlab.scene_export
+orbitopt.cli.main(['flight', 'to-scene', {str(run_dir)!r}, '-o', {str(out)!r}])
 print('ok')
 """
     proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
                           env={"PYTHONPATH": str(root / "src")}, timeout=20)
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.strip() == "ok"
+    assert proc.stdout.strip().splitlines()[-1] == "ok"
+    assert out.is_file()
+    scene = json.loads(out.read_text(encoding="utf-8"))
+    assert "sceneAssumptions" in scene
 
 
 def _track(body_id, frame="GCRS", epoch=EPOCH, t=((0.0, 10.0)), mass=((1000.0, 900.0)),
@@ -193,6 +219,18 @@ def test_earth_texture_toggle():
     bare = next(b for b in run_to_scene(run, earth_texture=False)["bodies"] if b["id"] == "earth")
     assert "texture" not in bare and "orientationBasis" not in bare
     validate_scene(run_to_scene(run, earth_texture=False))  # still a valid scene
+
+
+def test_earth_texture_fallback_records_scene_assumption(monkeypatch):
+    import orbitopt.flightlab.scene_export as scene_export
+
+    monkeypatch.setattr(scene_export, "_earth_orientation_basis",
+                        lambda epoch, mjd2000: (scene_export._gmst_only_basis(mjd2000), "fallback"))
+    scene = run_to_scene(read_run(RUN_FIXTURE), earth_texture=True)
+    assert scene["sceneAssumptions"] == ["fallback"]
+    assert scene["bodies"][0]["orientationBasis"] == _gmst_only_basis(
+        utc_datetime_to_mjd2000(_epoch_dt()))
+    validate_scene(scene)
 
 
 # ---------------------------------------------------------------- rejections
