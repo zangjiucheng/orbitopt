@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!--
+  Flight Lab E4 spike (#206): single throttleable liquid engine.
+  Vacuum Isp 320 s; 600 kg/s total propellant flow at full throttle
+  (1322.774 lbm/s) -> 1.8828 MN vacuum thrust, 100 s burn on 60 t.
+-->
+<rocket_engine name="spike_engine">
+  <isp> 320.0 </isp>
+  <propflowmax unit="LBS/SEC"> 1322.7736 </propflowmax>
+  <mixtureratio> 2.5 </mixtureratio>
+  <minthrottle> 0.0 </minthrottle>
+  <maxthrottle> 1.0 </maxthrottle>
+</rocket_engine>
