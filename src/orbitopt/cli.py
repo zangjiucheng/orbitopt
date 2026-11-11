@@ -381,7 +381,9 @@ def _cmd_flight_optimize(args):
             seed=args.seed, algorithm=args.algorithm,
             generations=args.generations, population=args.population,
             workers=args.workers or None, local=not args.no_local,
-            refly=not args.no_refly, timeout_s=args.timeout)
+            refly=not args.no_refly, timeout_s=args.timeout,
+            derive_window=not args.fixed_epoch, window_days=args.window_days,
+            sensitivity_offsets_s=tuple(args.sensitivity_offsets))
     except OptimizeAbort as exc:
         print(f"ERROR: {exc}")
         for code in exc.reason_codes:
@@ -407,6 +409,16 @@ def _cmd_flight_optimize(args):
     print(f"  objective {result['objective']}: {-best['objective']:.6g} kg"
           f"  [{result['algorithm']['global']}, {result['evaluations']} "
           f"evaluations, local: {result['algorithm']['local']}]")
+    raan = result.get("raan")
+    if raan:
+        print(f"  raan (GCRS):                {raan['achieved_raan_deg']:.3f} deg vs "
+              f"{raan['target_raan_deg']:.3f} deg, error {raan['error_deg']:+.3f} deg "
+              f"(tolerance {raan['tolerance_deg']:g} deg): {word(raan['passed'])}")
+        for row in raan.get("window_sensitivity", ()):
+            print(f"    liftoff {row['liftoff_offset_s']:+g} s "
+                  f"({row['liftoff_epoch_utc']}): RAAN {row['achieved_raan_deg']:.3f} deg, "
+                  f"error {row['error_deg']:+.3f} deg "
+                  f"{'PASS' if row['passed_within_tolerance'] else 'FAIL'}")
     for code in result["reason_codes"]:
         print(f"  {code}")
     for c in v.checks:
@@ -549,6 +561,17 @@ def build_parser() -> argparse.ArgumentParser:
                             help="skip the tudatpy insertion re-fly of the winner")
     flight_opt.add_argument("--timeout", type=float, default=300.0, metavar="S",
                             help="OpenTsiolkovsky subprocess timeout [s] (default 300)")
+    flight_opt.add_argument("--window-days", type=float, default=14.0, metavar="D",
+                            help="RAAN-constrained only: in-plane epoch search horizon "
+                                 "[days] from the target epoch (default 14)")
+    flight_opt.add_argument("--fixed-epoch", action="store_true",
+                            help="RAAN-constrained only: fly the epoch the target file "
+                                 "carries, do not derive the in-plane liftoff epoch (FL-203)")
+    flight_opt.add_argument("--sensitivity-offsets", type=float, nargs="*",
+                            default=[-60.0, 60.0], metavar="S",
+                            help="RAAN-constrained only: liftoff offsets [s] the winner is "
+                                 "re-flown at for the RAAN window-sensitivity report "
+                                 "(default: -60 60; pass no values to skip)")
     return parser
 
 

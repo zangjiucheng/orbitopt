@@ -9,11 +9,11 @@ temp directory, and reads the constraint residuals straight out of the Gate-B
 verdict (:func:`orbitopt.flightlab.checks.evaluate` -- the single source of
 truth: what the optimizer optimizes is exactly what the CLI later grades).
 
-Fitness vector layout (7 numbers, the pygmo constrained-UDP protocol -- see
-:meth:`AscentProblem.has_constraints`):
+Fitness vector layout (7 numbers -- 8 when the target constrains RAAN, FL-203;
+the pygmo constrained-UDP protocol, see :meth:`AscentProblem.has_constraints`):
 
     [ -objective,
-      eq_rp,  eq_ra,  eq_inc,                 # actual - target (m, m, deg)
+      eq_rp,  eq_ra,  eq_inc,  [eq_raan,]      # actual - target (m, m, deg, deg)
       ineq_maxq,  ineq_maxg,  ineq_reserve ]   # positive = violated
 
 The three eq residuals carry their sign (actual minus target; the target's
@@ -86,12 +86,43 @@ PENALTY_VIOLATION = 1.0e4
 _EQ_CHECKS = ("insertion-periapsis-within-tolerance",
               "insertion-apoapsis-within-tolerance",
               "insertion-inclination-within-tolerance")
+#: FL-203: the RAAN eq slot exists only when the target constrains RAAN --
+#: an unconstrained plane is not something the optimizer may drift.
+_EQ_RAAN_CHECK = "insertion-raan-within-tolerance"
 _INEQ_CHECKS = ("max-q-within-limit", "max-accel-within-limit", "propellant-reserve")
 
 _DEFAULT_WEIGHTS = {
-    "eq_rp": 1.0e-4, "eq_ra": 1.0e-4, "eq_inc": 10.0,
+    "eq_rp": 1.0e-4, "eq_ra": 1.0e-4, "eq_inc": 10.0, "eq_raan": 10.0,
     "ineq_maxq": 1.0e-4, "ineq_maxg": 10.0, "ineq_reserve": 1.0e-3,
 }
+
+#: per-check (best_fitness key, residual_violations key, INFEASIBLE_* code)
+#: for the FL-202 report -- keyed by check id so the RAAN slot can join or
+#: leave with the target (FL-203) without any positional bookkeeping.
+REPORT_NAMES = {
+    "insertion-periapsis-within-tolerance": ("eq_periapsis_m", "periapsis_m",
+                                             "INFEASIBLE_PERIAPSIS_OUT_OF_TOLERANCE"),
+    "insertion-apoapsis-within-tolerance": ("eq_apoapsis_m", "apoapsis_m",
+                                            "INFEASIBLE_APOAPSIS_OUT_OF_TOLERANCE"),
+    "insertion-inclination-within-tolerance": ("eq_inclination_deg", "inclination_deg",
+                                               "INFEASIBLE_INCLINATION_OUT_OF_TOLERANCE"),
+    _EQ_RAAN_CHECK: ("eq_raan_deg", "raan_deg", "INFEASIBLE_RAAN_OUT_OF_TOLERANCE"),
+    "max-q-within-limit": ("ineq_max_q_pa", "max_q_pa", "INFEASIBLE_MAX_Q_EXCEEDED"),
+    "max-accel-within-limit": ("ineq_max_accel_g", "max_accel_g",
+                               "INFEASIBLE_MAX_ACCEL_EXCEEDED"),
+    "propellant-reserve": ("ineq_propellant_reserve_kg", "propellant_reserve_kg",
+                           "INFEASIBLE_PROPELLANT_RESERVE"),
+}
+
+#: residual-slot penalty-weight names, in fitness order (FL-202's
+#: ``_scaled_weights`` and :meth:`AscentProblem.penalty_fitness`).
+_SLOT_NAMES = {"insertion-periapsis-within-tolerance": "eq_rp",
+               "insertion-apoapsis-within-tolerance": "eq_ra",
+               "insertion-inclination-within-tolerance": "eq_inc",
+               _EQ_RAAN_CHECK: "eq_raan",
+               "max-q-within-limit": "ineq_maxq",
+               "max-accel-within-limit": "ineq_maxg",
+               "propellant-reserve": "ineq_reserve"}
 
 
 class AscentProblem:
@@ -123,6 +154,23 @@ class AscentProblem:
         self._target_sha = target_digest(target.to_dict())
         self._lo, self._hi = ascent_param.bounds(self._vehicle_doc, target, objective)
         self._cache: dict[str, tuple[float, ...]] = {}
+        #: FL-203: the RAAN eq residual joins the vector exactly when the
+        #: target declares a RAAN -- never otherwise, never loosened.
+        self._raan_constrained = target.target_orbit.raan_deg is not None
+        self._eq_checks: tuple[str, ...] = (
+            _EQ_CHECKS + (_EQ_RAAN_CHECK,) if self._raan_constrained else _EQ_CHECKS)
+
+    @property
+    def raan_constrained(self) -> bool:
+        """True when the target declares ``target_orbit.raan_deg`` and the
+        fitness vector therefore carries the FL-203 RAAN eq residual."""
+        return self._raan_constrained
+
+    @property
+    def eq_check_ids(self) -> tuple[str, ...]:
+        """Equality check ids this problem carries, in fitness order (the
+        three FL-201 ones, plus the RAAN one when constrained)."""
+        return self._eq_checks
 
     # --- pygmo UDP protocol -------------------------------------------------
     def get_name(self) -> str:
@@ -157,10 +205,14 @@ class AscentProblem:
         inf = float("inf")
         eq = [(-alt_tol, alt_tol, -inf, inf), (-alt_tol, alt_tol, -inf, inf),
               (-inc_tol, inc_tol, -inf, inf)]
+        if self._raan_constrained:   # the one tolerance the schema does not carry
+            eq.append((-_checks.RAAN_TOLERANCE_DEG, _checks.RAAN_TOLERANCE_DEG,
+                       -inf, inf))
         return eq + [(-inf, inf, -inf, 0.0)] * 3
 
     def fitness(self, x: Sequence[float]) -> list[float]:
-        """Fly candidate ``x``, return the 7-slot fitness vector documented at
+        """Fly candidate ``x``, return the 7- or 8-slot fitness vector (FL-203)
+        documented at
         module level. Cached; never raises for an infeasible or failed flight
         (the penalty vector is returned instead)."""
         key = self._cache_key(x)
@@ -200,9 +252,12 @@ class AscentProblem:
         absolute value and ineq residuals only when violated."""
         f = self.fitness(x)
         w = dict(_DEFAULT_WEIGHTS, **(weights or {}))
-        return (f[0] + w["eq_rp"] * abs(f[1]) + w["eq_ra"] * abs(f[2])
-                + w["eq_inc"] * abs(f[3]) + w["ineq_maxq"] * max(0.0, f[4])
-                + w["ineq_maxg"] * max(0.0, f[5]) + w["ineq_reserve"] * max(0.0, f[6]))
+        total = f[0]
+        for i, cid in enumerate(self._eq_checks, start=1):
+            total += w[_SLOT_NAMES[cid]] * abs(f[i])
+        for j, cid in enumerate(_INEQ_CHECKS, start=1 + len(self._eq_checks)):
+            total += w[_SLOT_NAMES[cid]] * max(0.0, f[j])
+        return total
 
     # --- plumbing ------------------------------------------------------------
     def _fixed_payload(self) -> float | None:
@@ -271,7 +326,8 @@ class AscentProblem:
             shutil.rmtree(tmp, ignore_errors=True)
 
     def _penalty(self) -> list[float]:
-        return [PENALTY_OBJECTIVE] + [PENALTY_VIOLATION] * 6
+        return ([PENALTY_OBJECTIVE]
+                + [PENALTY_VIOLATION] * (len(self._eq_checks) + len(_INEQ_CHECKS)))
 
     def _vector_from(self, verdict: Any, run: Any, doc: Mapping[str, Any],
                      payload_kg: float) -> list[float]:
@@ -280,7 +336,7 @@ class AscentProblem:
         if objective is None:
             return self._penalty()
         vec = [-objective]
-        vec += [self._residual(by_id, cid, signed=True) for cid in _EQ_CHECKS]
+        vec += [self._residual(by_id, cid, signed=True) for cid in self._eq_checks]
         vec += [self._residual(by_id, cid, signed=False) for cid in _INEQ_CHECKS]
         return [PENALTY_OBJECTIVE if i == 0 and not _finite(v)
                 else (PENALTY_VIOLATION if not _finite(v) else v)
@@ -313,6 +369,11 @@ class AscentProblem:
         if check.value is None:
             return PENALTY_VIOLATION
         delta = float(check.value) - float(check.limit)
+        if check_id == _EQ_RAAN_CHECK:
+            # signed residual across the 0/360 seam: evaluate() judges the
+            # |diff| on the circle (angle_diff_deg); the optimizer needs the
+            # signed wrap so a gradient step knows which way to turn.
+            delta = (delta + 180.0) % 360.0 - 180.0
         if signed:
             return delta
         return -delta if check_id == "propellant-reserve" else delta
