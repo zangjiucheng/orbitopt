@@ -1,0 +1,716 @@
+{
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "description": "JSON Schema reference for editors (ignored)"
+  },
+  "name": {
+   "type": "string",
+   "description": "Vehicle or case name"
+  },
+  "simulation": {
+   "$ref": "#/$defs/Simulation"
+  },
+  "launch": {
+   "$ref": "#/$defs/Launch"
+  },
+  "atmosphere": {
+   "$ref": "#/$defs/Atmosphere"
+  },
+  "wind": {
+   "$ref": "#/$defs/Wind"
+  },
+  "attitude": {
+   "$ref": "#/$defs/Attitude",
+   "default": {
+    "azimuth_deg": 0.0,
+    "elevation_deg": 90.0
+   }
+  },
+  "stages": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/Stage"
+   },
+   "description": "Stages in flight order (first stage first)"
+  }
+ },
+ "required": [
+  "name",
+  "simulation",
+  "launch",
+  "stages"
+ ],
+ "description": "A vehicle and the flight to simulate",
+ "title": "OpenTsiolkovsky configuration",
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$defs": {
+  "Simulation": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "end_time_s": {
+     "type": "number",
+     "format": "double",
+     "description": "Simulation end time from launch [s]; the flight also ends at ground impact"
+    },
+    "output_step_s": {
+     "type": "number",
+     "format": "double",
+     "description": "Interval of the output samples [s]",
+     "default": 1.0
+    },
+    "integrator": {
+     "$ref": "#/$defs/Integrator"
+    }
+   },
+   "required": [
+    "end_time_s"
+   ]
+  },
+  "Integrator": {
+   "oneOf": [
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "method": {
+       "type": "string",
+       "const": "rk4"
+      },
+      "step_s": {
+       "type": [
+        "number",
+        "null"
+       ],
+       "format": "double",
+       "description": "Step size [s] (default: half the output step)"
+      }
+     },
+     "required": [
+      "method"
+     ],
+     "description": "Classic Runge-Kutta, fixed step; intervals are split evenly so the\nsteps end exactly on events and output times"
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "method": {
+       "type": "string",
+       "const": "rk45"
+      },
+      "abs_tol": {
+       "type": "number",
+       "format": "double",
+       "description": "Absolute tolerance (all state components: kg, m, m/s)",
+       "default": 1e-09
+      },
+      "rel_tol": {
+       "type": "number",
+       "format": "double",
+       "description": "Relative tolerance",
+       "default": 1e-09
+      }
+     },
+     "required": [
+      "method"
+     ],
+     "description": "Dormand-Prince 5(4), adaptive step"
+    }
+   ],
+   "description": "Integration method of the equations of motion"
+  },
+  "Launch": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "latitude_deg": {
+     "type": "number",
+     "format": "double"
+    },
+    "longitude_deg": {
+     "type": "number",
+     "format": "double"
+    },
+    "altitude_m": {
+     "type": "number",
+     "format": "double",
+     "description": "Height above the WGS84 ellipsoid [m]",
+     "default": 0.0
+    },
+    "time_utc": {
+     "$ref": "#/$defs/UtcTime",
+     "description": "Launch time, ISO 8601 (`2024-07-01T01:00:00Z`; an offset such as\n`+09:00` is converted to UTC)",
+     "default": "2000-01-01T00:00:00Z"
+    },
+    "velocity_ned_mps": {
+     "type": "array",
+     "items": {
+      "type": "number",
+      "format": "double"
+     },
+     "minItems": 3,
+     "maxItems": 3,
+     "description": "Initial Earth-relative velocity: north, east, down [m/s]. At rest the\nvehicle is held on the pad until the thrust lifts it; otherwise (air\nlaunch, restart in flight) it flies free from the start"
+    },
+    "rail_length_m": {
+     "type": "number",
+     "format": "double",
+     "description": "Launcher rail length along the initial attitude [m]; 0: pad only"
+    }
+   },
+   "required": [
+    "latitude_deg",
+    "longitude_deg"
+   ]
+  },
+  "UtcTime": {
+   "type": "string",
+   "format": "date-time",
+   "description": "ISO 8601 date-time; without an offset it is UTC",
+   "examples": [
+    "2024-07-01T01:00:00Z"
+   ]
+  },
+  "Atmosphere": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "model": {
+     "$ref": "#/$defs/AtmosphereKind",
+     "description": "Standard atmosphere model",
+     "default": "ussa1976"
+    },
+    "seasonal_variation_percent": {
+     "type": "number",
+     "format": "double",
+     "description": "Seasonal density variation [%] (-100 to 100), applied along the\nU.S. Standard Atmosphere variation profile (the sign flips between\nlow and high altitude)"
+    },
+    "density_deviation": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/Table"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Density deviation [%] over altitude [m], rows `[altitude_m, percent]`;\nreplaces the seasonal variation"
+    }
+   }
+  },
+  "AtmosphereKind": {
+   "oneOf": [
+    {
+     "type": "string",
+     "const": "ussa1976",
+     "description": "U.S. Standard Atmosphere 1976: layers in geopotential altitude\nup to 86 km, tabulated values (log-linear) from 86 to 1000 km"
+    },
+    {
+     "type": "string",
+     "const": "legacy",
+     "description": "As the C++ simulator: the 1976 layers evaluated at the geometric\naltitude, isothermal (186.95 K) above 84.852 km"
+    }
+   ],
+   "description": "Which standard atmosphere `AtmosphereModel` evaluates"
+  },
+  "Table": {
+   "anyOf": [
+    {
+     "type": "array",
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "number",
+       "format": "double"
+      },
+      "minItems": 2,
+      "maxItems": 2
+     },
+     "description": "Rows of numbers"
+    },
+    {
+     "type": "object",
+     "properties": {
+      "file": {
+       "type": "string"
+      },
+      "columns": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "integer",
+        "format": "uint",
+        "minimum": 0
+       },
+       "description": "Columns to read, 0-based (default: the first ones)"
+      }
+     },
+     "required": [
+      "file"
+     ],
+     "description": "CSV file (header rows are skipped)"
+    }
+   ],
+   "description": "Rows given inline or read from a CSV file"
+  },
+  "Wind": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "speed_mps": {
+     "type": "number",
+     "format": "double",
+     "description": "Constant wind speed [m/s]"
+    },
+    "direction_deg": {
+     "type": "number",
+     "format": "double",
+     "description": "Direction the constant wind blows from, clockwise from north [deg]"
+    },
+    "profile": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/Table2"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Wind over altitude, rows `[altitude_m, speed_mps, direction_deg]`,\ninterpolated in north/east components; replaces the constant wind"
+    }
+   },
+   "description": "Wind blowing from `direction_deg` (meteorological convention)"
+  },
+  "Table2": {
+   "anyOf": [
+    {
+     "type": "array",
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "number",
+       "format": "double"
+      },
+      "minItems": 3,
+      "maxItems": 3
+     },
+     "description": "Rows of numbers"
+    },
+    {
+     "type": "object",
+     "properties": {
+      "file": {
+       "type": "string"
+      },
+      "columns": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "integer",
+        "format": "uint",
+        "minimum": 0
+       },
+       "description": "Columns to read, 0-based (default: the first ones)"
+      }
+     },
+     "required": [
+      "file"
+     ],
+     "description": "CSV file (header rows are skipped)"
+    }
+   ],
+   "description": "Rows given inline or read from a CSV file"
+  },
+  "Attitude": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "azimuth_deg": {
+     "$ref": "#/$defs/Curve",
+     "description": "Azimuth of the body axis, clockwise from north [deg]",
+     "default": 0.0
+    },
+    "elevation_deg": {
+     "$ref": "#/$defs/Curve",
+     "description": "Elevation of the body axis above the horizon [deg] (90: vertical)",
+     "default": 90.0
+    },
+    "roll_deg": {
+     "$ref": "#/$defs/Curve",
+     "description": "Roll angle [deg]"
+    },
+    "yaw_offset_deg": {
+     "type": "number",
+     "format": "double",
+     "description": "Body misalignment from the program, applied about Z, then Y, then X [deg]"
+    },
+    "pitch_offset_deg": {
+     "type": "number",
+     "format": "double"
+    },
+    "roll_offset_deg": {
+     "type": "number",
+     "format": "double"
+    },
+    "gyro_bias_deg_h": {
+     "type": "array",
+     "items": {
+      "type": "number",
+      "format": "double"
+     },
+     "minItems": 3,
+     "maxItems": 3,
+     "description": "Gyro bias about body X, Y, Z [deg/h]: the attitude drifts linearly from launch"
+    }
+   },
+   "description": "Attitude program of the vehicle (time from launch)"
+  },
+  "Curve": {
+   "anyOf": [
+    {
+     "type": "number",
+     "format": "double"
+    },
+    {
+     "$ref": "#/$defs/Table"
+    }
+   ],
+   "description": "Constant or a table of `[x, y]` rows (piecewise linear, clamped at the ends)"
+  },
+  "Stage": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "mass_initial_kg": {
+     "type": "number",
+     "format": "double",
+     "description": "Initial mass of this stage alone, without the upper stages [kg]"
+    },
+    "mass_dry_kg": {
+     "type": [
+      "number",
+      "null"
+     ],
+     "format": "double",
+     "description": "Mass without propellant [kg]; the burn ends when the propellant\n(initial minus dry mass) runs out. Unset: the whole stage may burn"
+    },
+    "engine": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/Engine"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Rocket engine; unset: no thrust"
+    },
+    "aero": {
+     "$ref": "#/$defs/Aero",
+     "default": {
+      "diameter_m": 0.5,
+      "ca": 0.0,
+      "ballistic_coefficient_kg_m2": 100.0
+     }
+    },
+    "free_flight": {
+     "$ref": "#/$defs/FreeFlight",
+     "description": "Motion after burnout",
+     "default": "ballistic"
+    },
+    "separation_time_s": {
+     "type": [
+      "number",
+      "null"
+     ],
+     "format": "double",
+     "description": "Separation of the upper stages, from this stage's start [s]; required\nfor every stage but the last"
+    },
+    "jettisons": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/Jettison"
+     },
+     "description": "Bodies released during this stage's flight (fairings, ...)"
+    },
+    "thrust_trim": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/ThrustTrim"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Gimbal the thrust to balance the aerodynamic moment"
+    }
+   },
+   "required": [
+    "mass_initial_kg"
+   ]
+  },
+  "Engine": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "thrust_vac_n": {
+     "$ref": "#/$defs/Curve",
+     "description": "Vacuum thrust over stage time [N]"
+    },
+    "isp_vac_s": {
+     "$ref": "#/$defs/Curve",
+     "description": "Vacuum specific impulse over stage time [s]"
+    },
+    "burn_start_s": {
+     "type": "number",
+     "format": "double",
+     "description": "Ignition, from the stage start [s]",
+     "default": 0.0
+    },
+    "burn_end_s": {
+     "type": "number",
+     "format": "double",
+     "description": "End of the burn, from the stage start [s]"
+    },
+    "nozzle_exit_area_m2": {
+     "type": "number",
+     "format": "double",
+     "description": "Nozzle exit area [m²], for the ambient pressure loss"
+    }
+   },
+   "required": [
+    "thrust_vac_n",
+    "isp_vac_s",
+    "burn_end_s"
+   ],
+   "description": "Rocket engine of a stage. Thrust = vacuum thrust - exit area x ambient\npressure (never negative); mass flow = vacuum thrust / (vacuum Isp x g0)"
+  },
+  "Aero": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "diameter_m": {
+     "type": "number",
+     "format": "double",
+     "description": "Reference diameter [m]; reference area = pi/4 x diameter²",
+     "default": 0.5
+    },
+    "ca": {
+     "$ref": "#/$defs/Curve",
+     "description": "Axial force coefficient over Mach",
+     "default": 0.0
+    },
+    "ca_power_off": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/Curve"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Axial force coefficient over Mach while the engine is off (base\ndrag); unset: `ca`"
+    },
+    "cn_alpha_per_rad": {
+     "$ref": "#/$defs/Curve",
+     "description": "Normal force slope CN-alpha over Mach [1/rad]; normal force =\nCN-alpha x angle of attack [rad] x dynamic pressure x reference area"
+    },
+    "cn_table": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/Surface"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Normal force coefficient over Mach x angle of attack; replaces\n`cn_alpha_per_rad`"
+    },
+    "ballistic_coefficient_kg_m2": {
+     "type": "number",
+     "format": "double",
+     "description": "Ballistic coefficient for `free_flight: \"ballistic\"` [kg/m²]\n(drag deceleration = dynamic pressure / coefficient)",
+     "default": 100.0
+    }
+   },
+   "description": "Aerodynamics of a stage (and everything above it)"
+  },
+  "Surface": {
+   "anyOf": [
+    {
+     "type": "object",
+     "properties": {
+      "mach": {
+       "type": "array",
+       "items": {
+        "type": "number",
+        "format": "double"
+       },
+       "description": "Mach numbers (ascending)"
+      },
+      "alpha_deg": {
+       "type": "array",
+       "items": {
+        "type": "number",
+        "format": "double"
+       },
+       "description": "Angles of attack [deg] (ascending, 0 to 90, or 180 for flow from behind)"
+      },
+      "values": {
+       "type": "array",
+       "items": {
+        "type": "array",
+        "items": {
+         "type": "number",
+         "format": "double"
+        }
+       },
+       "description": "`values[i][j]` at `mach[i]`, `alpha_deg[j]`"
+      }
+     },
+     "required": [
+      "mach",
+      "alpha_deg",
+      "values"
+     ]
+    },
+    {
+     "type": "object",
+     "properties": {
+      "file": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "file"
+     ],
+     "description": "CSV file: first row `-, alpha_1, alpha_2, ...`, then `mach, value_1, value_2, ...`"
+    }
+   ],
+   "description": "Values over Mach number x angle of attack [deg]"
+  },
+  "FreeFlight": {
+   "oneOf": [
+    {
+     "type": "string",
+     "const": "ballistic",
+     "description": "Drag from the ballistic coefficient"
+    },
+    {
+     "type": "string",
+     "const": "aero_stable",
+     "description": "Body aligned with the airflow: axial force only"
+    },
+    {
+     "type": "string",
+     "const": "attitude_program",
+     "description": "Body follows the attitude program (axial and normal force)"
+    }
+   ],
+   "description": "Motion of a stage while its engine is off"
+  },
+  "Jettison": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "type": "string",
+     "description": "Name in the output (default `jettison<N>`)"
+    },
+    "time_s": {
+     "type": "number",
+     "format": "double",
+     "description": "Release time from the stage start [s]; must be before the separation"
+    },
+    "mass_kg": {
+     "type": "number",
+     "format": "double",
+     "description": "Mass, part of the stage's dry mass [kg]"
+    },
+    "ballistic_coefficient_kg_m2": {
+     "type": "number",
+     "format": "double",
+     "description": "Ballistic coefficient of the released body [kg/m²]",
+     "default": 100.0
+    },
+    "delta_v_ned_mps": {
+     "type": "array",
+     "items": {
+      "type": "number",
+      "format": "double"
+     },
+     "minItems": 3,
+     "maxItems": 3,
+     "description": "Velocity added at release: north, east, down [m/s]"
+    }
+   },
+   "required": [
+    "time_s",
+    "mass_kg"
+   ],
+   "description": "A body released from a stage"
+  },
+  "ThrustTrim": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "cg_sta_m": {
+     "$ref": "#/$defs/Curve",
+     "description": "Centre of gravity STA over stage time [m]"
+    },
+    "gimbal_sta_m": {
+     "$ref": "#/$defs/Curve",
+     "description": "Gimbal (thrust point) STA over stage time [m]"
+    },
+    "cp_sta_m": {
+     "$ref": "#/$defs/Surface",
+     "description": "Centre of pressure STA over Mach x angle of attack [m]"
+    },
+    "cg_offset_m": {
+     "type": "array",
+     "items": {
+      "type": "number",
+      "format": "double"
+     },
+     "minItems": 3,
+     "maxItems": 3
+    },
+    "cp_offset_m": {
+     "type": "array",
+     "items": {
+      "type": "number",
+      "format": "double"
+     },
+     "minItems": 3,
+     "maxItems": 3
+    },
+    "gimbal_offset_m": {
+     "type": "array",
+     "items": {
+      "type": "number",
+      "format": "double"
+     },
+     "minItems": 3,
+     "maxItems": 3
+    }
+   },
+   "required": [
+    "cg_sta_m",
+    "gimbal_sta_m",
+    "cp_sta_m"
+   ],
+   "description": "Thrust direction that balances the aerodynamic moment about the CG\n(the C++ simulator's 3DoF \"neutrality\"). Positions are STA [m]: distance\naft of the nose. Offsets move the CG, centre of pressure and thrust\npoint in body axes (X forward) [m]."
+  }
+ }
+}

@@ -1,0 +1,24 @@
+schema_version: '1.0'
+mission:
+  id: falcon9-pace
+  title: Falcon 9 PACE (OpenTsiolkovsky v1.0.0 example)
+  epoch_utc: '2024-02-08T06:33:32Z'
+launch_site:
+  name: lc-39a
+  latitude_deg: 28.5619
+  longitude_deg: -80.5772
+  altitude_wgs84_m: 3
+target_orbit:
+  central_body: Earth
+  periapsis_altitude_m: 639266.0
+  apoapsis_altitude_m: 669467.0
+  inclination_deg: 51.6
+  raan_deg: null
+vehicle:
+  source: fixtures/flightlab/opentsiolkovsky/falcon9_vehicle.yaml
+  provenance: public_estimate
+constraints:
+  max_dynamic_pressure_pa: 40000.0
+assumptions:
+- Fixture mirroring OpenTsiolkovsky v1.0.0 examples/falcon9.json for the slow reproduction
+  test.
