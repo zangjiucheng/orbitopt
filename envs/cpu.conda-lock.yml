@@ -13,10 +13,10 @@
 version: 1
 metadata:
   content_hash:
-    linux-64: 4e3a773b0f2146adde83dc1535a45ec24586548ee12d55f032f53abffd8f3071
-    win-64: e9c60c14f119582977ac0c1f40b47a793bf36a4ac3a07c26e97801c8b80b07ce
-    osx-64: c4deb7b9fec5d4b4bb54cae09d6dee9d1b37c30a1992f6b452fb98bdc3111d5d
-    osx-arm64: 1d6c72bb30a0360a339a94ca03b29f1c1b8a0ea434d25620d03283a8c8ed7ece
+    linux-64: 541c3c80d0a76dd51f47ec0817a8ad346d8c754c11f60c6d8fa148170256ad57
+    win-64: f6a08a79cea67fb14e4235877d656146ff72ff75325714647b28587d02fbd2ec
+    osx-64: 2821f119ed53d56e49640130fad349bc2b52a16c830e4a75588db9a93bafa5da
+    osx-arm64: 6bb6be2bdf8441d99d99b43099c7b91a77f84f09c2361f0a5865b8222a2b2a7a
   channels:
   - url: conda-forge
     used_env_vars: []
@@ -1469,7 +1469,7 @@ package:
   manager: conda
   platform: linux-64
   dependencies:
-    bleach: ==6.4.0
+    bleach: 6.4.0
     tinycss2: ''
   url: https://conda.anaconda.org/conda-forge/noarch/bleach-with-css-6.4.0-hac0b51c_0.conda
   hash:
@@ -1482,7 +1482,7 @@ package:
   manager: conda
   platform: osx-64
   dependencies:
-    bleach: ==6.4.0
+    bleach: 6.4.0
     tinycss2: ''
   url: https://conda.anaconda.org/conda-forge/noarch/bleach-with-css-6.4.0-hac0b51c_0.conda
   hash:
@@ -1495,7 +1495,7 @@ package:
   manager: conda
   platform: osx-arm64
   dependencies:
-    bleach: ==6.4.0
+    bleach: 6.4.0
     tinycss2: ''
   url: https://conda.anaconda.org/conda-forge/noarch/bleach-with-css-6.4.0-hac0b51c_0.conda
   hash:
@@ -1508,7 +1508,7 @@ package:
   manager: conda
   platform: win-64
   dependencies:
-    bleach: ==6.4.0
+    bleach: 6.4.0
     tinycss2: ''
   url: https://conda.anaconda.org/conda-forge/noarch/bleach-with-css-6.4.0-hac0b51c_0.conda
   hash:
@@ -11128,7 +11128,7 @@ package:
     libscotch: '>=7.0.6,<7.0.7.0a0'
     llvm-openmp: '>=18.1.8'
     metis: '>=5.1.0,<5.1.1.0a0'
-    mumps-include: ==5.7.3
+    mumps-include: 5.7.3
   url: https://conda.anaconda.org/conda-forge/osx-64/mumps-seq-5.7.3-heb77934_9.conda
   hash:
     md5: c71e04e0e2f0ead491b4148f00370c13
@@ -11148,7 +11148,7 @@ package:
     libscotch: '>=7.0.6,<7.0.7.0a0'
     llvm-openmp: '>=18.1.8'
     metis: '>=5.1.0,<5.1.1.0a0'
-    mumps-include: ==5.7.3
+    mumps-include: 5.7.3
   url: https://conda.anaconda.org/conda-forge/osx-arm64/mumps-seq-5.7.3-h29d90bc_9.conda
   hash:
     md5: f4059b9b2cec69451420cd39ad518887
@@ -17181,7 +17181,7 @@ package:
   manager: conda
   platform: linux-64
   dependencies:
-    typing_extensions: ==4.16.0
+    typing_extensions: 4.16.0
   url: https://conda.anaconda.org/conda-forge/noarch/typing-extensions-4.16.0-h69aa097_0.conda
   hash:
     md5: c680b5747e8c4c8f23dca0bb7042a8fc
@@ -17193,7 +17193,7 @@ package:
   manager: conda
   platform: osx-64
   dependencies:
-    typing_extensions: ==4.16.0
+    typing_extensions: 4.16.0
   url: https://conda.anaconda.org/conda-forge/noarch/typing-extensions-4.16.0-h69aa097_0.conda
   hash:
     md5: c680b5747e8c4c8f23dca0bb7042a8fc
@@ -17205,7 +17205,7 @@ package:
   manager: conda
   platform: osx-arm64
   dependencies:
-    typing_extensions: ==4.16.0
+    typing_extensions: 4.16.0
   url: https://conda.anaconda.org/conda-forge/noarch/typing-extensions-4.16.0-h69aa097_0.conda
   hash:
     md5: c680b5747e8c4c8f23dca0bb7042a8fc
@@ -17217,7 +17217,7 @@ package:
   manager: conda
   platform: win-64
   dependencies:
-    typing_extensions: ==4.16.0
+    typing_extensions: 4.16.0
   url: https://conda.anaconda.org/conda-forge/noarch/typing-extensions-4.16.0-h69aa097_0.conda
   hash:
     md5: c680b5747e8c4c8f23dca0bb7042a8fc

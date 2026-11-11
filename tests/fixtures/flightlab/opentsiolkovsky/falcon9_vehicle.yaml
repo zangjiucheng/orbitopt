@@ -1,0 +1,189 @@
+name: falcon9-pace
+provenance: public_estimate
+assumptions:
+- Public Falcon 9 Block 5 performance figures (open literature) as shipped in OpenTsiolkovsky
+  v1.0.0 examples/falcon9.json; used by the FL-004 slow test to reproduce the example
+  summary.json.
+simulation:
+  end_time_s: 2400
+  output_step_s: 2
+  integrator:
+    method: rk45
+attitude_program:
+- t_s: 0
+  azimuth_deg: 131.49
+  elevation_deg: 90
+- t_s: 10
+  azimuth_deg: 131.49
+  elevation_deg: 90
+- t_s: 20
+  azimuth_deg: 131.49
+  elevation_deg: 88.74
+- t_s: 24
+  azimuth_deg: 134.24
+  elevation_deg: 88.58
+- t_s: 28
+  azimuth_deg: 134.99
+  elevation_deg: 88.13
+- t_s: 32
+  azimuth_deg: 135.55
+  elevation_deg: 87.63
+- t_s: 36
+  azimuth_deg: 136.02
+  elevation_deg: 87.11
+- t_s: 40
+  azimuth_deg: 136.41
+  elevation_deg: 86.57
+- t_s: 44
+  azimuth_deg: 136.75
+  elevation_deg: 86.01
+- t_s: 48
+  azimuth_deg: 137.04
+  elevation_deg: 85.44
+- t_s: 52
+  azimuth_deg: 137.31
+  elevation_deg: 84.87
+- t_s: 56
+  azimuth_deg: 137.55
+  elevation_deg: 84.3
+- t_s: 60
+  azimuth_deg: 137.77
+  elevation_deg: 83.73
+- t_s: 64
+  azimuth_deg: 137.98
+  elevation_deg: 83.17
+- t_s: 68
+  azimuth_deg: 138.17
+  elevation_deg: 82.63
+- t_s: 72
+  azimuth_deg: 138.35
+  elevation_deg: 82.1
+- t_s: 76
+  azimuth_deg: 138.52
+  elevation_deg: 81.58
+- t_s: 80
+  azimuth_deg: 138.68
+  elevation_deg: 81.08
+- t_s: 84
+  azimuth_deg: 138.83
+  elevation_deg: 80.6
+- t_s: 88
+  azimuth_deg: 138.98
+  elevation_deg: 80.14
+- t_s: 92
+  azimuth_deg: 139.12
+  elevation_deg: 79.7
+- t_s: 96
+  azimuth_deg: 139.26
+  elevation_deg: 79.28
+- t_s: 100
+  azimuth_deg: 139.39
+  elevation_deg: 78.88
+- t_s: 104
+  azimuth_deg: 139.52
+  elevation_deg: 78.49
+- t_s: 108
+  azimuth_deg: 139.65
+  elevation_deg: 78.13
+- t_s: 112
+  azimuth_deg: 139.77
+  elevation_deg: 77.79
+- t_s: 116
+  azimuth_deg: 139.89
+  elevation_deg: 77.46
+- t_s: 120
+  azimuth_deg: 140.01
+  elevation_deg: 77.16
+- t_s: 124
+  azimuth_deg: 140.13
+  elevation_deg: 76.87
+- t_s: 128
+  azimuth_deg: 140.25
+  elevation_deg: 76.6
+- t_s: 132
+  azimuth_deg: 140.36
+  elevation_deg: 76.35
+- t_s: 200
+  azimuth_deg: 205.02
+  elevation_deg: 66.56
+- t_s: 250
+  azimuth_deg: 204.51
+  elevation_deg: 62.75
+- t_s: 300
+  azimuth_deg: 202.93
+  elevation_deg: 33.52
+- t_s: 400
+  azimuth_deg: 197.28
+  elevation_deg: -13.68
+- t_s: 460
+  azimuth_deg: 187.55
+  elevation_deg: -6.07
+- t_s: 520
+  azimuth_deg: 195.71
+  elevation_deg: -15.19
+- t_s: 5520
+  azimuth_deg: 195.71
+  elevation_deg: -15.19
+stages:
+- mass_initial_kg: 433100
+  mass_dry_kg: 22200
+  engine:
+    thrust_vac_n: 8227000
+    isp_vac_s: 311
+    burn_start_s: 0
+    burn_end_s: 139
+    nozzle_exit_area_m2: 6.11892
+  free_flight: attitude_program
+  aero:
+    diameter_m: 3.66
+    ca:
+    - - 0
+      - 0.35
+    - - 0.8
+      - 0.38
+    - - 1.1
+      - 0.55
+    - - 1.5
+      - 0.5
+    - - 2.5
+      - 0.4
+    - - 4
+      - 0.32
+    - - 8
+      - 0.26
+    cn_alpha_per_rad: 0.2
+    ballistic_coefficient_kg_m2: 100
+  separation_time_s: 143
+- mass_initial_kg: 115200
+  mass_dry_kg: 7700
+  engine:
+    thrust_vac_n: 981000
+    isp_vac_s: 348
+    burn_start_s: 7
+    burn_end_s: 367.34
+    nozzle_exit_area_m2: 8.55299
+  free_flight: attitude_program
+  jettisons:
+  - name: fairing
+    time_s: 112
+    mass_kg: 2000
+    ballistic_coefficient_kg_m2: 50
+  aero:
+    diameter_m: 3.66
+    ca:
+    - - 0
+      - 0.35
+    - - 0.8
+      - 0.38
+    - - 1.1
+      - 0.55
+    - - 1.5
+      - 0.5
+    - - 2.5
+      - 0.4
+    - - 4
+      - 0.32
+    - - 8
+      - 0.26
+    cn_alpha_per_rad: 0.2
+    ballistic_coefficient_kg_m2: 100

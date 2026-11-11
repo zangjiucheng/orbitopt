@@ -1,0 +1,45 @@
+schema_version: '1.0'
+mission:
+  id: kourou-400x400km-i51.6
+  title: 400x400 km @ 51.6 deg from Guiana Space Centre (Kourou)
+  epoch_utc: '2026-11-10T06:30:00Z'
+launch_site:
+  name: Guiana Space Centre (Kourou)
+  latitude_deg: 5.2392
+  longitude_deg: -52.7685
+  altitude_wgs84_m: 15.0
+target_orbit:
+  central_body: Earth
+  periapsis_altitude_m: 400000.0
+  apoapsis_altitude_m: 400000.0
+  inclination_deg: 51.6
+  raan_deg: null
+vehicle:
+  source: unspecified:ascent-backend-default-vehicle
+  provenance: illustrative
+assumptions:
+- 'launch_site block (name, latitude, longitude, altitude) taken from the packaged
+  launch-site database entry ''kourou''; sources: Arianespace, Ariane 5 User''s Manual,
+  Issue 5 Rev 2 (2016), ch. 6 (CSG description, ELA-3 location)'
+- launch_site.altitude_wgs84_m uses the database ground elevation as WGS-84 ellipsoid
+  height without geoid-undulation correction (< ~100 m at every catalogued site, irrelevant
+  to ascent trajectory design)
+- 'inclination 51.6 deg checked feasible for direct ascent from ''kourou'' against
+  its range-safety azimuth corridors [[349.5, 93.5]]; sources: Arianespace, Ariane
+  5 User''s Manual, Issue 5 Rev 2 (2016), sec. 2 -- CSG launch azimuth range -10.5
+  deg to +93.5 deg'
+- 'liftoff epoch 2026-11-10T06:30:00Z exactly as requested; target plane unconstrained
+  (raan_deg null): any corridor-admissible azimuth reaching this inclination yields
+  a valid plane, so RAAN is set by the chosen epoch and ascent azimuth'
+- 'vehicle block is a placeholder: no vehicle was specified at export time, the ascent
+  backend''s own default vehicle model applies and no performance figure here was
+  verified'
+- 'no mission constraints specified: no load/aero/propellant reserve limits were asserted
+  at export time; Gate-B still checks the atmosphere floor and default insertion tolerances
+  (20000 m altitude, 0.2 deg inclination)'
+- 'no recovery plan specified: recovery.kind = none (expendable first stage)'
+- 'no simulation backends/phases specified: the consumer (E2 ascent optimizer, Mission
+  Control) selects them and records the choice in the run manifest'
+- 'no terminal_state: the run is graded against the target orbit elements at insertion
+  using target tolerances when declared and Gate-B defaults otherwise, not one fixed
+  end-of-ascent state vector'

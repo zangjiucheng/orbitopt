@@ -14,6 +14,8 @@ dependencies:
   - numpy>=1.26.4,<2  # tudatpy 1.0.0 requires numpy<2.0 (its real conda pin)
   - scipy>=1.11,<1.14  # pykep.trajopt still calls scipy.interpolate.interp2d (gone in 1.14)
   - matplotlib=3.9.2
+  - astropy  # flightlab frame bridge (FL-002): ITRS<->GCRS at the launch epoch;
+             # imported lazily so the base package still works without it
   - notebook
   - pytest
   - pip

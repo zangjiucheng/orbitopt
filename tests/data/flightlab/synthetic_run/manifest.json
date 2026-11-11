@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "run_id": "synthetic-two-stage-0001",
+  "target_sha256": "812f9a8f5d196515df62c7310b1c9f48a3ae34ce037be6dd1380a07d52e1bd61",
+  "vehicle_sha256": "d43405459a2a4f21f1d95ffc2995331118bb4603ef6d7eb50eff8a1dc9c29b6b",
+  "engines": {
+    "synthetic-1a": "1.0.0",
+    "synthetic-vac": "1.0.0"
+  },
+  "git_sha": "0000000000000000000000000000000000000000",
+  "created_utc": "2026-11-10T12:30:00Z",
+  "assumptions": [
+    "Synthetic fixture: fabricated sample points only -- no physics was run; do not read any performance meaning into the numbers."
+  ],
+  "bodies": [
+    {
+      "body_id": "stack",
+      "parent_body_id": null,
+      "frame": "LAUNCH_ECI",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 0.0,
+      "t_end_s": 160.0,
+      "provenance": "illustrative"
+    },
+    {
+      "body_id": "upper_stage",
+      "parent_body_id": "stack",
+      "frame": "GCRS",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 160.0,
+      "t_end_s": 540.0,
+      "provenance": "illustrative"
+    },
+    {
+      "body_id": "booster",
+      "parent_body_id": "stack",
+      "frame": "GCRS",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 160.0,
+      "t_end_s": 420.0,
+      "provenance": "illustrative"
+    }
+  ]
+}
