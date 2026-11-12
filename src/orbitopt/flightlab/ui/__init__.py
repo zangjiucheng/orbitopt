@@ -17,7 +17,9 @@ from orbitopt.flightlab.ui.telemetry import (
 )
 
 __all__ = [
+    "FlightLabDesignerPage",
     "FlightLabReplayPage",
+    "FlightLabWorkbench",
     "TelemetryChannel",
     "TelemetrySeries",
     "build_telemetry_channels",
@@ -32,4 +34,12 @@ def __getattr__(name):
         from orbitopt.flightlab.ui.replay_page import FlightLabReplayPage
 
         return FlightLabReplayPage
+    if name == "FlightLabDesignerPage":
+        from orbitopt.flightlab.ui.designer_page import FlightLabDesignerPage
+
+        return FlightLabDesignerPage
+    if name == "FlightLabWorkbench":
+        from orbitopt.flightlab.ui.workbench import FlightLabWorkbench
+
+        return FlightLabWorkbench
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
