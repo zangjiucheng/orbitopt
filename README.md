@@ -200,7 +200,10 @@ warns when any check fails.
 
 Launch-site and launch-vehicle data cite a source and are tagged `official`
 or `public_estimate`, with accuracy and date. The values are planning-level;
-see [`docs/launch-data-sources.md`](docs/launch-data-sources.md).
+see [`docs/launch-data-sources.md`](docs/launch-data-sources.md). Flight Lab
+vehicle files are tagged and cited the same way (plus `illustrative`), and
+their uncertainty bands feed the recovery Monte Carlo by default; see
+[`docs/flightlab.md`](docs/flightlab.md).
 
 ## Layout
 
@@ -264,7 +267,8 @@ drive it. Every panel follows the same selection and mission time:
   verification checks, plain-language failure reasons and booster recovery;
   *Compare* puts two runs side by side. *Recent runs* lists every run with
   its verdict, and *Open run…* loads any run directory, such as one written
-  by `orbitopt flight simulate`.
+  by `orbitopt flight simulate`. User guide, fidelity levels and hard
+  gates: [`docs/flightlab.md`](docs/flightlab.md).
 - **Missions and trajectories** (left). Switch missions without relaunching;
   `File > Open scene file...` opens any scene JSON. For an optimized mission
   the TRAJECTORIES list shows every distinct candidate the optimizer found,
