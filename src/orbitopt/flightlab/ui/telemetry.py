@@ -35,6 +35,9 @@ class TelemetrySeries:
     body_id: str
     points: tuple[tuple[float, float], ...]
     derived: bool = False
+    #: Line style for overlays ("solid" | "dash"); the compare view draws
+    #: run B dashed over run A (FL-503).
+    style: str = "solid"
 
 
 @dataclass(frozen=True)

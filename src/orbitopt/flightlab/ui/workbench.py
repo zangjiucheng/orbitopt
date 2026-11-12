@@ -1,4 +1,5 @@
-"""Designer + replay container for Mission Control's Flight Lab tab (FL-502).
+"""Designer + replay + compare container for Mission Control's Flight Lab tab
+(FL-502, FL-503).
 
 A thin tab widget so the FL-502 designer and the FL-501 replay page share one
 Mission Control tab: finishing a simulation (or hitting the input-hash cache)
@@ -12,6 +13,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTabWidget
 
+from orbitopt.flightlab.ui.compare_page import FlightLabComparePage
 from orbitopt.flightlab.ui.designer_page import FlightLabDesignerPage
 from orbitopt.flightlab.ui.replay_page import FlightLabReplayPage
 
@@ -30,12 +32,20 @@ class FlightLabWorkbench(QWidget):
         self.designer_page = FlightLabDesignerPage(self)
         self.replay_page = FlightLabReplayPage(self)
         self.tabs.addTab(self.designer_page, "Designer")
+        self.compare_page = FlightLabComparePage(self)
         self.tabs.addTab(self.replay_page, "Replay")
+        self.tabs.addTab(self.compare_page, "Compare")
         self.designer_page.run_ready.connect(self._open_run)
-        self.replay_page.run_loaded.connect(lambda _p: self.tabs.setCurrentWidget(self.replay_page))
+        self.replay_page.run_loaded.connect(self._replay_loaded)
+
+    def _replay_loaded(self, _run_id: str):
+        if self.replay_page.run_dir is not None:
+            self.compare_page.add_run(self.replay_page.run_dir)
+        self.tabs.setCurrentWidget(self.replay_page)
 
     def _open_run(self, run_dir: str):
         self.replay_page.load_run(Path(run_dir))
+        self.compare_page.add_run(Path(run_dir))
         self.tabs.setCurrentWidget(self.replay_page)
 
     # --------------------------------------------------- playback delegation

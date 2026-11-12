@@ -17,6 +17,7 @@ from orbitopt.flightlab.ui.telemetry import (
 )
 
 __all__ = [
+    "FlightLabComparePage",
     "FlightLabDesignerPage",
     "FlightLabReplayPage",
     "FlightLabWorkbench",
@@ -34,6 +35,10 @@ def __getattr__(name):
         from orbitopt.flightlab.ui.replay_page import FlightLabReplayPage
 
         return FlightLabReplayPage
+    if name == "FlightLabComparePage":
+        from orbitopt.flightlab.ui.compare_page import FlightLabComparePage
+
+        return FlightLabComparePage
     if name == "FlightLabDesignerPage":
         from orbitopt.flightlab.ui.designer_page import FlightLabDesignerPage
 
