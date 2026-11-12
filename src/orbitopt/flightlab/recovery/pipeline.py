@@ -4,8 +4,10 @@
 OpenTsiolkovsky adapter, a synthetic test fixture, a Monte-Carlo sample),
 reads its first-stage separation state (FL-301
 :func:`~orbitopt.flightlab.recovery.propagator.separation_state_from_run`),
-flies the full E3 recovery chain -- FL-302 boostback + entry burn, then FL-303
-G-FOLD landing burn, both re-integrated through the FL-301 propagator -- and
+flies the full E3 recovery chain -- FL-302 boostback + entry burn, then the
+FL-303 landing burn flown by FL-305's closed-loop terminal guidance (the
+single-plan G-FOLD flow on request), both integrated through the FL-301
+propagator -- and
 returns a *combined* :class:`~orbitopt.flightlab.contract.FlightRun` whose
 ``stage1`` body is recovered: the ballistic ``stage1_debris`` track is replaced
 by the flown ``booster`` track (separation -> boostback -> entry -> landing
@@ -55,7 +57,9 @@ from orbitopt.flightlab.recovery.landing import (
     GFOLD_VERSION_PIN,
     LandingLimits,
     LandingResult,
+    TerminalGuidance,
     fly_landing_burn,
+    fly_landing_burn_closed_loop,
     landing_events,
 )
 from orbitopt.flightlab.recovery.propagator import (
@@ -82,9 +86,10 @@ RECOVERY_LANDING_NOT_ATTEMPTED = "RECOVERY_LANDING_NOT_ATTEMPTED"
 _BOOSTER_BODY_ID = "booster"
 _DEBRIS_BODY_ID = "stage1_debris"
 _RECOVERY_ASSUMPTION = (
-    "FL-304 recovery: FL-302 boostback/entry script + FL-303 G-FOLD landing "
-    "burn, re-integrated through the FL-301 propagator; the booster track "
-    "replaces the ballistic stage1_debris track"
+    "FL-304 recovery: FL-302 boostback/entry script + FL-303 landing burn "
+    "(FL-305 closed-loop guidance unless plan_options select the single "
+    "G-FOLD plan), integrated through the FL-301 propagator; the booster "
+    "track replaces the ballistic stage1_debris track"
 )
 
 #: Warm start pinning FL-302's accepted script for the packaged synthetic
@@ -92,7 +97,17 @@ _RECOVERY_ASSUMPTION = (
 #: throttle, pitch deg, yaw deg, trigger alt m, entry duration s). Passing it
 #: as ``initial_guess`` with a small ``max_fevals`` keeps a Monte-Carlo
 #: re-plan a local refinement of the known-good script, not a cold search.
-NOMINAL_PLAN_GUESS = (18.4, 19.1, 1.0, 4.36, 0.0, 17456.0, 23.0)
+#: FL-305 re-pinned the boostback duration 19.1 -> 17.75 s (the gentler
+#: handoff of ADR flightlab-0002): the FL-304 script overshot the pad and
+#: handed the landing burn a 1.76 km divert at 41.1 t; this one hands over
+#: 0.35 km out at 41.7 t, inside the landing burn's divert budget. FL-302's
+#: own penalty barely sees a 1.76 km miss against its 8 km corridor radius,
+#: and a short Nelder-Mead budget cannot step the 0.5 s-quantized burn.
+NOMINAL_PLAN_GUESS = (18.4, 17.75, 1.0, 4.36, 0.0, 17456.0, 23.0)
+
+#: ``plan_options["landing"]["mode"]`` values: FL-305's closed loop (the
+#: default) or FL-303's single open-loop plan.
+LANDING_MODES = ("closed-loop", "single")
 
 
 @dataclass(frozen=True)
@@ -249,8 +264,11 @@ def fly_recovery(ascent_run: FlightRun, target: FlightTarget, vehicle_path, *,
     separation states through here); ``booster``/``limits``/``physics``/
     ``plan_options`` pass straight through to FL-302/FL-303 (``plan_options``
     keys: ``max_fevals``, ``initial_guess``, ``horizon_s``, ``dt_opt``,
-    ``dt_final``, entry limits). Raises ``ValueError`` when the target
-    declares ``recovery: none`` or the run carries no separation state."""
+    ``dt_final``, entry limits) plus one landing key, ``landing``: a mapping
+    with ``mode`` (:data:`LANDING_MODES`, default ``"closed-loop"``) and any
+    :class:`~orbitopt.flightlab.recovery.landing.TerminalGuidance` fields.
+    Raises ``ValueError`` when the target declares ``recovery: none``, the
+    run carries no separation state, or the landing options are unknown."""
     if target.recovery.kind == "none":
         raise ValueError("target declares recovery: none -- nothing to fly")
     booster = booster if booster is not None else BoosterModel.load(vehicle_path)
@@ -259,12 +277,13 @@ def fly_recovery(ascent_run: FlightRun, target: FlightTarget, vehicle_path, *,
     if sep_state is None:
         sep_state = separation_state_from_run(ascent_run)
 
-    plan = plan_boostback_entry(sep_state, booster, recovery_target,
-                                **(dict(plan_options) if plan_options else {}))
+    opts = dict(plan_options) if plan_options else {}
+    fly_landing = _landing_flight(opts.pop("landing", None))
+    plan = plan_boostback_entry(sep_state, booster, recovery_target, **opts)
     landing: LandingResult | None = None
     if plan.feasible:
         try:
-            landing = fly_landing_burn(
+            landing = fly_landing(
                 plan.landing_burn_initial_state_enu,
                 plan.landing_burn_initial_state,
                 recovery_target, booster,
@@ -319,6 +338,26 @@ def fly_recovery(ascent_run: FlightRun, target: FlightTarget, vehicle_path, *,
     return RecoveryOutcome(run=run, success=success, reason_codes=reason_codes,
                            plan=plan, landing=landing, checks=tuple(checks),
                            assumptions=tuple(assumptions))
+
+
+def _landing_flight(landing_options: Mapping[str, Any] | None):
+    """The landing-burn step for ``plan_options["landing"]``: FL-305's
+    :func:`fly_landing_burn_closed_loop` with the given guidance fields, or
+    FL-303's :func:`fly_landing_burn` for ``mode="single"``. Validated
+    before FL-302 runs, so a typo fails fast instead of after the optimiser."""
+    opts = dict(landing_options) if landing_options else {}
+    mode = str(opts.pop("mode", "closed-loop"))
+    if mode not in LANDING_MODES:
+        raise ValueError(f"landing mode must be one of {LANDING_MODES}, got {mode!r}")
+    if mode == "single":
+        if opts:
+            raise ValueError(f"landing mode 'single' takes no guidance options, got {sorted(opts)}")
+        return fly_landing_burn
+    guidance = TerminalGuidance(**opts)  # TypeError on an unknown field
+
+    def fly(*args, **kwargs):
+        return fly_landing_burn_closed_loop(*args, guidance=guidance, **kwargs)
+    return fly
 
 
 def separation_state_ecef(ascent_run: FlightRun) -> BoosterState:

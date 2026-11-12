@@ -8,15 +8,18 @@ data-missing gate; the landing ids in checks.py mirror the FL-303 set).
 
 The @slow tests fly the real thing. The textbook-RTLS ascent (separation
 8 km up, 40 km down, 250 m/s) drives the full simulate -> FL-302 -> FL-303
-chain and must come back *honest red*: FL-302 hands the corridor off at
-~300 m/s descent, which FL-303's single-plan G-FOLD documents it cannot fly
-in the real atmosphere (landing.py "G3 note": under-thrust near the ground),
-so the gate must fail with the governing landing reason code -- explained,
-never whitewashed. The green verdict is then proven through the identical
-wiring by feeding FL-303's own nominal-case verdict (computed live by the
-real fly_landing_burn) into the real simulate(). A small-N Monte Carlo must
-reproduce itself byte-for-byte from a seed across worker layouts, and every
-failure in it must carry a reason code.
+chain and must come back *green* with FL-305's closed-loop terminal guidance
+(ADR flightlab-0002): FL-302 hands the corridor off at ~3 km / ~306 m/s,
+the closed loop lands it inside every FL-303 touchdown limit and the
+propellant reserve -- no substituted landing anywhere. The same handoff
+flown by FL-303's single open-loop plan (``landing: {mode: single}``) must
+still come back *honest red* with the governing landing reason code
+(landing.py "G3 note": under-thrust near the ground) -- explained, never
+whitewashed. Two wiring-only tests (labelled as such) feed FL-303's
+certified nominal verdict into simulate() / the Monte Carlo to pin the merge
+and statistics plumbing independently of the physics. A small-N Monte Carlo
+must reproduce itself byte-for-byte from a seed across worker layouts, and
+every failure in it must carry a reason code.
 """
 from __future__ import annotations
 
@@ -218,14 +221,12 @@ def _clean_orbit_run() -> FlightRun:
 
 
 def _nominal_green_landing():
-    """FL-303's own nominal handoff state (low, slow, near: 200 m up, 80 m
-    over, 10 m/s down, 54 t) landed by the real ``fly_landing_burn`` on the
-    scenario pad -- the green verdict FL-303's acceptance suite certifies.
-    The merged FL-302/FL-303 chain only hands off a *landable* corridor from
-    a state like this one; from the textbook RTLS handoff (~300 m/s at the
-    corridor plate) FL-303 under-thrusts near the ground by design and lands
-    red. The green E2E therefore drives the real simulate() wiring with this
-    real verdict in place of the corridor handoff."""
+    """WIRING-ONLY substitute: FL-303's own nominal handoff state (low,
+    slow, near: 200 m up, 80 m over, 10 m/s down, 54 t) landed by the real
+    ``fly_landing_burn`` on the scenario pad -- the green verdict FL-303's
+    acceptance suite certifies -- returned in place of whatever corridor
+    state FL-302 hands over. Used only by the tests labelled wiring-only;
+    the physical green E2E (FL-305) substitutes nothing."""
     from orbitopt.flightlab.recovery import BoosterModel, BoosterState
     from orbitopt.flightlab.recovery.boostback import LandingBurnEnu, RecoveryTarget, _enu_basis
     from orbitopt.flightlab.recovery.landing import fly_landing_burn
@@ -270,14 +271,56 @@ def _nominal_green_landing():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.slow
-def test_slow_e2e_textbook_rtls_is_honest_red_with_a_landing_reason_code(monkeypatch, target,
-                                                                         tmp_path):
-    """Full physical chain from the textbook separation: FL-302 feasible,
-    FL-303 flies, the re-integration lands hard, and every verdict is
-    explained. The corridor handoff (~300 m/s descent at h0) is beyond
-    FL-303's single-plan G-FOLD under real drag and ambient thrust (its own
-    G3 note documents the under-thrust), so the mission must come back RED
-    with the governing landing reason -- never silent, never whitewashed."""
+def test_slow_e2e_nominal_recovery_is_green_through_the_real_chain(monkeypatch, target,
+                                                                   tmp_path):
+    """FL-305 acceptance: the textbook separation flown by the real
+    simulate() -> FL-302 boostback/entry -> FL-303 landing burn under the
+    FL-305 closed-loop terminal guidance, nothing substituted. The gate is
+    green because FL-303's touchdown checks -- vertical / lateral speed,
+    tilt, pad distance, max-g and the propellant reserve -- all pass on the
+    propagated track, and the run round-trips through the contract reader."""
+    import orbitopt.flightlab.simulate as sim
+    from orbitopt.flightlab.recovery.landing import TOUCHDOWN_CHECK_IDS
+    from orbitopt.flightlab.recovery.pipeline import NOMINAL_PLAN_GUESS
+    from orbitopt.flightlab.simulate import simulate
+
+    pytest.importorskip("gfold")
+    ascent = _ascent_with_textbook_separation()
+    monkeypatch.setattr(sim, "run_ascent", lambda *a, **k: ascent)
+
+    out = tmp_path / "green"
+    run = simulate(target, VEHICLE, out, refly=False,
+                   recovery_options={"initial_guess": NOMINAL_PLAN_GUESS,
+                                     "max_fevals": 18})
+    by_id = {c.id: c for c in run.verification.checks}
+    gate = by_id[checks.RECOVERY_GATE_CHECK_ID]
+    assert gate.passed, f"gate failed: {gate.reason_code}"
+    assert run.verification.mission_constraints_passed is True
+    for check_id in TOUCHDOWN_CHECK_IDS:
+        assert by_id[check_id].passed, (check_id, by_id[check_id].value)
+    assert abs(by_id["landing-vertical-speed"].value) <= 3.0
+    assert by_id["landing-position"].value < 25.0
+    assert by_id["landing-tilt"].value <= 40.0
+    assert by_id["landing-propellant-reserve"].value >= 0.0
+    assert by_id["recovery-propellant-reserve"].passed
+    touchdown = [e for e in run.events if e.kind == "touchdown"]
+    assert len(touchdown) == 1 and touchdown[0].body_id == "booster"
+    assert any("FL-305 closed-loop" in a for a in run.assumptions)
+    bodies = {t.body_id for t in run.tracks}
+    assert "booster" in bodies and "stage1_debris" not in bodies
+    assert read_run(out).verification == run.verification
+
+
+@pytest.mark.slow
+def test_slow_e2e_single_plan_landing_is_honest_red_with_a_landing_reason_code(
+        monkeypatch, target, tmp_path):
+    """The same physical chain with FL-303's single open-loop G-FOLD plan
+    (``landing: {mode: single}``): FL-302 feasible, FL-303 flies, the
+    re-integration lands hard, and every verdict is explained. The corridor
+    handoff (~300 m/s descent at h0) is beyond an open-loop flat-model plan
+    under real drag and ambient thrust (FL-303's G3 note), so the mission
+    must come back RED with the governing landing reason -- never silent,
+    never whitewashed."""
     import orbitopt.flightlab.simulate as sim
     from orbitopt.flightlab.recovery.pipeline import NOMINAL_PLAN_GUESS
     from orbitopt.flightlab.simulate import simulate
@@ -288,7 +331,8 @@ def test_slow_e2e_textbook_rtls_is_honest_red_with_a_landing_reason_code(monkeyp
     out = tmp_path / "red"
     run = simulate(target, VEHICLE, out, refly=False,
                    recovery_options={"initial_guess": NOMINAL_PLAN_GUESS,
-                                     "max_fevals": 18})
+                                     "max_fevals": 18,
+                                     "landing": {"mode": "single"}})
     by_id = {c.id: c for c in run.verification.checks}
     gate = by_id[checks.RECOVERY_GATE_CHECK_ID]
     assert not gate.passed
@@ -305,10 +349,11 @@ def test_slow_e2e_textbook_rtls_is_honest_red_with_a_landing_reason_code(monkeyp
 
 
 @pytest.mark.slow
-def test_slow_e2e_green_verdict_travels_the_full_simulate_wiring(monkeypatch, target, tmp_path):
-    """The acceptance criterion "nominal E2E green for a synthetic vehicle":
-    with a landable corridor handoff (FL-303's certified nominal verdict
-    substituted for the infeasible textbook one -- see
+def test_slow_wiring_only_substituted_green_landing_travels_simulate(monkeypatch, target,
+                                                                    tmp_path):
+    """WIRING-ONLY (not a physics result -- the FL-305 green E2E above is):
+    with FL-303's certified nominal verdict substituted for the landing step
+    (``landing: {mode: single}`` + a patched ``fly_landing_burn``, see
     _nominal_green_landing), the real simulate() recovery branch must merge
     the booster run, turn the gate green, lift mission_constraints_passed,
     and round-trip through the contract reader."""
@@ -325,7 +370,8 @@ def test_slow_e2e_green_verdict_travels_the_full_simulate_wiring(monkeypatch, ta
     out = tmp_path / "green"
     run = simulate(target, VEHICLE, out, refly=False,
                    recovery_options={"initial_guess": NOMINAL_PLAN_GUESS,
-                                     "max_fevals": 18})
+                                     "max_fevals": 18,
+                                     "landing": {"mode": "single"}})
     by_id = {c.id: c for c in run.verification.checks}
     gate = by_id[checks.RECOVERY_GATE_CHECK_ID]
     assert gate.passed, f"gate failed: {gate.reason_code}"
@@ -369,11 +415,14 @@ def test_slow_monte_carlo_is_deterministic_per_seed(tmp_path):
 
 
 @pytest.mark.slow
-def test_slow_monte_carlo_green_source_yields_rate_percentiles_and_ellipse(monkeypatch, tmp_path):
-    """With a landable handoff (the FL-303 nominal verdict, as in the green
-    wiring test) the Monte Carlo must report a full success rate, the
-    touchdown dispersion ellipse over the landed subset, and the metric
-    percentiles -- the statistical twin of the green E2E."""
+def test_slow_wiring_only_monte_carlo_green_source_yields_rate_percentiles_and_ellipse(
+        monkeypatch, tmp_path):
+    """WIRING-ONLY (statistics plumbing, not a physics result -- the FL-305
+    before/after Monte Carlo lives in docs/benchmarks/
+    fl305_recovery_montecarlo.json): with the FL-303 nominal verdict
+    substituted for every landing, the Monte Carlo must report a full
+    success rate, the touchdown dispersion ellipse over the landed subset,
+    and the metric percentiles."""
     from orbitopt.flightlab.recovery import pipeline as pipe
     from orbitopt.flightlab.recovery.montecarlo import Dispersions, run_monte_carlo
     from orbitopt.flightlab.recovery.pipeline import NOMINAL_PLAN_GUESS
@@ -386,7 +435,8 @@ def test_slow_monte_carlo_green_source_yields_rate_percentiles_and_ellipse(monke
     res = run_monte_carlo(target, VEHICLE, _ascent_with_textbook_separation(),
                           dispersions=disp, seed=9, n=3, workers=1,
                           plan_options={"initial_guess": NOMINAL_PLAN_GUESS,
-                                        "max_fevals": 18},
+                                        "max_fevals": 18,
+                                        "landing": {"mode": "single"}},
                           out_path=tmp_path / "montecarlo.json")
     assert res.success_rate == 1.0
     assert res.reason_histogram == {"LANDED": 3}
