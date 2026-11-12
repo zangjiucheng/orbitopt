@@ -87,6 +87,12 @@ REFLY_MAX_DI_DEG = 0.005
 REFLY_MAX_DRAAN_DEG = 0.02
 
 #: Check ids whose pass/fail decides ``mission_constraints_passed``.
+#: The last seven are the FL-304 recovery half: the ``recovery-landing``
+#: gate (the pipeline flew the booster and it touched down) and the six
+#: FL-303 touchdown checks (identical to the recovery package's
+#: ``TOUCHDOWN_CHECK_IDS`` -- restated as strings so this module stays
+#: stdlib-only; a test asserts the two agree). They only join the
+#: conjunction when the target declares a recovery (see ``evaluate``).
 CONSTRAINT_CHECK_IDS = frozenset({
     "max-q-within-limit",
     "max-accel-within-limit",
@@ -99,7 +105,31 @@ CONSTRAINT_CHECK_IDS = frozenset({
     "insertion-apoapsis-within-tolerance",
     "insertion-inclination-within-tolerance",
     "insertion-raan-within-tolerance",
+    "recovery-landing",
+    "landing-position",
+    "landing-vertical-speed",
+    "landing-lateral-speed",
+    "landing-tilt",
+    "landing-propellant-reserve",
+    "landing-max-g",
 })
+
+#: The FL-303 touchdown checks (mirror of
+#: ``orbitopt.flightlab.recovery.landing.TOUCHDOWN_CHECK_IDS``).
+LANDING_CONSTRAINT_CHECK_IDS = frozenset({
+    "landing-position",
+    "landing-vertical-speed",
+    "landing-lateral-speed",
+    "landing-tilt",
+    "landing-propellant-reserve",
+    "landing-max-g",
+})
+#: The FL-304 recovery gate check id (mirror of
+#: ``orbitopt.flightlab.recovery.pipeline.RECOVERY_GATE_CHECK_ID``):
+#: pass = the booster was flown and landed inside every limit; a recovery
+#: target whose run has no gate is a failed data-missing check, not silence.
+RECOVERY_GATE_CHECK_ID = "recovery-landing"
+RECOVERY_LANDING_NOT_ASSESSED = "RECOVERY_LANDING_NOT_ASSESSED"
 
 _STACK_RE = re.compile(r"stage[0-9]+")
 
@@ -458,6 +488,9 @@ def evaluate(run: FlightRun, target: FlightTarget) -> Verification:
     if (target.recovery.kind != "none"
             and target.recovery.min_propellant_reserve_kg is not None):
         declared_ids.add("recovery-propellant-reserve")
+    if target.recovery.kind != "none":
+        declared_ids.add(RECOVERY_GATE_CHECK_ID)
+        declared_ids.update(LANDING_CONSTRAINT_CHECK_IDS)
     kept = [c for c in kept if c.id not in CONSTRAINT_CHECK_IDS or c.id in declared_ids
             or c.id == "liftoff-thrust-to-weight"]
     kept = _deduplicate_checks(kept)
@@ -502,6 +535,12 @@ def evaluate(run: FlightRun, target: FlightTarget) -> Verification:
                 id="recovery-propellant-reserve", passed=False, limit=float(limit), unit="kg",
                 reason_code="RECOVERY_PROPELLANT_RESERVE_DATA_MISSING",
             ))
+
+    if target.recovery.kind != "none" and _find_check(kept, RECOVERY_GATE_CHECK_ID) is None:
+        _replace_or_append(kept, Check(
+            id=RECOVERY_GATE_CHECK_ID, passed=False,
+            reason_code=RECOVERY_LANDING_NOT_ASSESSED,
+        ))
 
     checks = kept + insertion_checks(run, target)
     constraints = [c for c in checks if c.id in CONSTRAINT_CHECK_IDS]

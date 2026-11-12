@@ -251,7 +251,11 @@ def test_evaluate_uses_latest_recovery_reserve_check_when_duplicate_missing_and_
     measured = Check(
         id="recovery-propellant-reserve", passed=True, value=4782.0, limit=1000.0, unit="kg",
     )
-    run = replace(run, verification=Verification(checks=(missing, measured)))
+    # FL-304: the target declares a recovery, so the recovery-landing gate is a
+    # declared constraint too -- a mission can only come back green once a
+    # landed booster says so (see the data-missing variant elsewhere).
+    gate = Check(id="recovery-landing", passed=True)
+    run = replace(run, verification=Verification(checks=(missing, measured, gate)))
     t = replace(target, constraints=replace(
         target.constraints, max_dynamic_pressure_pa=None, max_specific_acceleration_g=None))
     v = evaluate(run, t)
