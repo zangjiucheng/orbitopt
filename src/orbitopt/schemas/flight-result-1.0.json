@@ -23,6 +23,12 @@
     "git_sha": {"type": "string", "pattern": "^[0-9a-f]{7,40}$"},
     "created_utc": {"$ref": "#/$defs/utc_timestamp"},
     "assumptions": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "toolchain": {
+      "type": "object",
+      "description": "FL-601 reproducibility record: interpreter, orbitopt, and the installed version of every tool the run could use, plus OpenTsiolkovsky's pinned version and SHA-256. Written by orbitopt.flightlab.toolchain.toolchain_record on every write_run; a tool that is not installed is recorded as \"absent\", never omitted. Optional in the schema so pre-FL-601 run dirs still validate.",
+      "propertyNames": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+      "additionalProperties": {"type": "string", "minLength": 1}
+    },
     "bodies": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/body"}}
   },
   "$defs": {

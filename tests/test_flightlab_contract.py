@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import json
+import platform
 import shutil
 from pathlib import Path
 
@@ -318,3 +319,43 @@ def test_write_run_from_scratch(tmp_path):
     write_run(out, run)
     assert sorted(p.name for p in (out / "trajectories").iterdir()) == ["pod.csv", "stack.csv"]
     assert read_run(out) == run
+
+
+# ------------------------------------------------- toolchain record (FL-601)
+
+
+def test_write_run_records_toolchain(tmp_path):
+    """FL-601: every manifest write_run emits names the exact tool versions
+    (and the OpenTsiolkovsky SHA-256) the run was flown with."""
+    write_run(tmp_path / "tc", read_run(RUN_FIXTURE))
+    toolchain = _read_manifest(tmp_path / "tc")["toolchain"]
+    required = {"python", "orbitopt", "numpy", "scipy", "astropy", "tudatpy",
+                "gfold", "jsbsim", "cvxpy", "jsonschema", "pyyaml",
+                "opentsiolkovsky", "opentsiolkovsky_sha256"}
+    assert required <= set(toolchain)
+    assert all(isinstance(k, str) and isinstance(v, str) and v
+               for k, v in toolchain.items())
+    assert toolchain["opentsiolkovsky"] == "1.0.0"
+    sha = toolchain["opentsiolkovsky_sha256"]
+    assert sha and all(c in "0123456789abcdef" for c in sha) or sha.startswith("binary absent")
+    # the record is manifest metadata only: the run itself round-trips
+    assert read_run(tmp_path / "tc") == read_run(RUN_FIXTURE)
+
+
+def test_pre_fl601_manifest_without_toolchain_still_validates():
+    """toolchain is required on write but optional in the schema: a run dir
+    recorded before FL-601 must still load."""
+    assert "toolchain" not in _read_manifest(RUN_FIXTURE)
+    assert read_run(RUN_FIXTURE).run_id == "synthetic-two-stage-0001"
+
+
+def test_toolchain_record_is_complete_and_stable():
+    from orbitopt.flightlab.toolchain import TOOL_DISTRIBUTIONS, toolchain_record
+
+    record = toolchain_record()
+    assert record["python"] == platform.python_version()
+    for dist in TOOL_DISTRIBUTIONS:
+        value = record[dist]
+        assert isinstance(value, str) and value  # version or "absent", never missing
+    assert record["opentsiolkovsky"] == "1.0.0"
+    assert toolchain_record() == record  # deterministic within a process
