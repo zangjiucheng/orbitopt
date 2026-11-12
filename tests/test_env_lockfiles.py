@@ -109,3 +109,19 @@ def test_sixdof_spike_requirements_pin_jsbsim_with_hashes():
     assert lines[0].startswith("jsbsim==1.3.3")
     assert len([ln for ln in lines if ln.startswith("--hash=sha256:")]) >= 2
     assert "jsbsim" not in "".join(_spec("cpu")["dependencies"] + _spec("gpu")["dependencies"])
+
+
+def test_flightlab_toolchain_pins_are_exact():
+    # FL-601: every tool a Flight Lab run can use is pinned exactly -- in the
+    # conda specs where the tool is a conda package (astropy), in the pip
+    # add-on layers where it is not (gfold, jsbsim; the jsbsim hash test is
+    # above). The toolchain record in a run manifest is only meaningful if
+    # the install is reproducible.
+    for flavor in FLAVORS:
+        astropy = [d for d in _spec(flavor)["dependencies"] if d.startswith("astropy")]
+        assert astropy == ["astropy=6.1.7"], f"{flavor}.yml must pin astropy exactly"
+        for platform in PLATFORMS[flavor]:
+            assert _locked(_lock(flavor), platform)["astropy"]["version"] == "6.1.7"
+    landing = (ENVS / "flightlab-landing.txt").read_text(encoding="utf-8")
+    assert any(ln.strip().startswith("gfold==0.3.2")
+               for ln in landing.splitlines() if ln.strip() and not ln.lstrip().startswith("#"))
