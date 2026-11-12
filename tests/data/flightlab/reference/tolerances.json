@@ -1,5 +1,5 @@
 {
-  "t_s_abs": 1e-09,
+  "t_s_abs": 1e-06,
   "mass_kg_abs": 1e-06,
   "position_m_abs": 0.0001,
   "velocity_m_s_abs": 1e-06,

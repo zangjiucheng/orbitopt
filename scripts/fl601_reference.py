@@ -54,9 +54,11 @@ VEHICLE = REPO / "src" / "orbitopt" / "data" / "flightlab" / "vehicles" / "synth
 # reference is recorded in a container and CI flies on a native runner, and
 # the two agree to ~2e-6 m / ~4e-7 m/s (the fairing's last ballistic samples
 # grow the last-bit differences most). The tolerances sit ~50x above that
-# floor -- 0.1 mm, 1 um/s -- and still far below any real change.
+# floor -- 0.1 mm, 1 um/s -- and still far below any real change. Times
+# likewise: an interpolated ground impact (the fairing's) moved by 3 ns, so
+# 1 us, ~0.3 mm of the fairing's fall.
 DEFAULT_TOLERANCES = {
-    "t_s_abs": 1e-9,
+    "t_s_abs": 1e-6,
     "mass_kg_abs": 1e-6,
     "position_m_abs": 1e-4,
     "velocity_m_s_abs": 1e-6,
