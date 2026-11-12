@@ -1,7 +1,7 @@
 {
   "files": {
     "gateb-leo-two-stage/events.json": "7b21e24af0ce3342997bd727eb127eb1900c415b8d0034da64cac8890e23c13a",
-    "gateb-leo-two-stage/manifest.json": "85779faef049984e786101d5c9c278c4666b35ad234ba26c6308734d2b5b4519",
+    "gateb-leo-two-stage/manifest.json": "ab6a4841023e7fd7be1281082623a1516a77eead1e65b326626ad43995fe0230",
     "gateb-leo-two-stage/opentsiolkovsky/bodies/stage1.csv": "c5f41641b525da6e4e62fc2139980b688feb0b44c8de8e75b23f36bc82f4ac94",
     "gateb-leo-two-stage/opentsiolkovsky/bodies/stage2_fairing.csv": "f1df2482ffa1e97c640208bca69cd7116b989cdb1cf1de58b097f0d6a530c9a0",
     "gateb-leo-two-stage/opentsiolkovsky/summary.json": "d6cd8cd437908fef3afb07438b2a344c76f9662660f826864673a5c2e3cee4c9",
@@ -14,7 +14,7 @@
     "tolerances.json": "0879c26e0f40d51dee251e9f3ef86dba63cbda04cd4939b772c1bee12d7b6949"
   },
   "generated_by": "scripts/fl601_reference.py update",
-  "git_sha_recording": "4b8f88e1b36366cfeea65857f26782c96888216a",
+  "git_sha_recording": "b34382e20c2b51b60db3b35585692ca628862697",
   "reference": "Gate B (FL-006) ascent-only regression flight",
   "requires_commit_tag": "[fl601-reference-update]",
   "simulate_options": {

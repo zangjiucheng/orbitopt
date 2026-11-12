@@ -42,6 +42,27 @@ def test_reference_manifest_records_the_recording_toolchain():
     assert all(c in "0123456789abcdef" for c in toolchain["opentsiolkovsky_sha256"])
 
 
+def test_reference_inputs_match_the_current_scenario_files():
+    """The reference was flown from the packaged target + vehicle. If either
+    file changes -- even comments or metadata the OT config never sees --
+    the slow real-binary `compare` fails on the input digests, so catch the
+    stale reference here, in the fast job, with the adapter's own digest
+    recipe. Fix: `python scripts/fl601_reference.py update` and commit with
+    [fl601-reference-update]."""
+    import hashlib
+
+    pytest.importorskip("jsonschema")
+    from orbitopt.flightlab.contract import load_target, target_digest
+
+    script = _script()
+    manifest = json.loads((REF_ROOT / "gateb-leo-two-stage" / "manifest.json")
+                          .read_text(encoding="utf-8"))
+    assert manifest["target_sha256"] == target_digest(load_target(script.TARGET).to_dict()), (
+        f"{script.TARGET.name} changed since the reference was recorded")
+    assert manifest["vehicle_sha256"] == hashlib.sha256(script.VEHICLE.read_bytes()).hexdigest(), (
+        f"{script.VEHICLE.name} changed since the reference was recorded")
+
+
 def test_declared_tolerances_are_complete():
     script = _script()
     declared = json.loads((REF_ROOT / "tolerances.json").read_text(encoding="utf-8"))

@@ -2,11 +2,11 @@
   "schema_version": "1.0",
   "run_id": "ot-812f9a8f-a67f59aa",
   "target_sha256": "812f9a8f5d196515df62c7310b1c9f48a3ae34ce037be6dd1380a07d52e1bd61",
-  "vehicle_sha256": "15a10f5645522b67dd8e0944accc5e65144fda525e6f8872cbc54e3b20acfb9e",
+  "vehicle_sha256": "ff284f2ad6fb9a153f33c4a30eb394e359992cfc0e8ecad80c73b06a56ebffb0",
   "engines": {
     "opentsiolkovsky-cli": "1.0.0"
   },
-  "git_sha": "4b8f88e1b36366cfeea65857f26782c96888216a",
+  "git_sha": "b34382e20c2b51b60db3b35585692ca628862697",
   "created_utc": "2026-11-10T12:00:00Z",
   "assumptions": [
     "OpenTsiolkovsky 1.0.0 (MIT, external binary -- not vendored; see NOTICE; openTsiolkovsky-v1.0.0-<platform>.tar.gz, pinned per-platform SHA-256 digests live in scripts/fetch_opentsiolkovsky.py)",
@@ -21,15 +21,15 @@
     "Gate-B verdict (FL-006): orbitopt.flightlab.checks.evaluate -- the three verification booleans are independent; None means not assessed, never passed"
   ],
   "toolchain": {
-    "python": "3.13.18",
-    "orbitopt": "unknown (source tree; see git_sha)",
+    "python": "3.12.3",
+    "orbitopt": "0.1.0",
     "numpy": "2.5.4",
-    "scipy": "1.18.1",
-    "astropy": "8.0.2",
+    "scipy": "1.17.1",
+    "astropy": "7.2.3",
     "tudatpy": "absent",
-    "gfold": "absent",
-    "jsbsim": "absent",
-    "cvxpy": "absent",
+    "gfold": "0.3.2",
+    "jsbsim": "1.3.3",
+    "cvxpy": "1.9.3",
     "jsonschema": "4.26.0",
     "pyyaml": "6.0.3",
     "opentsiolkovsky": "1.0.0",
