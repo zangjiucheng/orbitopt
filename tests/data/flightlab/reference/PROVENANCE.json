@@ -2,7 +2,7 @@
   "earth_orientation": "bundled IERS only, astropy-iers-data 0.2026.8.31.0.57.9",
   "files": {
     "gateb-leo-two-stage/events.json": "7b21e24af0ce3342997bd727eb127eb1900c415b8d0034da64cac8890e23c13a",
-    "gateb-leo-two-stage/manifest.json": "e7f6618ceafa32f090f6f8706fbfce4170bab8109b9614ac0fddaf7e50685706",
+    "gateb-leo-two-stage/manifest.json": "1b4a2da326fc34ee35a24cfe032a97786b3425fa243bcb21125fd35f65ba87f2",
     "gateb-leo-two-stage/opentsiolkovsky/bodies/stage1.csv": "c5f41641b525da6e4e62fc2139980b688feb0b44c8de8e75b23f36bc82f4ac94",
     "gateb-leo-two-stage/opentsiolkovsky/bodies/stage2_fairing.csv": "f1df2482ffa1e97c640208bca69cd7116b989cdb1cf1de58b097f0d6a530c9a0",
     "gateb-leo-two-stage/opentsiolkovsky/summary.json": "d6cd8cd437908fef3afb07438b2a344c76f9662660f826864673a5c2e3cee4c9",
@@ -12,10 +12,10 @@
     "gateb-leo-two-stage/trajectories/stage2.csv": "98f64168bb5d2c43db0f42dfc9e60c449b6e162019dbaffaa130ca701bf928a1",
     "gateb-leo-two-stage/trajectories/stage2_fairing.csv": "f7a9f21a7133fb2724783bb48ccf35305b0ee0888931b2a66d8edfce180080e4",
     "gateb-leo-two-stage/verification.json": "3cf47caedfbb69eeadb541fc69e408bf6df506702a69e8f5ddab6516435cb8c7",
-    "tolerances.json": "0879c26e0f40d51dee251e9f3ef86dba63cbda04cd4939b772c1bee12d7b6949"
+    "tolerances.json": "3b3b4b3bc99cc2e851ad64466fd87ac28a509066c1f6e445cd4c786068da9f56"
   },
   "generated_by": "scripts/fl601_reference.py update",
-  "git_sha_recording": "781a827be88a16b5e511760454f82cd8ee4bf26a",
+  "git_sha_recording": "ef59934e9a349affa4935ddf79cd64e1d64b9074",
   "reference": "Gate B (FL-006) ascent-only regression flight",
   "requires_commit_tag": "[fl601-reference-update]",
   "simulate_options": {

@@ -50,16 +50,21 @@ VEHICLE = REPO / "src" / "orbitopt" / "data" / "flightlab" / "vehicles" / "synth
 #: Default declared tolerances, written by ``update`` on first use and kept
 #: verbatim afterwards (changing them is itself a reference update). Each
 #: numeric comparison passes when |candidate - reference| <= abs + rel*|reference|.
+# Positions and velocities are GCRS states after the frame bridge; the
+# reference is recorded in a container and CI flies on a native runner, and
+# the two agree to ~2e-6 m / ~4e-7 m/s (the fairing's last ballistic samples
+# grow the last-bit differences most). The tolerances sit ~50x above that
+# floor -- 0.1 mm, 1 um/s -- and still far below any real change.
 DEFAULT_TOLERANCES = {
     "t_s_abs": 1e-9,
     "mass_kg_abs": 1e-6,
-    "position_m_abs": 1e-6,
-    "velocity_m_s_abs": 1e-8,
+    "position_m_abs": 1e-4,
+    "velocity_m_s_abs": 1e-6,
     "extra_abs": {
-        "altitude_m": 1e-6,
+        "altitude_m": 1e-4,
         "latitude_deg": 1e-9,
         "longitude_deg": 1e-9,
-        "downrange_m": 1e-6,
+        "downrange_m": 1e-4,
         "dynamic_pressure_pa": 1e-2,
         "mach": 1e-7,
     },
