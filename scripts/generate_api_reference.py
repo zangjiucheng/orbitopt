@@ -24,6 +24,7 @@ GROUPS = {
     "dynamics": "Dynamics",
     "flightlab": "Flight Lab",
     "lambert": "Lambert solvers",
+    "mission": "Mission integration",
     "optimize": "Optimization",
     "problems": "Optimization problems",
     "verify": "Verification",
