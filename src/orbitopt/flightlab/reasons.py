@@ -225,6 +225,33 @@ _ENTRIES: tuple[ReasonEntry, ...] = (
        "problem, not a tuning one.",
        "检查轨迹坐标系/历元（GCRS 转换）和后端输出步长；这是数据问题而非调参问题。"),
 
+    # ------------------------------------------------- 6-DOF backend (F-01, #226)
+    _e("SIXDOF_NON_FINITE_STATE", "physics",
+       "6-DOF state went non-finite", "6-DOF 状态出现非法值",
+       "The JSBSim 6-DOF integration produced a NaN or infinite state — the flight diverged and no "
+       "downstream check means anything.",
+       "JSBSim 6-DOF 积分产生 NaN 或无穷大的状态——飞行已发散，后续检查均不可信。",
+       "Shorten the integration step (dt_s), lower the throttle, or check the vehicle's mass/propellant "
+       "figures in the scenario config.",
+       "减小积分步长（dt_s）、降低油门，或检查场景配置中的飞行器质量/推进剂数值。"),
+    _e("SIXDOF_HANDOFF_CONTINUITY", "physics",
+       "Staging handoff not continuous", "级间分离衔接不连续",
+       "At the 6-DOF staging split the child states do not match the frozen stack state within the "
+       "declared tolerances (or the mass/momentum bookkeeping closed only loosely) — the handoff lost "
+       "or invented state.",
+       "6-DOF 级间分离时刻，子级状态与冻结的整箭状态在声明容差内不一致（或质量/动量记账不闭合）——衔接丢失或凭空多出了状态。",
+       "Re-check the staging split fractions, the separation impulse and the interstage models; the "
+       "handoff must be state-preserving by construction.",
+       "重新检查级间分离质量比例、分离冲量与级间段模型；衔接在构造上必须保持状态守恒。"),
+    _e("SIXDOF_TRACKING_OUT_OF_BOUNDS", "physics",
+       "Attitude tracking out of bounds", "姿态跟踪超出界限",
+       "The closed-loop 6-DOF attitude/trajectory deviation exceeded a bound declared in the scenario "
+       "config (settled error, gimbal saturation, or MECO-state deviation vs the reference).",
+       "闭环 6-DOF 的姿态/轨迹偏差超出场景配置中声明的界限（稳定段误差、伺服饱和率，或 MECO 状态相对基准的偏差）。",
+       "Re-tune the PID gains or slow the attitude program down; verify the initial attitude matches the "
+       "program's first waypoint.",
+       "重新整定 PID 增益或放缓姿态程序；确认初始姿态与程序第一个航点一致。"),
+
     # --------------------------------------------------------- optimizer (FL-201+)
     _e("INFEASIBLE_PERIAPSIS_OUT_OF_TOLERANCE", "optimizer",
        "Optimizer could not hit periapsis", "优化器未能满足近地点",

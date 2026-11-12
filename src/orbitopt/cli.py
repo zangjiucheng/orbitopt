@@ -321,7 +321,8 @@ def _cmd_flight_simulate(args):
     try:
         target = load_target(args.target)
         run = simulate(target, Path(args.vehicle), Path(args.output),
-                       refly=not args.no_refly, timeout_s=args.timeout)
+                       refly=not args.no_refly, timeout_s=args.timeout,
+                       backend=getattr(args, "backend", "3DOF"))
     except (OSError, ValueError, KeyError, RuntimeError, jsonschema.ValidationError) as exc:
         # RuntimeError covers OTBinaryMissingError and every adapter subprocess failure
         print(f"ERROR: {exc}")
@@ -582,10 +583,19 @@ def build_parser() -> argparse.ArgumentParser:
     flight_sim = flight_sub.add_parser(
         "simulate",
         help="Gate B (FL-006): fly a FlightTarget with a vehicle file, verify constraints "
-             "and re-fly the insertion orbit with tudatpy (needs the OpenTsiolkovsky binary)")
+             "and re-fly the insertion orbit with tudatpy (needs the OpenTsiolkovsky "
+             "binary; --backend 6DOF flies the JSBSim scenario config instead)")
     flight_sim.add_argument("target", help="a FlightTarget YAML (see `flight export-target`)")
     flight_sim.add_argument("--vehicle", required=True, metavar="PATH",
-                            help="flightlab vehicle YAML (OT stage configs + attitude program)")
+                            help="flightlab vehicle YAML (OT stage configs + attitude "
+                                 "program); with --backend 6DOF: a 6-DOF scenario "
+                                 "config (see orbitopt/data/flightlab/sixdof/)")
+    flight_sim.add_argument("--backend", choices=("3DOF", "6DOF"), default="3DOF",
+                            type=str.upper,
+                            help="ascent physics: '3DOF' OpenTsiolkovsky (default) or "
+                                 "'6DOF' JSBSim (pip install orbitopt[sixdof]; the "
+                                 "recovery chain and insertion re-fly are 3-DOF "
+                                 "machinery and do not run)")
     flight_sim.add_argument("-o", "--output", required=True, metavar="RUN_DIR",
                             help="output run directory (FlightResult v1)")
     flight_sim.add_argument("--scene", action="store_true",
