@@ -3,6 +3,11 @@
 track with events out (J2 + rotating Earth + US76 atmosphere + Cd(Mach)
 drag + relightable throttle-limited thrust).
 
+FL-304 adds the merge layer and the Monte Carlo: ``fly_recovery`` turns a
+flown ascent run into the combined insertion+landing run that
+``orbitopt flight simulate`` scores, and ``run_monte_carlo`` disperses
+thrust / Isp / atmosphere / drag / separation state around it.
+
 Deliberately *not* imported from ``orbitopt.flightlab.__init__``: this
 subpackage needs numpy (and, for non-ECEF frames, astropy), while the base
 package and the contract stay stdlib-only. Import it directly:
@@ -76,6 +81,22 @@ from orbitopt.flightlab.recovery.landing import (  # noqa: F401
     reintegrate_landing,
     solve_landing_burn,
 )
+from orbitopt.flightlab.recovery.pipeline import (  # noqa: F401
+    NOMINAL_PLAN_GUESS,
+    RECOVERY_GATE_CHECK_ID,
+    RECOVERY_NOT_ASSESSED,
+    RECOVERY_LANDING_NOT_ATTEMPTED,
+    RecoveryOutcome,
+    dispersed_separation_state,
+    fly_recovery,
+    separation_state_ecef,
+)
+from orbitopt.flightlab.recovery.montecarlo import (  # noqa: F401
+    MC_PLAN_OPTIONS,
+    Dispersions,
+    MonteCarloResult,
+    run_monte_carlo,
+)
 
 __all__ = [
     "AltitudeThreshold",
@@ -92,6 +113,7 @@ __all__ = [
     "DEFAULT_ENTRY_G_MAX",
     "DEFAULT_ENTRY_Q_MAX_PA",
     "DEFAULT_LANDING_LIMITS",
+    "Dispersions",
     "ENTRY_G_LIMIT_EXCEEDED",
     "ENTRY_Q_LIMIT_EXCEEDED",
     "EntryBurnPlan",
@@ -110,6 +132,12 @@ __all__ = [
     "LANDING_PROPELLANT_RESERVE_LOW",
     "LANDING_TILT_EXCEEDED",
     "LANDING_VERTICAL_SPEED_EXCEEDED",
+    "MC_PLAN_OPTIONS",
+    "MonteCarloResult",
+    "NOMINAL_PLAN_GUESS",
+    "RECOVERY_GATE_CHECK_ID",
+    "RECOVERY_NOT_ASSESSED",
+    "RECOVERY_LANDING_NOT_ATTEMPTED",
     "TOUCHDOWN_CHECK_IDS",
     "LandingInfeasibleError",
     "LandingLimits",
@@ -121,15 +149,21 @@ __all__ = [
     "RecoveryTarget",
     "ReturnPlan",
     "ThrustCmd",
+    "RecoveryOutcome",
+    "ThrustCmd",
     "ballistic_return",
     "density_us76_kg_m3",
+    "dispersed_separation_state",
     "landing_burn_propellant_need_kg",
     "fly_landing_burn",
     "landing_events",
     "landing_guidance",
     "landing_result_to_run",
     "landing_touchdown_checks",
+    "fly_recovery",
     "reintegrate_landing",
+    "run_monte_carlo",
+    "separation_state_ecef",
     "solve_landing_burn",
     "mission_command",
     "parse_event_specs",

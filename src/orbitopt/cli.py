@@ -208,6 +208,9 @@ def _cmd_flight(args):
     if getattr(args, "flight_command", None) == "simulate":
         _cmd_flight_simulate(args)
         return
+    if getattr(args, "flight_command", None) == "montecarlo":
+        _cmd_flight_montecarlo(args)
+        return
     if args.flight_command == "to-scene":
         return _cmd_flight_to_scene(args)
     if getattr(args, "flight_command", None) == "export-target":
@@ -328,6 +331,10 @@ def _cmd_flight_simulate(args):
           "  (E1 flies a hand-tuned program; no optimizer ran)")
     print(f"  physics_verified:           {word(v.physics_verified)}")
     print(f"  mission_constraints_passed: {word(v.mission_constraints_passed)}")
+    gate = next((c for c in v.checks if c.id == "recovery-landing"), None)
+    if gate is not None:
+        print(f"  recovery (FL-304):              {'LANDED' if gate.passed else 'NOT LANDED'}"
+              + (f" [{gate.reason_code}]" if gate.reason_code else ""))
     for c in v.checks:
         if not c.passed:
             value = "-" if c.value is None else f"{c.value:.6g} {c.unit}".strip()
@@ -343,6 +350,54 @@ def _cmd_flight_simulate(args):
         scene_path.write_text(json.dumps(scene, indent=2) + "\n", encoding="utf-8")
         print(f"  scene: {scene_path} ({len(scene['bodies'])} bodies "
               "-- open with: orbitopt view that file)")
+
+
+def _cmd_flight_montecarlo(args):
+    """`orbitopt flight montecarlo <target.yaml> --vehicle <v.yaml> -n N
+    --seed S [-o montecarlo.json] [--jobs J]`: FL-304 -- fly the ascent once,
+    then re-plan and re-fly ``n`` dispersed recovery samples (thrust, Isp,
+    atmosphere, drag, separation state) in a process pool, printing the
+    success rate, the reason-code histogram and the landing dispersion.
+    Deterministic per seed: the same seed and setup write a byte-identical
+    JSON regardless of ``--jobs``. Exit code reports pipeline health, like
+    `flight simulate`."""
+    from pathlib import Path
+
+    import jsonschema
+
+    from orbitopt.flightlab.contract import load_target
+    from orbitopt.flightlab.recovery.montecarlo import run_monte_carlo
+    from orbitopt.flightlab.simulate import simulate
+
+    out = Path(args.out)
+    ascent_dir = Path(args.ascent_run_dir) if args.ascent_run_dir else out.with_suffix(".ascent")
+    try:
+        target = load_target(args.target)
+        ascent = simulate(target, Path(args.vehicle), ascent_dir,
+                          refly=not args.no_refly, timeout_s=args.timeout,
+                          run_recovery=False)
+        mc = run_monte_carlo(target, Path(args.vehicle), ascent,
+                             seed=args.seed, n=args.n, workers=args.jobs,
+                             out_path=out)
+    except (OSError, ValueError, KeyError, RuntimeError, jsonschema.ValidationError) as exc:
+        print(f"ERROR: {exc}")
+        raise SystemExit(1) from None
+
+    print(f"montecarlo: n={mc.n} seed={mc.seed} -> {out}")
+    print(f"  success_rate: {mc.success_rate:.3f} "
+          f"({sum(1 for s in mc.samples if s.get('outcome') == 'landed')}/{mc.n} landed in limits)")
+    for code, count in mc.reason_histogram.items():
+        print(f"  {count:>4}  {code}")
+    ell = mc.ellipse
+    if ell.get("state") == "assessed":
+        print(f"  ellipse (1-sigma, site ENU): along {ell['sigma_along_m']:.1f} m x "
+              f"cross {ell['sigma_cross_m']:.1f} m @ {ell['bearing_deg']:.1f} deg "
+              f"(mean {ell['mean_east_m']:+.1f} E {ell['mean_north_m']:+.1f} N, n={ell['n']})")
+    else:
+        print(f"  ellipse: {ell['state']} (n={ell.get('n', 0)})")
+    for key, st in mc.landing_stats.items():
+        if st.get("n"):
+            print(f"  {key}: p50 {st['p50']:.3g}  p95 {st['p95']:.3g} (n={st['n']})")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -445,6 +500,29 @@ def build_parser() -> argparse.ArgumentParser:
                             help="skip the tudatpy insertion re-fly (physics_verified stays not-assessed)")
     flight_sim.add_argument("--timeout", type=float, default=300.0, metavar="S",
                             help="OpenTsiolkovsky subprocess timeout [s] (default 300)")
+    flight_mc = flight_sub.add_parser(
+        "montecarlo",
+        help="FL-304: Monte-carlo the booster recovery of a flight target "
+             "(ascent once, then n dispersed closed-loop recovery samples; "
+             "needs the OpenTsiolkovsky binary)")
+    flight_mc.add_argument("target", help="a FlightTarget YAML (see `flight export-target`)")
+    flight_mc.add_argument("--vehicle", required=True, metavar="PATH",
+                           help="flightlab vehicle YAML (OT stage configs + booster section)")
+    flight_mc.add_argument("-n", type=int, default=8, metavar="N",
+                           help="number of samples (default 8)")
+    flight_mc.add_argument("--seed", type=int, default=1, metavar="S",
+                           help="master seed; the statistics are byte-reproducible per seed (default 1)")
+    flight_mc.add_argument("--jobs", type=int, default=1, metavar="J",
+                           help="process-pool width (default 1 = in-process serial)")
+    flight_mc.add_argument("-o", "--out", default="montecarlo.json", metavar="PATH",
+                           help="output JSON path (default: montecarlo.json)")
+    flight_mc.add_argument("--ascent-run-dir", default=None, metavar="RUN_DIR",
+                           help="where the (single) ascent run is written "
+                                "(default: <out>.ascent/)")
+    flight_mc.add_argument("--no-refly", action="store_true",
+                           help="skip the tudatpy insertion re-fly of the ascent run")
+    flight_mc.add_argument("--timeout", type=float, default=300.0, metavar="S",
+                           help="OpenTsiolkovsky subprocess timeout [s] (default 300)")
     return parser
 
 
