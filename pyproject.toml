@@ -50,6 +50,12 @@ viewer = [
     "pyside6>=6.9",  # tested with 6.9.2 (3.11 / 3.12 envs) and 6.11.1 (3.10)
     "pyvistaqt>=0.12",
 ]
+# Flight Lab E4 JSBSim 6-DOF spike (orbitopt.flightlab.sixdof). Wheels:
+# universal2 macOS + manylinux x86_64. In the conda env use the hash-pinned
+# envs/sixdof-requirements.txt instead.
+sixdof = [
+    "jsbsim==1.3.3",
+]
 # Deliberately no "compute" extras group here: pykep, pygmo, and tudatpy
 # (needed by orbitopt.problems / orbitopt.verify / the mission-*computing*
 # viz exporters) ship only on conda-forge/tudat-team and do not exist on
@@ -74,6 +80,7 @@ where = ["src"]
 orbitopt = ["schemas/*.json", "data/*.yaml", "data/scenes/*.json.gz", "data/scenes/manifest.json",
             "data/flightlab/scenarios/*.yaml", "data/flightlab/vehicles/*.yaml",
             "data/flightlab/schemas/*.json",
+            "data/flightlab/jsbsim/aircraft/*/*.xml", "data/flightlab/jsbsim/engine/*.xml",
             "viz/assets/textures/*.jpg", "viz/assets/textures/*.png"]
 
 [tool.pytest.ini_options]
