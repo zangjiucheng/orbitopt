@@ -11,6 +11,7 @@ This page is the operational summary; the licenses are in
 |---|---|---|
 | python / conda stack | python 3.10, tudatpy 1.0, numpy 1.26.4, … | `envs/{cpu,gpu}.yml` + `envs/*.conda-lock.yml` (CI job `lockfile-drift` fails spec/lock skew) |
 | astropy (frame bridge) | `astropy=6.1.7`, exact | `envs/{cpu,gpu}.yml` |
+| IERS Earth-orientation data | `astropy-iers-data` from the lockfile, **no download** in the Gate B regression | `scripts/fl601_reference.py` (`_pin_earth_orientation`) |
 | gfold (FL-303 landing solver) | `gfold==0.3.2`, exact | `envs/flightlab-landing.txt` |
 | jsbsim (E4 6-DOF spike) | `jsbsim==1.3.3`, hash-locked | `envs/sixdof-requirements.txt` |
 | OpenTsiolkovsky (external binary) | v1.0.0, per-platform SHA-256 | `scripts/fetch_opentsiolkovsky.py` (fetch refuses any other bytes; `--check` verifies what is installed) |
@@ -20,6 +21,22 @@ carries all of this under `manifest.toolchain` (interpreter, orbitopt, every
 tool distribution's installed version or `"absent"`, OpenTsiolkovsky's pinned
 version and the SHA-256 of the binary actually found on disk).
 `tests/test_flightlab_contract.py` asserts the record is complete.
+
+### Why the regression never downloads IERS data
+
+The frame bridge rotates OpenTsiolkovsky's Earth-fixed states into GCRS
+with astropy, which needs Earth-orientation data (UT1-UTC, polar motion).
+astropy downloads the latest IERS-A table by default, and that table changes
+every day as predictions become measurements: the same flight's GCRS
+positions moved by tenths of a metre between days, far beyond the
+micrometre tolerances (the regression's first CI run failed on 7,670
+samples). `fl601_reference.py run` / `update` therefore use only the table
+bundled with the pinned `astropy-iers-data`. It ends before the reference
+epoch, so astropy takes UT1 = UTC and zero polar motion there: a frame a few
+tens of metres off the true one, but the same on every run with the same
+lockfile. Bumping `astropy-iers-data` in the lockfile changes the reference;
+re-record it with `update` and the `[fl601-reference-update]` tag. Record
+it in the locked environment (CI's), not a local one.
 
 ## CI layout (.github/workflows/ci.yml)
 

@@ -86,7 +86,7 @@
     {
       "id": "insertion-apoapsis-within-tolerance",
       "passed": false,
-      "value": 539299.7104611285,
+      "value": 539299.7104611294,
       "limit": 400000.0,
       "unit": "m",
       "reason_code": "INSERTION_APOAPSIS_OUT_OF_TOLERANCE"
@@ -94,7 +94,7 @@
     {
       "id": "insertion-inclination-within-tolerance",
       "passed": true,
-      "value": 51.76106883833418,
+      "value": 51.76104132861604,
       "limit": 51.6,
       "unit": "deg",
       "reason_code": ""
