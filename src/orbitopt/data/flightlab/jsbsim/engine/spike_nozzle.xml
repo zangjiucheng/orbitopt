@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<!--
+  Flight Lab E4 spike (#206): nozzle with a token exit area so the ambient
+  back-pressure term (p * A) in FGNozzle is negligible ("vacuum-ish").
+-->
+<nozzle name="spike_nozzle">
+  <area unit="FT2"> 0.001 </area>
+</nozzle>

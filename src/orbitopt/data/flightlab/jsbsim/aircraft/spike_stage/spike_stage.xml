@@ -1,0 +1,163 @@
+<?xml version="1.0"?>
+<!--
+  orbitopt Flight Lab E4 spike (task #206, FL-401): a minimal single liquid
+  stage with gimballed TVC, throttle and propellant-driven mass/CG/inertia.
+
+  Written fresh for the go/no-go spike. The *structure* follows JSBSim's
+  bundled J246 test article (rocket engine, nozzle thruster, propellant
+  tanks, TVC through FCS actuators) but nothing is copied from it: no
+  staging, no guidance, no aerodynamic tables.
+
+  Frames: JSBSim's structural frame is used for every <location>
+  (x positive AFT from the nose, y right, z up). The stage is 45 m long,
+  nose at x=0. Body axes (x forward, z down) are what the driver reports.
+
+  * Engine: FGRocket, liquid variant (isp + propflowmax + mixtureratio):
+    vacuum thrust = Isp * g0 * mdot with mdot = throttle * propflowmax, so
+    the analytic Tsiolkovsky / constant-mdot checks are exact laws.
+  * Nozzle: token exit area, so FNozzle's ambient back-pressure debit
+    (p * A) is negligible -> "vacuum-ish" thrust at any altitude.
+  * Tanks: OXIDIZER + FUEL sized to the mixture ratio (both empty together
+    after 100 s at full throttle). FGMassBalance recomputes weight, CG and
+    inertia from the tank contents every frame.
+  * TVC: the thruster's <orient> element makes propulsion/engine[0]/
+    {pitch,yaw}-angle-rad writable; two FGActuator channels (first-order
+    lag + slew-rate limit + travel limit) drive them from command
+    properties set by the driver.
+  * Aerodynamics: identically zero (TVC is the only moment source).
+  * No ground reactions: the spike flies free flights only.
+-->
+<aircraft name="spike_stage" version="2.0" release="ALPHA">
+  <fileheader>
+    <author>orbitopt Flight Lab</author>
+    <description>Minimal liquid stage with gimballed TVC (Flight Lab E4 JSBSim spike, #206)</description>
+  </fileheader>
+
+  <metrics>
+    <wingarea  unit="M2"> 10.0 </wingarea>
+    <wingspan  unit="M">   3.7 </wingspan>
+    <chord     unit="M">   3.7 </chord>
+    <htailarea unit="M2">  0.0 </htailarea>
+    <htailarm  unit="M">   0.0 </htailarm>
+    <vtailarea unit="M2">  0.0 </vtailarea>
+    <vtailarm  unit="M">   0.0 </vtailarm>
+    <location name="AERORP" unit="M"> <x> 20.0 </x> <y> 0.0 </y> <z> 0.0 </z> </location>
+  </metrics>
+
+  <mass_balance>
+    <!-- Dry stage: 10 t, CG 20 m aft of the nose. Inertia of a 45 m x 3.7 m
+         thin-walled cylinder of that mass (kg*m^2). -->
+    <ixx unit="KG*M2"> 3.4e4 </ixx>
+    <iyy unit="KG*M2"> 1.7e6 </iyy>
+    <izz unit="KG*M2"> 1.7e6 </izz>
+    <ixy unit="KG*M2"> 0.0 </ixy>
+    <ixz unit="KG*M2"> 0.0 </ixz>
+    <iyz unit="KG*M2"> 0.0 </iyz>
+    <emptywt unit="KG"> 10000.0 </emptywt>
+    <location name="CG" unit="M"> <x> 20.0 </x> <y> 0.0 </y> <z> 0.0 </z> </location>
+  </mass_balance>
+
+  <propulsion>
+    <engine file="spike_engine">
+      <feed> 0 </feed>
+      <feed> 1 </feed>
+      <thruster file="spike_nozzle">
+        <!-- 42 m aft of the nose, i.e. 22 m behind the dry CG. -->
+        <location unit="M"> <x> 42.0 </x> <y> 0.0 </y> <z> 0.0 </z> </location>
+        <orient unit="DEG">
+          <roll>  0.0 </roll>
+          <pitch> 0.0 </pitch>
+          <yaw>   0.0 </yaw>
+        </orient>
+      </thruster>
+    </engine>
+
+    <!-- Mixture ratio 2.5 (ox/fuel by mass): 60 t propellant =
+         42 857.14 kg LOX + 17 142.86 kg fuel. LOX forward, fuel aft. -->
+    <tank type="OXIDIZER">
+      <location unit="M"> <x> 14.0 </x> <y> 0.0 </y> <z> 0.0 </z> </location>
+      <radius unit="M"> 1.8 </radius>
+      <capacity unit="KG"> 42857.142857 </capacity>
+      <contents unit="KG"> 42857.142857 </contents>
+    </tank>
+    <tank type="FUEL">
+      <location unit="M"> <x> 28.0 </x> <y> 0.0 </y> <z> 0.0 </z> </location>
+      <radius unit="M"> 1.8 </radius>
+      <capacity unit="KG"> 17142.857143 </capacity>
+      <contents unit="KG"> 17142.857143 </contents>
+    </tank>
+  </propulsion>
+
+  <ground_reactions>
+    <!-- None: the spike flies free flights only. -->
+  </ground_reactions>
+
+  <flight_control name="spike_stage_fcs">
+    <!-- TVC servos. The driver writes fcs/{pitch,yaw}-gimbal-cmd-rad.
+         Each actuator: first-order lag (time constant 1/5 s; JSBSim's
+         <lag> value is the corner frequency in rad/s), 0.35 rad/s
+         (~20 deg/s) slew-rate limit, +-0.0873 rad (5 deg) travel.
+         Sign convention (checked by the tests): POSITIVE pitch command ->
+         nose-up pitching moment (q > 0); POSITIVE yaw command -> nose-right
+         yawing moment (r > 0). -->
+    <!-- Driver-written TVC commands [rad]. -->
+    <property value="0.0">fcs/pitch-gimbal-cmd-rad</property>
+    <property value="0.0">fcs/yaw-gimbal-cmd-rad</property>
+
+    <channel name="tvc-pitch">
+      <actuator name="fcs/pitch-gimbal-actuator">
+        <input>fcs/pitch-gimbal-cmd-rad</input>
+        <lag> 5.0 </lag>
+        <rate_limit> 0.35 </rate_limit>
+        <clipto>
+          <min> -0.0873 </min>
+          <max>  0.0873 </max>
+        </clipto>
+        <output>fcs/pitch-gimbal-actual-rad</output>
+      </actuator>
+      <pure_gain name="fcs/pitch-gimbal-to-engine">
+        <input>fcs/pitch-gimbal-actual-rad</input>
+        <gain> -1.0 </gain>
+        <output>propulsion/engine[0]/pitch-angle-rad</output>
+      </pure_gain>
+    </channel>
+    <channel name="tvc-yaw">
+      <actuator name="fcs/yaw-gimbal-actuator">
+        <input>fcs/yaw-gimbal-cmd-rad</input>
+        <lag> 5.0 </lag>
+        <rate_limit> 0.35 </rate_limit>
+        <clipto>
+          <min> -0.0873 </min>
+          <max>  0.0873 </max>
+        </clipto>
+        <output>fcs/yaw-gimbal-actual-rad</output>
+      </actuator>
+      <pure_gain name="fcs/yaw-gimbal-to-engine">
+        <input>fcs/yaw-gimbal-actual-rad</input>
+        <gain> -1.0 </gain>
+        <output>propulsion/engine[0]/yaw-angle-rad</output>
+      </pure_gain>
+    </channel>
+  </flight_control>
+
+  <aerodynamics>
+    <axis name="DRAG">
+      <function name="aero/coefficient/CD0">
+        <description>Zero (vacuum spike)</description>
+        <value> 0.0 </value>
+      </function>
+    </axis>
+    <axis name="SIDE">
+      <function name="aero/coefficient/CY0">
+        <description>Zero (vacuum spike)</description>
+        <value> 0.0 </value>
+      </function>
+    </axis>
+    <axis name="LIFT">
+      <function name="aero/coefficient/CL0">
+        <description>Zero (vacuum spike)</description>
+        <value> 0.0 </value>
+      </function>
+    </axis>
+  </aerodynamics>
+</aircraft>
