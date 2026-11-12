@@ -604,6 +604,9 @@ class FlightLabDesignerPage(QWidget):
             self.provenance.blockSignals(True)
             self.provenance.setCurrentIndex(idx)
             self.provenance.blockSignals(False)
+            # signals were blocked, so the badge must be told explicitly --
+            # otherwise an edited preset keeps reading "official"
+            self._update_provenance_badge()
 
     def _update_provenance_badge(self, *_a):
         """FL-602: spell out what the selected provenance tag means, so

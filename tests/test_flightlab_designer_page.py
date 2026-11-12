@@ -237,3 +237,27 @@ def test_explorer_mode_hides_every_engineer_field_and_caption(qapp):
     finally:
         page.terminate_compute()
         page.deleteLater()
+
+
+def test_provenance_badge_follows_an_edit_that_demotes_the_preset(qapp):
+    """FL-602: editing a value a preset supplied demotes its provenance to
+    "illustrative" -- with the combo's signals blocked, so the badge must be
+    refreshed explicitly or it keeps claiming "public estimate"/"official"
+    for data the user just changed."""
+    from orbitopt.flightlab.ui import FlightLabDesignerPage
+
+    page = FlightLabDesignerPage()
+    try:
+        page._load_preset("f9_class_public_estimate")
+        qapp.processEvents()
+        assert page.provenance.currentData() == "public_estimate"
+        assert "public estimate" in page.provenance_badge.text()
+
+        page.payload.setValue(page.payload.value() + 1.0)  # a user edit
+        qapp.processEvents()
+        assert page.provenance.currentData() == "illustrative"
+        assert "illustrative" in page.provenance_badge.text()
+        assert "public estimate" not in page.provenance_badge.text()
+    finally:
+        page.terminate_compute()
+        page.deleteLater()

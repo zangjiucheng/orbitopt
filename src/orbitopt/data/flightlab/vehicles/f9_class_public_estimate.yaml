@@ -155,9 +155,9 @@ data_provenance:
     uncertainty_pct: 8.0
   stages[0].engine.thrust_vac_n:
     provenance: public_estimate
-    source: OT example; equals 9 x the 981 kN per-engine vacuum rating published in the SpaceX Falcon 9 User Guide (2020), which itself lists 7,607 kN liftoff (sea-level) thrust
+    source: OT example; matches the commonly quoted Falcon 9 first-stage total (9 x Merlin 1D, ~914 kN each in vacuum; 7,607 kN at sea level). Not 9 x 981 kN -- 981 kN is the Merlin Vacuum second-stage rating (stages[1])
     as_of: "2020"
-    accuracy: "sum of published per-engine vacuum ratings; off-nominal in-flight margin varies"
+    accuracy: "first-stage total as quoted; off-nominal in-flight margin varies"
     uncertainty_pct: 3.0
   stages[0].engine.isp_vac_s:
     provenance: official
