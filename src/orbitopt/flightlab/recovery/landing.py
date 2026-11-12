@@ -66,6 +66,14 @@ short of the pad; and near the ground the ambient thrust is lower than the
 insertion-altitude envelope the SOCP was solved against, so the last few
 seconds under-thrust. Both failures show up in the re-integration verdict --
 which is the point of re-integrating.
+
+FL-305 (``docs/adr/flightlab-0002-closed-loop-landing-guidance.md``) adds
+:func:`fly_landing_burn_closed_loop`: the same insertion SOCP as the
+feasibility certificate, but the burn flown by :class:`TerminalGuidance`, a
+throttle-limited hoverslam + ZEM/ZEV divert re-planned from the propagated
+state every step, with the tilt limit in the loop and a final cutoff tuned
+to the no-hover thrust-to-weight. The referee is unchanged:
+:func:`landing_touchdown_checks` on the propagated track.
 """
 from __future__ import annotations
 
@@ -857,6 +865,38 @@ def fly_landing_burn(state_enu: LandingBurnEnu, state_ecef: BoosterState,
     ``feasible`` means the SOCP solved; ``landed`` means the re-integration
     touched down inside every limit."""
     lat, lon, pad_alt, pad_ecef = _pad_of_target(target)
+    plan, infeasible = _insertion_plan(
+        state_enu, state_ecef, vehicle, pad_alt, gravity_m_s2=gravity_m_s2,
+        drag_gravity_bias=drag_gravity_bias,
+        solver=solver, tof_s=tof_s, tof_min_s=tof_min_s, tof_max_s=tof_max_s,
+        n=n, glide_slope_deg=glide_slope_deg, tilt_limit_deg=tilt_limit_deg,
+        max_speed_m_s=max_speed_m_s,
+        cutoff_height_m=cutoff_height_m,
+        cutoff_descent_m_s=cutoff_descent_m_s)
+    if infeasible is not None:
+        return infeasible
+
+    track, samples = reintegrate_landing(
+        plan, state_ecef, vehicle, pad_lat_deg=lat, pad_lon_deg=lon,
+        ground_height_m=float(height_m(pad_ecef)), dt_s=dt_s, sample_s=sample_s,
+        physics=physics)
+    return _graded_result(
+        plan, track, samples, vehicle, limits, target,
+        assumptions=_FL303_ASSUMPTIONS + (
+            f"solver={plan.solver} status={plan.status} n={plan.n_nodes} "
+            f"tof_flying={plan.tof_flying_s:.2f}s "
+            f"fuel_planned={plan.fuel_planned_kg:.1f}kg",))
+
+
+def _insertion_plan(state_enu: LandingBurnEnu, state_ecef: BoosterState,
+                    vehicle: BoosterModel, pad_alt: float, *,
+                    gravity_m_s2: float | None, drag_gravity_bias: bool,
+                    **solve_kwargs: Any
+                    ) -> tuple[LandingPlan | None, LandingResult | None]:
+    """The SOCP at corridor insertion: ``(plan, None)``, or ``(None,
+    result)`` with the ``LANDING_INFEASIBLE`` verdict when it does not
+    solve. Shared by the single-plan flow and FL-305's closed loop, so an
+    infeasible corridor state reads identically in both."""
     gravity = (gravity_m_s2 if gravity_m_s2 is not None
                else _local_gravity(state_ecef.position_m))
     if gravity_m_s2 is None and drag_gravity_bias:
@@ -870,34 +910,32 @@ def fly_landing_burn(state_enu: LandingBurnEnu, state_ecef: BoosterState,
                   * vehicle.reference_area_m2 / max(state_enu.mass_kg, 1.0))
         gravity = max(gravity - a_drag, 1.0)
     try:
-        plan = solve_landing_burn(
-            state_enu, vehicle, gravity_m_s2=gravity, pad_altitude_m=pad_alt,
-            solver=solver, tof_s=tof_s, tof_min_s=tof_min_s, tof_max_s=tof_max_s,
-            n=n, glide_slope_deg=glide_slope_deg, tilt_limit_deg=tilt_limit_deg,
-            max_speed_m_s=max_speed_m_s,
-            cutoff_height_m=cutoff_height_m,
-            cutoff_descent_m_s=cutoff_descent_m_s)
+        plan = solve_landing_burn(state_enu, vehicle, gravity_m_s2=gravity,
+                                  pad_altitude_m=pad_alt, **solve_kwargs)
     except LandingInfeasibleError as exc:
-        return LandingResult(
+        return None, LandingResult(
             feasible=False, landed=False,
             reason_codes=(LANDING_INFEASIBLE,),
             checks=(Check(id="landing-solver", passed=False,
                           reason_code=LANDING_INFEASIBLE),),
             assumptions=_FL303_ASSUMPTIONS + (f"solver report: {exc}",),
         )
+    return plan, None
 
-    track, samples = reintegrate_landing(
-        plan, state_ecef, vehicle, pad_lat_deg=lat, pad_lon_deg=lon,
-        ground_height_m=float(height_m(pad_ecef)), dt_s=dt_s, sample_s=sample_s,
-        physics=physics)
+
+def _graded_result(plan: LandingPlan, track: BoosterTrack, samples: Sequence[tuple],
+                   vehicle: BoosterModel, limits: LandingLimits,
+                   target: RecoveryTarget, *,
+                   assumptions: tuple[str, ...]) -> LandingResult:
+    """Grade a flown landing track with :func:`landing_touchdown_checks`
+    (the referee both flows share) and pack the verdict."""
+    lat, lon, pad_alt, pad_ecef = _pad_of_target(target)
     checks, measured = landing_touchdown_checks(
         track, vehicle, limits, pad_lat_deg=lat, pad_lon_deg=lon,
         pad_altitude_m=pad_alt, samples=samples)
-
     reasons = tuple(c.reason_code for c in checks if not c.passed)
-    landed = bool(plan is not None) and not reasons
     return LandingResult(
-        feasible=True, landed=landed,
+        feasible=True, landed=not reasons,
         reason_codes=reasons,
         checks=checks,
         plan=plan,
@@ -913,11 +951,278 @@ def fly_landing_burn(state_enu: LandingBurnEnu, state_ecef: BoosterState,
         max_tilt_deg=measured.get("max_tilt_deg"),
         max_proper_g=measured.get("max_proper_g", 0.0),
         ignitions_used=int(track.ignitions_used),
-        assumptions=_FL303_ASSUMPTIONS + (
-            f"solver={plan.solver} status={plan.status} n={plan.n_nodes} "
-            f"tof_flying={plan.tof_flying_s:.2f}s "
-            f"fuel_planned={plan.fuel_planned_kg:.1f}kg",),
+        assumptions=assumptions,
     )
+
+
+# ---------------------------------------------------------------------------
+# FL-305: closed-loop terminal guidance (docs/adr/flightlab-0002)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class TerminalGuidance:
+    """FL-305 closed-loop landing-burn guidance (ADR flightlab-0002). The
+    convex plan made at corridor insertion is flown open-loop by FL-303; from
+    FL-302's ~3 km / ~300 m/s handoff that lands at ~-100 m/s because the flat
+    model sees neither drag nor the ambient-thrust drop near the ground. This
+    law re-plans analytically from the *propagated* state at every guidance
+    step instead:
+
+    * **vertical -- throttle-limited hoverslam.** The constant deceleration
+      that brings the descent rate to ``touchdown_speed_m_s`` exactly at pad
+      level, ``a_req = (v_z^2 - v_td^2) / (2 h)``, recomputed every step. The
+      engine stays shut while ``a_req`` is below what ``design_throttle`` of
+      the *sea-level* thrust gives (minus gravity) and lights once it gets
+      there, so the burn starts with ``1 - design_throttle`` of authority in
+      hand for drag, ambient thrust and mass errors. Late and hard is also
+      the min-gravity-loss burn. It lights earlier when the divert would
+      otherwise need more than ``divert_ignition_fraction`` of the
+      tilt-limited lateral authority (0 disables).
+    * **lateral -- ZEM/ZEV divert.** ``a_h = 6 ZEM / t_h^2 - 2 ZEV / t_h``
+      toward the pad with the vertical profile's time-to-go
+      ``t_go = 2 h / (|v_z| + v_td)`` shortened by ``settle_s``, so the
+      divert finishes before the last seconds; after that a PD loop
+      (``lateral_damping_per_s``, ``lateral_stiffness_per_s2``) nulls the
+      residual drift.
+    * **attitude in the loop.** The lateral command is scaled so the thrust
+      vector never tilts past ``tilt_limit_deg`` (below the 40 deg touchdown
+      check), and the thrust is capped at ``max_thrust_accel_g``.
+    * **cutoff tuned to the no-hover T/W.** With a throttle floor above the
+      vehicle's weight the profile cannot be followed once ``a_req`` drops
+      below the floor's net deceleration: below ``cutoff_height_m`` the
+      engine shuts down for good as soon as the ballistic arrival speed
+      ``sqrt(v_z^2 + 2 g h)`` is under ``cutoff_speed_m_s``. One ignition,
+      one cutoff -- no restarts spent.
+
+    The law commands; it never grades. The verdict is FL-303's
+    :func:`landing_touchdown_checks` on the propagated track, unchanged."""
+
+    design_throttle: float = 0.9
+    touchdown_speed_m_s: float = 1.5
+    tilt_limit_deg: float = 30.0
+    max_thrust_accel_g: float = 4.5
+    settle_s: float = 2.0
+    lateral_damping_per_s: float = 2.0
+    lateral_stiffness_per_s2: float = 0.2
+    cutoff_height_m: float = 3.0
+    cutoff_speed_m_s: float = 2.2
+    min_time_to_go_s: float = 0.5
+    divert_ignition_fraction: float = 0.7
+
+    def __post_init__(self) -> None:
+        if not 0.0 < self.design_throttle <= 1.0:
+            raise ValueError("design_throttle must be in (0, 1]")
+        if self.touchdown_speed_m_s <= 0.0:
+            raise ValueError("touchdown_speed_m_s must be positive")
+        if not 0.0 < self.tilt_limit_deg < 90.0:
+            raise ValueError("tilt_limit_deg must be in (0, 90)")
+        if self.max_thrust_accel_g <= 1.0:
+            raise ValueError("max_thrust_accel_g must exceed 1 g")
+        if min(self.settle_s, self.lateral_damping_per_s,
+               self.lateral_stiffness_per_s2, self.cutoff_height_m) < 0.0:
+            raise ValueError("settle/gain/cutoff-height terms cannot be negative")
+        if self.cutoff_speed_m_s <= 0.0 or self.min_time_to_go_s <= 0.0:
+            raise ValueError("cutoff_speed_m_s and min_time_to_go_s must be positive")
+
+
+#: The FL-305 policy the recovery pipeline flies by default.
+TERMINAL_GUIDANCE_DEFAULT = TerminalGuidance()
+
+
+@dataclass(frozen=True)
+class TerminalCommand:
+    """One step of :func:`terminal_guidance_command`: ``phase`` is
+    ``"coast"`` (engine not yet lit), ``"burn"`` or ``"cutoff"`` (final
+    shutdown); ``thrust_enu_n`` is the commanded thrust vector in pad ENU
+    (zero unless burning) and ``required_decel_m_s2`` the profile's
+    ``a_req`` at this state."""
+
+    phase: str
+    thrust_enu_n: tuple[float, float, float]
+    required_decel_m_s2: float
+
+    @property
+    def thrust_n(self) -> float:
+        return math.sqrt(sum(c * c for c in self.thrust_enu_n))
+
+
+def _divert_needs_ignition(r: np.ndarray, v: np.ndarray, a_design: float,
+                           gravity_m_s2: float, g: TerminalGuidance) -> bool:
+    """Divert-aware ignition: light early when a burn started now at the
+    design deceleration would already need more than
+    ``divert_ignition_fraction`` of the tilt-limited lateral authority to
+    null the pad offset (a late hoverslam leaves too little time to divert)."""
+    if a_design <= 0.0 or g.divert_ignition_fraction <= 0.0:
+        return False
+    t_h = abs(float(v[2])) / a_design - g.settle_s
+    if t_h <= g.min_time_to_go_s:
+        return False
+    r_h, v_h = r[:2], v[:2]
+    need = float(np.linalg.norm(6.0 * (-r_h - v_h * t_h) / t_h ** 2 + 2.0 * v_h / t_h))
+    cap = math.tan(math.radians(g.tilt_limit_deg)) * (a_design + gravity_m_s2)
+    return need > g.divert_ignition_fraction * cap
+
+
+def terminal_guidance_command(position_enu_m: Sequence[float],
+                              velocity_enu_m_s: Sequence[float],
+                              mass_kg: float, *,
+                              gravity_m_s2: float,
+                              thrust_max_n: float,
+                              thrust_min_n: float,
+                              ignited: bool,
+                              guidance: TerminalGuidance = TERMINAL_GUIDANCE_DEFAULT,
+                              ) -> TerminalCommand:
+    """The FL-305 law (see :class:`TerminalGuidance`) as a pure function of
+    the pad-relative state. ``thrust_max_n`` is the engine's ambient maximum
+    where the ignition decision should be judged (the pipeline passes the
+    sea-level value: the burn ends there), ``thrust_min_n`` its floor at the
+    current altitude, ``ignited`` whether the burn already started."""
+    g = guidance
+    r = np.asarray(position_enu_m, dtype=np.float64)
+    v = np.asarray(velocity_enu_m_s, dtype=np.float64)
+    m = float(mass_kg)
+    h, vz = float(r[2]), float(v[2])
+    h_eff = max(h, 0.05)
+    v_td = g.touchdown_speed_m_s
+    a_req = (vz * vz - v_td * v_td) / (2.0 * h_eff) if vz < -v_td else 0.0
+    zero = (0.0, 0.0, 0.0)
+    if not ignited:
+        a_design = g.design_throttle * float(thrust_max_n) / m - gravity_m_s2
+        if a_req < a_design and not _divert_needs_ignition(
+                r, v, a_design, gravity_m_s2, g):
+            return TerminalCommand("coast", zero, a_req)
+    a_floor = float(thrust_min_n) / m - gravity_m_s2
+    if (a_req < a_floor and h < g.cutoff_height_m
+            and math.sqrt(vz * vz + 2.0 * gravity_m_s2 * max(h, 0.0))
+            <= g.cutoff_speed_m_s):
+        return TerminalCommand("cutoff", zero, a_req)
+
+    a_up = a_req + gravity_m_s2
+    t_go = max(2.0 * h_eff / (abs(vz) + v_td), g.min_time_to_go_s)
+    t_h = t_go - g.settle_s
+    r_h, v_h = r[:2], v[:2]
+    if t_h > g.min_time_to_go_s:
+        a_h = 6.0 * (-r_h - v_h * t_h) / t_h ** 2 + 2.0 * v_h / t_h
+    else:
+        a_h = -g.lateral_damping_per_s * v_h - g.lateral_stiffness_per_s2 * r_h
+    a_h_mag = float(np.hypot(a_h[0], a_h[1]))
+    a_h_cap = math.tan(math.radians(g.tilt_limit_deg)) * a_up
+    if a_h_mag > a_h_cap:  # tilt limit enforced in the loop
+        a_h = a_h * (a_h_cap / a_h_mag)
+    acc = np.array([a_h[0], a_h[1], a_up])  # a_up >= g > 0: never a zero vector
+    a_mag = float(np.linalg.norm(acc))
+    a_cmd = min(a_mag, g.max_thrust_accel_g * G0_M_S2)
+    thrust = acc / a_mag * (m * a_cmd)
+    return TerminalCommand("burn", tuple(float(c) for c in thrust), a_req)
+
+
+class _ClosedLoopLanding:
+    """The guidance callback :func:`propagate` samples once per step: pad-ENU
+    state in, :func:`terminal_guidance_command` out, mapped to a throttle
+    through the *ambient* thrust at the flown altitude. Records the command
+    history (the tilt proxy the touchdown checks grade), ignition and
+    cutoff times."""
+
+    def __init__(self, vehicle: BoosterModel, guidance: TerminalGuidance, *,
+                 pad_lat_deg: float, pad_lon_deg: float, pad_altitude_m: float,
+                 pad_ecef_m: np.ndarray, gravity_m_s2: float) -> None:
+        self.vehicle, self.guidance = vehicle, guidance
+        self.lat, self.lon = pad_lat_deg, pad_lon_deg
+        self.pad_ecef = np.asarray(pad_ecef_m, dtype=np.float64)
+        self.axes = _enu_axes(pad_lat_deg, pad_lon_deg)
+        self.gravity = float(gravity_m_s2)
+        self.thrust_max_pad, _ = _ambient_thrust_envelope(vehicle, pad_altitude_m)
+        self.samples: list[tuple] = []
+        self.ignition_t_s: float | None = None
+        self.cutoff_t_s: float | None = None
+
+    def __call__(self, t_s: float, st: BoosterState) -> ThrustCmd | None:
+        if self.cutoff_t_s is not None:
+            return None
+        r, v = _enu_of(st.position_m, st.velocity_m_s, self.lat, self.lon,
+                       self.pad_ecef)
+        t_max, t_min = _ambient_thrust_envelope(
+            self.vehicle, height_m(np.asarray(st.position_m, dtype=np.float64)))
+        cmd = terminal_guidance_command(
+            r, v, float(st.mass_kg), gravity_m_s2=self.gravity,
+            thrust_max_n=min(t_max, self.thrust_max_pad), thrust_min_n=t_min,
+            ignited=self.ignition_t_s is not None, guidance=self.guidance)
+        if cmd.phase == "coast":
+            return None
+        if cmd.phase == "cutoff":
+            self.cutoff_t_s = float(t_s)
+            return None
+        if self.ignition_t_s is None:
+            self.ignition_t_s = float(t_s)
+        f = np.asarray(cmd.thrust_enu_n, dtype=np.float64)
+        f_mag = float(np.linalg.norm(f))
+        d_enu = f / f_mag
+        # never command a zero-throttle shutdown mid-burn (that would spend a
+        # restart); the propagator clamps up to the engine floor instead.
+        throttle = min(max(f_mag / t_max, 1e-6), self.vehicle.engine.throttle_max)
+        e_, n_, u_ = self.axes
+        d_ecef = d_enu[0] * e_ + d_enu[1] * n_ + d_enu[2] * u_
+        self.samples.append((float(t_s), tuple(float(c) for c in d_enu),
+                             float(throttle),
+                             float(self.vehicle.engine.effective_throttle(throttle))))
+        return ThrustCmd(throttle=float(throttle),
+                         dir_ecef=tuple(float(c) for c in d_ecef))
+
+
+def fly_landing_burn_closed_loop(state_enu: LandingBurnEnu, state_ecef: BoosterState,
+                                 target: RecoveryTarget, vehicle: BoosterModel, *,
+                                 limits: LandingLimits = DEFAULT_LANDING_LIMITS,
+                                 guidance: TerminalGuidance = TERMINAL_GUIDANCE_DEFAULT,
+                                 solver: str = "gfold",
+                                 gravity_m_s2: float | None = None,
+                                 dt_s: float = 0.1, sample_s: float = 0.5,
+                                 physics: BoosterPhysics | None = None,
+                                 flight_time_max_s: float = 300.0,
+                                 ) -> LandingResult:
+    """FL-305: the FL-303 landing flow with closed-loop terminal guidance.
+
+    The SOCP is still solved at corridor insertion -- it is the feasibility
+    certificate (an infeasible state reads ``LANDING_INFEASIBLE`` exactly as
+    in :func:`fly_landing_burn`) and the recorded plan -- but the burn is
+    flown by :class:`TerminalGuidance`, re-planned from the propagated state
+    every integration step, instead of the plan's open-loop thrust schedule.
+    One integration through the FL-301 propagator with the caller's
+    ``physics``; :func:`landing_touchdown_checks` grades it (G3: the
+    guidance never scores itself)."""
+    lat, lon, pad_alt, pad_ecef = _pad_of_target(target)
+    plan, infeasible = _insertion_plan(state_enu, state_ecef, vehicle, pad_alt,
+                                       gravity_m_s2=gravity_m_s2,
+                                       drag_gravity_bias=True, solver=solver,
+                                       tilt_limit_deg=limits.max_tilt_deg)
+    if infeasible is not None:
+        return infeasible
+    law = _ClosedLoopLanding(
+        vehicle, guidance, pad_lat_deg=lat, pad_lon_deg=lon, pad_altitude_m=pad_alt,
+        pad_ecef_m=pad_ecef,
+        gravity_m_s2=(gravity_m_s2 if gravity_m_s2 is not None
+                      else _local_gravity(state_ecef.position_m)))
+    track = propagate(state_ecef, vehicle, law,
+                      float(state_ecef.t_s) + float(flight_time_max_s),
+                      events=("burn", "ground"), dt_s=dt_s, sample_s=sample_s,
+                      ground_height_m=float(height_m(pad_ecef)), physics=physics)
+
+    def _t(x: float | None) -> str:
+        return "none" if x is None else f"{x - float(state_ecef.t_s):.1f}s"
+
+    return _graded_result(
+        plan, track, law.samples, vehicle, limits, target,
+        assumptions=_FL303_ASSUMPTIONS + (
+            "FL-305 closed-loop terminal guidance (docs/adr/flightlab-0002): "
+            "the insertion SOCP is the feasibility certificate; the burn is "
+            "re-planned from the propagated state every step (hoverslam "
+            "vertical profile, ZEM/ZEV divert, tilt limit in the loop, "
+            "no-hover ballistic cutoff); verdict from the same touchdown checks.",
+            f"guidance: design_throttle={guidance.design_throttle:g} "
+            f"v_td={guidance.touchdown_speed_m_s:g}m/s "
+            f"tilt<={guidance.tilt_limit_deg:g}deg ignition={_t(law.ignition_t_s)} "
+            f"cutoff={_t(law.cutoff_t_s)} after insertion; "
+            f"insertion plan fuel_planned={plan.fuel_planned_kg:.1f}kg",))
 
 
 # ---------------------------------------------------------------------------
