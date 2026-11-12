@@ -1,0 +1,92 @@
+{
+  "ascent": "tests/test_flightlab_simulate_recovery.py::_ascent_with_textbook_separation",
+  "dispersions": {
+    "cd_pct": 8.0,
+    "density_pct": 10.0,
+    "isp_pct": 3.0,
+    "sep_altitude_m": 400.0,
+    "sep_crossrange_m": 800.0,
+    "sep_downrange_m": 800.0,
+    "sep_heading_deg": 0.15,
+    "sep_speed_m_s": 4.0,
+    "thrust_pct": 5.0
+  },
+  "kind": "fl305-recovery-montecarlo-before-after",
+  "n": 32,
+  "runs": {
+    "after_fl305": {
+      "landed_stats": {
+        "lateral_speed_m_s": {
+          "n": 14,
+          "p50": 0.06754324413001608,
+          "p95": 0.18956486389131183
+        },
+        "position_error_m": {
+          "n": 14,
+          "p50": 0.8646910590578619,
+          "p95": 2.18204571512692
+        },
+        "vertical_speed_m_s": {
+          "n": 14,
+          "p50": -1.5003003739379515,
+          "p95": -1.5000920388501282
+        }
+      },
+      "plan_options": {
+        "initial_guess": [
+          18.4,
+          17.75,
+          1.0,
+          4.36,
+          0.0,
+          17456.0,
+          23.0
+        ],
+        "max_fevals": 30
+      },
+      "reason_histogram": {
+        "CORRIDOR_MISSED": 1,
+        "INSUFFICIENT_PROPELLANT_RESERVE": 8,
+        "LANDED": 14,
+        "LANDING_POSITION_OUT_OF_TOLERANCE": 4,
+        "LANDING_PROPELLANT_RESERVE_LOW": 5
+      },
+      "success_rate": 0.4375
+    },
+    "before_fl304": {
+      "landed_stats": {
+        "lateral_speed_m_s": {
+          "n": 0
+        },
+        "position_error_m": {
+          "n": 0
+        },
+        "vertical_speed_m_s": {
+          "n": 0
+        }
+      },
+      "plan_options": {
+        "initial_guess": [
+          18.4,
+          19.1,
+          1.0,
+          4.36,
+          0.0,
+          17456.0,
+          23.0
+        ],
+        "landing": {
+          "mode": "single"
+        },
+        "max_fevals": 30
+      },
+      "reason_histogram": {
+        "CORRIDOR_MISSED": 1,
+        "INSUFFICIENT_PROPELLANT_RESERVE": 8,
+        "LANDING_POSITION_OUT_OF_TOLERANCE": 23
+      },
+      "success_rate": 0.0
+    }
+  },
+  "seed": 1
+}
