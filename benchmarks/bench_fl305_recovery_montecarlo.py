@@ -38,11 +38,16 @@ from orbitopt.flightlab.recovery.montecarlo import (  # noqa: E402
 #: FL-304's merged warm start (before FL-305 re-pinned the boostback duration)
 FL304_PLAN_GUESS = (18.4, 19.1, 1.0, 4.36, 0.0, 17456.0, 23.0)
 
+#: R-01 changed the FL-302 objective (landing-aware miss/reserve terms), so
+#: this recorded before/after comparison pins the objective the numbers were
+#: taken under -- otherwise the "after_fl305" column would silently shift.
+FL305_OBJECTIVE = {"landing_divert_budget_m": None, "landing_reserve_margin_kg": 0.0}
+
 CONFIGS = {
     "before_fl304": {"initial_guess": FL304_PLAN_GUESS,
                      "max_fevals": MC_PLAN_OPTIONS["max_fevals"],
-                     "landing": {"mode": "single"}},
-    "after_fl305": dict(MC_PLAN_OPTIONS),
+                     "landing": {"mode": "single"}, **FL305_OBJECTIVE},
+    "after_fl305": {**MC_PLAN_OPTIONS, **FL305_OBJECTIVE},
 }
 
 
