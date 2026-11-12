@@ -198,9 +198,27 @@ def test_wrong_shape_vector_is_a_penalty(target, stub):
 def test_pygmo_roundtrip(target, stub):
     pg = pytest.importorskip("pygmo")
     udp = AscentProblem(target, VEHICLE, "payload")
-    prob = pg.problem(udp)
-    assert prob.get_ncx() == 8 and prob.has_constraints()
+    prob = udp.pygmo_problem(pg)
+    # pygmo must see the constrained layout fitness() returns: 1 objective,
+    # 3 eq (rp, ra, inc) + 3 ineq (max-Q, max-g, reserve) = 7 numbers
+    assert prob.get_ncx() == 8
+    assert (prob.get_nobj(), prob.get_nec(), prob.get_nic(), prob.get_nf()) == (1, 3, 3, 7)
+    bands = udp.get_bounds_eq_ineq()
+    assert list(prob.c_tol) == [b[1] for b in bands[:3]] + [0.0, 0.0, 0.0]
     lo, hi = prob.get_bounds()
     assert len(lo) == 8 and lo[0] < hi[0]
     pop = pg.population(prob, size=4, seed=11)
     assert len(pop.champion_f) == 7
+    # pygmo's feasibility test is the Gate-B band test: the stub flight
+    # misses the apoapsis band, so pygmo must call it infeasible too
+    assert not prob.feasibility_f(pop.champion_f)
+
+
+def test_pygmo_layout_with_raan_slot(target):
+    pg = pytest.importorskip("pygmo")
+    from dataclasses import replace
+
+    raan = replace(target, target_orbit=replace(target.target_orbit, raan_deg=120.0))
+    prob = AscentProblem(raan, VEHICLE, "payload").pygmo_problem(pg)
+    assert (prob.get_nec(), prob.get_nic(), prob.get_nf()) == (4, 3, 8)
+    assert list(prob.c_tol)[3] == pytest.approx(checks.RAAN_TOLERANCE_DEG)

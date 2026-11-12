@@ -10,7 +10,7 @@ verdict (:func:`orbitopt.flightlab.checks.evaluate` -- the single source of
 truth: what the optimizer optimizes is exactly what the CLI later grades).
 
 Fitness vector layout (7 numbers -- 8 when the target constrains RAAN, FL-203;
-the pygmo constrained-UDP protocol, see :meth:`AscentProblem.has_constraints`):
+the pygmo constrained-UDP layout, see :meth:`AscentProblem.get_nec`):
 
     [ -objective,
       eq_rp,  eq_ra,  eq_inc,  [eq_raan,]      # actual - target (m, m, deg, deg)
@@ -46,16 +46,27 @@ replay) costs nothing; ``__deepcopy__`` deliberately shares the cache between
 pygmo's copies of the UDP (same pattern as orbitopt.core.problem.BackendUsage).
 
 pygmo itself is never imported here -- a UDP is duck-typed, so this module
-(and its tests) work on a base install; wrap the instance in
-``pg.problem(udp)`` from the optimizer script:
+(and its tests) work on a base install. The constraint counts follow pygmo's
+UDP protocol (:meth:`AscentProblem.get_nec` / :meth:`AscentProblem.get_nic`),
+and pygmo's per-constraint ``c_tol`` carries the tolerance bands: pygmo
+treats an equality as satisfied when ``|r| <= c_tol`` and an inequality when
+``r <= c_tol``, so ``c_tol`` = the band half-widths for the eq slots and 0
+for the ineq slots makes a pygmo-feasible point exactly one ``evaluate()``
+would not flag. Build the problem with :meth:`AscentProblem.pygmo_problem`
+(which sets ``c_tol``) and use a constraint-handling algorithm:
 
     import pygmo as pg
     from orbitopt.flightlab.contract import load_target
     from orbitopt.flightlab.optimize.ascent_problem import AscentProblem
     udp = AscentProblem(load_target(SCENARIO_PATH), VEHICLE_PATH, "payload")
-    algo = pg.de122(gens=200, ftol=1e-6)          # de122 honours the eq/ineq bands
-    pop = pg.population(pg.problem(udp), size=40, seed=7)
-    pop = algo.evolve(pop)
+    prob = udp.pygmo_problem(pg)
+    algo = pg.algorithm(pg.cstrs_self_adaptive(iters=200, algo=pg.de(gen=1)))
+    pop = algo.evolve(pg.population(prob, size=40, seed=7))
+
+``orbitopt flight optimize`` (FL-202, :mod:`orbitopt.flightlab.optimize.run`)
+does not use this constrained form; it searches the scalar
+:meth:`AscentProblem.penalty_fitness` instead and grades the winner on the
+raw residuals.
 """
 from __future__ import annotations
 
@@ -187,6 +198,30 @@ class AscentProblem:
 
     def has_constraints(self) -> bool:
         return True
+
+    def get_nec(self) -> int:
+        """pygmo UDP protocol: number of equality slots (rp, ra, inc[, raan])."""
+        return len(self.eq_check_ids)
+
+    def get_nic(self) -> int:
+        """pygmo UDP protocol: number of inequality slots (max-Q, max-g,
+        reserve)."""
+        return len(_INEQ_CHECKS)
+
+    def c_tol(self) -> list[float]:
+        """pygmo per-constraint tolerances matching
+        :meth:`get_bounds_eq_ineq`: the symmetric eq band half-widths, then
+        0 for the ``<= 0`` ineq slots."""
+        bands = self.get_bounds_eq_ineq()
+        return ([float(hi) for _lo, hi, _ilo, _ihi in bands[:self.get_nec()]]
+                + [0.0] * self.get_nic())
+
+    def pygmo_problem(self, pg: Any) -> Any:
+        """``pg.problem(self)`` with :meth:`c_tol` applied, so pygmo's
+        feasibility test is the Gate-B tolerance test."""
+        prob = pg.problem(self)
+        prob.c_tol = self.c_tol()
+        return prob
 
     def get_bounds_eq_ineq(self) -> list[tuple[float, float, float, float]]:
         """Per-constraint (eq_lo, eq_hi, ineq_lo, ineq_hi) bands for the six
