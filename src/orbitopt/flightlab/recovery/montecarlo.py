@@ -254,12 +254,24 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
     ``out_path`` additionally writes ``montecarlo.json``. Sampling is per
     ``[seed, idx]`` streams, so the same seed reproduces the statistics
     byte-for-byte regardless of ``workers`` (``workers > 1`` runs the samples
-    through a ``ProcessPoolExecutor``; ``workers == 1`` stays in-process)."""
+    through a ``ProcessPoolExecutor``; ``workers == 1`` stays in-process).
+
+    ``dispersions=None`` (the default) takes the thrust / Isp / Cd half-widths
+    from the vehicle file's FL-602 provenance uncertainty tags -- a Monte Carlo
+    inherits the data's stated confidence bands unless the caller says
+    otherwise; scenario-side knobs (density scale, separation-state sigma)
+    keep their class defaults, and a vehicle file without uncertainty tags
+    reproduces the plain :class:`Dispersions` defaults exactly. The
+    substitution is recorded in the result's assumptions (FL-304/FL-602)."""
     if n < 1:
         raise ValueError(f"n must be >= 1, got {n}")
     if int(seed) < 0:
         raise ValueError(f"seed must be >= 0, got {seed}")
-    disp = dispersions if dispersions is not None else Dispersions()
+    if dispersions is not None:
+        disp, from_vehicle_notes = dispersions, []
+    else:
+        from orbitopt.flightlab.vehicle_catalog import vehicle_dispersions
+        disp, from_vehicle_notes = vehicle_dispersions(vehicle_path)
     opts = dict(MC_PLAN_OPTIONS if plan_options is None else plan_options)
 
     assumptions = [
@@ -270,6 +282,7 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
         "seed, independent of the worker layout",
         "success = FL-304 recovery-landing gate: touched down inside every "
         "target landing limit; every failure carries its governing reason code",
+        *from_vehicle_notes,
     ]
 
     jobs: list[dict[str, Any]]

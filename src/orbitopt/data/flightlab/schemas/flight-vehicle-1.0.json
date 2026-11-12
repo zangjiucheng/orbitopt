@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "flight-vehicle-1.0.json",
+  "title": "Flight Lab vehicle document with data provenance (FL-602)",
+  "description": "A Flight Lab vehicle YAML: the OpenTsiolkovsky flight article (simulation window, attitude program, plain-number OT stages, optional booster section) plus a mandatory `data_provenance` sidecar that tags every number in the document `official`, `public_estimate` or `illustrative`, with a cited `source`, an `as_of` date and an optional symmetric `uncertainty_pct`. The `stages` entries are $refs to OpenTsiolkovsky's own cached config schema (injected by orbitopt.flightlab.vehicle_catalog.vehicle_schema), so the flight article stays exactly what the OT adapter passes through: plain numbers, no inline provenance nodes there. Inline provenance nodes ({value, provenance, source, ...}) are allowed only inside `booster`, where BoosterModel.load already reads them. Sidecar keys are document paths (`stages[0].engine.isp_vac_s`, `attitude_program`, `booster.engines.thrust_vacuum_n`); a key covers the numeric node or subtree it names, nearest match wins. Public-estimate vehicles must carry a `disclaimer` that they are not official performance data.",
+  "type": "object",
+  "required": ["schema_version", "name", "provenance", "stages", "data_provenance"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "flight-vehicle-1.0"},
+    "name": {"type": "string", "minLength": 1},
+    "provenance": {"$ref": "#/$defs/ProvenanceTag"},
+    "as_of": {"type": "string", "minLength": 1,
+              "description": "Date the document's figures were last checked against their sources."},
+    "disclaimer": {"type": "string", "minLength": 1,
+                   "description": "Mandatory whenever the document carries public_estimate or official figures: states in what sense the vehicle is NOT official performance data of the named operator."},
+    "assumptions": {"type": "array", "items": {"type": "string"}},
+    "payload_kg": {"type": "number", "minimum": 0},
+    "min_throttle_fractions": {"type": "array", "items": {"type": "number", "minimum": 0, "maximum": 1}},
+    "simulation": {
+      "type": "object",
+      "required": ["end_time_s"],
+      "additionalProperties": false,
+      "properties": {
+        "end_time_s": {"type": "number", "exclusiveMinimum": 0},
+        "output_step_s": {"type": "number", "exclusiveMinimum": 0},
+        "integrator": {"type": "object"}
+      }
+    },
+    "attitude_program": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["t_s", "azimuth_deg", "elevation_deg"],
+        "additionalProperties": false,
+        "properties": {
+          "t_s": {"type": "number", "minimum": 0},
+          "azimuth_deg": {"type": "number"},
+          "elevation_deg": {"type": "number"}
+        }
+      }
+    },
+    "stages": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Stage"}},
+    "booster": {"$ref": "#/$defs/Booster"},
+    "data_provenance": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\[[0-9]+\\])?(\\.[A-Za-z_][A-Za-z0-9_]*(\\[[0-9]+\\])?)*$"
+      },
+      "additionalProperties": {"$ref": "#/$defs/ProvenanceEntry"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"provenance": {"enum": ["public_estimate", "official"]}},
+             "required": ["provenance"]},
+      "then": {"required": ["disclaimer"]}
+    }
+  ],
+  "$defs": {
+    "ProvenanceTag": {"enum": ["official", "public_estimate", "illustrative"]},
+    "UncertaintyPct": {
+      "type": "number", "minimum": 0, "maximum": 100,
+      "description": "Symmetric half-width of the uncertainty band, percent of the value; the form FL-304 Monte Carlo dispersions consume directly."
+    },
+    "ProvenanceEntry": {
+      "type": "object",
+      "required": ["provenance", "source", "as_of"],
+      "additionalProperties": false,
+      "properties": {
+        "provenance": {"$ref": "#/$defs/ProvenanceTag"},
+        "source": {"type": "string", "minLength": 1},
+        "as_of": {"type": "string", "minLength": 1},
+        "accuracy": {"type": "string"},
+        "uncertainty_pct": {"$ref": "#/$defs/UncertaintyPct"}
+      }
+    },
+    "ProvenanceNode": {
+      "type": "object",
+      "required": ["value"],
+      "additionalProperties": false,
+      "properties": {
+        "value": {},
+        "provenance": {"$ref": "#/$defs/ProvenanceTag"},
+        "source": {"type": "string", "minLength": 1},
+        "as_of": {"type": "string", "minLength": 1},
+        "accuracy": {"type": "string"},
+        "uncertainty_pct": {"$ref": "#/$defs/UncertaintyPct"}
+      }
+    },
+    "CdTable": {
+      "type": "array", "minItems": 2,
+      "items": {"type": "array", "minItems": 2, "maxItems": 2,
+                "items": {"type": "number"}}
+    },
+    "NumberOrNode": {"anyOf": [{"type": "number"}, {"$ref": "#/$defs/ProvenanceNode"}]},
+    "Booster": {
+      "type": "object",
+      "required": ["provenance", "dry_mass_kg", "landing_propellant_reserve_kg",
+                   "reference_area_m2", "cd_mach", "engines"],
+      "additionalProperties": false,
+      "properties": {
+        "provenance": {"$ref": "#/$defs/ProvenanceTag"},
+        "assumptions": {"type": "array", "items": {"type": "string"}},
+        "dry_mass_kg": {"$ref": "#/$defs/NumberOrNode"},
+        "landing_propellant_reserve_kg": {"$ref": "#/$defs/NumberOrNode"},
+        "reference_area_m2": {"$ref": "#/$defs/NumberOrNode"},
+        "cd_mach": {
+          "anyOf": [
+            {"$ref": "#/$defs/CdTable"},
+            {"allOf": [{"$ref": "#/$defs/ProvenanceNode"},
+                       {"properties": {"value": {"$ref": "#/$defs/CdTable"}}}]}
+          ]
+        },
+        "engines": {
+          "type": "object",
+          "required": ["thrust_vacuum_n", "isp_sea_level_s", "isp_vacuum_s",
+                       "nozzle_exit_area_m2", "throttle_min"],
+          "additionalProperties": false,
+          "properties": {
+            "count": {"type": "integer", "minimum": 1},
+            "usable_for": {"type": "array", "items": {"type": "string"}},
+            "thrust_vacuum_n": {"$ref": "#/$defs/NumberOrNode"},
+            "isp_sea_level_s": {"$ref": "#/$defs/NumberOrNode"},
+            "isp_vacuum_s": {"$ref": "#/$defs/NumberOrNode"},
+            "nozzle_exit_area_m2": {"$ref": "#/$defs/NumberOrNode"},
+            "throttle_min": {"$ref": "#/$defs/NumberOrNode"},
+            "throttle_max": {"$ref": "#/$defs/NumberOrNode"},
+            "restarts_max": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    }
+  }
+}

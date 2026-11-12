@@ -524,8 +524,14 @@ class FlightLabDesignerPage(QWidget):
         self.provenance = QComboBox()
         for tag in FLIGHT_PROVENANCE_TAGS:
             self.provenance.addItem(tag, tag)
+        self.provenance.currentIndexChanged.connect(self._update_provenance_badge)
         bar2.addWidget(QLabel("provenance"))
         bar2.addWidget(self.provenance)
+        # FL-602: the provenance tag must be *visible*, not just selected in a
+        # combo -- a non-official badge says so in plain words, in both modes.
+        self.provenance_badge = QLabel()
+        self.provenance_badge.setObjectName("flightLabProvenanceBadge")
+        bar2.addWidget(self.provenance_badge)
         self.payload = _num(0.0, 1e5, 0.0, 0.5, 2, " t")
         bar2.addWidget(QLabel("payload"))
         bar2.addWidget(self.payload)
@@ -547,6 +553,7 @@ class FlightLabDesignerPage(QWidget):
         self.payload.valueChanged.connect(lambda _v: (self._demote_provenance(), self._changed()))
         self.end_time.valueChanged.connect(lambda _v: self._changed())
         self._fields["name"] = self.vehicle_name
+        self._update_provenance_badge()
         return box
 
     # -------------------------------------------------------------- behaviour
@@ -597,6 +604,27 @@ class FlightLabDesignerPage(QWidget):
             self.provenance.blockSignals(True)
             self.provenance.setCurrentIndex(idx)
             self.provenance.blockSignals(False)
+
+    def _update_provenance_badge(self, *_a):
+        """FL-602: spell out what the selected provenance tag means, so
+        illustrative or public-estimate vehicle data can never read as real
+        performance -- the badge follows the tag in both Explorer and Engineer
+        mode (it is deliberately not registered as an engineer-only widget)."""
+        tag = str(self.provenance.currentData())
+        if tag == "illustrative":
+            self.provenance_badge.setText(
+                '<span style="color:#e8a23e">&#9888; illustrative &mdash; '
+                "authored demo data, not a real vehicle</span>")
+        elif tag == "public_estimate":
+            self.provenance_badge.setText(
+                '<span style="color:#e8a23e">&#9888; public estimate &mdash; '
+                "cited public sources, not official performance</span>")
+        elif tag == "official":
+            self.provenance_badge.setText(
+                f'<span style="color:{INK_MUTED}">official &mdash; '
+                "provider-published figures, see the vehicle file for citations</span>")
+        else:
+            self.provenance_badge.setText("")
 
     def _changed(self):
         if not self._loading:
