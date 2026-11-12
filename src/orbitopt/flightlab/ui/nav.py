@@ -119,12 +119,20 @@ class FlightLabNav(QWidget):
     # ------------------------------------------------------------- runs
     def set_runs(self, runs: list[tuple[str, Path]], current: Path | None = None) -> None:
         self.run_list.clear()
+        # A run id names the flight (target + vehicle), not every input: two
+        # designer runs can share it and differ in the form. Those get the
+        # cache digest (the label's last part) so they don't read as one run.
+        ids = [label.split(" · ")[0] for label, _p in runs]
         for label, path in runs:
             path = Path(path)
             verdict = run_verdict(path)
             color = INK_MUTED if verdict is None else (SUCCESS if verdict else DANGER)
             word = "not assessed" if verdict is None else ("mission passed" if verdict else "mission failed")
-            item = QListWidgetItem(icons.mission_marker_icon(color), label.split(" · ")[0])
+            parts = label.split(" · ")
+            text = parts[0]
+            if ids.count(text) > 1:
+                text += " · " + (parts[-1] if len(parts) > 1 else Path(path).name[:8])
+            item = QListWidgetItem(icons.mission_marker_icon(color), text)
             item.setData(Qt.UserRole, str(path))
             item.setToolTip(f"{label}\n{path}\n{word}")
             self.run_list.addItem(item)

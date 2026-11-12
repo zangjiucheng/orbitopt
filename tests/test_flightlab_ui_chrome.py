@@ -137,6 +137,9 @@ def test_nav_lists_runs_with_their_verdict(qapp, tmp_path):
     assert nav.run_list.currentRow() == 1 and not nav.empty_label.isVisibleTo(nav)
     nav._run_clicked(nav.run_list.item(2))
     assert got == [str(unknown)]
+    # two runs of one flight (same run id, different form inputs) stay apart
+    nav.set_runs([("ot-1 · recovery=none · aaaa1111", passed), ("ot-1 · recovery=none · bbbb2222", failed)])
+    assert [nav.run_list.item(i).text() for i in range(2)] == ["ot-1 · aaaa1111", "ot-1 · bbbb2222"]
 
 
 def test_flight_lab_pages_fit_a_laptop_width(qapp):

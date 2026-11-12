@@ -100,3 +100,30 @@ def test_native_window_resize_defers_the_repaint(monkeypatch):
     assert calls == [("dpi", 144), ("size", 2134, 828), ("settle",)]  # no draw yet
     viewport.DebouncedInteractor._render_after_resize_settles(w)
     assert calls[-1] == ("render",)
+
+
+def test_vtk_letter_keys_do_not_reach_the_scene():
+    """VTK's interactor style turned every actor to wireframe on "w" (the
+    textured Earth became a see-through grid) and let "a" drag actors
+    around; the 3D view now passes keys back to Qt instead."""
+    import pyvista as pv
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication
+
+    from orbitopt.viz.viewport import DebouncedInteractor
+
+    app = QApplication.instance() or QApplication([])
+    view = DebouncedInteractor()
+    try:
+        actor = view.add_mesh(pv.Sphere())
+        view.show()
+        app.processEvents()
+        surface = actor.GetProperty().GetRepresentation()
+        for key in (Qt.Key_W, Qt.Key_A, Qt.Key_3):
+            QTest.keyClick(view, key)
+        app.processEvents()
+        assert actor.GetProperty().GetRepresentation() == surface  # not wireframe
+        assert not view.render_window.GetStereoRender()
+    finally:
+        view.close()

@@ -161,21 +161,29 @@ def _require_astropy():
 
 
 def _tt_time(epoch_utc: datetime, t_s: Sequence[float] | None):
-    """UTC epoch (+ optional per-sample UTC t_s offsets) -> astropy ``Time``
-    in the TT scale. The UTC→TT conversion itself is orbitopt.timescales'
-    (leap-second aware); astropy only receives the TT label and handles
-    UT1/ERA internally via IERS data."""
+    """UTC epoch (+ optional per-sample UTC t_s offsets) -> astropy ``Time``.
+    The instant comes from orbitopt.timescales' leap-second-aware UTC->TT
+    converter; astropy receives it on the UTC scale and handles UT1/ERA
+    internally via IERS data (see the fallback note below)."""
     _Cd, _Cr, _GCRS, _ITRS, Time, _u = _require_astropy()
     mjd0 = utc_datetime_to_mjd2000(_as_utc_datetime(epoch_utc))
     if t_s is None:
         tt = utc_mjd2000_to_tt_seconds(mjd0)
-        return Time(_MJD_TT_J2000 + tt / 86400.0, format="mjd", scale="tt")
-    # t_s rides the UTC label (like every Flight Lab clock): offset the MJD2000
-    # UTC day number, then convert each epoch through the single converter.
-    tt = np.array([
-        utc_mjd2000_to_tt_seconds(mjd0 + float(dt) / 86400.0) for dt in np.asarray(t_s, dtype=np.float64)
-    ])
-    return Time(_MJD_TT_J2000 + tt / 86400.0, format="mjd", scale="tt")
+    else:
+        # t_s rides the UTC label (like every Flight Lab clock): offset the
+        # MJD2000 UTC day number, then convert each epoch through the single
+        # converter.
+        tt = np.array([
+            utc_mjd2000_to_tt_seconds(mjd0 + float(dt) / 86400.0) for dt in np.asarray(t_s, dtype=np.float64)
+        ])
+    instant = Time(_MJD_TT_J2000 + tt / 86400.0, format="mjd", scale="tt")
+    # The same instant on the UTC scale (TT->UTC is leap seconds only, no IERS
+    # lookup). When astropy has no UT1-UTC for the epoch (offline, or an epoch
+    # past its bundled IERS table) its ITRS<->GCRS falls back to taking the
+    # time *in its own scale* as UT1. Fed TT, that put the Earth 69 s
+    # (TT-UTC) further round -- 0.29 deg of RAAN; fed UTC, the fallback error
+    # is |UT1-UTC| < 0.9 s.
+    return instant.utc
 
 
 def _itrs_to_gcrs_matrix(obstime) -> np.ndarray:

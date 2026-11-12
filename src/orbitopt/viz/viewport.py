@@ -98,6 +98,19 @@ class DebouncedInteractor(QtInteractor):
         except (RuntimeError, AttributeError):  # widget torn down while the request was queued
             pass
 
+    # No keyboard for VTK. Its interactor style binds plain letters to
+    # scene-wide changes: w turns every actor to wireframe (the textured
+    # Earth became a see-through grid), s back to surfaces, a makes the mouse
+    # drag the Earth itself instead of the camera, e/q close the render
+    # window, 3 toggles stereo. Every Mission Control key is a window-level
+    # Qt shortcut, and mouse modifiers (Shift-drag pan) come with the mouse
+    # events, so the keys go back up to Qt instead.
+    def keyPressEvent(self, event):  # noqa: N802 -- Qt override signature
+        event.ignore()
+
+    def keyReleaseEvent(self, event):  # noqa: N802 -- Qt override signature
+        event.ignore()
+
     def render_now(self):
         """Draw immediately (screenshots, tests reading pixels)."""
         self._render_pending = False

@@ -374,6 +374,7 @@ def test_slow_e2e_single_plan_landing_is_honest_red_with_a_landing_reason_code(
     under real drag and ambient thrust (FL-303's G3 note), so the mission
     must come back RED with the governing landing reason -- never silent,
     never whitewashed."""
+    pytest.importorskip("gfold")  # a real landing burn (the locked env has none: envs/flightlab-landing.txt)
     import orbitopt.flightlab.simulate as sim
     from orbitopt.flightlab.recovery.pipeline import NOMINAL_PLAN_GUESS
     from orbitopt.flightlab.simulate import simulate
@@ -410,6 +411,7 @@ def test_slow_wiring_only_substituted_green_landing_travels_simulate(monkeypatch
     _nominal_green_landing), the real simulate() recovery branch must merge
     the booster run, turn the gate green, lift mission_constraints_passed,
     and round-trip through the contract reader."""
+    pytest.importorskip("gfold")  # _nominal_green_landing flies FL-303's real nominal burn
     import orbitopt.flightlab.simulate as sim
     from orbitopt.flightlab.recovery import pipeline as pipe
     from orbitopt.flightlab.recovery.pipeline import NOMINAL_PLAN_GUESS
@@ -476,6 +478,7 @@ def test_slow_wiring_only_monte_carlo_green_source_yields_rate_percentiles_and_e
     substituted for every landing, the Monte Carlo must report a full
     success rate, the touchdown dispersion ellipse over the landed subset,
     and the metric percentiles."""
+    pytest.importorskip("gfold")  # _nominal_green_landing flies FL-303's real nominal burn
     from orbitopt.flightlab.recovery import pipeline as pipe
     from orbitopt.flightlab.recovery.montecarlo import Dispersions, run_monte_carlo
     from orbitopt.flightlab.recovery.pipeline import NOMINAL_PLAN_GUESS

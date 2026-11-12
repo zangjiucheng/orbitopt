@@ -116,11 +116,24 @@ def _astropy():
     pytest.importorskip("astropy", reason="frame bridge references need astropy")
     from astropy.coordinates import CartesianDifferential, CartesianRepresentation, GCRS, ITRS
     from astropy.time import Time
-    from astropy.utils.iers import conf as iers_conf
     import astropy.units as u
 
-    iers_conf.auto_download = False  # never reach the network from CI
     return CartesianDifferential, CartesianRepresentation, GCRS, ITRS, Time, u
+
+
+@pytest.fixture(autouse=True)
+def _no_iers_download():
+    """These tests never reach the network for IERS data -- for their own
+    duration only. Set module-wide (iers_conf.auto_download = False, never
+    restored) it leaked into every later test: epochs past the bundled IERS
+    table then lost UT1, and the frame bridge's results moved (CI)."""
+    try:
+        from astropy.utils.iers import conf as iers_conf
+    except ImportError:
+        yield
+        return
+    with iers_conf.set_temp("auto_download", False):
+        yield
 
 
 def _oracle_ecef_to_gcrs(r_m, v_m_s, times_utc):
@@ -292,7 +305,10 @@ def test_tt_epoch_matches_astropy_utc_leap_handling():
     # same label: TT minus UTC on the calendar is 37 s leap + 32.184 s offset
     # (label values compared in their own scales -- TimeDelta between Time
     # objects is the physical interval, which is the assert above)
-    assert abs((ours.mjd - theirs.utc.mjd) * 86400.0 - 69.184) < 1e-6
+    assert abs((ours.tt.mjd - theirs.utc.mjd) * 86400.0 - 69.184) < 1e-6
+    # handed over on the UTC scale: astropy's no-UT1 fallback then takes UTC
+    # (|UT1-UTC| < 0.9 s) as UT1, not TT (69 s -- 0.29 deg of Earth rotation)
+    assert ours.scale == "utc"
 
 
 # ---- round trips (acceptance: < 1 mm, < 1 mm/s) ------------------------------

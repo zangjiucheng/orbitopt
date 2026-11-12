@@ -360,5 +360,8 @@ def test_optimize_fixed_epoch_skips_derivation(raan_target, stub, tmp_path):
                              target_path=str(TARGET))
     assert result["raan"].get("liftoff_window") is None
     assert "window_sensitivity" not in result["raan"]
+    # 1e-4 deg like the sensitivity test: the frame bridge reads IERS Earth
+    # orientation data, and an older astropy-iers-data release (the locked
+    # env's) moves the result by ~5e-6 deg
     assert result["raan"]["achieved_raan_deg"] == pytest.approx(STUB_RAAN_DEG,
-                                                                abs=1e-6)
+                                                                abs=1e-4)
