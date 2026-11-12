@@ -58,6 +58,19 @@ jobs:
       - name: Install orbitopt (editable, no-deps -- deps come from the lockfile)
         run: python -m pip install -e . --no-deps
 
+      # FL-601: the Flight Lab suite must pass on the recorded fixtures
+      # alone -- no OpenTsiolkovsky binary on this job (the adapter tests
+      # use the recorded-output stub), and the committed Gate B reference
+      # is checked for tampering here. The real-binary regression is the
+      # separate flightlab-gateb job below.
+      - name: Flight Lab unit tests on fixtures (no OT binary needed)
+        run: >
+          xvfb-run -a --server-args="-screen 0 1280x1024x24" pytest
+          tests/test_flightlab_contract.py
+          tests/test_flightlab_opentsiolkovsky.py
+          tests/test_flightlab_simulate.py
+          tests/test_flightlab_reference.py -v
+
       - name: Run test suite (gpu-marked tests skip here; see gpu.yml)
         run: xvfb-run -a --server-args="-screen 0 1280x1024x24" pytest tests/ -v
 
@@ -124,3 +137,55 @@ jobs:
             echo "::error::envs/*.conda-lock.yml are stale -- regenerate them (see envs/README.md)"
             exit 1
           }
+
+  flightlab-gateb:
+    # FL-601 slow regression job: the REAL pinned OpenTsiolkovsky binary
+    # (fetched, SHA-256-verified -- never vendored) flies the reference
+    # Gate B mission, and scripts/fl601_reference.py compares the result
+    # against the committed outputs in tests/data/flightlab/reference/
+    # with the declared tolerances. Fixture-based Flight Lab tests live in
+    # the fast `test` job; this job is the only one that talks to OT.
+    # Manual macOS-arm64 run: docs/flightlab-regression-ci.md.
+    name: flightlab Gate B regression (real OT binary, linux-64)
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # tag-check diffs the push/PR range
+
+      - name: Create locked CPU env
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: envs/cpu.conda-lock.yml
+          environment-name: orbitopt
+          cache-downloads: true
+
+      - name: Install orbitopt (editable, no-deps -- deps come from the lockfile)
+        run: python -m pip install -e . --no-deps
+
+      - name: Fetch the pinned OpenTsiolkovsky binary (SHA-256 verified)
+        run: python scripts/fetch_opentsiolkovsky.py
+
+      - name: Committed reference matches its provenance (G5 tamper check)
+        run: python scripts/fl601_reference.py verify
+
+      - name: Reference changes require an explicit tagged update (G5)
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            BASE=$(git merge-base "origin/${GITHUB_BASE_REF}" HEAD)
+          elif [ "$GITHUB_EVENT_NAME" = push ]; then
+            BASE="${{ github.event.before }}"
+          else
+            BASE=""
+          fi
+          python scripts/fl601_reference.py tag-check --base "$BASE"
+
+      - name: Fly the Gate B reference mission and compare (declared tolerances)
+        run: |
+          python scripts/fl601_reference.py run --out "$RUNNER_TEMP/gateb"
+          python scripts/fl601_reference.py compare "$RUNNER_TEMP/gateb"

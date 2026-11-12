@@ -56,6 +56,8 @@ from typing import Any, Mapping
 import jsonschema
 import yaml
 
+from orbitopt.flightlab.toolchain import toolchain_record
+
 SCHEMA_VERSION = "1.0"
 
 #: The only frames a Flight Lab v1 body track may declare. ``LAUNCH_ECI`` is
@@ -584,6 +586,12 @@ def _manifest_document(run: FlightRun) -> dict:
         "git_sha": run.git_sha,
         "created_utc": run.created_utc,
         "assumptions": list(run.assumptions),
+        # FL-601: every manifest records the exact tool versions/SHAs it was
+        # flown with (orbitopt.flightlab.toolchain); read_run does not fold
+        # it back into the FlightRun -- it describes the environment, not the
+        # flight, and a rewritten run records the environment it was written
+        # in.
+        "toolchain": toolchain_record(),
         "bodies": [track.to_manifest_entry() for track in run.tracks],
     }
 

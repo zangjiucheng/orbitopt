@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0",
+  "run_id": "ot-812f9a8f-a67f59aa",
+  "target_sha256": "812f9a8f5d196515df62c7310b1c9f48a3ae34ce037be6dd1380a07d52e1bd61",
+  "vehicle_sha256": "15a10f5645522b67dd8e0944accc5e65144fda525e6f8872cbc54e3b20acfb9e",
+  "engines": {
+    "opentsiolkovsky-cli": "1.0.0"
+  },
+  "git_sha": "4b8f88e1b36366cfeea65857f26782c96888216a",
+  "created_utc": "2026-11-10T12:00:00Z",
+  "assumptions": [
+    "OpenTsiolkovsky 1.0.0 (MIT, external binary -- not vendored; see NOTICE; openTsiolkovsky-v1.0.0-<platform>.tar.gz, pinned per-platform SHA-256 digests live in scripts/fetch_opentsiolkovsky.py)",
+    "opentsiolkovsky run-config sha256 a67f59aacda0455406d57a8ace3dd9e80c0b3fda23ef74ab4dbfd1bf7718ea35",
+    "OT pos_eci_*/vel_eci_* read as LAUNCH_ECI (axes = ECEF at the launch epoch, held inertial) and converted to GCRS by orbitopt.flightlab.frames.to_gcrs at the epoch",
+    "created_utc is the mission epoch: this adapter is a pure function of (target, vehicle, attitude program), so repeated calls write byte-identical runs",
+    "vehicle: Hand-tuned two-stage demonstrator sized for a ~400 km / 51.6 deg insertion from LC-39A within the FL scenario constraints (max_q 60 kPa, 5 g); the single-burn cutoff leaves ~130 km of apogee above perigee -- closing the circle is E2 optimizer headroom, not a vehicle defect.",
+    "vehicle: Stage separation and engine restart follow a Falcon-9-style sequence; the stage-1 throttle-down near MECO keeps thrust acceleration under 5 g; aero is a generic tube-and-fins guess.",
+    "target: Synthetic two-stage vehicle; masses/engines are illustrative placeholders, not real performance figures.",
+    "target: Max-Q and max-acceleration limits are design assumptions, not certified vehicle structural limits.",
+    "orbit re-fly: not requested (physics_verified stays None = not assessed)",
+    "Gate-B verdict (FL-006): orbitopt.flightlab.checks.evaluate -- the three verification booleans are independent; None means not assessed, never passed"
+  ],
+  "toolchain": {
+    "python": "3.13.18",
+    "orbitopt": "unknown (source tree; see git_sha)",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "astropy": "8.0.2",
+    "tudatpy": "absent",
+    "gfold": "absent",
+    "jsbsim": "absent",
+    "cvxpy": "absent",
+    "jsonschema": "4.26.0",
+    "pyyaml": "6.0.3",
+    "opentsiolkovsky": "1.0.0",
+    "opentsiolkovsky_sha256": "8041a9b5806136eb0e9d2a7b2c9ebed58ccc1876198cbf5c6373c440cb182c4c"
+  },
+  "bodies": [
+    {
+      "body_id": "stage1",
+      "parent_body_id": null,
+      "frame": "GCRS",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 0.0,
+      "t_end_s": 206.0,
+      "provenance": "illustrative"
+    },
+    {
+      "body_id": "stage2",
+      "parent_body_id": "stage1",
+      "frame": "GCRS",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 208.0,
+      "t_end_s": 950.0,
+      "provenance": "illustrative"
+    },
+    {
+      "body_id": "stage1_debris",
+      "parent_body_id": "stage1",
+      "frame": "GCRS",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 207.0,
+      "t_end_s": 739.9388128395576,
+      "provenance": "illustrative"
+    },
+    {
+      "body_id": "stage2_fairing",
+      "parent_body_id": "stage2",
+      "frame": "GCRS",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 267.0,
+      "t_end_s": 1324.7344778999486,
+      "provenance": "illustrative"
+    }
+  ]
+}

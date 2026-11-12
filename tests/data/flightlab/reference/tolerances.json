@@ -1,0 +1,19 @@
+{
+  "t_s_abs": 1e-09,
+  "mass_kg_abs": 1e-06,
+  "position_m_abs": 1e-06,
+  "velocity_m_s_abs": 1e-08,
+  "extra_abs": {
+    "altitude_m": 1e-06,
+    "latitude_deg": 1e-09,
+    "longitude_deg": 1e-09,
+    "downrange_m": 1e-06,
+    "dynamic_pressure_pa": 0.01,
+    "mach": 1e-07
+  },
+  "extra_abs_default": 1e-06,
+  "check_value_abs": 1e-09,
+  "check_value_rel": 1e-09,
+  "event_data_abs": 1e-09,
+  "event_data_rel": 1e-09
+}
