@@ -681,9 +681,9 @@ class MissionControlWindow(QMainWindow):
         return page
 
     def _build_flightlab_page(self) -> QWidget:
-        from orbitopt.flightlab.ui import FlightLabReplayPage
+        from orbitopt.flightlab.ui import FlightLabWorkbench
 
-        return FlightLabReplayPage()
+        return FlightLabWorkbench()
 
     def _build_menu(self):
         file_menu = self.menuBar().addMenu("&File")
@@ -1869,6 +1869,11 @@ class MissionControlWindow(QMainWindow):
         # flag is what _on_scene_loaded/_on_scene_load_failed actually check to
         # refuse to touch self.plotter/self.renderer once we're closing.
         self._closing = True
+        # The Flight Lab designer simulates on its own compute pool (so a
+        # simulate cancel can't kill scene loads) -- tear it down first.
+        terminate_compute = getattr(self.flightlab_page, "terminate_compute", None)
+        if terminate_compute is not None:
+            terminate_compute()
         thread = self._load_thread
         worker = self._load_worker
         if thread is not None:
