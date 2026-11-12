@@ -429,7 +429,9 @@ def test_body_track_bridge_and_event_mapping():
     assert bt.frame == "GCRS" and bt.body_id == "stage1_debris"
     assert bt.epoch_utc.endswith("Z")
     assert len(bt.t_s) == len(bt.position_m) == len(tr.times_s)
-    assert set(bt.extra_columns) == {"throttle", "mach", "dynamic_pressure_pa"}
+    assert set(bt.extra_columns) == {"throttle", "mach", "dynamic_pressure_pa",
+                                     "altitude_m", "latitude_deg", "longitude_deg"}
+    assert bt.extra_columns["altitude_m"] == pytest.approx(tuple(tr.height_m_arr))
     evs = tr.to_contract_events(body_id="stage1_debris")
     assert set(e.kind for e in evs) <= set(EVENT_KINDS)
     kinds = [e.kind for e in evs]

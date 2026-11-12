@@ -103,6 +103,9 @@ SCRUB_MIN_INTERVAL_MS = 16.0
 
 WEBSITE_URL = "https://zangjiucheng.github.io/orbitopt/"
 REPOSITORY_URL = "https://github.com/zangjiucheng/orbitopt"
+FLIGHTLAB_SIDEBAR_KEY = "__orbitopt_flightlab__"
+FLIGHTLAB_SIDEBAR_LABEL = "Flight Lab"
+FLIGHTLAB_SUBTITLE = "Design a launch, replay its flight, compare runs"
 
 # Auto-slow near a timeline event (TLI burn, closest approach, entry interface,
 # ...) so fast-forwarding through a mission doesn't blow past the moments that
@@ -166,6 +169,10 @@ class MissionControlWindow(QMainWindow):
         self._mission_ids: dict[str, str] = {}
         self._active_key: str | None = None
         self._active_label: str | None = None
+        self._flightlab_active = False
+        self._flightlab_hidden: dict | None = None  # widgets Flight Lab hid, with their visibility
+        self._mission_active: tuple[str | None, str | None] = (None, None)  # restored on leaving Flight Lab
+        self._flightlab_saved_title = ("", "")
         self._verified_keys: set[str] = set()
         self._loaders: dict[str, callable] = {}
         self._playing = False
@@ -317,7 +324,7 @@ class MissionControlWindow(QMainWindow):
         self.candidate_panel = CandidatePanel(self.state)
         self.candidate_panel.show_all_box.toggled.connect(lambda _on: self._apply_candidate_highlight())
         self.sidebar.add_section(self.candidate_panel)
-        self.left_rail = self._build_rail(icons.chevron_right_icon, self._toggle_sidebar, "Show missions")
+        self.left_rail = self._build_rail(icons.chevron_right_icon, self._toggle_sidebar, "Show the sidebar")
         self.left_stack = QStackedWidget()
         self.left_stack.addWidget(self.sidebar)
         self.left_stack.addWidget(self.left_rail)
@@ -347,6 +354,12 @@ class MissionControlWindow(QMainWindow):
         self.center_stack = QStackedWidget()
         self.center_stack.addWidget(self.plotter)
         self.center_stack.addWidget(self._build_loading_page())
+        self.flightlab_page = self._build_flightlab_page()
+        self._flightlab_index = self.center_stack.addWidget(self.flightlab_page)
+        # Flight Lab is its own mode, not a mission: the sidebar's switch
+        # swaps the mission list for Flight Lab's navigation and run list.
+        self.sidebar.set_flightlab_panel(self.flightlab_page.nav)
+        self.sidebar.mode_changed.connect(self._on_sidebar_mode)
 
         # The 3D view over the linked 2D charts; the splitter lets the charts
         # be dragged smaller, never the 3D view away.
@@ -455,7 +468,8 @@ class MissionControlWindow(QMainWindow):
         layout.addLayout(title_col, stretch=1)
 
         layout.addWidget(self._build_compute_status(), alignment=Qt.AlignVCenter)
-        layout.addWidget(self._build_view_controls(), alignment=Qt.AlignVCenter)
+        self._view_controls_widget = self._build_view_controls()
+        layout.addWidget(self._view_controls_widget, alignment=Qt.AlignVCenter)
 
         return bar
 
@@ -674,6 +688,11 @@ class MissionControlWindow(QMainWindow):
 
         layout.addStretch(1)
         return page
+
+    def _build_flightlab_page(self) -> QWidget:
+        from orbitopt.flightlab.ui import FlightLabWorkbench
+
+        return FlightLabWorkbench()
 
     def _build_menu(self):
         file_menu = self.menuBar().addMenu("&File")
@@ -1122,6 +1141,7 @@ class MissionControlWindow(QMainWindow):
         if self._loading:
             return
         self._set_playing(False)
+        self._hide_flightlab()
         self._active_key, self._active_label = key, label
         self._update_reload_button()
 
@@ -1138,6 +1158,72 @@ class MissionControlWindow(QMainWindow):
             return
 
         self._start_loading(key, label)
+
+    def _on_sidebar_mode(self, mode: str):
+        if mode == self.sidebar.FLIGHTLAB:
+            self._show_flightlab()
+        else:
+            self._hide_flightlab()
+
+    def _show_flightlab(self, label: str | None = None):
+        self._set_playing(False)
+        if not self._flightlab_active:
+            self._mission_active = (self._active_key, self._active_label)
+        self._flightlab_active = True
+        self._active_key = FLIGHTLAB_SIDEBAR_KEY
+        self._active_label = label or FLIGHTLAB_SIDEBAR_LABEL
+        self._update_reload_button()
+        if self.sidebar.mode != self.sidebar.FLIGHTLAB:
+            self.sidebar.set_mode(self.sidebar.FLIGHTLAB)
+        self.chart_panel.hide()
+        self.timeline_bar.hide()
+        # The title bar, view strip and right column describe the 3D mission
+        # scene. Left as they were, Flight Lab sat under the previous
+        # mission's title, view buttons and body list ("Solar System", Sun,
+        # Mercury, ...). Flight Lab owns the title; the rest steps aside and
+        # comes back unchanged when a mission is picked again.
+        if self._flightlab_hidden is None:
+            self._flightlab_hidden = {
+                w: w.isVisibleTo(self) for w in (
+                    self.view_strip, self._view_controls_widget, self.right_stack,
+                    self.verification_badge, self.selection_badge)}
+            self._flightlab_saved_title = (self.scene_title_label.text(),
+                                           self.scene_subtitle_label.text())
+            for widget in self._flightlab_hidden:
+                widget.hide()
+        self.scene_title_label.setText(FLIGHTLAB_SIDEBAR_LABEL)
+        self.scene_subtitle_label.setText(FLIGHTLAB_SUBTITLE)
+        self.center_stack.setCurrentIndex(self._flightlab_index)
+        self.statusBar().showMessage("Flight Lab")
+
+    def _set_mission_chrome_visible(self, widget, visible: bool) -> None:
+        """Show/hide mission chrome Flight Lab may be covering: while it is,
+        record the state for _hide_flightlab to restore instead."""
+        if self._flightlab_hidden is not None and widget in self._flightlab_hidden:
+            self._flightlab_hidden[widget] = visible
+        else:
+            widget.setVisible(visible)
+
+    def _hide_flightlab(self):
+        was_active = self._flightlab_active
+        self._flightlab_active = False
+        self.flightlab_page.stop_playback()
+        if was_active:  # back to the mission that was open (it never unloaded)
+            self._active_key, self._active_label = self._mission_active
+            self._update_reload_button()
+            self.statusBar().showMessage("Ready")
+        if self.sidebar.mode != self.sidebar.MISSIONS:
+            self.sidebar.set_mode(self.sidebar.MISSIONS)
+        if self.center_stack.currentWidget() is self.flightlab_page:
+            self.center_stack.setCurrentIndex(0)
+        self.chart_panel.setVisible(self.chart_panel.count() > 0)
+        self.timeline_bar.setVisible((self.state.scene or {}).get("timeline") is not None)
+        if self._flightlab_hidden is not None:
+            for widget, visible in self._flightlab_hidden.items():
+                widget.setVisible(visible)
+            self._flightlab_hidden = None
+            self.scene_title_label.setText(self._flightlab_saved_title[0])
+            self.scene_subtitle_label.setText(self._flightlab_saved_title[1])
 
     def _begin_switch(self, message: str):
         self._loading = True
@@ -1166,6 +1252,9 @@ class MissionControlWindow(QMainWindow):
 
     def _hide_loading(self):
         self._spinner.stop()
+        if self._flightlab_active:
+            self.center_stack.setCurrentIndex(self._flightlab_index)
+            return
         self.center_stack.setCurrentIndex(0)
         # The scene was built while the view was hidden, so SceneRenderer.load's
         # reset_camera() fit the camera to a stale/zero viewport (most visibly
@@ -1469,10 +1558,13 @@ class MissionControlWindow(QMainWindow):
         self._maneuver_windows = maneuver_windows(events, timeline_span(timeline)) if timeline else {}
         self.renderer.clear_maneuver_vector()
 
-        self.scene_title_label.setText(scene["title"])
-        self.scene_subtitle_label.setText(display_subtitle(scene))
+        if self._flightlab_hidden is not None:  # Flight Lab owns the title bar for now
+            self._flightlab_saved_title = (scene["title"], display_subtitle(scene))
+        else:
+            self.scene_title_label.setText(scene["title"])
+            self.scene_subtitle_label.setText(display_subtitle(scene))
         badge = verification_badge_state(scene)
-        self.verification_badge.setVisible(badge is not None)
+        self._set_mission_chrome_visible(self.verification_badge, badge is not None)
         if badge is not None:
             state, text, tooltip = badge
             self.verification_badge.set_state(state, text)
@@ -1613,7 +1705,7 @@ class MissionControlWindow(QMainWindow):
 
     def _refresh_selection_badge(self):
         badge = selection_badge_state(self.state.scene, self.state.candidate())
-        self.selection_badge.setVisible(badge is not None)
+        self._set_mission_chrome_visible(self.selection_badge, badge is not None)
         if badge is not None:
             state, text, tooltip = badge
             self.selection_badge.set_state(state, text)
@@ -1665,6 +1757,9 @@ class MissionControlWindow(QMainWindow):
         relative to the current time -- distinct from the "most recent event
         at or before now" lookup the readouts use, which only ever looks
         backward."""
+        if self._flightlab_active:
+            self.flightlab_page.seek_relative_event(direction)
+            return
         target = adjacent_event(self.state.events, self.state.time, direction)
         if target is not None:
             self._seek_to_event(target)
@@ -1673,6 +1768,9 @@ class MissionControlWindow(QMainWindow):
     def _step_time(self, direction: float):
         """Nudge the current time one step forward/back: 1% of the visible
         timeline, so the step gets finer as the timeline zooms in."""
+        if self._flightlab_active:
+            self.flightlab_page.step_time(direction)
+            return
         timeline = self.state.timeline
         if not timeline:
             return
@@ -1680,6 +1778,9 @@ class MissionControlWindow(QMainWindow):
         self.state.set_time(self.state.time + direction * (self.timeline_bar.step_size() or 0.01 * timeline_span(timeline)))
 
     def _restart_timeline(self):
+        if self._flightlab_active:
+            self.flightlab_page.restart()
+            return
         timeline = self.state.timeline
         if not timeline:
             return
@@ -1689,6 +1790,11 @@ class MissionControlWindow(QMainWindow):
     def _toggle_play(self, direction: int = 1):
         """Space plays forward, Shift+Space backwards; the key of the
         direction already playing pauses, the other one turns around."""
+        if self._flightlab_active:
+            # The mission scene is hidden behind the Flight Lab page; Space
+            # drives the replay instead of animating an invisible view.
+            self.flightlab_page.toggle_playback()
+            return
         timeline = self.state.timeline
         if not timeline:
             return
@@ -1812,6 +1918,11 @@ class MissionControlWindow(QMainWindow):
         # flag is what _on_scene_loaded/_on_scene_load_failed actually check to
         # refuse to touch self.plotter/self.renderer once we're closing.
         self._closing = True
+        # The Flight Lab designer simulates on its own compute pool (so a
+        # simulate cancel can't kill scene loads) -- tear it down first.
+        terminate_compute = getattr(self.flightlab_page, "terminate_compute", None)
+        if terminate_compute is not None:
+            terminate_compute()
         thread = self._load_thread
         worker = self._load_worker
         if thread is not None:

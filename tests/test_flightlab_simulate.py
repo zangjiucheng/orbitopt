@@ -405,6 +405,8 @@ def test_cli_flight_simulate_writes_run_and_scene(stub, tmp_path, capsys):
                    "-o", str(out), "--scene"])
     assert rc is None
     assert (out / "manifest.json").is_file()
+    # the vehicle rides along (as the Designer saves it) so Compare can read its inputs
+    assert (out / "vehicle.yaml").read_bytes() == VEHICLE.read_bytes()
     scene = json.loads((out / "scene.json").read_text(encoding="utf-8"))
     assert scene["schemaVersion"] == "1.0"
     assert len(scene["bodies"]) >= 2  # Earth aside, both live bodies (and debris) are attached

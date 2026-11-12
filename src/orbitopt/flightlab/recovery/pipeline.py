@@ -222,6 +222,18 @@ def _booster_track(plan: ReturnPlan, landing: LandingResult | None) -> BoosterTr
     return first
 
 
+def _launch_site_deg(ascent_run: FlightRun) -> tuple[float, float] | None:
+    """(lat, lon) of the ascent's first sample, from the earliest track's
+    geodetic columns (OpenTsiolkovsky writes them): the origin its
+    ``downrange_m`` is measured from. None when no track carries them."""
+    for track in sorted(ascent_run.tracks, key=lambda t: t.t_start_s):
+        cols = {k.lower(): v for k, v in track.extra_columns.items()}
+        lat, lon = cols.get("latitude_deg"), cols.get("longitude_deg")
+        if lat and lon:
+            return float(lat[0]), float(lon[0])
+    return None
+
+
 def _merged_run(ascent_run: FlightRun, booster_track: BoosterTrack,
                 booster_events: Sequence[Event], extra_checks: Sequence[Check],
                 assumptions: Sequence[str], engines: Mapping[str, str]) -> FlightRun:
@@ -238,7 +250,8 @@ def _merged_run(ascent_run: FlightRun, booster_track: BoosterTrack,
     return replace(
         ascent_run,
         tracks=tracks + (booster_track.to_body_track(
-            "GCRS", body_id=_BOOSTER_BODY_ID, parent_body_id="stage1"),),
+            "GCRS", body_id=_BOOSTER_BODY_ID, parent_body_id="stage1",
+            downrange_origin_deg=_launch_site_deg(ascent_run)),),
         events=tuple(events),
         engines={**ascent_run.engines, **dict(engines)},
         assumptions=tuple(ascent_run.assumptions) + tuple(assumptions),

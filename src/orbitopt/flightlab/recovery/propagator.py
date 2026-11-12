@@ -187,6 +187,16 @@ def _iso_z(dt: datetime) -> str:
 # --------------------------------------------------------------------------
 
 
+def surface_distance_m(lat0_deg, lon0_deg, lat_deg, lon_deg):
+    """Great-circle distance over the surface [m] (haversine on the WGS-84
+    equatorial radius) -- within ~0.15% of OpenTsiolkovsky's ``downrange_m``
+    over a whole ascent, so the booster's downrange lines up with it."""
+    p0, p1 = np.radians(lat0_deg), np.radians(np.asarray(lat_deg, dtype=np.float64))
+    dlon = np.radians(np.asarray(lon_deg, dtype=np.float64) - lon0_deg)
+    a = np.sin((p1 - p0) / 2.0) ** 2 + np.cos(p0) * np.cos(p1) * np.sin(dlon / 2.0) ** 2
+    return 2.0 * frames.WGS84_A * np.arcsin(np.sqrt(np.clip(a, 0.0, 1.0)))
+
+
 class RecoveryError(ValueError):
     """A recovery run that cannot be flown as commanded (a burn beyond the
     restart count, a start mass below the dry mass). A ValueError subclass:
@@ -522,15 +532,36 @@ class BoosterTrack:
 
     def to_body_track(self, frame: str = "GCRS", *, body_id: str = "booster",
                       parent_body_id: str | None = None,
-                      provenance: str = "illustrative") -> BodyTrack:
+                      provenance: str = "illustrative",
+                      downrange_origin_deg: tuple[float, float] | None = None) -> BodyTrack:
         """This track as a contract BodyTrack in ``frame`` ("ECEF" is a
         pass-through copy; "GCRS"/"LAUNCH_ECI" go through the FL-002 frame
         bridge at this track's epoch). The flown throttle, Mach and dynamic
-        pressure ride along as extra CSV columns."""
+        pressure ride along as extra CSV columns, with the geodetic
+        ``altitude_m`` / ``latitude_deg`` / ``longitude_deg`` the ascent
+        tracks carry (OpenTsiolkovsky's columns) and, given the launch site
+        as ``downrange_origin_deg`` (lat, lon), ``downrange_m`` from it.
+
+        Without them, profile charts fell back to inertial great-circle
+        downrange and spherical altitude for the booster only: on the same
+        chart as the ascent's Earth-fixed columns its line began ~70 km off
+        stage 1's separation point and ended ~8 km below ground."""
         if frame not in frames.KNOWN_FRAMES:
             raise frames.UnknownFrameError(f"frame {frame!r} is not one of {frames.KNOWN_FRAMES}")
         r, v = self.position_ecef_m, self.velocity_ecef_m_s
         t = self.times_s
+        lat, lon, _h = frames.ecef_to_geodetic(np.asarray(r, dtype=np.float64))
+        extra = {
+            "throttle": tuple(float(x) for x in self.throttle),
+            "mach": tuple(float(x) for x in self.mach),
+            "dynamic_pressure_pa": tuple(float(x) for x in self.dynamic_pressure_pa),
+            "altitude_m": tuple(float(x) for x in self.height_m_arr),
+            "latitude_deg": tuple(float(x) for x in np.atleast_1d(lat)),
+            "longitude_deg": tuple(float(x) for x in np.atleast_1d(lon)),
+        }
+        if downrange_origin_deg is not None:
+            extra["downrange_m"] = tuple(float(x) for x in surface_distance_m(
+                downrange_origin_deg[0], downrange_origin_deg[1], lat, lon))
         if frame != "ECEF":
             r, v = frames.to_gcrs(r, v, "ECEF", _naive_utc(self.epoch_utc), t)
             if frame == "LAUNCH_ECI":
@@ -545,11 +576,7 @@ class BoosterTrack:
             mass_kg=tuple(float(x) for x in self.mass_kg),
             position_m=tuple(tuple(float(c) for c in p) for p in r),
             velocity_m_s=tuple(tuple(float(c) for c in p) for p in v),
-            extra_columns={
-                "throttle": tuple(float(x) for x in self.throttle),
-                "mach": tuple(float(x) for x in self.mach),
-                "dynamic_pressure_pa": tuple(float(x) for x in self.dynamic_pressure_pa),
-            },
+            extra_columns=extra,
         )
 
     def to_contract_events(self, body_id: str = "booster") -> tuple:

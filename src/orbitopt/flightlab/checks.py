@@ -361,16 +361,19 @@ def insertion_checks(run: FlightRun, target: FlightTarget,
         ))
     alt_tol = constraints.orbit_altitude_tolerance_m
     alt_tol = DEFAULT_ORBIT_ALTITUDE_TOLERANCE_M if alt_tol is None else float(alt_tol)
-    for name, actual, want in (
-        ("periapsis", rp, float(orbit.periapsis_altitude_m)),
-        ("apoapsis", float(elements["apoapsis_altitude_m"]), float(orbit.apoapsis_altitude_m)),
+    for name, actual, want, fail_code in (
+        ("periapsis", rp, float(orbit.periapsis_altitude_m),
+         "INSERTION_PERIAPSIS_OUT_OF_TOLERANCE"),
+        ("apoapsis", float(elements["apoapsis_altitude_m"]), float(orbit.apoapsis_altitude_m),
+         "INSERTION_APOAPSIS_OUT_OF_TOLERANCE"),
     ):
         delta = actual - want
         passed = abs(delta) <= alt_tol
+        # Literal codes (not an f-string) so the reason catalog test can see them.
         checks.append(Check(
             id=f"insertion-{name}-within-tolerance", passed=passed, value=actual,
             limit=want, unit="m",
-            reason_code="" if passed else f"INSERTION_{name.upper()}_OUT_OF_TOLERANCE",
+            reason_code="" if passed else fail_code,
         ))
     inc_tol = constraints.inclination_tolerance_deg
     inc_tol = DEFAULT_INCLINATION_TOLERANCE_DEG if inc_tol is None else float(inc_tol)

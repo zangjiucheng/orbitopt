@@ -97,6 +97,28 @@ def test_simulate_recovery_gate_fails_honestly_on_the_stub_scenario(stub, target
     assert read_run(tmp_path / "run").verification == run.verification
 
 
+def test_booster_track_carries_the_ascent_profile_columns(stub, target, tmp_path):
+    """The flown booster track carries the geodetic altitude / lat / lon and
+    the launch-site downrange the OpenTsiolkovsky ascent tracks do, so the
+    profile charts (Compare Runs, replay) draw every body in one frame.
+    Without them the booster alone fell back to inertial downrange and
+    spherical altitude: its line began ~70 km off stage 1's separation point
+    and ended ~8 km below ground."""
+    from orbitopt.flightlab.compare import trajectory_profiles
+    from orbitopt.flightlab.simulate import simulate
+
+    run = simulate(target, VEHICLE, tmp_path / "run", timeout_s=60, refly=False)
+    booster = next(t for t in run.tracks if t.body_id == "booster")
+    assert {"altitude_m", "latitude_deg", "longitude_deg", "downrange_m"} <= set(booster.extra_columns)
+    profiles = dict(trajectory_profiles(read_run(tmp_path / "run")))
+    s1_end, s2_start = profiles["stage1"][-1], profiles["stage2"][0]
+    b_start, b_end = profiles["booster"][0], profiles["booster"][-1]
+    # separation sits between stage 1's last and stage 2's first sample
+    assert s1_end[0] - 2.0 <= b_start[0] <= s2_start[0] + 2.0
+    assert abs(b_start[1] - s1_end[1]) < 10.0
+    assert b_end[1] == pytest.approx(0.0, abs=0.05)  # the impact is on the ground
+
+
 def test_evaluate_recovery_gate_is_a_declared_constraint_when_missing(target):
     """A clean-orbit run that never attempted the landing cannot pass a
     recovery-declared mission: the gate lands as failed data-missing, not as
