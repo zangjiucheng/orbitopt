@@ -11,8 +11,8 @@ import math
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPixmap, QPolygonF
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -26,13 +26,32 @@ from PySide6.QtWidgets import (
     QSplitter,
     QStackedWidget,
     QSlider,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
+from orbitopt.flightlab.compare import bundle_from_run, load_side_files, recovery_summary
 from orbitopt.flightlab.contract import FlightRun, Verification
+from orbitopt.flightlab.reasons import explain_all
+from orbitopt.flightlab.ui.charts import (  # noqa: F401 -- re-exported for callers/tests
+    _TelemetryChart,
+    _fmt_clock,
+    _fmt_number,
+    _font,
+    _nice_ticks,
+    _slider_resolution,
+)
+from orbitopt.flightlab.ui.recovery_panel import (
+    FLIGHTLAB_PANEL_QSS,
+    ReasonPanel,
+    RecoveryPanel,
+    format_check_value,
+    reason_label,
+    reason_tooltip,
+)
 from orbitopt.flightlab.ui.telemetry import (
     TelemetryChannel,
     build_telemetry_channels,
@@ -40,287 +59,12 @@ from orbitopt.flightlab.ui.telemetry import (
     load_run_scene,
 )
 from orbitopt.viz.scene_renderer import SceneRenderer
-from orbitopt.viz.theme import BG_VOID, DANGER, HAIRLINE, INFO, INK_MUTED, INK_SECONDARY, PANEL
+from orbitopt.viz.theme import BG_VOID, DANGER, INK_MUTED
 from orbitopt.viz.ui_kit import StatusBadge
 from orbitopt.viz.viewport import DebouncedInteractor
 
 FLIGHTLAB_FIDELITY = "fast-3dof"
 _WARP_LEVELS = (1.0, 10.0, 60.0, 300.0, 1000.0)
-
-
-def _font(size: float, bold: bool = False) -> QFont:
-    font = QFont()
-    font.setPointSizeF(size)
-    font.setBold(bold)
-    return font
-
-
-def _nice_ticks(lo: float, hi: float, target: int = 4) -> list[float]:
-    if hi <= lo:
-        return [lo]
-    raw = (hi - lo) / max(1, target)
-    if raw <= 0 or not math.isfinite(raw):
-        return [lo]
-    mag = 10 ** math.floor(math.log10(raw))
-    step = next(m * mag for m in (1, 2, 2.5, 5, 10) if m * mag >= raw)
-    start = math.ceil(lo / step) * step
-    return [start + k * step for k in range(int((hi - start) / step + 1e-9) + 1)]
-
-
-def _fmt_number(value: float) -> str:
-    if not math.isfinite(value):
-        return "—"
-    magnitude = abs(value)
-    if magnitude >= 10_000:
-        return f"{value:,.0f}"
-    if magnitude >= 100:
-        return f"{value:,.1f}"
-    if magnitude >= 1:
-        return f"{value:.2f}"
-    if magnitude >= 0.001:
-        return f"{value:.3f}"
-    return "0" if value == 0 else f"{value:.2e}"
-
-
-def _fmt_clock(seconds: float) -> str:
-    if not math.isfinite(seconds):
-        return "—"
-    seconds = float(seconds)
-    if abs(seconds) < 90:
-        return f"{seconds:.1f} s"
-    if abs(seconds) < 7200:
-        return f"{seconds / 60:.1f} min"
-    if abs(seconds) < 172800:
-        return f"{seconds / 3600:.1f} h"
-    return f"{seconds / 86400:.1f} d"
-
-
-def _slider_resolution(seconds: float) -> float:
-    if seconds <= 600:
-        return 1000.0
-    if seconds <= 6000:
-        return 100.0
-    if seconds <= 60000:
-        return 10.0
-    return 1.0
-
-
-class _TelemetryChart(QWidget):
-    """One synchronized channel chart.
-
-    Static pixels are cached the same way the app's other QPainter charts do:
-    the data lines do not change on every playback tick, only the cursor does.
-    Click/drag requests a seek so scrubbing a chart keeps the 3D view, event
-    highlight and all other channels at the same time.
-    """
-
-    time_requested = Signal(float)
-
-    MARGINS = (66, 26, 18, 28)
-
-    def __init__(self, channel_id: str, label: str, unit: str, parent=None):
-        super().__init__(parent)
-        self.channel_id = channel_id
-        self._channel = TelemetryChannel(channel_id, label, unit, "waiting for a Flight Lab run")
-        self._xmin = 0.0
-        self._xmax = 1.0
-        self._ymin = 0.0
-        self._ymax = 1.0
-        self._time = 0.0
-        self._dragging = False
-        self._cache: QPixmap | None = None
-        self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setMouseTracking(True)
-        self.setMinimumSize(120, 110)
-
-    def set_channel(self, channel: TelemetryChannel) -> None:
-        self._channel = channel
-        self._recompute_y_range()
-        self.invalidate()
-
-    def set_time_range(self, lo: float, hi: float) -> None:
-        self._xmin = float(lo)
-        self._xmax = float(hi)
-        self.invalidate()
-
-    def clear(self) -> None:
-        self.set_channel(TelemetryChannel(self.channel_id, self._label(), self._unit(), "waiting for a Flight Lab run"))
-
-    def set_time(self, t: float) -> None:
-        self._time = float(t)
-        self.update()
-
-    def invalidate(self) -> None:
-        self._cache = None
-        self.update()
-
-    def _label(self) -> str:
-        return self._channel.label
-
-    def _unit(self) -> str:
-        return self._channel.unit
-
-    def resizeEvent(self, event):  # noqa: N802
-        self._cache = None
-        super().resizeEvent(event)
-
-    def plot_rect(self) -> QRectF:
-        left, top, right, bottom = self.MARGINS
-        return QRectF(left, top, max(1.0, self.width() - left - right), max(1.0, self.height() - top - bottom))
-
-    def _recompute_y_range(self) -> None:
-        values = [value for series in self._channel.series for _, value in series.points if math.isfinite(value)]
-        if not values:
-            self._ymin, self._ymax = 0.0, 1.0
-            return
-        lo, hi = min(values), max(values)
-        if hi <= lo:
-            pad = max(1.0, abs(lo) * 0.05)
-            lo, hi = lo - pad, hi + pad
-        else:
-            pad = (hi - lo) * 0.06
-            lo, hi = lo - pad, hi + pad
-        self._ymin, self._ymax = lo, hi
-
-    def _x(self, t: float) -> float:
-        rect = self.plot_rect()
-        if self._xmax <= self._xmin:
-            return rect.left() + rect.width() / 2.0
-        fraction = min(1.0, max(0.0, (float(t) - self._xmin) / (self._xmax - self._xmin)))
-        return rect.left() + rect.width() * fraction
-
-    def _y(self, value: float) -> float:
-        rect = self.plot_rect()
-        if self._ymax <= self._ymin:
-            return rect.bottom()
-        fraction = min(1.0, max(0.0, (float(value) - self._ymin) / (self._ymax - self._ymin)))
-        return rect.bottom() - rect.height() * fraction
-
-    def _time_at_x(self, x: float) -> float:
-        rect = self.plot_rect()
-        if rect.width() <= 0 or self._xmax <= self._xmin:
-            return self._xmin
-        fraction = min(1.0, max(0.0, (float(x) - rect.left()) / rect.width()))
-        return self._xmin + fraction * (self._xmax - self._xmin)
-
-    def paintEvent(self, _event):  # noqa: N802
-        ratio = self.devicePixelRatioF()
-        pixmap_width = max(1, int(round(self.width() * ratio)))
-        pixmap_height = max(1, int(round(self.height() * ratio)))
-        if self._cache is None or self._cache.width() != pixmap_width or self._cache.height() != pixmap_height:
-            pixmap = QPixmap(QSize(pixmap_width, pixmap_height))
-            pixmap.setDevicePixelRatio(ratio)
-            pixmap.fill(QColor(PANEL))
-            painter = QPainter(pixmap)
-            painter.setRenderHint(QPainter.Antialiasing)
-            self._paint_static(painter)
-            painter.end()
-            self._cache = pixmap
-
-        painter = QPainter(self)
-        painter.drawPixmap(0, 0, self._cache)
-        painter.setRenderHint(QPainter.Antialiasing)
-        self._paint_dynamic(painter)
-        painter.end()
-
-    def _paint_static(self, p: QPainter) -> None:
-        rect = self.plot_rect()
-        p.setFont(_font(10, True))
-        p.setPen(QColor(INK_SECONDARY))
-        p.drawText(QRectF(rect.left(), 3, rect.width() - 90, 18), Qt.AlignLeft | Qt.AlignVCenter,
-                   f"{self._channel.label} ({self._channel.unit})")
-        self._paint_legend(p, rect)
-        p.setPen(QPen(QColor(HAIRLINE), 1))
-        p.drawRect(rect)
-
-        if not self._channel.has_data:
-            p.setPen(QColor(INK_MUTED))
-            p.setFont(_font(10))
-            p.drawText(rect, Qt.AlignCenter, self._channel.missing_reason or "no telemetry")
-            return
-
-        for yv in _nice_ticks(self._ymin, self._ymax):
-            py = self._y(yv)
-            p.setPen(QPen(QColor(HAIRLINE), 1, Qt.DotLine))
-            p.drawLine(QPointF(rect.left(), py), QPointF(rect.right(), py))
-            p.setPen(QColor(INK_MUTED))
-            p.setFont(_font(8.5))
-            p.drawText(QRectF(0, py - 8, self.MARGINS[0] - 6, 16), Qt.AlignRight | Qt.AlignVCenter, _fmt_number(yv))
-
-        for tv in _nice_ticks(self._xmin, self._xmax):
-            px = self._x(tv)
-            p.setPen(QPen(QColor(HAIRLINE), 1, Qt.DotLine))
-            p.drawLine(QPointF(px, rect.top()), QPointF(px, rect.bottom()))
-            p.setPen(QColor(INK_MUTED))
-            p.setFont(_font(8.5))
-            p.drawText(QRectF(px - 35, rect.bottom() + 4, 70, 16), Qt.AlignCenter, _fmt_clock(tv))
-
-        for series in self._channel.series:
-            points = series.points
-            if not points:
-                continue
-            color = QColor(series.color)
-            if len(points) == 1:
-                px, py = self._x(points[0][0]), self._y(points[0][1])
-                p.setPen(Qt.NoPen)
-                p.setBrush(QBrush(color))
-                p.drawRect(QRectF(px - 2.0, py - 2.0, 4.0, 4.0))
-                continue
-            max_samples = max(2, int(rect.width() * 1.5))
-            stride = max(1, len(points) // max_samples)
-            samples = list(points[::stride])
-            if samples[-1] != points[-1]:
-                samples.append(points[-1])
-            p.setPen(QPen(color, 1.8, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-            p.drawPolyline(QPolygonF([QPointF(self._x(t), self._y(v)) for t, v in samples]))
-
-    def _paint_legend(self, p: QPainter, rect: QRectF) -> None:
-        series = [item for item in self._channel.series if item.label]
-        if not series:
-            return
-        p.setFont(_font(8.5))
-        x = rect.right() - 2.0
-        for entry in reversed(series):
-            label = entry.label
-            text_width = p.fontMetrics().horizontalAdvance(label) + 2
-            x -= text_width
-            p.setPen(QColor(entry.color))
-            p.drawText(QRectF(x, 3, text_width, 18), Qt.AlignLeft | Qt.AlignVCenter, label)
-            x -= 12
-            p.setPen(Qt.NoPen)
-            p.setBrush(QBrush(QColor(entry.color)))
-            p.drawRect(QRectF(x, 9, 7, 7))
-            x -= 10
-
-    def _paint_dynamic(self, p: QPainter) -> None:
-        if self._xmax <= self._xmin:
-            return
-        x = self._x(self._time)
-        rect = self.plot_rect()
-        p.setPen(QPen(QColor(INFO), 1, Qt.DashLine))
-        p.drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()))
-
-    def mousePressEvent(self, event):  # noqa: N802
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._dragging = True
-            self.time_requested.emit(self._time_at_x(event.position().x()))
-            event.accept()
-        else:
-            super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):  # noqa: N802
-        if self._dragging:
-            self.time_requested.emit(self._time_at_x(event.position().x()))
-            event.accept()
-        else:
-            super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):  # noqa: N802
-        if event.button() == Qt.MouseButton.LeftButton and self._dragging:
-            self._dragging = False
-            event.accept()
-        else:
-            super().mouseReleaseEvent(event)
 
 
 class FlightLabReplayPage(QWidget):
@@ -333,6 +77,8 @@ class FlightLabReplayPage(QWidget):
         super().__init__(parent)
         self.setObjectName("flightLabReplay")
         self._run: FlightRun | None = None
+        #: Directory of the loaded run (None when nothing is loaded).
+        self.run_dir: Path | None = None
         self._scene: dict | None = None
         self._events: tuple[dict, ...] = ()
         self._channels: tuple[TelemetryChannel, ...] = ()
@@ -368,6 +114,7 @@ class FlightLabReplayPage(QWidget):
 
         self._run = run
         self._scene = scene
+        self.run_dir = Path(run_dir).expanduser()
         timeline = scene.get("timeline") or {}
         self._tmin = float(timeline.get("min", 0.0))
         self._tmax = float(timeline.get("max", 0.0))
@@ -379,6 +126,7 @@ class FlightLabReplayPage(QWidget):
         self._update_badges(run.verification)
         self._populate_events()
         self._populate_checks(run.verification)
+        self._populate_recovery(run, self.run_dir)
         self._populate_charts()
         self._configure_timeline()
 
@@ -448,6 +196,7 @@ class FlightLabReplayPage(QWidget):
         self.run_title.setObjectName("appTitle")
         self.run_subtitle = QLabel("Open a FlightResult v1 run directory; playback is computed ahead of time.")
         self.run_subtitle.setObjectName("metricLabel")
+        self.run_subtitle.setWordWrap(True)  # assumptions can be long; never widen the window
         title_col.addWidget(self.run_title)
         title_col.addWidget(self.run_subtitle)
         title_row.addLayout(title_col, stretch=1)
@@ -572,10 +321,19 @@ class FlightLabReplayPage(QWidget):
         self.check_table.setMinimumWidth(270)
         self.check_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.check_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self.reason_panel = ReasonPanel()
+        self.reason_panel.clear_entries()
+        self.recovery_panel = RecoveryPanel()
+        self.detail_tabs = QTabWidget()
+        self.detail_tabs.setObjectName("flightLabDetailTabs")
+        self.detail_tabs.setStyleSheet(FLIGHTLAB_PANEL_QSS)
+        self.detail_tabs.addTab(self.check_table, "Checks")
+        self.detail_tabs.addTab(self.reason_panel, "Why · 原因")
+        self.detail_tabs.addTab(self.recovery_panel, "Recovery · 回收")
         right_layout.addWidget(event_title)
         right_layout.addWidget(self.event_list, stretch=2)
         right_layout.addWidget(checks_title)
-        right_layout.addWidget(self.check_table, stretch=3)
+        right_layout.addWidget(self.detail_tabs, stretch=3)
         splitter.addWidget(right)
 
         splitter.setStretchFactor(0, 1)
@@ -642,22 +400,28 @@ class FlightLabReplayPage(QWidget):
         for row, check in enumerate(checks):
             value = self._format_check_value(check.value, check.unit)
             limit = self._format_check_value(check.limit, check.unit)
-            reason = check.reason_code or ("pass" if check.passed else "no reason code")
-            labels = (check.id, "PASS" if check.passed else "FAIL", value, limit, reason)
+            labels = (check.id, "PASS" if check.passed else "FAIL", value, limit, reason_label(check))
+            tooltip = reason_tooltip(check)
             for column, text in enumerate(labels):
                 item = QTableWidgetItem(text)
+                if tooltip:
+                    item.setToolTip(tooltip)
                 if not check.passed:
                     item.setForeground(QBrush(QColor(DANGER)))
                     item.setBackground(QBrush(QColor("#2a1010")))
                 self.check_table.setItem(row, column, item)
         self.check_table.resizeRowsToContents()
+        entries = explain_all(c.reason_code for c in checks if not c.passed and c.reason_code)
+        self.reason_panel.set_entries(entries, title="Why this run is red · 失败原因" if entries else "")
+
+    def _populate_recovery(self, run: FlightRun, run_dir: Path) -> None:
+        bundle = bundle_from_run(run, run_dir, **load_side_files(run_dir))
+        summary = recovery_summary(bundle)
+        self.recovery_panel.set_summary(summary)
 
     @staticmethod
     def _format_check_value(value: float | None, unit: str) -> str:
-        if value is None:
-            return "—"
-        text = _fmt_number(float(value))
-        return f"{text} {unit}" if unit else text
+        return format_check_value(value, unit)
 
     def _populate_charts(self) -> None:
         for channel in self._channels:
@@ -699,6 +463,7 @@ class FlightLabReplayPage(QWidget):
     def _clear_loaded(self) -> None:
         self._set_playing(False)
         self._run = None
+        self.run_dir = None
         self._scene = None
         self._events = ()
         self._channels = ()
@@ -708,6 +473,8 @@ class FlightLabReplayPage(QWidget):
         self.event_list.clear()
         self.check_table.clearContents()
         self.check_table.setRowCount(0)
+        self.reason_panel.clear_entries()
+        self.recovery_panel.clear()
         self._update_badges(Verification())
         for chart in self._charts.values():
             chart.clear()
