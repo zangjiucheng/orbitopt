@@ -225,6 +225,15 @@ class BoosterPhysics:
     atmosphere: bool = True
     rotation: bool = True        # Coriolis + centrifugal + co-rotating air
     density_model: str = "entry"  # "entry" | "ussa1976"
+    #: Multiplicative bias on every density read (FL-304 Monte-Carlo
+    #: atmospheric-dispersion knob: 1.0 = nominal atmosphere, 1.1 = 10 %
+    #: thicker). Applies to both density tables; 0 would disable aero.
+    density_scale: float = 1.0
+
+    def __post_init__(self) -> None:
+        if self.density_scale <= 0.0:
+            raise ValueError(
+                f"density_scale must be positive, got {self.density_scale}")
 
 
 @dataclass(frozen=True)
@@ -593,7 +602,7 @@ def _aero_ecef(r: np.ndarray, v: np.ndarray, vehicle: BoosterModel,
         return np.zeros(3), 0.0, 0.0, 0.0
     h = height_m(r)
     rho = (density_us76_kg_m3(h) if physics.density_model == "ussa1976"
-           else density_kg_m3(h))
+           else density_kg_m3(h)) * float(physics.density_scale)
     if rho < 1e-14:
         return np.zeros(3), 0.0, 0.0, 0.0
     v_air = v if physics.rotation else v - np.cross(_OMEGA_ECEF, r)

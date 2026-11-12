@@ -19,6 +19,16 @@ insertion apoapsis overshoots the 400 km target and
 that produced the state it re-flies); without tudatpy it stays ``None``
 ("not assessed"), never a fake ``True``.
 
+FL-304 extends the same pipeline downrange: when the target declares a
+recovery (``recovery.kind != none``) and ``run_recovery`` is on (default),
+:func:`orbitopt.flightlab.recovery.pipeline.fly_recovery` flies the FL-302
+boostback/entry + FL-303 G-FOLD landing burn off the separation state, swaps
+the ballistic ``stage1_debris`` track for the flown ``booster`` track, and
+merges the gate/landing checks in, so ``mission_constraints_passed`` covers
+insertion *and* touchdown on one run. A recovery that cannot even be flown
+leaves the run ascent-only; the gate then reads as a failed data-missing
+check, never as silence.
+
 Determinism (acceptance criterion): every input to the pipeline -- target,
 vehicle file, attitude program, re-fly settings -- is honoured, nothing
 wall-clock enters the run, so two calls write byte-identical run directories
@@ -168,20 +178,43 @@ def orbit_refly(run: FlightRun, *, orbits: float = 1.05,
 def simulate(target: FlightTarget, vehicle_path: Path, out_dir: Path,
              *, attitude_program: Sequence[AttitudePoint] | None = None,
              refly: bool = True, refly_orbits: float = 1.05,
-             refly_max_step_s: float = 300.0, timeout_s: float = 300.0) -> FlightRun:
+             refly_max_step_s: float = 300.0, timeout_s: float = 300.0,
+             run_recovery: bool = True,
+             recovery_options: Mapping[str, Any] | None = None) -> FlightRun:
     """Fly ``target`` with the vehicle file ``vehicle_path`` into the FlightResult
     run directory ``out_dir`` and return the verified :class:`FlightRun`
     (documented in the module docstring; the frozen FL-006 interface).
     ``attitude_program=None`` uses the vehicle file's program; ``refly=False``
     skips the tudatpy re-fly (physics_verified stays None); ``timeout_s``
-    bounds the OpenTsiolkovsky subprocess. Raises what the adapter raises
+    bounds the OpenTsiolkovsky subprocess. ``run_recovery`` (default True)
+    flies the FL-304 recovery chain -- FL-302 boostback/entry + FL-303 G-FOLD
+    landing burn -- whenever the target declares a recovery, merging the
+    booster track and its checks into this run before the verdict is settled;
+    ``recovery_options`` passes planner knobs (``max_fevals``,
+    ``initial_guess``, ...) through to FL-302. Raises what the adapter raises
     (OTBinaryMissingError / jsonschema.ValidationError / RuntimeError) -- the
     verdict is honest, the pipeline is not; a check failing is a red verdict,
-    not an exception."""
+    not an exception (a recovery that cannot even be attempted leaves the run
+    ascent-only, and the recovery gate lands as a failed data-missing check)."""
     vehicle_path = Path(vehicle_path)
     out_dir = Path(out_dir)
     run = run_ascent(target, vehicle_path, attitude_program, out_dir, timeout_s=timeout_s)
     vehicle_doc: Mapping[str, Any] = yaml.safe_load(vehicle_path.read_text(encoding="utf-8"))
+
+    if run_recovery and target.recovery.kind != "none":
+        from orbitopt.flightlab.recovery.pipeline import fly_recovery
+        from orbitopt.flightlab.recovery.propagator import RecoveryError
+        try:
+            run = fly_recovery(run, target, vehicle_path,
+                               plan_options=recovery_options).run
+        except (ValueError, RecoveryError) as exc:
+            run = replace(
+                run,
+                assumptions=run.assumptions + (
+                    f"FL-304 recovery not flown: {type(exc).__name__}: {exc} "
+                    "(recovery-landing gate will read as not assessed)",
+                ),
+            )
 
     extra = [c for c in (_checks.liftoff_thrust_to_weight_check(run, vehicle_doc),
                          _checks.propellant_reserve_check(run, vehicle_doc, target),
@@ -209,4 +242,12 @@ def simulate(target: FlightTarget, vehicle_path: Path, out_dir: Path,
     )
     run = replace(run, verification=evaluate(run, target))
     write_run(out_dir, run)
+    if run_recovery and target.recovery.kind != "none":
+        # The recovery merge retired stage1_debris from the manifest; sweep the
+        # trajectory CSV the ascent adapter left behind for it (read_run
+        # rejects orphan trajectory files by contract).
+        declared = {t.body_id for t in run.tracks}
+        for leftover in (out_dir / "trajectories").glob("*.csv"):
+            if leftover.stem not in declared:
+                leftover.unlink()
     return run
