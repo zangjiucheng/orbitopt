@@ -96,6 +96,13 @@ jsbsim, `tests/test_flightlab_sixdof_jsbsim.py` is skipped.
   and the installed version agree; the lock pins the exact version.
 * `scipy>=1.11,<1.14` -- pykep.trajopt still calls
   `scipy.interpolate.interp2d`, removed in scipy 1.14.
+* `astropy=6.1.7` (exact) -- the Flight Lab frame bridge (FL-002). Pinned
+  exactly under FL-601: ITRS<->GCRS results are reproducible only against a
+  fixed astropy/erfa build, and every run manifest records the installed
+  version (`manifest.toolchain`). The other Flight Lab tools that are not
+  conda packages are exactly pinned in the pip add-on layers:
+  `gfold==0.3.2` (`flightlab-landing.txt`), `jsbsim==1.3.3` hash-locked
+  (`sixdof-requirements.txt`).
 * `cuda-version=13` (GPU only) -- selects CUDA 13 CuPy/cudart builds. To
   target another CUDA major, change it in `gpu.yml` and re-lock. The host
   only needs a compatible NVIDIA driver.
@@ -138,7 +145,11 @@ changes without its lockfile being regenerated.
 
 * `.github/workflows/ci.yml` -- every push/PR: CPU lockfile on ubuntu and
   on macOS (arm64 + x86_64), full test suite; `gpu`-marked tests are
-  skipped.
+  skipped. The ubuntu job additionally runs the Flight Lab tests on their
+  recorded fixtures; the slow `flightlab-gateb` job fetches the pinned
+  OpenTsiolkovsky binary and compares a fresh Gate B flight against the
+  committed reference (see
+  [`docs/flightlab-regression-ci.md`](../docs/flightlab-regression-ci.md)).
 * `.github/workflows/gpu.yml` -- the CUDA path: GPU lockfile on a
   self-hosted runner labelled `[self-hosted, linux, x64, gpu]`. Runs on
   manual dispatch or when a PR carries the `gpu-ci` label. It sets

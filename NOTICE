@@ -1,6 +1,11 @@
 orbitopt — third-party notices
 =============================
 
+The full list of third-party components, their licenses and their
+GPL-3.0-or-later compatibility is in THIRD_PARTY.md; this file reproduces
+the license text of the one component that is an external binary rather
+than a library dependency.
+
 OpenTsiolkovsky
 ---------------
 

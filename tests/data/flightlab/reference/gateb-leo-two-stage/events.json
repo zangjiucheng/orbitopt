@@ -1,0 +1,97 @@
+[
+  {
+    "t_s": 0.0,
+    "kind": "ignition",
+    "body_id": "stage1",
+    "data": {
+      "ot_event": "ignition",
+      "stage": 1
+    }
+  },
+  {
+    "t_s": 0.0,
+    "kind": "liftoff",
+    "body_id": "stage1",
+    "data": {
+      "ot_event": "liftoff",
+      "stage": 1
+    }
+  },
+  {
+    "t_s": 57.338757309138316,
+    "kind": "max_q",
+    "body_id": "stage1",
+    "data": {
+      "ot_event": "max_q",
+      "stage": 1
+    }
+  },
+  {
+    "t_s": 193.77021798455814,
+    "kind": "meco",
+    "body_id": "stage1",
+    "data": {
+      "ot_event": "burnout",
+      "stage": 1
+    }
+  },
+  {
+    "t_s": 207.0,
+    "kind": "separation",
+    "body_id": "stage2",
+    "data": {
+      "ot_event": "separation",
+      "stage": 1,
+      "separated_from": "stage1_debris"
+    }
+  },
+  {
+    "t_s": 214.0,
+    "kind": "ignition",
+    "body_id": "stage2",
+    "data": {
+      "ot_event": "ignition",
+      "stage": 2
+    }
+  },
+  {
+    "t_s": 267.0,
+    "kind": "separation",
+    "body_id": "stage2_fairing",
+    "data": {
+      "ot_event": "jettison",
+      "stage": 2
+    }
+  },
+  {
+    "t_s": 620.0,
+    "kind": "seco",
+    "body_id": "stage2",
+    "data": {
+      "ot_event": "burnout",
+      "stage": 2
+    }
+  },
+  {
+    "t_s": 739.9388128395576,
+    "kind": "impact",
+    "body_id": "stage1_debris",
+    "data": {
+      "ot_event": "impact",
+      "latitude_deg": 37.97350269581301,
+      "longitude_deg": -67.44618711891255,
+      "speed_mps": 1726.1387733075392
+    }
+  },
+  {
+    "t_s": 1324.7344778999486,
+    "kind": "impact",
+    "body_id": "stage2_fairing",
+    "data": {
+      "ot_event": "impact",
+      "latitude_deg": 39.27752200429423,
+      "longitude_deg": -65.1485882141758,
+      "speed_mps": 25.33941867404628
+    }
+  }
+]

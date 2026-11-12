@@ -1,0 +1,26 @@
+{
+  "files": {
+    "gateb-leo-two-stage/events.json": "7b21e24af0ce3342997bd727eb127eb1900c415b8d0034da64cac8890e23c13a",
+    "gateb-leo-two-stage/manifest.json": "ab6a4841023e7fd7be1281082623a1516a77eead1e65b326626ad43995fe0230",
+    "gateb-leo-two-stage/opentsiolkovsky/bodies/stage1.csv": "c5f41641b525da6e4e62fc2139980b688feb0b44c8de8e75b23f36bc82f4ac94",
+    "gateb-leo-two-stage/opentsiolkovsky/bodies/stage2_fairing.csv": "f1df2482ffa1e97c640208bca69cd7116b989cdb1cf1de58b097f0d6a530c9a0",
+    "gateb-leo-two-stage/opentsiolkovsky/summary.json": "d6cd8cd437908fef3afb07438b2a344c76f9662660f826864673a5c2e3cee4c9",
+    "gateb-leo-two-stage/opentsiolkovsky/trajectory.csv": "645108e1becf2eb33f53009e678b12ead933a18203676a8ede0480c13414ba5c",
+    "gateb-leo-two-stage/trajectories/stage1.csv": "8148dba7803b61238bfaeb8353b97cb5371f69d9cb27cc3f86b440e16afd6406",
+    "gateb-leo-two-stage/trajectories/stage1_debris.csv": "b76d968c6f568cf73359b9cb35b074a79789d4c6f3893abd85b5f47cd560ecba",
+    "gateb-leo-two-stage/trajectories/stage2.csv": "87f6ad8fe56cd0f1ed0e2538506187d85244fe4547791d4cd959574058e17c24",
+    "gateb-leo-two-stage/trajectories/stage2_fairing.csv": "29b8a892708b6c69ea9500b050e2ab37f3eb958d7f6d65279a72e7fca6b8add5",
+    "gateb-leo-two-stage/verification.json": "7457f3950394d12100823202fe80a898b084b4df7315fcc0ad7fae1c98573ccb",
+    "tolerances.json": "0879c26e0f40d51dee251e9f3ef86dba63cbda04cd4939b772c1bee12d7b6949"
+  },
+  "generated_by": "scripts/fl601_reference.py update",
+  "git_sha_recording": "b34382e20c2b51b60db3b35585692ca628862697",
+  "reference": "Gate B (FL-006) ascent-only regression flight",
+  "requires_commit_tag": "[fl601-reference-update]",
+  "simulate_options": {
+    "refly": false,
+    "run_recovery": false
+  },
+  "target": "src/orbitopt/data/flightlab/scenarios/leo_two_stage.yaml",
+  "vehicle": "src/orbitopt/data/flightlab/vehicles/synthetic_two_stage.yaml"
+}

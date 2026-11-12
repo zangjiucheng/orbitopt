@@ -1,0 +1,218 @@
+# Flight Lab vehicle: Falcon 9 (Block 5)-class two-stage, PUBLIC-ESTIMATE
+# reconstruction (FL-602). NOT official SpaceX performance data and never to
+# be presented as such: the flight article below is the MIT-licensed demo
+# config shipped as OpenTsiolkovsky v1.0.0 `examples/falcon9.json` (PACE
+# mission), cross-checked against cited public sources; the attitude program
+# is an illustrative class-typical gravity turn, not a flown PACE profile.
+# Every number is tagged in 'data_provenance:' (flight-vehicle-1.0 schema,
+# orbitopt.flightlab.vehicle_catalog): `official` entries cite a SpaceX
+# publication for that individual figure; `public_estimate` entries are
+# secondary or reconstructed and must never be quoted as SpaceX figures;
+# `illustrative` entries are scenario choices. The uncertainty_pct bands are
+# what `orbitopt flight montecarlo` disperses by default (FL-304/FL-602).
+# The 'booster:' section (FL-301) models the Block 5 lander as the E3 3-DOF
+# propagator flies it.
+schema_version: flight-vehicle-1.0
+name: f9-class-public-estimate
+provenance: public_estimate
+as_of: "2026-11"
+disclaimer: >
+  Public-estimate reconstruction of a Falcon 9 (Block 5)-class vehicle,
+  assembled from OpenTsiolkovsky's MIT example config and cited secondary
+  sources. Not official SpaceX performance data; capability, mass and
+  trajectory figures carry the stated uncertainty bands and must not be
+  presented as SpaceX numbers.
+assumptions:
+  - Stage masses are the OpenTsiolkovsky PACE example values and are
+    mission-specific (the stage-2 wet mass embeds the PACE payload, and the
+    example flew a direct-TLI timeline); treat them as class-representative
+    within the stated bands, not as a Block 5 data sheet.
+  - The attitude program is an illustrative class-typical ascent (LC-39A /
+    SLC-40 east-range, ~51.6 deg); the OT example's own TLI guidance curves
+    were deliberately NOT copied -- this file flies LEO insertion.
+  - "Aero is the example's generic tube-and-fins table: no grid fins, landing
+    legs, or fairing separation dynamics; booster Cd treats fins stowed."
+simulation:
+  end_time_s: 2400.0
+  output_step_s: 2.0
+  integrator: {method: rk45}
+attitude_program:
+  - {t_s: 0.0, azimuth_deg: 45.0, elevation_deg: 90.0}
+  - {t_s: 20.0, azimuth_deg: 45.0, elevation_deg: 90.0}
+  - {t_s: 60.0, azimuth_deg: 45.0, elevation_deg: 72.0}
+  - {t_s: 90.0, azimuth_deg: 45.0, elevation_deg: 57.0}
+  - {t_s: 110.0, azimuth_deg: 45.0, elevation_deg: 40.0}
+  - {t_s: 139.0, azimuth_deg: 45.0, elevation_deg: 8.0}
+  - {t_s: 150.0, azimuth_deg: 45.0, elevation_deg: 2.0}
+  - {t_s: 200.0, azimuth_deg: 45.0, elevation_deg: 0.0}
+  - {t_s: 480.0, azimuth_deg: 45.0, elevation_deg: 0.0}
+stages:
+  - mass_initial_kg: 433100.0
+    mass_dry_kg: 22200.0
+    engine:
+      thrust_vac_n: 8227000.0
+      isp_vac_s: 311.0
+      burn_start_s: 0.0
+      burn_end_s: 139.0
+      nozzle_exit_area_m2: 6.11892
+    aero:
+      diameter_m: 3.66
+      ca: [[0, 0.35], [0.8, 0.38], [1.1, 0.55], [1.5, 0.5], [2.5, 0.4], [4, 0.32], [8, 0.26]]
+      cn_alpha_per_rad: 0.2
+      ballistic_coefficient_kg_m2: 100
+    free_flight: attitude_program
+    separation_time_s: 143.0
+  - mass_initial_kg: 115200.0
+    mass_dry_kg: 7700.0
+    engine:
+      thrust_vac_n: 981000.0
+      isp_vac_s: 348.0
+      burn_start_s: 7.0
+      burn_end_s: 367.34
+      nozzle_exit_area_m2: 8.55299
+    aero:
+      diameter_m: 3.66
+      ca: [[0, 0.35], [0.8, 0.38], [1.1, 0.55], [1.5, 0.5], [2.5, 0.4], [4, 0.32], [8, 0.26]]
+      cn_alpha_per_rad: 0.2
+      ballistic_coefficient_kg_m2: 100
+    free_flight: attitude_program
+    jettisons:
+      - name: fairing
+        time_s: 112.0
+        mass_kg: 2000.0
+        ballistic_coefficient_kg_m2: 50
+booster:
+  # Block 5-style stage-1 lander for the E3 3-DOF propagator: one relightable
+  # Merlin 1D for the landing burn (Block 5 routinely lands on a single
+  # engine), propellant retained through entry for boostback/entry burns is
+  # carried as the FL scenario's separation-state reserve, not a vehicle
+  # constant. Dry mass and Cd are the weakly-known numbers here -- hence the
+  # wide bands.
+  provenance: public_estimate
+  dry_mass_kg:
+    value: 22200.0
+    provenance: public_estimate
+    source: community telemetry reconstructions of Block 5 booster landing mass (dry + residual); spread across published analyses is ~22-26 t
+    as_of: "2026-11"
+    uncertainty_pct: 8.0
+  landing_propellant_reserve_kg:
+    value: 2500.0
+    provenance: public_estimate
+    source: SpaceX post-flight statements and open telemetry reconstructions of landing-burn propellant usage (~1-3 t at ignition); not a SpaceX-published figure
+    as_of: "2026-11"
+    accuracy: "+/-40% (order-of-magnitude public figure)"
+    uncertainty_pct: 40.0
+  reference_area_m2:
+    value: 10.7521
+    provenance: public_estimate
+    source: pi/4 * 3.7^2 with the officially published 3.7 m body diameter
+    as_of: "2026-11"
+    uncertainty_pct: 2.0
+  cd_mach:
+    value: [[0.0, 0.35], [0.8, 0.38], [1.1, 0.55], [1.5, 0.5], [2.5, 0.4], [4.0, 0.32], [8.0, 0.26]]
+    provenance: public_estimate
+    source: OT example tube-and-fins table reused for the booster; real Block 5 Cd with grid fins stowed/deployed is not published
+    as_of: "2026-11"
+    accuracy: "+/-15% (generic aero, config-dependent)"
+    uncertainty_pct: 15.0
+  engines:
+    count: 1
+    usable_for: [boostback, landing]
+    thrust_vacuum_n: 981000.0
+    isp_sea_level_s: 282.0
+    isp_vacuum_s: 311.0
+    nozzle_exit_area_m2: 1.2
+    throttle_min: 0.7
+    throttle_max: 1.0
+    restarts_max: 3
+  assumptions:
+    - Single-engine landing burn per Block 5 practice; entry-burn delta-v
+      comes from propellant retained beyond this reserve, which the E3
+      scenario budget carries separately.
+data_provenance:
+  simulation:
+    provenance: illustrative
+    source: simulation window taken from the OT example, a scenario choice not a flight requirement
+    as_of: "2026-11"
+  attitude_program:
+    provenance: illustrative
+    source: authored class-typical gravity turn for the LEO insertion scenario (not a flown profile)
+    as_of: "2026-11"
+  stages[0]:
+    provenance: public_estimate
+    source: OpenTsiolkovsky v1.0.0 examples/falcon9.json (MIT, PACE mission config; community reconstruction), cross-checked against public Falcon 9 references
+    as_of: "2026-11"
+  stages[0].mass_initial_kg:
+    provenance: public_estimate
+    source: OpenTsiolkovsky examples/falcon9.json PACE liftoff mass; consistent with public Block 5 propellant-load reconstructions (~450 t class, mission-dependent)
+    as_of: "2026-11"
+    accuracy: "mission-specific load"
+    uncertainty_pct: 3.0
+  stages[0].mass_dry_kg:
+    provenance: public_estimate
+    source: OT example; Block 5 stage-1 dry mass is a community telemetry reconstruction (~22-26 t spread), never published by SpaceX
+    as_of: "2026-11"
+    uncertainty_pct: 8.0
+  stages[0].engine.thrust_vac_n:
+    provenance: public_estimate
+    source: OT example; matches the commonly quoted Falcon 9 first-stage total (9 x Merlin 1D, ~914 kN each in vacuum; 7,607 kN at sea level). Not 9 x 981 kN -- 981 kN is the Merlin Vacuum second-stage rating (stages[1])
+    as_of: "2020"
+    accuracy: "first-stage total as quoted; off-nominal in-flight margin varies"
+    uncertainty_pct: 3.0
+  stages[0].engine.isp_vac_s:
+    provenance: official
+    source: SpaceX, Falcon 9 User Guide (2020) -- Merlin 1D full-thrust vacuum specific impulse
+    as_of: "2020"
+    accuracy: "as published; vacuum Isp varies with altitude"
+    uncertainty_pct: 1.0
+  stages[0].aero:
+    provenance: public_estimate
+    source: OT example generic tube-and-fins aero; Falcon 9 transonic/supersonic Cd is not published (grid fins stowed)
+    as_of: "2026-11"
+  stages[0].aero.ca:
+    provenance: public_estimate
+    source: OT example generic tube-and-fins Cd(Mach) table; real vehicle Cd depends on grid-fin and landing-leg state
+    as_of: "2026-11"
+    accuracy: "+/-15% (config-dependent)"
+    uncertainty_pct: 15.0
+  stages[1]:
+    provenance: public_estimate
+    source: OpenTsiolkovsky v1.0.0 examples/falcon9.json (MIT, PACE mission config; community reconstruction)
+    as_of: "2026-11"
+  stages[1].mass_initial_kg:
+    provenance: public_estimate
+    source: OT example PACE stage-2 wet mass, mission payload included; upper-stage propellant load is not published by SpaceX
+    as_of: "2026-11"
+    accuracy: "mission-specific load (PACE direct-TLI)"
+    uncertainty_pct: 5.0
+  stages[1].mass_dry_kg:
+    provenance: public_estimate
+    source: OT example; Block 5 second-stage dry mass is a community reconstruction, not published
+    as_of: "2026-11"
+    uncertainty_pct: 15.0
+  stages[1].engine.thrust_vac_n:
+    provenance: official
+    source: SpaceX, Falcon 9 User Guide (2020) -- Merlin 1D Vacuum thrust class (981 kN)
+    as_of: "2020"
+    accuracy: "as published"
+    uncertainty_pct: 2.0
+  stages[1].engine.isp_vac_s:
+    provenance: official
+    source: SpaceX, Falcon 9 User Guide (2020) -- Merlin 1D Vacuum specific impulse (348 s)
+    as_of: "2020"
+    accuracy: "as published"
+    uncertainty_pct: 1.0
+  stages[1].jettisons[0].mass_kg:
+    provenance: public_estimate
+    source: OT example; Falcon 9 fairing dry mass is quoted ~1.7-2 t in press kits and secondary references, no SpaceX-published figure
+    as_of: "2026-11"
+    uncertainty_pct: 15.0
+  booster:
+    provenance: public_estimate
+    source: Block 5 lander reconstruction from the OT example aero and public telemetry analyses; no SpaceX-published landing vehicle data sheet
+    as_of: "2026-11"
+  booster.engines:
+    provenance: official
+    source: SpaceX, Falcon 9 User Guide (2020) for the Merlin 1D thrust/Isp figures; nozzle exit area and throttle minimum are secondary estimates (exit area ~1.2 m2 class, deep throttle ~70%)
+    as_of: "2026-11"
+    uncertainty_pct: 2.0

@@ -7,8 +7,15 @@
 # The 'booster:' section (FL-301) is the stage-1 recovery model read by
 # orbitopt.flightlab.recovery.propagator.BoosterModel.load; it is not passed
 # to the OT adapter.
+# FL-602: this document validates against data/flightlab/schemas/
+# flight-vehicle-1.0.json; 'data_provenance:' tags every number in the file
+# (a key covers the node or subtree it names -- see
+# orbitopt.flightlab.vehicle_catalog). The stage-1 thrust/Isp/Cd uncertainty
+# bands are the default FL-304 Monte Carlo dispersions for this vehicle.
+schema_version: flight-vehicle-1.0
 name: synthetic-two-stage
 provenance: illustrative
+as_of: "2026-11"
 assumptions:
   - Hand-tuned two-stage demonstrator sized for a ~400 km / 51.6 deg insertion
     from LC-39A within the FL scenario constraints (max_q 60 kPa, 5 g); the
@@ -100,3 +107,43 @@ booster:
     - The OT stage-1 config burns all propellant by separation, so the recovery
       reserve is planning headroom for the E3 burn sequence, not a state the
       FL-004 ascent scenario carries.
+data_provenance:
+  # Every entry is authored for this repository's demonstrator pipeline:
+  # plausible round numbers, no claim to match any real vehicle, so
+  # 'source' names the authoring intent and 'as_of' the last review.
+  simulation:
+    provenance: illustrative
+    source: sized for the FL-004/FL-005 scenario window (hand-tuned)
+    as_of: "2026-11"
+  attitude_program:
+    provenance: illustrative
+    source: hand-tuned gravity turn for the FL scenario constraints (not guidance-derived)
+    as_of: "2026-11"
+  stages[0]:
+    provenance: illustrative
+    source: hand-tuned stage-1 sized for ~400 km insertion within FL constraints
+    as_of: "2026-11"
+  stages[0].engine.thrust_vac_n:
+    provenance: illustrative
+    source: hand-tuned Merlin-class cluster total with MECO throttle-down
+    as_of: "2026-11"
+    uncertainty_pct: 5.0
+  stages[0].engine.isp_vac_s:
+    provenance: illustrative
+    source: hand-tuned Merlin-class vacuum Isp
+    as_of: "2026-11"
+    uncertainty_pct: 3.0
+  stages[0].aero.ca:
+    provenance: illustrative
+    source: generic tube-and-fins Cd(Mach) guess
+    as_of: "2026-11"
+    uncertainty_pct: 8.0
+  stages[1]:
+    provenance: illustrative
+    source: hand-tuned upper stage sized for the single-burn cutoff
+    as_of: "2026-11"
+  booster:
+    provenance: illustrative
+    source: mirrors the illustrative stage-1 OT config; reserve sized for 2x hover margin
+    as_of: "2026-11"
+
