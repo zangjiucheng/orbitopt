@@ -312,6 +312,37 @@ def test_slow_e2e_nominal_recovery_is_green_through_the_real_chain(monkeypatch, 
 
 
 @pytest.mark.slow
+def test_slow_e2e_missing_landing_solver_reads_not_assessed(monkeypatch, target,
+                                                           tmp_path):
+    """The locked conda env has no gfold (pip add-on layer). The physically
+    green chain above must then read "landing not assessed" -- a failed
+    gate, as every declared-but-unassessed check is -- and never the physics
+    verdict LANDING_INFEASIBLE, nor a fake landing-solver check."""
+    import sys
+
+    import orbitopt.flightlab.simulate as sim
+    from orbitopt.flightlab.recovery.pipeline import NOMINAL_PLAN_GUESS
+    from orbitopt.flightlab.simulate import simulate
+
+    monkeypatch.setitem(sys.modules, "gfold", None)
+    ascent = _ascent_with_textbook_separation()
+    monkeypatch.setattr(sim, "run_ascent", lambda *a, **k: ascent)
+
+    run = simulate(target, VEHICLE, tmp_path / "no-solver", refly=False,
+                   recovery_options={"initial_guess": NOMINAL_PLAN_GUESS,
+                                     "max_fevals": 18})
+    by_id = {c.id: c for c in run.verification.checks}
+    gate = by_id[checks.RECOVERY_GATE_CHECK_ID]
+    assert not gate.passed
+    assert gate.reason_code == checks.RECOVERY_LANDING_NOT_ASSESSED
+    assert "landing-solver" not in by_id
+    assert all(c.reason_code != "LANDING_INFEASIBLE" for c in run.verification.checks)
+    assert run.verification.mission_constraints_passed is False
+    assert any("gfold is not installed" in a for a in run.assumptions)
+    assert run.engines.get("gfold") == "not-run"
+
+
+@pytest.mark.slow
 def test_slow_e2e_single_plan_landing_is_honest_red_with_a_landing_reason_code(
         monkeypatch, target, tmp_path):
     """The same physical chain with FL-303's single open-loop G-FOLD plan

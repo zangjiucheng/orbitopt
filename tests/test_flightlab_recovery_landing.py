@@ -37,6 +37,7 @@ comes from the propagator's ground-event bisection either way.
 from __future__ import annotations
 
 import math
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -53,6 +54,7 @@ from orbitopt.flightlab.recovery import (
     BoosterState,
     LandingBurnEnu,
     LandingInfeasibleError,
+    LandingSolverUnavailableError,
     RecoveryTarget,
     fly_landing_burn,
     landing_result_to_run,
@@ -226,6 +228,31 @@ def test_infeasible_is_reported_not_green():
     assert not res.feasible and not res.landed
     assert res.reason_codes == (LANDING_INFEASIBLE,)
     assert res.plan is None
+
+
+def test_missing_solver_is_not_reported_infeasible(monkeypatch):
+    """No gfold in the environment is an environment gap, not a physics
+    verdict: it must never surface as LandingInfeasibleError (which the
+    flow reports as LANDING_INFEASIBLE)."""
+    monkeypatch.setitem(sys.modules, "gfold", None)
+    pos, vel, m0 = CASE_A
+    with pytest.raises(LandingSolverUnavailableError, match="not installed") as exc:
+        solve_landing_burn(_enu_state(pos, vel, m0), VEHICLE, solver="gfold",
+                           tof_s=20.0, n=16)
+    assert not isinstance(exc.value, LandingInfeasibleError)
+    with pytest.raises(LandingSolverUnavailableError):
+        fly_landing_burn(_enu_state(pos, vel, m0), _ecef_state(pos, vel, m0),
+                         TARGET, VEHICLE, solver="gfold", tof_s=20.0, n=16)
+
+
+def test_off_pin_solver_is_not_reported_infeasible(monkeypatch):
+    import importlib.metadata
+
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "0.0.1")
+    pos, vel, m0 = CASE_A
+    with pytest.raises(LandingSolverUnavailableError, match="pinned"):
+        solve_landing_burn(_enu_state(pos, vel, m0), VEHICLE, solver="gfold",
+                           tof_s=20.0, n=16)
 
 
 # ---------------------------------------------------------------------------

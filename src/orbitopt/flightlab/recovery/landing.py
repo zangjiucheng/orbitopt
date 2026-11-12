@@ -161,6 +161,14 @@ class LandingInfeasibleError(RecoveryError):
     already guarding the propagator guard this too."""
 
 
+class LandingSolverUnavailableError(RecoveryError):
+    """The pinned G-FOLD solver is missing or not the pinned version: an
+    *environment* problem, not a physics verdict. Deliberately not a
+    :class:`LandingInfeasibleError`, so it is never reported as
+    ``LANDING_INFEASIBLE``; the recovery pipeline reads it as "landing not
+    assessed" (``RECOVERY_LANDING_NOT_ASSESSED``)."""
+
+
 # ---------------------------------------------------------------------------
 # limits and the solved-plan record
 # ---------------------------------------------------------------------------
@@ -303,12 +311,12 @@ def _require_gfold():
         from importlib.metadata import version
 
         got = version("gfold")
-    except ImportError as exc:  # pragma: no cover - env-dependent
-        raise LandingInfeasibleError(
+    except ImportError as exc:  # env-dependent; tested by blocking the import
+        raise LandingSolverUnavailableError(
             "gfold is not installed: pip install -r envs/flightlab-landing.txt"
         ) from exc
     if got != GFOLD_VERSION_PIN:
-        raise LandingInfeasibleError(
+        raise LandingSolverUnavailableError(
             f"gfold {got} != pinned {GFOLD_VERSION_PIN}: this wrapper pins the "
             "0.3.2 discretization/bound semantics; install the pinned version"
         )

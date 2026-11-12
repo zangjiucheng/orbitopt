@@ -57,6 +57,7 @@ from orbitopt.flightlab.recovery.landing import (
     GFOLD_VERSION_PIN,
     LandingLimits,
     LandingResult,
+    LandingSolverUnavailableError,
     TerminalGuidance,
     fly_landing_burn,
     fly_landing_burn_closed_loop,
@@ -291,6 +292,13 @@ def fly_recovery(ascent_run: FlightRun, target: FlightTarget, vehicle_path, *,
                 else _landing_limits_for_target(target),
                 physics=physics,
             )
+        except LandingSolverUnavailableError as exc:
+            # an environment gap (gfold missing / off-pin), not a physics
+            # verdict: the landing was not assessed -- never LANDING_INFEASIBLE
+            landing = LandingResult(feasible=False, landed=False,
+                                    reason_codes=(RECOVERY_NOT_ASSESSED,),
+                                    checks=(), assumptions=(
+                                        f"landing burn not assessed: {exc}",))
         except RecoveryError as exc:
             landing = LandingResult(feasible=False, landed=False,
                                     reason_codes=("LANDING_INFEASIBLE",),
