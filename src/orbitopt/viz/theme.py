@@ -97,21 +97,22 @@ QWidget#timelineBar {{
 QWidget#titleBar {{
     border-bottom: 1px solid {HAIRLINE};
 }}
-QTabWidget#rightTabs, QTabWidget#chartTabs {{
+QTabWidget#rightTabs, QTabWidget#chartTabs, QTabWidget#flightLabTabs {{
     background: {PANEL};
 }}
 QTabWidget#rightTabs::pane {{
     border: none;
     border-left: 1px solid {HAIRLINE};
 }}
-QTabWidget#chartTabs::pane {{
+QTabWidget#chartTabs::pane, QTabWidget#flightLabTabs::pane {{
     border: none;
     border-top: 1px solid {HAIRLINE};
 }}
-QTabWidget#rightTabs QTabBar, QTabWidget#chartTabs QTabBar {{
+QTabWidget#rightTabs QTabBar, QTabWidget#chartTabs QTabBar, QTabWidget#flightLabTabs > QTabBar {{
     background: {PANEL};
 }}
-QTabWidget#rightTabs QTabBar::tab, QTabWidget#chartTabs QTabBar::tab {{
+QTabWidget#rightTabs QTabBar::tab, QTabWidget#chartTabs QTabBar::tab,
+QTabWidget#flightLabTabs > QTabBar::tab {{
     background: {PANEL};
     color: {INK_MUTED};
     padding: 7px 12px 6px 12px;
@@ -121,10 +122,12 @@ QTabWidget#rightTabs QTabBar::tab, QTabWidget#chartTabs QTabBar::tab {{
     font-weight: 600;
     letter-spacing: 0.06em;
 }}
-QTabWidget#rightTabs QTabBar::tab:hover, QTabWidget#chartTabs QTabBar::tab:hover {{
+QTabWidget#rightTabs QTabBar::tab:hover, QTabWidget#chartTabs QTabBar::tab:hover,
+QTabWidget#flightLabTabs > QTabBar::tab:hover {{
     color: {INK_SECONDARY};
 }}
-QTabWidget#rightTabs QTabBar::tab:selected, QTabWidget#chartTabs QTabBar::tab:selected {{
+QTabWidget#rightTabs QTabBar::tab:selected, QTabWidget#chartTabs QTabBar::tab:selected,
+QTabWidget#flightLabTabs > QTabBar::tab:selected {{
     color: {INK_PRIMARY};
     border-bottom: 2px solid {ACCENT};
 }}
@@ -233,6 +236,34 @@ QPushButton#playButton {{
     padding: 0;
 }}
 
+QPushButton#modeSwitch {{
+    background: {PANEL};
+    color: {INK_MUTED};
+    border: 1px solid {HAIRLINE};
+    padding: 5px 6px;
+    min-height: 16px;  /* the label's own height: "min-height: 0" let the layout squeeze it to 20 px, clipping the text */
+    font-size: 11px;
+    font-weight: 600;
+}}
+QPushButton#modeSwitch[side="left"] {{
+    border-top-left-radius: 3px; border-bottom-left-radius: 3px;
+    border-top-right-radius: 0; border-bottom-right-radius: 0;
+}}
+QPushButton#modeSwitch[side="right"] {{
+    border-left: none;
+    border-top-right-radius: 3px; border-bottom-right-radius: 3px;
+    border-top-left-radius: 0; border-bottom-left-radius: 0;
+}}
+QPushButton#modeSwitch:hover {{
+    color: {INK_SECONDARY};
+}}
+QPushButton#modeSwitch:checked {{
+    background: {PANEL_RAISED};
+    color: {ACCENT};
+}}
+QPushButton#modeSwitch:disabled {{
+    color: {BORDER_SOFT};
+}}
 QPushButton#panelCollapse {{
     min-width: 20px;
     max-width: 20px;

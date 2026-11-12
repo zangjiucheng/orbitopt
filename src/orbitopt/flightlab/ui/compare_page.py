@@ -16,6 +16,8 @@ draws them. Like the replay page it never flies anything.
 """
 from __future__ import annotations
 
+import json
+
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
@@ -190,6 +192,11 @@ def _fmt_cell(value, unit: str) -> str:
 
 def _fmt_delta(row: DiffRow) -> str:
     if row.delta is None:
+        # A value one run does not record (an ascent-only run has no booster
+        # figures; a run without vehicle.yaml no vehicle inputs) is not a
+        # change of value: say which side has it.
+        if row.changed and (row.a is None) != (row.b is None):
+            return "only in B" if row.a is None else "only in A"
         return "changed" if row.changed else ""
     if row.delta == 0:
         return "0"
@@ -210,8 +217,12 @@ class _RunPicker(QWidget):
         label = QLabel(f"Run {tag}")
         label.setObjectName("sectionHeader")
         self.combo = QComboBox()
-        self.combo.setMinimumWidth(260)
-        self.combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        # Sized to ~16 characters and growing with the row: sized to its
+        # longest run label, the two pickers held the page (and the window)
+        # near 1,000 px wide. The drop-down still shows full labels.
+        self.combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.combo.setMinimumContentsLength(16)
+        self.combo.view().setTextElideMode(Qt.TextElideMode.ElideNone)
         self.combo.activated.connect(self._activated)
         self.open_button = QPushButton("Open…")
         self.open_button.clicked.connect(self._browse)
@@ -225,6 +236,7 @@ class _RunPicker(QWidget):
         self.combo.addItem("— pick a run —", "")
         for label, path in runs:
             self.combo.addItem(label, str(path))
+            self.combo.setItemData(self.combo.count() - 1, f"{label}\n{path}", Qt.ItemDataRole.ToolTipRole)
         if current is not None:
             idx = self.combo.findData(str(current))
             if idx < 0:
@@ -246,10 +258,20 @@ class _RunPicker(QWidget):
             self.picked.emit(path)
 
 
+def _run_label(run_dir: Path) -> str:
+    """A run opened from disk, by its run id (its folder may be just "run")."""
+    try:
+        doc = json.loads((Path(run_dir) / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return Path(run_dir).name
+    return str(doc.get("run_id") or Path(run_dir).name)
+
+
 class FlightLabComparePage(QWidget):
     """Compare two Flight Lab runs (FL-503)."""
 
     compared = Signal()
+    runs_changed = Signal()  # known_runs() changed (the sidebar's run list follows)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -270,12 +292,19 @@ class FlightLabComparePage(QWidget):
             self._extra_runs.append(path)
         self.refresh_run_list()
 
-    def refresh_run_list(self) -> None:
+    def known_runs(self) -> list[tuple[str, Path]]:
+        """Designer-cached runs (newest first), then every run opened or
+        replayed this session: the run pickers' list, and the sidebar's."""
         runs = [(label, path) for label, path in discover_runs()]
         known = {p for _l, p in runs}
-        runs += [(p.name, p) for p in self._extra_runs if p not in known]
+        runs += [(_run_label(p), p) for p in self._extra_runs if p not in known]
+        return runs
+
+    def refresh_run_list(self) -> None:
+        runs = self.known_runs()
         self.picker_a.set_runs(runs, self.bundle_a.run_dir if self.bundle_a else None)
         self.picker_b.set_runs(runs, self.bundle_b.run_dir if self.bundle_b else None)
+        self.runs_changed.emit()
 
     def set_run(self, side: str, run_dir: Path | str) -> bool:
         """Load ``run_dir`` as run ``"A"`` or ``"B"``; False (and a message)
@@ -321,11 +350,17 @@ class FlightLabComparePage(QWidget):
         self.swap_button.clicked.connect(self.swap)
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.clicked.connect(self.refresh_run_list)
+        # A over B (one row each held the page near 850 px wide).
         pick_row.addWidget(self.picker_a, stretch=1)
-        pick_row.addWidget(self.picker_b, stretch=1)
         pick_row.addWidget(self.swap_button)
-        pick_row.addWidget(self.refresh_button)
         root.addLayout(pick_row)
+        pick_row_b = QHBoxLayout()
+        pick_row_b.addWidget(self.picker_b, stretch=1)
+        pick_row_b.addWidget(self.refresh_button)
+        root.addLayout(pick_row_b)
+        width = max(self.swap_button.sizeHint().width(), self.refresh_button.sizeHint().width())
+        self.swap_button.setMinimumWidth(width)  # the two buttons line up
+        self.refresh_button.setMinimumWidth(width)
         self.status_label = QLabel("Pick run A and run B (designer cache runs are listed; Open… for any run dir).")
         self.status_label.setObjectName("metricLabel")
         self.status_label.setWordWrap(True)
@@ -372,8 +407,12 @@ class FlightLabComparePage(QWidget):
         self.diff_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.diff_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         header = self.diff_table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        # Quantity takes the slack; the others are sized to their contents up
+        # to a cap after every fill (_fit_columns). Sized to contents alone, a
+        # long value (the vehicle name in A/B) pushed A, B and Δ off the panel.
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.diff_table.setTextElideMode(Qt.TextElideMode.ElideRight)
         diff_layout.addWidget(self.changed_only)
         diff_layout.addWidget(self.diff_table)
         self.tabs.addTab(diff_host, "Diff")
@@ -480,6 +519,7 @@ class FlightLabComparePage(QWidget):
             for col, text in enumerate(texts):
                 item = QTableWidgetItem(text)
                 item.setData(Qt.ItemDataRole.UserRole, row.key)
+                item.setToolTip(str(text))  # the full text when a capped column elides it
                 if col == 4 and row.trend:
                     item.setForeground(QBrush(QColor(SUCCESS if row.trend == "better" else DANGER)))
                 elif col in (2, 3) and str(text) in ("FAIL", "FAILED"):
@@ -487,7 +527,18 @@ class FlightLabComparePage(QWidget):
                 elif col in (2, 3) and str(text) in ("PASS", "LANDED"):
                     item.setForeground(QBrush(QColor(SUCCESS)))
                 self.diff_table.setItem(i, col, item)
+        self._fit_columns()
         self.diff_table.resizeRowsToContents()
+
+    _MAX_COLUMN_PX = {0: 130, 2: 120, 3: 120, 4: 110}
+
+    def _fit_columns(self) -> None:
+        """Every column but Quantity to its contents, capped (elided past
+        the cap, full text in the tooltip): A, B and Δ stay on the panel."""
+        for col, cap in self._MAX_COLUMN_PX.items():
+            hint = max(self.diff_table.sizeHintForColumn(col),
+                       self.diff_table.horizontalHeader().sectionSizeHint(col))
+            self.diff_table.setColumnWidth(col, min(cap, hint + 12))
 
     def diff_keys(self) -> list[str]:
         """Row keys currently shown in the diff table (tests)."""

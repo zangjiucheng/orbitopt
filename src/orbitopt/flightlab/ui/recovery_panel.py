@@ -268,9 +268,10 @@ class RecoveryPanel(QWidget):
             self.verdict_label.setText("Ascent-only run: the booster is expended (no recovery planned).")
             return
         gate = summary.gate
-        if gate is None and not summary.checks:
+        if summary.state == "not_assessed":
             self.verdict_label.setText(
-                f"Recovery requested ({summary.kind}) but not assessed: the run has no touchdown checks.")
+                f"Recovery requested ({summary.kind}) but not assessed: the booster was not flown, "
+                "so the run has no touchdown result.")
             self.verdict_label.setStyleSheet(f"color: {WARNING};")
         elif gate is not None and gate.passed:
             self.verdict_label.setText("Booster LANDED inside every touchdown limit · 助推级成功着陆")

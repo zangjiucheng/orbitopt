@@ -23,9 +23,10 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSizePolicy,
+    QSlider,
     QSplitter,
     QStackedWidget,
-    QSlider,
     QTabWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -285,12 +286,15 @@ class FlightLabReplayPage(QWidget):
         self.time_label.setObjectName("metReadout")
         self.readout_label = QLabel("no telemetry loaded")
         self.readout_label.setObjectName("metricLabel")
-        self.readout_label.setMinimumWidth(240)
+        # Takes what the row leaves (elided by the label), never sets the
+        # page's minimum width: a fixed 240 px helped hold the window wide.
+        self.readout_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.warp_combo = QComboBox()
         for warp in _WARP_LEVELS:
             self.warp_combo.addItem(f"{warp:g}×", warp)
         self.warp_combo.setCurrentIndex(2)
         self.warp_combo.currentIndexChanged.connect(self._warp_changed)
+        self.warp_combo.setStyleSheet(FLIGHTLAB_PANEL_QSS)  # unstyled it was a white native box
         timeline_row.addWidget(self.play_button)
         timeline_row.addWidget(self.restart_button)
         timeline_row.addWidget(self.timeline_slider, stretch=1)
@@ -359,8 +363,13 @@ class FlightLabReplayPage(QWidget):
             return
         self.run_title.setText(str(self._scene.get("title", f"Flight Lab — {self._run.run_id}")))
         subtitle = str(self._scene.get("subtitle", ""))
-        assumptions = ", ".join(self._run.assumptions) if self._run.assumptions else "none"
-        self.run_subtitle.setText(f"{subtitle} · fidelity {FLIGHTLAB_FIDELITY} · assumptions: {assumptions}")
+        # The assumptions run to a dozen long sentences: inline they filled
+        # ~13 lines above the 3D view. The subtitle counts them; the tooltip
+        # lists them, one per line.
+        n = len(self._run.assumptions)
+        count = f"{n} assumption{'' if n == 1 else 's'} (hover to read)" if n else "no assumptions recorded"
+        self.run_subtitle.setText(f"{subtitle} · fidelity {FLIGHTLAB_FIDELITY} · {count}")
+        self.run_subtitle.setToolTip("\n".join(f"• {a}" for a in self._run.assumptions))
         self.fidelity_label.setText(FLIGHTLAB_FIDELITY)
 
     def _update_badges(self, verification: Verification) -> None:
@@ -593,6 +602,34 @@ class FlightLabReplayPage(QWidget):
             text = text[:237] + "…"
         self.readout_label.setText(text or "no telemetry at this time")
 
+    def _apply_initial_view(self) -> bool:
+        """The scene's ``initialView`` (scene_export writes one: the first
+        stage, Earth behind it, 2,000 km out), as Mission Control applies
+        it: the camera looks down at the focus body from ``distance`` with
+        the face-lock body behind it, north up. reset_camera() alone fitted
+        the whole Earth, the ~400 km ascent a speck on its limb."""
+        view = (self._scene or {}).get("initialView") or {}
+        ids = {str(b.get("id")) for b in (self._scene or {}).get("bodies", [])}
+        focus, lock = view.get("focusBodyId"), view.get("faceLockBodyId")
+        if self._renderer is None or focus not in ids:
+            return False
+        import numpy as np
+
+        p = np.asarray(self._renderer.body_display_position(focus, self._time), dtype=float)
+        behind = (np.asarray(self._renderer.body_display_position(lock, self._time), dtype=float)
+                  if lock in ids else np.zeros(3))
+        out = p - behind
+        if not np.all(np.isfinite(p)) or np.linalg.norm(out) == 0.0:
+            return False
+        out /= np.linalg.norm(out)
+        north = np.array([0.0, 0.0, 1.0]) - out * out[2]
+        up = north / np.linalg.norm(north) if np.linalg.norm(north) > 1e-6 else np.array([0.0, 1.0, 0.0])
+        cam = self._plotter.camera
+        cam.focal_point = tuple(p)
+        cam.position = tuple(p + out * float(view.get("distance") or 2000.0))
+        cam.up = tuple(up)
+        return True
+
     def _highlight_event_at_time(self) -> None:
         current = -1
         for index, event in enumerate(self._events):
@@ -614,6 +651,10 @@ class FlightLabReplayPage(QWidget):
         try:
             self._plotter.reset_camera()
         except Exception:
+            pass
+        try:
+            self._apply_initial_view()
+        except Exception:  # noqa: BLE001 -- framing is cosmetic; the fitted view stays
             pass
         try:
             self._plotter.render()

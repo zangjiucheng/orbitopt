@@ -119,6 +119,31 @@ def test_recovery_requested_but_not_flown_is_not_assessed(tmp_path):
     assert recovery_summary(load_bundle(run_dir)).state == "not_assessed"
 
 
+def test_declared_recovery_placeholders_read_not_assessed_not_flown(tmp_path):
+    """simulate() of a target that declares a recovery it does not fly ends
+    with checks.evaluate's placeholders: a failed recovery-landing gate
+    RECOVERY_LANDING_NOT_ASSESSED (and a reserve with its data missing).
+    Those carry no landing outcome: the run reads ``not_assessed`` and its
+    kind ``declared``, never ``flown`` (the Compare and Recovery views used
+    to call any recovery check a flown recovery)."""
+    import dataclasses
+
+    from orbitopt.flightlab.contract import write_run
+
+    run_dir = make_ascent_only(RUN_FIXTURE, tmp_path / "declared")
+    (run_dir / "designer-form.json").unlink()  # no form: kind from the run itself
+    run = read_run(run_dir)
+    placeholders = (Check("recovery-landing", False, reason_code="RECOVERY_LANDING_NOT_ASSESSED"),
+                    Check("recovery-propellant-reserve", False, limit=1000.0, unit="kg",
+                          reason_code="RECOVERY_PROPELLANT_RESERVE_DATA_MISSING"))
+    run = dataclasses.replace(run, verification=dataclasses.replace(
+        run.verification, checks=run.verification.checks + placeholders))
+    write_run(run_dir, run)
+    bundle = load_bundle(run_dir)
+    assert recovery_kind(bundle) == "declared"
+    assert recovery_summary(bundle).state == "not_assessed"
+
+
 def test_check_margin_directions():
     assert check_margin(Check("max-q-within-limit", True, 36000.0, 60000.0, "Pa")) == 24000.0
     assert check_margin(Check("recovery-propellant-reserve", False, 0.0, 1000.0, "kg")) == -1000.0

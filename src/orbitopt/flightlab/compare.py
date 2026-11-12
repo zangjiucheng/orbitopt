@@ -70,6 +70,12 @@ TOUCHDOWN_CHECK_IDS = (
 )
 RECOVERY_CHECK_IDS = ("recovery-landing", *TOUCHDOWN_CHECK_IDS, "recovery-propellant-reserve")
 
+#: Reason codes of recovery checks that only say the recovery was declared
+#: but never flown (checks.evaluate adds them for a declared recovery with no
+#: booster result) -- they carry no landing outcome.
+_NOT_FLOWN_CODES = frozenset({"RECOVERY_LANDING_NOT_ASSESSED",
+                              "RECOVERY_PROPELLANT_RESERVE_DATA_MISSING"})
+
 #: Pass direction per check id: "min" = value must be >= limit, "max" = value
 #: must be <= limit, "target" = value should equal limit within a tolerance.
 _CHECK_SENSE: dict[str, str] = {
@@ -249,16 +255,20 @@ def _check_label(check_id: str) -> str:
 
 def recovery_kind(bundle: RunBundle) -> str:
     """``none`` / ``rtls`` / ``downrange`` from the designer form when it was
-    recorded, else ``flown`` when the run carries recovery checks or a
-    touchdown event, else ``none``."""
+    recorded, else ``flown`` when the run carries a recovery outcome (a
+    recovery check with a result, or a touchdown event), ``declared`` when
+    it only carries the "not assessed" placeholders of a recovery that was
+    never flown, else ``none``."""
     form = (bundle.designer_form or {}).get("mission_form") or {}
     kind = form.get("recovery")
     if kind:
         return str(kind)
-    ids = {c.id for c in bundle.run.verification.checks}
-    if ids & set(RECOVERY_CHECK_IDS) or any(e.kind == "touchdown" for e in bundle.run.events):
+    checks = [c for c in bundle.run.verification.checks if c.id in RECOVERY_CHECK_IDS]
+    if any(c.passed or c.reason_code not in _NOT_FLOWN_CODES for c in checks):
         return "flown"
-    return "none"
+    if checks:
+        return "declared"
+    return "flown" if any(e.kind == "touchdown" for e in bundle.run.events) else "none"
 
 
 def has_recovery(bundle: RunBundle) -> bool:
@@ -560,11 +570,23 @@ def _headlines(a: RunBundle, b: RunBundle, oa: Mapping[str, Metric],
                      f"{_fmt_kg(mb - ma)} from A to B.")
     prop_a = oa["recovery.booster_prop_kg"].value
     prop_b = ob["recovery.booster_prop_kg"].value
+    # "at touchdown" only where the booster touched down: the value is the
+    # reserve check's propellant left, which a booster that impacted (or
+    # never flew home) also has.
+    landed_a = oa["recovery.gate"].value == "LANDED"
+    landed_b = ob["recovery.gate"].value == "LANDED"
     if isinstance(prop_a, float) and isinstance(prop_b, float):
-        lines.append(f"Booster propellant at touchdown: {prop_a:,.0f} kg (A) vs {prop_b:,.0f} kg (B).")
+        if landed_a and landed_b:
+            lines.append(f"Booster propellant at touchdown: {prop_a:,.0f} kg (A) vs {prop_b:,.0f} kg (B).")
+        else:
+            lines.append(f"Booster propellant left: {prop_a:,.0f} kg (A{'' if landed_a else ', no touchdown'}) "
+                         f"vs {prop_b:,.0f} kg (B{'' if landed_b else ', no touchdown'}).")
     elif isinstance(prop_a, float) or isinstance(prop_b, float):
-        tag, val = ("A", prop_a) if isinstance(prop_a, float) else ("B", prop_b)
-        lines.append(f"Booster propellant at touchdown: {val:,.0f} kg (run {tag} only).")
+        tag, val, landed = ("A", prop_a, landed_a) if isinstance(prop_a, float) else ("B", prop_b, landed_b)
+        if landed:
+            lines.append(f"Booster propellant at touchdown: {val:,.0f} kg (run {tag} only).")
+        else:
+            lines.append(f"Booster propellant left: {val:,.0f} kg (run {tag} only; no touchdown).")
     va = a.run.verification.mission_constraints_passed
     vb = b.run.verification.mission_constraints_passed
     if va != vb:
@@ -592,8 +614,9 @@ def compare_runs(a: RunBundle, b: RunBundle) -> CompareResult:
 @dataclass(frozen=True)
 class RecoverySummary:
     """Recovery panel content. ``state``: ``none`` (no recovery in this
-    run), ``flown`` (touchdown checks present) or ``not_assessed`` (recovery
-    requested but no checks). ``montecarlo`` is None when no
+    run), ``flown`` (a recovery check with an outcome) or ``not_assessed``
+    (recovery requested but never flown: no checks, or only the "not
+    assessed" / "data missing" placeholders). ``montecarlo`` is None when no
     ``montecarlo.json`` was found."""
 
     state: str
@@ -623,9 +646,9 @@ def recovery_summary(bundle: RunBundle) -> RecoverySummary:
     kind = recovery_kind(bundle)
     touchdown = next((dict(e.data, t_s=e.t_s, body_id=e.body_id)
                       for e in run.events if e.kind == "touchdown"), None)
-    if checks:
+    if any(c.passed or c.reason_code not in _NOT_FLOWN_CODES for c in checks):
         state = "flown"
-    elif kind != "none" or bundle.montecarlo:
+    elif checks or kind != "none" or bundle.montecarlo:
         state = "not_assessed"
     else:
         state = "none"

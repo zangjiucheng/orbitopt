@@ -257,6 +257,14 @@ drive it. Every panel follows the same selection and mission time:
   If your code differs from the code that made them they still open
   instantly, and the title bar offers to recompute with your code; after an
   edit while the app runs, `⌘R` / `Ctrl+R` reloads with the new code.
+- **Flight Lab** (the sidebar's *Missions | Flight Lab* switch). Its own
+  mode, not a mission: the sidebar becomes Flight Lab's navigation.
+  *Designer* fills in a launch (site, target orbit, recovery) and a vehicle
+  and simulates it; *Replay* plays a run in 3D with its telemetry,
+  verification checks, plain-language failure reasons and booster recovery;
+  *Compare* puts two runs side by side. *Recent runs* lists every run with
+  its verdict, and *Open run…* loads any run directory, such as one written
+  by `orbitopt flight simulate`.
 - **Missions and trajectories** (left). Switch missions without relaunching;
   `File > Open scene file...` opens any scene JSON. For an optimized mission
   the TRAJECTORIES list shows every distinct candidate the optimizer found,

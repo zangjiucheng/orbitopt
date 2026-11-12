@@ -21,7 +21,7 @@ import signal
 import time
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QThread, QDate, Signal
+from PySide6.QtCore import QEvent, Qt, QTimer, QThread, QDate, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -47,14 +47,58 @@ from PySide6.QtWidgets import (
 from orbitopt.flightlab import designer as D
 from orbitopt.flightlab.contract import FLIGHT_PROVENANCE_TAGS
 from orbitopt.viz.compute_pool import ComputePool
-from orbitopt.viz.theme import DANGER, INK_MUTED, INK_SECONDARY, SUCCESS, WARNING
+from orbitopt.viz.theme import (
+    ACCENT,
+    DANGER,
+    HAIRLINE,
+    INK_MUTED,
+    INK_PRIMARY,
+    INK_SECONDARY,
+    PANEL,
+    PANEL_RAISED,
+    SUCCESS,
+    SURFACE_HOVER,
+    WARNING,
+)
 from orbitopt.viz.ui_kit import StatusBadge
 
 _RECOVERY_KINDS = (("no recovery", "none"), ("RTLS at launch site", "rtls"), ("downrange landing", "downrange"))
 _FREE_FLIGHT = (("ballistic", "ballistic"), ("weathercock (aero-stable)", "aero_stable"),
                 ("follow program", "attitude_program"))
 
-_FIELD_ERROR_QSS = f"""
+# The app theme styles its own named widgets only; unstyled, the form fell
+# back to the native light palette -- light-grey cards with the theme's
+# near-white text on them, every value unreadable. Scoped to the page.
+_FORM_QSS = f"""
+QWidget#flightLabDesigner QScrollArea, QWidget#flightLabDesigner QScrollArea > QWidget > QWidget {{
+    background: {PANEL}; border: none;
+}}
+QWidget#flightLabDesigner QGroupBox {{
+    background: {PANEL_RAISED}; border: 1px solid {HAIRLINE}; border-radius: 4px;
+    margin-top: 14px; padding: 10px 8px 8px 8px; color: {INK_PRIMARY}; font-weight: 600;
+}}
+QWidget#flightLabDesigner QGroupBox::title {{
+    subcontrol-origin: margin; left: 10px; padding: 0 4px; color: {INK_PRIMARY};
+}}
+QWidget#flightLabDesigner QLabel {{ color: {INK_SECONDARY}; background: transparent; }}
+QWidget#flightLabDesigner QDoubleSpinBox, QWidget#flightLabDesigner QSpinBox,
+QWidget#flightLabDesigner QLineEdit, QWidget#flightLabDesigner QDateEdit,
+QWidget#flightLabDesigner QComboBox, QWidget#flightLabDesigner QPlainTextEdit {{
+    background: {PANEL}; color: {INK_PRIMARY}; border: 1px solid {HAIRLINE}; border-radius: 3px;
+    padding: 2px 4px; selection-background-color: {SURFACE_HOVER}; selection-color: {ACCENT};
+}}
+QWidget#flightLabDesigner QDoubleSpinBox:disabled, QWidget#flightLabDesigner QLineEdit:disabled,
+QWidget#flightLabDesigner QComboBox:disabled, QWidget#flightLabDesigner QDateEdit:disabled {{
+    color: {INK_MUTED};
+}}
+QWidget#flightLabDesigner QComboBox QAbstractItemView {{
+    background: {PANEL_RAISED}; color: {INK_PRIMARY}; border: 1px solid {HAIRLINE};
+    selection-background-color: {SURFACE_HOVER}; selection-color: {ACCENT};
+}}
+QWidget#flightLabDesigner QCheckBox {{ color: {INK_SECONDARY}; }}
+"""
+
+_FIELD_ERROR_QSS = _FORM_QSS + f"""
 QDoubleSpinBox[flErr="1"], QLineEdit[flErr="1"], QComboBox[flErr="1"],
 QDateEdit[flErr="1"], QPlainTextEdit[flErr="1"] {{ border: 1px solid {DANGER}; }}
 """
@@ -163,7 +207,7 @@ class _StageCard(QGroupBox):
         rm = QPushButton("remove stage")
         rm.setStyleSheet(f"color: {DANGER};")
         rm.clicked.connect(lambda: self.removed.emit(self))
-        grid.addWidget(rm, 6, 3)
+        grid.addWidget(rm, 7, 3)  # its own row: at (6, 3) it covered the Coast behaviour combo
 
         self.cd_button.clicked.connect(self._edit_cd)
         for w in (self.mass_initial, self.mass_dry, self.thrust, self.isp, self.burn_end,
@@ -311,7 +355,10 @@ class FlightLabDesignerPage(QWidget):
         header.addWidget(self.badge)
         self.status = QLabel("Fill the form — Simulate runs when the documents are valid.")
         self.status.setStyleSheet(f"color: {INK_MUTED};")
-        header.addWidget(self.status)
+        # Its own wrapping line under the buttons: in the header row its
+        # one-line width (with the derived line below) held the page, and so
+        # the whole window, above ~1,250 px -- past a laptop screen's edge.
+        self.status.setWordWrap(True)
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.setEnabled(False)
         self.cancel_button.clicked.connect(self.cancel_simulate)
@@ -320,27 +367,59 @@ class FlightLabDesignerPage(QWidget):
         self.simulate_button.clicked.connect(self.simulate)
         header.addWidget(self.simulate_button)
         root.addLayout(header)
+        root.addWidget(self.status)
 
         self.optimize_note = QLabel()
         self.optimize_note.setStyleSheet(f"color: {INK_MUTED}; font-style: italic;")
+        self.optimize_note.setWordWrap(True)
         root.addWidget(self.optimize_note)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         root.addWidget(scroll, 1)
+        self._scroll = scroll
         body = QWidget()
         scroll.setWidget(body)
-        columns = QGridLayout(body)
-        columns.setContentsMargins(2, 2, 2, 2)
-        columns.setColumnStretch(0, 2)
-        columns.setColumnStretch(1, 3)
-        columns.addWidget(self._mission_group(), 0, 0, Qt.AlignTop)
-        columns.addWidget(self._vehicle_group(), 0, 1)
+        self._columns = QGridLayout(body)
+        self._columns.setContentsMargins(2, 2, 2, 2)
+        self._mission_box = self._mission_group()
+        self._vehicle_box = self._vehicle_group()
+        self._side_by_side: bool | None = None
+        self._reflow(side_by_side=True)
+        # Mission beside Vehicle when the view is wide enough, else stacked.
+        # Decided on the scroll area's *viewport* width: the body is never
+        # narrower than its own two-column minimum, so it cannot tell.
+        scroll.viewport().installEventFilter(self)
 
         self.derived = QLabel()
         self.derived.setObjectName("flDesignerDerived")
         self.derived.setStyleSheet(f"color: {INK_SECONDARY};")
+        self.derived.setWordWrap(True)
         root.addWidget(self.derived)
+
+    def eventFilter(self, obj, event):  # noqa: N802 -- Qt override
+        if obj is self._scroll.viewport() and event.type() == QEvent.Resize:
+            need = (self._mission_box.minimumSizeHint().width() + self._vehicle_box.minimumSizeHint().width()
+                    + self._columns.horizontalSpacing() + 8)
+            self._reflow(side_by_side=event.size().width() >= need)
+        return super().eventFilter(obj, event)
+
+    def _reflow(self, *, side_by_side: bool) -> None:
+        if side_by_side == self._side_by_side:
+            return
+        self._side_by_side = side_by_side
+        for box in (self._mission_box, self._vehicle_box):
+            self._columns.removeWidget(box)
+        if side_by_side:
+            self._columns.addWidget(self._mission_box, 0, 0, Qt.AlignTop)
+            self._columns.addWidget(self._vehicle_box, 0, 1)
+            self._columns.setColumnStretch(0, 2)
+            self._columns.setColumnStretch(1, 3)
+        else:
+            self._columns.addWidget(self._mission_box, 0, 0)
+            self._columns.addWidget(self._vehicle_box, 1, 0)
+            self._columns.setColumnStretch(0, 1)
+            self._columns.setColumnStretch(1, 0)
 
     def _mission_group(self) -> QWidget:
         box = QGroupBox("Mission")
@@ -372,8 +451,9 @@ class FlightLabDesignerPage(QWidget):
         raan_w = QWidget()
         raan_w.setLayout(raan_row)
         self._fields["raan"] = raan_w
-        self._register_engineer(QLabel("RAAN"), raan_w)
-        form.addRow(QLabel("RAAN"), raan_w)
+        raan_label = QLabel("RAAN")  # one label: registering a second one left this caption up in Explorer mode
+        self._register_engineer(raan_label, raan_w)
+        form.addRow(raan_label, raan_w)
         self.date_edit = QDateEdit(QDate.currentDate())
         self.date_edit.setCalendarPopup(True)
         self.date_edit.setDisplayFormat("yyyy-MM-dd")
@@ -421,7 +501,10 @@ class FlightLabDesignerPage(QWidget):
         box = QGroupBox("Vehicle")
         layout = QVBoxLayout(box)
 
+        # Two rows: on one, these fields held the Vehicle box (and so the
+        # page) at ~920 px.
         bar = QHBoxLayout()
+        bar2 = QHBoxLayout()
         self.preset_combo = QComboBox()
         self.preset_combo.addItem("— custom —", "")
         for name in D.vehicle_presets():
@@ -431,28 +514,29 @@ class FlightLabDesignerPage(QWidget):
         bar.addWidget(QLabel("preset"))
         bar.addWidget(self.preset_combo)
         self.vehicle_name = QLineEdit("designer-vehicle")
-        self.vehicle_name.setFixedWidth(160)
+        self.vehicle_name.setMinimumWidth(110)
         self.vehicle_name.textChanged.connect(lambda _t: self._changed())
         bar.addWidget(QLabel("name"))
-        bar.addWidget(self.vehicle_name)
-        self.provenance = QComboBox()
-        for tag in FLIGHT_PROVENANCE_TAGS:
-            self.provenance.addItem(tag, tag)
-        bar.addWidget(QLabel("provenance"))
-        bar.addWidget(self.provenance)
-        self.payload = _num(0.0, 1e5, 0.0, 0.5, 2, " t")
-        bar.addWidget(QLabel("payload"))
-        bar.addWidget(self.payload)
-        self.end_time = _num(1.0, 1e5, 950.0, 30.0, 0, " s")
-        eng_label = QLabel("sim ends")
-        self._register_engineer(eng_label, self.end_time)
-        bar.addWidget(eng_label)
-        bar.addWidget(self.end_time)
-        bar.addStretch(1)
+        bar.addWidget(self.vehicle_name, 1)
         add_btn = QPushButton("＋ stage")
         add_btn.clicked.connect(lambda: self._add_stage() or self._changed())
         bar.addWidget(add_btn)
+        self.provenance = QComboBox()
+        for tag in FLIGHT_PROVENANCE_TAGS:
+            self.provenance.addItem(tag, tag)
+        bar2.addWidget(QLabel("provenance"))
+        bar2.addWidget(self.provenance)
+        self.payload = _num(0.0, 1e5, 0.0, 0.5, 2, " t")
+        bar2.addWidget(QLabel("payload"))
+        bar2.addWidget(self.payload)
+        self.end_time = _num(1.0, 1e5, 950.0, 30.0, 0, " s")
+        eng_label = QLabel("sim ends")
+        self._register_engineer(eng_label, self.end_time)
+        bar2.addWidget(eng_label)
+        bar2.addWidget(self.end_time)
+        bar2.addStretch(1)
         layout.addLayout(bar)
+        layout.addLayout(bar2)
 
         self.stages_host = QWidget()
         self.stages_layout = QVBoxLayout(self.stages_host)
@@ -485,12 +569,18 @@ class FlightLabDesignerPage(QWidget):
         card.removed.connect(self._remove_stage)
         self._cards.append(card)
         self.stages_layout.addWidget(card)
+        for w in self._engineer_widgets:  # a card built after _apply_mode: its fields follow the mode too
+            if card.isAncestorOf(w):
+                w.setVisible(self._engineer)
         self._sync_last_stage()
 
     def _remove_stage(self, card):
         if len(self._cards) <= 1:
             return
         self._cards.remove(card)
+        # Forget its engineer fields: _apply_mode would otherwise touch the
+        # deleted widgets on the next mode switch (RuntimeError).
+        self._engineer_widgets = [w for w in self._engineer_widgets if not card.isAncestorOf(w)]
         card.deleteLater()
         self._sync_last_stage()
         self._changed()
@@ -525,6 +615,7 @@ class FlightLabDesignerPage(QWidget):
             self.payload.setValue(form["payload_t"])
             self.end_time.setValue(form["end_time_s"])
             for card in self._cards:
+                self._engineer_widgets = [w for w in self._engineer_widgets if not card.isAncestorOf(w)]
                 card.deleteLater()
             self._cards.clear()
             self.stages_layout.setContentsMargins(0, 0, 0, 0)

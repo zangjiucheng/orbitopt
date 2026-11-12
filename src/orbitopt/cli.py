@@ -326,6 +326,14 @@ def _cmd_flight_simulate(args):
         # RuntimeError covers OTBinaryMissingError and every adapter subprocess failure
         print(f"ERROR: {exc}")
         raise SystemExit(1) from None
+    # The vehicle beside the run, as the Designer saves it: Flight Lab's
+    # Compare view reads its inputs (stages, payload) from there, and a CLI
+    # run without it compared as "inputs not recorded".
+    vehicle_copy = Path(args.output) / "vehicle.yaml"
+    if not vehicle_copy.exists():
+        import shutil
+
+        shutil.copyfile(args.vehicle, vehicle_copy)
 
     def word(v):
         return "not assessed" if v is None else ("PASSED" if v else "FAILED")

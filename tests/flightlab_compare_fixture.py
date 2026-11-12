@@ -1,7 +1,9 @@
 """Run-directory builders for the FL-503 compare/recovery tests.
 
-FL-304's recovery pipeline is not on this branch, so the ascent+recovery run
-is *built* here in the FL-304 output format: the ballistic ``stage1_debris``
+The base flight is ascent only (``run_recovery=False``): the stub ascent
+leaves the booster no propellant to return with, so a real FL-304 recovery
+of it is always red. The ascent+recovery run is therefore *built* here in
+the FL-304 output format: the ballistic ``stage1_debris``
 track is swapped for an illustrative ``booster`` return arc back to the
 launch site, the FL-303 touchdown checks + FL-304 ``recovery-landing`` gate
 are merged into the verification, and a ``montecarlo.json`` in the FL-304
@@ -31,7 +33,8 @@ LANDING_IDS = ("landing-position", "landing-vertical-speed", "landing-lateral-sp
 
 
 def fly_stub_run(out: Path, tmp: Path, monkeypatch) -> Path:
-    """A real Gate-B run from ``simulate`` flown by the FL-004 OT CLI stub."""
+    """A real Gate-B ascent from ``simulate`` flown by the FL-004 OT CLI stub,
+    recovery not flown (the variants below add or leave it out)."""
     from orbitopt.flightlab.contract import load_target
     from orbitopt.flightlab.simulate import simulate
 
@@ -41,7 +44,7 @@ def fly_stub_run(out: Path, tmp: Path, monkeypatch) -> Path:
     monkeypatch.setenv("ORBITOPT_OPENTSIOLKOVSKY", str(cli))
     monkeypatch.setenv("OT_STUB_FIXTURE", str(OT_FIX / "synthetic_out"))
     monkeypatch.setenv("OT_STUB_SRC", str(REPO / "src" / "orbitopt"))
-    simulate(load_target(TARGET), VEHICLE, out, timeout_s=60)
+    simulate(load_target(TARGET), VEHICLE, out, timeout_s=60, run_recovery=False)
     return out
 
 
@@ -59,7 +62,10 @@ def _write_side(out: Path, payload_kg: float, recovery: str) -> None:
 def make_ascent_only(src: Path, out: Path, *, payload_kg: float = 15000.0) -> Path:
     """Copy of ``src`` as an expendable (recovery = none) run."""
     run = read_run(src)
-    checks = tuple(c for c in run.verification.checks if c.id != "recovery-propellant-reserve")
+    # an expendable run carries no recovery checks (the base flight's
+    # declared-but-unflown recovery leaves a "not assessed" gate behind)
+    checks = tuple(c for c in run.verification.checks
+                   if c.id not in ("recovery-propellant-reserve", "recovery-landing"))
     constraints = [c for c in checks if c.id in CONSTRAINT_CHECK_IDS]
     run = dataclasses.replace(run, run_id=f"{run.run_id}-expendable", verification=dataclasses.replace(
         run.verification, checks=checks,

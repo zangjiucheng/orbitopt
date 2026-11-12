@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -35,7 +36,14 @@ def _wait(predicate, timeout=60.0, app=None):
 def _live_members(pgid: int) -> list[int]:
     """PIDs in process group ``pgid`` that are actually running. Zombies are
     excluded: this dev container's PID 1 never reaps orphaned grandchildren,
-    so "killed" here means "no live member", not "no entry in /proc"."""
+    so "killed" here means "no live member", not "no entry in /proc".
+    No /proc (macOS, BSD): ``ps``, which reports the same pid/pgid/state."""
+    if not Path("/proc").is_dir():
+        out = subprocess.run(["ps", "-A", "-o", "pid=,pgid=,stat="],
+                             capture_output=True, text=True, check=True).stdout
+        return [int(pid) for pid, group, stat in (line.split()[:3] for line in out.splitlines()
+                                                  if len(line.split()) >= 3)
+                if int(group) == pgid and not stat.startswith("Z")]
     live = []
     for entry in Path("/proc").iterdir():
         if not entry.name.isdigit():
@@ -188,6 +196,44 @@ def test_cancel_kills_the_worker_process_group(qapp, stub_env, tmp_path, monkeyp
             # recorded group -- nothing live may remain in it
             assert _wait(lambda: not _live_members(pgid), 15.0, qapp), \
                 f"live members left in group {pgid}"
+    finally:
+        page.terminate_compute()
+        page.deleteLater()
+
+
+def test_explorer_mode_hides_every_engineer_field_and_caption(qapp):
+    """Explorer mode left the stage cards' engineer fields up (the cards are
+    built after the mode is applied) and the RAAN caption without its field
+    (a second, unregistered label); "remove stage" sat on the Coast
+    behaviour combo's grid cell; and removing a stage left deleted widgets
+    for the next mode switch to trip over."""
+    from PySide6.QtWidgets import QLabel
+
+    from orbitopt.flightlab.ui import FlightLabDesignerPage
+
+    page = FlightLabDesignerPage()
+    try:
+        assert not page._engineer and page._cards
+        card = page._cards[0]
+        for field in (card.burn_start, card.throttle, card.nozzle, card.free_flight):
+            assert not field.isVisibleTo(page)
+        assert card.mass_initial.isVisibleTo(page)
+        raan_captions = [w for w in page.findChildren(QLabel) if w.text() == "RAAN"]
+        assert raan_captions and not any(w.isVisibleTo(page) for w in raan_captions)
+
+        page._toggle_mode(True)
+        assert card.free_flight.isVisibleTo(page) and card.nozzle.isVisibleTo(page)
+        grid = card.layout()
+        at = grid.itemAtPosition(6, 3)
+        assert at is not None and at.widget() is card.free_flight  # not covered by "remove stage"
+
+        page._add_stage()
+        qapp.processEvents()
+        assert page._cards[-1].nozzle.isVisibleTo(page)  # a new card follows the current mode
+        page._remove_stage(page._cards[-1])
+        qapp.processEvents()
+        page._toggle_mode(False)  # no RuntimeError on the removed card's widgets
+        page._toggle_mode(True)
     finally:
         page.terminate_compute()
         page.deleteLater()

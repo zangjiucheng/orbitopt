@@ -87,6 +87,8 @@ class _TelemetryChart(QWidget):
     time_requested = Signal(float)
 
     MARGINS = (66, 26, 18, 28)
+    _TITLE_X = 8.0
+    legend_placement: str | None = None  # "header" | "inside" | None, set when painted
 
     def __init__(self, channel_id: str, label: str, unit: str, parent=None):
         super().__init__(parent)
@@ -195,15 +197,18 @@ class _TelemetryChart(QWidget):
 
     def _paint_static(self, p: QPainter) -> None:
         rect = self.plot_rect()
+        # The title owns the header row from the widget's left edge (the
+        # y-axis labels are below it): a fixed box ``rect.width() - 90`` wide
+        # cut narrow charts' titles to "Altitud" / "Dynam" / "Mass (".
         p.setFont(_font(10, True))
         p.setPen(QColor(INK_SECONDARY))
-        p.drawText(QRectF(rect.left(), 3, rect.width() - 90, 18), Qt.AlignLeft | Qt.AlignVCenter,
-                   f"{self._channel.label} ({self._channel.unit})")
-        title_right = rect.left() + p.fontMetrics().horizontalAdvance(
-            f"{self._channel.label} ({self._channel.unit})") + 10
-        self._paint_legend(p, rect, title_right)
+        title = f"{self._channel.label} ({self._channel.unit})"
+        title_box = QRectF(self._TITLE_X, 3, max(1.0, self.width() - 2 * self._TITLE_X), 18)
+        shown = p.fontMetrics().elidedText(title, Qt.ElideRight, int(title_box.width()))
+        p.drawText(title_box, Qt.AlignLeft | Qt.AlignVCenter, shown)
+        title_right = self._TITLE_X + p.fontMetrics().horizontalAdvance(shown) + 10
         p.setPen(QPen(QColor(HAIRLINE), 1))
-        p.setBrush(Qt.NoBrush)  # the legend leaves a series colour on the brush
+        p.setBrush(Qt.NoBrush)
         p.drawRect(rect)
 
         if not self._channel.has_data:
@@ -247,26 +252,51 @@ class _TelemetryChart(QWidget):
             line = Qt.DashLine if getattr(series, "style", "solid") == "dash" else Qt.SolidLine
             p.setPen(QPen(color, 1.8, line, Qt.RoundCap, Qt.RoundJoin))
             p.drawPolyline(QPolygonF([QPointF(self._x(t), self._y(v)) for t, v in samples]))
+        self._paint_legend(p, rect, title_right)  # over the lines, so an inside box stays legible
 
     def _paint_legend(self, p: QPainter, rect: QRectF, min_x: float = 0.0) -> None:
+        """Every labelled series, or none: beside the title when the whole
+        legend fits there, else in a box inside the plot's top-right corner.
+        It used to paint from the right only what fitted beside the title,
+        so a four-body chart could be labelled "Booster" alone."""
         series = [item for item in self._channel.series if item.label]
+        self.legend_placement = None
         if not series:
             return
         p.setFont(_font(8.5))
-        x = rect.right() - 2.0
-        for entry in reversed(series):
-            label = entry.label
-            text_width = p.fontMetrics().horizontalAdvance(label) + 2
-            if x - text_width - 22 < min_x:
-                break  # never paint over the chart title; overlays have many series
-            x -= text_width
-            p.setPen(QColor(entry.color))
-            p.drawText(QRectF(x, 3, text_width, 18), Qt.AlignLeft | Qt.AlignVCenter, label)
-            x -= 12
+        fm = p.fontMetrics()
+        widths = [fm.horizontalAdvance(item.label) + 2 for item in series]
+        if rect.right() - 2.0 - sum(w + 22 for w in widths) >= min_x:
+            self.legend_placement = "header"
+            x = rect.right() - 2.0
+            for entry, text_width in zip(reversed(series), reversed(widths)):
+                x -= text_width
+                p.setPen(QColor(entry.color))
+                p.drawText(QRectF(x, 3, text_width, 18), Qt.AlignLeft | Qt.AlignVCenter, entry.label)
+                x -= 12
+                p.setPen(Qt.NoPen)
+                p.setBrush(QBrush(QColor(entry.color)))
+                p.drawRect(QRectF(x, 9, 7, 7))
+                x -= 10
+            return
+        self.legend_placement = "inside"
+        row_h = fm.height() + 1
+        box_w = min(rect.width() - 8.0, max(widths) + 22.0)
+        box = QRectF(rect.right() - box_w - 4.0, rect.top() + 4.0, box_w, row_h * len(series) + 6.0)
+        backdrop = QColor(PANEL)
+        backdrop.setAlpha(215)
+        p.setPen(QPen(QColor(HAIRLINE), 1))
+        p.setBrush(QBrush(backdrop))
+        p.drawRect(box)
+        for row, entry in enumerate(series):
+            y = box.top() + 3.0 + row * row_h
             p.setPen(Qt.NoPen)
             p.setBrush(QBrush(QColor(entry.color)))
-            p.drawRect(QRectF(x, 9, 7, 7))
-            x -= 10
+            p.drawRect(QRectF(box.left() + 6.0, y + (row_h - 7.0) / 2.0, 7, 7))
+            p.setPen(QColor(entry.color))
+            text = fm.elidedText(entry.label, Qt.ElideRight, int(box.width() - 22.0))
+            p.drawText(QRectF(box.left() + 18.0, y, box.width() - 20.0, row_h), Qt.AlignLeft | Qt.AlignVCenter, text)
+        p.setBrush(Qt.NoBrush)
 
     def _paint_dynamic(self, p: QPainter) -> None:
         if self._xmax <= self._xmin:
