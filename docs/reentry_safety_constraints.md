@@ -1,6 +1,6 @@
 # Re-entry safety constraints — assessment and design (task #163)
 
-> **摘要（中文）**：当前 `target_free_return_entry_corridor()` 只保证"真空传播下、入口界面处的惯性航迹角落在 (-7°, -5°) 几何走廊内"。这**不等于**可存活再入。本文档列出应纳入的约束（峰值热流、总热载、g 载荷、skip-out 风险）、所需输入数据与模型精度分级、与现有定靶函数的衔接方式，并明确**不做**的部分。任何输出都不得宣称"可存活再入（survivable entry）"，只能表述为"在所列假设与模型下，指标是否在所设限值之内"。
+> **Summary:** The current targeter checks only the inertial entry angle of a vacuum trajectory against a geometric corridor. This does not establish survivability. Atmospheric heating, loads and skip-out require a separate assessment under explicit vehicle and model assumptions.
 
 Status: design / research only. No code in this task changes behaviour.
 

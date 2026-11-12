@@ -1,0 +1,21 @@
+// Mission Control's palette (src/orbitopt/viz/theme.py) on Just the Docs'
+// dark scheme, so the docs read as the same "tracking station" world as the
+// app and the landing page.
+$color-scheme: dark;
+$body-background-color: #0b0916;      // --panel
+$sidebar-color: #050409;              // --void
+$body-heading-color: #f4f2ea;         // --ink
+$body-text-color: #c9c6d8;            // between --ink and --ink-2: long-form reading
+$link-color: #e8a23e;                 // --accent
+$nav-child-link-color: #a9a6bb;       // --ink-2
+$base-button-color: #13101e;          // --panel-raised
+$btn-primary-color: #a8711f;          // --accent, darkened for white button text
+$code-background-color: #13101e;
+$code-linenumber-color: #6f6c85;      // --ink-muted
+$feedback-color: #050409;
+$table-background-color: #100d1b;
+$search-background-color: #13101e;
+$search-result-preview-color: #a9a6bb;
+$border-color: #262239;               // --hairline
+
+@import "./vendor/accessible-pygments/github-dark";

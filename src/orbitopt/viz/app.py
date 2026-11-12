@@ -34,7 +34,6 @@ from __future__ import annotations
 import os
 import sys
 import time
-from pathlib import Path
 
 import numpy as np
 
@@ -813,13 +812,10 @@ class MissionControlWindow(QMainWindow):
     ]
 
     def help_url(self, which: str) -> QUrl:
-        """Where Help > User Guide / Website / README points: the guide is
-        read from the source checkout when there is one (it works offline
-        and matches this version), else from the website."""
+        """Where Help > User Guide / Website / README points. The guide is a
+        page of the Jekyll docs site (docs/guide.md), so it opens on the
+        website: the source checkout holds Markdown, not a viewable page."""
         if which == "guide":
-            local = Path(__file__).resolve().parents[3] / "docs" / "guide.html"
-            if local.is_file():
-                return QUrl.fromLocalFile(str(local))
             return QUrl(f"{WEBSITE_URL}guide.html")
         if which == "website":
             return QUrl(WEBSITE_URL)

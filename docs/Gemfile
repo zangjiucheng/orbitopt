@@ -1,0 +1,19 @@
+# The documentation site (GitHub Pages, built by .github/workflows/pages.yml).
+#
+#   cd docs && bundle install && bundle exec jekyll serve
+#
+# Gemfile.lock pins every gem (with the Linux platform CI builds on), so the
+# site builds the same locally and in Actions.
+source "https://rubygems.org"
+
+gem "jekyll", "~> 4.4"
+gem "just-the-docs", "~> 0.12"
+
+group :jekyll_plugins do
+  gem "jekyll-include-cache", "~> 0.2"        # needed by just-the-docs
+  gem "jekyll-seo-tag", "~> 2.8"
+  gem "jekyll-optional-front-matter", "~> 0.3" # the repo's Markdown docs stay front-matter-free
+  gem "jekyll-titles-from-headings", "~> 0.5"  # ... and take their title from their first heading
+  gem "jekyll-relative-links", "~> 0.7"        # docs link each other as .md; served as .html
+  gem "jekyll-readme-index", "~> 0.3"          # a folder's README.md is its index page
+end

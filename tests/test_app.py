@@ -165,9 +165,9 @@ def test_mission_control_loads_and_switches_missions(tmp_path):
         window.labels_action.setChecked(False)
         assert window.renderer.flight_label_text("spacecraft") is None
         window.labels_action.setChecked(True)
-        # Help > User Guide: the checkout's own guide page; the others go online.
+        # Help links open the guide, website and README online.
         guide = window.help_url("guide")
-        assert guide.isLocalFile() and guide.toLocalFile().endswith("docs/guide.html")
+        assert guide.toString() == "https://zangjiucheng.github.io/orbitopt/guide.html"  # the docs site's page
         assert window.help_url("website").toString() == "https://zangjiucheng.github.io/orbitopt/"
         assert window.help_url("readme").toString().endswith("/blob/main/README.md")
         # Seen from the far side of Earth the spacecraft is hidden, and so is its label.

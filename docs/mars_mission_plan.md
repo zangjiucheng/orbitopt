@@ -2,171 +2,66 @@
 
 ## Scope
 
-This mission models a Mars probe's entire journey from Earth launch through
-Mars orbit insertion (MOI). **It does not model landing.** This framework has
-no atmosphere model (point-mass/N-body gravity only, see
-`verify/tudat_propagate.py`), so a descent-to-the-surface arc would be
-fabricated physics — unlike everything else this framework claims. This
-mirrors `geo_raising.py` not drawing the launch ascent a two-body propagator
-can't represent, and Artemis II's own "what this does not claim" precedent.
-The mission is titled and scoped accordingly: **"Mars — Earth to Orbit
-Insertion,"** not "...to Landing."
+The Mars mission models departure, heliocentric cruise and Mars orbit
+insertion. It does not model launch ascent, atmospheric descent or landing.
+The default trail starts in a 185 km parking orbit; an optional launch
+configuration adds a site, vehicle, launch window and verified injection.
+See [`mars2020_replay.yaml`](../examples/mars2020_replay.yaml).
 
 ## Why one continuous heliocentric-km scene
 
-Unlike Artemis II (Earth-Moon, Earth-centered throughout) or GOES
-(Earth-centered GTO→GEO), a Mars mission genuinely crosses three physics
-regimes — near-Earth, heliocentric cruise, near-Mars — and three
-characteristic length scales six orders of magnitude apart (hundreds of km
-at each planet vs. hundreds of millions of km in cruise). The scene format
-imposes no per-segment frame or scaling (`scene_format.py`'s schema: trail
-positions are just numbers, `centralBodyId` is a descriptive label never
-read by the renderer), so this mission is exported as **one continuous
-trail in a single heliocentric, km-scale frame**: each Earth/Mars-centered
-phase is propagated in its own natural frame, then converted to heliocentric
-by adding that body's real heliocentric position (from SPICE, via
-`bodies.py`/`tudat_propagate.py`) at each sample's absolute epoch — exact
-vector addition (ECLIPJ2000 axes are non-rotating, so this is a plain
-Galilean frame translation), not an approximation. The tradeoff is that
-near-Earth/near-Mars detail is sub-pixel at the whole-mission default zoom;
-Mission Control's Track/Focus/Face camera system is the tool for inspecting
-either end up close.
+Earth departure and Mars approach are propagated in their natural
+planet-centered frames, then translated using the planets' SPICE positions at
+each epoch. The exported trail uses one heliocentric frame in kilometers.
+Planetary details are small at the whole-mission scale; use Mission Control's
+focus and tracking controls to inspect them.
 
 ## Real reference numbers used
 
-- **Departure window:** real, near-term Earth-Mars Hohmann-class transfer
-  window, searched 2026-09 through 2027-02 (Earth-Mars synodic period is
-  ~780 days; recent windows are ~2020-07, ~2022-09, ~2024-10, implying the
-  next one lands in ~2026 Q4). The porkchop-screen + PSO-optimizer pipeline
-  converged to a departure of ≈2026-Oct-30 (MJD2000 9799.78), arrival
-  ≈2027-Sep-06, time of flight ≈310.67 days, departure C3 ≈9.2 km²/s²
-  (physically realistic for an Earth-Mars transfer) — this is a genuinely
-  optimized result, not a hand-picked date.
-- **Parking orbit:** 185 km circular, matching the Artemis II mission's own
-  convention (`mission_timeline.py`).
-- **Earth sphere of influence:** 924,000 km (real value), used as the
-  phase-1 hand-off boundary.
-- **Target Mars capture orbit:** ~500 km periapsis altitude × 20,000 km
-  apoapsis altitude — a representative science-orbit-class ellipse, not a
-  specific real mission's exact target (no single real Mars orbiter's
-  capture orbit is claimed to be reproduced here).
+The documented 2026-window search found a departure near 2026-10-30 and
+arrival near 2027-09-06, with a 310.67-day flight and C3 around 9.2 km²/s².
+The 185 km parking orbit and approximately 500 × 20,000 km Mars capture orbit
+are modeling choices, not a reconstruction of a particular flight. The Earth
+sphere-of-influence handoff uses 924,000 km.
 
 ## Phase-boundary idealizations (stated plainly, not hidden)
 
-1. **Idealized Lambert departure vs. reality.** The Lambert solver's
-   departure v∞ is idealized: it assumes an instantaneous departure at
-   Earth's exact heliocentric state at t0. The real trajectory departs from
-   Earth's *sphere of influence*, a few days later, once Earth's own
-   heliocentric velocity direction has rotated a few degrees. Measured (not
-   assumed): propagating the real post-departure state under real
-   Earth/Mars/Jupiter third-body perturbation misses Mars by **over 1.27
-   million km** relative to the idealized Lambert arrival point. This is
-   genuine physical sensitivity, not a numerical artifact — Earth's gravity
-   at the ~924,000 km SOI boundary is still ~7.9% of the Sun's local pull,
-   and this transfer's ~157.8° transfer angle sits in the numerically- and
-   physically-sensitive near-180° regime. Every real interplanetary mission
-   flies a trajectory-correction maneuver (TCM) for exactly this reason;
-   this mission does too (see below).
-2. **Trajectory-correction maneuver (TCM).** A fixed-time Newton-Raphson
-   differential-correction shooting method (`verify/mars_insertion.py::
-   target_mars_approach`, mirroring `verify/differential_correction.py::
-   target_lunar_flyby`) targets a specific Mars periapsis radius under real
-   perturbed propagation (Sun + Earth + Mars + Jupiter point masses). The
-   correction re-refines its target coast duration between outer rounds
-   (mirroring `target_lunar_b_plane`'s own documented need for this — a
-   large correction can shift the trajectory's true closest-approach time
-   enough that a stale fixed-time target stops being meaningful). That
-   fixed-time position stage only reaches the right neighbourhood: aiming a
-   point `target_periapsis_km` from Mars's center at a fixed epoch lets
-   gravity focusing bend the real periapsis well below it (measured 252 km
-   altitude instead of 500 km for the 2026 window, and under the surface for
-   the 2020 window). A second B-plane stage therefore solves a square 3×3
-   Newton system — (B·T, B·R) of the osculating Mars-relative hyperbola plus
-   the along-asymptote position S·r at the fixed epoch, which holds the
-   arrival time — so the *periapsis* hits the target to 10 km. The
-   `mars-tcm` verification report carries a `periapsis_vs_target` residual,
-   and `viz/mars_transfer.py` rejects any candidate whose located periapsis
-   is below 100 km altitude instead of exporting an impact trajectory. The
-   targeter is not guaranteed to converge for every geometry; the scene's
-   "Trajectory correction maneuver" event note reports the achieved
-   periapsis, rather than silently assuming success.
-3. **Mars orbit insertion (MOI).** An apsis-preserving, tangential-only
-   capture burn (closed-form vis-viva), applied at the *true* periapsis of
-   the hyperbolic approach — located via a dedicated two-stage propagation
-   (`verify/mars_insertion.py::locate_mars_periapsis`: a coarse bulk-step
-   coast for the long final approach, then a fine-step local window around
-   the anticipated encounter). This two-stage approach exists because even
-   a step size fine enough for the multi-hundred-day cruise (hundreds to
-   thousands of seconds) is too coarse to locate the true periapsis of a
-   close, fast planetary encounter — the same class of RK4-step-size gotcha
-   already documented for the lunar-flyby case elsewhere in this project.
-   A short post-MOI stationkeeping propagation confirms the captured orbit
-   actually holds over a few days, the same sanity check `geo_insertion.py`
-   performs for GEO.
-4. **One numerical trajectory for the whole cruise leg, not two glued
-   together.** An earlier version of this pipeline displayed the cruise leg
-   from an *independently re-propagated* `propagate_two_body_leg` call
-   (3600 s step) glued to `locate_mars_periapsis`'s own bulk+fine result at
-   the Mars approach. Even though both used identical physics (same
-   perturbing bodies, same central body), the differing step sizes' RK4
-   truncation error left the two numerical solutions of the *same* physical
-   trajectory measurably apart by the time they reached Mars — a residual of
-   ~90,000–110,000 km (an implied ~70–110 km/s "speed" across that one trail
-   sample, well above any real heliocentric speed this mission ever
-   reaches), visible as a small teleport in the exported trail right at Mars
-   arrival. Measured via a dedicated continuity test comparing consecutive
-   trail-sample implied speeds, not eyeballed. Fixed by having
-   `locate_mars_periapsis` return its own bulk+fine trajectory (already
-   heliocentric, since both stages use `central_body="Sun"`) for `viz.
-   mars_transfer` to display directly as the cruise leg, and having phase 3
-   pick up *exactly* at the periapsis state that trajectory already ends at
-   — one continuous numerical solution end to end, with an exact (not
-   merely close) seam by construction, not a loosened tolerance.
+1. **Departure:** the Lambert solution assumes departure at Earth's
+   heliocentric position. The propagated Earth-escape state differs; in the
+   documented 2026 case, an uncorrected perturbed cruise misses the Lambert
+   arrival by over 1.27 million km.
+2. **Cruise correction:** `target_mars_approach` uses differential correction
+   and a B-plane refinement to target periapsis. Targeting a point at a fixed
+   epoch alone does not account for gravitational focusing. The targeter can
+   fail; the report records the achieved result.
+3. **Orbit insertion:** the approach is propagated with a local refinement
+   around periapsis. A tangential impulsive burn targets capture, followed by a
+   short orbit check.
+4. **Scene continuity:** the displayed cruise uses the same numerical
+   trajectory as the periapsis locator. Independently re-propagating the two
+   pieces at different step sizes previously produced a visible seam.
 
 ## Optional real launch (`launch` config section)
 
-By default the trail starts in an idealized parking orbit with no launch
-site or rocket. An optional `launch` section in the YAML config (site,
-vehicle, payload, parking orbit, optional preferred lift-off and pinned
-departure) switches on the real launch, through `launch_injection.py`:
-
-- the (t0, tof) PSO search applies the vehicle C3 and site DLA limits
-  (`LaunchConstraints`). A pinned `launch.departure` skips the search;
-- each candidate gets the launch windows for its departure day from the site.
-  The pipeline plans site → parking orbit → TMI (`plan_departure`) and
-  verifies it numerically (`verify_injection`, report kind
-  `launch-injection`, written with the TCM/MOI reports);
-- the scene timeline starts at that lift-off, and the trail starts at
-  parking-orbit insertion in the site-reachable plane, flying the corrected
-  TMI burn.
-
-`examples/mars2020_replay.yaml` carries Mars 2020's launch section, and
-`examples/14_mars2020_replay.py` reads the same section for its
-launch-to-injection steps. Omitting the section, or setting
-`enabled: false`, leaves the pipeline unchanged.
+A `launch` section supplies site, vehicle, payload and parking-orbit choices.
+The search applies launch constraints, computes daily windows and plans the
+site-to-injection sequence. A pinned departure skips the search. The injection
+is numerically checked and gets its own report. Omitting `launch`, or setting
+`enabled: false`, retains the idealized parking-orbit start.
 
 ## Modules
 
-- `launch_injection.py`: shared launch-window → parking orbit → verified TMI
-  step (`LaunchSpec`, `launch_to_injection`).
-- `viz/mars_transfer.py` — the 3-phase pipeline + scene assembly
-  (`_build_mars_mission`, `compute_and_export_mars_mission`,
-  `build_from_config`).
-- `verify/mars_insertion.py` — the TCM targeter (`target_mars_approach`),
-  precise periapsis locator (`locate_mars_periapsis`), and MOI burn +
-  stationkeeping verifier (`insert_mars_orbit`, `verify_mars_orbit_insertion`).
-- `schemas/mission-mars-transfer-1.0.json` — the `mars-transfer` mission-config
-  schema (`orbitopt validate`/`orbitopt run`).
-- Registered both as a config-driven kind (`mission.kind: mars-transfer`) and
-  as the zero-arg built-in mission `"mars"` (`missions.py`), mirroring
-  `geo-raising`/`"goes"`.
+| Component | Purpose |
+|---|---|
+| `launch_injection.py` | Launch window, parking orbit and verified injection |
+| `viz/mars_transfer.py` | Search, mission pipeline and scene export |
+| `verify/mars_insertion.py` | Cruise correction, periapsis and insertion |
+| `schemas/mission-mars-transfer-1.0.json` | Mission configuration schema |
 
 ## What this does not claim
 
-- No landing/EDL — see Scope above.
-- No launch ascent from the pad — the trail starts already in the 185 km
-  parking orbit, same as every other mission in this project.
-- The TCM/MOI targeting is not guaranteed to fully converge for every
-  departure-window/time-of-flight combination a user's config might select;
-  the exported scene reports the actual achieved result rather than
-  asserting success.
+The model does not reconstruct launch ascent or Mars landing. Convergence is
+not guaranteed for every requested geometry. Candidates with unsafe modeled
+Mars periapsis are rejected; if no candidate passes the verification gate, the
+export is identified as **best effort**, not a verified success. See
+[engineering notes](engineering-notes.md#candidate-selection-and-the-verification-gate-task-171).

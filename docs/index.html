@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>orbitopt — flight log</title>
-<meta name="description" content="orbitopt pairs pykep + pygmo's population-based search with tudatpy's high-fidelity propagation, CUDA-batched where it counts, to find and confirm real orbital trajectories." />
+<meta name="description" content="orbitopt pairs pykep + pygmo's population-based search with tudatpy's high-fidelity propagation, CUDA-batched where it counts, to search and verify modeled orbital trajectories." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2306050c'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='6' fill='none' stroke='%23e8a23e' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='%235ec8ff'/%3E%3Ccircle cx='27' cy='16' r='2.2' fill='%23e8a23e'/%3E%3C/svg%3E" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -649,7 +649,8 @@
       <a href="#results">results</a><span class="sep">/</span>
       <a href="#architecture">architecture</a><span class="sep">/</span>
       <a href="#start">start</a><span class="sep">/</span>
-      <a href="guide.html">guide</a>
+      <a href="guide.html">guide</a><span class="sep">/</span>
+      <a href="docs/">docs</a>
     </div>
     <a class="nav-gh" href="https://github.com/zangjiucheng/orbitopt" target="_blank" rel="noopener">
       <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -670,19 +671,17 @@
    <div class="hero-grid">
     <div class="hero-main">
     <div class="hero-kicker">Open-source · orbital trajectory optimization</div>
-    <h1>Screen fast.<br>Verify <span class="ln2">exactly.</span></h1>
+    <h1>Screen fast.<br>Verify <span class="ln2">carefully.</span></h1>
     <p class="lede">
-      orbitopt pairs <code>pykep</code> + <code>pygmo</code>'s cheap, population-based search
-      with <code>tudatpy</code>'s high-fidelity numerical propagation — CUDA-batched
-      where it counts — to find <em>and confirm</em> real trajectories, from the
-      launch pad and its daily window through injection, cruise and orbit insertion.
+      orbitopt combines trajectory search with high-fidelity numerical
+      propagation, optional GPU batching and model-aware verification reports.
     </p>
     <div class="cta-row">
       <a class="btn btn-primary" href="https://github.com/zangjiucheng/orbitopt" target="_blank" rel="noopener">
         <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
         View on GitHub
       </a>
-      <a class="btn btn-ghost" href="#start">$ pip install orbitopt[viewer] →</a>
+      <a class="btn btn-ghost" href="quickstart.html">Quickstart →</a>
     </div>
     </div>
 
@@ -691,8 +690,8 @@
     </div>
    </div>
 
-    <div class="hero-verify" role="group" aria-label="orbitopt results checked against real missions: historical replays and targeting checks">
-      <div class="hv-head"><span class="live">Verified vs real missions</span><a href="#replay">injection.verification.json · <b>9/9 PASS</b> · passed: true →</a></div>
+    <div class="hero-verify" role="group" aria-label="Historical mission comparisons and targeting checks">
+      <div class="hv-head"><span class="live">Historical comparisons and targets</span><a href="#replay">injection.verification.json · <b>9/9 PASS</b> · passed: true →</a></div>
       <div class="hv-grid">
         <div class="hv-cell">
           <div class="hv-mission"><i style="background:var(--mars)"></i>Mars 2020</div>
@@ -740,11 +739,10 @@
   <div class="wrap">
     <div class="phase-head">
       <div class="met-chip"><span class="bar"></span><span class="phase">T+00:04 · Staging</span></div>
-      <h2>Every mission flies the same four stages</h2>
+      <h2>From search to verification</h2>
       <p class="phase-sub">
-        A cheap optimizer sweeps the whole search space, real-world launch
-        limits prune it, a numerical propagator re-flies only the survivor,
-        and a machine-readable report says whether it held.
+        Search candidate trajectories, apply launch constraints and re-fly
+        selected candidates when high-fidelity verification is enabled.
       </p>
     </div>
 
@@ -775,15 +773,14 @@
           <span class="btag">3 · Verify</span>
           <h3>tudatpy + scipy</h3>
           <p>Adaptive RKDP8(7) N-body propagation with dense-output event location.
-            Parking orbit → TLI/TMI under J2, Newton and B-plane targeters close
-            the gap to the real trajectory.</p>
+            Parking-orbit injection, Newton and B-plane targeters refine
+            selected modeled trajectories.</p>
         </div>
         <div class="bnode report">
           <span class="btag">4 · Report</span>
           <h3>Verification JSON</h3>
-          <p>Every run writes a schema-validated report: step convergence,
-            conservation, residuals, the force model actually used, and a
-            pass/fail per check.</p>
+          <p>Verification reports record the force model, numerical checks,
+            residuals and verdicts for the checks that ran.</p>
         </div>
       </div>
       <div class="batch-band">
@@ -992,9 +989,8 @@
       </div>
       <div class="ticket">
         <div class="thead"><span class="tdot" style="color:#2fa97a;background:#2fa97a"></span><h3>GOES — GTO to GEO</h3></div>
-        <p>Real Atlas&nbsp;V/Centaur launch-to-GTO profile, continuously propagated
-          through an optimized minimum-burn-count apogee-raising campaign.</p>
-        <div class="fact">min. <b>finite-burn-feasible</b> schedule, J2+J22+Sun/Moon verified</div>
+        <p>A GOES-16-like launch profile and an optimized apogee-raising campaign.</p>
+        <div class="fact"><b>Not checked</b> on first load; run verification in the app</div>
       </div>
       <div class="ticket">
         <div class="thead"><span class="tdot" style="color:#e14b3d;background:#e14b3d"></span><h3>Mars — launch to orbit insertion</h3><span class="newpill">NEW</span></div>
@@ -1010,8 +1006,7 @@
       </div>
       <div class="ticket">
         <div class="thead"><span class="tdot" style="color:#5ec8ff;background:#5ec8ff"></span><h3>Config-driven runs</h3></div>
-        <p><code>orbitopt validate</code> / <code>orbitopt run</code>: describe a GEO-raising
-          or Mars-transfer mission in YAML, get a verified scene and its report.</p>
+        <p>Validate a YAML mission, compute a scene and inspect its reports.</p>
         <div class="fact">strict JSON-Schema config → scene + <b>verification report</b></div>
       </div>
     </div>
@@ -1092,15 +1087,14 @@
         <div class="layer">
           <span class="lnum">01 · base install</span>
           <h4>Scene format</h4>
-          <p><code>pip install orbitopt</code> — stdlib + <code>jsonschema</code> only.
+          <p>The base package uses <code>jsonschema</code> and <code>PyYAML</code>.
             <code>read_scene</code> / <code>write_scene</code> / <code>validate_scene</code>
             against a versioned, independent JSON Schema.</p>
         </div>
         <div class="layer">
           <span class="lnum">02 · +viewer extra</span>
           <h4>3D viewer + Mission Control</h4>
-          <p><code>pip install orbitopt[viewer]</code> — real PyPI wheels (numpy,
-            PyVista, PySide6). Opens any scene file, yours or a colleague's.</p>
+          <p>The viewer extra adds NumPy, PyVista and PySide6 for opening scenes.</p>
         </div>
         <div class="layer">
           <span class="lnum">03 · conda environment</span>
@@ -1207,7 +1201,7 @@
   <div class="wrap">
     <div class="phase-head">
       <div class="met-chip"><span class="bar"></span><span class="phase">T+00:42 · Go / No-go</span></div>
-      <h2>From a YAML file to a verified mission</h2>
+      <h2>Run your first mission</h2>
       <p class="phase-sub">
         No source edits: describe a mission's orbit elements, spacecraft, and
         optimizer settings, then validate and run it from the command line.
@@ -1217,34 +1211,21 @@
     <div class="console">
       <div class="console-head">
         <span>flight-terminal — orbitopt</span>
-        <button class="copy-btn" data-copy="pip install orbitopt[viewer]&#10;orbitopt view solar-system&#10;&#10;cat my_mission.yaml&#10;mission:&#10;  id: my-geo-mission&#10;  title: My GEO raising campaign&#10;  kind: geo-raising&#10;target:&#10;  geostationary_longitude_deg: -101.0&#10;campaign_search:&#10;  n_burns: { min: 2, max: 6 }&#10;output:&#10;  scene_file: scenes/my-geo-mission.json&#10;&#10;orbitopt validate my_mission.yaml&#10;orbitopt run my_mission.yaml&#10;orbitopt view scenes/my-geo-mission.json&#10;&#10;orbitopt launch-window ksc --rla 9.6 --dla 23.4 --epoch 2020-07-30 --azimuth 90 115">copy all</button>
+        <button class="copy-btn" data-copy="git clone https://github.com/zangjiucheng/orbitopt.git&#10;cd orbitopt&#10;micromamba create -n orbitopt -f envs/cpu.conda-lock.yml&#10;micromamba activate orbitopt&#10;pip install -e . --no-deps&#10;orbitopt validate examples/mars2020_replay.yaml&#10;orbitopt run examples/mars2020_replay.yaml&#10;orbitopt">copy all</button>
       </div>
-      <pre class="code"><span class="c"># view any scene -- no conda, real PyPI wheels only</span>
-<span class="k">pip install</span> orbitopt[viewer]
-<span class="k">orbitopt view</span> solar-system
+      <pre class="code"><span class="c"># install the compute stack from a checkout</span>
+<span class="k">git clone</span> https://github.com/zangjiucheng/orbitopt.git
+<span class="k">cd</span> orbitopt
+<span class="k">micromamba create</span> -n orbitopt -f envs/cpu.conda-lock.yml
+<span class="k">micromamba activate</span> orbitopt
+<span class="k">pip install</span> -e . --no-deps
 
-<span class="c"># describe a mission -- no source edits</span>
-<span class="k">cat</span> my_mission.yaml
-<span class="c">mission:</span>
-  id: <span class="s">my-geo-mission</span>
-  title: <span class="s">My GEO raising campaign</span>
-  kind: <span class="s">geo-raising</span>
-<span class="c">target:</span>
-  geostationary_longitude_deg: <span class="s">-101.0</span>
-<span class="c">campaign_search:</span>
-  n_burns: { min: <span class="s">2</span>, max: <span class="s">6</span> }
-<span class="c">output:</span>
-  scene_file: <span class="s">scenes/my-geo-mission.json</span>
-
-<span class="c"># schema-check, then optimize + tudatpy-verify + write scene and report</span>
-<span class="k">orbitopt validate</span> my_mission.yaml
-<span class="k">orbitopt run</span> my_mission.yaml
-<span class="k">orbitopt view</span> scenes/my-geo-mission.json
-
-<span class="c"># daily launch windows from KSC along the Mars 2020 departure asymptote</span>
-<span class="k">orbitopt launch-window</span> ksc --rla 9.6 --dla 23.4 --epoch 2020-07-30 --azimuth 90 115</pre>
+<span class="c"># validate, run and explore a mission</span>
+<span class="k">orbitopt validate</span> examples/mars2020_replay.yaml
+<span class="k">orbitopt run</span> examples/mars2020_replay.yaml
+<span class="k">orbitopt</span></pre>
     </div>
-    <p class="start-note">Every field falls back to the real GOES-16 numbers if omitted — the minimal config just re-derives the built-in mission. See <a href="https://github.com/zangjiucheng/orbitopt/blob/main/src/orbitopt/schemas/mission-geo-raising-1.0.json" target="_blank" rel="noopener">the full config schema</a> on GitHub.</p>
+    <p class="start-note">See the <a href="quickstart.html">quickstart</a> for installation options, mission configs and verification results.</p>
   </div>
 </section>
 
@@ -1259,6 +1240,7 @@
       <div class="flinks">
         <a href="https://github.com/zangjiucheng/orbitopt" target="_blank" rel="noopener">GitHub</a>
         <a href="guide.html">User guide</a>
+        <a href="docs/">Docs</a>
         <a href="https://github.com/zangjiucheng/orbitopt/blob/main/README.md" target="_blank" rel="noopener">README</a>
         <a href="https://github.com/zangjiucheng/orbitopt/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
       </div>

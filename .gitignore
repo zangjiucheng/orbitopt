@@ -8,3 +8,11 @@ __pycache__/
 .claude/
 /scenes/
 /out/
+
+# Jekyll docs site build (docs/Gemfile): output, caches, local gems
+docs/_site/
+docs/.jekyll-cache/
+docs/.jekyll-metadata
+docs/.sass-cache/
+docs/vendor/
+docs/.bundle/

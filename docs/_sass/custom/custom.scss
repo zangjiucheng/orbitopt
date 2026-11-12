@@ -1,0 +1,65 @@
+// The app's typefaces (IBM Plex for text and code, Barlow Condensed for the
+// site title) -- loaded in _includes/head_custom.html.
+body { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
+code, kbd, pre, .highlight { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+
+.site-title {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #e8a23e;
+}
+
+kbd {
+  display: inline-block;
+  padding: 0.05em 0.45em;
+  border: 1px solid #262239;
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: #13101e;
+  color: #f4f2ea;
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.main-content img { border: 1px solid #262239; border-radius: 4px; }
+.main-content figure { margin: 1.5rem 0; }
+.main-content figcaption { color: #a9a6bb; font-size: 0.9em; margin-top: 0.4rem; }
+
+// The user guide's window map (guide.md): the panels where they sit.
+.layout-map {
+  display: grid;
+  grid-template-columns: 1fr 2.2fr 1fr;
+  grid-template-rows: auto auto auto;
+  gap: 4px;
+  margin: 1.25rem 0;
+  font-size: 0.82em;
+  color: #a9a6bb;
+  > div {
+    background: #13101e;
+    border: 1px solid #262239;
+    border-radius: 3px;
+    padding: 0.6rem 0.7rem;
+  }
+  b { display: block; color: #e8a23e; letter-spacing: 0.06em; margin-bottom: 0.2rem; }
+  .lm-left { grid-column: 1; grid-row: 1 / 3; }
+  .lm-view { grid-column: 2; grid-row: 1; min-height: 6rem; }
+  .lm-right { grid-column: 3; grid-row: 1 / 3; }
+  .lm-charts { grid-column: 2; grid-row: 2; }
+  .lm-bottom { grid-column: 1 / 4; grid-row: 3; }
+}
+
+// Code blocks: the theme colours plain code text with $code-linenumber-color
+// (muted) -- readable ink instead, and tighter lines.
+.highlight, pre.highlight { color: #e6e3ef; }
+pre.highlight, .highlight pre { line-height: 1.55; }
+
+// Source docstrings can contain long, indented lines; keep expanded API notes
+// readable without making the entire page scroll sideways on small screens.
+.main-content details { max-width: 100%; }
+.main-content details pre {
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

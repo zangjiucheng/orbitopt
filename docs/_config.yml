@@ -1,0 +1,129 @@
+# orbitopt documentation site -- Jekyll 4 + Just the Docs, deployed to
+# GitHub Pages by .github/workflows/pages.yml.
+#
+#   cd docs && bundle install && bundle exec jekyll serve   # http://127.0.0.1:4000/orbitopt/
+#
+# index.html (the landing page) has no front matter, so Jekyll copies it
+# untouched. Every other page is rendered with Just the Docs. The project's
+# Markdown docs carry no front matter either (they also read on GitHub):
+# jekyll-optional-front-matter makes them pages, jekyll-titles-from-headings
+# titles them from their first heading, and the `defaults` below place them
+# in the sidebar.
+
+title: orbitopt
+description: >-
+  Trajectory optimization (pykep + pygmo), high-fidelity verification
+  (tudatpy) and Mission Control, a desktop app for working through a mission.
+url: "https://zangjiucheng.github.io"
+baseurl: "/orbitopt"
+repository: zangjiucheng/orbitopt
+
+theme: just-the-docs
+color_scheme: orbitopt
+
+plugins:
+  - jekyll-include-cache
+  - jekyll-seo-tag
+  - jekyll-optional-front-matter
+  - jekyll-titles-from-headings
+  - jekyll-relative-links
+  - jekyll-readme-index
+
+relative_links:
+  enabled: true
+  collections: false
+titles_from_headings:
+  enabled: true
+  strip_title: false
+  collections: false
+optional_front_matter:
+  remove_originals: true
+
+# The theme's Sass still uses @import / darken(): its deprecation warnings
+# are the theme's, not ours.
+sass:
+  quiet_deps: true
+  silence_deprecations: [import, global-builtin, color-functions]
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+
+search_enabled: true
+search:
+  heading_level: 3
+  previews: 2
+  button: true
+heading_anchors: true
+callouts_level: loud
+callouts:
+  note:
+    title: Note
+    color: blue
+  warning:
+    title: Warning
+    color: yellow
+back_to_top: true
+back_to_top_text: "Back to top"
+nav_external_links:
+  - title: orbitopt on GitHub
+    url: https://github.com/zangjiucheng/orbitopt
+aux_links:
+  "Home": "https://zangjiucheng.github.io/orbitopt/"
+  "GitHub": "https://github.com/zangjiucheng/orbitopt"
+aux_links_new_tab: false
+footer_content: >-
+  orbitopt · GPL-3.0 · <a href="https://github.com/zangjiucheng/orbitopt">source on GitHub</a>
+gh_edit_link: true
+gh_edit_link_text: "Edit this page on GitHub"
+gh_edit_repository: "https://github.com/zangjiucheng/orbitopt"
+gh_edit_branch: "main"
+gh_edit_source: docs
+gh_edit_view_mode: "blob"
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor/
+  - .bundle/
+  - .jekyll-cache/
+
+# Sidebar placement of the front-matter-free Markdown docs. Section pages
+# (docs.md, missions.md, engineering.md) and the user guide (guide.md) carry
+# their own front matter.
+defaults:
+  - scope: { path: "" }
+    values: { layout: default }
+
+  # Flight Lab: its user guide is the section page.
+  - scope: { path: "flightlab.md" }
+    values: { title: "Flight Lab", nav_order: 4, has_children: true, has_toc: false }
+  - scope: { path: "flightlab-regression-ci.md" }
+    values: { title: "Regression CI", parent: "Flight Lab", nav_order: 1 }
+  - scope: { path: "flightlab-jsbsim-spike-findings.md" }
+    values: { title: "JSBSim 6-DOF spike", parent: "Flight Lab", nav_order: 2 }
+  - scope: { path: "adr/flightlab-0001-jsbsim-6dof.md" }
+    values: { title: "ADR 0001 · JSBSim 6-DOF", parent: "Flight Lab", nav_order: 3 }
+  - scope: { path: "adr/flightlab-0002-closed-loop-landing-guidance.md" }
+    values: { title: "ADR 0002 · Landing guidance", parent: "Flight Lab", nav_order: 4 }
+
+  # Missions
+  - scope: { path: "mars_mission_plan.md" }
+    values: { title: "Mars mission plan", parent: "Missions and examples", nav_order: 2 }
+  - scope: { path: "goes_gto_geo_mission_plan.md" }
+    values: { title: "GOES GTO-to-GEO plan", parent: "Missions and examples", nav_order: 3 }
+  - scope: { path: "reentry_safety_constraints.md" }
+    values: { title: "Re-entry safety constraints", parent: "Missions and examples", nav_order: 4 }
+  - scope: { path: "launch-data-sources.md" }
+    values: { title: "Launch data sources", parent: "Missions and examples", nav_order: 5 }
+
+  # Engineering
+  - scope: { path: "engineering-notes.md" }
+    values: { title: "Engineering notes", parent: "Engineering", nav_order: 1 }
+  - scope: { path: "mission-control-worker-lifecycle.md" }
+    values: { title: "Compute worker lifecycle", parent: "Engineering", nav_order: 2 }
+  - scope: { path: "benchmarks/fused_kernel_evaluation.md" }
+    values: { title: "Fused CUDA kernel benchmark", parent: "Engineering", nav_order: 3 }
+  - scope: { path: "gpu-regression/README.md" }
+    values: { title: "GPU regression testing", parent: "Engineering", nav_order: 4 }

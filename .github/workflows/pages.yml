@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      - "src/orbitopt/**"
+      - "scripts/generate_api_reference.py"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -29,12 +31,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # docs/ is already the finished static site (single self-contained
-      # index.html + assets/) -- no build step, just hand it to Pages as-is.
-      - name: Upload docs/ as the Pages artifact
+      # API pages are generated from Python source and schemas without imports.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # docs/ is a Jekyll 4 site (Just the Docs theme; docs/_config.yml),
+      # gems pinned by docs/Gemfile.lock. The landing page (index.html) has
+      # no front matter and is copied as-is; everything else is rendered.
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+          working-directory: docs
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Build the site
+        working-directory: docs
+        env:
+          JEKYLL_ENV: production
+        run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
+
+      - name: Upload the built site as the Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          path: docs/_site
 
       - name: Deploy to GitHub Pages
         id: deployment
