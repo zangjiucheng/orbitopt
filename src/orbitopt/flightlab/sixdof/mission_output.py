@@ -479,7 +479,8 @@ def mission_comparison_report(mission_3dof: MissionStudy,
     acceptance checks as the report's checks -- the comparison is green only
     when both runs are. ``inputs.bodies[<body>]`` also carries the run
     terminal bookkeeping of both sides."""
-    from orbitopt.verify.report import build_report, report_digest, status_from_checks
+    from orbitopt.verify.report import (CHECK_NUMERICAL, build_report, report_digest,
+                                        status_from_checks)
 
     if mission_3dof.backend != BACKEND_3DOF or mission_6dof.backend != BACKEND_6DOF:
         raise ValueError("the comparison runs 3DOF minus 6DOF; pass the two "
@@ -525,7 +526,11 @@ def mission_comparison_report(mission_3dof: MissionStudy,
                           targets={"6dof_minus_3dof": {
                               b: body_docs[b].get("metrics", {})
                               for b in bodies}})
-    report["status"] = status_from_checks(checks)
+    # V-04 (task #243): every check here is the run checking itself -- staging
+    # continuity, mass/momentum closure, the scheduled ignition, the two bodies
+    # parting, both backends spanning the same window -- so numerical
+    # consistency; the 6dof-minus-3dof deltas are reported, not graded.
+    report["status"] = status_from_checks(checks, dict.fromkeys(checks, CHECK_NUMERICAL))
     report["digest"] = report_digest(report)
     return report
 

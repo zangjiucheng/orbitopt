@@ -54,7 +54,14 @@ import numpy as np
 from scipy.integrate import solve_ivp
 
 from orbitopt.entry import J2_EARTH, MU_EARTH_M3_S2, R_EARTH_M
-from orbitopt.verify.report import build_report, report_digest, status_from_checks
+from orbitopt.verify.report import (
+    CHECK_HISTORICAL,
+    CHECK_MODEL,
+    CHECK_NUMERICAL,
+    build_report,
+    report_digest,
+    status_from_checks,
+)
 
 # Integrator for every measurement here: high-accuracy explicit RK, absolute
 # tolerances in m / m s-1.
@@ -387,6 +394,22 @@ def run_benchmark(key: str) -> BenchmarkResult:
     return producer()
 
 
+#: Verification category of each scenario's checks (task #243, V-04: every
+#: check in a verification report must say what kind of evidence it is):
+#: kepler_two_body compares a numerical propagation with the closed form of
+#: the *same* two-body model and checks its exact energy integral --
+#: numerical consistency; j2_secular_drift compares the J2-integrated state
+#: with first-order averaged secular theory and the public sun-synchronous
+#: rate -- a different model, so model agreement; starship_booster_catch is
+#: graded against a flown mission's published timeline -- historical
+#: validation.
+BENCHMARK_CATEGORIES = {
+    "kepler_two_body": CHECK_NUMERICAL,
+    "j2_secular_drift": CHECK_MODEL,
+    "starship_booster_catch": CHECK_HISTORICAL,
+}
+
+
 def run_all_benchmarks(keys: Sequence[str] | None = None) -> list:
     """Run every benchmark (or the given subset), in declaration order."""
     keys = list(BENCHMARKS) if keys is None else list(keys)
@@ -399,17 +422,21 @@ def benchmark_report(results: Sequence[BenchmarkResult] | None = None) -> dict:
     pair in ``targets["metrics"]``. Digest covers everything but itself, so
     the same code on the same library versions re-runs byte-identically."""
     results = run_all_benchmarks() if results is None else list(results)
-    checks, metrics = {}, []
+    checks, categories, metrics = {}, {}, []
     for r in results:
+        if r.key not in BENCHMARK_CATEGORIES:
+            raise ValueError(f"benchmark {r.key!r} declares no verification category "
+                             "(add it to BENCHMARK_CATEGORIES)")
         for c in r.checks:
             checks[f"{r.key}.{c['name']}"] = c["passed"]
+            categories[f"{r.key}.{c['name']}"] = BENCHMARK_CATEGORIES[r.key]
             metrics.append({"name": f"{r.label}: {c['meaning']}",
                             "expected": c["expected"], "actual": c["actual"],
                             "tolerance": c["tolerance"], "unit": c["unit"], "ok": c["passed"]})
     report = build_report("benchmark_scenarios", "public reference data / analytic solutions",
                           propagations=[], inputs={"benchmarks": [r.to_dict() for r in results]},
                           targets={"metrics": metrics})
-    report["status"] = status_from_checks(checks)
+    report["status"] = status_from_checks(checks, categories)
     report["digest"] = report_digest(report)
     return report
 

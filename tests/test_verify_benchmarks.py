@@ -103,5 +103,27 @@ def test_benchmark_report_is_deterministic():
     assert a["digest"] == b["digest"]
 
 
+def test_every_benchmark_check_is_categorised():
+    """V-04 (task #243) refuses an uncategorised check; V-06's scenarios were
+    written against the pre-V-04 report and failed to build after the merge.
+    Each scenario declares what kind of evidence it is, and the roll-up shows
+    all three kinds backed by a passing check."""
+    from orbitopt.verify.report import CHECK_HISTORICAL, CHECK_MODEL, CHECK_NUMERICAL
+
+    assert set(bm.BENCHMARK_CATEGORIES) == set(bm.BENCHMARKS)
+    status = bm.benchmark_report()["status"]
+    cats = status["check_categories"]
+    assert set(cats) == set(status["checks"])
+    assert {c for k, c in cats.items() if k.startswith("kepler_two_body.")} == {CHECK_NUMERICAL}
+    assert {c for k, c in cats.items() if k.startswith("j2_secular_drift.")} == {CHECK_MODEL}
+    assert {c for k, c in cats.items()
+            if k.startswith("starship_booster_catch.")} == {CHECK_HISTORICAL}
+    rollup = status["categories"]
+    assert {c: (rollup[c]["result"], rollup[c]["checks_total"])
+            for c in (CHECK_NUMERICAL, CHECK_MODEL, CHECK_HISTORICAL)} == {
+        CHECK_NUMERICAL: ("passed", 3), CHECK_MODEL: ("passed", 3),
+        CHECK_HISTORICAL: ("passed", 2)}
+
+
 def test_cli_main_exits_zero_when_all_pass():
     assert bm.main([]) == 0

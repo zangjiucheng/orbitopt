@@ -1116,6 +1116,27 @@ def _grade(checks: Sequence[HandoffCheck], run) -> tuple[str, str, tuple[str, ..
             "inside the expected results", ())
 
 
+def _check_category(name: str) -> str:
+    """V-04 (task #243) evidence category of one mission-chain check. The
+    chain's own integrity -- stations present and ordered, handoff
+    continuity, mass bookkeeping, the parking-orbit transform of the same
+    state, the propagation link running forward and conserving mass, the
+    optimizer converging -- is numerical consistency; grading against the
+    target orbit, the Gate-B verdict, tudatpy's re-fly and the M-05 report
+    (a residual against an analytic coast) is model agreement."""
+    from orbitopt.verify.report import CHECK_MODEL, CHECK_NUMERICAL
+
+    if name.startswith(("station.", "handoff.", "mass.", "parking.")):
+        return CHECK_NUMERICAL
+    if name in ("ascent.optimizer_converged", "propagation.ran",
+                "propagation.epoch_forward", "propagation.mass_conservation"):
+        return CHECK_NUMERICAL
+    if name.startswith("expected.") or name in (
+            "ascent.flight_verified", "ascent.physics_verified", "propagation.report_passed"):
+        return CHECK_MODEL
+    raise ValueError(f"mission check {name!r} has no verification category")
+
+
 def mission_report(mission: TwoStageLeoMission) -> dict:
     """The unified task report of the reference mission (kind
     ``two-stage-leo-mission``, schema ``verification-report-1.0``): one status
@@ -1127,7 +1148,7 @@ def mission_report(mission: TwoStageLeoMission) -> dict:
     from orbitopt.verify.report import provenance, report_digest, status_from_checks, to_jsonable
 
     checks = {c.id: bool(c.passed) for c in mission.checks}
-    status = status_from_checks(checks)
+    status = status_from_checks(checks, {name: _check_category(name) for name in checks})
     child_reports = []
     for kind, block in (("launch-pipeline", mission.launch),
                         ("orbit-propagation", mission.propagation)):
