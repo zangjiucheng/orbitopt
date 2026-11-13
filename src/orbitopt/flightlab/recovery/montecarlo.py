@@ -35,6 +35,18 @@ the whole population. Landing statistics (percentiles + the 1-sigma error
 ellipse in the site ENU plane) are reported over the landed subset only, and
 say so when there are too few touchdowns to fit one.
 
+R-06 (task #238) adds the statistical reading of that population, in the
+report's ``statistics`` section: the failure classes (planning infeasible /
+execution failure / landing accuracy / insufficient propellant, with every
+failure attributed to exactly one of them), a Wilson score interval on the
+success rate, and per-source sensitivity. The joint-dispersion reading (how
+each source's own draw associates with failure) is free and always reported;
+``solo_sensitivity=True`` additionally re-flies every active source alone at
+the same seed and sample count, which is what isolates one source from its
+co-dispersed neighbours. Nothing in the statistics layer consumes RNG or
+changes a flown sample, so a fixed seed still reproduces the report
+byte-for-byte.
+
     from orbitopt.flightlab.recovery.montecarlo import run_monte_carlo, Dispersions
     mc = run_monte_carlo(target, vehicle_path, ascent_run,
                          dispersions=Dispersions(), seed=7, n=24, workers=4)
@@ -43,6 +55,10 @@ say so when there are too few touchdowns to fit one.
     # R-04: the same setup declared per-source, with wind and per-source switches
     mc = run_monte_carlo(target, vehicle_path, ascent_run,
                          uncertainty="uncertainty.yaml", seed=7, n=24)
+
+    # R-06: plus the one-at-a-time marginal sensitivity per source
+    mc = run_monte_carlo(target, vehicle_path, ascent_run, uncertainty=unc,
+                         seed=7, n=24, solo_sensitivity=True)
 """
 from __future__ import annotations
 
@@ -63,11 +79,15 @@ from orbitopt.flightlab.recovery.pipeline import (
     separation_state_ecef,
 )
 from orbitopt.flightlab.recovery.propagator import BoosterModel, BoosterPhysics
+from orbitopt.flightlab.recovery.stats import (
+    failure_breakdown,
+    solo_models,
+    statistics_summary,
+    success_rate_interval,
+)
 from orbitopt.flightlab.recovery.uncertainty import UncertaintyModel
 
-__all__ = ["Dispersions", "MonteCarloResult", "run_monte_carlo"]
-
-#: The MC default plan options: every sample re-plans locally around the
+__all__ = ["Dispersions", "MonteCarloResult", "run_monte_carlo"]#: The MC default plan options: every sample re-plans locally around the
 #: accepted nominal script (a guidance computer would refine, not restart a
 #: cold search) -- ``max_fevals`` below 40 keeps FL-302 where it started.
 MC_PLAN_OPTIONS: dict[str, Any] = {"initial_guess": NOMINAL_PLAN_GUESS,
@@ -121,9 +141,10 @@ class Dispersions:
 @dataclass(frozen=True)
 class MonteCarloResult:
     """Aggregated Monte-Carlo verdict: success rate, the reason-code
-    histogram that explains every sample, landing percentiles and the error
-    ellipse over the landed subset, and the per-sample records (every number
-    in the aggregates is recomputable from them)."""
+    histogram that explains every sample, the R-06 statistics section
+    (confidence interval, failure classes, sensitivity), landing percentiles
+    and the error ellipse over the landed subset, and the per-sample records
+    (every number in the aggregates is recomputable from them)."""
 
     n: int
     seed: int
@@ -140,10 +161,16 @@ class MonteCarloResult:
     #: statement of what was dispersed; ``dispersions`` above is its legacy
     #: flat view.
     uncertainty: Mapping[str, Any] = field(default_factory=dict)
+    #: R-06: the statistical reading of the sample population -- success-rate
+    #: confidence interval, failure-class breakdown, perturbation sensitivity
+    #: and (opt-in) the one-at-a-time marginal reading; a pure function of
+    #: ``samples`` and ``uncertainty``, see
+    #: :mod:`orbitopt.flightlab.recovery.stats`.
+    statistics: Mapping[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "schemaVersion": "1.1",
+            "schemaVersion": "1.2",
             "kind": "flightlab-recovery-montecarlo",
             "n": int(self.n),
             "seed": int(self.seed),
@@ -151,6 +178,7 @@ class MonteCarloResult:
             "uncertainty": dict(self.uncertainty),
             "success_rate": float(self.success_rate),
             "reason_histogram": {k: int(v) for k, v in self.reason_histogram.items()},
+            "statistics": dict(self.statistics),
             "landing_stats": dict(self.landing_stats),
             "ellipse": dict(self.ellipse),
             "samples": [dict(s) for s in self.samples],
@@ -248,9 +276,14 @@ def _percentiles(values: Sequence[float]) -> dict[str, float]:
 def _ellipse(samples: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """1-sigma error ellipse of the touchdowns in the site ENU plane:
     eigen-decomposition of the scatter (needs >= 3 touchdowns to mean
-    anything; the state field says so honestly)."""
+    anything; the state field says so honestly). A landed record without
+    touchdown coordinates contributes nothing to the scatter and is counted
+    only in the shortfall."""
     pts = np.array([[s["touchdown_east_m"], s["touchdown_north_m"]]
-                    for s in samples], dtype=np.float64)
+                    for s in samples
+                    if s.get("touchdown_east_m") is not None
+                    and s.get("touchdown_north_m") is not None],
+                   dtype=np.float64)
     if len(pts) < 3:
         return {"state": "no_landings" if not len(pts) else "insufficient_samples",
                 "n": int(len(pts))}
@@ -273,6 +306,7 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
                     uncertainty: "UncertaintyModel | Mapping[str, Any] | str | Path | None" = None,
                     seed: int = 1, n: int = 8, workers: int = 1,
                     plan_options: Mapping[str, Any] | None = None,
+                    solo_sensitivity: bool = False,
                     out_path: Path | str | None = None) -> MonteCarloResult:
     """Fly ``n`` dispersed recovery samples of ``ascent_run`` under ``target``
     (module docstring) and return the aggregated :class:`MonteCarloResult`;
@@ -292,7 +326,16 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
     otherwise; scenario-side knobs (density scale, separation-state sigma)
     keep their class defaults, and a vehicle file without uncertainty tags
     reproduces the plain :class:`Dispersions` defaults exactly. The
-    substitution is recorded in the result's assumptions (FL-304/FL-602)."""
+    substitution is recorded in the result's assumptions (FL-304/FL-602).
+
+    R-06: the report's ``statistics`` section carries the statistical reading
+    of the population (:mod:`orbitopt.flightlab.recovery.stats`) -- failure
+    classes, a Wilson score interval on the success rate and a per-source
+    sensitivity under joint dispersion, all pure functions of the flown
+    samples. ``solo_sensitivity=True`` adds the marginal reading: every active
+    source re-flown alone (all others neutral) at the same seed and sample
+    count, i.e. ``1 + n_active`` passes in total -- a correspondingly more
+    expensive, but far more explanatory, run."""
     if n < 1:
         raise ValueError(f"n must be >= 1, got {n}")
     if int(seed) < 0:
@@ -327,28 +370,61 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
         "R-04 perturbation declaration (distribution kind, parameters, per-"
         "source switches) recorded under 'uncertainty'; 'dispersions' is the "
         "legacy flat view of it",
+        "R-06 statistics: success rate reported with a Wilson score interval, "
+        "every failure attributed to one R-06 failure class, and per-source "
+        "sensitivity computed as a rank correlation of each source's own "
+        "sigma-equivalent draw against failure under joint dispersion "
+        "(orbitopt.flightlab.recovery.stats)",
         *from_vehicle_notes,
     ]
+    if solo_sensitivity:
+        assumptions.append(
+            "R-06 one-at-a-time sensitivity: every active source re-flown "
+            "alone at the same seed and sample count -- the marginal reading "
+            "that separates a source from the sources dispersed with it")
 
-    jobs: list[dict[str, Any]]
-    with tempfile.TemporaryDirectory(prefix="fl304mc-") as tmp:
-        run_dir = Path(tmp) / "ascent"
-        write_run(run_dir, ascent_run)
+    def _dispatch(m: UncertaintyModel) -> list[dict[str, Any]]:
+        """Fly the ``n`` samples of one perturbation model over the shared
+        ascent run (the pool moves work, never numbers)."""
         jobs = [{"idx": i, "seed": int(seed), "run_dir": str(run_dir),
                  "target": target, "vehicle_path": str(vehicle_path),
-                 "uncertainty": model.to_dict(), "plan_options": dict(opts)}
+                 "uncertainty": m.to_dict(), "plan_options": dict(opts)}
                 for i in range(n)]
         if workers and workers > 1 and n > 1:
             with ProcessPoolExecutor(max_workers=int(workers)) as pool:
-                records = list(pool.map(_run_sample, jobs))
-        else:
-            records = [_run_sample(job) for job in jobs]
+                return list(pool.map(_run_sample, jobs))
+        return [_run_sample(job) for job in jobs]
+
+    with tempfile.TemporaryDirectory(prefix="fl304mc-") as tmp:
+        run_dir = Path(tmp) / "ascent"
+        write_run(run_dir, ascent_run)
+        records = _dispatch(model)
+        solo: dict[str, Any] | None = None
+        if solo_sensitivity:
+            per_source: dict[str, Any] = {}
+            for name, alone in solo_models(model).items():
+                sub = _dispatch(alone)
+                k = sum(1 for r in sub if r.get("outcome") == "landed")
+                per_source[name] = {
+                    "n": n, "success_rate": k / n,
+                    "ci": success_rate_interval(k, n),
+                    "failure_classes": failure_breakdown(sub)}
+            solo = {"method": "one-at-a-time: each active source alone "
+                              "(every other source neutral), same seed and n "
+                              "as the joint run; the delta is marginal to "
+                              "that source, not a variance decomposition",
+                    "sources": per_source}
 
     histogram: dict[str, int] = {}
     for rec in records:
         histogram[rec["reason"]] = histogram.get(rec["reason"], 0) + 1
     landed = [r for r in records if r.get("outcome") == "landed"]
     n_ok = len(landed)
+    if solo is not None:
+        solo["baseline"] = {"success_rate": n_ok / n,
+                            "ci": success_rate_interval(n_ok, n)}
+        for entry in solo["sources"].values():
+            entry["delta_vs_baseline"] = entry["success_rate"] - n_ok / n
 
     def stats_of(key: str) -> dict[str, Any]:
         vals = [r[key] for r in landed if r.get(key) is not None]
@@ -373,6 +449,8 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
         uncertainty=model.to_dict(),
         success_rate=n_ok / n,
         reason_histogram=dict(sorted(histogram.items())),
+        statistics=statistics_summary(successes=n_ok, n=n, samples=records,
+                                      model=model, solo=solo),
         landing_stats={
             "position_error_m": stats_of("position_error_m"),
             "vertical_speed_m_s": stats_of("vertical_speed_m_s"),

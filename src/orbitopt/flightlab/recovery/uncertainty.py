@@ -51,6 +51,13 @@ everywhere. The wind itself lives in the FL-301 propagator
 (:class:`~orbitopt.flightlab.recovery.propagator.BoosterPhysics`): one
 steady ENU vector per sample, no shear, no turbulence.
 
+R-06 (task #238) reads the same declaration back through
+:meth:`UncertaintyModel.component_scales` to express each sample's draw in
+sigma-equivalents -- the unit its failure/sensitivity statistics divide by:
+every width in the unit of its own draw key (a percentage width converted to
+the factor's fraction, a uniform half-width taken as its standard deviation,
+width / sqrt(3)).
+
     from orbitopt.flightlab.recovery.uncertainty import UncertaintyModel
     model = UncertaintyModel.from_file("uncertainty.yaml")
     mc = run_monte_carlo(target, vehicle, ascent, uncertainty=model, seed=7, n=24)
@@ -58,12 +65,14 @@ steady ENU vector per sample, no shear, no turbulence.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import sqrt
 from pathlib import Path
 from typing import Any, Mapping
 
 import numpy as np
 
-__all__ = ["SOURCE_ORDER", "UncertaintyModel", "UncertaintySource"]
+__all__ = ["ComponentScale", "SOURCE_ORDER", "UncertaintyModel",
+           "UncertaintySource"]
 
 #: The canonical draw order (the stream layout is the determinism contract).
 SOURCE_ORDER: tuple[str, ...] = (
@@ -153,6 +162,25 @@ class UncertaintySource:
             return {"enabled": bool(self.enabled)}
         return {"enabled": bool(self.enabled), "distribution": self.distribution,
                 **{k: float(v) for k, v in sorted(self.params.items())}}
+
+
+@dataclass(frozen=True)
+class ComponentScale:
+    """One declared component as the R-06 statistics read it: which draw key it
+    moves, what the sample carries when the component does not move
+    (``neutral`` -- 1.0 for a factor, the declared wind bias for a wind
+    component, 0.0 for a separation-state offset), and how wide its random
+    part is **in the unit of that draw key** (``sigma_eq``: the 1-sigma of a
+    normal; a uniform half-width as its standard deviation, width / sqrt(3);
+    a percentage width already converted to the factor's fractional unit, so
+    a ``uniform_pct`` 6 % becomes 0.06 / sqrt(3); ``None`` when the component
+    cannot move randomly, so a pure wind bias is reported but never z-scored).
+    Dividing a sample's ``(draw - neutral)`` by ``sigma_eq`` turns every
+    perturbation into comparable sigma-equivalents."""
+
+    draw_key: str
+    neutral: float
+    sigma_eq: float | None
 
 
 @dataclass(frozen=True)
@@ -296,6 +324,38 @@ class UncertaintyModel:
 
     def active_sources(self) -> tuple[str, ...]:
         return tuple(n for n in SOURCE_ORDER if self.sources[n].is_active())
+
+    def component_scales(self) -> dict[str, tuple[ComponentScale, ...]]:
+        """Every component of every source, in declaration and draw order, as
+        a :class:`ComponentScale` (R-06 statistics: what to divide a sample's
+        draw by to get sigma-equivalents). Source-independent of the draw
+        stream: this is the declaration read back, not a re-derivation of it."""
+        out: dict[str, tuple[ComponentScale, ...]] = {}
+        for name in SOURCE_ORDER:
+            src = self.sources[name]
+            live = src.enabled and src.distribution != "none"
+            comps: list[ComponentScale] = []
+            for key in _DRAW_KEYS[name]:
+                neutral = float(_NEUTRAL[key])
+                sigma_eq: float | None = None
+                if live and src.distribution == "uniform_pct":
+                    width = float(src.params.get("half_width_pct", 0.0)) / 100.0
+                    sigma_eq = width / sqrt(3.0) if width > 0.0 else None
+                elif live and src.distribution == "normal_pct":
+                    sigma = float(src.params.get("sigma_pct", 0.0)) / 100.0
+                    sigma_eq = sigma if sigma > 0.0 else None
+                elif live and name == "wind":
+                    comp = key[len("wind_"):-len("_m_s")]
+                    neutral = float(src.params.get(f"mean_{comp}_m_s", 0.0))
+                    sigma = float(src.params.get(f"sigma_{comp}_m_s", 0.0))
+                    sigma_eq = sigma if sigma > 0.0 else None
+                elif live and name == "initial_state":
+                    sigma = float(src.params.get(f"sigma_{_STATE_PARAM[key]}",
+                                                0.0))
+                    sigma_eq = sigma if sigma > 0.0 else None
+                comps.append(ComponentScale(key, neutral, sigma_eq))
+            out[name] = tuple(comps)
+        return out
 
     def dispersions_view(self) -> dict[str, float]:
         """The flat legacy :class:`Dispersions` view of this declaration
