@@ -161,3 +161,30 @@ For Mars, if no selected candidate passes, the pipeline can export a degraded
 or fallback trajectory as **best effort**, with a warning and `success: false`.
 The gate, scene and CLI carry the warning. A completed computation alone does
 not imply a passed verification.
+
+## Benchmark scenarios with public references / analytic solutions (task #245)
+
+`orbitopt.verify.benchmarks` (CLI: `orbitopt benchmarks`) defines three
+scenarios, each with a *frozen expected value* (a published number or the
+closed-form solution) and a *declared tolerance*; the measurement never sees
+the reference:
+
+1. `kepler_two_body` -- DOP853 propagation of a defined LEO-like state over
+   ~1.28 revolutions against the closed-form two-body solution (tolerance
+   0.5 m / 5 mm/s), plus an exact-energy-drift check on the numerical run.
+2. `j2_secular_drift` -- one day of osculating J2 propagation for a
+   sun-synchronous 700 km orbit (node drift vs the public +360 deg/tropical
+   year reference, 0.01 deg/day) and a critical-inclination MEO orbit
+   (frozen perigee: perigee drift ~0, 0.02 deg/day).
+3. `starship_booster_catch` -- the Flight 15 booster return solved by
+   `orbitopt.viz.starship_ascent` (boostback + ballistic fall + landing
+   burn) against SpaceX's published catch (~T+6:35, ±60 s) and the tower
+   catch position (±10 m of the pad); the announcement is never an input.
+
+`tests/test_verify_benchmarks.py` runs all three in the fast CI suite -- the
+regression gate -- and also re-derives the frozen constants from their
+formulas, so drift of the Earth constants or the reference numbers cannot
+silently move the goalposts. `benchmark_report()` emits the suite as a
+verification-report-1.0 document (no new schema); `orbitopt benchmarks` runs
+it from the command line (exit 1 on failure).
+
