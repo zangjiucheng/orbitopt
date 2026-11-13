@@ -279,6 +279,9 @@ def _cmd_flight(args):
     if getattr(args, "flight_command", None) == "montecarlo":
         _cmd_flight_montecarlo(args)
         return
+    if getattr(args, "flight_command", None) == "mission":
+        _cmd_flight_mission(args)
+        return
     if getattr(args, "flight_command", None) == "optimize":
         _cmd_flight_optimize(args)
         return
@@ -339,8 +342,8 @@ def _cmd_flight_to_scene(args):
     """`orbitopt flight to-scene <run_dir> -o scene.json`: the FL-005 scene
     importer -- a FlightResult run dir becomes a scene-1.0 JSON that
     `orbitopt view` (or Mission Control) opens as a multi-body Earth scene.
-    A run that fails the contract (or carries a frame scene export cannot
-    convert to GCRS) is rejected and no file is written: never render a
+    A run that fails the contract (or carries a frame outside the FL-002
+    frame bridge's reach) is rejected and no file is written: never render a
     suspect run."""
     import jsonschema
 
@@ -366,6 +369,41 @@ def _cmd_flight_to_scene(args):
     n_events = len(scene["timeline"].get("events", []))
     print(f"wrote {out}: {n_bodies} bodies, {n_events} events "
           f"(open with: orbitopt view {out})")
+
+
+def _cmd_flight_mission(args):
+    """`orbitopt flight mission --backend 3DOF|6DOF|BOTH -o runs/<id>`: F-07
+    (task #232) on the native plant -- fly the packaged two-stage mission on
+    the selected backend(s) and write the standard output bundle: a
+    FlightResult v1 run directory per backend (M-01 ``handoff.json``,
+    verification-report-1.0 and Mission Control scene beside it), and, for
+    ``BOTH``, the automatically generated 3-DOF/6-DOF comparison report.
+    Illustrative native-plant physics -- the same study as
+    ``benchmarks/bench_fl607_mission_outputs.py``, printed, not asserted."""
+    from orbitopt.flightlab.sixdof.mission_output import (
+        run_mission, write_mission_outputs, write_mission_pair,
+    )
+
+    scene = not args.no_scene
+    if args.backend == "BOTH":
+        result = write_mission_pair(out_dir=args.output, scene=scene)
+        for backend in ("3DOF", "6DOF"):
+            paths = result[backend]
+            print(f"{backend}: run dir {paths['run_dir']} (scene: "
+                  f"{'scene.json' if scene else 'skipped'})")
+        report = result["comparison"]
+        status = report["status"]["result"]
+        print(f"comparison: {result['comparison_path']} [{status}]")
+        raise SystemExit(0 if status == "passed" else 1)
+    mission = run_mission(backend=args.backend)
+    paths = write_mission_outputs(mission, f"{args.output}/{args.backend}",
+                                  scene=scene)
+    n_fail = sum(1 for c in mission.checks if not c.passed)
+    print(f"{args.backend}: run dir {paths['run_dir']}, handoff "
+          f"{paths['handoff'].name}, report {paths['report'].name}"
+          f"{', scene ' + paths['scene'].name if scene else ''} "
+          f"({len(mission.checks) - n_fail}/{len(mission.checks)} checks passed)")
+    raise SystemExit(0 if n_fail == 0 else 1)
 
 
 def _cmd_flight_simulate(args):
@@ -731,6 +769,22 @@ def build_parser() -> argparse.ArgumentParser:
     flight_scene.add_argument("-o", "--output", help="output scene JSON path (default: <run_id>.json)")
     flight_scene.add_argument("--no-earth-texture", action="store_true",
                               help="draw Earth as a point marker instead of the textured globe")
+    flight_mission = flight_sub.add_parser(
+        "mission",
+        help="F-07: fly the packaged two-stage mission on the native plant with a "
+             "selectable backend and write the standard outputs (FlightResult v1 "
+             "run dir, M-01 handoff.json, verification-report-1.0, Mission Control "
+             "scene; with BOTH also the auto-generated 3-DOF/6-DOF comparison report)")
+    flight_mission.add_argument("--backend", choices=("3DOF", "6DOF", "BOTH"),
+                                default="BOTH", type=str.upper,
+                                help="ascent physics for this mission: '3DOF' native "
+                                     "point-mass twin, '6DOF' closed-loop rigid body, "
+                                     "or 'BOTH' (default) to fly both and generate the "
+                                     "comparison report")
+    flight_mission.add_argument("-o", "--output", default="runs/f07-mission", metavar="DIR",
+                                help="output directory (default runs/f07-mission)")
+    flight_mission.add_argument("--no-scene", action="store_true",
+                               help="skip the scene.json export")
     flight_sim = flight_sub.add_parser(
         "simulate",
         help="Gate B (FL-006): fly a FlightTarget with a vehicle file, verify constraints "

@@ -6,12 +6,14 @@ every contract event becoming a timeline marker.
 
 The contract-to-scene frame rule: a run may only be rendered once every
 sample sits in the scene's GCRS. ``GCRS`` tracks render as-is; ``LAUNCH_ECI``
-tracks are converted through the FL-002 frame bridge (``frames.to_gcrs``), so
-the exported trail uses the same authoritative astropy/ITRS conversion as the
-contract pipeline rather than a GMST-only approximation. ``ECEF`` is NOT
-convertible here: its position/velocity pair needs the FL-002 frame bridge's
-omega-cross-r velocity term, so an ECEF track is rejected with a clear error
-rather than rendered wrong. Anything failing the run contract (bad frame enum,
+and ``ECEF`` tracks are converted through the FL-002 frame bridge
+(``frames.to_gcrs``), so the exported trail uses the same authoritative
+astropy/ITRS conversion as the contract pipeline rather than a GMST-only
+approximation. The ECEF conversion (F-07, task #232 -- what lets Mission
+Control render the native-plant 6-DOF runs) converts every sample at its own
+epoch through the bridge's full rotating-frame transform, omega-cross-r
+velocity term included; ``frames.to_gcrs`` growing that support is what
+superseded FL-005's "ECEF is not convertible here" refusal. Anything failing the run contract (bad frame enum,
 unparseable or missing epoch, non-monotonic time, mass discontinuity, ...)
 raises before a single actor is drawn -- a bad run must never render.
 
@@ -83,9 +85,10 @@ CRAFT_RADIUS_DISPLAY = 3.0
 #: Trail colours cycled per track, in contract (manifest) body order.
 TRAIL_PALETTE = ("#e8a23e", "#2fa97a", "#d64550", "#b58cf0", "#4cc9f0", "#f25f5c")
 
-#: Frames a track may be rendered in, after conversion if needed. ECEF is
-#: deliberately absent -- see this module's docstring.
-CONVERTIBLE_FRAMES = ("GCRS", "LAUNCH_ECI")
+#: Frames a track may be rendered in, after conversion if needed. Every
+#: non-GCRS frame goes through the FL-002 frame bridge -- see this module's
+#: docstring.
+CONVERTIBLE_FRAMES = ("GCRS", "LAUNCH_ECI", "ECEF")
 
 _EVENT_LABELS = {
     "ignition": "Ignition",
@@ -141,13 +144,10 @@ def _check_track(track) -> None:
     hand-built FlightRun, and the checks are cheap."""
     where = f"track {track.body_id!r}"
     if track.frame not in CONVERTIBLE_FRAMES:
-        hint = (" (ECEF needs the FL-002 frame bridge's rotating-frame "
-                "velocity term; it is not renderable by scene export alone)"
-                if track.frame == "ECEF" else
-                f" (scene export renders {', '.join(CONVERTIBLE_FRAMES)} only)")
-        raise ValueError(f"{where}: frame {track.frame!r} is not convertible to GCRS{hint}")
+        raise ValueError(f"{where}: frame {track.frame!r} is not convertible to GCRS "
+                         f"(scene export renders {', '.join(CONVERTIBLE_FRAMES)} only)")
     if not track.epoch_utc:
-        raise ValueError(f"{where}: epoch_utc is missing -- a LAUNCH_ECI conversion and a "
+        raise ValueError(f"{where}: epoch_utc is missing -- a frame-bridge conversion and a "
                          "calendar-anchored timeline both need the track's epoch")
     _parse_utc(track.epoch_utc, f"{where}: epoch_utc")  # raises on unparseable
     n = len(track.t_s)
@@ -203,7 +203,7 @@ def _km(v: float) -> float:
 def _gcrs_m(track, epoch: datetime) -> tuple[list, list]:
     """A track's samples in metres / m/s in GCRS -- the frame every handoff
     comparison and every coast-arc seed is taken in (FL-002 frame bridge
-    for LAUNCH_ECI, as-is for GCRS)."""
+    for every non-GCRS frame, as-is for GCRS)."""
     if track.frame == "GCRS":
         return ([[float(x) for x in r] for r in track.position_m],
                 [[float(v) for v in v] for v in track.velocity_m_s])
@@ -306,7 +306,8 @@ def _staging_handoffs(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dic
         if not parent_id or parent_id not in by_id:
             continue
         parent = by_id[parent_id]
-        impulse_ns = next((float(ev.data.get("separation_impulse_ns") or 0.0)
+        impulse_ns = next((float(ev.data.get("separation_impulse_ns")
+                                or ev.data.get("impulse_ns") or 0.0)
                            for ev in run.events
                            if ev.kind == "separation" and ev.body_id == parent_id), 0.0)
         tolerances = HandoffTolerances(
@@ -484,7 +485,7 @@ def _track_body_entry(track, color: str, positions_km: list, velocities_km_s: li
         "info": [
             {"label": "Tracked", "value": f"{_fmt_t(track.t_start_s)} \u2013 {_fmt_t(track.t_end_s)}"},
             {"label": "Mass", "value": f"{track.mass_kg[0]:,.0f} \u2192 {track.mass_kg[-1]:,.0f} kg"},
-            {"label": "Frame", "value": track.frame + (" (converted to GCRS)" if track.frame == "LAUNCH_ECI" else "")},
+            {"label": "Frame", "value": track.frame + (" (converted to GCRS)" if track.frame != "GCRS" else "")},
         ],
     }
 
@@ -496,7 +497,7 @@ def _earth_body(earth_texture: bool, orientation_basis: list | None) -> dict:
     }
     if earth_texture:
         # orientationBasis is normally the full FL-002 ITRS -> GCRS position
-        # rotation used for LAUNCH_ECI tracks. A base install may instead get
+        # rotation used for non-GCRS tracks. A base install may instead get
         # the stdlib GMST Rz fallback; run_to_scene records that assumption.
         if orientation_basis is None:
             raise ValueError("earth texture needs a frame-bridge orientation basis")
@@ -542,7 +543,7 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
     gcrs: dict[str, tuple[list, list]] = {}
     for i, track in enumerate(run.tracks):
         # Convert once per track: GCRS metres for the handoff gates, km/km-s
-        # for the trail (LAUNCH_ECI goes through the FL-002 frame bridge).
+        # for the trail (non-GCRS goes through the FL-002 frame bridge).
         r_m, v_m_s = _gcrs_m(track, epoch)
         gcrs[track.body_id] = (r_m, v_m_s)
         positions_km = [[_km(x), _km(y), _km(z)] for x, y, z in r_m]

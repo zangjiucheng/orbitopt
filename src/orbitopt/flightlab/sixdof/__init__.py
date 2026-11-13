@@ -64,4 +64,16 @@ burning to dry::
     from orbitopt.flightlab.sixdof.two_stage import f06_two_stage_scenario, run_two_stage
     # docs/flightlab.md (the F-06 section) and
     # tests/test_flightlab_sixdof_two_stage.py (the staging acceptance gates)
+
+F-07 (task #232) turns that study into mission artefacts: the same
+``TwoStageScenario`` is selectable between a ``"3DOF"`` point-mass twin and
+the ``"6DOF"`` closed-loop path, and each flown backend writes the standard
+bundle -- a FlightResult v1 run directory, its verification-report-1.0
+document, the M-01 ``handoff.json`` the 6-DOF run produces at separation,
+and a Mission Control scene; flying both backends auto-generates the
+3-DOF/6-DOF comparison report::
+
+    from orbitopt.flightlab.sixdof.mission_output import run_mission, write_mission_pair
+    # docs/flightlab.md (the F-07 section) and
+    # docs/benchmarks/fl607_mission_outputs.json (the committed numbers)
 """

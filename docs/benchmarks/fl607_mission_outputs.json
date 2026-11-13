@@ -1,0 +1,232 @@
+{
+  "artefacts": {
+    "comparison": "/tmp/fl607-jn4xg5o_/flightlab-comparison-f07-two-stage-6dof-vs-3dof.verification.json",
+    "kept": false,
+    "run_dirs": [
+      "/tmp/fl607-jn4xg5o_/3DOF",
+      "/tmp/fl607-jn4xg5o_/6DOF"
+    ]
+  },
+  "backends": {
+    "3DOF": {
+      "checks": {
+        "staging-handoff-continuity": true,
+        "staging-mass-closure": true,
+        "staging-momentum-residual": true,
+        "staging-scheduled-ignition": true,
+        "staging-trajectory-divergence": true
+      },
+      "handoff": {
+        "dry_mass_kg": 10000.0,
+        "frame": "ECEF",
+        "mass_kg": 12872.076710801928,
+        "t_s": 95.0
+      },
+      "runs": {
+        "booster": {
+          "mass_end_kg": 12872.076710801928,
+          "t_end_s": 260.0,
+          "terminal": "t_end"
+        },
+        "stack": {
+          "mass_end_kg": 20872.076710801928,
+          "t_end_s": 95.0,
+          "terminal": "t_end"
+        },
+        "upper": {
+          "mass_end_kg": 2000.0,
+          "t_end_s": 260.0,
+          "terminal": "t_end"
+        }
+      },
+      "scenario": {
+        "dt_s": 0.05,
+        "ignition_delay_s": 8.0,
+        "name": "f07-two-stage",
+        "sample_every": 20,
+        "separation_t_s": 95.0,
+        "t_end_s": 260.0
+      },
+      "separation": {
+        "attitude_continuity_err_rad": 0.0,
+        "booster_propellant_remaining_kg": 2872.076710801928,
+        "dv_booster_m_s": 1.9421885498103517,
+        "dv_upper_m_s": 3.125,
+        "mass_after_kg": 20872.076710801928,
+        "mass_residual_kg": 0.0,
+        "momentum_residual_kg_m_s": 8.33000234328132e-09,
+        "position_continuity_err_m": 0.0,
+        "separation_impulse_ns": 25000.0,
+        "stack_mass_separation_kg": 20872.076710801928,
+        "stack_mass_t0_kg": 78000.0,
+        "stage1_propellant_burned_kg": 57127.92328919807,
+        "upper_propellant_kg": 6000.0
+      }
+    },
+    "6DOF": {
+      "checks": {
+        "staging-handoff-continuity": true,
+        "staging-mass-closure": true,
+        "staging-momentum-residual": true,
+        "staging-scheduled-ignition": true,
+        "staging-trajectory-divergence": true
+      },
+      "handoff": {
+        "dry_mass_kg": 10000.0,
+        "frame": "ECEF",
+        "mass_kg": 12871.996293615426,
+        "t_s": 95.0
+      },
+      "runs": {
+        "booster": {
+          "mass_end_kg": 12871.996293615426,
+          "t_end_s": 260.0,
+          "terminal": "t_end"
+        },
+        "stack": {
+          "mass_end_kg": 20871.996293615426,
+          "t_end_s": 95.0,
+          "terminal": "t_end"
+        },
+        "upper": {
+          "mass_end_kg": 2000.0,
+          "t_end_s": 260.0,
+          "terminal": "t_end"
+        }
+      },
+      "scenario": {
+        "dt_s": 0.05,
+        "ignition_delay_s": 8.0,
+        "name": "f07-two-stage",
+        "sample_every": 20,
+        "separation_t_s": 95.0,
+        "t_end_s": 260.0
+      },
+      "separation": {
+        "attitude_continuity_err_rad": 0.0,
+        "booster_propellant_remaining_kg": 2871.996293615426,
+        "dv_booster_m_s": 1.9422006835412253,
+        "dv_upper_m_s": 3.125,
+        "mass_after_kg": 20871.996293615426,
+        "mass_residual_kg": 0.0,
+        "momentum_residual_kg_m_s": 3.725290298461914e-09,
+        "position_continuity_err_m": 0.0,
+        "separation_impulse_ns": 25000.0,
+        "stack_mass_separation_kg": 20871.996293615426,
+        "stack_mass_t0_kg": 78000.0,
+        "stage1_propellant_burned_kg": 57128.003706384574,
+        "upper_propellant_kg": 6000.0
+      }
+    }
+  },
+  "command": "benchmarks/bench_fl607_mission_outputs.py -o docs/benchmarks/fl607_mission_outputs.json",
+  "comparison": {
+    "bodies": {
+      "booster": {
+        "metrics": {
+          "d_altitude_m_max_abs_m": 2526.882650175132,
+          "d_altitude_m_rms_m": 1579.292946338165,
+          "d_altitude_m_terminal_m": -2526.882650175132,
+          "d_fpa_deg_max_abs_deg": 0.4801386086749737,
+          "d_fpa_deg_rms_deg": 0.45838937404823643,
+          "d_fpa_deg_terminal_deg": -0.47228815496859866,
+          "d_mass_kg_max_abs_kg": 0.08041718650201801,
+          "d_mass_kg_rms_kg": 0.08041718650201801,
+          "d_mass_kg_terminal_kg": -0.08041718650201801,
+          "d_speed_m_s_max_abs_m_s": 10.935953347826853,
+          "d_speed_m_s_rms_m_s": 6.446048128982862,
+          "d_speed_m_s_terminal_m_s": 10.935953347826853,
+          "t_span_s": 165.0
+        },
+        "run_3dof": {
+          "mass_kg": 12872.076710801928,
+          "terminal": "t_end"
+        },
+        "run_6dof": {
+          "mass_kg": 12871.996293615426,
+          "terminal": "t_end"
+        },
+        "t_span_s": [
+          95.0,
+          260.0
+        ]
+      },
+      "stack": {
+        "metrics": {
+          "d_altitude_m_max_abs_m": 327.3353377757594,
+          "d_altitude_m_rms_m": 114.71045374562483,
+          "d_altitude_m_terminal_m": -327.3353377757594,
+          "d_fpa_deg_max_abs_deg": 0.4183897586011014,
+          "d_fpa_deg_rms_deg": 0.33744240695319777,
+          "d_fpa_deg_terminal_deg": -0.41010171553361374,
+          "d_mass_kg_max_abs_kg": 0.08041718650201801,
+          "d_mass_kg_rms_kg": 0.05401803451258475,
+          "d_mass_kg_terminal_kg": -0.08041718650201801,
+          "d_speed_m_s_max_abs_m_s": 1.2170714795274762,
+          "d_speed_m_s_rms_m_s": 0.3855804408281841,
+          "d_speed_m_s_terminal_m_s": 1.2170714795274762,
+          "t_span_s": 95.0
+        },
+        "run_3dof": {
+          "mass_kg": 20872.076710801928,
+          "terminal": "t_end"
+        },
+        "run_6dof": {
+          "mass_kg": 20871.996293615426,
+          "terminal": "t_end"
+        },
+        "t_span_s": [
+          0.0,
+          95.0
+        ]
+      },
+      "upper": {
+        "metrics": {
+          "d_altitude_m_max_abs_m": 234842.45397031587,
+          "d_altitude_m_rms_m": 100233.09018921929,
+          "d_altitude_m_terminal_m": -234842.45397031587,
+          "d_fpa_deg_max_abs_deg": 23.346890798990195,
+          "d_fpa_deg_rms_deg": 16.11011970119784,
+          "d_fpa_deg_terminal_deg": -23.346890798990195,
+          "d_mass_kg_max_abs_kg": 0.549847432952447,
+          "d_mass_kg_rms_kg": 0.4048642242759278,
+          "d_mass_kg_terminal_kg": 0.0,
+          "d_speed_m_s_max_abs_m_s": 665.4963820977628,
+          "d_speed_m_s_rms_m_s": 401.95727524962575,
+          "d_speed_m_s_terminal_m_s": -446.52810520929324,
+          "t_span_s": 165.0
+        },
+        "run_3dof": {
+          "mass_kg": 2000.0,
+          "terminal": "t_end"
+        },
+        "run_6dof": {
+          "mass_kg": 2000.0,
+          "terminal": "t_end"
+        },
+        "t_span_s": [
+          95.0,
+          260.0
+        ]
+      }
+    },
+    "checks": {
+      "3DOF.staging-handoff-continuity": true,
+      "3DOF.staging-mass-closure": true,
+      "3DOF.staging-momentum-residual": true,
+      "3DOF.staging-scheduled-ignition": true,
+      "3DOF.staging-trajectory-divergence": true,
+      "6DOF.staging-handoff-continuity": true,
+      "6DOF.staging-mass-closure": true,
+      "6DOF.staging-momentum-residual": true,
+      "6DOF.staging-scheduled-ignition": true,
+      "6DOF.staging-trajectory-divergence": true,
+      "comparison-shared-spans": true
+    },
+    "status": "passed"
+  },
+  "generated_utc": "2026-11-13T19:43:12+00:00",
+  "schema": "orbitopt-fl607-1",
+  "task": "#232 (F-07, epic #216)",
+  "wall_clock_s": 181.5
+}
