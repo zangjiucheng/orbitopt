@@ -143,7 +143,10 @@ plumbing (OT `trajectory.csv` replay, ECEF-climb altitude comparison that
 cancels the geoid offset). Reference: `fl403_spike` fixture, a run of the
 OT vehicle mirrored from the spike stage (same masses/Isp/ṁ/burn, zero
 aero); regenerable with `scripts/fl403_record_reference.py`. Plots + all
-metrics regenerate via `scripts/fl403_run_spike.py`.
+metrics regenerate via `scripts/fl403_run_spike.py` (since F-01, task #226,
+a report generator over the formal 6-DOF backend config
+`orbitopt/data/flightlab/sixdof/fl403_program_tracking.yaml`, not an
+experiment entry point).
 
 ## Numbers (dt = 0.01 s; full table in the ADR)
 

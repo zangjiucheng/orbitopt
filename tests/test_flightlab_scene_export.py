@@ -267,11 +267,17 @@ def test_unknown_frame_rejected():
         run_to_scene(_run([_track("sc", frame="J2000")]))
 
 
-def test_ecef_frame_rejected_as_not_convertible():
-    # ECEF is a legal *contract* frame, but its velocity needs the FL-002
-    # frame bridge's rotating-frame term -- scene export must refuse it.
-    with pytest.raises(ValueError, match="frame bridge"):
-        run_to_scene(_run([_track("sc", frame="ECEF")]))
+def test_ecef_frame_converts_through_the_frame_bridge():
+    # F-07 (task #232): ECEF is renderable -- the FL-002 frame bridge gained
+    # the rotating-frame velocity term, so the same conversion the contract
+    # pipeline uses now carries ECEF tracks into the scene.
+    scene = run_to_scene(_run([_track("sc", frame="ECEF")]))
+    validate_scene(scene)
+    body = next(b for b in scene["bodies"] if b["id"] == "sc")
+    assert any(i["label"] == "Frame" and "ECEF (converted to GCRS)" == i["value"]
+               for i in body["info"])
+    trail = body["trail"]["positions"]
+    assert all(len(p) == 3 and all(math.isfinite(c) for c in p) for p in trail)
 
 
 def test_missing_epoch_rejected():
@@ -339,16 +345,23 @@ def test_cli_to_scene_writes_openable_scene(tmp_path, capsys):
     assert "open with: orbitopt view" in capsys.readouterr().out
 
 
-def test_cli_rejects_ecef_run_and_writes_nothing(tmp_path, capsys):
+def test_cli_renders_ecef_tracks(tmp_path, capsys):
+    # F-07: an ECEF-mutated fixture run is schema-legal AND renderable now;
+    # the scene says so in the body's frame label. (The synthetic fixture's
+    # ECEF numbers are not a physical pair with its LAUNCH_ECI parent, so a
+    # separation gate may fail -- that rides along in the scene's checks, it
+    # is not an export refusal.)
     run_dir = _copy_run(tmp_path)
     manifest = json.loads((run_dir / "manifest.json").read_text())
-    manifest["bodies"][1]["frame"] = "ECEF"  # schema-legal, not renderable
+    manifest["bodies"][1]["frame"] = "ECEF"  # schema-legal, now renderable
     (run_dir / "manifest.json").write_text(json.dumps(manifest))
     out = tmp_path / "scene.json"
-    with pytest.raises(SystemExit):
-        cli_main(["flight", "to-scene", str(run_dir), "-o", str(out)])
-    assert not out.exists()
-    assert "REJECTED" in capsys.readouterr().out
+    cli_main(["flight", "to-scene", str(run_dir), "-o", str(out)])
+    scene = read_scene(out)
+    body = next(b for b in scene["bodies"] if b["id"] == "upper_stage")
+    assert any(i["label"] == "Frame" and "converted to GCRS" in i["value"]
+               for i in body["info"])
+    assert "open with: orbitopt view" in capsys.readouterr().out
 
 
 def test_cli_rejects_mass_discontinuity_run(tmp_path):

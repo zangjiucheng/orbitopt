@@ -1,0 +1,35 @@
+# Packaged 6-DOF backend scenario: the FL-402 staging handoff (spike #207)
+# migrated to the formal, config-driven backend (F-01, task #226). One
+# stack flies open-loop for 10 s, then freezes and hands off to two
+# independent JSBSim instances (booster + upper) that coast interleaved for
+# 61 s -- the mass/momentum/continuity bookkeeping lands in the run's
+# checks (tests/test_flightlab_sixdof_backend.py asserts the verdict).
+name: fl402-staging-handoff
+provenance: illustrative
+model: spike_stage
+dt_s: 0.01
+duration_s: 10.0            # stack burn (staging.at_t_s == end of the burn)
+epoch_utc: '2026-01-01T00:00:00Z'
+ic:
+  lat_geod_deg: 0.0
+  lon_deg: 0.0
+  alt_m: 0.0
+  pitch_deg: 90.0
+  heading_deg: 90.0
+ignition:
+  t_s: 0.0
+  throttle: 1.0
+control:
+  mode: hold
+staging:
+  at_t_s: 10.0
+  coast_s: 61.0             # >= 60 s, the FL-402 acceptance window
+  separation_impulse_ns: 200000.0
+  booster_dry_fraction: 0.4
+  booster_propellant_fraction: 0.4
+  booster_model: spike_booster
+  upper_model: spike_upper
+  step_order: ab
+assumptions:
+  - "Two-body handoff of the zero-aero spike stage: illustrative vehicle,
+    impulse along shared body +x, no plume/aero interaction at separation."

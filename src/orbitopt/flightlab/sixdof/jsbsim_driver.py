@@ -26,6 +26,12 @@ Conventions
 ``jsbsim`` and ``numpy`` are imported lazily, so importing this module (and
 its constants) works on a base install; constructing :class:`SixDofSim`
 without jsbsim raises :class:`ImportError` with an install hint.
+
+F-03 (task #228) added the mass bookkeeping: every sample carries the total
+propellant load and the instantaneous mass flow alongside the full inertia
+tensor and CG offset, and :meth:`SixDofSim.mass_state` exports them as a
+:class:`~orbitopt.flightlab.sixdof.mass_properties.MassState` to compare
+against a scenario's declared mass model.
 """
 from __future__ import annotations
 
@@ -37,6 +43,7 @@ from pathlib import Path
 from typing import Callable, Mapping
 
 from orbitopt.flightlab.contract import BodyTrack
+from orbitopt.flightlab.sixdof.mass_properties import MassState
 
 # --------------------------------------------------------------------------
 # Units and the spike model's declared parameters (mirrors the XML; the tests
@@ -64,14 +71,41 @@ SPIKE_STAGE = {
 }
 SPIKE_STAGE["thrust_vac_n"] = SPIKE_STAGE["isp_s"] * G0_M_S2 * SPIKE_STAGE["mdot_max_kg_s"]
 
+#: The sample keys carrying the CG offset, in :class:`MassState` order (F-03).
+CG_STATE_KEYS = ("cg_x_m", "cg_y_m", "cg_z_m")
+#: The sample keys carrying the inertia tensor, in
+#: :data:`~orbitopt.flightlab.sixdof.mass_properties.TENSOR_COMPONENTS` order.
+INERTIA_STATE_KEYS = ("ixx_kg_m2", "iyy_kg_m2", "izz_kg_m2",
+                      "ixy_kg_m2", "ixz_kg_m2", "iyz_kg_m2")
+
+
+def mass_state_from_sample(sample: Mapping[str, float]) -> MassState:
+    """A driver sample (from :meth:`SixDofSim.sample`, a
+    :attr:`~orbitopt.flightlab.sixdof.jsbsim_driver.SixDofSim.samples` row or
+    a trajectory CSV row with these columns) as a
+    :class:`~orbitopt.flightlab.sixdof.mass_properties.MassState`."""
+    return MassState(mass_kg=float(sample["mass_kg"]),
+                     cg_m=tuple(float(sample[k]) for k in CG_STATE_KEYS),  # type: ignore[arg-type]
+                     inertia_kg_m2=tuple(float(sample[k]) for k in INERTIA_STATE_KEYS))  # type: ignore[arg-type]
+
+
 #: Extra BodyTrack columns produced by :meth:`SixDofSim.to_body_track`, in order.
+#: The mass-properties block (F-03, task #228) is the bookkeeping the variable
+#: mass / CG / inertia checks are made of: the full symmetric tensor and the
+#: full CG offset about it (JSBSim's products-of-inertia convention is the
+#: negated tensor off-diagonal, so ``inertia/ixy-slugs_ft2`` is read as
+#: ``-ixy``), plus the tank contents and the engine's mass flow whose integral
+#: the checks compare against the mass trace.
 EXTRA_COLUMNS = (
     "q_w", "q_x", "q_y", "q_z",
     "p_rad_s", "q_rad_s", "r_rad_s",
     "gimbal_pitch_cmd_rad", "gimbal_yaw_cmd_rad",
     "gimbal_pitch_actual_rad", "gimbal_yaw_actual_rad",
     "thrust_n", "throttle",
-    "ixx_kg_m2", "iyy_kg_m2", "izz_kg_m2", "cg_x_m",
+    "ixx_kg_m2", "iyy_kg_m2", "izz_kg_m2",
+    "ixy_kg_m2", "ixz_kg_m2", "iyz_kg_m2",
+    "cg_x_m", "cg_y_m", "cg_z_m",
+    "propellant_kg", "flow_kg_s",
     "altitude_m", "pitch_moment_n_m", "yaw_moment_n_m",
 )
 
@@ -150,6 +184,7 @@ class SixDofSim:
         if not self.fdm.load_model(model):
             raise RuntimeError(f"JSBSim failed to load model {model!r} from {root or data_root()}")
         self._samples: list[dict[str, float]] = []
+        self._n_tanks: int | None = None
 
     # -- properties -------------------------------------------------------
     def __getitem__(self, prop: str) -> float:
@@ -195,6 +230,39 @@ class SixDofSim:
         f = self.fdm
         return (float(f["propulsion/tank[0]/contents-lbs"]) * LB_KG,
                 float(f["propulsion/tank[1]/contents-lbs"]) * LB_KG)
+
+    def propellant_mass_kg(self) -> float:
+        """Total tank contents in kg, summed over every tank the model
+        declares (the tank count is probed once, after ``run_ic``)."""
+        if self._n_tanks is None:
+            n = 0
+            while True:
+                try:
+                    self.fdm[f"propulsion/tank[{n}]/contents-lbs"]
+                except KeyError:
+                    break
+                n += 1
+            self._n_tanks = n
+        return sum(float(self.fdm[f"propulsion/tank[{i}]/contents-lbs"]) * LB_KG
+                   for i in range(self._n_tanks))
+
+    def mass_flow_kg_s(self) -> float:
+        """Propellant mass actually flowing, in kg/s. JSBSim's
+        ``propulsion/engine/{fuel,oxi}-flow-rate-pps`` is what the engines
+        *request*, summed over engines, and keeps reporting full flow after
+        the tanks run dry while the mass trace flat-lines -- so the reading
+        is gated by the tank contents, which makes its integral the mass the
+        vehicle really lost (F-03)."""
+        if self.propellant_mass_kg() <= 0.0:
+            return 0.0
+        return (float(self.fdm["propulsion/engine/fuel-flow-rate-pps"])
+                + float(self.fdm["propulsion/engine/oxi-flow-rate-pps"])) * LB_KG
+
+    def mass_state(self) -> MassState:
+        """The instance's current mass properties as a
+        :class:`~orbitopt.flightlab.sixdof.mass_properties.MassState`
+        (F-03): mass, CG and full tensor in the structural frame."""
+        return mass_state_from_sample(self.sample())
 
     def ignite(self, throttle: float = 1.0) -> None:
         self.fdm["propulsion/engine[0]/set-running"] = 1
@@ -258,8 +326,17 @@ class SixDofSim:
             "ixx_kg_m2": g("inertia/ixx-slugs_ft2") * SLUGFT2_KGM2,
             "iyy_kg_m2": g("inertia/iyy-slugs_ft2") * SLUGFT2_KGM2,
             "izz_kg_m2": g("inertia/izz-slugs_ft2") * SLUGFT2_KGM2,
+            # JSBSim's products of inertia are the negated tensor off-diagonals.
+            "ixy_kg_m2": -g("inertia/ixy-slugs_ft2") * SLUGFT2_KGM2,
+            "ixz_kg_m2": -g("inertia/ixz-slugs_ft2") * SLUGFT2_KGM2,
+            "iyz_kg_m2": -g("inertia/iyz-slugs_ft2") * SLUGFT2_KGM2,
             # structural frame: x aft from the nose
             "cg_x_m": g("inertia/cg-x-in") * FT_M / 12.0,
+            "cg_y_m": g("inertia/cg-y-in") * FT_M / 12.0,
+            "cg_z_m": g("inertia/cg-z-in") * FT_M / 12.0,
+            # F-03 mass bookkeeping: what is left to burn, and what is flowing
+            "propellant_kg": self.propellant_mass_kg(),
+            "flow_kg_s": self.mass_flow_kg_s(),
             "altitude_m": g("position/h-sl-ft") * FT_M,
             "pitch_moment_n_m": g("moments/m-prop-lbsft") * LBF_N * FT_M,
             "yaw_moment_n_m": g("moments/n-prop-lbsft") * LBF_N * FT_M,
