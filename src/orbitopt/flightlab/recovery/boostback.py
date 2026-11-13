@@ -22,7 +22,22 @@ corridor residual at the first descending crossing of ``corridor.h0_m`` after
 the entry-burn ignition -- horizontal miss against ``radius_m``, velocity
 tilt against ``max_tilt_deg``, speed against ``v_max_m_s`` -- plus propellant
 at the corridor against the landing-burn need plus the vehicle reserve, and
-the entry-phase dynamic-pressure / proper-g limits as penalties. Every
+the entry-phase dynamic-pressure / proper-g limits as penalties.
+
+R-01 (epic #217) makes that objective *landing-aware*, co-designing the
+handoff with the landing burn instead of only with the corridor: the same
+corridor miss is additionally soft-constrained against the landing-divert
+budget :data:`DEFAULT_LANDING_DIVERT_BUDGET_M` -- the divert the
+FL-303/FL-305 landing burn can close with authority in hand, far tighter than
+the 8 km corridor radius a miss is graded against (ADR flightlab-0002: the
+corridor term "barely sees" a 1.76 km miss the landing burn cannot) -- and
+the corridor propellant is asked to cover the landing-burn need + vehicle
+reserve + a minimum fuel margin :data:`DEFAULT_LANDING_RESERVE_MARGIN_KG`
+(FL-305-baseline Monte Carlo: 13 of 18 failures were reserve shortfalls the
+zero-margin objective was indifferent to). Both terms are objective terms,
+not feasibility verdicts: the frozen reason-code set and check order are
+unchanged, and the exact FL-305 objective is reproducible with
+``landing_divert_budget_m=None`` / ``landing_reserve_margin_kg=0.0``. Every
 trajectory the optimizer ever sees is one ``propagate()`` call; nothing is
 estimated with a kinematic shortcut, and the accepted plan is re-integrated
 at the final (finer) step before it is reported.
@@ -89,6 +104,8 @@ __all__ = [
     "DEFAULT_CORRIDOR",
     "DEFAULT_ENTRY_G_MAX",
     "DEFAULT_ENTRY_Q_MAX_PA",
+    "DEFAULT_LANDING_DIVERT_BUDGET_M",
+    "DEFAULT_LANDING_RESERVE_MARGIN_KG",
     "ENTRY_BURN_LEAD_RAD",
     "ENTRY_G_LIMIT_EXCEEDED",
     "ENTRY_Q_LIMIT_EXCEEDED",
@@ -132,6 +149,26 @@ DEFAULT_ENTRY_Q_MAX_PA = 150_000.0
 
 #: Entry-phase proper-load limit [g] -- DESIGN ASSUMPTION (illustrative).
 DEFAULT_ENTRY_G_MAX = 8.0
+
+#: R-01 landing-divert budget [m]: the horizontal offset at the corridor the
+#: FL-303/FL-305 landing burn can close with throttle authority in hand --
+#: the corridor miss enters the objective against this budget, not only
+#: against the (far larger) corridor radius. DESIGN ASSUMPTION anchored on
+#: ADR flightlab-0002 measurements: the accepted FL-305 handoff is 0.35 km
+#: out (lands inside every limit), FL-304's 1.76 km overshoot missed the pad.
+#: ``float("inf")`` (``None`` at the planner API) reproduces the FL-305
+#: objective, which graded the miss against the corridor radius only.
+DEFAULT_LANDING_DIVERT_BUDGET_M = 1000.0
+
+#: R-01 minimum fuel reserve margin [kg] the objective keeps at the corridor
+#: on top of the landing-burn need + vehicle reserve: propellant to absorb
+#: the plan/reality mismatch (dispersions, divert spending) the momentum-
+#: balance landing need does not see. DESIGN ASSUMPTION sized to the FL-305
+#: baseline failure population (13 of 18 non-landed samples lost the margin,
+#: not the corridor) and to the dispersion bands (5 % thrust / 3 % Isp on a
+#: ~15 t recovery burn). ``0.0`` reproduces the FL-305 objective, which
+#: penalized only the violation of need + reserve.
+DEFAULT_LANDING_RESERVE_MARGIN_KG = 1000.0
 
 
 # --------------------------------------------------------------------------
@@ -269,7 +306,11 @@ class LandingBurnEnu:
 class CorridorReport:
     """Measured corridor state at the insertion crossing (the numbers the
     feasibility check actually compared; ``reached=False`` = never crossed
-    h0 after entry ignition, residual fields None where not measured)."""
+    h0 after entry ignition, residual fields None where not measured). The
+    R-01 ``landing_divert_budget_m`` / ``min_landing_reserve_margin_kg``
+    fields carry what the *objective* asked for (None when the R-01 term is
+    disabled), so a consumer can check the accepted plan against the same
+    landing-reachability and fuel-margin bar the optimizer steered to."""
 
     reached: bool
     t_s: float | None = None
@@ -281,6 +322,8 @@ class CorridorReport:
     reserve_kg: float | None = None
     entry_max_q_pa: float | None = None
     entry_max_proper_g: float | None = None
+    landing_divert_budget_m: float | None = None
+    min_landing_reserve_margin_kg: float | None = None
 
 
 @dataclass(frozen=True)
@@ -508,10 +551,16 @@ def _entry_window_loads(track: BoosterTrack, vehicle: BoosterModel,
 def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
               target: RecoveryTarget, corridor: RecoveryCorridor,
               q_lim: float, g_lim: float, reserve: float, horizon_s: float,
-              dt: float, bb_window: tuple[float, float]) -> _Rollout:
+              dt: float, bb_window: tuple[float, float],
+              divert_budget: float = float("inf"),
+              reserve_margin: float = 0.0) -> _Rollout:
     """One full-physics flight through the FL-301 propagator plus the
     corridor residual. Penalty is a sum of dimensionless squared violations:
-    0.0 iff every corridor/entry/propellant criterion passes in-flight."""
+    the corridor/entry/propellant violations in-flight, plus the R-01 soft
+    constraints -- corridor miss against ``divert_budget`` and corridor
+    propellant against landing need + reserve + ``reserve_margin``. The
+    defaults (infinite budget, zero margin) reproduce the FL-305 objective
+    bit-for-bit."""
     out = _Rollout()
     h0_name = "fl302_corridor_h0"
     try:
@@ -569,9 +618,16 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
         pen += 10.0
     if out.crossed:
         pen += (out.miss_m / corridor.radius_m) ** 2
+        # R-01 landing feasibility: the same miss against the divert the
+        # landing burn can actually close, not only against the corridor
+        # radius (a 1.76 km miss costs ~0.05 against 8 km and ~3.1 here).
+        pen += (out.miss_m / divert_budget) ** 2
         pen += (max(0.0, out.tilt_deg - corridor.max_tilt_deg) / 10.0) ** 2
         pen += (max(0.0, out.speed_m_s - corridor.v_max_m_s) / 50.0) ** 2
-        short = out.landing_need_kg + reserve - out.prop_kg
+        # R-01 fuel reserve: landing need + vehicle reserve + margin, so the
+        # plan keeps headroom for the dispersions the momentum-balance need
+        # cannot see (margin 0 = the FL-305 violation-only term).
+        short = out.landing_need_kg + reserve + reserve_margin - out.prop_kg
         pen += (max(0.0, short) / 1000.0) ** 2
         pen += (max(0.0, out.entry_q_pa - q_lim) / 50_000.0) ** 2
         pen += (max(0.0, out.entry_g - g_lim) / 2.0) ** 2
@@ -599,13 +655,17 @@ def _propellant_floor_kg(sep_mass: float, horiz_speed: float, isp_vac_s: float) 
 
 
 def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
-                        recovery_target: RecoveryTarget, *,
-                        entry_q_max_pa: float = DEFAULT_ENTRY_Q_MAX_PA,
-                        entry_g_max: float = DEFAULT_ENTRY_G_MAX,
-                        horizon_s: float = 900.0,
-                        dt_opt: float = 2.0, dt_final: float = 0.5,
-                        max_fevals: int = 120,
-                        initial_guess: Sequence[float] | None = None) -> ReturnPlan:
+                         recovery_target: RecoveryTarget, *,
+                         entry_q_max_pa: float = DEFAULT_ENTRY_Q_MAX_PA,
+                         entry_g_max: float = DEFAULT_ENTRY_G_MAX,
+                         horizon_s: float = 900.0,
+                         dt_opt: float = 2.0, dt_final: float = 0.5,
+                         max_fevals: int = 120,
+                         initial_guess: Sequence[float] | None = None,
+                         landing_divert_budget_m: float | None =
+                             DEFAULT_LANDING_DIVERT_BUDGET_M,
+                         landing_reserve_margin_kg: float =
+                             DEFAULT_LANDING_RESERVE_MARGIN_KG) -> ReturnPlan:
     """Optimize the boostback/entry-burn script so the FL-301-propagated
     booster reaches ``recovery_target.corridor``; returns the corridor
     insertion state, its pad-ENU mirror, and the flown track.
@@ -613,7 +673,12 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     ``sep_state`` is the FL-301 separation state (any contract frame),
     ``booster`` the recovery vehicle model, ``recovery_target`` an rtls or
     downrange landing site. The entry-phase q/g limits default to the module
-    DESIGN ASSUMPTIONs. All trajectories are flown by
+    DESIGN ASSUMPTIONs. R-01's landing-aware objective terms (module
+    docstring) default to :data:`DEFAULT_LANDING_DIVERT_BUDGET_M` and
+    :data:`DEFAULT_LANDING_RESERVE_MARGIN_KG`; ``landing_divert_budget_m=
+    None`` and ``landing_reserve_margin_kg=0.0`` turn them off and reproduce
+    the FL-305 objective exactly (the fair-baseline switch used by the
+    before/after benchmarks). All trajectories are flown by
     ``orbitopt.flightlab.recovery.propagator.propagate`` -- the optimizer
     only ever sees full-physics rollouts, and the accepted solution is
     re-integrated at ``dt_final`` before it is reported (no kinematic
@@ -629,6 +694,15 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     if eng.restarts_max < 2:
         raise RecoveryError(
             f"boostback + entry burns need 2 ignitions, vehicle allows {eng.restarts_max}")
+    if landing_divert_budget_m is not None and not landing_divert_budget_m > 0.0:
+        raise ValueError(f"landing_divert_budget_m must be positive or None, "
+                         f"got {landing_divert_budget_m}")
+    if not landing_reserve_margin_kg >= 0.0:
+        raise ValueError(f"landing_reserve_margin_kg must be >= 0, "
+                         f"got {landing_reserve_margin_kg}")
+    divert_budget = float("inf") if landing_divert_budget_m is None \
+        else float(landing_divert_budget_m)
+    reserve_margin = float(landing_reserve_margin_kg)
     dry = float(booster.dry_mass_kg)
     sep_mass = float(sep_state.mass_kg)
     reserve = float(booster.landing_propellant_reserve_kg)
@@ -668,7 +742,8 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
         x = clamp(x)
         window = (sep_state.t_s + float(x[0]), sep_state.t_s + float(x[0]) + float(x[1]))
         return _evaluate(sep_state, to_mission(x), booster, recovery_target, corridor,
-                         entry_q_max_pa, entry_g_max, reserve, horizon_s, dt, window)
+                         entry_q_max_pa, entry_g_max, reserve, horizon_s, dt, window,
+                         divert_budget=divert_budget, reserve_margin=reserve_margin)
 
     # --- analytic floor check (see _propellant_floor_kg)
     sep_prop = sep_mass - dry
@@ -722,17 +797,21 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                          assumption=(f"separation propellant {sep_prop:.0f} kg is below the "
                                      f"{prop_floor:.0f} kg analytic floor to null the "
                                      f"{horiz_speed:.0f} m/s horizontal separation velocity"),
-                         q_lim=entry_q_max_pa, g_lim=entry_g_max, reserve=reserve)
+                         q_lim=entry_q_max_pa, g_lim=entry_g_max, reserve=reserve,
+                         divert_budget=divert_budget, reserve_margin=reserve_margin)
 
     final = rollout(best_x, dt_final)
     return _assemble(final, best_x, sep_state, booster, recovery_target, corridor,
-                     None, q_lim=entry_q_max_pa, g_lim=entry_g_max, reserve=reserve)
+                     None, q_lim=entry_q_max_pa, g_lim=entry_g_max, reserve=reserve,
+                     divert_budget=divert_budget, reserve_margin=reserve_margin)
 
 
 def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
               booster: BoosterModel, target: RecoveryTarget, corridor: RecoveryCorridor,
               forced: tuple[str, ...] | None, *, q_lim: float, g_lim: float,
-              reserve: float, assumption: str | None = None) -> ReturnPlan:
+              reserve: float, assumption: str | None = None,
+              divert_budget: float = float("inf"),
+              reserve_margin: float = 0.0) -> ReturnPlan:
     """Turn the final re-integrated rollout into the ReturnPlan: feasibility
     checks in physical order (first violation governs), corridor report,
     insertion state + ENU mirror."""
@@ -770,6 +849,8 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
         reserve_kg=reserve,
         entry_max_q_pa=final.entry_q_pa if final.entry_q_pa > 0.0 or final.crossed else None,
         entry_max_proper_g=final.entry_g if final.entry_q_pa > 0.0 or final.crossed else None,
+        landing_divert_budget_m=None if math.isinf(divert_budget) else divert_budget,
+        min_landing_reserve_margin_kg=reserve_margin if reserve_margin > 0.0 else None,
     )
 
     state: BoosterState | None = None
@@ -795,6 +876,12 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
         assumptions.append(assumption)
     assumptions.append(f"entry q limit {q_lim:.0f} Pa, entry g limit {g_lim:.1f} g over the "
                        "post-boostback descent window (DESIGN ASSUMPTIONs unless overridden)")
+    if not math.isinf(divert_budget) or reserve_margin > 0.0:
+        assumptions.append(
+            f"R-01 landing-aware objective: corridor miss soft-constrained against a "
+            f"{divert_budget:.0f} m landing-divert budget, corridor propellant against "
+            f"landing need + reserve + {reserve_margin:.0f} kg fuel margin "
+            "(DESIGN ASSUMPTIONs unless overridden)")
 
     return ReturnPlan(
         feasible=not reasons, reason_codes=tuple(reasons),

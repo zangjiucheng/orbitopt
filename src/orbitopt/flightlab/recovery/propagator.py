@@ -12,7 +12,9 @@ RK4 step and per-step event bisection:
   one reason the propagator lives in ECEF);
 * rotation: the Coriolis (``-2 Ω×v``) and centrifugal (``-Ω×(Ω×r)``)
   accelerations appear explicitly, and the atmosphere co-rotates, so the
-  air-relative velocity is the ECEF velocity itself (no wind yet);
+  air-relative velocity is the ECEF velocity itself plus any steady wind
+  (``BoosterPhysics.wind_*``: one constant ENU vector -- R-04's wind
+  dispersion, no shear or turbulence);
 * atmosphere: the density profile of :mod:`orbitopt.entry` (Vallado Table
   8-4, US Standard Atmosphere 1976 below ~1000 km), height above the WGS-84
   ellipsoid via ``entry.height_m``. Pressure and temperature -- which
@@ -57,7 +59,8 @@ Time follows the mission clock: ``state0.t_s`` seconds after ``epoch_utc``
 (the FlightLab t=0, usually liftoff), so a recovery track continues its
 ascent run's ``t_s`` column instead of starting a new clock.
 
-Only the state (r, v, m) is modelled: no attitude, no heating, no winds.
+Only the state (r, v, m) is modelled: no attitude, no heating; wind (R-04)
+is a single steady ENU vector constant along the track, not a wind field.
 This answers "where/when does it land, how hard does it decelerate, does the
 propellant bookkeeping close" -- it is not a loads or TPS tool.
 """
@@ -189,11 +192,26 @@ class BoosterPhysics:
     #: atmospheric-dispersion knob: 1.0 = nominal atmosphere, 1.1 = 10 %
     #: thicker). Applies to both density tables; 0 would disable aero.
     density_scale: float = 1.0
+    #: R-04 wind dispersion: one steady wind vector in the local ENU frame
+    #: (east / north / up, m/s), constant along the whole track -- the air
+    #: moves with it, so aero sees ``v_air - wind`` (the co-rotating
+    #: atmosphere is the zero baseline). All-zero (the default) is exact
+    #: identity: no wind, no behaviour or record change at all.
+    wind_east_m_s: float = 0.0
+    wind_north_m_s: float = 0.0
+    wind_up_m_s: float = 0.0
 
     def __post_init__(self) -> None:
         if self.density_scale <= 0.0:
             raise ValueError(
                 f"density_scale must be positive, got {self.density_scale}")
+        for name in ("wind_east_m_s", "wind_north_m_s", "wind_up_m_s"):
+            if not math.isfinite(float(getattr(self, name))):
+                raise ValueError(f"{name} must be finite, got {getattr(self, name)!r}")
+
+    @property
+    def has_wind(self) -> bool:
+        return bool(self.wind_east_m_s or self.wind_north_m_s or self.wind_up_m_s)
 
 
 @dataclass(frozen=True)
@@ -570,11 +588,41 @@ def _gravity_ecef(r: np.ndarray, gravity: str) -> np.ndarray:
     ])
 
 
+_WGS84_E2 = frames.WGS84_F * (2.0 - frames.WGS84_F)
+
+
+def _wind_ecef(r: np.ndarray, physics: BoosterPhysics) -> np.ndarray:
+    """The steady ENU wind of ``physics`` in ECEF components at ``r`` (the
+    wind keeps its ENU direction as the vehicle moves -- a constant wind
+    follows the ground track, which is what a dispersion wind means). The
+    geodetic latitude/longitude come from Bowring's closed form (scalar,
+    sub-microsecond; the same one FL-302's guidance uses)."""
+    x, y, z = (float(c) for c in r)
+    lon = math.atan2(y, x)
+    p = math.hypot(x, y)
+    if p < 1e-9:
+        lat = math.copysign(math.pi / 2.0, z)
+    else:
+        th = math.atan2(z, p * (1.0 - frames.WGS84_F))
+        st, ct = math.sin(th), math.cos(th)
+        lat = math.atan2(
+            z + (frames.WGS84_A * _WGS84_E2 / (1.0 - frames.WGS84_F)) * st ** 3,
+            p - frames.WGS84_A * _WGS84_E2 * ct ** 3)
+    sa, ca, so, co = (math.sin(lat), math.cos(lat), math.sin(lon), math.cos(lon))
+    east = np.array((-so, co, 0.0))
+    north = np.array((-sa * co, -sa * so, ca))
+    up = np.array((ca * co, ca * so, sa))
+    return (physics.wind_east_m_s * east + physics.wind_north_m_s * north
+            + physics.wind_up_m_s * up)
+
+
 def _aero_ecef(r: np.ndarray, v: np.ndarray, vehicle: BoosterModel,
                physics: BoosterPhysics) -> tuple[np.ndarray, float, float, float]:
     """(drag force vector [N], air-relative speed, Mach, dynamic pressure).
     The force is mass-independent; the equation of motion divides by the
-    flown mass at the use site."""
+    flown mass at the use site. With ``physics.wind_*`` set the air-relative
+    velocity subtracts the wind (R-04); the zero default leaves every number
+    bit-for-bit what it was."""
     if not physics.atmosphere:
         return np.zeros(3), 0.0, 0.0, 0.0
     h = height_m(r)
@@ -583,6 +631,8 @@ def _aero_ecef(r: np.ndarray, v: np.ndarray, vehicle: BoosterModel,
     if rho < 1e-14:
         return np.zeros(3), 0.0, 0.0, 0.0
     v_air = v if physics.rotation else v - np.cross(_OMEGA_ECEF, r)
+    if physics.has_wind:
+        v_air = v_air - _wind_ecef(r, physics)
     speed = float(np.linalg.norm(v_air))
     if speed < 1e-6:
         return np.zeros(3), 0.0, 0.0, 0.0

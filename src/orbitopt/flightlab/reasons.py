@@ -360,6 +360,21 @@ _ENTRIES: tuple[ReasonEntry, ...] = (
        "助推级到达再入界面时偏离通往着陆场的再入走廊。",
        "Re-plan boostback (more burn time / better heading) or move the landing target.",
        "重新规划回飞（更长点火时间/修正航向），或调整着陆目标。"),
+    _e("HANDOFF_STATE_DISCONTINUITY", "recovery",
+       "Handoff state discontinuity", "交接状态不连续",
+       "A recovery segment restarted from a state that is not the one the previous "
+       "segment handed over: position, velocity or mass jump across the phase boundary.",
+       "某回收段重启时的状态与上一段交接的状态不一致：相位边界处位置、速度或质量出现跳变。",
+       "Check the segment boundary against the HandoffState digest; the producer or "
+       "the consumer re-derived the initial state instead of using the handed-over one.",
+       "对照交接摘要检查段边界：生产者或消费者擅自重新推导了初始状态，而非使用交接状态。"),
+    _e("HANDOFF_MASS_NOT_CONSERVED", "recovery",
+       "Mass not conserved across handoffs", "交接过程质量不守恒",
+       "Mass bookkeeping broke in the recovery chain: mass rose on a flown track, "
+       "changed during the ballistic coast between burns, or the chain ended below dry mass.",
+       "回收链质量记账出错：飞行轨迹上质量上升、两次点火间滑行段质量变化，或链条终点低于干重。",
+       "Inspect the mass column and the propellant flow of the phase the failing check names.",
+       "检查失败检查所属相位的质量列与推进剂流量。"),
     _e("CORRIDOR_NOT_REACHED", "recovery",
        "Entry corridor not reached", "未到达再入走廊",
        "The booster's trajectory never reached the entry corridor altitude window.",

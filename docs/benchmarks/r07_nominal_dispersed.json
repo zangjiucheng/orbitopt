@@ -1,0 +1,371 @@
+{
+  "ascent": "tests/test_flightlab_simulate_recovery.py::_ascent_with_textbook_separation",
+  "baseline_evidence": "docs/benchmarks/fl305_recovery_montecarlo.json (same seed/n convention)",
+  "dispersions": {
+    "cd_pct": 8.0,
+    "density_pct": 10.0,
+    "isp_pct": 3.0,
+    "sep_altitude_m": 400.0,
+    "sep_crossrange_m": 800.0,
+    "sep_downrange_m": 800.0,
+    "sep_heading_deg": 0.15,
+    "sep_speed_m_s": 4.0,
+    "thrust_pct": 5.0
+  },
+  "fairness": "same ascent, seed, dispersions, FL-302 warm start and referee; the guidance/objective differs by exactly what epic #217 changed (baseline pins the R-01 objective terms off as the FL-305 evidence did)",
+  "kind": "r07-nominal-dispersed-vs-fl305-baseline",
+  "n": 32,
+  "runs": {
+    "baseline_fl305": {
+      "ellipse": {
+        "bearing_deg": 161.28295524993564,
+        "mean_east_m": 0.2871867632304302,
+        "mean_north_m": 0.1488161976712103,
+        "n": 14,
+        "sigma_along_m": 1.337128034056745,
+        "sigma_cross_m": 0.3488828430840937,
+        "state": "assessed"
+      },
+      "envelope": {
+        "max_range_m": 15554.470422339167,
+        "max_touchdown_radius_m": 338.0908221255704,
+        "n_captured": 32
+      },
+      "failure_classes": {
+        "classes": {
+          "execution_failure": 0,
+          "fuel_insufficient": 13,
+          "landing_accuracy": 4,
+          "planning_infeasible": 1,
+          "unclassified": 0
+        },
+        "codes_by_class": {
+          "fuel_insufficient": {
+            "INSUFFICIENT_PROPELLANT_RESERVE": 8,
+            "LANDING_PROPELLANT_RESERVE_LOW": 5
+          },
+          "landing_accuracy": {
+            "LANDING_POSITION_OUT_OF_TOLERANCE": 4
+          },
+          "planning_infeasible": {
+            "CORRIDOR_MISSED": 1
+          }
+        },
+        "n_failures": 18,
+        "n_samples": 32
+      },
+      "landed_stats": {
+        "control_margin": {
+          "burn_time_s": {
+            "max": 21.9,
+            "mean": 20.771428571428572,
+            "min": 17.3,
+            "n": 14
+          },
+          "n": 14,
+          "saturated_high_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 14
+          },
+          "saturated_low_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 14
+          },
+          "slew_deg_s_max": {
+            "max": 167.5844,
+            "mean": 54.905228571428566,
+            "min": 28.7751,
+            "n": 14
+          },
+          "throttle_floor_room_min": {
+            "max": 0.242303,
+            "mean": 0.16744864285714287,
+            "min": 0.018595,
+            "n": 14
+          },
+          "throttle_headroom_at_ignition": {
+            "max": 0.197187,
+            "mean": 0.14099757142857142,
+            "min": 0.073423,
+            "n": 14
+          },
+          "throttle_headroom_min": {
+            "max": 0.197187,
+            "mean": 0.14099757142857142,
+            "min": 0.073423,
+            "n": 14
+          },
+          "tilt_margin_deg_min": {
+            "max": 18.3098,
+            "mean": 4.118907142857142,
+            "min": -0.0,
+            "n": 14
+          },
+          "tvc_rate_limit_deg_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 14
+          }
+        },
+        "lateral_speed_m_s": {
+          "n": 14,
+          "p50": 0.06754324413001608,
+          "p95": 0.18956486389131183
+        },
+        "position_error_m": {
+          "n": 14,
+          "p50": 0.8646910590578619,
+          "p95": 2.18204571512692
+        },
+        "vertical_speed_m_s": {
+          "n": 14,
+          "p50": -1.5003003739379515,
+          "p95": -1.5000920388501282
+        }
+      },
+      "nominal": {
+        "landing": {
+          "actuator_margin": {
+            "burn_time_s": 18.5,
+            "saturated_high_s": 0,
+            "saturated_low_s": 0,
+            "slew_deg_s_max": 193.1436,
+            "throttle_floor_room_min": 0.241747,
+            "throttle_headroom_at_ignition": 0.131086,
+            "throttle_headroom_min": 0.131086,
+            "tilt_margin_deg_min": 10.6856,
+            "tvc_rate_limit_deg_s": 0.0
+          },
+          "feasible": true,
+          "ignitions_used": 1,
+          "landed": true,
+          "lateral_speed_m_s": 0.0426696613891352,
+          "max_proper_g": 3.5189145423251444,
+          "max_tilt_deg": 19.314362310614165,
+          "position_error_m": 0.552298530522226,
+          "reason_codes": [],
+          "touchdown_enu_m": [
+            0.5512737499305791,
+            -0.03362914590658739,
+            -2.847987305007067e-07
+          ],
+          "vertical_speed_m_s": -1.608746295156212
+        },
+        "reason_codes": [],
+        "recovered": true
+      },
+      "plan_options": {
+        "initial_guess": [
+          18.4,
+          17.75,
+          1.0,
+          4.36,
+          0.0,
+          17456.0,
+          23.0
+        ],
+        "landing_divert_budget_m": null,
+        "landing_reserve_margin_kg": 0.0,
+        "max_fevals": 30
+      },
+      "reason_histogram": {
+        "CORRIDOR_MISSED": 1,
+        "INSUFFICIENT_PROPELLANT_RESERVE": 8,
+        "LANDED": 14,
+        "LANDING_POSITION_OUT_OF_TOLERANCE": 4,
+        "LANDING_PROPELLANT_RESERVE_LOW": 5
+      },
+      "success_rate": 0.4375,
+      "success_rate_ci": {
+        "confidence_level": 0.95,
+        "lower": 0.2816533111504037,
+        "method": "wilson_score",
+        "n": 32,
+        "point": 0.4375,
+        "standard_error": 0.08769509500251425,
+        "successes": 14,
+        "upper": 0.6067440886314801
+      }
+    },
+    "r07_stack": {
+      "ellipse": {
+        "bearing_deg": 160.69870707689188,
+        "mean_east_m": 0.20800961084393008,
+        "mean_north_m": 0.2093163070764401,
+        "n": 17,
+        "sigma_along_m": 1.2206874619095887,
+        "sigma_cross_m": 0.40036912251119566,
+        "state": "assessed"
+      },
+      "envelope": {
+        "max_range_m": 15554.470422339167,
+        "max_touchdown_radius_m": 832.939138605398,
+        "n_captured": 32
+      },
+      "failure_classes": {
+        "classes": {
+          "execution_failure": 0,
+          "fuel_insufficient": 7,
+          "landing_accuracy": 7,
+          "planning_infeasible": 1,
+          "unclassified": 0
+        },
+        "codes_by_class": {
+          "fuel_insufficient": {
+            "INSUFFICIENT_PROPELLANT_RESERVE": 2,
+            "LANDING_PROPELLANT_RESERVE_LOW": 5
+          },
+          "landing_accuracy": {
+            "LANDING_POSITION_OUT_OF_TOLERANCE": 7
+          },
+          "planning_infeasible": {
+            "CORRIDOR_MISSED": 1
+          }
+        },
+        "n_failures": 15,
+        "n_samples": 32
+      },
+      "landed_stats": {
+        "control_margin": {
+          "burn_time_s": {
+            "max": 21.9,
+            "mean": 20.970588235294116,
+            "min": 17.8,
+            "n": 17
+          },
+          "n": 17,
+          "saturated_high_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 17
+          },
+          "saturated_low_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 17
+          },
+          "slew_deg_s_max": {
+            "max": 215.6429,
+            "mean": 56.43132352941176,
+            "min": 24.0966,
+            "n": 17
+          },
+          "throttle_floor_room_min": {
+            "max": 0.242303,
+            "mean": 0.1708194117647059,
+            "min": 0.018595,
+            "n": 17
+          },
+          "throttle_headroom_at_ignition": {
+            "max": 0.231794,
+            "mean": 0.14380217647058824,
+            "min": 0.073423,
+            "n": 17
+          },
+          "throttle_headroom_min": {
+            "max": 0.231794,
+            "mean": 0.14380217647058824,
+            "min": 0.073423,
+            "n": 17
+          },
+          "tilt_margin_deg_min": {
+            "max": 13.2416,
+            "mean": 3.851405882352941,
+            "min": -0.0,
+            "n": 17
+          },
+          "tvc_rate_limit_deg_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 17
+          }
+        },
+        "lateral_speed_m_s": {
+          "n": 17,
+          "p50": 0.05934238501161065,
+          "p95": 0.14518331599460751
+        },
+        "position_error_m": {
+          "n": 17,
+          "p50": 0.7541413066275526,
+          "p95": 1.719155077200365
+        },
+        "vertical_speed_m_s": {
+          "n": 17,
+          "p50": -1.500307241748819,
+          "p95": -1.500120843927398
+        }
+      },
+      "nominal": {
+        "landing": {
+          "actuator_margin": {
+            "burn_time_s": 18.5,
+            "saturated_high_s": 0,
+            "saturated_low_s": 0,
+            "slew_deg_s_max": 193.1436,
+            "throttle_floor_room_min": 0.241747,
+            "throttle_headroom_at_ignition": 0.131086,
+            "throttle_headroom_min": 0.131086,
+            "tilt_margin_deg_min": 10.6856,
+            "tvc_rate_limit_deg_s": 0.0
+          },
+          "feasible": true,
+          "ignitions_used": 1,
+          "landed": true,
+          "lateral_speed_m_s": 0.0426696613891352,
+          "max_proper_g": 3.5189145423251444,
+          "max_tilt_deg": 19.314362310614165,
+          "position_error_m": 0.552298530522226,
+          "reason_codes": [],
+          "touchdown_enu_m": [
+            0.5512737499305791,
+            -0.03362914590658739,
+            -2.847987305007067e-07
+          ],
+          "vertical_speed_m_s": -1.608746295156212
+        },
+        "reason_codes": [],
+        "recovered": true
+      },
+      "plan_options": {
+        "initial_guess": [
+          18.4,
+          17.75,
+          1.0,
+          4.36,
+          0.0,
+          17456.0,
+          23.0
+        ],
+        "max_fevals": 30
+      },
+      "reason_histogram": {
+        "CORRIDOR_MISSED": 1,
+        "INSUFFICIENT_PROPELLANT_RESERVE": 2,
+        "LANDED": 17,
+        "LANDING_POSITION_OUT_OF_TOLERANCE": 7,
+        "LANDING_PROPELLANT_RESERVE_LOW": 5
+      },
+      "success_rate": 0.53125,
+      "success_rate_ci": {
+        "confidence_level": 0.95,
+        "lower": 0.36449517118974645,
+        "method": "wilson_score",
+        "n": 32,
+        "point": 0.53125,
+        "standard_error": 0.08821554523934542,
+        "successes": 17,
+        "upper": 0.6913061289193116
+      }
+    }
+  },
+  "seed": 1
+}

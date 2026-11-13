@@ -15,6 +15,12 @@ touchdown checks (the guidance never grades itself):
   plan hits at ~-85 m/s;
 * FL-303's own G3 exhibit (flat-feasible, drag-failing) lands closed-loop;
 * an infeasible corridor state stays LANDING_INFEASIBLE, never green.
+
+R-05 (epic #217) adds the actuator-aware overlay: the pure-law TVC slew
+limit (clipped vs unconstrained commands, rate-bounded step tracking) and,
+flown, the :class:`ActuatorMargin` report on the closed-loop result --
+constraints held as commanded, metrics in the assumption line and the
+touchdown event data, FL-305 baseline measured alongside.
 """
 from __future__ import annotations
 
@@ -30,6 +36,7 @@ from orbitopt.flightlab.frames import geodetic_to_ecef
 from orbitopt.flightlab.recovery import (
     LANDING_INFEASIBLE,
     TERMINAL_GUIDANCE_DEFAULT,
+    TERMINAL_GUIDANCE_R05,
     TOUCHDOWN_CHECK_IDS,
     BoosterModel,
     BoosterState,
@@ -38,6 +45,7 @@ from orbitopt.flightlab.recovery import (
     TerminalGuidance,
     fly_landing_burn,
     fly_landing_burn_closed_loop,
+    landing_events,
     terminal_guidance_command,
 )
 from orbitopt.flightlab.recovery.boostback import _enu_basis
@@ -97,6 +105,7 @@ def _tilt_deg(cmd) -> float:
     {"design_throttle": 0.0}, {"design_throttle": 1.2},
     {"touchdown_speed_m_s": 0.0}, {"tilt_limit_deg": 90.0},
     {"max_thrust_accel_g": 1.0}, {"settle_s": -1.0}, {"cutoff_speed_m_s": 0.0},
+    {"tvc_rate_limit_deg_s": -1.0},
 ])
 def test_guidance_policy_rejects_nonsense(kwargs):
     with pytest.raises(ValueError):
@@ -170,6 +179,57 @@ def test_lateral_drift_is_damped_in_the_settle_window():
 
 
 # ---------------------------------------------------------------------------
+# R-05 (epic #217): TVC slew limit as a pure-law actuator constraint
+# ---------------------------------------------------------------------------
+
+OFF_PAD = ((1500.0, -400.0, 900.0), (40.0, -10.0, -150.0))  # divert rides the cone
+
+
+def _cmd_rate(pos, vel, prev_dir, dt, guidance):
+    return terminal_guidance_command(pos, vel, 40_000.0, gravity_m_s2=G,
+                                     thrust_max_n=T_MAX, thrust_min_n=T_MIN,
+                                     ignited=True, guidance=guidance,
+                                     prev_dir_enu=prev_dir, dt_s=dt)
+
+
+def test_tvc_rate_limit_clips_the_direction_slew():
+    r = TerminalGuidance(tvc_rate_limit_deg_s=20.0)
+    cmd = _cmd_rate(*OFF_PAD, (0.0, 0.0, 1.0), 0.1, r)
+    assert cmd.phase == "burn" and cmd.rate_clipped
+    assert _tilt_deg(cmd) == pytest.approx(2.0, abs=1e-9)  # 20 deg/s x 0.1 s
+    # the unconstrained law rides the whole 30 deg cone on this state ...
+    plain = _cmd(*OFF_PAD)
+    assert not plain.rate_clipped
+    assert _tilt_deg(plain) == pytest.approx(30.0, abs=1e-9)
+    # ... and with the rate limit at 0 (the FL-305 default) the law returns
+    # the baseline command to the bit
+    off = _cmd_rate(*OFF_PAD, (0.0, 0.0, 1.0), 0.1, TERMINAL_GUIDANCE_DEFAULT)
+    assert off.thrust_enu_n == plain.thrust_enu_n
+    # a long dt gives the slew more room than the cone: the cone binds, no clip
+    slow = _cmd_rate(*OFF_PAD, (0.0, 0.0, 1.0), 5.0, r)
+    assert _tilt_deg(slow) == pytest.approx(30.0, abs=1e-9)
+    assert not slow.rate_clipped
+
+
+def test_rate_limited_direction_tracks_the_demand_within_the_actuator_rate():
+    # step the law from gimbal neutral toward the cone-bound divert demand:
+    # every step turns by at most rate * dt, and the tilt converges on the
+    # cone -- the constraint is tracked, not evaded
+    r = TerminalGuidance(tvc_rate_limit_deg_s=20.0)
+    prev = np.array([0.0, 0.0, 1.0])
+    tilts = []
+    for _ in range(20):
+        cmd = _cmd_rate(*OFF_PAD, tuple(prev), 0.1, r)
+        d = np.asarray(cmd.thrust_enu_n)
+        d = d / np.linalg.norm(d)
+        assert math.degrees(math.acos(float(np.dot(prev, d)))) / 0.1 <= 20.0 + 1e-6
+        tilts.append(_tilt_deg(cmd))
+        prev = d
+    assert tilts[0] == pytest.approx(2.0, abs=1e-9)
+    assert tilts[-1] == pytest.approx(30.0, abs=1e-6)
+
+
+# ---------------------------------------------------------------------------
 # pipeline switch
 # ---------------------------------------------------------------------------
 
@@ -230,3 +290,40 @@ def test_infeasible_corridor_state_is_never_green():
     assert not res.feasible and not res.landed
     assert res.reason_codes == (LANDING_INFEASIBLE,)
     assert res.track is None
+
+
+# ---------------------------------------------------------------------------
+# R-05: flown actuator constraints and control-margin reporting
+# ---------------------------------------------------------------------------
+
+def test_r05_preset_lands_with_the_actuator_constraints_held():
+    res = _fly(CASE_TEXTBOOK_HANDOFF, guidance=TERMINAL_GUIDANCE_R05)
+    assert res.landed, res.reason_codes
+    assert res.ignitions_used == 1
+    m = res.actuator_margin
+    assert m is not None
+    # every constraint the guidance promised, held as *commanded*:
+    assert m.tvc_rate_limit_deg_s == 20.0
+    assert m.slew_deg_s_max <= m.tvc_rate_limit_deg_s + 1e-6  # TVC rate
+    assert m.tilt_margin_deg_min >= -1e-9                     # TVC angle
+    assert m.throttle_floor_room_min >= -1e-12                # floor
+    assert m.throttle_headroom_min >= -1e-12                  # ceiling
+    assert m.burn_time_s > 0.0
+    # the metrics travel in the run's report: an assumption line and the
+    # touchdown event data (the referee checks stay FL-303's, unchanged)
+    assert any("R-05 actuator margins" in a for a in res.assumptions)
+    touch = [e for e in landing_events(res) if e.kind in ("touchdown", "impact")]
+    assert touch and "control_margin" in touch[0].data
+    assert touch[0].data["control_margin"]["tvc_rate_limit_deg_s"] == 20.0
+
+
+def test_closed_loop_reports_the_baseline_control_margin_too():
+    res = _fly(CASE_TEXTBOOK_HANDOFF)  # FL-305 default guidance, unchanged
+    m = res.actuator_margin
+    assert res.landed and m is not None and m.tvc_rate_limit_deg_s == 0.0
+    # ADR flightlab-0002's reserved ignition authority (1 - design_throttle
+    # = 10 %), *measured* as flown, not asserted by fiat
+    assert 0.05 <= m.throttle_headroom_at_ignition <= 0.2
+    # and the honest indictment of the unlimited baseline: a TVC slew no real
+    # actuator delivers, which the R-05 preset above keeps at its 20 deg/s
+    assert m.slew_deg_s_max > TERMINAL_GUIDANCE_R05.tvc_rate_limit_deg_s

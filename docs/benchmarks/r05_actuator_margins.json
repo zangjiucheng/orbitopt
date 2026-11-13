@@ -1,0 +1,216 @@
+{
+  "ascent": "tests/test_flightlab_simulate_recovery.py::_ascent_with_textbook_separation",
+  "dispersions": {
+    "cd_pct": 8.0,
+    "density_pct": 10.0,
+    "isp_pct": 3.0,
+    "sep_altitude_m": 400.0,
+    "sep_crossrange_m": 800.0,
+    "sep_downrange_m": 800.0,
+    "sep_heading_deg": 0.15,
+    "sep_speed_m_s": 4.0,
+    "thrust_pct": 5.0
+  },
+  "fairness": "same seed, dispersions, FL-302 warm start and referee; the guidance differs only by the TVC slew limit under test",
+  "kind": "r05-actuator-margins-vs-fl305-baseline",
+  "n": 32,
+  "runs": {
+    "baseline_fl305": {
+      "landed_stats": {
+        "control_margin": {
+          "burn_time_s": {
+            "max": 21.9,
+            "mean": 20.771428571428572,
+            "min": 17.3,
+            "n": 14
+          },
+          "n": 14,
+          "saturated_high_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 14
+          },
+          "saturated_low_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 14
+          },
+          "slew_deg_s_max": {
+            "max": 167.5844,
+            "mean": 54.905228571428566,
+            "min": 28.7751,
+            "n": 14
+          },
+          "throttle_floor_room_min": {
+            "max": 0.242303,
+            "mean": 0.16744864285714287,
+            "min": 0.018595,
+            "n": 14
+          },
+          "throttle_headroom_at_ignition": {
+            "max": 0.197187,
+            "mean": 0.14099757142857142,
+            "min": 0.073423,
+            "n": 14
+          },
+          "throttle_headroom_min": {
+            "max": 0.197187,
+            "mean": 0.14099757142857142,
+            "min": 0.073423,
+            "n": 14
+          },
+          "tilt_margin_deg_min": {
+            "max": 18.3098,
+            "mean": 4.118907142857142,
+            "min": -0.0,
+            "n": 14
+          },
+          "tvc_rate_limit_deg_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 14
+          }
+        },
+        "lateral_speed_m_s": {
+          "n": 14,
+          "p50": 0.06754324413001608,
+          "p95": 0.18956486389131183
+        },
+        "position_error_m": {
+          "n": 14,
+          "p50": 0.8646910590578619,
+          "p95": 2.18204571512692
+        },
+        "vertical_speed_m_s": {
+          "n": 14,
+          "p50": -1.5003003739379515,
+          "p95": -1.5000920388501282
+        }
+      },
+      "plan_options": {
+        "initial_guess": [
+          18.4,
+          17.75,
+          1.0,
+          4.36,
+          0.0,
+          17456.0,
+          23.0
+        ],
+        "max_fevals": 30
+      },
+      "reason_histogram": {
+        "CORRIDOR_MISSED": 1,
+        "INSUFFICIENT_PROPELLANT_RESERVE": 8,
+        "LANDED": 14,
+        "LANDING_POSITION_OUT_OF_TOLERANCE": 4,
+        "LANDING_PROPELLANT_RESERVE_LOW": 5
+      },
+      "success_rate": 0.4375
+    },
+    "r05_actuator": {
+      "landed_stats": {
+        "control_margin": {
+          "burn_time_s": {
+            "max": 21.9,
+            "mean": 20.72307692307692,
+            "min": 17.3,
+            "n": 13
+          },
+          "n": 13,
+          "saturated_high_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 13
+          },
+          "saturated_low_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 13
+          },
+          "slew_deg_s_max": {
+            "max": 20.0,
+            "mean": 20.0,
+            "min": 20.0,
+            "n": 13
+          },
+          "throttle_floor_room_min": {
+            "max": 0.240098,
+            "mean": 0.1847993076923077,
+            "min": 0.006673,
+            "n": 13
+          },
+          "throttle_headroom_at_ignition": {
+            "max": 0.197187,
+            "mean": 0.14505223076923077,
+            "min": 0.073423,
+            "n": 13
+          },
+          "throttle_headroom_min": {
+            "max": 0.197187,
+            "mean": 0.14505223076923077,
+            "min": 0.073423,
+            "n": 13
+          },
+          "tilt_margin_deg_min": {
+            "max": 18.4577,
+            "mean": 4.477161538461538,
+            "min": -0.0,
+            "n": 13
+          },
+          "tvc_rate_limit_deg_s": {
+            "max": 20.0,
+            "mean": 20.0,
+            "min": 20.0,
+            "n": 13
+          }
+        },
+        "lateral_speed_m_s": {
+          "n": 13,
+          "p50": 0.039697333840306395,
+          "p95": 0.3719869560990159
+        },
+        "position_error_m": {
+          "n": 13,
+          "p50": 0.5141406476370648,
+          "p95": 2.6233240955195316
+        },
+        "vertical_speed_m_s": {
+          "n": 13,
+          "p50": -1.5002844318266932,
+          "p95": -1.5001797703617477
+        }
+      },
+      "plan_options": {
+        "initial_guess": [
+          18.4,
+          17.75,
+          1.0,
+          4.36,
+          0.0,
+          17456.0,
+          23.0
+        ],
+        "landing": {
+          "tvc_rate_limit_deg_s": 20.0
+        },
+        "max_fevals": 30
+      },
+      "reason_histogram": {
+        "CORRIDOR_MISSED": 1,
+        "INSUFFICIENT_PROPELLANT_RESERVE": 8,
+        "LANDED": 13,
+        "LANDING_LATERAL_SPEED_EXCEEDED": 4,
+        "LANDING_POSITION_OUT_OF_TOLERANCE": 4,
+        "LANDING_PROPELLANT_RESERVE_LOW": 2
+      },
+      "success_rate": 0.40625
+    }
+  },
+  "seed": 1
+}
