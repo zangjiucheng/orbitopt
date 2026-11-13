@@ -154,9 +154,12 @@ def test_run_monte_carlo_default_dispersions_follow_the_vehicle_file(monkeypatch
     carry the vehicle file's bands and an assumption line saying so."""
     from orbitopt.flightlab.recovery import montecarlo as mc
 
-    def fake_sample(job):  # echo the dispersions the dispatcher computed
+    def fake_sample(job):  # echo the uncertainty declaration the dispatcher computed
+        unc = job["uncertainty"]
         return {"reason": "stub", "outcome": "stub",
-                "dispersions": job["dispersions"]}
+                "dispersions": {k: v.get("half_width_pct", 0.0) or 0.0
+                                for k, v in unc.items()
+                                if k in ("thrust", "isp", "cd")}}
 
     monkeypatch.setattr(mc, "_run_sample", fake_sample)
     monkeypatch.setattr(mc, "write_run", lambda *a, **k: None)

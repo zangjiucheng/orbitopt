@@ -12,11 +12,21 @@ only moves work, never numbers.
 
 Honest dispersion accounting: thrust, Isp and Cd enter the FL-302 planner
 (it flies the dispersed ``BoosterModel``) *and* the acceptance re-integration;
-the density scale enters the acceptance re-integration (FL-301 propagator and
-FL-303 landing burn) but NOT the FL-302 optimiser, whose rollout keeps the
-nominal atmosphere -- a deliberate plan/reality mismatch, which is exactly
-what an atmospheric dispersion is meant to probe. The separation-state
-dispersion moves the state itself, so it enters everywhere.
+the density scale and the R-04 wind enter the acceptance re-integration (FL-301
+propagator and FL-303 landing burn) but NOT the FL-302 optimiser, whose rollout
+keeps the nominal atmosphere (and calm air) -- a deliberate plan/reality
+mismatch, which is exactly what an atmospheric dispersion is meant to probe.
+The separation-state dispersion moves the state itself, so it enters
+everywhere.
+
+R-04 (task #236) adds the declarative layer: pass ``uncertainty=`` an
+:class:`~orbitopt.flightlab.recovery.uncertainty.UncertaintyModel` (or a
+config mapping / YAML path) to declare every perturbation's distribution
+and switch per source -- wind, density, thrust, Isp, drag, initial state.
+The declaration is recorded verbatim in the report (``uncertainty`` section),
+the draw stream stays a fixed-order per-[seed, idx] contract, and the legacy
+flat :class:`Dispersions` path draws exactly what it always drew (wind
+inactive), so pre-R-04 fixed-seed results remain reproducible.
 
 Verdict bookkeeping: a sample is a success only when the FL-304 gate says
 landed-in-limits; every failure carries its governing reason code (FL-302
@@ -29,6 +39,10 @@ say so when there are too few touchdowns to fit one.
     mc = run_monte_carlo(target, vehicle_path, ascent_run,
                          dispersions=Dispersions(), seed=7, n=24, workers=4)
     mc.write("montecarlo.json")
+
+    # R-04: the same setup declared per-source, with wind and per-source switches
+    mc = run_monte_carlo(target, vehicle_path, ascent_run,
+                         uncertainty="uncertainty.yaml", seed=7, n=24)
 """
 from __future__ import annotations
 
@@ -49,6 +63,7 @@ from orbitopt.flightlab.recovery.pipeline import (
     separation_state_ecef,
 )
 from orbitopt.flightlab.recovery.propagator import BoosterModel, BoosterPhysics
+from orbitopt.flightlab.recovery.uncertainty import UncertaintyModel
 
 __all__ = ["Dispersions", "MonteCarloResult", "run_monte_carlo"]
 
@@ -119,14 +134,21 @@ class MonteCarloResult:
     ellipse: Mapping[str, Any]
     samples: tuple[Mapping[str, Any], ...]
     assumptions: tuple[str, ...] = field(default_factory=tuple)
+    #: R-04: the declared perturbation model (source -> enabled flag,
+    #: distribution kind and every parameter, see
+    #: :mod:`orbitopt.flightlab.recovery.uncertainty`) -- the authoritative
+    #: statement of what was dispersed; ``dispersions`` above is its legacy
+    #: flat view.
+    uncertainty: Mapping[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "schemaVersion": "1.0",
+            "schemaVersion": "1.1",
             "kind": "flightlab-recovery-montecarlo",
             "n": int(self.n),
             "seed": int(self.seed),
             "dispersions": {k: float(v) for k, v in self.dispersions.items()},
+            "uncertainty": dict(self.uncertainty),
             "success_rate": float(self.success_rate),
             "reason_histogram": {k: int(v) for k, v in self.reason_histogram.items()},
             "landing_stats": dict(self.landing_stats),
@@ -144,55 +166,46 @@ class MonteCarloResult:
 
 
 def _draw_factors(rng: np.random.Generator, disp: Dispersions) -> dict[str, float]:
-    """Fixed draw order -- stream layout is the determinism contract."""
-    def uniform(pct: float) -> float:
-        return 1.0 + float(rng.uniform(-pct, pct)) / 100.0 if pct > 0.0 else 1.0
-
-    def normal(sigma: float) -> float:
-        return float(rng.normal(0.0, sigma)) if sigma > 0.0 else 0.0
-
-    return {
-        "thrust_factor": uniform(disp.thrust_pct),
-        "isp_factor": uniform(disp.isp_pct),
-        "density_scale": uniform(disp.density_pct),
-        "cd_factor": uniform(disp.cd_pct),
-        "sep_altitude_m": normal(disp.sep_altitude_m),
-        "sep_downrange_m": normal(disp.sep_downrange_m),
-        "sep_crossrange_m": normal(disp.sep_crossrange_m),
-        "sep_speed_m_s": normal(disp.sep_speed_m_s),
-        "sep_heading_deg": normal(disp.sep_heading_deg),
-    }
+    """Fixed draw order -- stream layout is the determinism contract. The
+    legacy flat entry point: delegates to the R-04
+    :class:`~orbitopt.flightlab.recovery.uncertainty.UncertaintyModel`
+    translation of ``disp`` (wind inactive), which consumes exactly the RNG
+    calls FL-304 always consumed."""
+    return UncertaintyModel.from_dispersions(disp).draw(rng)
 
 
 def _run_sample(job: Mapping[str, Any]) -> dict[str, Any]:
     """Top-level pool worker: one dispersed, fully flown recovery (pickle-safe
-    by necessity -- the job carries paths and a plain-data dispersion, the
-    record returns plain data)."""
+    by necessity -- the job carries paths and a plain-data uncertainty
+    declaration, the record returns plain data)."""
     idx = int(job["idx"])
-    disp = Dispersions(**job["dispersions"])
+    model = UncertaintyModel.from_dict(job["uncertainty"])
     rng = np.random.default_rng([int(job["seed"]), idx])
-    draw = _draw_factors(rng, disp)
+    draw = model.draw(rng)
     record: dict[str, Any] = {"idx": idx, **draw}
     try:
         ascent = read_run(Path(job["run_dir"]))
-        model = BoosterModel.load(job["vehicle_path"])
-        eng = model.engine
-        model = replace(
-            model,
+        vehicle = BoosterModel.load(job["vehicle_path"])
+        eng = vehicle.engine
+        vehicle = replace(
+            vehicle,
             engine=replace(eng,
                            thrust_vacuum_n=eng.thrust_vacuum_n * draw["thrust_factor"],
                            isp_sea_level_s=eng.isp_sea_level_s * draw["isp_factor"],
                            isp_vacuum_s=eng.isp_vacuum_s * draw["isp_factor"]),
-            cd_mach=tuple((m, c * draw["cd_factor"]) for m, c in model.cd_mach),
+            cd_mach=tuple((m, c * draw["cd_factor"]) for m, c in vehicle.cd_mach),
         )
-        physics = BoosterPhysics(density_scale=draw["density_scale"])
+        physics = BoosterPhysics(density_scale=draw["density_scale"],
+                                 wind_east_m_s=draw["wind_east_m_s"],
+                                 wind_north_m_s=draw["wind_north_m_s"],
+                                 wind_up_m_s=draw["wind_up_m_s"])
         sep = separation_state_ecef(ascent)
         sep = dispersed_separation_state(
             sep, altitude_m=draw["sep_altitude_m"],
             downrange_m=draw["sep_downrange_m"], crossrange_m=draw["sep_crossrange_m"],
             speed_m_s=draw["sep_speed_m_s"], heading_deg=draw["sep_heading_deg"])
         outcome = fly_recovery(ascent, job["target"], job["vehicle_path"],
-                               sep_state=sep, booster=model, physics=physics,
+                               sep_state=sep, booster=vehicle, physics=physics,
                                plan_options=dict(job["plan_options"]))
         record["outcome"] = "landed" if outcome.success else "failed"
         record["reason"] = "LANDED" if outcome.success else outcome.reason_codes[0]
@@ -257,6 +270,7 @@ def _ellipse(samples: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
                     ascent_run: FlightRun, *,
                     dispersions: Dispersions | None = None,
+                    uncertainty: "UncertaintyModel | Mapping[str, Any] | str | Path | None" = None,
                     seed: int = 1, n: int = 8, workers: int = 1,
                     plan_options: Mapping[str, Any] | None = None,
                     out_path: Path | str | None = None) -> MonteCarloResult:
@@ -267,7 +281,12 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
     byte-for-byte regardless of ``workers`` (``workers > 1`` runs the samples
     through a ``ProcessPoolExecutor``; ``workers == 1`` stays in-process).
 
-    ``dispersions=None`` (the default) takes the thrust / Isp / Cd half-widths
+    R-04: ``uncertainty`` takes the declarative perturbation model -- a
+    :class:`~orbitopt.flightlab.recovery.uncertainty.UncertaintyModel`, a
+    config mapping or a YAML/JSON path (``UncertaintyModel.from_file`` form) --
+    declaring each source's distribution, parameters and switch; it is
+    recorded verbatim under ``uncertainty`` in the report and takes precedence
+    over ``dispersions`` (passing both raises). ``dispersions=None`` (the default) takes the thrust / Isp / Cd half-widths
     from the vehicle file's FL-602 provenance uncertainty tags -- a Monte Carlo
     inherits the data's stated confidence bands unless the caller says
     otherwise; scenario-side knobs (density scale, separation-state sigma)
@@ -278,21 +297,36 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
         raise ValueError(f"n must be >= 1, got {n}")
     if int(seed) < 0:
         raise ValueError(f"seed must be >= 0, got {seed}")
-    if dispersions is not None:
-        disp, from_vehicle_notes = dispersions, []
+    if uncertainty is not None and dispersions is not None:
+        raise ValueError("pass either uncertainty= or dispersions=, not both: "
+                         "the declarative model already carries the full setup")
+    from_vehicle_notes: list[str] = []
+    if isinstance(uncertainty, (str, Path)):
+        model = UncertaintyModel.from_file(uncertainty)
+    elif isinstance(uncertainty, Mapping):
+        model = UncertaintyModel.from_config(uncertainty)
+    elif uncertainty is not None:
+        model = uncertainty
+    elif dispersions is not None:
+        model = UncertaintyModel.from_dispersions(dispersions)
     else:
         from orbitopt.flightlab.vehicle_catalog import vehicle_dispersions
         disp, from_vehicle_notes = vehicle_dispersions(vehicle_path)
+        model = UncertaintyModel.from_dispersions(disp)
     opts = dict(MC_PLAN_OPTIONS if plan_options is None else plan_options)
 
     assumptions = [
         "FL-304 Monte Carlo: guidance re-planned per sample on the dispersed "
         "vehicle/separation state (closed loop at plan level); density scale "
-        "biases the acceptance atmosphere only, not the FL-302 optimiser model",
+        "and R-04 wind bias the acceptance atmosphere only, not the FL-302 "
+        "optimiser model",
         "one numpy stream [seed, idx] per sample: statistics are exact for a "
         "seed, independent of the worker layout",
         "success = FL-304 recovery-landing gate: touched down inside every "
         "target landing limit; every failure carries its governing reason code",
+        "R-04 perturbation declaration (distribution kind, parameters, per-"
+        "source switches) recorded under 'uncertainty'; 'dispersions' is the "
+        "legacy flat view of it",
         *from_vehicle_notes,
     ]
 
@@ -302,7 +336,7 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
         write_run(run_dir, ascent_run)
         jobs = [{"idx": i, "seed": int(seed), "run_dir": str(run_dir),
                  "target": target, "vehicle_path": str(vehicle_path),
-                 "dispersions": disp.to_dict(), "plan_options": dict(opts)}
+                 "uncertainty": model.to_dict(), "plan_options": dict(opts)}
                 for i in range(n)]
         if workers and workers > 1 and n > 1:
             with ProcessPoolExecutor(max_workers=int(workers)) as pool:
@@ -335,7 +369,8 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
         return out
 
     result = MonteCarloResult(
-        n=n, seed=int(seed), dispersions=disp.to_dict(),
+        n=n, seed=int(seed), dispersions=model.dispersions_view(),
+        uncertainty=model.to_dict(),
         success_rate=n_ok / n,
         reason_histogram=dict(sorted(histogram.items())),
         landing_stats={
