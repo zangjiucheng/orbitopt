@@ -149,7 +149,11 @@ jobs:
     name: flightlab Gate B regression (real OT binary, linux-64)
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The M-07 step below optimizes the ascent (cmaes 40x40, 4 workers):
+    # measured 31 min on 8 cores / 8 workers, so ~60+ min on a 4-vCPU
+    # runner before env setup, Gate B and the tudatpy arc. 30 min (the
+    # FL-601 budget for Gate B alone) would time the job out.
+    timeout-minutes: 120
     defaults:
       run:
         shell: bash -l {0}
@@ -189,3 +193,12 @@ jobs:
         run: |
           python scripts/fl601_reference.py run --out "$RUNNER_TEMP/gateb"
           python scripts/fl601_reference.py compare "$RUNNER_TEMP/gateb"
+
+      # M-07 (task #225): the two-stage LEO reference mission is the Gate B
+      # flight pushed through the whole M-01..M-05 chain -- optimize the
+      # ascent now, handoff-grade it, propagate the parking orbit with the
+      # same locked env's tudatpy -- and requires the unified report to be
+      # green. This job is the only one with binary + pygmo + tudatpy at
+      # once, so the acceptance run lives here.
+      - name: M-07 two-stage LEO reference mission end to end (task #225)
+        run: pytest tests/test_mission_two_stage_leo.py -m slow -v

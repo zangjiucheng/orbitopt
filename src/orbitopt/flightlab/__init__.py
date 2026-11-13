@@ -51,8 +51,9 @@ __all__ = [
 # / `evaluate` work either way.
 _LAZY = ("build_target", "feasibility_report", "parse_orbit_spec", "parse_window_spec", "save_target")
 _SIM_LAZY = ("simulate", "evaluate", "orbit_refly")
+_SEG_LAZY = ("FlightLabSegment", "FlightLabSegmentResult", "flight_run_report")
 
-__all__ += list(_LAZY) + list(_SIM_LAZY)
+__all__ += list(_LAZY) + list(_SIM_LAZY) + list(_SEG_LAZY)
 
 
 def __getattr__(name):
@@ -66,4 +67,8 @@ def __getattr__(name):
         # importlib, not `from . import simulate`: the function name would
         # re-enter this __getattr__ (module and function share the name).
         return getattr(importlib.import_module("orbitopt.flightlab.simulate"), name)
+    if name in _SEG_LAZY:
+        from orbitopt.flightlab import segment
+
+        return getattr(segment, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

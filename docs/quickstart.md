@@ -53,8 +53,10 @@ orbitopt view examples/mars2020_replay.yaml
 
 `validate` checks the schema without running a simulation. `run` computes and
 exports the scene and reports; `view` opens a cached or newly computed result.
-The supported kinds are `geo-raising`, `mars-transfer` and
-`lunar-free-return`. Each has a schema in
+The supported kinds are `geo-raising`, `mars-transfer`,
+`lunar-free-return` and `flight-lab` (a Flight Lab ascent run through the
+pipeline; see `src/orbitopt/data/flightlab/mission_leo_two_stage.yaml`).
+Each has a schema in
 [`src/orbitopt/schemas/`](../src/orbitopt/schemas/) and example configurations
 in [`examples/`](../examples/). Omitted optional fields use the corresponding
 built-in defaults.

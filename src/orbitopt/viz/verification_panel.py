@@ -10,9 +10,17 @@ into a friendlier claim than the report makes -- "not checked" stays "not
 checked", and a conservation test that does not apply to perturbed dynamics
 says so instead of passing or failing.
 
+A scene with a ``handoffs`` block (M-06: a mission that crossed segment
+boundaries, e.g. the Flight Lab ascent feeding a parking orbit) also gets a
+MISSION HANDOFFS section: one card per boundary with its pass/fail/not-checked
+badge, the state handed over, and the checks behind the verdict -- rendered
+straight from the scene, inferred by nothing.
+
 Viewer-only: reads JSON, imports no compute code.
 """
 from __future__ import annotations
+
+import math
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
@@ -93,6 +101,12 @@ def verification_scope(scene: dict | None, selected: dict | None) -> list[tuple[
         rows.append(("Selected Candidate", f"{selected['label']} — the exported trajectory", None))
     rows.append(("Screening Fidelity", SCREENING_FIDELITY_LABEL, None))
     return rows
+
+
+def handoffs_of(scene: dict | None) -> list:
+    """The scene's ``handoffs`` block (M-06 segment-boundary verdicts, e.g.
+    from orbitopt.flightlab.scene_export.run_to_scene) -- possibly empty."""
+    return (scene or {}).get("handoffs") or []
 
 
 def display_subtitle(scene: dict) -> str:
@@ -289,7 +303,74 @@ class VerificationPanel(QWidget):
                 RESULT_COLOR.get(result)))
             for report in reports:
                 self._layout.addWidget(self._report_card(report))
+
+        handoffs = handoffs_of(scene)
+        if handoffs:
+            self._layout.addWidget(self._handoffs_section(handoffs))
         self._layout.addStretch(1)
+
+    # ----------------------------------------------------- handoffs (M-06)
+    def _handoffs_section(self, handoffs: list) -> None:
+        """Header + one card per segment boundary the mission crossed."""
+        header = QLabel("MISSION HANDOFFS")
+        header.setObjectName("sectionHeader")
+        self._layout.addWidget(header)
+        self._layout.addWidget(self._note_card(
+            "State continuity and mission checks at each segment boundary. "
+            "PASSED means every check at that boundary ran and held; NOT CHECKED is never success."))
+        for handoff in handoffs:
+            self._layout.addWidget(self._handoff_card(handoff))
+
+    def _handoff_card(self, handoff: dict) -> QFrame:
+        card = QFrame()
+        card.setObjectName("bodyCard")
+        v = QVBoxLayout(card)
+        v.setContentsMargins(10, 8, 10, 8)
+        v.setSpacing(3)
+
+        status = handoff.get("status", "not_checked")
+        title_row = QHBoxLayout()
+        title_row.addWidget(_label(handoff.get("label", "Handoff"), "bodyName"), stretch=1)
+        badge = QLabel(RESULT_TEXT.get(status, str(status).upper()))
+        badge.setStyleSheet(f"color: {RESULT_COLOR.get(status, INK_MUTED)}; font-size: 10px; font-weight: 600;")
+        title_row.addWidget(badge, alignment=Qt.AlignTop)
+        v.addLayout(title_row)
+        met = f"T+{float(handoff.get('time', 0.0)):,.0f} s"
+        if handoff.get("detail"):
+            met += f" \u00b7 {handoff['detail']}"
+        v.addWidget(_label(met, "maneuverNote"))
+
+        for key, row_key in (("from", "Handed over"), ("to", "Received"), ("state", "Handoff state")):
+            state = handoff.get(key)
+            if not isinstance(state, dict):
+                continue
+            r_m = state.get("position_m") or [0.0, 0.0, 0.0]
+            v_m_s = state.get("velocity_m_s") or [0.0, 0.0, 0.0]
+            summary = (f"|r| {math.dist([0.0] * 3, r_m) / 1000.0:,.1f} km"
+                       f" \u00b7 |v| {math.dist([0.0] * 3, v_m_s):,.1f} m/s"
+                       f" \u00b7 mass {float(state.get('mass_kg', 0.0)):,.0f} kg"
+                       f" \u00b7 {state.get('frame', '?')} @ {state.get('epoch_utc', '?')}")
+            _row(v, f"{row_key} \u00b7 {state.get('body', '?')}", summary)
+
+        checks = handoff.get("checks") or []
+        if checks:
+            v.addWidget(_label("CHECKS", "sectionHeader", wrap=False))
+            for check in checks:
+                ok = check.get("passed")
+                mark, color = ("✓", SUCCESS) if ok else ("✗", DANGER)
+                v.addWidget(_label(f"{mark}  {_humanize(check.get('id', ''))}", "maneuverNote", color))
+                bits = []
+                if check.get("value") is not None:
+                    bits.append(f"{float(check['value']):,.3g} {check.get('unit', '')}".rstrip())
+                if check.get("limit") is not None:
+                    bits.append(f"limit {float(check['limit']):,.3g}")
+                if check.get("reason_code"):
+                    bits.append(str(check["reason_code"]))
+                if bits:
+                    v.addWidget(_label("    " + " \u00b7 ".join(bits), "maneuverNote"))
+        else:
+            v.addWidget(_label("No checks ran at this boundary.", "maneuverNote", WARNING))
+        return card
 
     def _scope_card(self, rows) -> QFrame:
         card = QFrame()
