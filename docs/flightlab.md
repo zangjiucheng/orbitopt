@@ -217,6 +217,38 @@ exactly one physics switch, and the headline difference telescopes over them
   engine law seen through slightly different altitudes differs by 8 g —
   the test gate at 5 kg exists to catch anyone ever breaking that.
 
+## Two-stage separation and upper-stage ignition (F-06)
+
+`sixdof/two_stage.py` parts the flying stack on the native plant: at
+`separation_t_s` the closed-loop F-04 ascent hands its frozen state to an
+*analytic* split — both children inherit position, attitude and body rates
+verbatim, and the separation impulse `J` along body +x enters as equal and
+opposite momenta (`+J` upper, `−J` booster), so mass and momentum are
+conserved to rounding rather than to a tolerance (residual `0 kg`,
+`4e-9 kg·m/s` on a `6e7` momentum). Mass bookkeeping follows the F-03
+convention: stage-1 propellant burned is read off the stack's own mass
+trace, the remainder is the booster's recovery margin, and the upper stage
+was inert ballast inside the stack's dry floor, so it separates full of
+propellant (78 t stack: booster 10 t dry + 2.9 t residue, upper 8 t wet).
+
+Afterwards the two bodies integrate **independently** on the same plant:
+
+- the booster coasts (engine dead — it was the stack's) over the
+  separation boundary into the M-01 recovery chain as a valid
+  `separation -> boostback` `HandoffState`, carrying its propellant margin;
+- the upper stage coasts gimbal-neutral and full-throttle-ignites at
+  `separation_t_s + ignition_delay_s` — never before, by construction of the
+  `IgnitionPlan` control law — and burns its 6 t to dry (+3.3 km/s).
+
+The packaged `f06_two_stage_scenario()` (separation at 95 s, ignition at
+103 s, 260 s horizon) ships with five acceptance checks — mass closure,
+momentum residual, handoff continuity, scheduled ignition, trajectory
+divergence (442 km by `t_end`) — all green in
+`tests/test_flightlab_sixdof_two_stage.py`; `to_flight_run()` serialises the
+study as a valid three-body FlightResult v1 run (children parented to the
+stack). The JSBSim two-instance spike (`sixdof/staging.py`) stays the FL-403
+probe; F-06 is the supported, testable staging flow.
+
 ## Hard gates
 
 Runs record frames, epochs, units and provenance. Orbit requires the declared

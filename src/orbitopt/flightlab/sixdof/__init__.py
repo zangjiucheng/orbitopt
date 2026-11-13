@@ -53,4 +53,15 @@ difference comes from (aerodynamics, attitude dynamics, control lag)::
     from orbitopt.flightlab.sixdof.gravity_turn import f05_scenario, run_f05_study
     # docs/flightlab.md (the F-05 section) and
     # docs/benchmarks/fl605_gravity_turn_ascent.json (the committed study)
+
+F-06 (task #231) parts the flying stack on that plant: an analytic,
+momentum-exact separation split into two rigid bodies that then integrate
+independently -- the booster over the M-01 ``separation -> boostback``
+handoff into the recovery chain with its stage-1 residue as recovery margin,
+the upper stage inert until a configurable ``IgnitionPlan`` delay, then
+burning to dry::
+
+    from orbitopt.flightlab.sixdof.two_stage import f06_two_stage_scenario, run_two_stage
+    # docs/flightlab.md (the F-06 section) and
+    # tests/test_flightlab_sixdof_two_stage.py (the staging acceptance gates)
 """
