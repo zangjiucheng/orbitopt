@@ -376,7 +376,12 @@ def _cmd_flight_montecarlo(args):
     ``--jobs``. ``--uncertainty`` declares the perturbation distributions
     per source (YAML/JSON, see orbitopt.flightlab.recovery.uncertainty);
     without it the vehicle file's uncertainty tags and the class defaults
-    stand. Exit code reports pipeline health, like `flight simulate`."""
+    stand. The report also carries the R-06 statistics: failure classes, a
+    Wilson confidence interval on the success rate and a per-source
+    sensitivity; ``--solo-sensitivity`` adds the one-at-a-time marginal
+    reading. Determinism covers all of it: the same seed and setup write a
+    byte-identical JSON regardless of ``--jobs``. Exit code reports pipeline
+    health, like `flight simulate`."""
     from pathlib import Path
 
     import jsonschema
@@ -396,6 +401,7 @@ def _cmd_flight_montecarlo(args):
         mc = run_monte_carlo(target, Path(args.vehicle), ascent,
                              uncertainty=uncertainty,
                              seed=args.seed, n=args.n, workers=args.jobs,
+                             solo_sensitivity=args.solo_sensitivity,
                              out_path=out)
     except (OSError, ValueError, KeyError, RuntimeError, jsonschema.ValidationError) as exc:
         print(f"ERROR: {exc}")
@@ -406,10 +412,30 @@ def _cmd_flight_montecarlo(args):
         active = sorted(k for k, v in mc.uncertainty.items()
                         if isinstance(v, dict) and v.get("enabled"))
         print(f"  uncertainty: {uncertainty.name}: " + ", ".join(active))
+    ci = (mc.statistics or {}).get("success_rate_ci") or {}
+    ci_txt = (f"  [{ci['lower']:.3f}, {ci['upper']:.3f}] "
+              f"{ci['confidence_level']:.0%} {ci['method'].replace('_', ' ')}"
+              if ci else "")
     print(f"  success_rate: {mc.success_rate:.3f} "
-          f"({sum(1 for s in mc.samples if s.get('outcome') == 'landed')}/{mc.n} landed in limits)")
+          f"({sum(1 for s in mc.samples if s.get('outcome') == 'landed')}/{mc.n} landed in limits)"
+          f"{ci_txt}")
     for code, count in mc.reason_histogram.items():
         print(f"  {count:>4}  {code}")
+    classes = ((mc.statistics or {}).get("failure_classes") or {})
+    live = [(c, k) for c, k in (classes.get("classes") or {}).items() if k]
+    if live:
+        print("  failure classes: "
+              + ", ".join(f"{c} {k}" for c, k in live))
+    sens = (mc.statistics or {}).get("sensitivity") or {}
+    if sens.get("ranking"):
+        print("  sensitivity (|perturbation| vs failure): " + ", ".join(
+            f"{name} r={sens['sources'][name]['rank_correlation']:+.2f}"
+            for name in sens["ranking"]))
+    solo = (mc.statistics or {}).get("solo_sensitivity") or {}
+    for name, entry in (solo.get("sources") or {}).items():
+        print(f"  solo {name}: success_rate {entry['success_rate']:.3f} "
+              f"[{entry['ci']['lower']:.3f}, {entry['ci']['upper']:.3f}] "
+              f"(delta {entry['delta_vs_baseline']:+.3f})")
     ell = mc.ellipse
     if ell.get("state") == "assessed":
         print(f"  ellipse (1-sigma, site ENU): along {ell['sigma_along_m']:.1f} m x "
@@ -624,6 +650,12 @@ def build_parser() -> argparse.ArgumentParser:
                                 "default: vehicle-file tags + class defaults")
     flight_mc.add_argument("-o", "--out", default="montecarlo.json", metavar="PATH",
                            help="output JSON path (default: montecarlo.json)")
+    flight_mc.add_argument("--solo-sensitivity", action="store_true",
+                           help="R-06: also re-fly every active perturbation "
+                                "source alone (all others neutral) at the same "
+                                "seed and n -- the marginal per-source "
+                                "sensitivity reading (1 + n_active sample "
+                                "passes instead of 1)")
     flight_mc.add_argument("--ascent-run-dir", default=None, metavar="RUN_DIR",
                            help="where the (single) ascent run is written "
                                 "(default: <out>.ascent/)")

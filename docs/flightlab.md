@@ -43,7 +43,7 @@ also has its own `--help`.
 |---|---|
 | Ascent | OpenTsiolkovsky 3-DOF point mass with a gravity turn or attitude program and a Cd(Mach) model. Displayed attitude is kinematic. |
 | Booster recovery | 3-DOF Earth-fixed point mass with J2, rotation, atmosphere, relightable engines and event detection. |
-| Recovery Monte Carlo | Plan-level dispersed samples; guidance re-plans with each sample's vehicle parameters. Vehicle uncertainty bands supply defaults; R-04 sources (wind / density / thrust / Isp / drag / initial state) are config-declared and individually switchable. |
+| Recovery Monte Carlo | Plan-level dispersed samples; guidance re-plans with each sample's vehicle parameters. Vehicle uncertainty bands supply defaults; R-04 sources (wind / density / thrust / Isp / drag / initial state) are config-declared and individually switchable. R-06 reports failure classes, a success-rate confidence interval and per-source sensitivity. |
 | JSBSim spike | Optional 6-DOF tracking cross-check; it is not the default propagator or part of the optimization loop. See [ADR 0001](adr/flightlab-0001-jsbsim-6dof.md). |
 
 ## Hard gates
@@ -104,7 +104,8 @@ uncertainty:
 
 Every source has its own `enabled` switch; the declared distributions and
 parameters are recorded verbatim in the report's `uncertainty` section
-(`montecarlo.json` schema 1.1; `dispersions` stays as the flat legacy view).
+(`montecarlo.json` schema 1.2 — R-06 adds the `statistics` section described
+below; `dispersions` stays as the flat legacy view).
 The wind is one steady ENU vector per sample — it enters the acceptance
 re-integration (propagator and landing burn) but not the FL-302 optimiser
 rollout, the same deliberate plan/reality mismatch as the density bias.
@@ -112,3 +113,33 @@ Sampling stays deterministic: one `[seed, idx]` RNG stream per sample and a
 fixed draw order, so a fixed seed reproduces the report byte-for-byte
 regardless of `--jobs`, and pre-R-04 fixed-seed dispersions runs (the plain
 `Dispersions` path, wind inactive) remain reproducible.
+
+## Recovery Monte Carlo statistics (R-06)
+
+Every `montecarlo.json` now carries a `statistics` section
+(schema 1.2) that reads the sample population instead of only counting it:
+
+* **failure classes** — every non-landed sample is attributed to exactly one
+  family: `planning_infeasible` (no feasible boostback/entry/landing plan),
+  `execution_failure` (sample error, no touchdown, entry limits, handoff
+  break), `landing_accuracy` (touched down outside the limits) or
+  `fuel_insufficient` (a propellant shortfall, wherever reported). An
+  unrecognised reason code is reported as `unclassified` rather than dropped,
+  so the classes always sum to the failure count;
+* **confidence interval** — a Wilson score interval on the success rate
+  (`statistics.success_rate_ci`), reported with its point estimate and Wald
+  standard error. Samples are independent by construction, so this is the
+  honest statement of what `n` samples support: 6/8 landed is 0.75 with a
+  95 % interval of [0.41, 0.93], not "75 %";
+* **sensitivity** — per source, the association between that sample's own
+  perturbation (in sigma-equivalents of its declared distribution) and its
+  failure: mean |z| among landed vs failed samples, the failure rate above and
+  below 1 sigma, a Spearman rank correlation, and a `ranking`. This is read
+  under joint dispersion, so a source can inherit a neighbour's effect.
+
+`--solo-sensitivity` adds the marginal reading: every active source re-flown
+alone at the same seed and `n` (`statistics.solo_sensitivity`, one delta in
+success rate per source). That costs `1 + n_active` sample passes and is what
+isolates one source from the ones dispersed with it. All of it is a pure
+function of the flown samples — no RNG — so the same seed still reproduces the
+whole report byte-for-byte.

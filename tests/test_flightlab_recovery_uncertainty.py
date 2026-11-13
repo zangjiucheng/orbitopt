@@ -209,7 +209,7 @@ def test_run_monte_carlo_records_the_declaration(tmp_path, monkeypatch):
     result = mc.run_monte_carlo(None, "vehicle.yaml", None, uncertainty=path,
                                 n=2, seed=3, workers=1)
     out = result.to_dict()
-    assert out["schemaVersion"] == "1.1"
+    assert out["schemaVersion"] == "1.2"
     assert out["uncertainty"]["wind"]["sigma_east_m_s"] == 4.0
     assert out["uncertainty"]["drag"] == {"enabled": False}
     assert out["dispersions"]["thrust_pct"] == 5.0
