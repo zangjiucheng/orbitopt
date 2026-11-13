@@ -36,6 +36,7 @@ _KIND_SCHEMAS = {
     "mars-transfer": "mission-mars-transfer-1.0.json",
     "lunar-free-return": "mission-lunar-free-return-1.0.json",
     "flight-lab": "mission-flight-lab-1.0.json",
+    "two-stage-leo": "mission-two-stage-leo-1.0.json",
 }
 
 # mission.kind -> (module, attribute) of a `build_from_config(config: dict,
@@ -49,6 +50,7 @@ _KIND_BUILDERS = {
     "mars-transfer": ("orbitopt.viz.mars_transfer", "build_from_config"),
     "lunar-free-return": ("orbitopt.viz.mission_timeline", "build_from_config"),
     "flight-lab": ("orbitopt.flightlab.mission", "build_from_config"),
+    "two-stage-leo": ("orbitopt.mission.two_stage_leo", "build_from_config"),
 }
 
 
