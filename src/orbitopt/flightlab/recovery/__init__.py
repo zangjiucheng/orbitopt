@@ -120,6 +120,11 @@ from orbitopt.flightlab.recovery.montecarlo import (  # noqa: F401
     MonteCarloResult,
     run_monte_carlo,
 )
+from orbitopt.flightlab.recovery.uncertainty import (  # noqa: F401
+    SOURCE_ORDER,
+    UncertaintyModel,
+    UncertaintySource,
+)
 
 __all__ = [
     "ActuatorMargin",
