@@ -9,6 +9,7 @@ the single-scene 3D viewer directly, without going through examples/.
     orbitopt view my_mission.yaml       # run (or load cached) a mission config, then view it
     orbitopt export goes -o goes.json   # cache a built-in mission's scene JSON
     orbitopt validate my_mission.yaml   # schema-check a mission config (no compute)
+    orbitopt benchmarks                 # physics benchmarks vs public/analytic references (gate)
     orbitopt run my_mission.yaml        # run a mission config, write + verify its scene
     orbitopt launch-window kourou --inclination 51.64 --raan 100 --epoch 2026-11-08
                                         # daily launch windows (no compute stack)
@@ -515,6 +516,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("missions", help="list every registered mission id (built-in + plugins)")
 
+    bench = sub.add_parser("benchmarks",
+                           help="physics benchmark scenarios against public reference data / "
+                                "analytic solutions (expected values + tolerances; exit 1 on fail)")
+    bench.add_argument("--json", action="store_true", help="print the results as JSON")
+    bench.add_argument("keys", nargs="*", metavar="KEY",
+                       help="benchmark keys to run (default: all of kepler_two_body, "
+                            "j2_secular_drift, starship_booster_catch)")
+
     validate = sub.add_parser("validate", help="schema-check a mission config file (no compute)")
     validate.add_argument("config", help="path to a mission config YAML/JSON file")
 
@@ -671,6 +680,9 @@ def main(argv=None):
         _cmd_export(args)
     elif args.command == "missions":
         _cmd_missions(args)
+    elif args.command == "benchmarks":
+        from orbitopt.verify.benchmarks import main as _benchmarks
+        raise SystemExit(_benchmarks(["--json"] * args.json + list(args.keys)))
     elif args.command == "validate":
         _cmd_validate(args)
     elif args.command == "run":
