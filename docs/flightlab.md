@@ -37,6 +37,23 @@ orbitopt flight montecarlo src/orbitopt/data/flightlab/scenarios/leo_two_stage.y
 `orbitopt flight optimize --help` describes ascent optimization. Each command
 also has its own `--help`.
 
+## Mission pipeline
+
+A Flight Lab run is also a mission segment (M-03): the `flight-lab` mission
+kind flies the same Gate-B pipeline through `orbitopt run`, so the flight
+enters the unified pipeline result, Verification Gate and report outputs
+like any other mission kind:
+
+```bash
+orbitopt run src/orbitopt/data/flightlab/mission_leo_two_stage.yaml -o run/scene.json
+```
+
+`orbitopt.flightlab.segment.FlightLabSegment` is the Python-level wrapper:
+`run()` returns the `FlightRun`, the SECO handoff state (frame/epoch/r/v/mass)
+for the next segment in a chain, and the standardized verification report.
+A red verdict flows through as a best-effort export warning, never a silent
+pass (see [engineering notes](engineering-notes.md)).
+
 ## Fidelity levels
 
 | Model | Scope |

@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zangjiucheng/orbitopt/schemas/mission-flight-lab-1.0.json",
+  "title": "orbitopt Flight Lab mission config v1.0",
+  "description": "A user-editable YAML/JSON config that runs a Flight Lab segment (flightlab.simulate: 3-DOF ascent + optional FL-304 recovery + tudatpy orbit re-fly) through the unified mission pipeline (M-03, task #221). The flight is one candidate on the pipeline's search stage, its Gate-B verdict is the verify stage, the scene comes from the FL-005 run importer and the verification report from orbitopt.flightlab.segment.flight_run_report -- same pipeline-result / verification-report documents as every other kind. Like the other mission schemas this one is deliberately strict (additionalProperties: false everywhere); every section besides `mission`, `flightlab` and `output` is absent by design, and every optional flightlab field falls back to the orbitopt.flightlab.simulate.simulate default.",
+  "type": "object",
+  "required": ["schemaVersion", "mission", "flightlab", "output"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0",
+      "description": "Which version of this mission-config schema the document was written against."
+    },
+    "mission": {
+      "type": "object",
+      "required": ["id", "title", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Stable slug for the produced scene, e.g. 'leo-two-stage-pipeline'." },
+        "title": { "type": "string", "minLength": 1 },
+        "kind": { "const": "flight-lab", "description": "Selects the Flight Lab adapter (orbitopt.flightlab.mission.build_from_config)." }
+      }
+    },
+    "flightlab": {
+      "type": "object",
+      "required": ["target_file"],
+      "additionalProperties": false,
+      "description": "What to fly and how. Paths resolve as given (absolute or CWD-relative), then against the packaged flightlab data root.",
+      "properties": {
+        "target_file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "FlightTarget v1 YAML/JSON (flight-target-1.0.json) to fly, e.g. 'scenarios/leo_two_stage.yaml'."
+        },
+        "vehicle_file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Vehicle file to fly. Omitted: resolve the target's declared vehicle.source with the same 4-step order `orbitopt flight simulate` uses."
+        },
+        "run_dir": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where the FlightResult run directory is written. Default: next to the scene as <scene stem>.flightrun."
+        },
+        "refly": {
+          "type": "boolean",
+          "default": true,
+          "description": "Independent tudatpy re-fly of the insertion orbit (sets physics_verified; false leaves it not-assessed, never passed)."
+        },
+        "refly_orbits": { "type": "number", "exclusiveMinimum": 0, "default": 1.05 },
+        "refly_max_step_s": { "type": "number", "exclusiveMinimum": 0, "default": 300.0 },
+        "timeout_s": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 300.0,
+          "description": "Wall-clock bound on the OpenTsiolkovsky ascent subprocess."
+        },
+        "run_recovery": {
+          "type": "boolean",
+          "default": true,
+          "description": "Fly the FL-304 recovery chain when the target declares a recovery (recovery.kind != none)."
+        },
+        "recovery_options": {
+          "type": "object",
+          "additionalProperties": { "type": ["number", "string", "boolean", "null"] },
+          "description": "FL-302/303 planner knobs passed through to the recovery pipeline (max_fevals, initial_guess, ...)."
+        },
+        "earth_texture": {
+          "type": "boolean",
+          "default": true,
+          "description": "Scene rendering only (FL-005 importer): false renders Earth as a bare marker."
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Standard pipeline verification switch (what `orbitopt run --skip-verify` sets): with enabled=false the tudatpy orbit re-fly is skipped and physics_verified stays not-assessed, never passed.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true }
+      }
+    },
+    "output": {
+      "type": "object",
+      "required": ["scene_file"],
+      "additionalProperties": false,
+      "properties": {
+        "scene_file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where `orbitopt run` writes the produced scene-1.0.json document; overridable with --out."
+        },
+        "verification_report": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where `orbitopt run` writes the machine-readable verification report (verification-report-1.0.json schema). Default: next to the scene as <scene stem>.verification.json."
+        },
+        "pipeline_result": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where `orbitopt run` writes the standardized pipeline result (pipeline-result-1.0.json schema). Default: next to the scene as <scene stem>.pipeline.json."
+        }
+      }
+    }
+  }
+}
