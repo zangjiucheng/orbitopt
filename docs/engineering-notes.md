@@ -45,6 +45,19 @@ uses a central-body-only re-run. Reports use the
 the scene; `ORBITOPT_VERIFICATION_REPORT_DIR` also enables library-call
 report output.
 
+Every check is filed under one of three categories (task #243), so a pass
+never blurs what was actually demonstrated. *Numerical consistency* — the
+integration and targeting did what the equations say (step convergence,
+conservation, converged targeting). *Model agreement* — this model's result
+matches a reference model, aim point or corridor (the default for residuals).
+*Historical validation* — the simulation matches a published, flown reality
+(Starship's announced timeline; a flown mission's telemetry once that exists).
+Producers must classify every check (`status_from_checks` refuses otherwise);
+the status carries a per-check map and a per-category roll-up, and the
+Verification tab lists checks under their category header. Bundles roll the
+categories up across reports. The addition is additive in the 1.0 schema:
+documents without categories still validate and render as before.
+
 ## GPU is not always faster -- measured, not assumed
 
 GPU performance depends on batch size and kernel-launch overhead. Precomputing

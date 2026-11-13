@@ -17,6 +17,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
+from orbitopt.verify.report import CATEGORY_LABELS, CHECK_CATEGORIES  # pure JSON helpers, no compute code
 from orbitopt.viz.candidate_panel import FLOWN_FIDELITY_LABEL, SCREENING_FIDELITY_LABEL, exported_candidate
 from orbitopt.viz.state import MissionState
 from orbitopt.viz.theme import DANGER, INK_MUTED, SUCCESS, WARNING
@@ -348,25 +349,45 @@ class VerificationPanel(QWidget):
         metrics = (report.get("targets") or {}).get("metrics") if isinstance(report.get("targets"), dict) else None
         if metrics:
             # Reports that carry their numbers (Starship's): each check with
-            # what was measured and the limit it was held to.
+            # what was measured and the limit it was held to, labelled with
+            # its verification category (task #243).
             v.addWidget(_label("CHECKS", "sectionHeader", wrap=False))
             for m in metrics:
                 ok = m.get("ok")
                 mark, color = ("✓", SUCCESS) if ok else (("✗", DANGER) if ok is False else ("—", INK_MUTED))
-                v.addWidget(_label(f"{mark}  {m.get('name', '')}", "maneuverNote", color))
+                cat = CATEGORY_LABELS.get(m.get("category"))
+                v.addWidget(_label(f"{mark}  {m.get('name', '')}" + (f"  ·  {cat}" if cat else ""),
+                                   "maneuverNote", color))
                 detail = " · ".join(x for x in (m.get("value", ""), f"limit {m['limit']}" if m.get("limit") else "") if x)
                 if detail:
                     v.addWidget(_label(f"    {detail}", "maneuverNote"))
         elif checks:
-            v.addWidget(_label("CHECKS", "sectionHeader", wrap=False))
-            for name, ok in checks.items():
-                v.addWidget(_label(f"{'✓' if ok else '✗'}  {_humanize(name)}", "maneuverNote",
-                                   SUCCESS if ok else DANGER))
+            # Checks grouped under their category header (task #243): checks
+            # without a category (documents written before categorisation)
+            # fall back to the plain list.
+            cats = status.get("check_categories") or {}
+            for cat in CHECK_CATEGORIES:
+                rows = [(n, ok) for n, ok in checks.items() if cats.get(n) == cat]
+                if not rows:
+                    continue
+                n_ok = sum(1 for _, ok in rows if ok)
+                v.addWidget(_label(f"{CATEGORY_LABELS[cat].upper()} ({n_ok}/{len(rows)})",
+                                   "sectionHeader", wrap=False))
+                for name, ok in rows:
+                    v.addWidget(_label(f"{'✓' if ok else '✗'}  {_humanize(name)}", "maneuverNote",
+                                       SUCCESS if ok else DANGER))
+            rest = [(n, ok) for n, ok in checks.items() if n not in cats]
+            if rest:
+                v.addWidget(_label("CHECKS", "sectionHeader", wrap=False))
+                for name, ok in rest:
+                    v.addWidget(_label(f"{'✓' if ok else '✗'}  {_humanize(name)}", "maneuverNote",
+                                       SUCCESS if ok else DANGER))
         else:
             v.addWidget(_label("No checks ran.", "maneuverNote", WARNING))
 
         for res in report.get("residuals", []):
-            v.addWidget(_label("RESIDUAL", "sectionHeader", wrap=False))
+            cat = CATEGORY_LABELS.get(res.get("category"))
+            v.addWidget(_label(f"RESIDUAL{f' · {cat.upper()}' if cat else ''}", "sectionHeader", wrap=False))
             within = res.get("within_tolerance")
             mark, color = ("✓", SUCCESS) if within else (("✗", DANGER) if within is False else ("—", INK_MUTED))
             v.addWidget(_label(f"{mark}  {_humanize(res.get('name', ''))}", "maneuverNote", color))

@@ -22,8 +22,11 @@ from orbitopt.pipeline import StageRecorder, run_pipeline, validate_pipeline_res
 from orbitopt.verify import report as verification_report
 from orbitopt.viz.scene import body_entry, scene_document
 
-PASS = {"kind": "moi", "label": "ok", "status": verification_report.status_from_checks({"a": True})}
-FAIL = {"kind": "tcm", "label": "bad", "status": verification_report.status_from_checks({"miss": False, "a": True})}
+PASS = {"kind": "moi", "label": "ok",
+        "status": verification_report.status_from_checks({"a": True}, {"a": "model_agreement"})}
+FAIL = {"kind": "tcm", "label": "bad",
+        "status": verification_report.status_from_checks({"miss": False, "a": True},
+                                                       {"miss": "model_agreement", "a": "model_agreement"})}
 UNCHECKED = {"kind": "moi", "label": "off", "status": verification_report.status_from_checks({})}
 
 
