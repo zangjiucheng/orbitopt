@@ -49,6 +49,27 @@ PHYSICAL_MODEL = {
 }
 
 
+#: Gate-B check ids that are data integrity / conservation of the run itself
+#: (V-04 numerical consistency); every other Gate-B check grades the flight
+#: against a target band, a vehicle limit or an independent propagator
+#: (model agreement).
+_NUMERICAL_CHECK_PREFIXES = ("mass-", "sixdof-states-finite", "sixdof-mass-non-negative")
+
+
+def _check_category(name: str) -> str:
+    """V-04 (task #243) evidence category of one flight-run report check."""
+    from orbitopt.verify.report import CHECK_MODEL, CHECK_NUMERICAL
+
+    if name == "optimizer_converged":
+        return CHECK_NUMERICAL          # converged targeting
+    if name in ("physics_verified", "mission_constraints_passed"):
+        return CHECK_MODEL              # reference propagator / vehicle limits
+    if name.startswith("check."):
+        cid = name[len("check."):]
+        return CHECK_NUMERICAL if cid.startswith(_NUMERICAL_CHECK_PREFIXES) else CHECK_MODEL
+    raise ValueError(f"flight-run report check {name!r} has no verification category")
+
+
 def flight_run_report(run: FlightRun, target: FlightTarget | None = None) -> dict:
     """The run's :class:`~orbitopt.flightlab.contract.Verification` as a
     standardized verification-report-1.0 document (kind ``"flightlab"``,
@@ -92,7 +113,8 @@ def flight_run_report(run: FlightRun, target: FlightTarget | None = None) -> dic
         "reason_codes": reasons,
     }
     report = build_report("flightlab", run.run_id, [], inputs=inputs, targets=targets)
-    report["status"] = status_from_checks(checks)
+    report["status"] = status_from_checks(
+        checks, {name: _check_category(name) for name in checks})
     report["digest"] = report_digest(report)
     return report
 

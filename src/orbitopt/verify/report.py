@@ -22,7 +22,18 @@ that quantifies how far the result can be trusted, rather than a single
 * **dynamics** -- the perturbation-model inventory: which body exerts which
   gravity model (point mass vs spherical harmonics with J2 / J22 named
   explicitly), which third bodies (Sun, Moon, planets) are included, and what
-  is *not* modelled (SRP, drag, relativity, finite burns).
+  is *not* modelled (SRP, drag, relativity, finite burns);
+* **check categories** (task #243) -- every check in ``status`` carries one of
+  three categories: ``numerical_consistency`` (the same model re-run by
+  independent numerics: step convergence, conservation of quantities the model
+  conserves exactly, solver convergence), ``model_agreement`` (the result
+  against a *different* model or prediction: a reference propagator, the
+  screening orbit, an aim point, a vehicle/site or corridor limit) and
+  ``historical_validation`` (against published real-world data, e.g. a flown
+  mission's timeline). ``status.check_categories`` maps each check name to its
+  category and ``status.categories`` rolls the outcome up per category, so a
+  reader sees which kind of evidence backs a pass -- and which kind is absent
+  (a category with no check is ``not_checked``, never counted as a pass).
 
 Reproducibility: the document contains no wall-clock time, keys are sorted,
 floats are serialised with full ``repr`` precision, and ``digest`` is the
@@ -76,6 +87,22 @@ _ALWAYS_UNMODELLED = (
     "solid_and_ocean_tides",
     "finite_burn_thrust_arcs (burns are impulsive)",
 )
+
+# Check categories (task #243): what kind of evidence a check actually is.
+# Three categories answer the three independent questions a verification can
+# settle -- is the numerics trustworthy (the same model, independent
+# numerics), do independent models agree (the result vs another model's
+# prediction), and does the real world agree (vs published, observed data).
+CHECK_NUMERICAL = "numerical_consistency"
+CHECK_MODEL = "model_agreement"
+CHECK_HISTORICAL = "historical_validation"
+CHECK_CATEGORIES = (CHECK_NUMERICAL, CHECK_MODEL, CHECK_HISTORICAL)
+CATEGORY_LABELS = {
+    CHECK_NUMERICAL: "Numerical consistency",
+    CHECK_MODEL: "Model agreement",
+    CHECK_HISTORICAL: "Historical validation",
+}
+"""Human-readable titles for the Verification tab."""
 
 
 # --------------------------------------------------------------------------
@@ -442,9 +469,17 @@ def propagation_section(
 # --------------------------------------------------------------------------
 
 def state_residual(name: str, reference: str, state=None, reference_state=None,
-                   position=None, reference_position=None, tolerance: Optional[Mapping] = None) -> dict:
+                   position=None, reference_position=None, tolerance: Optional[Mapping] = None,
+                   category: str = CHECK_MODEL) -> dict:
     """Position / velocity residual (numerical minus reference). Pass full
-    6-vectors (``state``/``reference_state``) or positions only."""
+    6-vectors (``state``/``reference_state``) or positions only.
+
+    ``category`` classifies the check the residual is (task #243): the
+    default, ``model_agreement``, fits a residual against another model's
+    prediction (a reference propagator, the screening orbit, an aim point);
+    pass ``numerical_consistency`` when the reference is the same model
+    re-run by independent numerics, or ``historical_validation`` when it is
+    published real-world data."""
     if state is not None:
         s = np.asarray(state, dtype=float)
         ref = np.asarray(reference_state, dtype=float)
@@ -456,6 +491,7 @@ def state_residual(name: str, reference: str, state=None, reference_state=None,
     out = {
         "name": name,
         "reference": reference,
+        "category": category,
         "position_residual_m": float(np.linalg.norm(dr)),
         "position_residual_vector_m": dr,
         "velocity_residual_m_s": None if dv is None else float(np.linalg.norm(dv)),
@@ -496,25 +532,33 @@ def provenance() -> dict:
 
 
 def _status(propagations, residuals, targets) -> dict:
-    checks = {}
+    checks, categories = {}, {}
+    def add(name: str, ok: bool, category: str) -> None:
+        checks[name] = bool(ok)
+        categories[name] = category
     for p in propagations:
         lab = p.get("label", "propagation")
         conv = p.get("integrator", {}).get("convergence", {})
         if conv.get("checked"):
-            checks[f"{lab}.step_convergence"] = bool(conv.get("converged"))
+            add(f"{lab}.step_convergence", bool(conv.get("converged")), CHECK_NUMERICAL)
         cons = p.get("conservation", {})
         tb = cons.get("two_body_reference")
         if tb is not None:
-            checks[f"{lab}.two_body_conservation"] = bool(tb.get("within_tolerance"))
+            add(f"{lab}.two_body_conservation", bool(tb.get("within_tolerance")), CHECK_NUMERICAL)
         pm = cons.get("propagated_model", {})
         if pm.get("applicable"):
-            checks[f"{lab}.model_conservation"] = bool(pm.get("within_tolerance"))
+            add(f"{lab}.model_conservation", bool(pm.get("within_tolerance")), CHECK_NUMERICAL)
     for r in residuals:
         if "within_tolerance" in r:
-            checks[f"residual.{r['name']}"] = bool(r["within_tolerance"])
+            category = r.get("category")
+            if category not in CHECK_CATEGORIES:
+                raise ValueError(
+                    f"residual {r.get('name')!r} needs a check category (one of {CHECK_CATEGORIES}); "
+                    "pass category= to state_residual or set 'category' on the residual dict")
+            add(f"residual.{r['name']}", bool(r["within_tolerance"]), category)
     if isinstance(targets, Mapping) and "converged" in targets:
-        checks["targeting.converged"] = bool(targets["converged"])
-    return status_from_checks(checks)
+        add("targeting.converged", bool(targets["converged"]), CHECK_NUMERICAL)
+    return status_from_checks(checks, categories)
 
 
 # Tri-state verification outcome (task #162). "No checks ran" is *not* a
@@ -525,19 +569,55 @@ RESULT_FAILED = "failed"
 RESULT_NOT_CHECKED = "not_checked"
 RESULTS = (RESULT_PASSED, RESULT_FAILED, RESULT_NOT_CHECKED)
 
+def _category_rollup(checks: Mapping, categories: Mapping) -> dict:
+    """Per-category outcome of a categorised check set: all three categories
+    always appear; one with no check is ``not_checked`` (absent evidence is
+    never counted as a pass)."""
+    out = {}
+    for cat in CHECK_CATEGORIES:
+        names = [n for n, c in categories.items() if c == cat]
+        n_ok = sum(bool(checks[n]) for n in names)
+        if not names:
+            result = RESULT_NOT_CHECKED
+        elif n_ok == len(names):
+            result = RESULT_PASSED
+        else:
+            result = RESULT_FAILED
+        out[cat] = {"result": result, "checks_passed": int(n_ok), "checks_total": len(names)}
+    return out
 
-def status_from_checks(checks: Mapping) -> dict:
-    """Status block for a mapping of ``check name -> bool``: ``failed`` if any
-    check failed, ``passed`` if there is at least one check and all passed,
-    ``not_checked`` if there are no checks at all."""
+
+def status_from_checks(checks: Mapping, categories: Optional[Mapping] = None) -> dict:
+    """Status block for a mapping of ``check name -> bool`` and a mapping of
+    ``check name -> category`` (one of :data:`CHECK_CATEGORIES`): ``failed``
+    if any check failed, ``passed`` if there is at least one check and all
+    passed, ``not_checked`` if there are no checks at all.
+
+    Every check must be categorised (task #243): ``numerical_consistency``,
+    ``model_agreement`` or ``historical_validation``. The status then carries
+    ``check_categories`` (the per-check label) and ``categories`` (the
+    per-category rollup), so the three kinds of evidence stay separate in the
+    report."""
     checks = {str(k): bool(v) for k, v in checks.items()}
+    cats = {str(k): str(v) for k, v in (categories or {}).items()}
+    missing = sorted(set(checks) - set(cats))
+    if missing:
+        raise ValueError(f"checks without a verification category: {missing} "
+                         f"(every check must be one of {CHECK_CATEGORIES})")
+    unknown = sorted(set(cats) - set(checks))
+    if unknown:
+        raise ValueError(f"categories given for unknown checks: {unknown}")
+    bad = sorted({c for c in cats.values() if c not in CHECK_CATEGORIES})
+    if bad:
+        raise ValueError(f"unknown check categories: {bad} (must be one of {CHECK_CATEGORIES})")
     if not checks:
         result = RESULT_NOT_CHECKED
     elif all(checks.values()):
         result = RESULT_PASSED
     else:
         result = RESULT_FAILED
-    return {"result": result, "passed": result == RESULT_PASSED, "checks": checks}
+    return {"result": result, "passed": result == RESULT_PASSED, "checks": checks,
+            "check_categories": cats, "categories": _category_rollup(checks, cats)}
 
 
 def status_result(status: Mapping) -> str:
@@ -546,7 +626,10 @@ def status_result(status: Mapping) -> str:
     result = status.get("result")
     if result in RESULTS:
         return result
-    return status_from_checks(status.get("checks") or {})["result"]
+    checks = status.get("checks") or {}
+    if not checks:
+        return RESULT_NOT_CHECKED
+    return RESULT_PASSED if all(bool(v) for v in checks.values()) else RESULT_FAILED
 
 
 def format_status(status: Mapping) -> str:
@@ -672,6 +755,27 @@ def publish_to_scene(scene: dict, reports: Sequence[Mapping]) -> dict:
     return scene
 
 
+def _merged_category_rollups(reports: Sequence[Mapping]) -> dict:
+    """Combine the sub-reports' per-category rollups (task #243): only a
+    report that ran a check in a category votes in it (failed beats passed),
+    and a category no report checked -- or a report written before checks
+    were categorised -- leaves it ``not_checked``: absent evidence."""
+    out = {cat: {"result": RESULT_NOT_CHECKED, "checks_passed": 0, "checks_total": 0}
+           for cat in CHECK_CATEGORIES}
+    for r in reports:
+        for cat, roll in ((r.get("status") or {}).get("categories") or {}).items():
+            if cat not in out or not roll.get("checks_total"):
+                continue
+            merged = out[cat]
+            merged["checks_passed"] += int(roll.get("checks_passed") or 0)
+            merged["checks_total"] += int(roll["checks_total"])
+            if roll.get("result") == RESULT_FAILED:
+                merged["result"] = RESULT_FAILED
+            elif merged["result"] != RESULT_FAILED:
+                merged["result"] = RESULT_PASSED
+    return out
+
+
 def bundle(reports: Sequence[Mapping], label: str) -> dict:
     """Combine several reports (one per verification stage) into one file."""
     reports = [to_jsonable(r) for r in reports]
@@ -690,7 +794,10 @@ def bundle(reports: Sequence[Mapping], label: str) -> dict:
         "schemaVersion": SCHEMA_VERSION,
         "kind": "bundle",
         "label": str(label),
-        "status": {"result": result, "passed": result == RESULT_PASSED, "checks": checks},
+        # The bundle's own checks are per-report verdicts, so no per-check
+        # category; the per-category rollup over all sub-reports' checks is.
+        "status": {"result": result, "passed": result == RESULT_PASSED, "checks": checks,
+                   "categories": _merged_category_rollups(reports)},
         "reports": reports,
         "provenance": provenance(),
     }

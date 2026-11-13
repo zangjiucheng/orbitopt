@@ -25,7 +25,9 @@ publishes no limits for Starship V3) and are labelled as such in the
 report. The reports use the verification-report-1.0 schema like every other
 mission's, with no propagation sections (the orbit's own step-convergence
 check is the re-fly's first check); the numbers behind each check ride in
-``targets["metrics"]`` for the Verification tab.
+``targets["metrics"]`` for the Verification tab. In the report's categories
+(task #243): the re-fly is numerical consistency, the dispersions and limits
+model agreement, the timeline check historical validation.
 """
 from __future__ import annotations
 
@@ -35,7 +37,15 @@ from dataclasses import dataclass
 import numpy as np
 
 from orbitopt.ground_track import eci_to_ecef
-from orbitopt.verify.report import build_report, report_digest, state_residual, status_from_checks
+from orbitopt.verify.report import (
+    CHECK_HISTORICAL,
+    CHECK_MODEL,
+    CHECK_NUMERICAL,
+    build_report,
+    report_digest,
+    state_residual,
+    status_from_checks,
+)
 from orbitopt.viz import starship_ascent as ascent_mod
 from orbitopt.viz import starship_flight as sf
 
@@ -94,14 +104,17 @@ model at entry heights. Burn +-1 s / +-1 m/s: a coarse execution error for a
 Raptor burn. L/D +-10%: the flat-plate aerodynamics is a first estimate."""
 
 
-def _metric(name: str, value: str, limit: str, ok: bool | None) -> dict:
-    return {"name": name, "value": value, "limit": limit, "ok": ok}
+def _metric(name: str, value: str, limit: str, ok: bool | None, category: str = CHECK_MODEL) -> dict:
+    return {"name": name, "value": value, "limit": limit, "ok": ok, "category": category}
 
 
-def _report(kind: str, label: str, checks: dict, metrics: list, inputs: dict, residuals=()) -> dict:
+def _report(kind: str, label: str, checks: dict, metrics: list, inputs: dict, residuals=(),
+            category: str = CHECK_MODEL) -> dict:
+    """One report: every check (and metric) belongs to ``category`` -- these
+    reports check one thing each, so all their checks share a category."""
     report = build_report(kind, label, propagations=[], residuals=list(residuals), inputs=inputs,
                           targets={"metrics": metrics})
-    report["status"] = status_from_checks(checks)
+    report["status"] = status_from_checks(checks, dict.fromkeys(checks, category))
     report["digest"] = report_digest(report)
     return report
 
@@ -119,7 +132,7 @@ def refly_report(pred, tight, sol) -> dict:
     residual = state_residual(
         "landing_burn_start", "nominal solve (tudatpy orbit, DOP853 entry)",
         position=_end_ecef(tight, sol.burn_time_s, again), reference_position=_end_ecef(pred, sol.burn_time_s, nominal),
-        tolerance={"position_m": REFLY_TOLERANCE_M})
+        tolerance={"position_m": REFLY_TOLERANCE_M}, category=CHECK_NUMERICAL)
     miss_m = float(np.linalg.norm(sf._miss_vector_km(tight, sol.burn_time_s, again))) * 1000.0
     pass_dt = (abs(pred.return_pass.time_s - tight.return_pass.time_s)
                if pred.return_pass is not None and tight.return_pass is not None else math.inf)
@@ -131,13 +144,14 @@ def refly_report(pred, tight, sol) -> dict:
     }
     metrics = [
         _metric("Return pass, tolerances x0.01", f"moves {pass_dt:.3f} s", f"<= {PASS_TIME_TOLERANCE_S:g} s",
-                checks["orbit_step_convergence"]),
+                checks["orbit_step_convergence"], CHECK_NUMERICAL),
         _metric("Landing point, re-flown vs nominal", f"{residual['position_residual_m']:.1f} m",
-                f"<= {REFLY_TOLERANCE_M:g} m", checks["refly_matches_nominal"]),
+                f"<= {REFLY_TOLERANCE_M:g} m", checks["refly_matches_nominal"], CHECK_NUMERICAL),
         _metric("Re-flown miss from Starbase", f"{miss_m:.1f} m", f"<= {REFLY_TOLERANCE_M:g} m",
-                checks["refly_reaches_starbase"]),
+                checks["refly_reaches_starbase"], CHECK_NUMERICAL),
     ]
-    return _report("starship_return_refly", "independent re-fly", checks, metrics, residuals=[residual], inputs={
+    return _report("starship_return_refly", "independent re-fly", checks, metrics, residuals=[residual],
+                   category=CHECK_NUMERICAL, inputs={
         "orbit": "tudatpy, rtol/atol x0.01 of the nominal propagation",
         "entry": "scipy RK45, rtol 1e-11, atol 1e-5, max step 10 s (nominal: DOP853, 1e-9 / 1e-6, 60 s)",
         "burn_time_s": sol.burn_time_s, "bank_deg": sol.bank_deg, "dv_normal_m_s": sol.dv_normal_m_s})
@@ -313,13 +327,14 @@ def timeline_report(pred, sol) -> dict:
     tol = f"within ±{ENTRY_TIME_TOLERANCE_S / 60.0:g} min"
     metrics = [
         _metric("Entry interface vs SpaceX's T+22:10:46", "—" if ei is None else f"{ei_off / 60.0:+.1f} min", tol,
-                checks["entry_interface_vs_announced"]),
+                checks["entry_interface_vs_announced"], CHECK_HISTORICAL),
         _metric("Tower catch vs SpaceX's T+22:32:34", f"{catch_off / 60.0:+.1f} min", tol,
-                checks["tower_catch_vs_announced"]),
+                checks["tower_catch_vs_announced"], CHECK_HISTORICAL),
         _metric("Orbits to the announced entry", f"{orbits:.2f}", f"{ANNOUNCED_ORBITS} completed",
-                checks["orbits_vs_announced"]),
+                checks["orbits_vs_announced"], CHECK_HISTORICAL),
     ]
     return _report("starship_timeline_consistency", "against SpaceX's published timeline", checks, metrics,
+                   category=CHECK_HISTORICAL,
                    inputs={"note": "the published times are never inputs to the orbit or the return solve"})
 
 

@@ -290,13 +290,80 @@ def test_fixed_step_convergence_compares_states_at_same_epoch():
 def test_status_is_tri_state():
     """Task #162: no checks is ``not_checked``, never an implicit pass."""
     empty = vr.status_from_checks({})
-    assert empty == {"result": "not_checked", "passed": False, "checks": {}}
-    assert vr.status_from_checks({"a": True, "b": True})["result"] == "passed"
-    failed = vr.status_from_checks({"a": True, "b": False})
+    assert empty["result"] == "not_checked" and not empty["passed"] and empty["checks"] == {}
+    # Task #243: the three categories always appear, empty ones as not_checked.
+    assert empty["check_categories"] == {}
+    assert set(empty["categories"]) == set(vr.CHECK_CATEGORIES)
+    assert all(r == {"result": "not_checked", "checks_passed": 0, "checks_total": 0}
+               for r in empty["categories"].values())
+    assert vr.status_from_checks({"a": True}, {"a": vr.CHECK_NUMERICAL})["result"] == "passed"
+    failed = vr.status_from_checks({"a": True, "b": False},
+                                   {"a": vr.CHECK_NUMERICAL, "b": vr.CHECK_MODEL})
     assert failed["result"] == "failed" and not failed["passed"]
+    assert failed["categories"][vr.CHECK_NUMERICAL]["result"] == "passed"
+    assert failed["categories"][vr.CHECK_MODEL] == {"result": "failed", "checks_passed": 0, "checks_total": 1}
     assert vr.format_status(empty).startswith("NOT CHECKED")
     # Legacy documents without ``result`` are re-derived from their checks.
     assert vr.status_result({"passed": True, "checks": {}}) == "not_checked"
+
+
+def test_every_check_must_be_categorised():
+    """Task #243: a check without a category (or with an unknown one) is a
+    producer bug, refused where the status is built."""
+    with pytest.raises(ValueError):
+        vr.status_from_checks({"a": True})
+    with pytest.raises(ValueError):
+        vr.status_from_checks({"a": True}, {"a": "instrumental_drift"})
+    with pytest.raises(ValueError):
+        vr.status_from_checks({"a": True}, {"a": vr.CHECK_MODEL, "b": vr.CHECK_MODEL})
+    with pytest.raises(ValueError):  # hand-written residual dict without category
+        vr.build_report("t", "x", propagations=[],
+                        residuals=[{"name": "r", "reference": "ref", "within_tolerance": True}])
+
+
+def test_auto_checks_are_categorised_by_kind():
+    """Step convergence / conservation / targeting convergence are numerical;
+    a residual is model agreement unless its producer says otherwise."""
+    period = 2 * np.pi * np.sqrt(R_GEO**3 / MU_EARTH)
+    rep = _report(propagate(_geo_state(), [{"type": "coast", "duration": period}]))
+    vr.validate_report(rep)
+    cats = rep["status"]["check_categories"]
+    assert set(cats) == set(rep["status"]["checks"])
+    assert cats["coast.step_convergence"] == vr.CHECK_NUMERICAL
+    assert cats["coast.two_body_conservation"] == vr.CHECK_NUMERICAL
+    assert cats["coast.model_conservation"] == vr.CHECK_NUMERICAL
+    assert cats["targeting.converged"] == vr.CHECK_NUMERICAL
+    assert cats["residual.final_vs_initial"] == vr.CHECK_MODEL  # state_residual default
+    roll = rep["status"]["categories"]
+    assert roll[vr.CHECK_NUMERICAL]["result"] == "passed"
+    assert roll[vr.CHECK_MODEL]["result"] == "passed"
+    assert roll[vr.CHECK_HISTORICAL] == {"result": "not_checked", "checks_passed": 0, "checks_total": 0}
+
+
+def test_historical_residuals_carry_their_category_and_bundle_rolls_up():
+    period = 2 * np.pi * np.sqrt(R_GEO**3 / MU_EARTH)
+    res = propagate(_geo_state(), [{"type": "coast", "duration": period}])
+    section = vr.propagation_section(res, "coast", mu=MU_EARTH)
+    flown = vr.build_report(
+        kind="t", label="flown", propagations=[section],
+        residuals=[vr.state_residual("touchdown_vs_telemetry", "published flight telemetry",
+                                     position=res.final_state[:3], reference_position=_geo_state()[:3],
+                                     tolerance={"position_m": 1e9}, category=vr.CHECK_HISTORICAL)],
+    )
+    vr.validate_report(flown)
+    cats = flown["status"]["check_categories"]
+    assert cats["residual.touchdown_vs_telemetry"] == vr.CHECK_HISTORICAL
+    assert cats["coast.step_convergence"] == vr.CHECK_NUMERICAL
+    roll = flown["status"]["categories"]
+    assert roll[vr.CHECK_HISTORICAL] == {"result": "passed", "checks_passed": 1, "checks_total": 1}
+    assert roll[vr.CHECK_MODEL] == {"result": "not_checked", "checks_passed": 0, "checks_total": 0}
+    b = vr.bundle([flown], "b")
+    vr.validate_report(b)
+    broll = b["status"]["categories"]
+    assert broll[vr.CHECK_HISTORICAL] == {"result": "passed", "checks_passed": 1, "checks_total": 1}
+    assert broll[vr.CHECK_NUMERICAL]["result"] == "passed" and broll[vr.CHECK_NUMERICAL]["checks_total"] == 3
+    assert broll[vr.CHECK_MODEL]["result"] == "not_checked"
+    assert vr.status_result(b["status"]) == "passed"
 
 
 def test_report_without_checks_is_not_checked_and_validates():

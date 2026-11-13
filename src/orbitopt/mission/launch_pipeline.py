@@ -314,9 +314,25 @@ def _build_report(*, inputs: Mapping, window: dict | None, ascent: dict | None,
     }
     report = build_report("launch-pipeline", label, [], inputs=dict(inputs),
                           targets=targets)
-    report["status"] = status_from_checks(checks_map)
+    report["status"] = status_from_checks(
+        checks_map, {name: _check_category(name) for name in checks_map})
     report["digest"] = report_digest(report)
     return report
+
+
+def _check_category(name: str) -> str:
+    """V-04 (task #243) evidence category of one launch-pipeline check: the
+    optimizer converging is numerical consistency (converged targeting);
+    the window against the site corridor, the Gate-B verdicts and the
+    injection against the target orbit are model agreement."""
+    from orbitopt.verify.report import CHECK_MODEL, CHECK_NUMERICAL
+
+    if name == "ascent.optimizer_converged":
+        return CHECK_NUMERICAL
+    if name in ("window.selected", "ascent.physics_verified",
+                "ascent.mission_constraints_passed") or name.startswith("injection."):
+        return CHECK_MODEL
+    raise ValueError(f"launch-pipeline check {name!r} has no verification category")
 
 
 def _write(result_kwargs: dict, report: dict, out: Path):

@@ -36,8 +36,10 @@ ENTRY_EPOCH_S = 9.0 * 86400.0
 def _report(passed=True):
     return {
         "kind": "lunar-free-return-entry-corridor", "label": "artemis",
-        "status": verification_report.status_from_checks({"targeting.converged": True,
-                                                          "residual.entry_flight_path_angle_in_corridor": passed}),
+        "status": verification_report.status_from_checks(
+            {"targeting.converged": True, "residual.entry_flight_path_angle_in_corridor": passed},
+            {"targeting.converged": "numerical_consistency",
+             "residual.entry_flight_path_angle_in_corridor": "model_agreement"}),
         "residuals": [{"name": "entry", "position_residual_m": 12.0}],
     }
 

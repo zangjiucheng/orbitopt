@@ -75,6 +75,7 @@ from orbitopt.launch_windows import (
     as_mjd2000,
     asymptote_launch_windows,
 )
+from orbitopt.physics_io import EARTH_CENTRED_METRES, check_grav_parameter
 from orbitopt.timescales import utc_mjd2000_to_tdb_seconds
 
 MU_EARTH_M3_S2 = 3.986004418e14
@@ -192,6 +193,12 @@ class ParkingOrbit:
             raise ValueError("parking-orbit altitude must be > 0 km")
         if not 0.0 <= self.inclination_deg <= 180.0:
             raise ValueError("inclination must be in [0, 180] deg")
+        # The epoch is MJD2000 UTC days and mu is m^3/s^2 -- the conventions of
+        # orbitopt.physics_io.EARTH_CENTRED_METRES, checked here so a TDB-seconds
+        # epoch or a km^3/s^2 mu is caught at construction, not in the state.
+        EARTH_CENTRED_METRES.check_epoch(self.epoch_mjd2000, where="ParkingOrbit.epoch_mjd2000")
+        check_grav_parameter(self.mu_m3_s2, units=EARTH_CENTRED_METRES.units,
+                             where="ParkingOrbit.mu_m3_s2")
 
     @property
     def radius_m(self) -> float:
@@ -245,7 +252,9 @@ class ParkingOrbit:
         m = np.cross(h, n)
         r_hat = math.cos(u) * n + math.sin(u) * m
         t_hat = np.cross(h, r_hat)
-        return np.concatenate([self.radius_m * r_hat, self.speed_m_s * t_hat])
+        state = np.concatenate([self.radius_m * r_hat, self.speed_m_s * t_hat])
+        EARTH_CENTRED_METRES.check_state(state[:3], state[3:], where="ParkingOrbit.state_at")
+        return state
 
     def to_dict(self) -> dict:
         return {"altitude_km": self.altitude_km, "inclination_deg": self.inclination_deg,
@@ -993,9 +1002,17 @@ def verify_injection(
         "launch.azimuth_in_corridor": lv.azimuth_in_corridor,
         "launch.inclination_reachable": lv.inclination_reachable,
     }
+    # Site-in-plane is plan geometry consistent to zero (numerical); the rest
+    # compare the achieved injection against the site/vehicle models.
+    extra_categories = {
+        "launch.site_in_plane": _report.CHECK_NUMERICAL,
+        "launch.azimuth_in_corridor": _report.CHECK_MODEL,
+        "launch.inclination_reachable": _report.CHECK_MODEL,
+    }
     if target.kind == "elliptic":
         targets["max_out_of_plane_deg"] = float(max_out_of_plane_deg)
         extra_checks["targeting.out_of_plane"] = bool(abs(oop) <= max_out_of_plane_deg)
+        extra_categories["targeting.out_of_plane"] = _report.CHECK_MODEL
     if launch_constraints is not None:
         # The vehicle limit applies to every injection: C3 = 2 * specific
         # energy of the post-burn arc (negative for TLI / any elliptic
@@ -1016,21 +1033,26 @@ def verify_injection(
         if launch_constraints.vehicle is not None:
             targets["max_c3_km2_s2"] = launch_constraints.max_c3
             extra_checks["launch.c3_within_vehicle"] = bool(c3_achieved <= launch_constraints.max_c3)
+            extra_categories["launch.c3_within_vehicle"] = _report.CHECK_MODEL
         if target.kind == "hyperbolic":
             if achieved is None:
                 extra_checks["launch.dla_within_site"] = False
+                extra_categories["launch.dla_within_site"] = _report.CHECK_MODEL
             else:
                 v = achieved.reshape(1, 3)
                 if launch_constraints.frame == "ecliptic":
                     v = equatorial_to_ecliptic(v)
                 ev = launch_constraints.evaluate(v)
                 extra_checks["launch.dla_within_site"] = bool(float(ev.dla_excess_deg[0]) <= 0.0)
+                extra_categories["launch.dla_within_site"] = _report.CHECK_MODEL
 
     report = _report.build_report(
         kind="launch-injection", label=f"{lv.site_id}-{target.name or target.kind}-{orbit.epoch_mjd2000:.5f}",
         propagations=[section], residuals=residuals, inputs=plan.to_dict(), targets=targets,
     )
-    report["status"] = _report.status_from_checks({**report["status"]["checks"], **extra_checks})
+    report["status"] = _report.status_from_checks(
+        {**report["status"]["checks"], **extra_checks},
+        {**report["status"]["check_categories"], **extra_categories})
     report["digest"] = _report.report_digest(report)
     _report.finalize_report(report, report_path)
 

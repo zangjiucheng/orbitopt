@@ -1007,6 +1007,7 @@ def target_free_return_entry_corridor(
             "name": "entry_flight_path_angle_in_corridor",
             "reference": "TudatPy-propagated inertial flight-path angle at the entry-interface crossing "
                          "vs the safe lunar-return entry corridor",
+            "category": _report.CHECK_MODEL,
             "position_residual_m": None, "velocity_residual_m_s": None,
             "value_deg": entry_fpa,
             "tolerance": {"corridor_deg": [float(steepest), float(shallowest)]},
