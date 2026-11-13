@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "flight-aero-1.0.json",
+  "title": "Flight Lab aerodynamic coefficient document (FL-602 / F-02)",
+  "description": "A Flight Lab aerodynamic model YAML: what orbitopt.flightlab.sixdof.aero.AeroModel loads. Two shapes are allowed. 'kind: coefficient-tables' (what AeroModel.to_document writes) carries one table per coefficient under `coefficients`, each with its own `axes` subset of {mach, alpha_deg, beta_deg}, the axis nodes inline or shared at document level, and a nested `values` list rectangular in the axis order; that is the shape a real CFD/wind-tunnel reduction is tabulated into. 'kind: axisymmetric' carries instead the small description a hand-built booster gets from a diameter and a curve slope -- a `ca` Mach breakout plus `cn_alpha_per_rad` and `static_margin` -- which the loader promotes to full tables; packaged illustrative models use it and say so in `provenance`. Axes are strictly increasing, and the extrapolation policy of a table ('clamp' default, 'linear', 'error') is what happens outside the tabulated range.",
+  "type": "object",
+  "required": ["schema_version", "name"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "flight-aero-1.0"},
+    "kind": {"enum": ["coefficient-tables", "axisymmetric"], "default": "coefficient-tables"},
+    "name": {"type": "string", "minLength": 1},
+    "label": {"type": "string"},
+    "extrapolation": {"$ref": "#/$defs/Extrapolation"},
+    "provenance": {"$ref": "#/$defs/Provenance"},
+    "reference": {
+      "type": "object",
+      "required": ["length_m"],
+      "anyOf": [
+        {"required": ["area_m2"]},
+        {"required": ["diameter_m"]}
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "area_m2": {"type": "number", "exclusiveMinimum": 0,
+                    "description": "Reference area S of Cx = F/(q S)."},
+        "diameter_m": {"type": "number", "exclusiveMinimum": 0,
+                       "description": "axisymmetric kind only: body diameter, recorded for the record (area wins when both are given)."},
+        "diameter_m": {"type": "number", "exclusiveMinimum": 0,
+                       "description": "axisymmetric kind only: body diameter, recorded for the record (area wins when both are given)."},
+        "span_m": {"type": "number", "exclusiveMinimum": 0,
+                   "description": "Roll-moment reference length b; defaults to length_m."},
+        "length_m": {"type": "number", "exclusiveMinimum": 0,
+                     "description": "Pitch/yaw-moment reference length c."}
+      }
+    },
+    "mach": {"$ref": "#/$defs/AxisNodes"},
+    "alpha_deg": {"$ref": "#/$defs/AxisNodes"},
+    "beta_deg": {"$ref": "#/$defs/AxisNodes"},
+    "coefficients": {
+      "type": "object",
+      "required": ["ca", "cn", "cy", "cl", "cm", "cn_yaw"],
+      "additionalProperties": false,
+      "properties": {
+        "ca": {"$ref": "#/$defs/Table"},
+        "cn": {"$ref": "#/$defs/Table"},
+        "cy": {"$ref": "#/$defs/Table"},
+        "cl": {"$ref": "#/$defs/Table"},
+        "cm": {"$ref": "#/$defs/Table"},
+        "cn_yaw": {"$ref": "#/$defs/Table"}
+      }
+    },
+    "damping": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cl_p": {"type": "number", "description": "Roll-damping derivative cl_p (per nondimensional rate c*p/2V)."},
+        "cm_q": {"type": "number", "description": "Pitch damping, negative for a damped body."},
+        "cn_yaw_r": {"type": "number", "description": "Yaw damping, negative for a damped body."}
+      }
+    },
+    "ca": {
+      "type": "array", "minItems": 2,
+      "items": {"type": "array", "prefixItems": [{"type": "number"}, {"type": "number"}],
+                "items": false},
+      "description": "axisymmetric kind: [[mach, ca], ...] drag breakout, linear between nodes."
+    },
+    "cn_alpha_per_rad": {"type": "number", "exclusiveMinimum": 0},
+    "static_margin": {"type": "number", "minimum": 0,
+                      "description": "axisymmetric kind: centre of pressure behind the CG, in reference lengths; cm_alpha = -static_margin * cn_alpha."},
+    "mach_nodes": {"$ref": "#/$defs/AxisNodes"},
+    "alpha_deg_nodes": {"$ref": "#/$defs/AxisNodes"},
+    "beta_deg_nodes": {"$ref": "#/$defs/AxisNodes"}
+  },
+  "oneOf": [
+    {"properties": {"kind": {"const": "axisymmetric"}}, "required": ["reference", "ca", "cn_alpha_per_rad"]},
+    {"properties": {"kind": {"enum": ["coefficient-tables", null]}}, "required": ["reference", "coefficients"]}
+  ],
+  "$defs": {
+    "Extrapolation": {
+      "enum": ["clamp", "linear", "error"],
+      "description": "Outside the tabulated range: hold the edge value (default, what numpy.interp does), continue the end segment's slope, or raise."
+    },
+    "Provenance": {
+      "type": ["string", "object"],
+      "description": "Where the coefficients came from; packaged illustrative models must say 'illustrative'."
+    },
+    "AxisNodes": {
+      "type": "array", "minItems": 2, "items": {"type": "number"}
+    },
+    "Table": {
+      "type": "object",
+      "required": ["axes", "values"],
+      "additionalProperties": false,
+      "properties": {
+        "axes": {
+          "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true,
+          "items": {"enum": ["mach", "alpha_deg", "beta_deg"]},
+          "description": "Independent variables of this table, in nested-list order."
+        },
+        "mach": {"$ref": "#/$defs/AxisNodes"},
+        "alpha_deg": {"$ref": "#/$defs/AxisNodes"},
+        "beta_deg": {"$ref": "#/$defs/AxisNodes"},
+        "values": {"type": "array", "minItems": 2, "description": "Nested lists, rectangular over `axes`; a scalar or a shallower nesting is broadcast by the loader."},
+        "extrapolation": {"$ref": "#/$defs/Extrapolation"},
+        "label": {"type": "string"},
+        "provenance": {"$ref": "#/$defs/Provenance"}
+      }
+    }
+  }
+}

@@ -79,6 +79,7 @@ where = ["src"]
 # data/scenes: the precomputed built-in missions (scripts/precompute_scenes.py).
 orbitopt = ["schemas/*.json", "data/*.yaml", "data/scenes/*.json.gz", "data/scenes/manifest.json",
             "data/flightlab/scenarios/*.yaml", "data/flightlab/vehicles/*.yaml",
+            "data/flightlab/aero/*.yaml",
             "data/flightlab/sixdof/*.yaml",
             "data/flightlab/schemas/*.json",
             "data/flightlab/jsbsim/aircraft/*/*.xml", "data/flightlab/jsbsim/engine/*.xml",

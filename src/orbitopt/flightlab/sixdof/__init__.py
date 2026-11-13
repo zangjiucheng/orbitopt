@@ -26,4 +26,13 @@ without jsbsim)::
 ``jsbsim==1.3.3`` is an opt-in pip dependency (``envs/sixdof-requirements.txt``
 or ``pip install orbitopt[sixdof]``); the JSBSim model XML lives under
 ``orbitopt/data/flightlab/jsbsim/``.
+
+F-02 (task #227) adds the two modules the JSBSim backend cannot host: an
+in-house coefficient model and the native plant that flies it. The bindings
+expose no per-step force/moment injection hook, so the aero authored here is
+flew here -- the *reference* 6-DOF plant, not a JSBSim replacement::
+
+    from orbitopt.flightlab.sixdof.aero import AeroModel, load_packaged_aero
+    from orbitopt.flightlab.sixdof.rigidbody import propagate, RigidBodyVehicle
+    # docs/flightlab.md (the F-02 section, and why the split exists)
 """
