@@ -345,7 +345,7 @@ def test_report_carries_the_r06_statistics(tmp_path, monkeypatch):
 
     result = _run_stubbed(monkeypatch, mc, tmp_path)
     out = result.to_dict()
-    assert out["schemaVersion"] == "1.2"
+    assert out["schemaVersion"] == "1.3"
     stats = out["statistics"]
     ci = stats["success_rate_ci"]
     assert ci["n"] == 12 and ci["successes"] == ci["point"] * 12

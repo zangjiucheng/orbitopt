@@ -379,7 +379,10 @@ def _cmd_flight_montecarlo(args):
     stand. The report also carries the R-06 statistics: failure classes, a
     Wilson confidence interval on the success rate and a per-source
     sensitivity; ``--solo-sensitivity`` adds the one-at-a-time marginal
-    reading. Determinism covers all of it: the same seed and setup write a
+    reading. ``--capture-tracks N`` (R-07) also records each sample's flown
+    booster track, down-sampled to at most N site-ENU rows, for the
+    dispersion-envelope plots (orbitopt.flightlab.recovery.envelope).
+    Determinism covers all of it: the same seed and setup write a
     byte-identical JSON regardless of ``--jobs``. Exit code reports pipeline
     health, like `flight simulate`."""
     from pathlib import Path
@@ -402,6 +405,7 @@ def _cmd_flight_montecarlo(args):
                              uncertainty=uncertainty,
                              seed=args.seed, n=args.n, workers=args.jobs,
                              solo_sensitivity=args.solo_sensitivity,
+                             capture_tracks=args.capture_tracks,
                              out_path=out)
     except (OSError, ValueError, KeyError, RuntimeError, jsonschema.ValidationError) as exc:
         print(f"ERROR: {exc}")
@@ -656,6 +660,12 @@ def build_parser() -> argparse.ArgumentParser:
                                 "seed and n -- the marginal per-source "
                                 "sensitivity reading (1 + n_active sample "
                                 "passes instead of 1)")
+    flight_mc.add_argument("--capture-tracks", type=int, default=None,
+                           metavar="N",
+                           help="R-07: record each sample's flown booster "
+                                "track, down-sampled to at most N rows in the "
+                                "site-ENU frame, for the dispersion-envelope "
+                                "plots (orbitopt.flightlab.recovery.envelope)")
     flight_mc.add_argument("--ascent-run-dir", default=None, metavar="RUN_DIR",
                            help="where the (single) ascent run is written "
                                 "(default: <out>.ascent/)")

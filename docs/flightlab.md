@@ -31,7 +31,7 @@ directory:
 ```bash
 orbitopt flight montecarlo src/orbitopt/data/flightlab/scenarios/leo_two_stage.yaml \
   --vehicle src/orbitopt/data/flightlab/vehicles/synthetic_two_stage.yaml \
-  -n 32 --seed 7 -o montecarlo.json
+  -n 32 --seed 7 --capture-tracks 240 -o montecarlo.json
 ```
 
 `orbitopt flight optimize --help` describes ascent optimization. Each command
@@ -43,7 +43,7 @@ also has its own `--help`.
 |---|---|
 | Ascent | OpenTsiolkovsky 3-DOF point mass with a gravity turn or attitude program and a Cd(Mach) model. Displayed attitude is kinematic. |
 | Booster recovery | 3-DOF Earth-fixed point mass with J2, rotation, atmosphere, relightable engines and event detection. |
-| Recovery Monte Carlo | Plan-level dispersed samples; guidance re-plans with each sample's vehicle parameters. Vehicle uncertainty bands supply defaults; R-04 sources (wind / density / thrust / Isp / drag / initial state) are config-declared and individually switchable. R-06 reports failure classes, a success-rate confidence interval and per-source sensitivity. |
+| Recovery Monte Carlo | Plan-level dispersed samples; guidance re-plans with each sample's vehicle parameters. Vehicle uncertainty bands supply defaults; R-04 sources (wind / density / thrust / Isp / drag / initial state) are config-declared and individually switchable. R-06 reports failure classes, a success-rate confidence interval and per-source sensitivity. R-07 optionally records each sample's booster track (`--capture-tracks`) for the dispersion-envelope figures. |
 | JSBSim spike | Optional 6-DOF tracking cross-check; it is not the default propagator or part of the optimization loop. See [ADR 0001](adr/flightlab-0001-jsbsim-6dof.md). |
 
 ## Hard gates
@@ -104,8 +104,9 @@ uncertainty:
 
 Every source has its own `enabled` switch; the declared distributions and
 parameters are recorded verbatim in the report's `uncertainty` section
-(`montecarlo.json` schema 1.2 — R-06 adds the `statistics` section described
-below; `dispersions` stays as the flat legacy view).
+(`montecarlo.json` schema 1.3 — R-06 adds the `statistics` section described
+below and R-07 the optional `track_capture` section described below;
+`dispersions` stays as the flat legacy view).
 The wind is one steady ENU vector per sample — it enters the acceptance
 re-integration (propagator and landing burn) but not the FL-302 optimiser
 rollout, the same deliberate plan/reality mismatch as the density bias.
@@ -117,7 +118,8 @@ regardless of `--jobs`, and pre-R-04 fixed-seed dispersions runs (the plain
 ## Recovery Monte Carlo statistics (R-06)
 
 Every `montecarlo.json` now carries a `statistics` section
-(schema 1.2) that reads the sample population instead of only counting it:
+(schema 1.2, still current in 1.3) that reads the sample population instead
+of only counting it:
 
 * **failure classes** — every non-landed sample is attributed to exactly one
   family: `planning_infeasible` (no feasible boostback/entry/landing plan),
@@ -143,3 +145,53 @@ success rate per source). That costs `1 + n_active` sample passes and is what
 isolates one source from the ones dispersed with it. All of it is a pure
 function of the flown samples — no RNG — so the same seed still reproduces the
 whole report byte-for-byte.
+
+## Nominal / dispersed comparison (R-07)
+
+R-06 counts and classifies the failures; R-07 shows *where and how* the
+population lands, against the FL-305 baseline, under identical conditions.
+Three pieces, all in `orbitopt.flightlab.recovery.envelope`:
+
+* **nominal verification report** — `nominal_recovery()` flies the one
+  unperturbed recovery (the Monte Carlo's own warm start by default, so the
+  nominal and the dispersed population share one setup), and
+  `nominal_report()` / `write_nominal_report()` render the full verdict:
+  every gate and check re-assessed through `checks.evaluate` with its
+  governing reason title, the FL-302 corridor assessment, the landing
+  summary (with the R-05 `actuator_margin`), the R-02 handoff block and the
+  flown booster track in the capture format below. `--reports` JSONs are
+  byte-stable (sorted keys).
+* **track capture** — `flight montecarlo --capture-tracks N` records each
+  landed *and* failed sample's booster track, projected into site-ENU
+  (`t_s, east_m, north_m, up_m`, up from the site altitude) and uniformly
+  down-sampled to ≤ N rows, first and last row always kept. It rides on the
+  per-sample records after the flight, so it never touches the RNG or the
+  statistics: the same seed reports identical numbers with and without
+  capture (`montecarlo.json` schema 1.3, `track_capture` section records the
+  budget and the site used).
+* **envelope figures** — `envelope_dataset()` + `plot_envelope()` render one
+  run: every captured ground track in the site-ENU plane (landed in blue,
+  failures coloured by R-06 class and annotated with `idx REASON`, the max
+  touchdown radius as a ring) and the altitude-vs-range-to-site min/max
+  envelope with the nominal profile overlaid. `plot_comparison()` overlays
+  two runs' nominal tracks, touchdown scatters with 1/3-sigma ellipses, and
+  each run's Wilson interval.
+
+The evidence run is `benchmarks/bench_r07_nominal_dispersed.py`
+(evidence: `docs/benchmarks/r07_nominal_dispersed.json`, nominal reports
+`docs/benchmarks/r07_nominal_{baseline_fl305,r07_stack}.json`, figures
+`docs/assets/r07_envelope_{baseline_fl305,r07_stack}.png` and
+`docs/assets/r07_comparison.png`). Fairness: same ascent fixture, seed 1,
+n 32, dispersions, FL-302 warm start and referee for both configurations —
+the guidance/objective differs by exactly what epic #217 changed, the
+baseline pinning the R-01 objective terms off as the recorded FL-305
+evidence does. Under those conditions the baseline re-run reproduces the
+recorded FL-305 evidence exactly (14/32 = 0.4375, identical reason
+histogram — the fairness check passing by construction), and the current
+stack lands 17/32 = 0.531 (Wilson [0.36, 0.69]): `INSUFFICIENT_PROPELLANT_
+RESERVE` failures drop 8 → 2 as the landing-aware objective stops burning
+boostback propellant the landing needs, at the price of three more
+out-of-tolerance touchdowns (4 → 7) — the envelope figures show those as
+`LANDING_POSITION_OUT_OF_TOLERANCE` annotations pushed past the tolerance
+ring. Both configurations' nominal flights land at ~0.55 m with identical
+touchdown states; the difference is entirely in the tail.
