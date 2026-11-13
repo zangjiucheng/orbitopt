@@ -45,6 +45,41 @@ also has its own `--help`.
 | Booster recovery | 3-DOF Earth-fixed point mass with J2, rotation, atmosphere, relightable engines and event detection. |
 | Recovery Monte Carlo | Plan-level dispersed samples; guidance re-plans with each sample's vehicle parameters. Vehicle uncertainty bands supply defaults. |
 | 6-DOF ascent (JSBSim) | Opt-in formal backend (`backend="6DOF"`, `pip install orbitopt[sixdof]`): config-driven vehicle/ICs/dt through `orbitopt.flightlab.adapters.sixdof`; zero-aero illustrative vehicles so far. Not the default propagator, no aero yet, and not part of the optimization loop. See [ADR 0001](adr/flightlab-0001-jsbsim-6dof.md). |
+| 6-DOF reference plant (native) | JSBSim-free RK4 plant in `orbitopt.flightlab.sixdof.rigidbody` (gravity/J2/rotation, US76, throttleable thrust, attitude) flying the coefficient model of `orbitopt.flightlab.sixdof.aero`; reports the q-bar history and max-Q. Reference plant for aero acceptance, not a JSBSim replacement and not a `flight simulate` backend. |
+
+## Native aero model and the reference plant (F-02)
+
+The JSBSim backend flies the aerodynamics written inside its aircraft XML, and
+the `jsbsim==1.3.3` bindings expose no per-step force/moment injection hook —
+so an in-house coefficient model cannot be pushed into it. F-02 therefore
+ships the mirror image: an aero model authored here, flown by a native 6-DOF
+plant here (`orbitopt.flightlab.sixdof.rigidbody`).
+
+- **Coefficient model** (`sixdof/aero.py`): tables over Mach / angle of attack
+  / sideslip per coefficient (`ca, cy, cn, cl, cm, cn_yaw`), N-linear
+  interpolation with a per-table extrapolation policy (`clamp`, `linear`,
+  `error`), body-axis force/moment assembly with linear rate damping, and max-Q
+  extraction (peak sample, parabolic time refinement). Documents validate
+  against the packaged `flight-aero-1.0` JSON schema on load.
+- **Axisymmetric form**: `kind: axisymmetric` documents carry just
+  `ca(M)`, a curve slope, a static margin and damping, and are promoted to full
+  tables at load. The packaged [spike-stage model](../src/orbitopt/data/flightlab/aero/spike_stage.yaml)
+  (geometry from the task #206 spike, cd(M) from the f9-class catalog table,
+  coefficients **illustrative**) is what the acceptance tests fly.
+- **Reference plant** (`sixdof/rigidbody.py`): same physics family as the
+  recovery propagator plus attitude — ECEF RK4 on `(r, v, q, omega, m)`, US76
+  (or an injectable `ExponentialAtmosphere` for analytic baselines),
+  ambient-corrected throttleable thrust with a gimballed moment arm, propellant
+  bookkeeping floored at dry mass, ground-stop with an interpolated crossing
+  time. `to_body_track()` emits contract tracks directly.
+- **Max-Q**: reported per run with time, altitude and Mach;
+  `tests/test_flightlab_sixdof_rigidbody.py` checks the recorded history
+  against the closed form of the exponential atmosphere at the run's own mean
+  acceleration (constant-acceleration idealisation, so a ~35 % band against a
+  burn-down run).
+
+The JSBSim backend stays the formal 6-DOF engine; this plant is where a real
+coefficient table from F-05 lands first.
 
 ## Hard gates
 
