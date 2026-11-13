@@ -4,6 +4,17 @@
 - **Date:** 2026-11-11 (FL-403 numbers corrected 2026-11-11, see "Correction")
 - **Deciders:** Flight Lab E4 spike (Epic #196; FL-401 #206, FL-402 #207, FL-403 #208)
 - **ContextDB:** `epic187/jsbsim-go-no-go`
+- **Aftermath (F-01, task #226):** the GO engine became the formal, config-driven
+  6-DOF backend `orbitopt.flightlab.adapters.sixdof` — selectable as
+  `backend="6DOF"` in `simulate()` / `orbitopt flight simulate --backend 6DOF`,
+  with the vehicle, initial conditions and integration step supplied by scenario
+  configs (`orbitopt/data/flightlab/sixdof/fl401_vertical_hop.yaml`,
+  `fl402_staging_handoff.yaml`, `fl403_program_tracking.yaml`). The spike drivers
+  remain the implementation underneath; the isolated experiment entry point is
+  gone (`scripts/fl403_run_spike.py` now just regenerates this ADR's report
+  artifacts through the formal backend). MECO is a real throttle cut in the
+  formal backend (the spike coasted 5 s with the engine still open; metrics stop
+  at MECO, so the numbers here are unchanged).
 
 ## Context and problem
 

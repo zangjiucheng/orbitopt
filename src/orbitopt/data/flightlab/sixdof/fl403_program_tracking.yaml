@@ -1,0 +1,47 @@
+# Packaged 6-DOF backend scenario: the FL-403 closed-loop program tracking
+# (spike #208) migrated to the formal, config-driven backend (F-01, task
+# #226). One body, closed-loop PID TVC on an attitude program, 100 s burn +
+# 5 s coast; the FL-403 GO bounds are the `tracking` section and the MECO
+# deviation compares against the OpenTsiolkovsky 3-DOF reference CSV
+# (tests/fixtures/.../fl403_spike/ot_out/trajectory.csv -- re-generate with
+# scripts/fl403_record_reference.py). The tracking test
+# (tests/test_flightlab_sixdof_tracking_jsbsim.py) asserts the same bounds.
+name: fl403-program-tracking
+provenance: illustrative
+model: spike_stage
+dt_s: 0.01
+epoch_utc: '2026-01-01T00:00:00Z'
+ic:
+  lat_geod_deg: 0.0
+  lon_deg: 0.0
+  alt_m: 0.0
+  pitch_deg: 90.0
+  heading_deg: 90.0
+  roll_deg: -90.0
+ignition:
+  t_s: 0.0
+  throttle: 1.0
+control:
+  mode: pid
+  meco_t_s: 100.0
+  coast_s: 5.0
+  attitude_program:
+    - {t_s: 0.0,  azimuth_deg: 90.0, elevation_deg: 90.0}
+    - {t_s: 8.0,  azimuth_deg: 90.0, elevation_deg: 90.0}
+    - {t_s: 50.0, azimuth_deg: 90.0, elevation_deg: 18.0}
+    - {t_s: 105.0, azimuth_deg: 90.0, elevation_deg: 18.0}
+  gains: {kp: 3.0, ki: 0.01, kd: 4.0, i_max_alpha: 0.05}
+reference_csv: tests/fixtures/flightlab/opentsiolkovsky/fl403_spike/ot_out/trajectory.csv
+tracking:
+  settled_from_s: 60.0
+  settled_max_deg: 2.0
+  settled_rms_deg: 0.6
+  full_max_deg: 2.0
+  gimbal_sat_fraction_max: 0.0
+  d_alt_m: 500.0
+  d_speed_m_s: 20.0
+  d_fpa_deg: 0.2
+assumptions:
+  - "Closed-loop TVC of the zero-aero spike stage tracking a 3-DOF attitude
+    program: illustrative, not flight-certified. The reference CSV is a
+    3-DOF OpenTsiolkovsky trajectory (public_estimate)."
