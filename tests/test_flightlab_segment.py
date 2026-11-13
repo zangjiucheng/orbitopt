@@ -223,6 +223,22 @@ def test_pipeline_flight_lab_success_when_target_grades_the_flight(stub, target,
 
 
 @pytest.mark.slow
+def test_scene_path_also_places_the_run_directory(stub, tmp_path):
+    """`orbitopt run cfg.yaml -o out/scene.json`: with no explicit run_dir the
+    flight-lab run directory goes beside the scene it was given (it used to
+    follow the config's own output.scene_file -- the current directory)."""
+    config = _config(tmp_path)
+    del config["flightlab"]["run_dir"]
+    config["output"]["scene_file"] = "elsewhere/never.json"
+    out = tmp_path / "out" / "scene.json"
+    run_pipeline(config, write_outputs=True, scene_path=out, raise_on_error=False)
+    assert out.is_file()
+    assert (tmp_path / "out" / "scene.flightrun" / "manifest.json").is_file()
+    assert not (Path("elsewhere") / "never.flightrun").exists()
+    assert config["output"]["scene_file"] == "elsewhere/never.json"  # caller's dict untouched
+
+
+@pytest.mark.slow
 def test_pipeline_flight_lab_reports_write_outputs(stub, tmp_path):
     config = _config(tmp_path)
     result = run_pipeline(config, write_outputs=True, raise_on_error=False)

@@ -408,12 +408,38 @@ def test_separation_handoffs_are_m01_gated(fixture_scene):
     assert up["from"]["frame"] == "GCRS" and up["to"]["frame"] == "GCRS"
     # the fabricated fixture ends the LAUNCH_ECI stack at the numbers its GCRS
     # child starts with -- through the frame bridge those are different states.
-    assert up["status"] == "failed"
-    # the fabricated booster starts heavier than the stack ended: mass_gain.
+    assert up["status"] == "failed" and up["graded"] is True
+    # The booster is off the ascent lineage (stack -> upper_stage reaches
+    # orbit): recorded, never graded, as in the M-07 reference chain. Its
+    # divergence from the stack (here even a fabricated mass gain) is the
+    # recovered stage's own physics, not a lost handoff of the mission.
     booster = by_id["separation:booster"]
-    assert booster["status"] == "failed"
-    mass = next(c for c in booster["checks"] if c["id"] == "handoff.mass_conservation")
-    assert mass["passed"] is False and mass["reason_code"] == "mass_gain"
+    assert booster["status"] == "not_checked" and booster["graded"] is False
+    assert booster["checks"] == [] and "not graded" in booster["detail"]
+
+
+def test_staging_gap_is_bridged_by_a_coast_before_the_gate():
+    """A backend samples each stage on its own clock: the parent ends 2 s
+    before the child begins (FL-004: 206 s vs 208 s). Graded raw, that gap
+    is ~7 km and ~18 m/s of flight and every staging read FAILED; the parent
+    is coasted to the child's first sample first, as in the M-07 chain."""
+    from orbitopt.flightlab.coast import coast_arc
+
+    r0, v0 = (6.6e6, 0.0, 0.0), (0.0, 7771.0, 0.0)
+    _, rs, vs = coast_arc(r0, v0, 2.0, samples=2)
+    parent = _track("stack", t=(0.0, 100.0), mass=(300000.0, 120000.0),
+                    pos=((6.5e6, 0.0, 0.0), r0), vel=((0.0, 7700.0, 0.0), v0))
+    child = replace(_track("upper", t=(102.0, 200.0), mass=(100000.0, 60000.0),
+                           pos=(tuple(rs[-1]), (6.6e6, 1.5e6, 0.0)),
+                           vel=(tuple(vs[-1]), (-1700.0, 7600.0, 0.0))),
+                    parent_body_id="stack")
+    scene = run_to_scene(_run([parent, child], events=[
+        Event(t_s=100.0, kind="separation", body_id="stack", data={"separation_impulse_ns": 0.0})]))
+    handoff = next(h for h in scene["handoffs"] if h["id"] == "separation:upper")
+    assert handoff["bridge"]["method"] == "two_body_coast"
+    assert handoff["bridge"]["gap_s"] == pytest.approx(2.0)
+    assert handoff["status"] == "passed", handoff["detail"]
+    assert "coasted 2.0 s" in handoff["detail"]
 
 
 def test_seco_handoff_carries_gate_b_checks(fixture_scene):

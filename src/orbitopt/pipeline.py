@@ -413,6 +413,15 @@ def run_pipeline(
 
     from orbitopt import mission_config as mc
 
+    if scene_path is not None:
+        # The scene path decides where *every* output goes, not just the
+        # scene: builders derive side outputs from output.scene_file (the
+        # flight-lab kind's <scene>.flightrun/ run directory). Left on the
+        # config's own path, `orbitopt run cfg.yaml -o out/scene.json` wrote
+        # the scene to out/ and the run directory into the current directory.
+        config = {**config, "output": {**(config.get("output") or {}),
+                                       "scene_file": str(scene_path)}}
+
     recorder = StageRecorder(on_stage=on_stage)
     mission = dict(config.get("mission") or {})
     result = PipelineResult(

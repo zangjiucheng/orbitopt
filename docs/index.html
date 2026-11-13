@@ -674,7 +674,8 @@
     <h1>Screen fast.<br>Verify <span class="ln2">carefully.</span></h1>
     <p class="lede">
       orbitopt combines trajectory search with high-fidelity numerical
-      propagation, optional GPU batching and model-aware verification reports.
+      propagation, optional GPU batching and model-aware verification reports,
+      and flies launches from the pad to orbit, with a verdict at every handoff.
     </p>
     <div class="cta-row">
       <a class="btn btn-primary" href="https://github.com/zangjiucheng/orbitopt" target="_blank" rel="noopener">
@@ -730,7 +731,7 @@
       <div><div class="hs-v">4.7×</div><div class="hs-k">GPU Lambert</div><div class="hs-n">2M independent solves, CuPy vs vectorized numpy</div></div>
       <div><div class="hs-v">1.08<small>s</small></div><div class="hs-k">90k-cell porkchop</div><div class="hs-n">Earth–Mars grid in one batched call</div></div>
       <div><div class="hs-v">6<small>sites</small> · 7<small>vehicles</small></div><div class="hs-k">Launch database</div><div class="hs-n">every value sourced, accuracy-tagged</div></div>
-      <div><div class="hs-v">5</div><div class="hs-k">Missions in Mission Control</div><div class="hs-n">Solar system · Artemis II · GOES · Mars · Starship Flight 15</div></div>
+      <div><div class="hs-v">5</div><div class="hs-k">Missions in Mission Control</div><div class="hs-n">Solar system · Artemis II · GOES · Mars · Starship Flight 15, plus Flight Lab</div></div>
     </div>
   </div>
 </header>
@@ -779,8 +780,10 @@
         <div class="bnode report">
           <span class="btag">4 · Report</span>
           <h3>Verification JSON</h3>
-          <p>Verification reports record the force model, numerical checks,
-            residuals and verdicts for the checks that ran.</p>
+          <p>Verification reports record the force model, residuals and
+            verdicts, and label every check as numerical consistency, model
+            agreement or historical validation. Absent evidence reads
+            <b>not checked</b>, never passed.</p>
         </div>
       </div>
       <div class="batch-band">
@@ -975,6 +978,21 @@
         <div class="fact">ship catch <b>T+22:33:18</b> · SpaceX plan T+22:32:34</div>
       </div>
       <div class="ticket">
+        <div class="thead"><span class="tdot" style="color:#5ec8ff;background:#5ec8ff"></span><h3>Flight Lab — pad to orbit</h3><span class="newpill">NEW</span></div>
+        <p>Design a two-stage launch, optimize its ascent and fly it in 3-DOF or
+          an optional 6-DOF, with booster recovery and its Monte Carlo. One
+          command chains the launch window, ascent, injection and propagation,
+          and grades every stage handoff.</p>
+        <div class="fact"><b>orbitopt launch</b> --orbit 400x400@51.6 · injection within tolerance</div>
+      </div>
+      <div class="ticket">
+        <div class="thead"><span class="tdot" style="color:#2fa97a;background:#2fa97a"></span><h3>Physics benchmarks</h3><span class="newpill">NEW</span></div>
+        <p>Frozen references the physics must reproduce: the analytic two-body
+          and J2-drift solutions, and the Starship Flight 15 booster catch
+          against its published timeline.</p>
+        <div class="fact"><b>orbitopt benchmarks</b> · exit 1 on any miss</div>
+      </div>
+      <div class="ticket">
         <div class="thead"><span class="tdot" style="color:#4c8eff;background:#4c8eff"></span><h3>Solar System</h3></div>
         <p>Live heliocentric snapshot of the Sun and eight planets — real 2K
           textures, true sidereal spin rates, positions from pykep ephemerides.</p>
@@ -1031,6 +1049,10 @@
       <figure class="figure">
         <img src="assets/mission-control-goes.png" alt="GOES GTO-to-GEO apogee-raising campaign mid-way through its burns, with the distance chart" loading="lazy" />
         <figcaption><span class="fignum">FIG. 1D</span> — GOES, GTO to GEO: the apogee-raising burns mid-campaign</figcaption>
+      </figure>
+      <figure class="figure">
+        <img src="assets/flightlab-replay.png" alt="Flight Lab's Replay page: an optimized two-stage ascent from Cape Canaveral to a 400 km, 51.6 degree orbit, with per-stage telemetry charts, the event list and every verification check passing" loading="lazy" />
+        <figcaption><span class="fignum">FIG. 1E</span> — Flight Lab: an ascent from <code>orbitopt launch</code>, replayed with its telemetry and checks, injection within tolerance</figcaption>
       </figure>
     </div>
     <p class="phase-sub" style="margin-top:28px">How to drive it: the <a href="guide.html" style="color:var(--verify)">Mission Control user guide</a>.</p>
@@ -1119,11 +1141,18 @@
              differential_correction.py, b_plane.py
              geo_insertion.py, mars_insertion.py
              report.py                 <span class="comment"># schema-validated verification reports</span>
+             benchmarks.py, cross_model.py
+             integrator_convergence.py <span class="comment"># references, 3/6-DOF/TudatPy, step studies</span>
 <span class="path">viz/</span>         scene_renderer.py         <span class="comment"># one PyVista draw path, every scene</span>
              app.py                    <span class="comment"># Mission Control (PySide6 + pyvistaqt)</span>
              state.py, charts.py        <span class="comment"># shared selection/time, linked 2D charts</span>
              solar_system.py, mission_timeline.py
              geo_raising.py, mars_transfer.py, porkchop.py
+<span class="path">flightlab/</span>   simulate.py, guidance/    <span class="comment"># launch: 3-DOF ascent, Gate-B checks</span>
+             sixdof/, recovery/        <span class="comment"># 6-DOF backend, boostback + landing, Monte Carlo</span>
+<span class="path">mission/</span>     contract.py, launch_pipeline.py
+             two_stage_leo.py          <span class="comment"># segments, handoff gates, reference chain</span>
+<span class="path">pipeline.py</span>                    <span class="comment"># search -> refine -> verify -> export, one result</span>
 <span class="path">mission_config.py</span>              <span class="comment"># YAML config -> validated -> built scene</span>
 <span class="path">missions.py</span>                    <span class="comment"># named-mission registry + plugin entry points</span>
 <span class="path">scene_format.py</span>                <span class="comment"># the format's entire read/write/validate surface</span></pre>
@@ -1204,14 +1233,15 @@
       <h2>Run your first mission</h2>
       <p class="phase-sub">
         No source edits: describe a mission's orbit elements, spacecraft, and
-        optimizer settings, then validate and run it from the command line.
+        optimizer settings, then validate and run it from the command line,
+        or launch a rocket from a site to an orbit in one command.
       </p>
     </div>
 
     <div class="console">
       <div class="console-head">
         <span>flight-terminal — orbitopt</span>
-        <button class="copy-btn" data-copy="git clone https://github.com/zangjiucheng/orbitopt.git&#10;cd orbitopt&#10;micromamba create -n orbitopt -f envs/cpu.conda-lock.yml&#10;micromamba activate orbitopt&#10;pip install -e . --no-deps&#10;orbitopt validate examples/mars2020_replay.yaml&#10;orbitopt run examples/mars2020_replay.yaml&#10;orbitopt">copy all</button>
+        <button class="copy-btn" data-copy="git clone https://github.com/zangjiucheng/orbitopt.git&#10;cd orbitopt&#10;micromamba create -n orbitopt -f envs/cpu.conda-lock.yml&#10;micromamba activate orbitopt&#10;pip install -e . --no-deps&#10;orbitopt validate examples/mars2020_replay.yaml&#10;orbitopt run examples/mars2020_replay.yaml&#10;orbitopt&#10;python scripts/fetch_opentsiolkovsky.py&#10;orbitopt launch --site cape-canaveral --vehicle synthetic_two_stage --orbit 400x400@51.6 --date 2026-11-14 -o launch/&#10;orbitopt benchmarks">copy all</button>
       </div>
       <pre class="code"><span class="c"># install the compute stack from a checkout</span>
 <span class="k">git clone</span> https://github.com/zangjiucheng/orbitopt.git
@@ -1223,7 +1253,13 @@
 <span class="c"># validate, run and explore a mission</span>
 <span class="k">orbitopt validate</span> examples/mars2020_replay.yaml
 <span class="k">orbitopt run</span> examples/mars2020_replay.yaml
-<span class="k">orbitopt</span></pre>
+<span class="k">orbitopt</span>
+
+<span class="c"># launch to orbit, and check the physics against references</span>
+<span class="k">python</span> scripts/fetch_opentsiolkovsky.py
+<span class="k">orbitopt launch</span> --site cape-canaveral --vehicle synthetic_two_stage \
+  --orbit 400x400@51.6 --date 2026-11-14 -o launch/
+<span class="k">orbitopt benchmarks</span></pre>
     </div>
     <p class="start-note">See the <a href="quickstart.html">quickstart</a> for installation options, mission configs and verification results.</p>
   </div>

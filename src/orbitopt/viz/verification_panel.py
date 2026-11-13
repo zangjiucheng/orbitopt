@@ -307,7 +307,10 @@ class VerificationPanel(QWidget):
 
         handoffs = handoffs_of(scene)
         if handoffs:
-            self._layout.addWidget(self._handoffs_section(handoffs))
+            # adds its own header, note and cards (returns None: never
+            # addWidget() its result -- Qt raised on the None and skipped the
+            # stretch below)
+            self._handoffs_section(handoffs)
         self._layout.addStretch(1)
 
     # ----------------------------------------------------- handoffs (M-06)

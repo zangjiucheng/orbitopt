@@ -8,15 +8,18 @@
 
 orbitopt searches spacecraft trajectories with pykep and pygmo, then checks
 selected candidates with tudatpy. CuPy can accelerate batched screening.
-**Mission Control** displays trajectories, timelines and verification reports;
-**Flight Lab** simulates launch and booster recovery.
+**Flight Lab** simulates launch and booster recovery, in 3-DOF or an optional
+6-DOF, and one command chains a launch window, an optimized ascent, orbit
+injection and propagation, with a verdict at every handoff. **Mission Control**
+displays trajectories, timelines and verification reports, and every report
+says which kind of evidence backs each check.
 
 ![Mission Control showing an Earth-to-Mars trajectory](docs/assets/mission-control-mars.png)
 
 [Documentation](https://zangjiucheng.github.io/orbitopt/docs/) ·
 [Quickstart](docs/quickstart.md) · [Mission Control guide](docs/guide.md) ·
-[Flight Lab](docs/flightlab.md) · [Examples and validation](docs/examples.md) ·
-[API reference](docs/api.md)
+[Flight Lab](docs/flightlab.md) · [Verification](docs/verification.md) ·
+[Examples and validation](docs/examples.md) · [API reference](docs/api.md)
 
 ## Quick start
 
@@ -43,7 +46,11 @@ For GPU, Windows, macOS and optional Flight Lab dependencies, see
 orbitopt validate examples/mars2020_replay.yaml  # check a config without computing
 orbitopt run examples/mars2020_replay.yaml       # compute and export a scene
 orbitopt export mars -o mars.json                # export a built-in mission
+orbitopt launch-window ksc --rla 9.6 --dla 23.4 --epoch 2020-07-30  # daily launch window
+orbitopt launch --site cape-canaveral --vehicle synthetic_two_stage \
+  --orbit 400x400@51.6 --date 2026-11-14 -o launch/  # window -> ascent -> injection
 orbitopt flight --help                          # launch and recovery tools
+orbitopt benchmarks                             # physics benchmarks vs public references
 ```
 
 Run `orbitopt --help` for all commands. The [quickstart](docs/quickstart.md)
@@ -51,25 +58,32 @@ explains configs, outputs and launch windows.
 
 ## Mission configs
 
-YAML configs support `geo-raising`, `mars-transfer` and `lunar-free-return`.
-See [mission configuration](docs/quickstart.md#mission-configs) and the
+YAML configs support `geo-raising`, `mars-transfer`, `lunar-free-return`,
+`flight-lab` (a Flight Lab ascent) and `two-stage-leo` (the reference
+scenario graded from the launch site to the propagated parking orbit). See
+[mission configuration](docs/quickstart.md#mission-configs) and the
 [examples](examples/). The Solar System scene is an ephemeris visualization,
 not an optimized mission.
 
 ## Verification reports
 
-Reports record the model, numerical settings, residuals and checks. A
-verification verdict applies to those checks and assumptions; it is not proof
-of real-world flight safety. A Mars export may be marked **best effort** if no
-candidate passes, and GOES loads **not checked** by default. See
-[verification](docs/quickstart.md#verification) and
+Reports record the model, numerical settings, residuals and checks. Each
+check is labelled as numerical consistency, model agreement or historical
+validation, and a category with no check reads **not checked**, never passed.
+A verification verdict applies to those checks and assumptions; it is not
+proof of real-world flight safety. A Mars export may be marked **best effort**
+if no candidate passes, and GOES loads **not checked** by default.
+`orbitopt benchmarks` gates the physics against analytic solutions and
+published data. See [verification](docs/verification.md) and
 [mission examples](docs/examples.md).
 
 ## Mission Control
 
 The desktop app links a 3D view, timeline, charts and verification inspector.
-Flight Lab adds a launch designer, replay and comparison. See the
-[Mission Control guide](docs/guide.md) and [Flight Lab guide](docs/flightlab.md).
+Its Flight Lab mode adds a launch designer, replay and comparison; a Flight Lab
+mission opens as one continuous multi-stage timeline with a pass/fail verdict
+at each stage handoff. See the [Mission Control guide](docs/guide.md) and
+[Flight Lab guide](docs/flightlab.md).
 
 ## Checked against real missions
 
@@ -88,8 +102,9 @@ see the [benchmark](docs/benchmarks/fused_kernel_evaluation.md).
 | Path | Purpose |
 |---|---|
 | `src/orbitopt/lambert`, `problems`, `optimize` | Screening and optimization |
-| `src/orbitopt/verify` | Propagation, targeting and verification reports |
-| `src/orbitopt/flightlab` | Launch and recovery simulation |
+| `src/orbitopt/verify` | Propagation, targeting, verification reports, benchmarks and convergence studies |
+| `src/orbitopt/flightlab` | Launch and recovery simulation (3-DOF, 6-DOF, recovery Monte Carlo) |
+| `src/orbitopt/mission`, `pipeline.py` | Mission segments and handoffs, the unified mission pipeline |
 | `src/orbitopt/viz` | Scene export, viewer and Mission Control |
 | `examples`, `docs`, `tests` | Examples, guides and regression tests |
 
@@ -118,8 +133,10 @@ phase-boundary assumptions.
   spans of about ten days from its SPICE seed.
 - Mars mission targeters may fail to converge; a failed or unchecked candidate
   is not a verified result. The Mars scene ends at orbit insertion, not landing.
-- Flight Lab uses simplified dynamics and public or illustrative vehicle data;
-  its [fidelity and limitations](docs/flightlab.md#fidelity-levels) are explicit.
+- Flight Lab's default ascent is a 3-DOF point mass; the 6-DOF backend is
+  opt-in and not part of ascent optimization. Vehicle data are public or
+  illustrative; the [fidelity and limitations](docs/flightlab.md#fidelity-levels)
+  are explicit.
 
 ## License
 

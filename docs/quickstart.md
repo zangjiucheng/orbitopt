@@ -54,8 +54,9 @@ orbitopt view examples/mars2020_replay.yaml
 `validate` checks the schema without running a simulation. `run` computes and
 exports the scene and reports; `view` opens a cached or newly computed result.
 The supported kinds are `geo-raising`, `mars-transfer`,
-`lunar-free-return` and `flight-lab` (a Flight Lab ascent run through the
-pipeline; see `src/orbitopt/data/flightlab/mission_leo_two_stage.yaml`).
+`lunar-free-return`, `flight-lab` (a Flight Lab ascent run through the
+pipeline; see `src/orbitopt/data/flightlab/mission_leo_two_stage.yaml`) and
+`two-stage-leo` (the reference scenario below).
 Each has a schema in
 [`src/orbitopt/schemas/`](../src/orbitopt/schemas/) and example configurations
 in [`examples/`](../examples/). Omitted optional fields use the corresponding
@@ -69,6 +70,35 @@ orbitopt launch-window ksc --rla 9.6 --dla 23.4 --epoch 2020-07-30
 
 Use `orbitopt --help` or `orbitopt <command> --help` for all options.
 
+## Launch to orbit
+
+`orbitopt launch` runs a launch end to end: the launch window from a site into
+an orbit plane, an optimized ascent flown by Flight Lab, and orbit injection
+graded against the target, ending in one verification report. It needs the
+pinned OpenTsiolkovsky binary (`python scripts/fetch_opentsiolkovsky.py`).
+
+```bash
+orbitopt launch --site cape-canaveral --vehicle synthetic_two_stage \
+  --orbit 400x400@51.6 --date 2026-11-14 -o launch/
+```
+
+The output directory holds the target, the ascent run and
+`launch.verification.json`. Add `--raan` to constrain the orbit plane (the
+in-plane pass then sets the liftoff time). A short search
+(`--generations`, `--population`) may not converge; the report says so rather
+than passing.
+
+The two-stage LEO reference scenario grades the whole chain, from the launch
+site through staging and orbit insertion to the propagated parking orbit, into
+one report:
+
+```bash
+orbitopt run src/orbitopt/data/mission_two_stage_leo.yaml
+```
+
+See [Flight Lab](flightlab.md#mission-pipeline) for the segments and their
+handoff gates.
+
 ## Verification
 
 A verification report records the dynamics, integration settings, checks and
@@ -76,6 +106,10 @@ residuals. A passing result is conditional on the model and tolerances; it does
 not establish flight safety. GOES is **not checked** on first load: run its
 verification from the app's Verification tab, or enable it in a config. A
 Mars run may export a **best-effort** result when no candidate passes.
+
+Each check is labelled numerical consistency, model agreement or historical
+validation; `orbitopt benchmarks` checks the physics against analytic
+solutions and published data. See [verification](verification.md).
 
 See [examples and validation](examples.md) for the distinction between
 historical comparisons and targeting checks, and

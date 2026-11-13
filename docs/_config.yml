@@ -107,6 +107,12 @@ defaults:
     values: { title: "ADR 0001 · JSBSim 6-DOF", parent: "Flight Lab", nav_order: 3 }
   - scope: { path: "adr/flightlab-0002-closed-loop-landing-guidance.md" }
     values: { title: "ADR 0002 · Landing guidance", parent: "Flight Lab", nav_order: 4 }
+  - scope: { path: "adr/flightlab-0003-landing-aware-boostback-objective.md" }
+    values: { title: "ADR 0003 · Boostback objective", parent: "Flight Lab", nav_order: 5 }
+
+  # Verification: between Flight Lab and Missions in the sidebar
+  - scope: { path: "verification.md" }
+    values: { title: "Verification", nav_order: 4.5 }
 
   # Missions
   - scope: { path: "mars_mission_plan.md" }

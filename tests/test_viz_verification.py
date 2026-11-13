@@ -309,6 +309,12 @@ def test_panel_renders_scene_handoffs_block(app):
     assert "Handed over \u00b7 stack" in text and "mass 340,000 kg" in text
     assert "SECO \u2014 parking orbit insertion" in text and "NOT CHECKED" in text
     assert "orbit re-fly not assessed" in text
+    # rebuilt directly (a signal-driven rebuild only prints an exception):
+    # adding the section must not raise, and the layout still ends in its
+    # stretch -- the section once went through addWidget(None)
+    panel._rebuild(_mission_scene(handoffs=_HANDOFFS))
+    last = panel._layout.itemAt(panel._layout.count() - 1)
+    assert last.spacerItem() is not None
 
 
 def test_panel_handoff_failures_are_visible(app):

@@ -16,6 +16,7 @@ target; a passing verification report only covers its stated checks and model.
 | Artemis II-like | Lunar flyby and unpowered Earth return | A 6,545 km perilune is an input target, not an independent reconstruction. The chosen departure is 2026-08-01; the real flight launched on 2026-04-01. The entry-angle check is vacuum geometry, not an assessment of heating or survival. See [re-entry constraints](reentry_safety_constraints.md). |
 | GOES | GTO-to-GEO raising with an Atlas V/GOES-16 reference profile | A modeled campaign; the built-in scene starts **not checked** until high-fidelity verification is run. See the [mission plan](goes_gto_geo_mission_plan.md). |
 | Starship Flight 15 | Return-pass prediction using assumed orbit and vehicle properties | A pre-flight prediction, not a reconstruction. The ascent is illustrative. The verification report fails under a 10% lift reduction; see the assumptions in [`starship_flight.py`](../src/orbitopt/viz/starship_flight.py). |
+| Two-stage LEO (reference scenario) | Launch site to a 400 × 400 km, 51.6° parking orbit: ascent, staging, insertion and propagation | Graded as one chain with handoff gates and expected parking-orbit elements; the synthetic vehicle is illustrative, not a real rocket. Run `orbitopt run src/orbitopt/data/mission_two_stage_leo.yaml`; see [Flight Lab](flightlab.md#mission-pipeline). |
 | Solar System | Planetary ephemeris visualization | No trajectory optimization or verification. |
 
 ## Historical launch-window comparisons
@@ -30,6 +31,10 @@ target; a passing verification report only covers its stated checks and model.
 For the Mars launch-time comparison, the flown departure date and flight time
 are inputs; the time of day is compared afterward. Launch-site and vehicle
 figures are planning-level data: see [sources and limitations](launch-data-sources.md).
+
+`orbitopt benchmarks` turns two more references into regression gates: the
+analytic two-body and J2 drift solutions, and the Starship Flight 15 booster
+catch against its published timeline. See [verification](verification.md).
 
 ## Run an example
 

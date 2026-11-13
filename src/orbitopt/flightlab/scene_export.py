@@ -293,41 +293,72 @@ def _check_summary(checks: list) -> str:
 
 
 def _staging_handoffs(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dict) -> list:
-    """One M-01-gated handoff per child body: the parent track's final GCRS
-    state vs the child track's initial GCRS state (position, velocity, epoch,
-    mass). A declared separation impulse is a real, intended delta-v between
-    the two     states, so the velocity gate gets that much headroom."""
+    """One handoff per child body: the parent track's final GCRS state vs the
+    child track's initial GCRS state (position, velocity, epoch, mass), graded
+    the way the M-07 reference chain grades staging
+    (:func:`orbitopt.mission.two_stage_leo.staging_handoffs`):
+
+    * the parent state is first coasted (two-body) to the child's first
+      sample -- a backend samples each body on its own clock, and the 2 s
+      between the FL-004 stage-1 end and stage-2 start is ~7 km of flight,
+      physics, not a lost handoff;
+    * only boundaries on the ascent lineage (first stage -> insertion body)
+      are graded. Debris and fairing boundaries are recorded as not graded:
+      they diverge on purpose.
+
+    Graded raw, the scene showed every staging of a nominal flight as FAILED
+    (position/velocity discontinuity across the gap, a fairing's
+    "epoch_backwards"). A declared separation impulse is a real, intended
+    delta-v, so the velocity gate gets that much headroom."""
     from orbitopt.mission.contract import HandoffTolerances, check_handoff
+    from orbitopt.mission.two_stage_leo import _ascent_lineage, _bridge_across_gap
 
     by_id = {track.body_id: track for track in run.tracks}
+    lineage = _ascent_lineage(run)
+    graded_pairs = set(zip(lineage[1:], lineage[:-1]))  # (parent, child) up the chain
     out = []
     for child in run.tracks:
         parent_id = getattr(child, "parent_body_id", None)
         if not parent_id or parent_id not in by_id:
             continue
         parent = by_id[parent_id]
+        before = _handoff_state(parent, len(parent.t_s) - 1, gcrs, epoch, mjd2000, run.run_id)
+        after = _handoff_state(child, 0, gcrs, epoch, mjd2000, run.run_id)
+        base = {
+            "id": f"separation:{child.body_id}",
+            "label": f"Separation \u2014 {parent_id} \u2192 {child.body_id}",
+            "time": float(child.t_start_s),
+            "from_body": parent_id,
+            "to": _state_doc(child.body_id, float(child.t_start_s), after, epoch),
+        }
+        if (parent_id, child.body_id) not in graded_pairs:
+            out.append({**base, "status": "not_checked", "graded": False,
+                        "detail": "off the ascent lineage (debris / fairing): recorded, not graded",
+                        "from": _state_doc(parent_id, float(parent.t_end_s), before, epoch),
+                        "checks": []})
+            continue
+        bridge = _bridge_across_gap(before, after)
+        from_time = float(parent.t_end_s)
+        if bridge is not None and bridge["method"] == "two_body_coast":
+            before, from_time = bridge["state"], float(child.t_start_s)
         impulse_ns = next((float(ev.data.get("separation_impulse_ns")
                                 or ev.data.get("impulse_ns") or 0.0)
                            for ev in run.events
                            if ev.kind == "separation" and ev.body_id == parent_id), 0.0)
         tolerances = HandoffTolerances(
             velocity_m_s=0.01 + abs(impulse_ns) / max(float(child.mass_kg[0]), 1.0))
-        report = check_handoff(
-            _handoff_state(parent, len(parent.t_s) - 1, gcrs, epoch, mjd2000, run.run_id),
-            _handoff_state(child, 0, gcrs, epoch, mjd2000, run.run_id),
-            tolerances)
+        report = check_handoff(before, after, tolerances)
         checks = [_check_doc(c) for c in report.checks]
-        out.append({
-            "id": f"separation:{child.body_id}",
-            "label": f"Separation \u2014 {parent_id} \u2192 {child.body_id}",
-            "time": float(child.t_start_s),
-            "status": _tri_state(checks, True),
-            "detail": _check_summary(checks),
-            "from_body": parent_id,
-            "from": _state_doc(parent_id, float(parent.t_end_s), report.before, epoch),
-            "to": _state_doc(child.body_id, float(child.t_start_s), report.after, epoch),
-            "checks": checks,
-        })
+        detail = _check_summary(checks)
+        if bridge is not None:
+            detail += (f" \u00b7 parent coasted {bridge['gap_s']:.1f} s to the child's first sample"
+                       if bridge["method"] == "two_body_coast" else f" \u00b7 {bridge['method']}")
+        out.append({**base, "status": _tri_state(checks, True), "graded": True,
+                    "detail": detail,
+                    "bridge": None if bridge is None else {"gap_s": bridge["gap_s"],
+                                                           "method": bridge["method"]},
+                    "from": _state_doc(parent_id, from_time, report.before, epoch),
+                    "checks": checks})
     return out
 
 

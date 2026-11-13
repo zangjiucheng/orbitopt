@@ -5,6 +5,12 @@ Mission Control, switch the sidebar to **Flight Lab**: Designer sets up a
 run, Replay displays its trajectory and checks, and Compare puts two runs side
 by side. Recent runs and *Open run…* load saved run directories.
 
+![Flight Lab's Replay page in Mission Control: an optimized two-stage ascent from Cape Canaveral to a 400 km, 51.6° orbit over Florida, with altitude, speed, dynamic pressure, g-load and mass charts per stage, the event list from liftoff to SECO, and every verification check passing](assets/flightlab-replay.png)
+
+*An ascent from `orbitopt launch`, replayed: optimizer, physics and mission
+verdicts all pass, with injection within tolerance of the 400 × 400 km,
+51.6° target.*
+
 ## Quick start
 
 From a configured [compute environment](quickstart.md#installation), install

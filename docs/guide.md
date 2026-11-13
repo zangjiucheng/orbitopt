@@ -124,10 +124,31 @@ verification. The badge reads **VERIFIED**, **VERIFY FAILED** or **NOT
 CHECKED**. GOES opens unchecked; use its Verification tab to run the TudatPy
 re-flight. Verification is conditional on its model and tolerances.
 
+Each check in the Verification tab is labelled as numerical consistency,
+model agreement or historical validation; a kind of evidence with no check
+reads **not checked**, never passed. See [verification](verification.md).
+
 The Starship Flight 15 report includes independent re-flight, recovery
 dispersions, loads and timeline checks. It fails for the assumed 10% lift
 reduction. See [mission examples](examples.md) for the assumptions and the
 difference between a prediction and a historical comparison.
+
+## Launch missions
+
+A Flight Lab run can also open as a mission in the main view, one continuous
+timeline from the pad to orbit: export it with `orbitopt flight to-scene
+run/ -o scene.json`, or run a `flight-lab` or `two-stage-leo` config with
+`orbitopt run`, then open the scene with *File › Open scene file…*.
+
+- The **phase row** tiles the whole mission: on the pad, boost, staging,
+  upper-stage burn, then parking orbit and propagation (a two-body display
+  coast after engine cutoff, labelled as display data, not verification).
+- Each **stage handoff** carries a verdict. At separation the state and mass
+  must be continuous between the stages; at engine cutoff the insertion is
+  checked against the target orbit. The verdict appears in the event's note
+  on the timeline and in the Verification tab's **MISSION HANDOFFS** section.
+
+See [Flight Lab](flightlab.md#mission-pipeline) for the gates.
 
 ## Your own missions
 

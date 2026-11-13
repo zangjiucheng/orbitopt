@@ -314,7 +314,7 @@ QLabel#viewLabel {{
 QPushButton#viewButton {{
     padding: 4px 9px;
     font-size: 10.5px;
-    min-height: 0;
+    min-height: 14px;  /* "min-height: 0" let a short window squeeze the CENTER strip's buttons, clipping Sun/Earth/Mars */
     border-radius: 2px;
 }}
 QFrame#viewSep {{
