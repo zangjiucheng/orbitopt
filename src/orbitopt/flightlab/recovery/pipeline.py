@@ -46,11 +46,16 @@ from orbitopt.flightlab.contract import (
     Verification,
 )
 from orbitopt.flightlab.recovery.boostback import (
+    DEFAULT_ENTRY_Q_MAX_PA,
     RecoveryTarget,
     ReturnPlan,
     _enu_basis,
     _geodetic_fast,
     plan_boostback_entry,
+)
+from orbitopt.flightlab.recovery.handoff_check import (
+    RecoveryHandoffReport,
+    build_handoff_report,
 )
 from orbitopt.flightlab.recovery.landing import (
     DEFAULT_LANDING_LIMITS,
@@ -124,6 +129,11 @@ class RecoveryOutcome:
     landing: LandingResult | None = None
     checks: tuple[Check, ...] = ()
     assumptions: tuple[str, ...] = field(default_factory=tuple)
+    #: The R-02 handoff / joint-constraint report for the flown chain
+    #: (:mod:`orbitopt.flightlab.recovery.handoff_check`) -- always built,
+    #: merged into ``run.verification.checks`` only when
+    #: ``plan_options["handoff_check"]`` is set.
+    handoff: RecoveryHandoffReport | None = None
 
 
 def _landing_limits_for_target(target: FlightTarget) -> LandingLimits:
@@ -278,7 +288,8 @@ def fly_recovery(ascent_run: FlightRun, target: FlightTarget, vehicle_path, *,
     separation states through here); ``booster``/``limits``/``physics``/
     ``plan_options`` pass straight through to FL-302/FL-303 (``plan_options``
     keys: ``max_fevals``, ``initial_guess``, ``horizon_s``, ``dt_opt``,
-    ``dt_final``, entry limits) plus one landing key, ``landing``: a mapping
+    ``dt_final``, entry limits, ``handoff_check`` (merge the R-02 handoff /
+    joint-constraint checks into the run's verification), ``landing``: a mapping
     with ``mode`` (:data:`LANDING_MODES`, default ``"closed-loop"``) and any
     :class:`~orbitopt.flightlab.recovery.landing.TerminalGuidance` fields.
     Raises ``ValueError`` when the target declares ``recovery: none``, the
@@ -293,6 +304,11 @@ def fly_recovery(ascent_run: FlightRun, target: FlightTarget, vehicle_path, *,
 
     opts = dict(plan_options) if plan_options else {}
     fly_landing = _landing_flight(opts.pop("landing", None))
+    # R-02: merge the handoff / joint-constraint checks into the run only on
+    # request -- Gate B reference runs compare verification byte-for-byte,
+    # so the extra checks are opt-in and the report object is the default
+    # surface (outcome.handoff).
+    handoff_in_run = bool(opts.pop("handoff_check", False))
     plan = plan_boostback_entry(sep_state, booster, recovery_target, **opts)
     landing: LandingResult | None = None
     if plan.feasible:
@@ -347,18 +363,30 @@ def fly_recovery(ascent_run: FlightRun, target: FlightTarget, vehicle_path, *,
     booster_events = list(track.to_contract_events(_BOOSTER_BODY_ID))
     if landing is not None:
         booster_events.extend(landing_events(landing, body_id=_BOOSTER_BODY_ID))
+    # R-02 (task #234): grade the flown chain against the M-01 handoff
+    # contract -- continuity, mass conservation, joint cross-phase limits,
+    # every check attributed to the phase that owns it.
+    eff_limits = limits if limits is not None else _landing_limits_for_target(target)
+    handoff = build_handoff_report(
+        sep_state, plan, landing, booster,
+        recovery_target=recovery_target, limits=eff_limits,
+        entry_q_max_pa=float(opts.get("entry_q_max_pa", DEFAULT_ENTRY_Q_MAX_PA)),
+        min_propellant_reserve_kg=target.recovery.min_propellant_reserve_kg)
+    if handoff_in_run:
+        checks.extend(handoff.checks)
     engines = {"propagator": "orbitopt.flightlab.recovery.propagator",
                "cvxpy": "reference",
                "gfold": (GFOLD_VERSION_PIN if landing is not None
                          and landing.plan is not None
                          and landing.plan.solver == "gfold" else "not-run")}
     assumptions = [_RECOVERY_ASSUMPTION, *plan.assumptions,
-                   *(() if landing is None else landing.assumptions)]
+                   *(() if landing is None else landing.assumptions),
+                   *([handoff.assumption_note()] if handoff_in_run else [])]
     run = _merged_run(ascent_run, track, booster_events, checks, assumptions, engines)
     reason_codes: tuple[str, ...] = () if success else (gate_reason,)
     return RecoveryOutcome(run=run, success=success, reason_codes=reason_codes,
                            plan=plan, landing=landing, checks=tuple(checks),
-                           assumptions=tuple(assumptions))
+                           assumptions=tuple(assumptions), handoff=handoff)
 
 
 def _landing_flight(landing_options: Mapping[str, Any] | None):
