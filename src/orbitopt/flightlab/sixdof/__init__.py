@@ -35,4 +35,12 @@ flew here -- the *reference* 6-DOF plant, not a JSBSim replacement::
     from orbitopt.flightlab.sixdof.aero import AeroModel, load_packaged_aero
     from orbitopt.flightlab.sixdof.rigidbody import propagate, RigidBodyVehicle
     # docs/flightlab.md (the F-02 section, and why the split exists)
+
+F-04 (task #229) closes that plant's attitude loop: a first-order-lag /
+slew-limited / saturating TVC actuator and a basic ZOH PID tracker on the
+FL-403 body-axis attitude error, with the post-actuator deflection fed to the
+plant and deflection-margin diagnostics recorded per run::
+
+    from orbitopt.flightlab.sixdof.tvc import AttitudeTvcLaw, run_closed_loop_ascent
+    # docs/flightlab.md (the F-04 section, including the two-gimbal scope limit)
 """
