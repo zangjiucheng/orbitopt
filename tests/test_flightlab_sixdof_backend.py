@@ -267,6 +267,7 @@ def test_tracking_dt_halving_agrees(tmp_path):
                - c2["sixdof-att-tracking-full-max"].value) < 0.1
 
 
+@pytest.mark.slow
 def test_missing_reference_reports_not_assessed(tmp_path):
     """The MECO-deviation checks are conditional on the reference CSV -- a
     config pointing at a missing file says so instead of silently passing."""
