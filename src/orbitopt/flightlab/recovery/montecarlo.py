@@ -204,6 +204,9 @@ def _run_sample(job: Mapping[str, Any]) -> dict[str, Any]:
             if landing.touchdown_enu_m is not None:
                 record["touchdown_east_m"] = float(landing.touchdown_enu_m[0])
                 record["touchdown_north_m"] = float(landing.touchdown_enu_m[1])
+            if getattr(landing, "actuator_margin", None) is not None:
+                # R-05: the guidance's own actuator-margin accounting
+                record["control_margin"] = landing.actuator_margin.to_dict()
     except Exception as exc:  # noqa: BLE001 -- a broken sample must never erase the run
         record["outcome"] = "error"
         record["reason"] = f"SAMPLE_ERROR:{type(exc).__name__}"
@@ -309,6 +312,20 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
         vals = [r[key] for r in landed if r.get(key) is not None]
         return _percentiles(vals) if vals else {"n": 0}
 
+    def margin_stats() -> dict[str, Any]:
+        """R-05 control-margin aggregation over the landed subset (the
+        guidance's own accounting travels per sample; min/mean/max per
+        metric here)."""
+        vals = [r["control_margin"] for r in landed if r.get("control_margin")]
+        if not vals:
+            return {"n": 0}
+        out: dict[str, Any] = {"n": len(vals)}
+        for key in sorted({k for v in vals for k in v}):
+            xs = [float(v[key]) for v in vals if v.get(key) is not None]
+            out[key] = ({"n": len(xs), "min": min(xs), "mean": sum(xs) / len(xs),
+                         "max": max(xs)} if xs else {"n": 0})
+        return out
+
     result = MonteCarloResult(
         n=n, seed=int(seed), dispersions=disp.to_dict(),
         success_rate=n_ok / n,
@@ -317,6 +334,7 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
             "position_error_m": stats_of("position_error_m"),
             "vertical_speed_m_s": stats_of("vertical_speed_m_s"),
             "lateral_speed_m_s": stats_of("lateral_speed_m_s"),
+            "control_margin": margin_stats(),
         },
         ellipse=_ellipse(landed),
         samples=tuple(records),

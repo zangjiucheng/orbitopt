@@ -69,7 +69,9 @@ from orbitopt.flightlab.recovery.landing import (  # noqa: F401
     LANDING_TILT_EXCEEDED,
     LANDING_VERTICAL_SPEED_EXCEEDED,
     TERMINAL_GUIDANCE_DEFAULT,
+    TERMINAL_GUIDANCE_R05,
     TOUCHDOWN_CHECK_IDS,
+    ActuatorMargin,
     LandingInfeasibleError,
     LandingSolverUnavailableError,
     LandingLimits,
@@ -105,6 +107,7 @@ from orbitopt.flightlab.recovery.montecarlo import (  # noqa: F401
 )
 
 __all__ = [
+    "ActuatorMargin",
     "AltitudeThreshold",
     "BoostbackPlan",
     "BoosterEngine",
@@ -165,6 +168,7 @@ __all__ = [
     "fly_landing_burn",
     "fly_landing_burn_closed_loop",
     "TERMINAL_GUIDANCE_DEFAULT",
+    "TERMINAL_GUIDANCE_R05",
     "TerminalCommand",
     "TerminalGuidance",
     "terminal_guidance_command",
