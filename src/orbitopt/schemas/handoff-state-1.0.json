@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zangjiucheng/orbitopt/schemas/handoff-state-1.0.json",
+  "title": "orbitopt mission handoff state (HandoffState v1)",
+  "description": "The state one mission segment hands to the next (M-01, Epic #215): epoch with its timescale, frame, position, velocity, wet mass, the stage configuration attached, and free-form metadata. Epochs are MJD2000 day-labels counted on the declared timescale (each day exactly 86400 SI seconds, the convention of orbitopt.timescales); comparisons always go through Epoch.to_tdb_seconds(). Structural rules JSON Schema can express live here; finiteness, mass > 0 and epoch representability are checked by orbitopt.mission.contract.state_from_dict, matching the scene_format split. Compatibility policy: readers ignore unknown OPTIONAL fields, so adding one is not a breaking change; removing/renaming/narrowing is, and gets handoff-state-2.0.json.",
+  "type": "object",
+  "required": ["schema_version", "epoch", "frame", "position_m", "velocity_m_s", "mass_kg", "stage_config"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "epoch": {
+      "type": "object",
+      "description": "Mission instant: MJD2000 day-labels plus the timescale they are counted on. The timescale is mandatory -- a TT epoch is never treated as UTC.",
+      "required": ["mjd2000", "timescale"],
+      "additionalProperties": false,
+      "properties": {
+        "mjd2000": {
+          "type": "number",
+          "description": "Days since 2000-01-01 00:00:00 on the declared timescale's own day label (86400 SI s per day, like datetime; leap seconds are not counted inside the day)."
+        },
+        "timescale": {"enum": ["UTC", "TT", "TDB"]}
+      }
+    },
+    "frame": {
+      "enum": ["GCRS", "ECEF", "LAUNCH_ECI"],
+      "description": "One of the package's Flight Lab v1 frames; GCRS is the recommended interchange frame. Never label a backend's private pseudo-ECI 'GCRS' -- convert via orbitopt.flightlab.frames inside the producing segment."
+    },
+    "position_m": {"$ref": "#/$defs/vec3"},
+    "velocity_m_s": {"$ref": "#/$defs/vec3"},
+    "mass_kg": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Wet mass of the remaining stack [kg], including everything the stage_config says is still attached."
+    },
+    "stage_config": {
+      "type": "object",
+      "propertyNames": {"type": "string"},
+      "description": "Opaque-to-the-contract description of the stage configuration at this handoff (e.g. which vehicle/stage/engines are active). A change of this mapping between consecutive states is what makes a beyond-tolerance mass drop legal (staging/shedding); with an unchanged stage_config, mass is conserved."
+    },
+    "metadata": {
+      "type": "object",
+      "propertyNames": {"type": "string"},
+      "description": "Free-form producer annotations (solver provenance, run ids, ...). Optional; readers must not depend on any particular key."
+    }
+  },
+  "$defs": {
+    "vec3": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {"type": "number"},
+      "description": "Three finite numbers (finiteness enforced by orbitopt.mission.contract)."
+    }
+  }
+}
