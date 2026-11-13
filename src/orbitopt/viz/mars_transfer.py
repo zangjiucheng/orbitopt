@@ -60,6 +60,14 @@ from orbitopt.injection import (
 )
 from orbitopt.lambert.gpu_batch import solve_lambert_batch
 from orbitopt.launch_injection import LaunchSpec, launch_to_injection
+from orbitopt.model_fidelity import (
+    NOT_MODELLED_DRAG,
+    NOT_MODELLED_IMPULSIVE_BURNS,
+    NOT_MODELLED_POINT_MASS_GRAVITY,
+    NOT_MODELLED_RELATIVITY,
+    NOT_MODELLED_SRP,
+    NOT_MODELLED_THIRD_BODIES,
+)
 from orbitopt.optimize.multistart import SINGLE_BASIN_HALF_WIDTH, find_diverse_basins, multistart_optimize
 from orbitopt.pipeline import CONSTRAINTS, OPTIMIZE, REFINE, SEARCH, SELECT, VERIFY, StageRecorder
 from orbitopt.problems.transfer_2body import Transfer2BodyProblem
@@ -174,6 +182,13 @@ def _search_transfer(
         )
         st.physical_model = {"name": "Sun-centered Lambert porkchop grid (pykep ephemerides)",
                              "fidelity": "patched-conic", "grid": [120, 120]}
+        st.record_physics(
+            assumptions=["heliocentric two-body Lambert arcs between pykep (SPICE) planet ephemerides",
+                         "every grid cell is a single unconstrained impulsive transfer"],
+            limitations=["screen only: basin minima, not converged optima -- the multistart refine is authoritative"],
+            not_modelled=[NOT_MODELLED_THIRD_BODIES, NOT_MODELLED_POINT_MASS_GRAVITY,
+                          NOT_MODELLED_SRP, NOT_MODELLED_IMPULSIVE_BURNS],
+        )
         st.candidates = [{"t0_mjd2000": b.x, "tof_days": b.y, "total_dv_km_s": b.value, "rank": b.rank}
                          for b in basins]
         st.convergence = {"converged": bool(basins), "grid_converged_fraction": float(np.mean(grid.converged))}
@@ -195,6 +210,13 @@ def _search_transfer(
     recorder.add_time(OPTIMIZE, time.perf_counter() - t_opt)
     opt.physical_model = {"name": "Sun-centered Lambert transfer, multistart PSO (Transfer2BodyProblem)",
                           "fidelity": "patched-conic"}
+    opt.record_physics(
+        assumptions=["same Lambert patched-conic model as the search, refined from the porkchop basins",
+                     "launch constraints enter as penalty terms, not as a trajectory model"],
+        limitations=["PSO is a stochastic search: a better optimum in an unseeded basin is not excluded"],
+        not_modelled=[NOT_MODELLED_THIRD_BODIES, NOT_MODELLED_POINT_MASS_GRAVITY,
+                      NOT_MODELLED_SRP, NOT_MODELLED_IMPULSIVE_BURNS],
+    )
     opt.candidates = [{"t0_mjd2000": c.x, "tof_days": c.y, "total_dv_m_s": c.value, "basin_rank": c.basin_rank,
                        "merged_runs": c.merged_runs} for c in report.candidates]
     opt.convergence = {"converged": bool(report.candidates), "runs": len(report.runs),
@@ -316,8 +338,13 @@ def _build_mars_mission(
         st.physical_model = {"name": "departure window + TOF box" + ("" if launch is None else
                                                                        ", launch vehicle C3 + site DLA limits"),
                              "fidelity": "analytic",
-                             "t0_range_mjd2000": list(t0_range), "tof_range_days": list(tof_range),
-                             "launch_limits": None if launch_constraints is None else launch_constraints.describe()}
+                              "t0_range_mjd2000": list(t0_range), "tof_range_days": list(tof_range),
+                              "launch_limits": None if launch_constraints is None else launch_constraints.describe()}
+        st.record_physics(
+            assumptions=["the admissible domain is the (departure epoch, time of flight) box"
+                         + ("" if launch is None else " plus vehicle C3 and site DLA limits")],
+            limitations=["no trajectory physics: this stage bounds where the search may look, nothing more"],
+        )
 
     if launch is not None and launch.pinned:
         t0, tof = launch.departure_mjd2000, launch.tof_days
@@ -342,6 +369,14 @@ def _build_mars_mission(
     refine = recorder[REFINE]
     refine.physical_model = {"name": "tudatpy N-body (Earth/Sun escape, Sun-centered cruise with TCM, "
                                      "Mars capture), adaptive RKDP 8(7) (dop853) integrator", "fidelity": "high-fidelity"}
+    refine.record_physics(
+        assumptions=["impulsive TMI and mid-course correction burns applied at fixed epochs",
+                     "planet motion from SPICE ephemerides; escape and capture flown as linked arcs"],
+        limitations=["the patched-conic search steered this propagation; the two agree only within the "
+                    "residuals the verification report quantifies"],
+        not_modelled=[NOT_MODELLED_POINT_MASS_GRAVITY, NOT_MODELLED_SRP, NOT_MODELLED_DRAG,
+                      NOT_MODELLED_RELATIVITY, NOT_MODELLED_IMPULSIVE_BURNS],
+    )
     gate = recorder.gate
 
     def violations(v_inf_dep):
@@ -474,6 +509,10 @@ def _select_candidates(candidates, report, max_candidates, recorder, pinned=Fals
                              "duplicate_tolerance_days": list(SELECTION_DUPLICATE_TOLERANCE),
                              "min_separation_days": list(MULTISTART_BASIN_SEPARATION),
                              "max_candidates": int(max_candidates)}
+        st.record_physics(
+            assumptions=["candidates ranked by the same Lambert patched-conic total dv the search scored them with"],
+            limitations=["Lambert dv ranking is a screening order only; refinement can re-rank the short list"],
+        )
         st.candidates = sel.to_candidates()
         st.convergence = {"converged": bool(sel.selected), **sel.counts()}
         for rec in st.candidates:
@@ -704,6 +743,12 @@ def _fly_transfer(
         st.physical_model = {"name": "tudatpy Mars point mass + Sun, MOI capture-burn targeting; "
                                      "verification reports for launch injection / TCM / MOI",
                              "fidelity": "high-fidelity"}
+        st.record_physics(
+            assumptions=["a single impulsive capture burn at the located periapsis, Mars-centered two-body capture"],
+            limitations=["confirms the capture orbit is achievable; does not verify the years-long post-capture life"],
+            not_modelled=[NOT_MODELLED_POINT_MASS_GRAVITY, NOT_MODELLED_SRP, NOT_MODELLED_DRAG,
+                          NOT_MODELLED_RELATIVITY, NOT_MODELLED_IMPULSIVE_BURNS],
+        )
         st.candidates.append({"captured_orbit": moi.achieved,
                               "moi_delta_v_m_s": float(np.linalg.norm(moi.delta_v_ms)), "selected": False})
     events.append({

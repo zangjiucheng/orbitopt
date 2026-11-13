@@ -48,6 +48,26 @@
         "reports": {"type": "array", "items": {"type": "string"}}
       }
     },
+    "model_fidelity": {
+      "type": "object",
+      "description": "V-05 mission report section: per-segment physics model, fidelity, assumptions, limitations and unmodelled effects, aggregated over the stages (orbitopt.model_fidelity).",
+      "required": ["segments", "fidelity_ladder", "highest_fidelity", "unmodelled_effects"],
+      "additionalProperties": false,
+      "properties": {
+        "segments": {"type": "array", "items": {"$ref": "#/$defs/segment"}},
+        "fidelity_ladder": {
+          "type": "object",
+          "description": "Segment name -> fidelity level, over the segments that ran with a physics model.",
+          "additionalProperties": {"enum": ["none", "analytic", "patched-conic", "two-body", "high-fidelity"]}
+        },
+        "highest_fidelity": {"enum": ["none", "analytic", "patched-conic", "two-body", "high-fidelity"]},
+        "unmodelled_effects": {
+          "type": "array",
+          "description": "Union of every physical effect the run's physics segments do not model: the answer to \"which physical effects were not modelled\".",
+          "items": {"type": "string"}
+        }
+      }
+    },
     "gate": {
       "type": "object",
       "description": "Verification Gate: per-candidate verdicts (why each was rejected / degraded / accepted) and which one was exported.",
@@ -131,6 +151,21 @@
             "fidelity": {"enum": ["none", "analytic", "patched-conic", "two-body", "high-fidelity"]}
           }
         },
+        "assumptions": {
+          "type": "array",
+          "description": "V-05: what the stage's physical model takes for granted (impulsive burns, ephemeris source, ...).",
+          "items": {"type": "string"}
+        },
+        "limitations": {
+          "type": "array",
+          "description": "V-05: what the stage's result cannot be trusted for.",
+          "items": {"type": "string"}
+        },
+        "not_modelled": {
+          "type": "array",
+          "description": "V-05: physical effects the stage's model does not include.",
+          "items": {"type": "string"}
+        },
         "numerical_error": {
           "type": "object",
           "description": "Numerical error estimate name (unit suffix) -> value.",
@@ -138,6 +173,21 @@
         },
         "notes": {"type": "array", "items": {"type": "string"}},
         "error": {"type": "string"}
+      }
+    },
+    "segment": {
+      "type": "object",
+      "description": "One mission segment (V-05, orbitopt.model_fidelity.MissionSegment): the physics metadata of one mission phase.",
+      "required": ["name", "physical_model", "fidelity", "status", "assumptions", "limitations", "not_modelled"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "description": "Mission phase (pipeline stage) this segment describes."},
+        "physical_model": {"type": "string", "description": "Name of the physical model the phase used."},
+        "fidelity": {"enum": ["none", "analytic", "patched-conic", "two-body", "high-fidelity"]},
+        "status": {"enum": ["completed", "skipped", "failed", "not_run"]},
+        "assumptions": {"type": "array", "items": {"type": "string"}},
+        "limitations": {"type": "array", "items": {"type": "string"}},
+        "not_modelled": {"type": "array", "items": {"type": "string"}}
       }
     }
   }
