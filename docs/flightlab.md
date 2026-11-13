@@ -65,6 +65,22 @@ Propagation phases span a two-body display coast of the insertion state,
 sized by `flightlab.coast_orbits` (default 2 orbital periods, `0` to omit);
 the coast is labelled display data, never verification.
 
+M-07 freezes all of this as a *reference scenario* (`two-stage-leo` mission
+kind, `orbitopt run src/orbitopt/data/mission_two_stage_leo.yaml`): a mission
+config declares the launch site, vehicle, target orbit and expected results
+(parking-orbit elements with the Gate-B tolerances), and the run grades the
+whole chain — Launch Site → Liftoff → MECO → Separation → SECO → Parking
+Orbit → Orbit Propagation — into one unified report
+(`mission.verification.json`) that references the M-04 launch and M-05
+propagation reports by path and digest. Stage boundaries are graded on the
+ascent lineage only (debris and fairing tracks are recorded, not graded),
+with the parent and child states bridged across the backend's staging gap
+by a two-body coast before the M-01 continuity and mass gates are applied.
+`ascent.mode: run_dir` replays a previously flown run directory instead of
+optimizing, so the chain grading runs without the compute stack; the
+end-to-end green run (optimize, propagate, all gates passed) is the
+`flightlab-gateb` CI job. See `orbitopt.mission.two_stage_leo`.
+
 ## Fidelity levels
 
 | Model | Scope |
