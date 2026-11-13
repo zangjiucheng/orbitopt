@@ -43,6 +43,12 @@ itself owns the ``mission_config`` stage (schema validation), fills in a
 record one, and owns ``export`` (scene validation and, optionally, writing
 the scene / verification report / pipeline result files).
 
+V-05 (orbitopt.model_fidelity): physics stages additionally record
+``assumptions`` / ``limitations`` / ``not_modelled`` via ``record_physics``,
+and the result document carries a ``model_fidelity`` section aggregating
+every segment's model, fidelity level and unmodelled effects -- so the
+mission report answers "which physical effects were not modelled" directly.
+
 This module only needs stdlib + jsonschema + pyyaml at import time; a mission
 kind's compute stack is imported when that kind is actually run.
 """
@@ -57,6 +63,13 @@ from dataclasses import dataclass, field
 from functools import cache
 from importlib import resources
 from pathlib import Path
+
+from orbitopt.model_fidelity import (
+    FIDELITIES,
+    MissionSegment,
+    format_coverage,
+    model_coverage,
+)
 
 SCHEMA_VERSION = "1.0"
 SCHEMA_FILE = "pipeline-result-1.0.json"
@@ -77,8 +90,8 @@ STATUS_FAILED = "failed"
 STATUS_NOT_RUN = "not_run"
 STAGE_STATUSES = (STATUS_COMPLETED, STATUS_SKIPPED, STATUS_FAILED, STATUS_NOT_RUN)
 
-# physical_model["fidelity"] vocabulary, lowest to highest.
-FIDELITIES = ("none", "analytic", "patched-conic", "two-body", "high-fidelity")
+# physical_model["fidelity"] vocabulary, lowest to highest: see the import
+# above (orbitopt.model_fidelity owns the list, V-05).
 
 
 def _jsonable(obj):
@@ -113,10 +126,27 @@ class StageResult:
     constraint_violations: dict = field(default_factory=dict)
     # ``name`` (+ ``fidelity`` from FIDELITIES, free-form extras).
     physical_model: dict = field(default_factory=dict)
+    # V-05 (orbitopt.model_fidelity): what the stage's model takes for
+    # granted, what its result cannot be trusted for, and which physical
+    # effects it does not model. Recorded via ``record_physics``.
+    assumptions: list = field(default_factory=list)
+    limitations: list = field(default_factory=list)
+    not_modelled: list = field(default_factory=list)
     # error-estimate name (with unit suffix) -> value.
     numerical_error: dict = field(default_factory=dict)
     notes: list = field(default_factory=list)
     error: str | None = None
+
+    def record_physics(self, *, assumptions=(), limitations=(), not_modelled=()) -> None:
+        """Attach the V-05 metadata lists to this stage's model record."""
+        self.assumptions = [str(a) for a in assumptions]
+        self.limitations = [str(x) for x in limitations]
+        self.not_modelled = [str(e) for e in not_modelled]
+
+    @property
+    def model(self) -> MissionSegment:
+        """This stage as a MissionSegment (orbitopt.model_fidelity, V-05)."""
+        return MissionSegment.from_stage(self.to_dict())
 
     @property
     def converged(self):
@@ -131,6 +161,9 @@ class StageResult:
             "convergence": _jsonable({"converged": None, **self.convergence}),
             "constraint_violations": _jsonable(self.constraint_violations),
             "physical_model": _jsonable(self.physical_model),
+            "assumptions": [str(a) for a in self.assumptions],
+            "limitations": [str(x) for x in self.limitations],
+            "not_modelled": [str(e) for e in self.not_modelled],
             "numerical_error": _jsonable(self.numerical_error),
             "notes": [str(n) for n in self.notes],
         }
@@ -241,6 +274,13 @@ class PipelineResult:
         raise KeyError(name)
 
     @property
+    def model_fidelity(self) -> dict:
+        """V-05 mission report section: per-segment physics model, fidelity,
+        assumptions, limitations and the run's union of unmodelled effects
+        (orbitopt.model_fidelity)."""
+        return model_coverage(self)
+
+    @property
     def verification_result(self) -> str:
         from orbitopt.verify.report import RESULT_NOT_CHECKED, bundle, status_result
 
@@ -273,6 +313,7 @@ class PipelineResult:
                 "result": self.verification_result,
                 "reports": [f"{r.get('kind', '?')}:{r.get('label', '?')}" for r in self.verification_reports],
             },
+            "model_fidelity": self.model_fidelity,
             "gate": self.gate.to_dict(),
             "outputs": dict(self.outputs),
         }
@@ -295,6 +336,7 @@ class PipelineResult:
                          f"candidate #{g.exported} ({g.result}); "
                          + ", ".join(f"{n} {v}" for v, n in g.to_dict()["counts"].items() if n))
         lines.extend(f"  WARNING: {w}" for w in self.warnings)
+        lines.extend(format_coverage(self.model_fidelity, indent="  "))
         return "\n".join(lines)
 
 

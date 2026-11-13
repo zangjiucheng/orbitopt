@@ -26,6 +26,13 @@ from orbitopt.bodies import (
     moon_state,
 )
 from orbitopt.lambert.cpu import solve_lambert_single
+from orbitopt.model_fidelity import (
+    NOT_MODELLED_DRAG,
+    NOT_MODELLED_IMPULSIVE_BURNS,
+    NOT_MODELLED_POINT_MASS_GRAVITY,
+    NOT_MODELLED_RELATIVITY,
+    NOT_MODELLED_SRP,
+)
 from orbitopt.pipeline import (
     CONSTRAINTS,
     OPTIMIZE,
@@ -319,6 +326,14 @@ def _build_artemis2_mission(
 
     with recorder.stage(SEARCH) as st:
         st.physical_model = {"name": "offset-aim Lambert arc to the Moon (pykep)", "fidelity": "two-body"}
+        st.record_physics(
+            assumptions=["one Earth-centered two-body Lambert arc to a fixed offset aim point ahead of the "
+                         "Moon's predicted position"],
+            limitations=["seed only: no Moon gravity on the arc, so this dv misses the free-return solution the "
+                         "targeter converges"],
+            not_modelled=["third_body_gravity (Moon gravity is what bends the real arc)",
+                          NOT_MODELLED_SRP, NOT_MODELLED_IMPULSIVE_BURNS],
+        )
         r_moon_arrival, v_moon_arrival = moon_state(departure_mjd2000 + coast_days_guess)
         r_moon_arrival = np.asarray(r_moon_arrival)
         v_moon_arrival = np.asarray(v_moon_arrival)
@@ -348,6 +363,14 @@ def _build_artemis2_mission(
     with recorder.stage(OPTIMIZE) as st:
         st.physical_model = {"name": "joint lunar B-plane + entry-corridor Newton (TudatPy Earth/Moon/Sun)",
                              "fidelity": "high-fidelity"}
+        st.record_physics(
+            assumptions=["point-mass Earth/Moon/Sun with SPICE ephemerides; a single impulsive departure burn",
+                         "entry corridor checked at the interface crossing of the propagated return leg"],
+            limitations=["converged means the perilune/entry-FPA residuals met tolerance; corridor survivability "
+                         "is the separate in_corridor check"],
+            not_modelled=[NOT_MODELLED_POINT_MASS_GRAVITY, NOT_MODELLED_SRP, NOT_MODELLED_DRAG,
+                          NOT_MODELLED_RELATIVITY, NOT_MODELLED_IMPULSIVE_BURNS],
+        )
         targeting = target_free_return_entry_corridor(
             r0=r0, v0_pre_burn=v0, initial_epoch=0.0,
             dv_guess=dv_guess, coast_duration_guess=coast_days_guess * 86400.0,
@@ -395,6 +418,13 @@ def _build_artemis2_mission(
                                      f"(max step {step_seconds:g} s; Earth/Moon/Sun)",
                              "fidelity": "high-fidelity",
                              "integrator": integrator_description(DEFAULT_INTEGRATOR, step_seconds)}
+        st.record_physics(
+            assumptions=["one impulsive TLI then a single coast; point-mass Earth/Moon/Sun on SPICE ephemerides"],
+            limitations=["no solid Earth or atmosphere: past the entry interface the trajectory keeps going "
+                        "through the planet, so the export is truncated at the interface crossing"],
+            not_modelled=[NOT_MODELLED_POINT_MASS_GRAVITY, NOT_MODELLED_SRP, NOT_MODELLED_DRAG,
+                          NOT_MODELLED_RELATIVITY, NOT_MODELLED_IMPULSIVE_BURNS],
+        )
         export_duration_s = total_days * 86400.0
         if targeting.entry_epoch is not None:
             export_duration_s = min(export_duration_s, targeting.entry_epoch + 0.5 * 86400.0)
@@ -419,6 +449,14 @@ def _build_artemis2_mission(
     with recorder.stage(VERIFY) as st:
         st.physical_model = {"name": "entry-corridor re-check on the export propagation + targeter TudatPy report",
                              "fidelity": "high-fidelity"}
+        st.record_physics(
+            assumptions=["same point-mass Earth/Moon/Sun dynamics as the export propagation; the corridor check "
+                         "reads the vacuum flight-path angle at the interface crossing"],
+            limitations=["a free-return corridor verdict only: entry dynamics themselves (lift, skip, drag) "
+                         "are outside this framework's scope"],
+            not_modelled=[NOT_MODELLED_POINT_MASS_GRAVITY, NOT_MODELLED_SRP, NOT_MODELLED_DRAG,
+                          NOT_MODELLED_RELATIVITY, NOT_MODELLED_IMPULSIVE_BURNS],
+        )
         try:
             entry = _verify_entry_corridor(full)
         except RuntimeError as exc:

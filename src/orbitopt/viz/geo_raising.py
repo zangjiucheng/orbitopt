@@ -61,6 +61,14 @@ from orbitopt.bodies import (
     earth_body_fixed_to_eclipj2000,
     mjd2000_from_date,
 )
+from orbitopt.model_fidelity import (
+    NOT_MODELLED_DRAG,
+    NOT_MODELLED_IMPULSIVE_BURNS,
+    NOT_MODELLED_POINT_MASS_GRAVITY,
+    NOT_MODELLED_RELATIVITY,
+    NOT_MODELLED_SRP,
+    NOT_MODELLED_THIRD_BODIES,
+)
 from orbitopt.optimize.runner import run_optimization
 from orbitopt.pipeline import CONSTRAINTS, OPTIMIZE, REFINE, SEARCH, VERIFY, StageRecorder
 from orbitopt.problems.geo_raising import (
@@ -270,12 +278,24 @@ def _search_feasible_schedule(
     with recorder.stage(CONSTRAINTS) as st:
         cap = GeoRaisingProblem(n_burns=2, **kwargs).max_dv_per_pass_ms(apogee_dwell_s)
         st.physical_model = {"name": "finite-burn per-apogee-pass delta-v cap", "fidelity": "analytic"}
+        st.record_physics(
+            assumptions=["per-pass dv cap = apogee dwell time x thrust/mass, the engine's finite-thrust budget"],
+            limitations=["a budget check on the burn schedule; models no trajectory"],
+        )
         st.candidates = [{"max_dv_per_burn_ms": float(cap), "apogee_dwell_s": float(apogee_dwell_s),
                           "n_burns_range": [n_burns_min, n_burns_max]}]
 
     search = recorder[SEARCH]
     search.physical_model = {"name": "impulsive two-body GTO->GEO apogee-burn campaign (GeoRaisingProblem)",
                              "fidelity": "two-body"}
+    search.record_physics(
+        assumptions=["all burns impulsive at a shared apogee taken at the GEO radius; GEO holds by construction",
+                     "per-burn dv from the apogee velocity triangle; finite thrust enters only as the per-pass cap"],
+        limitations=["coarse closed-form screening model: shared apogee at r_geo makes the total dv a lower bound; "
+                    "the tudatpy re-fly is authoritative"],
+        not_modelled=[NOT_MODELLED_POINT_MASS_GRAVITY, NOT_MODELLED_THIRD_BODIES,
+                      NOT_MODELLED_SRP, NOT_MODELLED_DRAG, NOT_MODELLED_IMPULSIVE_BURNS],
+    )
     search.notes.append("sweep n_burns upward; the first finite-burn-feasible PSO optimum wins")
     for n_burns in range(n_burns_min, n_burns_max + 1):
         problem = GeoRaisingProblem(n_burns=n_burns, max_dv_per_burn_ms=cap, **kwargs)
@@ -292,6 +312,8 @@ def _search_feasible_schedule(
             search.convergence = {"converged": True, "n_burns": n_burns, "attempts": len(search.candidates)}
             opt = recorder.add_time(OPTIMIZE, dt)
             opt.physical_model = dict(search.physical_model)
+            opt.record_physics(assumptions=search.assumptions, limitations=search.limitations,
+                               not_modelled=search.not_modelled)
             opt.candidates = [{"n_burns": n_burns, "decision_vector": np.asarray(x).tolist(),
                                "fitness": float(np.ravel(f)[0]), "dv_total_ms": sched["dv_total_ms"],
                                "dv_per_burn_ms": sched["dv_per_burn_ms"], "selected": True}]
@@ -548,6 +570,14 @@ def _build_geo_mission(
     refine = recorder.add_time(REFINE, time.perf_counter() - refine_t0)
     refine.physical_model = {"name": "tudatpy Earth point mass, adaptive RKDP 8(7) (dop853) integrator", "fidelity": "two-body",
                              "step_size_s": float(step_size_s)}
+    refine.record_physics(
+        assumptions=["the winning impulsive schedule re-flown as coast arcs under Earth's point mass; "
+                     "the launch profile prepended as for the scene"],
+        limitations=["terminal-state miss against ideal GEO measures integration error, not perturbation response "
+                    "-- the verify stage runs the perturbed model"],
+        not_modelled=[NOT_MODELLED_POINT_MASS_GRAVITY, NOT_MODELLED_THIRD_BODIES,
+                      NOT_MODELLED_SRP, NOT_MODELLED_DRAG, NOT_MODELLED_IMPULSIVE_BURNS],
+    )
     refine.candidates = [{"n_burns": int(n_burns), "duration_days": float(days[-1]),
                           "burns": len(burn_events), "selected": True}]
     refine.numerical_error = {
@@ -766,6 +796,14 @@ def build_from_config(config: dict, recorder=None) -> dict:
             achieved = result.achieved_corrected
             st.physical_model = {"name": "tudatpy Earth J2+J22 + Sun/Moon third body, final-burn targeter",
                                  "fidelity": "high-fidelity"}
+            st.record_physics(
+                assumptions=["impulsive burn+coast re-fly with burns at a shared apogee; the final burn is "
+                             "Newton-targeted onto osculating GEO over a station-keeping window"],
+                limitations=["achieved osculating (a, e, i) at end of the station-keeping window: says nothing "
+                            "about months-scale station-keeping or mass decay beyond the campaign"],
+                not_modelled=[NOT_MODELLED_SRP, NOT_MODELLED_DRAG, NOT_MODELLED_RELATIVITY,
+                              "gravity_field_beyond_J2_J22", NOT_MODELLED_IMPULSIVE_BURNS],
+            )
             st.convergence = {"converged": bool(result.converged), "iterations": int(result.iterations)}
             st.candidates = [{"achieved": achieved, "selected": True}]
             st.numerical_error = {
