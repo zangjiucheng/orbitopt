@@ -492,7 +492,13 @@ def test_slow_wiring_only_monte_carlo_green_source_yields_rate_percentiles_and_e
                           dispersions=disp, seed=9, n=3, workers=1,
                           plan_options={"initial_guess": NOMINAL_PLAN_GUESS,
                                         "max_fevals": 18,
-                                        "landing": {"mode": "single"}},
+                                        "landing": {"mode": "single"},
+                                        # the wiring expectation below was recorded
+                                        # under the FL-305 objective; R-01 (epic #217)
+                                        # reweights the search, pin it off to keep this
+                                        # statistics-plumbing test about its plumbing
+                                        "landing_divert_budget_m": None,
+                                        "landing_reserve_margin_kg": 0.0},
                           out_path=tmp_path / "montecarlo.json")
     assert res.success_rate == 1.0
     assert res.reason_histogram == {"LANDED": 3}

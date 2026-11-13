@@ -47,18 +47,24 @@ from orbitopt.flightlab.recovery import (
     plan_boostback_entry,
 )
 from orbitopt.flightlab.recovery.boostback import (
+    CORRIDOR_MISSED,
+    CORRIDOR_NOT_REACHED,
     DEFAULT_CORRIDOR,
     DEFAULT_ENTRY_G_MAX,
     DEFAULT_ENTRY_Q_MAX_PA,
+    DEFAULT_LANDING_DIVERT_BUDGET_M,
+    DEFAULT_LANDING_RESERVE_MARGIN_KG,
+    ENTRY_G_LIMIT_EXCEEDED,
+    ENTRY_Q_LIMIT_EXCEEDED,
     INSUFFICIENT_PROPELLANT_BOOSTBACK,
     INSUFFICIENT_PROPELLANT_ENTRY_BURN,
     INSUFFICIENT_PROPELLANT_RESERVE,
-    CORRIDOR_MISSED,
-    CORRIDOR_NOT_REACHED,
-    ENTRY_G_LIMIT_EXCEEDED,
-    ENTRY_Q_LIMIT_EXCEEDED,
+    BoostbackPlan,
+    EntryBurnPlan,
     _bearing_of_target,
     _enu_basis,
+    _evaluate,
+    _Mission,
     landing_burn_propellant_need_kg,
     mission_command,
 )
@@ -368,5 +374,121 @@ def test_downrange_target_steers_south(vehicle):
     assert cr.reached and cr.tilt_deg <= tgt.corridor.max_tilt_deg
     assert plan.ignitions_used == 2
     assert cr.entry_max_q_pa <= DEFAULT_ENTRY_Q_MAX_PA
-    assert plan.reason_codes[0] in (CORRIDOR_MISSED, INSUFFICIENT_PROPELLANT_RESERVE) \
-        or plan.feasible
+    assert plan.feasible \
+        or plan.reason_codes[0] in (CORRIDOR_MISSED, INSUFFICIENT_PROPELLANT_RESERVE)
+
+
+# ---------------------------------------------------------------------------
+# R-01 (epic #217): landing-aware objective -- divert budget + fuel margin
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def r01_nominal_plan(vehicle, pad_target):
+    """The plan the R-01-default MC/simulate warm start converges to
+    (FL-305's pinned NOMINAL_PLAN_GUESS, FL-304 search budget) -- the handoff
+    the R-01 objective steers at nominal."""
+    from orbitopt.flightlab.recovery.pipeline import NOMINAL_PLAN_GUESS
+    st = _sep_state(alt=40_000.0, speed=250.0, fpa_deg=2.0, down_m=8_000.0,
+                    mass=65_000.0)
+    return st, plan_boostback_entry(st, vehicle, pad_target,
+                                    initial_guess=NOMINAL_PLAN_GUESS, max_fevals=18)
+
+
+FL305_OBJECTIVE = {"landing_divert_budget_m": None, "landing_reserve_margin_kg": 0.0}
+
+
+@pytest.mark.slow
+def test_r01_disabled_reproduces_fl305_plan(vehicle, pad_target):
+    """The FL-305 baseline switch: with the R-01 terms off, the pinned-script
+    plan is untouched -- identical script, identical measured corridor
+    state, no R-01 assumptions -- and the report carries no R-01 bar. With
+    the defaults on, everything except the two objective-knob report fields
+    (and the assumption line) is bit-identical."""
+    st = _sep_state(alt=40_000.0, speed=250.0, fpa_deg=2.0, down_m=8_000.0,
+                    mass=65_000.0)
+    off = plan_boostback_entry(st, vehicle, pad_target, max_fevals=1,
+                               initial_guess=_SEED_PLAN, **FL305_OBJECTIVE)
+    on = plan_boostback_entry(st, vehicle, pad_target, max_fevals=1,
+                              initial_guess=_SEED_PLAN)
+    assert off.boostback == on.boostback and off.entry_burn == on.entry_burn
+    assert off.feasible == on.feasible and off.reason_codes == on.reason_codes
+    cr_off, cr_on = off.corridor_report, on.corridor_report
+    for field in ("reached", "t_s", "miss_m", "tilt_deg", "speed_m_s",
+                  "propellant_available_kg", "landing_need_kg", "reserve_kg",
+                  "entry_max_q_pa", "entry_max_proper_g"):
+        assert getattr(cr_off, field) == getattr(cr_on, field)
+    assert cr_off.landing_divert_budget_m is None
+    assert cr_off.min_landing_reserve_margin_kg is None
+    assert cr_on.landing_divert_budget_m == DEFAULT_LANDING_DIVERT_BUDGET_M
+    assert cr_on.min_landing_reserve_margin_kg == DEFAULT_LANDING_RESERVE_MARGIN_KG
+    assert not any("R-01" in a for a in off.assumptions)
+    assert any("R-01" in a for a in on.assumptions)
+
+
+def test_r01_objective_penalty_scales(vehicle, pad_target):
+    """The two R-01 objective terms are exactly the documented scales: the
+    crossed-branch penalty grows by (miss / divert_budget)**2 and by the
+    squared shortfall of propellant against need + reserve + margin -- the
+    scripted nominal's surplus passes the bare need + reserve bar but not a
+    10 t ask, so the second term must switch on."""
+    st = _sep_state(alt=40_000.0, speed=250.0, fpa_deg=2.0, down_m=8_000.0,
+                    mass=65_000.0)
+    pad_ecef = np.asarray(pad_target.position_ecef_m)
+
+    def fresh_mission() -> _Mission:
+        return _Mission(st.t_s, BoostbackPlan(*_SEED_PLAN[:5]),
+                        EntryBurnPlan(_SEED_PLAN[5], _SEED_PLAN[6]),
+                        _bearing_of_target(pad_ecef))
+
+    def rollout(**kw):
+        return _evaluate(st, fresh_mission(), vehicle, pad_target,
+                         pad_target.corridor, DEFAULT_ENTRY_Q_MAX_PA,
+                         DEFAULT_ENTRY_G_MAX,
+                         float(vehicle.landing_propellant_reserve_kg), 900.0,
+                         2.0, (st.t_s + _SEED_PLAN[0],
+                               st.t_s + _SEED_PLAN[0] + _SEED_PLAN[1]), **kw)
+
+    base = rollout()  # divert_budget=inf, reserve_margin=0: FL-305
+    assert base.crossed and base.penalty < float("inf")
+    diverted = rollout(divert_budget=DEFAULT_LANDING_DIVERT_BUDGET_M)
+    want = (base.miss_m / DEFAULT_LANDING_DIVERT_BUDGET_M) ** 2
+    assert diverted.penalty - base.penalty == pytest.approx(want, rel=1e-9)
+    margin = rollout(reserve_margin=10_000.0)
+    short = base.landing_need_kg + vehicle.landing_propellant_reserve_kg + 10_000.0 \
+        - base.prop_kg
+    want = (max(0.0, base.landing_need_kg + vehicle.landing_propellant_reserve_kg
+                - base.prop_kg) / 1000.0) ** 2
+    assert margin.penalty - base.penalty == pytest.approx(
+        (max(0.0, short) / 1000.0) ** 2 - want, rel=1e-9)
+
+
+def test_r01_parameter_validation(vehicle, pad_target):
+    st = _sep_state(alt=40_000.0, speed=250.0, fpa_deg=2.0, down_m=8_000.0,
+                    mass=65_000.0)
+    with pytest.raises(ValueError):
+        plan_boostback_entry(st, vehicle, pad_target, landing_divert_budget_m=0.0)
+    with pytest.raises(ValueError):
+        plan_boostback_entry(st, vehicle, pad_target, landing_reserve_margin_kg=-1.0)
+    # an explicit infinite budget is the disabled state, not an error
+    plan = plan_boostback_entry(st, vehicle, pad_target, max_fevals=1,
+                                initial_guess=_SEED_PLAN,
+                                landing_divert_budget_m=float("inf"))
+    assert plan.corridor_report.landing_divert_budget_m is None
+
+
+@pytest.mark.slow
+def test_r01_nominal_handoff_meets_r01_targets(r01_nominal_plan, pad_target):
+    """Acceptance: the optimization result at nominal satisfies both R-01
+    constraints as measured, against the very bar the report says the
+    optimizer was steered to (miss within the divert budget, propellant at
+    the corridor covering need + reserve + the minimum margin)."""
+    _st, plan = r01_nominal_plan
+    cr = plan.corridor_report
+    assert plan.feasible, plan.reason_codes
+    assert cr.reached
+    assert cr.landing_divert_budget_m == DEFAULT_LANDING_DIVERT_BUDGET_M
+    assert cr.min_landing_reserve_margin_kg == DEFAULT_LANDING_RESERVE_MARGIN_KG
+    assert 0.0 <= cr.miss_m <= cr.landing_divert_budget_m
+    assert (cr.propellant_available_kg - cr.landing_need_kg - cr.reserve_kg
+            >= cr.min_landing_reserve_margin_kg)

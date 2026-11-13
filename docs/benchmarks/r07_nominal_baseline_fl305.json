@@ -1,0 +1,931 @@
+{
+ "assumptions": [
+  "FL-304 recovery: FL-302 boostback/entry script + FL-303 landing burn (FL-305 closed-loop guidance unless plan_options select the single G-FOLD plan), integrated through the FL-301 propagator; the booster track replaces the ballistic stage1_debris track",
+  "entry q limit 150000 Pa, entry g limit 8.0 g over the post-boostback descent window (DESIGN ASSUMPTIONs unless overridden)",
+  "G-FOLD model: constant gravity (local J2 magnitude at insertion), flat ground, no aero, thrust envelope = ambient engine capability at the insertion altitude; verdict from the FL-301 re-integration (drag, J2, rotation, min-throttle clamp), not the solver.",
+  "gfold 0.3.2: Environment.max_angle_deg is accepted but inert (verified); the tilt limit binds the cvxpy reference and the touchdown tilt check.",
+  "FOH discretization (n nodes, h = tof/n, terminal node = engine cutoff state a short distance above the pad; ballistic coast from there); trapezoidal fuel accounting against sea-level Isp (pessimistic end).",
+  "FL-305 closed-loop terminal guidance (docs/adr/flightlab-0002): the insertion SOCP is the feasibility certificate; the burn is re-planned from the propagated state every step (hoverslam vertical profile, ZEM/ZEV divert, tilt limit in the loop, no-hover ballistic cutoff); verdict from the same touchdown checks.",
+  "guidance: design_throttle=0.9 v_td=1.5m/s tilt<=30deg ignition=1.2s cutoff=19.7s after insertion; insertion plan fuel_planned=5753.0kg",
+  "R-05 actuator margins (0 deg/s TVC slew limit): burn 18.5s; ignition headroom 13.1%, min throttle headroom 13.1%, floor room 24.2%, min tilt margin 10.7 deg, peak slew 193.1 deg/s (limit unlimited), ceiling riding 0.0s, floor riding 0.0s"
+ ],
+ "checks": [
+  {
+   "id": "max-q-within-limit",
+   "limit": 60000.0,
+   "passed": true,
+   "reason_code": "",
+   "unit": "Pa",
+   "value": 36690.0
+  },
+  {
+   "id": "max-accel-within-limit",
+   "limit": 5.0,
+   "passed": true,
+   "reason_code": "",
+   "unit": "g",
+   "value": 4.1
+  },
+  {
+   "id": "recovery-landing",
+   "limit": null,
+   "passed": true,
+   "reason_code": "",
+   "unit": "",
+   "value": null
+  },
+  {
+   "id": "landing-position",
+   "limit": 25.0,
+   "passed": true,
+   "reason_code": "",
+   "unit": "m",
+   "value": 0.552298530522226
+  },
+  {
+   "id": "landing-vertical-speed",
+   "limit": 3.0,
+   "passed": true,
+   "reason_code": "",
+   "unit": "m/s",
+   "value": -1.608746295156212
+  },
+  {
+   "id": "landing-lateral-speed",
+   "limit": 1.0,
+   "passed": true,
+   "reason_code": "",
+   "unit": "m/s",
+   "value": 0.0426696613891352
+  },
+  {
+   "id": "landing-tilt",
+   "limit": 40.0,
+   "passed": true,
+   "reason_code": "",
+   "unit": "deg",
+   "value": 19.314362310614165
+  },
+  {
+   "id": "landing-propellant-reserve",
+   "limit": 4200.0,
+   "passed": true,
+   "reason_code": "",
+   "unit": "kg",
+   "value": 992.4011328587221
+  },
+  {
+   "id": "landing-max-g",
+   "limit": 5.0,
+   "passed": true,
+   "reason_code": "",
+   "unit": "g",
+   "value": 3.5189145423251444
+  },
+  {
+   "id": "recovery-propellant-reserve",
+   "limit": 1000.0,
+   "passed": true,
+   "reason_code": "",
+   "unit": "kg",
+   "value": 5192.401132858722
+  }
+ ],
+ "corridor": {
+  "entry_max_proper_g": 3.955808841533551,
+  "entry_max_q_pa": 33767.72801367207,
+  "feasible": true,
+  "ignitions_used": 2,
+  "landing_divert_budget_m": null,
+  "landing_need_kg": 5799.114946707341,
+  "min_landing_reserve_margin_kg": null,
+  "miss_m": 351.61529018689885,
+  "propellant_available_kg": 11660.875867022114,
+  "reached": true,
+  "reason_codes": [],
+  "reserve_kg": 4200.0,
+  "speed_m_s": 306.01530149122954,
+  "t_s": 328.4683164239762,
+  "tilt_deg": 0.257687651307473
+ },
+ "handoff": {
+  "checks": [
+   {
+    "id": "handoff-separation-boostback",
+    "limit": 1.0,
+    "passed": true,
+    "reason_code": "",
+    "unit": "ratio",
+    "value": 0.0
+   },
+   {
+    "id": "handoff-boostback-entry",
+    "limit": 1.0,
+    "passed": true,
+    "reason_code": "",
+    "unit": "ratio",
+    "value": 0.41197625185908965
+   },
+   {
+    "id": "handoff-entry-landing",
+    "limit": 1.0,
+    "passed": true,
+    "reason_code": "",
+    "unit": "ratio",
+    "value": 0.0
+   },
+   {
+    "id": "handoff-landing-touchdown",
+    "limit": 0.01,
+    "passed": true,
+    "reason_code": "",
+    "unit": "m",
+    "value": 0.0
+   },
+   {
+    "id": "handoff-mass-monotonic-boostback",
+    "limit": 1e-06,
+    "passed": true,
+    "reason_code": "",
+    "unit": "kg",
+    "value": 0.0
+   },
+   {
+    "id": "handoff-mass-monotonic-landing",
+    "limit": 1e-06,
+    "passed": true,
+    "reason_code": "",
+    "unit": "kg",
+    "value": 0.0
+   },
+   {
+    "id": "handoff-mass-coast-entry",
+    "limit": 0.5,
+    "passed": true,
+    "reason_code": "",
+    "unit": "kg",
+    "value": 0.0
+   },
+   {
+    "id": "handoff-mass-terminal",
+    "limit": 0.0,
+    "passed": true,
+    "reason_code": "",
+    "unit": "kg",
+    "value": 5192.401132858722
+   },
+   {
+    "id": "joint-max-q-boostback",
+    "limit": 150000.0,
+    "passed": true,
+    "reason_code": "",
+    "unit": "Pa",
+    "value": 753.4260781182045
+   },
+   {
+    "id": "joint-max-q-entry",
+    "limit": 150000.0,
+    "passed": true,
+    "reason_code": "",
+    "unit": "Pa",
+    "value": 33767.72801367207
+   },
+   {
+    "id": "joint-max-q-landing",
+    "limit": 150000.0,
+    "passed": true,
+    "reason_code": "",
+    "unit": "Pa",
+    "value": 40905.26439598978
+   },
+   {
+    "id": "joint-propellant-corridor-budget",
+    "limit": 0.0,
+    "passed": true,
+    "reason_code": "",
+    "unit": "kg",
+    "value": 1661.760920314773
+   },
+   {
+    "id": "joint-touchdown-position",
+    "limit": 25.0,
+    "passed": true,
+    "reason_code": "",
+    "unit": "m",
+    "value": 0.552298530522226
+   },
+   {
+    "id": "joint-touchdown-vertical-speed",
+    "limit": 3.0,
+    "passed": true,
+    "reason_code": "",
+    "unit": "m/s",
+    "value": 1.608746295156212
+   },
+   {
+    "id": "joint-touchdown-lateral-speed",
+    "limit": 1.0,
+    "passed": true,
+    "reason_code": "",
+    "unit": "m/s",
+    "value": 0.0426696613891352
+   },
+   {
+    "id": "joint-propellant-reserve-touchdown",
+    "limit": 4200.0,
+    "passed": true,
+    "reason_code": "",
+    "unit": "kg",
+    "value": 5192.401132858722
+   }
+  ],
+  "passed": true,
+  "phases": {
+   "handoff-boostback-entry": "entry",
+   "handoff-entry-landing": "landing",
+   "handoff-landing-touchdown": "landing",
+   "handoff-mass-coast-entry": "entry",
+   "handoff-mass-monotonic-boostback": "boostback",
+   "handoff-mass-monotonic-landing": "landing",
+   "handoff-mass-terminal": "landing",
+   "handoff-separation-boostback": "boostback",
+   "joint-max-q-boostback": "boostback",
+   "joint-max-q-entry": "entry",
+   "joint-max-q-landing": "landing",
+   "joint-propellant-corridor-budget": "entry",
+   "joint-propellant-reserve-touchdown": "landing",
+   "joint-touchdown-lateral-speed": "landing",
+   "joint-touchdown-position": "landing",
+   "joint-touchdown-vertical-speed": "landing"
+  },
+  "unassessed": []
+ },
+ "kind": "flightlab-recovery-nominal-report",
+ "landing": {
+  "actuator_margin": {
+   "burn_time_s": 18.5,
+   "saturated_high_s": 0,
+   "saturated_low_s": 0,
+   "slew_deg_s_max": 193.1436,
+   "throttle_floor_room_min": 0.241747,
+   "throttle_headroom_at_ignition": 0.131086,
+   "throttle_headroom_min": 0.131086,
+   "tilt_margin_deg_min": 10.6856,
+   "tvc_rate_limit_deg_s": 0.0
+  },
+  "feasible": true,
+  "ignitions_used": 1,
+  "landed": true,
+  "lateral_speed_m_s": 0.0426696613891352,
+  "max_proper_g": 3.5189145423251444,
+  "max_tilt_deg": 19.314362310614165,
+  "position_error_m": 0.552298530522226,
+  "reason_codes": [],
+  "touchdown_enu_m": [
+   0.5512737499305791,
+   -0.03362914590658739,
+   -2.847987305007067e-07
+  ],
+  "vertical_speed_m_s": -1.608746295156212
+ },
+ "reason_codes": [],
+ "recovered": true,
+ "schemaVersion": "1.0",
+ "target": {
+  "recovery_kind": "rtls",
+  "site": [
+   28.5619,
+   -80.5772,
+   3.0
+  ]
+ },
+ "track": {
+  "columns": [
+   "t_s",
+   "east_m",
+   "north_m",
+   "up_m"
+  ],
+  "n_full": 102,
+  "rows": [
+   [
+    207.0,
+    8000.0,
+    0.0,
+    39986.252
+   ],
+   [
+    209.0,
+    8499.655,
+    -0.035,
+    39985.068
+   ],
+   [
+    211.0,
+    8999.232,
+    -0.141,
+    39945.372
+   ],
+   [
+    213.0,
+    9498.739,
+    -0.318,
+    39867.167
+   ],
+   [
+    215.0,
+    9998.182,
+    -0.565,
+    39750.455
+   ],
+   [
+    217.0,
+    10497.565,
+    -0.883,
+    39595.236
+   ],
+   [
+    219.0,
+    10996.892,
+    -1.271,
+    39401.513
+   ],
+   [
+    221.0,
+    11496.168,
+    -1.73,
+    39169.287
+   ],
+   [
+    223.0,
+    11995.395,
+    -2.259,
+    38898.562
+   ],
+   [
+    225.0,
+    12494.573,
+    -2.859,
+    38589.339
+   ],
+   [
+    227.0,
+    12962.536,
+    -3.52,
+    38243.997
+   ],
+   [
+    229.0,
+    13322.062,
+    -4.212,
+    37868.391
+   ],
+   [
+    231.0,
+    13567.638,
+    -4.91,
+    37462.894
+   ],
+   [
+    233.0,
+    13697.113,
+    -5.595,
+    37027.633
+   ],
+   [
+    235.0,
+    13708.25,
+    -6.242,
+    36562.745
+   ],
+   [
+    237.0,
+    13598.729,
+    -6.829,
+    36068.382
+   ],
+   [
+    239.0,
+    13366.143,
+    -7.332,
+    35544.721
+   ],
+   [
+    241.0,
+    13008.009,
+    -7.726,
+    34991.968
+   ],
+   [
+    243.0,
+    12521.761,
+    -7.987,
+    34410.356
+   ],
+   [
+    245.0,
+    11941.995,
+    -8.114,
+    33797.286
+   ],
+   [
+    247.0,
+    11358.463,
+    -8.157,
+    33145.955
+   ],
+   [
+    249.0,
+    10775.321,
+    -8.121,
+    32456.097
+   ],
+   [
+    251.0,
+    10192.62,
+    -8.003,
+    31727.766
+   ],
+   [
+    253.0,
+    9610.418,
+    -7.805,
+    30961.033
+   ],
+   [
+    255.0,
+    9028.781,
+    -7.527,
+    30155.987
+   ],
+   [
+    257.0,
+    8447.787,
+    -7.169,
+    29312.735
+   ],
+   [
+    259.0,
+    7867.527,
+    -6.73,
+    28431.417
+   ],
+   [
+    261.0,
+    7288.108,
+    -6.212,
+    27512.207
+   ],
+   [
+    263.0,
+    6709.659,
+    -5.615,
+    26555.325
+   ],
+   [
+    265.0,
+    6132.332,
+    -4.938,
+    25561.046
+   ],
+   [
+    267.0,
+    5556.308,
+    -4.183,
+    24529.717
+   ],
+   [
+    269.0,
+    4981.791,
+    -3.35,
+    23461.749
+   ],
+   [
+    271.0,
+    4409.012,
+    -2.44,
+    22357.629
+   ],
+   [
+    273.0,
+    3838.244,
+    -1.454,
+    21217.956
+   ],
+   [
+    275.0,
+    3269.812,
+    -0.392,
+    20043.475
+   ],
+   [
+    277.0,
+    2704.105,
+    0.744,
+    18835.107
+   ],
+   [
+    279.0,
+    2141.591,
+    1.952,
+    17593.999
+   ],
+   [
+    281.0,
+    1592.379,
+    3.233,
+    16334.624
+   ],
+   [
+    283.0,
+    1113.346,
+    4.588,
+    15138.141
+   ],
+   [
+    285.0,
+    711.61,
+    5.994,
+    14022.443
+   ],
+   [
+    287.0,
+    383.99,
+    7.422,
+    12992.391
+   ],
+   [
+    289.0,
+    126.607,
+    8.846,
+    12052.631
+   ],
+   [
+    291.0,
+    -65.189,
+    10.243,
+    11207.53
+   ],
+   [
+    293.0,
+    -196.879,
+    11.593,
+    10461.2
+   ],
+   [
+    295.0,
+    -274.905,
+    12.881,
+    9817.437
+   ],
+   [
+    297.0,
+    -306.891,
+    14.112,
+    9278.977
+   ],
+   [
+    299.0,
+    -307.724,
+    15.306,
+    8848.35
+   ],
+   [
+    301.0,
+    -306.739,
+    16.219,
+    8527.762
+   ],
+   [
+    303.0,
+    -307.318,
+    16.781,
+    8314.293
+   ],
+   [
+    305.0,
+    -311.491,
+    17.136,
+    8105.013
+   ],
+   [
+    307.0,
+    -315.586,
+    17.491,
+    7857.651
+   ],
+   [
+    309.0,
+    -319.59,
+    17.843,
+    7572.611
+   ],
+   [
+    311.0,
+    -323.489,
+    18.194,
+    7250.393
+   ],
+   [
+    313.0,
+    -327.271,
+    18.543,
+    6891.604
+   ],
+   [
+    315.0,
+    -330.922,
+    18.889,
+    6496.973
+   ],
+   [
+    317.0,
+    -334.43,
+    19.232,
+    6067.372
+   ],
+   [
+    319.0,
+    -337.782,
+    19.571,
+    5603.833
+   ],
+   [
+    321.0,
+    -340.966,
+    19.907,
+    5107.571
+   ],
+   [
+    323.0,
+    -343.968,
+    20.237,
+    4580.091
+   ],
+   [
+    325.0,
+    -346.777,
+    20.562,
+    4023.506
+   ],
+   [
+    327.0,
+    -349.377,
+    20.88,
+    3440.359
+   ],
+   [
+    328.468,
+    -351.126,
+    21.107,
+    2994.868
+   ],
+   [
+    328.968,
+    -351.723,
+    21.185,
+    2843.335
+   ],
+   [
+    329.468,
+    -352.284,
+    21.261,
+    2688.387
+   ],
+   [
+    329.968,
+    -352.391,
+    21.309,
+    2533.473
+   ],
+   [
+    330.468,
+    -350.336,
+    21.222,
+    2383.731
+   ],
+   [
+    330.968,
+    -346.135,
+    21.0,
+    2239.553
+   ],
+   [
+    331.468,
+    -339.997,
+    20.656,
+    2100.778
+   ],
+   [
+    331.968,
+    -332.116,
+    20.202,
+    1967.256
+   ],
+   [
+    332.468,
+    -322.68,
+    19.65,
+    1838.862
+   ],
+   [
+    332.968,
+    -311.867,
+    19.011,
+    1715.495
+   ],
+   [
+    333.468,
+    -299.852,
+    18.296,
+    1597.06
+   ],
+   [
+    333.968,
+    -286.799,
+    17.514,
+    1483.463
+   ],
+   [
+    334.468,
+    -272.868,
+    16.676,
+    1374.616
+   ],
+   [
+    334.968,
+    -258.211,
+    15.792,
+    1270.429
+   ],
+   [
+    335.468,
+    -242.977,
+    14.87,
+    1170.819
+   ],
+   [
+    335.968,
+    -227.305,
+    13.919,
+    1075.704
+   ],
+   [
+    336.468,
+    -211.333,
+    12.948,
+    985.006
+   ],
+   [
+    336.968,
+    -195.19,
+    11.964,
+    898.647
+   ],
+   [
+    337.468,
+    -179.003,
+    10.977,
+    816.556
+   ],
+   [
+    337.968,
+    -162.894,
+    9.993,
+    738.663
+   ],
+   [
+    338.468,
+    -146.978,
+    9.019,
+    664.901
+   ],
+   [
+    338.968,
+    -131.37,
+    8.064,
+    595.205
+   ],
+   [
+    339.468,
+    -116.178,
+    7.133,
+    529.514
+   ],
+   [
+    339.968,
+    -101.508,
+    6.233,
+    467.772
+   ],
+   [
+    340.468,
+    -87.462,
+    5.372,
+    409.923
+   ],
+   [
+    340.968,
+    -74.138,
+    4.554,
+    355.916
+   ],
+   [
+    341.468,
+    -61.632,
+    3.786,
+    305.701
+   ],
+   [
+    341.968,
+    -50.037,
+    3.073,
+    259.234
+   ],
+   [
+    342.468,
+    -39.443,
+    2.422,
+    216.471
+   ],
+   [
+    342.968,
+    -29.935,
+    1.838,
+    177.375
+   ],
+   [
+    343.468,
+    -21.599,
+    1.326,
+    141.908
+   ],
+   [
+    343.968,
+    -14.513,
+    0.891,
+    110.038
+   ],
+   [
+    344.468,
+    -8.755,
+    0.537,
+    81.736
+   ],
+   [
+    344.968,
+    -4.397,
+    0.27,
+    56.975
+   ],
+   [
+    345.468,
+    -1.502,
+    0.092,
+    35.732
+   ],
+   [
+    345.968,
+    -0.088,
+    0.005,
+    17.987
+   ],
+   [
+    346.468,
+    0.392,
+    -0.024,
+    3.724
+   ],
+   [
+    346.968,
+    0.538,
+    -0.033,
+    -7.07
+   ],
+   [
+    347.468,
+    0.568,
+    -0.035,
+    -14.406
+   ],
+   [
+    347.968,
+    0.559,
+    -0.034,
+    -18.291
+   ],
+   [
+    348.173,
+    0.551,
+    -0.034,
+    -18.887
+   ]
+  ],
+  "schema": "r07-track-capture-1"
+ },
+ "verdict": {
+  "mission_constraints_passed": true,
+  "optimizer_converged": null,
+  "physics_verified": null
+ }
+}
