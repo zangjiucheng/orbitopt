@@ -1,13 +1,13 @@
 {
-  "t_s_abs": 1e-09,
+  "t_s_abs": 1e-06,
   "mass_kg_abs": 1e-06,
-  "position_m_abs": 1e-06,
-  "velocity_m_s_abs": 1e-08,
+  "position_m_abs": 0.0001,
+  "velocity_m_s_abs": 1e-06,
   "extra_abs": {
-    "altitude_m": 1e-06,
+    "altitude_m": 0.0001,
     "latitude_deg": 1e-09,
     "longitude_deg": 1e-09,
-    "downrange_m": 1e-06,
+    "downrange_m": 0.0001,
     "dynamic_pressure_pa": 0.01,
     "mach": 1e-07
   },
