@@ -49,6 +49,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from orbitopt.physics_io import check_grav_parameter
 from orbitopt.core.gpu import get_array_module, to_numpy
 
 
@@ -257,8 +258,9 @@ def solve_lambert_batch(
     zero velocities and infinite residual -- never NaN.
     """
     mu = float(mu)
-    if not (np.isfinite(mu) and mu > 0.0):
-        raise ValueError(f"mu must be a finite positive number, got {mu!r}")
+    # The layer raises for a non-finite/non-positive mu, and (unit-agnostically)
+    # reports which unit system this mu puts the endpoints in.
+    check_grav_parameter(mu, where="orbitopt.lambert.gpu_batch.solve_lambert_batch: mu")
 
     xp = get_array_module(use_gpu)
 

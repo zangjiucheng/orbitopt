@@ -18,6 +18,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from orbitopt.launch_windows import gmst_deg
+from orbitopt.physics_io import GROUND_TRACK
 
 WGS84_A_M = 6378137.0
 WGS84_F = 1.0 / 298.257223563
@@ -27,9 +28,15 @@ MEAN_EARTH_RADIUS_KM = 6371.0088  # IUGG mean radius, for great-circle distances
 
 def eci_to_ecef(r_eci, utc_mjd2000) -> np.ndarray:
     """Rotate (N, 3) Earth-centred inertial positions (J2000 equator) into the
-    Earth-fixed frame at the matching UTC epochs (N,), by GMST about +Z."""
+    Earth-fixed frame at the matching UTC epochs (N,), by GMST about +Z.
+
+    The epochs are checked against :data:`orbitopt.physics_io.GROUND_TRACK`
+    (MJD2000 UTC days): an ephemeris-seconds column handed to this argument
+    rotates the track by a nonsense Earth angle rather than by GMST."""
     r = np.atleast_2d(np.asarray(r_eci, dtype=float))
-    g = np.radians(gmst_deg(np.atleast_1d(np.asarray(utc_mjd2000, dtype=float))))
+    epochs = GROUND_TRACK.check_epochs(np.atleast_1d(np.asarray(utc_mjd2000, dtype=float)),
+                                      where="orbitopt.ground_track.eci_to_ecef")
+    g = np.radians(gmst_deg(epochs))
     c, s = np.cos(g), np.sin(g)
     return np.column_stack([c * r[:, 0] + s * r[:, 1], -s * r[:, 0] + c * r[:, 1], r[:, 2]])
 
@@ -63,7 +70,9 @@ def geodetic_to_ecef(lat_deg: float, lon_deg: float, h_m: float = 0.0) -> np.nda
 def ecef_to_eci(r_ecef, utc_mjd2000) -> np.ndarray:
     """Inverse of :func:`eci_to_ecef` (e.g. a ground site's inertial path)."""
     r = np.atleast_2d(np.asarray(r_ecef, dtype=float))
-    g = np.radians(gmst_deg(np.atleast_1d(np.asarray(utc_mjd2000, dtype=float))))
+    epochs = GROUND_TRACK.check_epochs(np.atleast_1d(np.asarray(utc_mjd2000, dtype=float)),
+                                      where="orbitopt.ground_track.ecef_to_eci")
+    g = np.radians(gmst_deg(epochs))
     c, s = np.cos(g), np.sin(g)
     return np.column_stack([c * r[:, 0] - s * r[:, 1], s * r[:, 0] + c * r[:, 1], r[:, 2]])
 

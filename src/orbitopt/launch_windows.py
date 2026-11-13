@@ -42,6 +42,7 @@ from typing import Callable, Sequence
 import numpy as np
 
 from orbitopt.launch_sites import LaunchSite, get_launch_site
+from orbitopt.physics_io import check_epoch
 from orbitopt.timescales import MJD2000_EPOCH_UTC, mjd2000_to_utc_datetime, utc_datetime_to_mjd2000
 
 MJD2000_EPOCH = MJD2000_EPOCH_UTC
@@ -81,12 +82,18 @@ def mjd2000_to_datetime(mjd2000: float) -> datetime:
 
 
 def as_mjd2000(t) -> float:
-    """MJD2000 from an MJD2000 number, UTC datetime or ISO-8601 string."""
+    """MJD2000 from an MJD2000 number, UTC datetime or ISO-8601 string.
+
+    A bare number is checked against the MJD2000 magnitude band of
+    :mod:`orbitopt.physics_io`: ephemeris (TDB) seconds since J2000 handed to an
+    MJD2000 argument -- the two epoch conventions in this codebase -- is a value
+    of order 1e9 here, and accepting it would move a mission by ~2500 years
+    rather than raise."""
     if isinstance(t, datetime):
         return datetime_to_mjd2000(t)
     if isinstance(t, str):
         return datetime_to_mjd2000(datetime.fromisoformat(t.replace("Z", "+00:00")))
-    return float(t)
+    return float(check_epoch(t, "mjd2000", where="orbitopt.launch_windows.as_mjd2000"))
 
 
 def gmst_deg(mjd2000):

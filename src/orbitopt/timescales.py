@@ -60,15 +60,33 @@ _DELTET_M0 = 6.239996
 _DELTET_M1 = 1.99096871e-7
 
 
+#: Supported MJD2000 UTC epoch range, in days since 2000-01-01: the leap-second
+#: table starts 1972-01-01, and 2110-01-01 is where trusting its last entry
+#: stops being defensible. A value far outside this range is not an epoch in
+#: this format at all -- ephemeris (TDB) seconds handed to an MJD2000 argument is
+#: the classic case -- so the conversions reject it instead of returning a
+#: silently wrong DeltaAT; see :mod:`orbitopt.physics_io` for the I/O layer that
+#: turns the same magnitude check into a diagnosis.
+MJD2000_MIN_UTC_DAYS = _LEAP_MJD2000[0]
+MJD2000_MAX_UTC_DAYS = int((datetime(2110, 1, 1, tzinfo=timezone.utc) - MJD2000_EPOCH_UTC).total_seconds() // SECONDS_PER_DAY)
+
+
 def tai_minus_utc(mjd2000_utc: float) -> float:
     """Leap-second count DeltaAT = TAI - UTC [s] in effect at the given
-    MJD2000 UTC epoch. Raises ValueError before 1972-01-01."""
+    MJD2000 UTC epoch. Raises ValueError outside the supported range
+    (1972-01-01 .. 2110-01-01)."""
     t = float(mjd2000_utc)
     if not math.isfinite(t):
         raise ValueError(f"epoch must be finite, got {mjd2000_utc!r}")
     i = bisect_right(_LEAP_MJD2000, math.floor(t)) - 1
     if i < 0:
         raise ValueError("UTC before 1972-01-01 has no integer leap-second offset; not supported")
+    if t > MJD2000_MAX_UTC_DAYS:
+        raise ValueError(
+            f"MJD2000 UTC epoch {mjd2000_utc!r} is beyond the supported range (up to "
+            f"{MJD2000_MAX_UTC_DAYS} days = 2110-01-01); a value around 1e9 is TDB seconds "
+            "since J2000, not MJD2000 days -- convert it with tdb_seconds_to_utc_mjd2000()"
+        )
     return _LEAP_DELTA_AT[i]
 
 
