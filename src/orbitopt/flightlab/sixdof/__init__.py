@@ -3,7 +3,9 @@ engine room of the formal 6-DOF backend.
 
 The modules below are the FL-401/402/403 spike drivers (:mod:`jsbsim_driver`
 single-body simulation, :mod:`staging` two-instance handoff, :mod:`tracking`
-closed-loop TVC). F-01 (task #226) promoted the spike path to a supported,
+closed-loop TVC) plus :mod:`mass_properties`, the declared variable mass / CG
+/ inertia model F-03 (task #228) checks the drivers' mass bookkeeping against.
+F-01 (task #226) promoted the spike path to a supported,
 config-driven backend -- ``backend="6DOF"`` in
 :func:`orbitopt.flightlab.simulate.simulate` / ``orbitopt flight simulate
 --backend 6DOF``, scenario configs in ``orbitopt/data/flightlab/sixdof/``:

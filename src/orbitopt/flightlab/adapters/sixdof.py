@@ -50,6 +50,14 @@ Config document (SI units; required keys ``name``, ``model``; unknown
     tracking: {settled_from_s: 60.0, settled_max_deg: 2.0, settled_rms_deg: 0.6,
                full_max_deg: 2.0, gimbal_sat_fraction_max: 0.0,
                d_alt_m: 500.0, d_speed_m_s: 20.0, d_fpa_deg: 0.2}
+    mass_model:                         # optional F-03 declared mass properties
+      full: {mass_kg: 70000.0, cg_m: [18.2857143, 0.0, 0.0],
+             inertia_kg_m2: {ixx: 111760.0, iyy: 4212000.0, izz: 4212000.0}}
+      empty: {mass_kg: 10000.0, cg_m: [20.0, 0.0, 0.0],
+              inertia_kg_m2: {ixx: 3.4e4, iyy: 1.7e6, izz: 1.7e6}}
+      tolerances: {flow_lag_frames: 2.0, mass_abs_kg: 2.0, cg_abs_m: 0.02,
+                   inertia_rel: 0.002, interpolation_cg_abs_m: 0.05,
+                   interpolation_inertia_rel: 0.02, burnout_fraction: 0.001}
     output: {every: 1}
     assumptions: [ ... ]
 
@@ -109,7 +117,9 @@ from orbitopt.flightlab.contract import (
     target_digest,
     write_run,
 )
-from orbitopt.flightlab.sixdof.jsbsim_driver import InitialConditions, SixDofSim
+from orbitopt.flightlab.sixdof.jsbsim_driver import InitialConditions, SixDofSim, \
+    mass_state_from_sample
+from orbitopt.flightlab.sixdof.mass_properties import MassModelConfig, load_mass_model
 
 #: Backend selector value accepted by ``simulate(backend=...)`` /
 #: ``orbitopt flight simulate --backend``.
@@ -202,6 +212,7 @@ class SixDofConfig:
     gimbal_yaw_rad: float
     pid: PidConfig | None
     staging: StagingConfig | None
+    mass_model: MassModelConfig | None
     tracking: TrackingBounds
     reference_csv: Path | None
     every: int
@@ -371,6 +382,10 @@ def load_config(source) -> SixDofConfig:
             step_order=order,
         )
 
+    mass_model: MassModelConfig | None = None
+    if doc.get("mass_model") is not None:
+        mass_model = load_mass_model(doc["mass_model"], f"{where}: mass_model")
+
     trk_doc = _req_mapping(doc.get("tracking"), f"{where}: tracking")
     tracking = TrackingBounds(
         settled_from_s=_num(trk_doc, "settled_from_s", 60.0, f"{where}: tracking"),
@@ -412,6 +427,7 @@ def load_config(source) -> SixDofConfig:
         gimbal_yaw_rad=gimbal_yaw,
         pid=pid,
         staging=staging,
+        mass_model=mass_model,
         tracking=tracking,
         reference_csv=reference_csv,
         every=every,
@@ -447,6 +463,82 @@ def _finite_and_mass_checks(samples_per_body: Mapping[str, list],
     checks.append(Check(id="sixdof-mass-non-negative", passed=min_mass >= 0.0,
                         value=min_mass, limit=0.0, unit="kg",
                         reason_code="" if min_mass >= 0.0 else "negative_mass"))
+
+
+def _mass_state_deviation(state, ref) -> tuple[float, float]:
+    """Worst (CG offset in m, relative inertia error) of a sampled
+    :class:`MassState` against a reference one (F-03). Zero-valued tensor
+    components compare against ``max(|ref|, 1 kg m^2)`` so that a numerically
+    absent product-of-inertia cannot blow the relative error up."""
+    cg = max(abs(a - b) for a, b in zip(state.cg_m, ref.cg_m))
+    inertia = max(abs(a - b) / max(abs(b), 1.0)
+                  for a, b in zip(state.inertia_kg_m2, ref.inertia_kg_m2))
+    return cg, inertia
+
+
+def _mass_model_checks(samples: list, cfg: SixDofConfig, checks: list[Check], *,
+                       assess_burnout: bool = True) -> None:
+    """F-03 (task #228): the variable mass / CG / inertia claims, judged
+    against the scenario's declared mass model. Three acceptance claims:
+
+    * ``sixdof-mass-conservation`` — the integrated engine flow (trapezoid,
+      over the run's own sampled flow) must equal the mass the model reports
+      having lost. JSBSim applies a step's drain to ``inertia/mass-slugs``
+      one frame late, so the allowance is a declared number of integration
+      frames of flow (``tolerances.flow_lag_frames``) plus an absolute floor.
+    * ``sixdof-{cg,inertia}-full-load`` / ``sixdof-{cg,inertia}-burnout`` —
+      the endpoints (first sample, and the last one once the tanks are dry)
+      must match the declared ``full`` / ``empty`` states.
+    * ``sixdof-{cg,inertia}-interpolation`` — in between, the flown state
+      must match the model interpolated at each sample's own remaining
+      propellant load, within looser tolerances (the one-frame drain lag is
+      largest where the CG moves fastest, just before burnout).
+
+    Only called when the config declares a ``mass_model``; ``assess_burnout``
+    is False for staging runs, whose stack never reaches the endpoint."""
+    props, tol = cfg.mass_model.properties, cfg.mass_model.tolerances
+
+    def add(cid: str, value: float, limit: float, unit: str) -> None:
+        ok = value <= limit
+        checks.append(Check(id=cid, passed=ok, value=value, limit=limit, unit=unit,
+                            reason_code="" if ok else "sixdof_mass_model_mismatch"))
+
+    flow_peak = max(s["flow_kg_s"] for s in samples)
+    dt_nom = (samples[-1]["t_s"] - samples[0]["t_s"]) / max(1, len(samples) - 1)
+    m0, integral, residual = samples[0]["mass_kg"], 0.0, 0.0
+    prev = samples[0]
+    for s in samples[1:]:
+        integral += 0.5 * (prev["flow_kg_s"] + s["flow_kg_s"]) * (s["t_s"] - prev["t_s"])
+        residual = max(residual, abs(integral - (m0 - s["mass_kg"])))
+        prev = s
+    add("sixdof-mass-conservation", residual,
+        tol.flow_lag_frames * flow_peak * dt_nom + tol.mass_abs_kg, "kg")
+
+    cg_err, inertia_err = _mass_state_deviation(mass_state_from_sample(samples[0]),
+                                                props.full)
+    add("sixdof-cg-full-load", cg_err, tol.cg_abs_m, "m")
+    add("sixdof-inertia-full-load", inertia_err, tol.inertia_rel, "fraction")
+
+    worst_cg = worst_inertia = 0.0
+    for s in samples:
+        cg_err, inertia_err = _mass_state_deviation(
+            mass_state_from_sample(s), props.at_propellant_mass_kg(s["propellant_kg"]))
+        worst_cg = max(worst_cg, cg_err)
+        worst_inertia = max(worst_inertia, inertia_err)
+    add("sixdof-cg-interpolation", worst_cg, tol.interpolation_cg_abs_m, "m")
+    add("sixdof-inertia-interpolation", worst_inertia,
+        tol.interpolation_inertia_rel, "fraction")
+
+    if not assess_burnout:
+        return
+    if samples[-1]["propellant_kg"] > tol.burnout_fraction * props.propellant_mass_kg:
+        checks.append(Check(id="sixdof-mass-model-burnout-not-assessed", passed=False,
+                            reason_code="sixdof_burnout_not_reached"))
+        return
+    cg_err, inertia_err = _mass_state_deviation(mass_state_from_sample(samples[-1]),
+                                               props.empty)
+    add("sixdof-cg-burnout", cg_err, tol.cg_abs_m, "m")
+    add("sixdof-inertia-burnout", inertia_err, tol.inertia_rel, "fraction")
 
 
 def _open_loop_flight(cfg: SixDofConfig, until_s: float | None = None) -> SixDofSim:
@@ -664,6 +756,13 @@ def run_ascent(config, out_dir, *, target=None) -> FlightRun:
         _finite_and_mass_checks({"stack": stack.samples, "booster": booster.samples,
                                  "upper": upper.samples}, checks)
         _staging_checks(bk, handoff, checks)
+        if cfg.mass_model is not None:
+            _mass_model_checks(stack.samples, cfg, checks, assess_burnout=False)
+            assumptions_extra += (
+                "Mass model checked on the stack only: the split children carry "
+                "a fraction of the declared propellant, so their states are the "
+                "parent model's neither, and the staging flight never burns out.",
+            )
         vehicle_note = (f"{cfg.model} -> {cfg.staging.booster_model}/"
                         f"{cfg.staging.upper_model}")
         assumptions_extra = (
@@ -683,6 +782,8 @@ def run_ascent(config, out_dir, *, target=None) -> FlightRun:
         events.append(Event(cfg.pid.meco_t_s, "meco", cfg.body_id, {}))
         _finite_and_mass_checks({cfg.body_id: res.samples}, checks)
         _pid_checks(cfg, res, reference, checks)
+        if cfg.mass_model is not None:
+            _mass_model_checks(res.samples, cfg, checks)
         if reference is None:
             checks.append(Check(id="sixdof-meco-deviation-not-assessed", passed=False,
                                 reason_code="REFLY_BACKEND_MISSING"))
@@ -700,7 +801,18 @@ def run_ascent(config, out_dir, *, target=None) -> FlightRun:
         events.append(Event(cfg.ignition_t_s, "ignition", cfg.body_id,
                             {"throttle": cfg.ignition_throttle}))
         _finite_and_mass_checks({cfg.body_id: sim.samples}, checks)
+        if cfg.mass_model is not None:
+            _mass_model_checks(sim.samples, cfg, checks)
         vehicle_note = cfg.model
+
+    if cfg.mass_model is not None:
+        full, empty = cfg.mass_model.properties.full, cfg.mass_model.properties.empty
+        assumptions_extra += (
+            f"Declared mass model (F-03, task #228): {full.mass_kg} kg full / "
+            f"{empty.mass_kg} kg burnout with the config's CG and inertia endpoints; "
+            "the flown mass/CG/inertia trace is checked against it by the "
+            "sixdof-mass-* / sixdof-cg-* / sixdof-inertia-* checks.",
+        )
 
     physics = all(c.passed for c in checks)
     assumptions = [

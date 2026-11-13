@@ -1,0 +1,56 @@
+# Packaged 6-DOF backend scenario: propellant depletion to burnout (F-03,
+# task #228). The FL-401 hop's vehicle flown open-loop on full throttle past
+# the 100 s the tanks last, so the burnout endpoint is measured, not
+# extrapolated. The mass_model section is the declared truth the acceptance
+# claims are checked against, read off spike_stage.xml: a 10 t dry stage with
+# CG at structural x 20 m and I = 3.4e4 / 1.7e6 / 1.7e6 kg m^2, carrying 60 t
+# of propellant (2.5:1 LOX/CH4) in two 1.8 m-radius spherical tanks at x 14 m
+# and 28 m. That decomposes (mass_properties.py) into the dry structure plus a
+# 60 t propellant lump centred at the mass-weighted tank mean, x 18 m, with an
+# own inertia of 7.776e4 / 2.47776e6 / 2.47776e6 kg m^2 -- which at capacity
+# adds up to 70 t, CG 18.2857143 m, I = 1.1176e5 / 4.21205e6 / 4.21205e6.
+name: f03-propellant-depletion
+provenance: illustrative
+model: spike_stage
+dt_s: 0.02
+duration_s: 104.0
+epoch_utc: '2026-01-01T00:00:00Z'
+ic:
+  lat_geod_deg: 0.0
+  lon_deg: 0.0
+  alt_m: 300000.0
+  pitch_deg: 90.0
+  heading_deg: 90.0
+ignition:
+  t_s: 0.0
+  throttle: 1.0
+control:
+  mode: hold
+mass_model:
+  full:
+    mass_kg: 70000.0
+    cg_m: [18.2857143, 0.0, 0.0]
+    inertia_kg_m2: {ixx: 111760.0, iyy: 4212000.0, izz: 4212000.0}
+  empty:
+    mass_kg: 10000.0
+    cg_m: [20.0, 0.0, 0.0]
+    inertia_kg_m2: {ixx: 34000.0, iyy: 1.7e+6, izz: 1.7e+6}
+  tolerances:
+    flow_lag_frames: 2.0
+    mass_abs_kg: 2.0
+    cg_abs_m: 0.02
+    inertia_rel: 0.002
+    interpolation_cg_abs_m: 0.05
+    interpolation_inertia_rel: 0.02
+    burnout_fraction: 0.001
+output:
+  every: 20
+assumptions:
+  - "Depletion run of the zero-aero spike stage at 300 km: flies past
+    burnout on purpose, so the empty endpoint is real, not extrapolated;
+    throttle stays commanded open after the tanks dry out."
+  - "flow_lag_frames: JSBSim applies a step's drain to inertia/mass-slugs
+    one frame late, and the ignition step's trapezoid sees half a frame, so
+    the flow integral runs ~1.5 frames ahead of the mass trace; the declared
+    allowance is 2 frames of peak flow (2 * 600 kg/s * 0.02 s = 24 kg) plus a
+    2 kg floor."
