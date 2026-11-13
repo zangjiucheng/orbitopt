@@ -14,7 +14,10 @@ numpy, no Qt, no compute stack, so producers and consumers on either side
 of a segment boundary never import each other. The M-02 ascent transform
 (:mod:`orbitopt.mission.ascent`) adds only the pure-stdlib flightlab
 checks; the numpy/astropy frame bridge is imported lazily when a track
-actually needs converting.
+actually needs converting. The one exception is the opt-in M-04 unified
+runner :mod:`orbitopt.mission.launch_pipeline` (import it directly, never
+through this package): it drives the real ascent optimizer and therefore
+needs the compute stack.
 """
 from orbitopt.mission.ascent import (
     AscentHandoffReport,
