@@ -11,8 +11,19 @@ gated by the continuity/conservation checks of
 Like orbitopt.flightlab.contract, this package is contract-first and needs
 nothing but the standard library + jsonschema (+ orbitopt.timescales): no
 numpy, no Qt, no compute stack, so producers and consumers on either side
-of a segment boundary never import each other.
+of a segment boundary never import each other. The M-02 ascent transform
+(:mod:`orbitopt.mission.ascent`) adds only the pure-stdlib flightlab
+checks; the numpy/astropy frame bridge is imported lazily when a track
+actually needs converting.
 """
+from orbitopt.mission.ascent import (
+    AscentHandoffReport,
+    ElementTolerances,
+    ascent_handoff_state,
+    check_ascent_to_parking_orbit,
+    epoch_at_ascent_time,
+    parking_orbit_elements,
+)
 from orbitopt.mission.contract import (
     EPOCH_TIMESCALES,
     MISSION_FRAMES,
@@ -38,7 +49,9 @@ from orbitopt.mission.contract import (
 )
 
 __all__ = [
+    "AscentHandoffReport",
     "EPOCH_TIMESCALES",
+    "ElementTolerances",
     "MISSION_FRAMES",
     "SCHEMA_VERSION",
     "Epoch",
@@ -48,13 +61,17 @@ __all__ = [
     "HandoffTolerances",
     "MissionSegment",
     "SegmentResult",
+    "ascent_handoff_state",
+    "check_ascent_to_parking_orbit",
     "check_epoch_continuity",
     "check_handoff",
     "check_handoff_chain",
     "check_mass_conservation",
     "check_position_continuity",
     "check_velocity_continuity",
+    "epoch_at_ascent_time",
     "is_valid_state_document",
+    "parking_orbit_elements",
     "run_checked",
     "state_from_dict",
     "state_to_dict",
