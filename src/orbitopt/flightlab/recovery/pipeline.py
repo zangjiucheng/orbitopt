@@ -55,6 +55,7 @@ from orbitopt.flightlab.recovery.boostback import (
 from orbitopt.flightlab.recovery.landing import (
     DEFAULT_LANDING_LIMITS,
     GFOLD_VERSION_PIN,
+    GuidanceModelMismatch,
     LandingLimits,
     LandingResult,
     LandingSolverUnavailableError,
@@ -279,8 +280,11 @@ def fly_recovery(ascent_run: FlightRun, target: FlightTarget, vehicle_path, *,
     ``plan_options`` pass straight through to FL-302/FL-303 (``plan_options``
     keys: ``max_fevals``, ``initial_guess``, ``horizon_s``, ``dt_opt``,
     ``dt_final``, entry limits) plus one landing key, ``landing``: a mapping
-    with ``mode`` (:data:`LANDING_MODES`, default ``"closed-loop"``) and any
-    :class:`~orbitopt.flightlab.recovery.landing.TerminalGuidance` fields.
+    with ``mode`` (:data:`LANDING_MODES`, default ``"closed-loop"``), any
+    :class:`~orbitopt.flightlab.recovery.landing.TerminalGuidance` fields,
+    and R-03's ``mismatch``
+    (:class:`~orbitopt.flightlab.recovery.landing.GuidanceModelMismatch` or
+    its fields as a mapping; zero/absent = the plain FL-305 flight).
     Raises ``ValueError`` when the target declares ``recovery: none``, the
     run carries no separation state, or the landing options are unknown."""
     if target.recovery.kind == "none":
@@ -365,7 +369,11 @@ def _landing_flight(landing_options: Mapping[str, Any] | None):
     """The landing-burn step for ``plan_options["landing"]``: FL-305's
     :func:`fly_landing_burn_closed_loop` with the given guidance fields, or
     FL-303's :func:`fly_landing_burn` for ``mode="single"``. Validated
-    before FL-302 runs, so a typo fails fast instead of after the optimiser."""
+    before FL-302 runs, so a typo fails fast instead of after the optimiser.
+    R-03: a ``mismatch`` key (a
+    :class:`~orbitopt.flightlab.recovery.landing.GuidanceModelMismatch` or a
+    mapping of its fields) biases the guidance's model against the truth
+    propagator; absent/zero is the plain FL-305 flight."""
     opts = dict(landing_options) if landing_options else {}
     mode = str(opts.pop("mode", "closed-loop"))
     if mode not in LANDING_MODES:
@@ -374,10 +382,12 @@ def _landing_flight(landing_options: Mapping[str, Any] | None):
         if opts:
             raise ValueError(f"landing mode 'single' takes no guidance options, got {sorted(opts)}")
         return fly_landing_burn
+    mismatch = GuidanceModelMismatch.from_option(opts.pop("mismatch", None))
     guidance = TerminalGuidance(**opts)  # TypeError on an unknown field
 
     def fly(*args, **kwargs):
-        return fly_landing_burn_closed_loop(*args, guidance=guidance, **kwargs)
+        return fly_landing_burn_closed_loop(*args, guidance=guidance,
+                                            mismatch=mismatch, **kwargs)
     return fly
 
 
