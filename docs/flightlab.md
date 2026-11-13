@@ -46,6 +46,7 @@ also has its own `--help`.
 | Recovery Monte Carlo | Plan-level dispersed samples; guidance re-plans with each sample's vehicle parameters. Vehicle uncertainty bands supply defaults. |
 | 6-DOF ascent (JSBSim) | Opt-in formal backend (`backend="6DOF"`, `pip install orbitopt[sixdof]`): config-driven vehicle/ICs/dt through `orbitopt.flightlab.adapters.sixdof`; mass, CG and inertia tensor follow the propellant load and are checked against the scenario's declared mass model (`mass_model`, F-03). Zero-aero illustrative vehicles so far. Not the default propagator, no aero yet, and not part of the optimization loop. See [ADR 0001](adr/flightlab-0001-jsbsim-6dof.md). |
 | 6-DOF reference plant (native) | JSBSim-free RK4 plant in `orbitopt.flightlab.sixdof.rigidbody` (gravity/J2/rotation, US76, throttleable thrust, attitude) flying the coefficient model of `orbitopt.flightlab.sixdof.aero`; reports the q-bar history and max-Q. Reference plant for aero acceptance, not a JSBSim replacement and not a `flight simulate` backend. |
+| TVC + attitude tracking (native, F-04) | `orbitopt.flightlab.sixdof.tvc` closes the reference plant's loop: first-order-lag / slew-limited / saturating actuator, a ZOH PID tracker on the FL-403 body-axis attitude error, per-tick history and deflection-margin diagnostics. Basic tracker by design, not GNC. |
 
 ## Native aero model and the reference plant (F-02)
 
@@ -80,6 +81,39 @@ plant here (`orbitopt.flightlab.sixdof.rigidbody`).
 
 The JSBSim backend stays the formal 6-DOF engine; this plant is where a real
 coefficient table from F-05 lands first.
+
+## TVC actuator and attitude tracking (F-04)
+
+`sixdof/tvc.py` closes the reference plant's attitude loop with deliberately
+basic parts:
+
+- **Actuator** (`TvcActuator`): first-order lag (`tau_lag_s`), slew-rate cap
+  (`max_slew_rate_rad_s`, exact on ramps) and travel saturation
+  (`limit_rad`, default 5°); commands are clamped *before* the lag, so the
+  state never leaves the travel. Substepped at ≤ τ/4 for stiff commands.
+- **Tracker** (`AttitudeTvcLaw`): digital ZOH PID on the body-axis attitude
+  error `so3_log(R_cmdᵀ R_act)` resolved into the body frame, with the
+  program's kinematic body rate as feedforward — the FL-403 convention, so
+  positive pitch error means "nose up" and near vertical the azimuth DOF
+  rides the roll axis. The integrator is clamped at `i_max_alpha/ki`; after
+  engine cut-off (`mass ≤ dry`) the command neutralises and the integrator
+  freezes. Deflection authority is checked against the plant's own engine
+  gimbal clamp at construction.
+- **Actuator state is what the plant sees**: the tracker feeds the *post*
+  lag/rate/saturation deflection to `RigidBodyVehicle`, so saturation and
+  slew limiting are real in the loop, not cosmetic.
+- **Diagnostics**: per-tick history (`law.history()`), `law.diagnostics`
+  (command/applied peaks, saturated and slew-limited seconds, deflection
+  margin) and `attitude_metrics` (error max/RMS, α and rate peaks) are
+  recorded on every `run_closed_loop_ascent()`, and `summary()` prints the
+  acceptance's margin/max-deflection line.
+- **Known scope limit**: two gimbals cannot steer the unactuated roll /
+  azimuth-about-vertical DOF. A hard pitch-over through vertical therefore
+  leaves a bounded azimuth spin (the aero acceptance runs stay under a
+  degree); the thrust line and pitch rate converge onto the program
+  regardless — `test_aggressive_initial_offset_proves_saturation_in_the_loop`
+  pins this behaviour down. Roll control, steering-to-vertical and a proper
+  autopilot are out of scope for F-04 by design.
 
 ## Hard gates
 
