@@ -1,0 +1,21 @@
+# Example Flight Lab mission config (M-03, task #221): fly the packaged
+# synthetic two-stage LEO scenario through the unified mission pipeline.
+#
+#   orbitopt run src/orbitopt/data/flightlab/mission_leo_two_stage.yaml -o /tmp/leo.scene.json
+#
+# Needs the OpenTsiolkovsky v1.0.0 binary (scripts/fetch_opentsiolkovsky.py
+# or ORBITOPT_OPENTSIOLKOVSKY). tudatpy is optional: without it the orbit
+# re-fly stays "not assessed" and the pipeline records that honestly.
+schemaVersion: "1.0"
+mission:
+  id: leo-two-stage-pipeline
+  title: Flight Lab two-stage LEO through the mission pipeline
+  kind: flight-lab
+flightlab:
+  target_file: scenarios/leo_two_stage.yaml
+  # vehicle_file omitted: resolved from the target's declared vehicle.source
+  refly: true
+  run_recovery: true
+  earth_texture: true
+output:
+  scene_file: leo-two-stage-pipeline.scene.json

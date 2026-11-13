@@ -267,3 +267,60 @@ def test_panel_offers_one_click_verification_only_while_unverified(app):
     state.set_scene(vr.publish_to_scene(_mission_scene(), [REPORT]))
     assert panel.verify_button is None
     assert "PASSED — 1 of 1 report(s) passed" in panel.text()
+
+
+# ------------------------------------------------------------ M-06 handoffs
+
+_HANDOFFS = [
+    {"id": "separation:upper_stage", "label": "Separation \u2014 stack \u2192 upper_stage",
+     "time": 160.0, "status": "passed", "detail": "4/4 checks passed", "from_body": "stack",
+     "from": {"body": "stack", "time_s": 160.0, "frame": "GCRS",
+              "epoch_utc": "2026-11-10T12:02:40Z", "position_m": [0.0, 66000.0, 6438140.0],
+              "velocity_m_s": [0.0, 600.0, 600.0], "mass_kg": 340000.0},
+     "to": {"body": "upper_stage", "time_s": 160.0, "frame": "GCRS",
+            "epoch_utc": "2026-11-10T12:02:40Z", "position_m": [0.0, 66000.0, 6438140.0],
+            "velocity_m_s": [0.0, 600.0, 600.0], "mass_kg": 120000.0},
+     "checks": [{"id": "handoff.position_continuity", "passed": True, "value": 0.0,
+                 "limit": 1.0, "unit": "m", "reason_code": ""},
+                {"id": "handoff.mass_conservation", "passed": True, "value": -220000.0,
+                 "limit": 0.001, "unit": "kg", "reason_code": "staging_mass_drop"}]},
+    {"id": "seco", "label": "SECO \u2014 parking orbit insertion", "time": 540.0,
+     "status": "not_checked", "detail": "2/2 checks passed \u00b7 orbit re-fly not assessed",
+     "state": {"body": "upper_stage", "time_s": 540.0, "frame": "GCRS",
+               "epoch_utc": "2026-11-10T12:09:00Z", "position_m": [0.0, 360000.0, 6520000.0],
+               "velocity_m_s": [0.0, 7600.0, 200.0], "mass_kg": 60000.0},
+     "checks": [{"id": "insertion-above-atmosphere", "passed": True, "value": 120000.0,
+                 "limit": 100000.0, "unit": "m", "reason_code": ""}]},
+]
+
+
+def test_panel_renders_scene_handoffs_block(app):
+    from orbitopt.viz.verification_panel import handoffs_of
+
+    assert handoffs_of(None) == [] and handoffs_of({"handoffs": _HANDOFFS}) == _HANDOFFS
+    state = MissionState()
+    panel = VerificationPanel(state)
+    state.set_scene(_mission_scene(handoffs=_HANDOFFS))
+    text = panel.text()
+    assert "MISSION HANDOFFS" in text
+    assert "Separation \u2014 stack \u2192 upper_stage" in text and "PASSED" in text
+    assert "T+160 s \u00b7 4/4 checks passed" in text
+    assert "✓  handoff.position continuity" in text and "staging_mass_drop" in text
+    assert "Handed over \u00b7 stack" in text and "mass 340,000 kg" in text
+    assert "SECO \u2014 parking orbit insertion" in text and "NOT CHECKED" in text
+    assert "orbit re-fly not assessed" in text
+
+
+def test_panel_handoff_failures_are_visible(app):
+    failed = [dict(_HANDOFFS[0], status="failed",
+                   detail="2/4 checks passed (position_discontinuity)",
+                   checks=[{"id": "handoff.position_continuity", "passed": False,
+                            "value": 4021.3, "limit": 1.0, "unit": "m",
+                            "reason_code": "position_discontinuity"}])]
+    state = MissionState()
+    panel = VerificationPanel(state)
+    state.set_scene(_mission_scene(handoffs=failed))
+    text = panel.text()
+    assert "FAILED" in text
+    assert "✗  handoff.position continuity" in text
+    assert "position_discontinuity" in text
