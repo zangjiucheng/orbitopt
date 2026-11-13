@@ -304,6 +304,7 @@ def target_mars_approach(
             "name": "periapsis_vs_target",
             "reference": "periapsis radius of the osculating Mars-relative hyperbola at the fixed "
                          "arrival time vs target_periapsis_km (B-plane stage)",
+            "category": _report.CHECK_MODEL,
             "position_residual_m": (abs(predicted_periapsis_km - target_periapsis_km) * 1000.0
                                     if np.isfinite(predicted_periapsis_km) else None),
             "velocity_residual_m_s": None,

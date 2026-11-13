@@ -73,7 +73,8 @@ def fake_builder(config, recorder=None):
     if config.get("verification", {}).get("enabled", True):
         verification_report.attach_to_scene(scene, {
             "kind": "fake", "label": "check",
-            "status": verification_report.status_from_checks({"a": True, "b": True}),
+            "status": verification_report.status_from_checks({"a": True, "b": True},
+                                                 {"a": "model_agreement", "b": "model_agreement"}),
             "residuals": [{"name": "final", "position_residual_m": 3.0}],
         })
     else:

@@ -34,11 +34,17 @@ REPORT = {
         "tli-flyby-entry.two_body_conservation": True,
         "residual.entry_flight_path_angle_in_corridor": True,
         "targeting.converged": True,
+    }, "check_categories": {
+        "tli-flyby-entry.step_convergence": "numerical_consistency",
+        "tli-flyby-entry.two_body_conservation": "numerical_consistency",
+        "residual.entry_flight_path_angle_in_corridor": "model_agreement",
+        "targeting.converged": "numerical_consistency",
     }},
     "inputs": {},
     "residuals": [{
         "name": "entry_flight_path_angle_in_corridor",
         "reference": "TudatPy-propagated inertial flight-path angle vs the entry corridor",
+        "category": "model_agreement",
         "position_residual_m": None, "velocity_residual_m_s": None,
         "tolerance": {"corridor_deg": [-7.0, -5.0]}, "within_tolerance": True,
     }],
@@ -83,7 +89,8 @@ def test_publish_combines_reports_tri_state():
     scene = vr.publish_to_scene(_mission_scene(), [REPORT])
     assert scene["verification"]["result"] == "passed"
     failed = copy.deepcopy(REPORT)
-    failed["status"] = vr.status_from_checks({"a": True, "b": False})
+    failed["status"] = vr.status_from_checks({"a": True, "b": False},
+                                                  {"a": "model_agreement", "b": "model_agreement"})
     not_checked = copy.deepcopy(REPORT)
     not_checked["status"] = vr.status_from_checks({})
     assert vr.publish_to_scene(_mission_scene(), [REPORT, failed])["verification"]["result"] == "failed"
@@ -136,6 +143,29 @@ def test_panel_shows_checks_residuals_and_model(app):
     assert "Earth point mass + Moon, Sun (ECLIPJ2000)" in text
     assert "solar_radiation_pressure, atmospheric_drag" in text
     assert "tudatpy 1.0.0" in text
+
+
+def test_panel_separates_the_three_check_categories(app):
+    """Task #243: checks are grouped under their category header, and the
+    residual says which kind of evidence it is."""
+    state = MissionState()
+    panel = VerificationPanel(state)
+    state.set_scene(vr.publish_to_scene(_mission_scene(), [REPORT]))
+    text = panel.text()
+    assert "NUMERICAL CONSISTENCY (3/3)" in text
+    assert "MODEL AGREEMENT (1/1)" in text
+    assert "HISTORICAL VALIDATION" not in text  # a category with no checks is not shown
+    assert "RESIDUAL · MODEL AGREEMENT" in text
+    # Checks without categories (documents written before categorisation) still
+    # render under the plain heading.
+    unclassified = copy.deepcopy(REPORT)
+    unclassified["status"] = {"result": "passed", "passed": True, "checks": dict(REPORT["status"]["checks"])}
+    unclassified["digest"] = vr.report_digest(unclassified)
+    state.set_scene(vr.publish_to_scene(_mission_scene(), [unclassified]))
+    text = panel.text()
+    assert "NUMERICAL CONSISTENCY" not in text and "✓  targeting.converged" in text
+    lines = [ln.strip() for ln in text.splitlines()]
+    assert "CHECKS" in lines  # unclassified checks fall back to the plain list
 
 
 def test_panel_says_not_checked_without_reports(app):

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://zangjiucheng.github.io/orbitopt/schemas/verification-report-1.0.json",
   "title": "orbitopt verification report",
-  "description": "Machine-readable output of every high-fidelity verification (orbitopt.verify.report): residuals, integrator tolerances + step convergence, energy / angular-momentum error, and the perturbation-model inventory. Deterministic (no timestamps, sorted keys); `digest` is the SHA-256 of the canonical JSON of everything else.",
+  "description": "Machine-readable output of every high-fidelity verification (orbitopt.verify.report): residuals, integrator tolerances + step convergence, energy / angular-momentum error, and the perturbation-model inventory. Every check is categorised as numerical consistency, model agreement or historical validation. Deterministic (no timestamps, sorted keys); `digest` is the SHA-256 of the canonical JSON of everything else.",
   "oneOf": [
     { "$ref": "#/$defs/report" },
     { "$ref": "#/$defs/bundle" }
@@ -11,6 +11,19 @@
     "num": { "type": ["number", "null"] },
     "vec": { "type": ["array", "null"], "items": { "$ref": "#/$defs/num" } },
     "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "checkCategory": {
+      "enum": ["numerical_consistency", "model_agreement", "historical_validation"],
+      "description": "What kind of evidence a check is (task #243): numerical_consistency = the same model re-run by independent numerics; model_agreement = the result against another model's prediction or a named limit; historical_validation = against published real-world data."
+    },
+    "categoryRollup": {
+      "type": "object",
+      "required": ["result", "checks_passed", "checks_total"],
+      "properties": {
+        "result": { "enum": ["passed", "failed", "not_checked"] },
+        "checks_passed": { "type": "integer", "minimum": 0 },
+        "checks_total": { "type": "integer", "minimum": 0 }
+      }
+    },
     "status": {
       "type": "object",
       "required": ["result", "passed", "checks"],
@@ -20,7 +33,17 @@
           "description": "passed: at least one check ran and all passed; failed: some check failed; not_checked: no check evidence (never treated as success)."
         },
         "passed": { "type": "boolean", "description": "Legacy boolean; true only when result is \"passed\"." },
-        "checks": { "type": "object", "additionalProperties": { "type": "boolean" } }
+        "checks": { "type": "object", "additionalProperties": { "type": "boolean" } },
+        "check_categories": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/checkCategory" },
+          "description": "Every check name mapped to its category. Optional for documents written before checks were categorised."
+        },
+        "categories": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/categoryRollup" },
+          "description": "Per-category rollup of the checks: a category with no check is not_checked (absent evidence, never a pass)."
+        }
       }
     },
     "provenance": {
@@ -144,6 +167,7 @@
       "properties": {
         "name": { "type": "string" },
         "reference": { "type": "string" },
+        "category": { "$ref": "#/$defs/checkCategory" },
         "position_residual_m": { "$ref": "#/$defs/num" },
         "position_residual_vector_m": { "$ref": "#/$defs/vec" },
         "velocity_residual_m_s": { "$ref": "#/$defs/num" },

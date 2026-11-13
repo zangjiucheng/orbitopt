@@ -993,9 +993,17 @@ def verify_injection(
         "launch.azimuth_in_corridor": lv.azimuth_in_corridor,
         "launch.inclination_reachable": lv.inclination_reachable,
     }
+    # Site-in-plane is plan geometry consistent to zero (numerical); the rest
+    # compare the achieved injection against the site/vehicle models.
+    extra_categories = {
+        "launch.site_in_plane": _report.CHECK_NUMERICAL,
+        "launch.azimuth_in_corridor": _report.CHECK_MODEL,
+        "launch.inclination_reachable": _report.CHECK_MODEL,
+    }
     if target.kind == "elliptic":
         targets["max_out_of_plane_deg"] = float(max_out_of_plane_deg)
         extra_checks["targeting.out_of_plane"] = bool(abs(oop) <= max_out_of_plane_deg)
+        extra_categories["targeting.out_of_plane"] = _report.CHECK_MODEL
     if launch_constraints is not None:
         # The vehicle limit applies to every injection: C3 = 2 * specific
         # energy of the post-burn arc (negative for TLI / any elliptic
@@ -1016,21 +1024,26 @@ def verify_injection(
         if launch_constraints.vehicle is not None:
             targets["max_c3_km2_s2"] = launch_constraints.max_c3
             extra_checks["launch.c3_within_vehicle"] = bool(c3_achieved <= launch_constraints.max_c3)
+            extra_categories["launch.c3_within_vehicle"] = _report.CHECK_MODEL
         if target.kind == "hyperbolic":
             if achieved is None:
                 extra_checks["launch.dla_within_site"] = False
+                extra_categories["launch.dla_within_site"] = _report.CHECK_MODEL
             else:
                 v = achieved.reshape(1, 3)
                 if launch_constraints.frame == "ecliptic":
                     v = equatorial_to_ecliptic(v)
                 ev = launch_constraints.evaluate(v)
                 extra_checks["launch.dla_within_site"] = bool(float(ev.dla_excess_deg[0]) <= 0.0)
+                extra_categories["launch.dla_within_site"] = _report.CHECK_MODEL
 
     report = _report.build_report(
         kind="launch-injection", label=f"{lv.site_id}-{target.name or target.kind}-{orbit.epoch_mjd2000:.5f}",
         propagations=[section], residuals=residuals, inputs=plan.to_dict(), targets=targets,
     )
-    report["status"] = _report.status_from_checks({**report["status"]["checks"], **extra_checks})
+    report["status"] = _report.status_from_checks(
+        {**report["status"]["checks"], **extra_checks},
+        {**report["status"]["check_categories"], **extra_categories})
     report["digest"] = _report.report_digest(report)
     _report.finalize_report(report, report_path)
 
