@@ -50,16 +50,23 @@ VEHICLE = REPO / "src" / "orbitopt" / "data" / "flightlab" / "vehicles" / "synth
 #: Default declared tolerances, written by ``update`` on first use and kept
 #: verbatim afterwards (changing them is itself a reference update). Each
 #: numeric comparison passes when |candidate - reference| <= abs + rel*|reference|.
+# Positions and velocities are GCRS states after the frame bridge; the
+# reference is recorded in a container and CI flies on a native runner, and
+# the two agree to ~2e-6 m / ~4e-7 m/s (the fairing's last ballistic samples
+# grow the last-bit differences most). The tolerances sit ~50x above that
+# floor -- 0.1 mm, 1 um/s -- and still far below any real change. Times
+# likewise: an interpolated ground impact (the fairing's) moved by 3 ns, so
+# 1 us, ~0.3 mm of the fairing's fall.
 DEFAULT_TOLERANCES = {
-    "t_s_abs": 1e-9,
+    "t_s_abs": 1e-6,
     "mass_kg_abs": 1e-6,
-    "position_m_abs": 1e-6,
-    "velocity_m_s_abs": 1e-8,
+    "position_m_abs": 1e-4,
+    "velocity_m_s_abs": 1e-6,
     "extra_abs": {
-        "altitude_m": 1e-6,
+        "altitude_m": 1e-4,
         "latitude_deg": 1e-9,
         "longitude_deg": 1e-9,
-        "downrange_m": 1e-6,
+        "downrange_m": 1e-4,
         "dynamic_pressure_pa": 1e-2,
         "mach": 1e-7,
     },
@@ -86,10 +93,38 @@ def _digest(path: Path) -> str:
 # --------------------------------------------------------------- run
 
 
+def _pin_earth_orientation() -> str:
+    """Freeze the frame bridge's Earth orientation to the IERS data the
+    locked env ships (astropy-iers-data) and return its version.
+
+    astropy otherwise downloads the latest IERS-A table, which changes daily
+    as predictions turn into measurements: the GCRS positions of the same
+    flight then move by tenths of a metre between recordings -- far past the
+    micrometre tolerances, so the first CI run failed on 7,670 samples. On
+    the bundled table alone (which ends before the reference epoch) astropy
+    falls back to UT1 = UTC and zero polar motion: a sub-second, few-metre
+    approximation of the true frame, but the same one on every run with the
+    same lockfile. Updating astropy-iers-data in the lockfile changes it;
+    re-record then (``update`` + the commit tag)."""
+    from astropy.utils import iers
+
+    iers.conf.auto_download = False
+    iers.conf.iers_degraded_accuracy = "ignore"
+    try:
+        import astropy_iers_data
+
+        return str(astropy_iers_data.__version__)
+    except ImportError:
+        return "astropy bundled"
+
+
 def cmd_run(out_dir: Path) -> int:
     _load_repo_package()
     from orbitopt.flightlab.contract import load_target
     from orbitopt.flightlab.simulate import simulate
+
+    iers_data = _pin_earth_orientation()
+    print(f"Earth orientation: bundled IERS data only (astropy-iers-data {iers_data}), no download")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     run = simulate(load_target(TARGET), VEHICLE, out_dir, refly=False,
@@ -289,6 +324,7 @@ def cmd_update() -> int:
         "target": str(TARGET.relative_to(REPO)),
         "vehicle": str(VEHICLE.relative_to(REPO)),
         "simulate_options": {"refly": False, "run_recovery": False},
+        "earth_orientation": f"bundled IERS only, astropy-iers-data {_pin_earth_orientation()}",
         "requires_commit_tag": COMMIT_TAG,
         "git_sha_recording": subprocess.run(
             ["git", "-C", str(REPO), "rev-parse", "HEAD"],
