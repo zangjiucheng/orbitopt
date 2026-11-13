@@ -80,7 +80,8 @@ plant here (`orbitopt.flightlab.sixdof.rigidbody`).
   burn-down run).
 
 The JSBSim backend stays the formal 6-DOF engine; this plant is where a real
-coefficient table from F-05 lands first.
+coefficient table from F-05 lands first (the F-05 ascent study below flies
+it with the packaged `spike_stage` tables).
 
 ## TVC actuator and attitude tracking (F-04)
 
@@ -114,6 +115,63 @@ basic parts:
   regardless — `test_aggressive_initial_offset_proves_saturation_in_the_loop`
   pins this behaviour down. Roll control, steering-to-vertical and a proper
    autopilot are out of scope for F-04 by design.
+
+## 6-DOF vs. 3-DOF gravity-turn ascent (F-05)
+
+`sixdof/gravity_turn.py` flies the F-02 plant + F-04 tracker against a
+point-mass 3-DOF reference built on the *same* vehicle object, the same
+ambient-corrected engine law, the same physics switches (US76 + J2 +
+rotation) and the same RK4 core — the class of model the OpenTsiolkovsky
+adapter drives (point mass, kinematic program attitude, q̄·S·CA/CN aero),
+flown natively so the pair differs *only* in the 6-DOF content the study
+sets out to quantify; the pinned OT binary itself stays covered by
+`tests/test_flightlab_opentsiolkovsky.py`. One scenario — the spike-stage
+booster, packaged `spike_stage` tables, vertical rise to 10 s then a linear
+pitch-over to 18° by 120 s, full throttle to the 99.85 s burn-out, coast to
+180 s — is flown five times:
+
+| rung | physics added over the rung below |
+|---|---|
+| `3dof_vacuum` | shared-physics baseline (no aero) |
+| `3dof_aero` | drag/lift on the point mass — the OT-equivalent ascent |
+| `6dof_ideal` | rigid-body inertia + discrete tracker, ideal actuator |
+| `6dof_lag` | the real F-04 actuator (τ = 0.1 s, 5.73°/s) |
+| `6dof_full` | body-oriented aero closed onto the lagged loop |
+
+**Headline (6-DOF minus 3-DOF, max |difference|):** altitude **2.13 km**,
+Earth-relative speed **2.08 m/s**, flight-path angle **0.47°**, mass
+**8 g**. The acceptance's four difference curves and these metrics are
+committed as `docs/benchmarks/fl605_gravity_turn_ascent.json`
+(`PYTHONPATH=src python benchmarks/bench_fl605_gravity_turn.py`), and the
+regression gates live in `tests/test_flightlab_sixdof_gravity_turn.py`.
+
+**Where the differences come from** — four attribution terms, each flipping
+exactly one physics switch, and the headline difference telescopes over them
+*sample-wise exactly*:
+
+- **Aerodynamics dominates everything**: drag costs 34.4 km of the 402 km
+  ballistic altitude on both models (`aero_point_mass` 34 422 m vs.
+  `aero_rigid_body` 34 453 m) — so in the 3-DOF/6-DOF *comparison* it almost
+  cancels; the ~30 m residual between the two is the difference between a
+  point-mass q̄S·C law and the same tables on an oriented body with pitch
+  rate (weathercock damping `cm_q`, and AoA realised from body attitude).
+- **Attitude dynamics is what the headline really measures**: rigid-body
+  inertia plus the discrete tracker lag the thrust vector behind the 0.65°/s
+  pitch program and the gravity-loss path bends — 2.1 km of altitude, 8 m/s
+  of speed, 0.57° of FPA. The tracker never saturates or slew-limits (5°
+  deflection margin ≥ 98%), but the 3-axis attitude error reaches ~10°
+  through the high-q̄ pitch-over (trim AoA plus F-04's un-actuated
+  roll-about-flight-axis DOF) and keeps growing after MECO — by design the
+  tracker neutralises at engine cutoff, so the attitude freezes while the
+  velocity vector turns on (62° "AoA" at t = 180 s, at q̄ ≈ 0: unloaded,
+  and the 3-DOF side sees the same program-vs-velocity angle).
+- **Control lag is second-order on this program**: the tracker treats the
+  first-order lag as plant dynamics it was tuned to fight, so the actuator
+  rung moves the trajectory by < 5 cm and the FPA by ~0.001° — the lag bites
+  on *fast* commands, which F-04's slew/saturation tests already pin down.
+- **Mass is a shared-law consistency check, not a difference**: the same
+  engine law seen through slightly different altitudes differs by 8 g —
+  the test gate at 5 kg exists to catch anyone ever breaking that.
 
 ## Hard gates
 
