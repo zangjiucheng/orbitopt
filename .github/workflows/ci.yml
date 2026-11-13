@@ -149,7 +149,11 @@ jobs:
     name: flightlab Gate B regression (real OT binary, linux-64)
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The M-07 step below optimizes the ascent (cmaes 40x40, 4 workers):
+    # measured 31 min on 8 cores / 8 workers, so ~60+ min on a 4-vCPU
+    # runner before env setup, Gate B and the tudatpy arc. 30 min (the
+    # FL-601 budget for Gate B alone) would time the job out.
+    timeout-minutes: 120
     defaults:
       run:
         shell: bash -l {0}

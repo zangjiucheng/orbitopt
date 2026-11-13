@@ -69,6 +69,7 @@ def _config(tmp_path, target_file=TARGET, **fl):
 # ----------------------------------------------------------------- segment
 
 
+@pytest.mark.slow
 def test_segment_run_collects_flightrun_and_handoff(stub, target, tmp_path):
     seg = FlightLabSegment(target, vehicle_path=VEHICLE, run_dir=tmp_path / "seg-run",
                            refly=False, target_path=TARGET)
@@ -158,6 +159,7 @@ def test_flight_lab_config_schema_is_strict():
 # ------------------------------------------------------------- the pipeline
 
 
+@pytest.mark.slow
 def test_pipeline_runs_flight_lab_segment_with_honest_red_verdict(stub, tmp_path):
     result = run_pipeline(_config(tmp_path))
 
@@ -192,6 +194,7 @@ def test_pipeline_runs_flight_lab_segment_with_honest_red_verdict(stub, tmp_path
     assert read_run(tmp_path / "flightrun").run_id == report["label"]
 
 
+@pytest.mark.slow
 def test_pipeline_flight_lab_success_when_target_grades_the_flight(stub, target, tmp_path):
     """Grade the stub's actual insertion (a 400 x ~533 km orbit, no declared
     recovery): every check then passes and the pipeline's success becomes
@@ -219,6 +222,7 @@ def test_pipeline_flight_lab_success_when_target_grades_the_flight(stub, target,
     assert result.gate.candidates[0]["verdict"] == "accepted"
 
 
+@pytest.mark.slow
 def test_pipeline_flight_lab_reports_write_outputs(stub, tmp_path):
     config = _config(tmp_path)
     result = run_pipeline(config, write_outputs=True, raise_on_error=False)
@@ -236,6 +240,7 @@ def test_pipeline_flight_lab_reports_write_outputs(stub, tmp_path):
     assert doc["gate"]["exported_candidate"] == 0
 
 
+@pytest.mark.slow
 def test_skip_verify_disables_refly_through_schema(stub, tmp_path):
     config = _config(tmp_path)
     config.setdefault("verification", {})["enabled"] = False

@@ -108,8 +108,13 @@ def test_stub_pipeline_is_honest_and_writes_the_full_record(tmp_path, stub):
     assert targets["pipeline_status"] == result.status
     assert targets["window"]["liftoff_epoch_utc"]
     inj = targets["injection"]
-    for key in ("semi_major_axis", "eccentricity", "inclination", "raan"):
-        assert key in inj["checks"] and key in inj["tolerance"]
+    # check ids are bare names; tolerances carry their unit, like the
+    # error block (delta_semi_major_axis_m, ...) and the failure message
+    for check, tol in (("semi_major_axis", "semi_major_axis_m"),
+                       ("eccentricity", "eccentricity"),
+                       ("inclination", "inclination_deg"),
+                       ("raan", "raan_deg")):
+        assert check in inj["checks"] and tol in inj["tolerance"]
     assert all(err is not None for err in (inj["error"]["delta_semi_major_axis_m"],
                                            inj["error"]["delta_eccentricity"],
                                            inj["error"]["delta_inclination_deg"]))
