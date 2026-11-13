@@ -249,6 +249,54 @@ study as a valid three-body FlightResult v1 run (children parented to the
 stack). The JSBSim two-instance spike (`sixdof/staging.py`) stays the FL-403
 probe; F-06 is the supported, testable staging flow.
 
+## Mission outputs: selectable backends, reports and Mission Control (F-07)
+
+`sixdof/mission_output.py` turns the F-06 study into standard mission
+artefacts. The mission is the scenario (`f07_scenario()` — the F-06
+two-stage scenario, same object either way); `run_mission(scenario,
+backend=...)` flies it on one of two backends:
+
+- `6DOF` — F-06's closed-loop path: rigid-body stack on the F-04 tracker,
+  analytic split, two independent rigid children;
+- `3DOF` — the point-mass twin: the stack flown by
+  `gravity_turn.propagate_point_mass` (kinematic program attitude, q-bar
+  CA/CN aero — the OT-class model, flown natively), the **same**
+  `split_stack_state` split on the frozen trace, point-mass children, the
+  upper stage's delayed ignition honoured exactly (coast leg to the
+  ignition instant, burn leg from there, butt-joined).
+
+Both backends run the identical five F-06 acceptance checks, so "the same
+task, flown twice" is the F-05 fidelity-comparison claim again: the pair
+differs only in the 6-DOF content. `write_mission_outputs()` writes a flown
+backend's bundle: a FlightResult v1 run directory (`write_run`, three ECEF
+tracks, six events), the M-01 `handoff.json` the run produces at separation
+(`HandoffState`, `separation -> boostback`, masses included — a recovery
+segment restarts from this document), the run's verification-report-1.0
+document, and a Mission Control `scene.json`. ECEF tracks render: the FL-002
+frame bridge (`frames.to_gcrs`) carries the rotating-frame ω×r velocity
+term, so scene export converts ECEF per-sample through the same conversion
+as the contract pipeline (this supersedes FL-005's ECEF refusal; the run
+directory still keeps the flown ECEF states verbatim).
+
+Flying both backends (`write_mission_pair`, or
+`orbitopt flight mission --backend BOTH -o runs/f07-mission`) also
+auto-generates the **comparison report** — itself a verification-report-1.0
+document (kind `flightlab-comparison`) whose checks are the two backends'
+own acceptance checks plus a shared-span gate, and whose `inputs.bodies`
+carry the F-05 `AscentDiff` metrics of `6dof − 3dof` per body. On the
+packaged mission: stack altitude apart by ≤ 327 m at separation (the
+tracker loop bending the pitch program), booster ≤ 2.5 km apart at `t_end`,
+upper stage apart by 235 km and 665 m/s — honest divergence: the 6-DOF
+upper stage is inertially pointed (no closed-loop guidance yet — that is
+F-08 territory) while the 3-DOF twin follows the program kinematically.
+Mass closes to 0.55 kg everywhere (same propellant bookkeeping; only the
+pressure-dependent Isp sees slightly different trajectories). The committed
+study: `docs/benchmarks/fl607_mission_outputs.json`
+(`PYTHONPATH=src python benchmarks/bench_fl607_mission_outputs.py`, ~4 min
+single-core), thresholds in
+`tests/test_flightlab_sixdof_mission_output.py`. Scene files open with
+`orbitopt view runs/f07-mission/6DOF/scene.json`.
+
 ## Hard gates
 
 Runs record frames, epochs, units and provenance. Orbit requires the declared
