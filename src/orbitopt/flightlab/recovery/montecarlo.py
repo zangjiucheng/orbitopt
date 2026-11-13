@@ -196,6 +196,14 @@ def _run_sample(job: Mapping[str, Any]) -> dict[str, Any]:
                                plan_options=dict(job["plan_options"]))
         record["outcome"] = "landed" if outcome.success else "failed"
         record["reason"] = "LANDED" if outcome.success else outcome.reason_codes[0]
+        plan = outcome.plan
+        if plan is not None and plan.corridor_report.reached:
+            rep = plan.corridor_report
+            record["corridor_miss_m"] = _num(rep.miss_m)
+            if rep.propellant_available_kg is not None and rep.landing_need_kg is not None:
+                record["corridor_fuel_margin_kg"] = _num(rep.propellant_available_kg
+                                                         - rep.landing_need_kg
+                                                         - rep.reserve_kg)
         landing = outcome.landing
         if landing is not None:
             record["position_error_m"] = _num(landing.position_error_m)

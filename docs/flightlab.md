@@ -76,6 +76,7 @@ uses the most specific matching path; inline provenance is permitted under
 `booster`, while OpenTsiolkovsky stage data remains plain.
 
 See [regression CI](flightlab-regression-ci.md), the
-[JSBSim findings](flightlab-jsbsim-spike-findings.md) and
-[ADR 0002](adr/flightlab-0002-closed-loop-landing-guidance.md) for engineering
-and verification details.
+[JSBSim findings](flightlab-jsbsim-spike-findings.md),
+[ADR 0002](adr/flightlab-0002-closed-loop-landing-guidance.md) and
+[ADR 0003](adr/flightlab-0003-landing-aware-boostback-objective.md) for
+engineering and verification details.
