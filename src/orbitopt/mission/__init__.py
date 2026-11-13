@@ -11,7 +11,10 @@ gated by the continuity/conservation checks of
 Like orbitopt.flightlab.contract, this package is contract-first and needs
 nothing but the standard library + jsonschema (+ orbitopt.timescales): no
 numpy, no Qt, no compute stack, so producers and consumers on either side
-of a segment boundary never import each other.
+of a segment boundary never import each other. The one exception is the
+opt-in M-04 unified runner :mod:`orbitopt.mission.launch_pipeline` (import
+it directly, never through this package): it drives the real ascent
+optimizer and therefore needs the compute stack.
 """
 from orbitopt.mission.contract import (
     EPOCH_TIMESCALES,
