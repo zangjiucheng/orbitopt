@@ -47,6 +47,14 @@ co-dispersed neighbours. Nothing in the statistics layer consumes RNG or
 changes a flown sample, so a fixed seed still reproduces the report
 byte-for-byte.
 
+R-07 (task #239) adds ``capture_tracks=``: each flown sample additionally
+records its booster track (separation -> boostback -> entry -> landing ->
+touchdown) down-sampled to plain rows in the site-ENU frame, ready for the
+dispersion-envelope plots in :mod:`orbitopt.flightlab.recovery.envelope`.
+Capture is a reporting view only -- the records it adds never enter any
+statistic, and with ``capture_tracks=None`` (the default) the report is the
+pre-R-07 document apart from the schema stamp.
+
     from orbitopt.flightlab.recovery.montecarlo import run_monte_carlo, Dispersions
     mc = run_monte_carlo(target, vehicle_path, ascent_run,
                          dispersions=Dispersions(), seed=7, n=24, workers=4)
@@ -59,6 +67,11 @@ byte-for-byte.
     # R-06: plus the one-at-a-time marginal sensitivity per source
     mc = run_monte_carlo(target, vehicle_path, ascent_run, uncertainty=unc,
                          seed=7, n=24, solo_sensitivity=True)
+
+    # R-07: and each sample's flown booster track, down-sampled into the
+    # record, for the dispersion-envelope plots (recovery.envelope)
+    mc = run_monte_carlo(target, vehicle_path, ascent_run, seed=1, n=32,
+                         capture_tracks=240)
 """
 from __future__ import annotations
 
@@ -72,8 +85,10 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 from orbitopt.flightlab.contract import FlightRun, FlightTarget, read_run, write_run
+from orbitopt.flightlab.recovery.envelope import capture_track_rows, site_from_target
 from orbitopt.flightlab.recovery.pipeline import (
     NOMINAL_PLAN_GUESS,
+    _booster_track,
     dispersed_separation_state,
     fly_recovery,
     separation_state_ecef,
@@ -167,10 +182,14 @@ class MonteCarloResult:
     #: ``samples`` and ``uncertainty``, see
     #: :mod:`orbitopt.flightlab.recovery.stats`.
     statistics: Mapping[str, Any] = field(default_factory=dict)
+    #: R-07: what track capture was requested (capture format, row budget) --
+    #: ``{}`` when the run flew without ``capture_tracks``, in which case no
+    #: sample record carries a ``track`` key and this one is not emitted.
+    track_capture: Mapping[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "schemaVersion": "1.2",
+        out: dict[str, Any] = {
+            "schemaVersion": "1.3",
             "kind": "flightlab-recovery-montecarlo",
             "n": int(self.n),
             "seed": int(self.seed),
@@ -184,6 +203,9 @@ class MonteCarloResult:
             "samples": [dict(s) for s in self.samples],
             "assumptions": list(self.assumptions),
         }
+        if self.track_capture:
+            out["track_capture"] = dict(self.track_capture)
+        return out
 
     def write(self, path: Path) -> None:
         """``montecarlo.json`` -- byte-identical for identical statistics
@@ -256,6 +278,12 @@ def _run_sample(job: Mapping[str, Any]) -> dict[str, Any]:
             if getattr(landing, "actuator_margin", None) is not None:
                 # R-05: the guidance's own actuator-margin accounting
                 record["control_margin"] = landing.actuator_margin.to_dict()
+        if job.get("capture_tracks") and plan is not None:
+            # R-07: the flown track as a plain down-sampled site-ENU view --
+            # a reporting overlay, never an input to any statistic
+            record["track"] = capture_track_rows(
+                _booster_track(plan, landing), job["site"],
+                int(job["capture_tracks"]))
     except Exception as exc:  # noqa: BLE001 -- a broken sample must never erase the run
         record["outcome"] = "error"
         record["reason"] = f"SAMPLE_ERROR:{type(exc).__name__}"
@@ -305,9 +333,10 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
                     dispersions: Dispersions | None = None,
                     uncertainty: "UncertaintyModel | Mapping[str, Any] | str | Path | None" = None,
                     seed: int = 1, n: int = 8, workers: int = 1,
-                    plan_options: Mapping[str, Any] | None = None,
-                    solo_sensitivity: bool = False,
-                    out_path: Path | str | None = None) -> MonteCarloResult:
+                     plan_options: Mapping[str, Any] | None = None,
+                     solo_sensitivity: bool = False,
+                     capture_tracks: int | None = None,
+                     out_path: Path | str | None = None) -> MonteCarloResult:
     """Fly ``n`` dispersed recovery samples of ``ascent_run`` under ``target``
     (module docstring) and return the aggregated :class:`MonteCarloResult`;
     ``out_path`` additionally writes ``montecarlo.json``. Sampling is per
@@ -335,11 +364,20 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
     samples. ``solo_sensitivity=True`` adds the marginal reading: every active
     source re-flown alone (all others neutral) at the same seed and sample
     count, i.e. ``1 + n_active`` passes in total -- a correspondingly more
-    expensive, but far more explanatory, run."""
+    expensive, but far more explanatory, run.
+
+    R-07: ``capture_tracks=N`` records each flown sample's booster track,
+    down-sampled to at most ``N`` plain rows in the site-ENU frame, under the
+    sample record's ``track`` key (capture format ``r07-track-capture-1``,
+    see :mod:`orbitopt.flightlab.recovery.envelope`) -- the input for the
+    dispersion-envelope plots. Capture changes no statistic and consumes no
+    RNG: the same seed flies the same samples with or without it."""
     if n < 1:
         raise ValueError(f"n must be >= 1, got {n}")
     if int(seed) < 0:
         raise ValueError(f"seed must be >= 0, got {seed}")
+    if capture_tracks is not None and int(capture_tracks) < 2:
+        raise ValueError(f"capture_tracks must be None or >= 2, got {capture_tracks}")
     if uncertainty is not None and dispersions is not None:
         raise ValueError("pass either uncertainty= or dispersions=, not both: "
                          "the declarative model already carries the full setup")
@@ -382,13 +420,22 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
             "R-06 one-at-a-time sensitivity: every active source re-flown "
             "alone at the same seed and sample count -- the marginal reading "
             "that separates a source from the sources dispersed with it")
+    site = site_from_target(target) if capture_tracks is not None else (0.0, 0.0, 0.0)
+    if capture_tracks is not None:
+        assumptions.append(
+            "R-07 track capture: each flown sample also records its booster "
+            f"track down-sampled to <= {int(capture_tracks)} rows in the "
+            "site-ENU frame (capture format r07-track-capture-1) -- a "
+            "reporting overlay for the dispersion envelope, never an input "
+            "to a statistic")
 
     def _dispatch(m: UncertaintyModel) -> list[dict[str, Any]]:
         """Fly the ``n`` samples of one perturbation model over the shared
         ascent run (the pool moves work, never numbers)."""
         jobs = [{"idx": i, "seed": int(seed), "run_dir": str(run_dir),
                  "target": target, "vehicle_path": str(vehicle_path),
-                 "uncertainty": m.to_dict(), "plan_options": dict(opts)}
+                 "uncertainty": m.to_dict(), "plan_options": dict(opts),
+                 "capture_tracks": capture_tracks, "site": site}
                 for i in range(n)]
         if workers and workers > 1 and n > 1:
             with ProcessPoolExecutor(max_workers=int(workers)) as pool:
@@ -460,6 +507,12 @@ def run_monte_carlo(target: FlightTarget, vehicle_path: Path | str,
         ellipse=_ellipse(landed),
         samples=tuple(records),
         assumptions=tuple(assumptions),
+        track_capture=({
+            "schema": "r07-track-capture-1",
+            "columns": ["t_s", "east_m", "north_m", "up_m"],
+            "max_rows": int(capture_tracks),
+            "site": [float(c) for c in site]}
+            if capture_tracks is not None else {}),
     )
     if out_path is not None:
         result.write(Path(out_path))
