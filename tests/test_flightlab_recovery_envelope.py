@@ -169,6 +169,7 @@ def test_envelope_band_brackets_the_population_and_gaps_sparse_tails():
                             SITE)["band"] is None
 
 
+@pytest.mark.slow
 def test_nominal_report_over_the_honest_stub_verdict(tmp_path, monkeypatch):
     """The stub ascent separates with no recoverable propellant: the nominal
     report must carry the red gate, the governing reason and the flown
@@ -236,6 +237,7 @@ def test_nominal_report_defaults_plan_options_to_the_mc_warm_start(monkeypatch):
 # fast: rendering (matplotlib is in the locked CI env; skip if absent)
 # ---------------------------------------------------------------------------
 
+@pytest.mark.slow
 def test_plot_envelope_and_comparison_render(tmp_path):
     pytest.importorskip("matplotlib")
     data = _dataset(nominal=capture_track_rows(_fake_track(n=400), SITE, 600))

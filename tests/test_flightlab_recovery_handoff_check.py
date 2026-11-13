@@ -192,6 +192,7 @@ def test_joint_constraints_defaults_track_the_declared_limits():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_handoff_checks_merge_into_the_run_only_on_request(stub, tmp_path):
     from orbitopt.flightlab.simulate import simulate
 

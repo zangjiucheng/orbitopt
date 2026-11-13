@@ -398,6 +398,7 @@ def r01_nominal_plan(vehicle, pad_target):
 FL305_OBJECTIVE = {"landing_divert_budget_m": None, "landing_reserve_margin_kg": 0.0}
 
 
+@pytest.mark.slow
 def test_r01_disabled_reproduces_fl305_plan(vehicle, pad_target):
     """The FL-305 baseline switch: with the R-01 terms off, the pinned-script
     plan is untouched -- identical script, identical measured corridor
