@@ -43,4 +43,14 @@ plant and deflection-margin diagnostics recorded per run::
 
     from orbitopt.flightlab.sixdof.tvc import AttitudeTvcLaw, run_closed_loop_ascent
     # docs/flightlab.md (the F-04 section, including the two-gimbal scope limit)
+
+F-05 (task #230) flies that closed-loop plant against a point-mass 3-DOF
+reference on the identical vehicle, physics and integration core -- the
+OT-class model, natively -- and reports the acceptance's altitude/speed/FPA/
+mass difference curves plus an exact telescoping attribution of where the
+difference comes from (aerodynamics, attitude dynamics, control lag)::
+
+    from orbitopt.flightlab.sixdof.gravity_turn import f05_scenario, run_f05_study
+    # docs/flightlab.md (the F-05 section) and
+    # docs/benchmarks/fl605_gravity_turn_ascent.json (the committed study)
 """
