@@ -74,12 +74,20 @@ throttle-limited hoverslam + ZEM/ZEV divert re-planned from the propagated
 state every step, with the tilt limit in the loop and a final cutoff tuned
 to the no-hover thrust-to-weight. The referee is unchanged:
 :func:`landing_touchdown_checks` on the propagated track.
+
+R-03 separates the truth dynamics (the FL-301 propagator with the caller's
+``physics`` and the real vehicle) from the guidance dynamics (the law plus
+the model it *perceives*): a :class:`GuidanceModelMismatch` biases the
+guidance's gravity, engine envelope, mass and pad position while the truth
+keeps flying the full model, and :func:`assess_landing_model_mismatch`
+sweeps the bias to show what it does to landing accuracy and fuel alone.
+Zero mismatch is bit-for-bit the plain FL-305 flight.
 """
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
@@ -1038,6 +1046,84 @@ class TerminalGuidance:
 TERMINAL_GUIDANCE_DEFAULT = TerminalGuidance()
 
 
+# ---------------------------------------------------------------------------
+# R-03: truth dynamics vs guidance dynamics -- configurable model mismatch
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class GuidanceModelMismatch:
+    """R-03: how far the closed-loop guidance's *perceived* model may drift
+    from the truth the FL-301 propagator flies (truth dynamics and guidance
+    dynamics separated). The law (:class:`TerminalGuidance`) and the referee
+    (:func:`landing_touchdown_checks`) are untouched; the mismatch biases
+    only what the guidance *believes* while it flies:
+
+    * ``gravity_bias_m_s2``: the guidance fights ``g_truth + bias``, so a
+      positive bias over-thrusts gravity and burns fuel early;
+    * ``thrust_scale``: the guidance believes its engine makes
+      ``scale`` x the ambient envelope -- below 1 it commands a higher
+      throttle for the same force (the truth engine then overshoots the
+      request, and the ignition/cutoff margins shift with it);
+    * ``mass_bias_kg``: the guidance reads the vehicle ``bias`` kg heavier
+      (inertial and fuel bookkeeping perception error);
+    * ``pad_offset_east_m`` / ``pad_offset_north_m``: navigation bias -- the
+      guidance steers to the pad *it believes*, which sits offset from the
+      truth pad, so the touchdown check (graded at the truth pad) sees the
+      miss.
+
+    The insertion SOCP stays the truth-model feasibility certificate and
+    the truth propagator takes the real vehicle -- the mismatch never
+    touches the referee. All-zero is exact identity: :data:`NO_MODEL_MISMATCH`
+    reproduces the FL-305 results bit-for-bit (regression criterion)."""
+
+    gravity_bias_m_s2: float = 0.0
+    thrust_scale: float = 1.0
+    mass_bias_kg: float = 0.0
+    pad_offset_east_m: float = 0.0
+    pad_offset_north_m: float = 0.0
+
+    def __post_init__(self) -> None:
+        vals = (self.gravity_bias_m_s2, self.thrust_scale, self.mass_bias_kg,
+                self.pad_offset_east_m, self.pad_offset_north_m)
+        for name, v in zip(("gravity_bias_m_s2", "thrust_scale", "mass_bias_kg",
+                            "pad_offset_east_m", "pad_offset_north_m"), vals):
+            if not math.isfinite(float(v)):
+                raise ValueError(f"{name} must be finite, got {v!r}")
+        if self.thrust_scale <= 0.0:
+            raise ValueError(f"thrust_scale must be positive, got {self.thrust_scale}")
+
+    @property
+    def is_identity(self) -> bool:
+        return self == NO_MODEL_MISMATCH
+
+    def to_dict(self) -> dict[str, float]:
+        return {"gravity_bias_m_s2": float(self.gravity_bias_m_s2),
+                "thrust_scale": float(self.thrust_scale),
+                "mass_bias_kg": float(self.mass_bias_kg),
+                "pad_offset_east_m": float(self.pad_offset_east_m),
+                "pad_offset_north_m": float(self.pad_offset_north_m)}
+
+    @staticmethod
+    def from_option(option: "GuidanceModelMismatch | Mapping[str, float] | None"
+                    ) -> "GuidanceModelMismatch":
+        """Accept an instance, a mapping of fields, or ``None`` (identity) --
+        the form ``plan_options["landing"]["mismatch"]`` and the fly keyword
+        both take."""
+        if option is None:
+            return NO_MODEL_MISMATCH
+        if isinstance(option, GuidanceModelMismatch):
+            return option
+        if isinstance(option, Mapping):
+            return GuidanceModelMismatch(**{str(k): v for k, v in option.items()})
+        raise TypeError(f"model mismatch must be a GuidanceModelMismatch or a "
+                        f"mapping of its fields, got {type(option).__name__}")
+
+
+#: Zero mismatch: guidance dynamics == truth dynamics, the plain FL-305 flight.
+NO_MODEL_MISMATCH = GuidanceModelMismatch()
+
+
 @dataclass(frozen=True)
 class TerminalCommand:
     """One step of :func:`terminal_guidance_command`: ``phase`` is
@@ -1130,17 +1216,32 @@ class _ClosedLoopLanding:
     state in, :func:`terminal_guidance_command` out, mapped to a throttle
     through the *ambient* thrust at the flown altitude. Records the command
     history (the tilt proxy the touchdown checks grade), ignition and
-    cutoff times."""
+    cutoff times.
+
+    R-03: the state feedback is the truth (the propagator's own), but the
+    *model* the law reasons about -- pad position, gravity, engine envelope,
+    vehicle mass -- is perceived through a :class:`GuidanceModelMismatch`
+    (identity by default, which is bit-exact with the plain FL-305 law)."""
 
     def __init__(self, vehicle: BoosterModel, guidance: TerminalGuidance, *,
                  pad_lat_deg: float, pad_lon_deg: float, pad_altitude_m: float,
-                 pad_ecef_m: np.ndarray, gravity_m_s2: float) -> None:
+                 pad_ecef_m: np.ndarray, gravity_m_s2: float,
+                 mismatch: GuidanceModelMismatch = NO_MODEL_MISMATCH) -> None:
         self.vehicle, self.guidance = vehicle, guidance
         self.lat, self.lon = pad_lat_deg, pad_lon_deg
-        self.pad_ecef = np.asarray(pad_ecef_m, dtype=np.float64)
-        self.axes = _enu_axes(pad_lat_deg, pad_lon_deg)
-        self.gravity = float(gravity_m_s2)
-        self.thrust_max_pad, _ = _ambient_thrust_envelope(vehicle, pad_altitude_m)
+        self.mismatch = mismatch
+        e, n, u_axis = _enu_axes(pad_lat_deg, pad_lon_deg)
+        self.axes = (e, n, u_axis)
+        self.pad_ecef = (np.asarray(pad_ecef_m, dtype=np.float64)
+                         + float(mismatch.pad_offset_east_m) * e
+                         + float(mismatch.pad_offset_north_m) * n)
+        self.gravity = float(gravity_m_s2) + float(mismatch.gravity_bias_m_s2)
+        if self.gravity <= 0.0:
+            raise ValueError(
+                f"guidance gravity {self.gravity:.3f} m/s^2 (bias "
+                f"{mismatch.gravity_bias_m_s2:+.3f}) is not positive")
+        thrust_max_pad, _ = _ambient_thrust_envelope(vehicle, pad_altitude_m)
+        self.thrust_max_pad = thrust_max_pad * float(mismatch.thrust_scale)
         self.samples: list[tuple] = []
         self.ignition_t_s: float | None = None
         self.cutoff_t_s: float | None = None
@@ -1152,9 +1253,17 @@ class _ClosedLoopLanding:
                        self.pad_ecef)
         t_max, t_min = _ambient_thrust_envelope(
             self.vehicle, height_m(np.asarray(st.position_m, dtype=np.float64)))
+        scale = float(self.mismatch.thrust_scale)
+        m_guided = float(st.mass_kg) + float(self.mismatch.mass_bias_kg)
+        if m_guided <= 0.0:
+            raise RecoveryError(
+                f"guidance-perceived mass {m_guided} kg is not positive "
+                f"(mass_bias {self.mismatch.mass_bias_kg:+g} kg at truth mass "
+                f"{st.mass_kg} kg)")
         cmd = terminal_guidance_command(
-            r, v, float(st.mass_kg), gravity_m_s2=self.gravity,
-            thrust_max_n=min(t_max, self.thrust_max_pad), thrust_min_n=t_min,
+            r, v, m_guided, gravity_m_s2=self.gravity,
+            thrust_max_n=min(t_max * scale, self.thrust_max_pad),
+            thrust_min_n=t_min * scale,
             ignited=self.ignition_t_s is not None, guidance=self.guidance)
         if cmd.phase == "coast":
             return None
@@ -1168,7 +1277,11 @@ class _ClosedLoopLanding:
         d_enu = f / f_mag
         # never command a zero-throttle shutdown mid-burn (that would spend a
         # restart); the propagator clamps up to the engine floor instead.
-        throttle = min(max(f_mag / t_max, 1e-6), self.vehicle.engine.throttle_max)
+        # The throttle is what the guidance *believes* achieves f_mag: under
+        # a thrust-scale mismatch that differs from what the truth engine
+        # delivers -- which is the point of the mismatch.
+        throttle = min(max(f_mag / (t_max * scale), 1e-6),
+                       self.vehicle.engine.throttle_max)
         e_, n_, u_ = self.axes
         d_ecef = d_enu[0] * e_ + d_enu[1] * n_ + d_enu[2] * u_
         self.samples.append((float(t_s), tuple(float(c) for c in d_enu),
@@ -1187,6 +1300,8 @@ def fly_landing_burn_closed_loop(state_enu: LandingBurnEnu, state_ecef: BoosterS
                                  dt_s: float = 0.1, sample_s: float = 0.5,
                                  physics: BoosterPhysics | None = None,
                                  flight_time_max_s: float = 300.0,
+                                 mismatch: GuidanceModelMismatch
+                                 | Mapping[str, float] | None = None,
                                  ) -> LandingResult:
     """FL-305: the FL-303 landing flow with closed-loop terminal guidance.
 
@@ -1197,7 +1312,13 @@ def fly_landing_burn_closed_loop(state_enu: LandingBurnEnu, state_ecef: BoosterS
     every integration step, instead of the plan's open-loop thrust schedule.
     One integration through the FL-301 propagator with the caller's
     ``physics``; :func:`landing_touchdown_checks` grades it (G3: the
-    guidance never scores itself)."""
+    guidance never scores itself).
+
+    R-03: ``mismatch`` (a :class:`GuidanceModelMismatch` or a mapping of its
+    fields) biases the model the *guidance* reasons about while the truth
+    propagator flies the full model -- see the dataclass. ``None`` /
+    all-zero is the plain FL-305 flight, bit-for-bit."""
+    mm = GuidanceModelMismatch.from_option(mismatch)
     lat, lon, pad_alt, pad_ecef = _pad_of_target(target)
     plan, infeasible = _insertion_plan(state_enu, state_ecef, vehicle, pad_alt,
                                        gravity_m_s2=gravity_m_s2,
@@ -1209,7 +1330,8 @@ def fly_landing_burn_closed_loop(state_enu: LandingBurnEnu, state_ecef: BoosterS
         vehicle, guidance, pad_lat_deg=lat, pad_lon_deg=lon, pad_altitude_m=pad_alt,
         pad_ecef_m=pad_ecef,
         gravity_m_s2=(gravity_m_s2 if gravity_m_s2 is not None
-                      else _local_gravity(state_ecef.position_m)))
+                      else _local_gravity(state_ecef.position_m)),
+        mismatch=mm)
     track = propagate(state_ecef, vehicle, law,
                       float(state_ecef.t_s) + float(flight_time_max_s),
                       events=("burn", "ground"), dt_s=dt_s, sample_s=sample_s,
@@ -1218,6 +1340,8 @@ def fly_landing_burn_closed_loop(state_enu: LandingBurnEnu, state_ecef: BoosterS
     def _t(x: float | None) -> str:
         return "none" if x is None else f"{x - float(state_ecef.t_s):.1f}s"
 
+    mismatch_note = (f"R-03 guidance model mismatch: {mm.to_dict()}"
+                     if not mm.is_identity else None)
     return _graded_result(
         plan, track, law.samples, vehicle, limits, target,
         assumptions=_FL303_ASSUMPTIONS + (
@@ -1230,7 +1354,65 @@ def fly_landing_burn_closed_loop(state_enu: LandingBurnEnu, state_ecef: BoosterS
             f"v_td={guidance.touchdown_speed_m_s:g}m/s "
             f"tilt<={guidance.tilt_limit_deg:g}deg ignition={_t(law.ignition_t_s)} "
             f"cutoff={_t(law.cutoff_t_s)} after insertion; "
-            f"insertion plan fuel_planned={plan.fuel_planned_kg:.1f}kg",))
+            f"insertion plan fuel_planned={plan.fuel_planned_kg:.1f}kg",)
+            + ((mismatch_note,) if mismatch_note else ()))
+
+
+@dataclass(frozen=True)
+class MismatchAssessment:
+    """One flown landing inside an :func:`assess_landing_model_mismatch`
+    sweep: the mismatch guidance flew under, the full FL-305 verdict, and
+    the propellant the *truth* actually burned (``None`` when no track was
+    flown)."""
+
+    mismatch: GuidanceModelMismatch
+    result: LandingResult
+    propellant_used_kg: float | None
+
+    def to_dict(self) -> dict[str, Any]:
+        res = self.result
+        return {"mismatch": self.mismatch.to_dict(),
+                "landed": bool(res.landed),
+                "reason_codes": list(res.reason_codes),
+                "position_error_m": res.position_error_m,
+                "vertical_speed_m_s": res.vertical_speed_m_s,
+                "lateral_speed_m_s": res.lateral_speed_m_s,
+                "propellant_used_kg": self.propellant_used_kg}
+
+
+def assess_landing_model_mismatch(state_enu: LandingBurnEnu,
+                                  state_ecef: BoosterState,
+                                  target: RecoveryTarget, vehicle: BoosterModel,
+                                  mismatches: Sequence[GuidanceModelMismatch
+                                                      | Mapping[str, float] | None],
+                                  *,
+                                  limits: LandingLimits = DEFAULT_LANDING_LIMITS,
+                                  guidance: TerminalGuidance = TERMINAL_GUIDANCE_DEFAULT,
+                                  solver: str = "gfold",
+                                  gravity_m_s2: float | None = None,
+                                  dt_s: float = 0.1, sample_s: float = 0.5,
+                                  physics: BoosterPhysics | None = None,
+                                  flight_time_max_s: float = 300.0,
+                                  ) -> tuple[MismatchAssessment, ...]:
+    """R-03 acceptance hook: fly the same corridor handoff under each model
+    mismatch in isolation and report what it did to the two numbers the task
+    asks about -- landing accuracy (``result.position_error_m``) and fuel
+    (``propellant_used_kg``, from the truth track's mass column). Same
+    corridor state, same truth physics, same referee in every entry; only
+    the guidance's model perception moves."""
+    out: list[MismatchAssessment] = []
+    for option in mismatches:
+        mm = GuidanceModelMismatch.from_option(option)
+        res = fly_landing_burn_closed_loop(
+            state_enu, state_ecef, target, vehicle, limits=limits,
+            guidance=guidance, solver=solver, gravity_m_s2=gravity_m_s2,
+            dt_s=dt_s, sample_s=sample_s, physics=physics,
+            flight_time_max_s=flight_time_max_s, mismatch=mm)
+        used = (float(res.track.mass_kg[0] - res.track.mass_kg[-1])
+                if res.track is not None and len(res.track.mass_kg) else None)
+        out.append(MismatchAssessment(mismatch=mm, result=res,
+                                      propellant_used_kg=used))
+    return tuple(out)
 
 
 # ---------------------------------------------------------------------------
