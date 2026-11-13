@@ -251,6 +251,26 @@ _ENTRIES: tuple[ReasonEntry, ...] = (
        "Re-tune the PID gains or slow the attitude program down; verify the initial attitude matches the "
        "program's first waypoint.",
        "重新整定 PID 增益或放缓姿态程序；确认初始姿态与程序第一个航点一致。"),
+    _e("SIXDOF_MASS_MODEL_MISMATCH", "physics",
+       "Mass properties off the declared model", "质量特性偏离声明模型",
+       "The integrated mass / centre-of-gravity / inertia trace disagreed with the mass model declared "
+       "in the scenario config beyond its tolerances: mass is not conserved against the integrated "
+       "flow, or the full/burnout endpoints, or the in-flight interpolation, are off.",
+       "积分得到的质量/质心/惯量与场景配置中声明的质量模型在容差范围内不一致：流量积分与质量变化不守恒，"
+       "或满载/燃尽端点值、飞行中的插值不符合声明。",
+       "Check the scenario's mass_model endpoints against the aircraft XML (tank contents, locations, "
+       "dry mass/inertia), the integration step dt_s (the drain shows up one step late), and the "
+       "tolerances; a genuine mismatch means the model and the vehicle file disagree.",
+       "对照飞行器 XML 检查场景的 mass_model 端点（推进剂装填量与位置、干重/惯量）、积分步长 dt_s"
+       "（排流滞后一拍）以及容差；确实不符则说明模型与飞行器文件不一致。"),
+    _e("SIXDOF_BURNOUT_NOT_REACHED", "physics",
+       "Burnout endpoint not assessed", "燃尽端点未评估",
+       "The config declares a mass model with an empty (burnout) endpoint but the run never flew the "
+       "propellant down to it, so the burnout CG/inertia endpoint could not be compared.",
+       "配置声明了含燃尽（empty）端点的质量模型，但本次运行未把推进剂燃尽到该点，无法比较燃尽质心/惯量端点。",
+       "Lengthen duration_s (or drop the ignition time) until the tanks run dry, or leave the burnout "
+       "endpoint out of the config if the scenario is not meant to assess it.",
+       "延长 duration_s（或提前点火）直到推进剂耗尽；如该场景本就不评估燃尽端点，则从配置中删去该端点。"),
 
     # --------------------------------------------------------- optimizer (FL-201+)
     _e("INFEASIBLE_PERIAPSIS_OUT_OF_TOLERANCE", "optimizer",
