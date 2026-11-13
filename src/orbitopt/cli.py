@@ -433,13 +433,24 @@ def _cmd_flight_simulate(args):
 
 def _cmd_flight_montecarlo(args):
     """`orbitopt flight montecarlo <target.yaml> --vehicle <v.yaml> -n N
-    --seed S [-o montecarlo.json] [--jobs J]`: FL-304 -- fly the ascent once,
-    then re-plan and re-fly ``n`` dispersed recovery samples (thrust, Isp,
-    atmosphere, drag, separation state) in a process pool, printing the
-    success rate, the reason-code histogram and the landing dispersion.
-    Deterministic per seed: the same seed and setup write a byte-identical
-    JSON regardless of ``--jobs``. Exit code reports pipeline health, like
-    `flight simulate`."""
+    --seed S [-o montecarlo.json] [--jobs J] [--uncertainty unc.yaml]`:
+    FL-304 -- fly the ascent once, then re-plan and re-fly ``n`` dispersed
+    recovery samples (R-04 sources: wind, atmosphere density, thrust, Isp,
+    drag, separation state) in a process pool, printing the success rate,
+    the reason-code histogram and the landing dispersion. Deterministic per
+    seed: the same seed and setup write a byte-identical JSON regardless of
+    ``--jobs``. ``--uncertainty`` declares the perturbation distributions
+    per source (YAML/JSON, see orbitopt.flightlab.recovery.uncertainty);
+    without it the vehicle file's uncertainty tags and the class defaults
+    stand. The report also carries the R-06 statistics: failure classes, a
+    Wilson confidence interval on the success rate and a per-source
+    sensitivity; ``--solo-sensitivity`` adds the one-at-a-time marginal
+    reading. ``--capture-tracks N`` (R-07) also records each sample's flown
+    booster track, down-sampled to at most N site-ENU rows, for the
+    dispersion-envelope plots (orbitopt.flightlab.recovery.envelope).
+    Determinism covers all of it: the same seed and setup write a
+    byte-identical JSON regardless of ``--jobs``. Exit code reports pipeline
+    health, like `flight simulate`."""
     from pathlib import Path
 
     import jsonschema
@@ -450,23 +461,51 @@ def _cmd_flight_montecarlo(args):
 
     out = Path(args.out)
     ascent_dir = Path(args.ascent_run_dir) if args.ascent_run_dir else out.with_suffix(".ascent")
+    uncertainty = Path(args.uncertainty) if args.uncertainty else None
     try:
         target = load_target(args.target)
         ascent = simulate(target, Path(args.vehicle), ascent_dir,
                           refly=not args.no_refly, timeout_s=args.timeout,
                           run_recovery=False)
         mc = run_monte_carlo(target, Path(args.vehicle), ascent,
+                             uncertainty=uncertainty,
                              seed=args.seed, n=args.n, workers=args.jobs,
+                             solo_sensitivity=args.solo_sensitivity,
+                             capture_tracks=args.capture_tracks,
                              out_path=out)
     except (OSError, ValueError, KeyError, RuntimeError, jsonschema.ValidationError) as exc:
         print(f"ERROR: {exc}")
         raise SystemExit(1) from None
 
     print(f"montecarlo: n={mc.n} seed={mc.seed} -> {out}")
+    if uncertainty is not None:
+        active = sorted(k for k, v in mc.uncertainty.items()
+                        if isinstance(v, dict) and v.get("enabled"))
+        print(f"  uncertainty: {uncertainty.name}: " + ", ".join(active))
+    ci = (mc.statistics or {}).get("success_rate_ci") or {}
+    ci_txt = (f"  [{ci['lower']:.3f}, {ci['upper']:.3f}] "
+              f"{ci['confidence_level']:.0%} {ci['method'].replace('_', ' ')}"
+              if ci else "")
     print(f"  success_rate: {mc.success_rate:.3f} "
-          f"({sum(1 for s in mc.samples if s.get('outcome') == 'landed')}/{mc.n} landed in limits)")
+          f"({sum(1 for s in mc.samples if s.get('outcome') == 'landed')}/{mc.n} landed in limits)"
+          f"{ci_txt}")
     for code, count in mc.reason_histogram.items():
         print(f"  {count:>4}  {code}")
+    classes = ((mc.statistics or {}).get("failure_classes") or {})
+    live = [(c, k) for c, k in (classes.get("classes") or {}).items() if k]
+    if live:
+        print("  failure classes: "
+              + ", ".join(f"{c} {k}" for c, k in live))
+    sens = (mc.statistics or {}).get("sensitivity") or {}
+    if sens.get("ranking"):
+        print("  sensitivity (|perturbation| vs failure): " + ", ".join(
+            f"{name} r={sens['sources'][name]['rank_correlation']:+.2f}"
+            for name in sens["ranking"]))
+    solo = (mc.statistics or {}).get("solo_sensitivity") or {}
+    for name, entry in (solo.get("sources") or {}).items():
+        print(f"  solo {name}: success_rate {entry['success_rate']:.3f} "
+              f"[{entry['ci']['lower']:.3f}, {entry['ci']['upper']:.3f}] "
+              f"(delta {entry['delta_vs_baseline']:+.3f})")
     ell = mc.ellipse
     if ell.get("state") == "assessed":
         print(f"  ellipse (1-sigma, site ENU): along {ell['sigma_along_m']:.1f} m x "
@@ -720,8 +759,25 @@ def build_parser() -> argparse.ArgumentParser:
                            help="master seed; the statistics are byte-reproducible per seed (default 1)")
     flight_mc.add_argument("--jobs", type=int, default=1, metavar="J",
                            help="process-pool width (default 1 = in-process serial)")
+    flight_mc.add_argument("--uncertainty", default=None, metavar="PATH",
+                           help="R-04 uncertainty config YAML/JSON: per-source "
+                                "perturbation distributions and switches (wind / "
+                                "density / thrust / Isp / drag / initial_state); "
+                                "default: vehicle-file tags + class defaults")
     flight_mc.add_argument("-o", "--out", default="montecarlo.json", metavar="PATH",
                            help="output JSON path (default: montecarlo.json)")
+    flight_mc.add_argument("--solo-sensitivity", action="store_true",
+                           help="R-06: also re-fly every active perturbation "
+                                "source alone (all others neutral) at the same "
+                                "seed and n -- the marginal per-source "
+                                "sensitivity reading (1 + n_active sample "
+                                "passes instead of 1)")
+    flight_mc.add_argument("--capture-tracks", type=int, default=None,
+                           metavar="N",
+                           help="R-07: record each sample's flown booster "
+                                "track, down-sampled to at most N rows in the "
+                                "site-ENU frame, for the dispersion-envelope "
+                                "plots (orbitopt.flightlab.recovery.envelope)")
     flight_mc.add_argument("--ascent-run-dir", default=None, metavar="RUN_DIR",
                            help="where the (single) ascent run is written "
                                 "(default: <out>.ascent/)")
