@@ -24,10 +24,20 @@ from dataclasses import dataclass
 import numpy as np
 
 from orbitopt.core.gpu import get_array_module, to_numpy
+from orbitopt.physics_io import (
+    KEPLER_BATCH,
+    NBODY_SCREENING,
+    UnitSystem,
+    check_grav_parameter,
+)
 
 MU_EARTH_KM3_S2 = 398600.4418
 MU_MOON_KM3_S2 = 4902.8
 MU_SUN_KM3_S2 = 1.32712440018e11
+
+#: This module's declared unit system: kilometres, seconds (see
+#: :data:`orbitopt.physics_io.NBODY_SCREENING`).
+UNITS = UnitSystem("km", "s")
 
 _SPICE_LOADED = False
 _MOON_STATE0_KM = {}  # keyed by seed_epoch_ephemeris_seconds (rounded)
@@ -242,6 +252,24 @@ def _propagate_kepler_core(r0, v0, dt, mu, xp, maxiter, tol=1e-12, return_info=F
     return r, v
 
 
+def _on_device(a) -> bool:
+    """True for a CuPy (or other non-host) array. Note that numpy arrays have
+    had a ``.device`` attribute since NumPy 2, so that is not the test."""
+    return type(a).__module__.split(".")[0] not in ("numpy", "builtins")
+
+
+def _check_host_states(r0, v0, *, spec, where: str) -> None:
+    """Run the physics I/O state checks on host arrays.
+
+    Device arrays are skipped: :mod:`orbitopt.physics_io` is a host-side layer,
+    and pulling a whole batch back to the CPU to validate it would cost more
+    than the propagation does. Every public entry point here takes numpy
+    arguments, so in practice the check always runs."""
+    if _on_device(r0) or _on_device(v0):
+        return
+    spec.check_state(r0, v0, where=where)
+
+
 def propagate_kepler_batch(r0, v0, dt, mu, use_gpu=None, maxiter=50, tol=1e-12, return_info=False):
     """Propagate N independent two-body states by the universal-variable
     method (Curtis Algorithms 3.3/3.4; equivalent to Vallado's universal
@@ -271,6 +299,12 @@ def propagate_kepler_batch(r0, v0, dt, mu, use_gpu=None, maxiter=50, tol=1e-12, 
     ``iterations`` the number of Newton iterations actually run.
     """
     xp = get_array_module(use_gpu)
+    if check_grav_parameter(mu, units=UNITS,
+                           where="orbitopt.dynamics.nbody_gpu.propagate_kepler_batch: mu") is not None:
+        # ``mu`` is a known body's tabulated value, so the unit system it fixes
+        # is the one the states must be in too.
+        _check_host_states(r0, v0, spec=KEPLER_BATCH,
+                           where="orbitopt.dynamics.nbody_gpu.propagate_kepler_batch")
     out = _propagate_kepler_core(r0, v0, dt, mu, xp, maxiter, tol=tol, return_info=return_info)
     if return_info:
         r, v, converged, iterations = out
@@ -311,6 +345,10 @@ def get_moon_state0(seed_epoch_ephemeris_seconds=0.0):
     -------
     (r0, v0) : each (3,) numpy arrays, km and km/s.
     """
+    NBODY_SCREENING.check_epochs(
+        seed_epoch_ephemeris_seconds,
+        where="orbitopt.dynamics.nbody_gpu.get_moon_state0: seed_epoch_ephemeris_seconds",
+    )
     key = round(float(seed_epoch_ephemeris_seconds), 3)
     if key not in _MOON_STATE0_KM:
         _ensure_spice_loaded()
@@ -332,6 +370,10 @@ def get_sun_state0(seed_epoch_ephemeris_seconds=0.0):
     rationale as ``get_moon_state0``. Used only when
     ``propagate_spacecraft_batch(..., include_sun=True)``.
     """
+    NBODY_SCREENING.check_epochs(
+        seed_epoch_ephemeris_seconds,
+        where="orbitopt.dynamics.nbody_gpu.get_sun_state0: seed_epoch_ephemeris_seconds",
+    )
     key = round(float(seed_epoch_ephemeris_seconds), 3)
     if key not in _SUN_STATE0_KM:
         _ensure_spice_loaded()
@@ -580,6 +622,14 @@ def propagate_spacecraft_batch(
     if output not in _OUTPUT_MODES:
         raise ValueError(f"output must be one of {_OUTPUT_MODES}, got {output!r}")
     track_closest = output == "closest_approach"
+
+    _where = "orbitopt.dynamics.nbody_gpu.propagate_spacecraft_batch"
+    check_grav_parameter(mu_earth, units=UNITS, where=f"{_where}: mu_earth")
+    check_grav_parameter(mu_moon, units=UNITS, where=f"{_where}: mu_moon")
+    if mu_sun is not None:
+        check_grav_parameter(mu_sun, units=UNITS, where=f"{_where}: mu_sun")
+    _check_host_states(r0, v0, spec=NBODY_SCREENING, where=_where)
+    NBODY_SCREENING.check_epochs(epoch0, where=f"{_where}: epoch0")
 
     xp = get_array_module(use_gpu)
 

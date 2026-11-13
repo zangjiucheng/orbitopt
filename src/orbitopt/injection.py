@@ -75,6 +75,7 @@ from orbitopt.launch_windows import (
     as_mjd2000,
     asymptote_launch_windows,
 )
+from orbitopt.physics_io import EARTH_CENTRED_METRES, check_grav_parameter
 from orbitopt.timescales import utc_mjd2000_to_tdb_seconds
 
 MU_EARTH_M3_S2 = 3.986004418e14
@@ -192,6 +193,12 @@ class ParkingOrbit:
             raise ValueError("parking-orbit altitude must be > 0 km")
         if not 0.0 <= self.inclination_deg <= 180.0:
             raise ValueError("inclination must be in [0, 180] deg")
+        # The epoch is MJD2000 UTC days and mu is m^3/s^2 -- the conventions of
+        # orbitopt.physics_io.EARTH_CENTRED_METRES, checked here so a TDB-seconds
+        # epoch or a km^3/s^2 mu is caught at construction, not in the state.
+        EARTH_CENTRED_METRES.check_epoch(self.epoch_mjd2000, where="ParkingOrbit.epoch_mjd2000")
+        check_grav_parameter(self.mu_m3_s2, units=EARTH_CENTRED_METRES.units,
+                             where="ParkingOrbit.mu_m3_s2")
 
     @property
     def radius_m(self) -> float:
@@ -245,7 +252,9 @@ class ParkingOrbit:
         m = np.cross(h, n)
         r_hat = math.cos(u) * n + math.sin(u) * m
         t_hat = np.cross(h, r_hat)
-        return np.concatenate([self.radius_m * r_hat, self.speed_m_s * t_hat])
+        state = np.concatenate([self.radius_m * r_hat, self.speed_m_s * t_hat])
+        EARTH_CENTRED_METRES.check_state(state[:3], state[3:], where="ParkingOrbit.state_at")
+        return state
 
     def to_dict(self) -> dict:
         return {"altitude_km": self.altitude_km, "inclination_deg": self.inclination_deg,

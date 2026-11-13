@@ -7,6 +7,8 @@ from __future__ import annotations
 import numpy as np
 import pykep as pk
 
+from orbitopt.physics_io import check_lambert_pair
+
 
 def _frame_with_z_along(normal, r1):
     """Rows of a rotation matrix whose third row is ``normal`` (unit) and
@@ -37,6 +39,7 @@ def solve_lambert_single(r1, r2, tof, mu=pk.MU_SUN, max_revs=0, prograde=True, p
     about that vector instead; the problem is solved in a frame whose +z is
     ``plane_normal`` and the velocities rotated back.
     """
+    check_lambert_pair(r1, r2, mu, where="orbitopt.lambert.cpu.solve_lambert_single")
     if plane_normal is not None:
         rot = _frame_with_z_along(plane_normal, r1)
         sols = solve_lambert_single(

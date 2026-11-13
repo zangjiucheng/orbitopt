@@ -42,6 +42,7 @@ from functools import lru_cache
 import numpy as np
 
 from orbitopt.dynamics import nbody_gpu as nb
+from orbitopt.physics_io import NBODY_SCREENING, check_grav_parameter
 
 cuda = None  # numba.cuda, bound lazily by _numba_cuda_kernel()
 
@@ -79,6 +80,21 @@ def prepare_inputs(
         moon_seed_epoch_ephemeris_seconds = float(epoch0[0])
     if include_sun and mu_sun is None:
         mu_sun = nb.MU_SUN_KM3_S2
+
+    # Same physics I/O contract as ``nbody_gpu.propagate_spacecraft_batch``:
+    # the two ``mu`` values fix km/s, the states have to agree with them, and
+    # every epoch here is ephemeris seconds since J2000 (V-01, task #240).
+    _where = "orbitopt.dynamics.nbody_fused.prepare_inputs"
+    check_grav_parameter(mu_earth, units=NBODY_SCREENING.units, where=f"{_where}: mu_earth")
+    check_grav_parameter(mu_moon, units=NBODY_SCREENING.units, where=f"{_where}: mu_moon")
+    if mu_sun is not None:
+        check_grav_parameter(mu_sun, units=NBODY_SCREENING.units, where=f"{_where}: mu_sun")
+    NBODY_SCREENING.check_state(r0, v0, where=_where)
+    NBODY_SCREENING.check_epochs(epoch0, where=f"{_where}: epoch0")
+    NBODY_SCREENING.check_epochs(
+        moon_seed_epoch_ephemeris_seconds,
+        where=f"{_where}: moon_seed_epoch_ephemeris_seconds",
+    )
 
     # _precompute_body_grid returns the compact (n_grid, U, 3) grid over the
     # distinct (epoch0, dt) pairs plus each candidate's column index.

@@ -74,6 +74,7 @@ from typing import Sequence
 import numpy as np
 
 from orbitopt.flightlab.contract import FRAMES
+from orbitopt.physics_io import FLIGHT_TRACK, FrameMismatchError, check_frame
 from orbitopt.timescales import utc_datetime_to_mjd2000, utc_mjd2000_to_tt_seconds
 
 #: WGS84 semi-major axis [m] (identical in GRS80, which astropy/ITRF uses).
@@ -91,12 +92,8 @@ _MJD_TT_J2000 = 51544.5
 #: Flight Lab contract's vocabulary; there is no "ECI" default.
 KNOWN_FRAMES: tuple[str, ...] = FRAMES
 
-_FRAME_LIKE_ALIASES = (
-    "ECI", "J2000", "TEME", "MOD", "TDME", "GCRF", "ITRF", "ECEF(0)", "NED", "VVLH", "LVLH",
-)
 
-
-class UnknownFrameError(ValueError):
+class UnknownFrameError(FrameMismatchError):
     """A track/frame carried no Flight Lab frame label, or one this bridge
     does not know. Raised instead of guessing a frame: an unlabelled
     "ECI" is ambiguous in a way that quietly corrupts orbits (OpenTsiolkovsky
@@ -105,19 +102,15 @@ class UnknownFrameError(ValueError):
 
 
 def _check_frame(frame: str) -> None:
-    if not isinstance(frame, str) or frame not in KNOWN_FRAMES:
-        hint = ""
-        if isinstance(frame, str) and frame.strip().upper() in _FRAME_LIKE_ALIASES:
-            hint = (
-                f" {frame!r} names a frame family, not a Flight Lab frame: a "
-                "launch-aligned pseudo-inertial backend (e.g. OpenTsiolkovsky) "
-                "is 'LAUNCH_ECI'; a true GCRS propagation is 'GCRS'; Earth-fixed "
-                "is 'ECEF'."
-            )
-        raise UnknownFrameError(
-            f"unknown Flight Lab frame {frame!r} -- allowed frames are exactly "
-            f"{', '.join(KNOWN_FRAMES)} and there is no silent default.{hint}"
-        )
+    """Frame vocabulary check, delegated to :mod:`orbitopt.physics_io`.
+
+    The wording this raises is part of the Flight Lab contract, so the layer's
+    generic message is translated into :class:`UnknownFrameError` here rather
+    than leaking a different exception type to track producers."""
+    try:
+        check_frame(frame, KNOWN_FRAMES, where="orbitopt.flightlab.frames")
+    except FrameMismatchError as exc:
+        raise UnknownFrameError(str(exc)) from None
 
 
 def _as_batch(r_m, v_m_s, t_s) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -134,6 +127,10 @@ def _as_batch(r_m, v_m_s, t_s) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         raise ValueError(f"t_s must be a [N] array matching {r.shape[0]} samples, got shape {t.shape}")
     if not (np.all(np.isfinite(r)) and np.all(np.isfinite(v)) and np.all(np.isfinite(t))):
         raise ValueError("r/v/t contain non-finite values -- a nan in a trajectory is an error, not a sample")
+    # same unit band every other physics module is checked against, so a track
+    # handed to the bridge in kilometres fails here instead of at the pad.
+    FLIGHT_TRACK.check_positions(r, where="orbitopt.flightlab.frames")
+    FLIGHT_TRACK.check_velocities(v, where="orbitopt.flightlab.frames")
     return r, v, t
 
 
