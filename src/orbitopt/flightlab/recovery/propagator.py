@@ -19,7 +19,8 @@ RK4 step and per-step event bisection:
   8-4, US Standard Atmosphere 1976 below ~1000 km), height above the WGS-84
   ellipsoid via ``entry.height_m``. Pressure and temperature -- which
   density alone does not give, but Isp interpolation and Mach-dependent
-  drag do -- come from a US76 layer table consistent with that density;
+  drag do -- come from the US76 layer table of
+  :mod:`orbitopt.flightlab.atmosphere`, consistent with that density;
 * drag: ``-q Cd(M) A r̂_air`` with the vehicle's Cd(Mach) table
   (piecewise-linear in Mach, clamped at the ends -- the same table shape
   OpenTsiolkovsky's ascent aero uses, so the same vehicle means the same
@@ -84,6 +85,17 @@ from orbitopt.entry import (
     height_m,
 )
 from orbitopt.flightlab import frames
+# The US76 layer table and its readers moved to orbitopt.flightlab.atmosphere
+# (F-02, task #227) so the ascent-side aero can share them; this module keeps
+# re-exporting them (``__all__`` below), so the FL-301-era import path is
+# unchanged. ``density_model="ussa1976"`` selects exactly this density table.
+from orbitopt.flightlab.atmosphere import (
+    P_SEA_LEVEL_PA as _P_SEA_LEVEL_PA,
+    density_us76_kg_m3,
+    pressure_pa,
+    speed_of_sound_m_s,
+    temperature_k,
+)
 from orbitopt.flightlab.contract import FLIGHT_PROVENANCE_TAGS, BodyTrack
 
 __all__ = [
@@ -108,68 +120,6 @@ __all__ = [
 ]
 
 _OMEGA_ECEF = np.array([0.0, 0.0, OMEGA_EARTH_RAD_S])
-_P_SEA_LEVEL_PA = 101325.0
-_R_SPEC_DRY_AIR = 287.05287
-_GAMMA_AIR = 1.4
-_G0_BY_R = G0_M_S2 / _R_SPEC_DRY_AIR
-
-# US Standard Atmosphere 1976 layer bases (geometric height km, base pressure
-# Pa, base temperature K, lapse rate K/km) -- consistent with the density
-# bases of orbitopt.entry (both are the US76 table below 50 km). Above
-# 84.56 km the standard holds the base temperature, where
-# p/p_sea_level < 4e-7 and nothing but a 4th-decimal Isp correction sees it.
-_US76_LAYERS: tuple[tuple[float, float, float, float], ...] = (
-    (0.0, 101325.0, 288.150, -6.5),
-    (11.0, 22632.06, 216.650, 0.0),
-    (20.0, 5474.889, 216.650, 1.0),
-    (32.0, 868.0187, 228.650, 2.8),
-    (47.0, 110.5234, 270.650, 0.0),
-    (51.0, 66.93887, 270.650, -2.8),
-    (71.0, 3.956420, 214.650, 0.0),
-    (84.560, 0.373388, 186.870, 0.0),
-)
-
-
-def temperature_k(h_m: float) -> float:
-    """US76 standard temperature at geometric height ``h_m`` [m] (negative
-    heights clamp to sea level)."""
-    h_km = max(float(h_m), 0.0) / 1000.0
-    base = _US76_LAYERS[0]
-    for layer in _US76_LAYERS:
-        if h_km >= layer[0]:
-            base = layer
-    return base[2] + base[3] * (h_km - base[0])
-
-
-def pressure_pa(h_m: float) -> float:
-    """US76 standard pressure at geometric height ``h_m`` [m] (hydrostatic
-    within each layer, isothermal above the top layer)."""
-    h_km = max(float(h_m), 0.0) / 1000.0
-    base = _US76_LAYERS[0]
-    for layer in _US76_LAYERS:
-        if h_km >= layer[0]:
-            base = layer
-    p_b, t_b, lapse = base[1], base[2], base[3]
-    dh = (h_km - base[0]) * 1000.0
-    if lapse == 0.0:
-        return p_b * math.exp(-_G0_BY_R * dh / t_b)
-    t = t_b + lapse * dh / 1000.0
-    return p_b * (t / t_b) ** (-_G0_BY_R / (lapse / 1000.0))
-
-
-def speed_of_sound_m_s(h_m: float) -> float:
-    """Speed of sound of the US76 standard atmosphere at height ``h_m``."""
-    return math.sqrt(_GAMMA_AIR * _R_SPEC_DRY_AIR * temperature_k(h_m))
-
-
-def density_us76_kg_m3(h_m: float) -> float:
-    """US76 density at height ``h_m`` from the layer pressure/temperature
-    (ideal gas) -- the textbook table itself. ``orbitopt.entry``'s density is
-    the same US76 base *fitted* with piecewise exponentials (Vallado Table
-    8-4), which tracks it to a few percent but reads ~15 % light near sea
-    level; a cross-check against a code that evaluates US76 directly (e.g.
-    OpenTsiolkovsky) should pick this model."""
-    return pressure_pa(h_m) / (_R_SPEC_DRY_AIR * temperature_k(h_m))
 
 
 def _naive_utc(dt: datetime) -> datetime:

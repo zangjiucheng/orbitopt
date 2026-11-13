@@ -1,0 +1,50 @@
+# Flight Lab packaged aero model (F-02, task #227).
+#
+# The aerodynamic stand-in for the JSBSim spike stage of task #206. The
+# JSBSim `spike_stage` XML flies with identically zero aero on purpose (the
+# spike is a TVC/propellant/mass paper test), so the native 6-DOF reference
+# plant needs its OWN coefficients to exercise the aero path -- this is that
+# file. Geometry and the reference quantities match the spike XML (3.7 m
+# diameter, 45 m long, 10.75 m^2 body planform); the coefficients themselves
+# are illustrative, in the spirit of the f9_class_public_estimate vehicle
+# file: a subsonic-plateau drag rise peaking just past Mach 1 and settling
+# with Mach, a modest normal-curve slope, a small positive static margin and
+# first-order pitch/yaw damping.
+#
+# `kind: axisymmetric` promotes this into full Mach/AoA/sideslip tables at
+# load (AeroModel.axisymmetric): cn = cn_alpha * alpha, cy = -cn_alpha *
+# beta, ca = ca(M) + cn_alpha * (alpha^2 + beta^2), cm = -static_margin *
+# cn_alpha * alpha. Replace it with a `kind: coefficient-tables` document
+# when measured curves exist -- nothing downstream changes.
+schema_version: flight-aero-1.0
+kind: axisymmetric
+name: spike_stage
+label: Spike-stage booster aero (illustrative; the JSBSim spike flies with zero aero)
+reference:
+  diameter_m: 3.7
+  area_m2: 10.7521
+  span_m: 3.7
+  length_m: 45.0
+ca: [[0.0, 0.35], [0.8, 0.38], [1.1, 0.55], [1.5, 0.50], [2.5, 0.40], [4.0, 0.32], [8.0, 0.26]]
+cn_alpha_per_rad: 0.2
+static_margin: 0.05
+# Mach nodes = the ca breakout nodes: the table is then exact at every
+# catalog figure and linear between them.
+mach_nodes: [0.0, 0.8, 1.1, 1.5, 2.5, 4.0, 8.0]
+alpha_deg_nodes: [-15.0, -10.0, -5.0, 0.0, 5.0, 10.0, 15.0]
+beta_deg_nodes: [-15.0, -10.0, -5.0, 0.0, 5.0, 10.0, 15.0]
+extrapolation: clamp
+damping:
+  cl_p: 0.0
+  cm_q: -2.0
+  cn_yaw_r: -2.0
+provenance:
+  kind: illustrative
+  as_of: 2026-11-13
+  source: >-
+    orbitopt F-02 (#227). Geometry from the task #206 spike_stage.xml
+    (data/flightlab/jsbsim/aircraft/spike_stage/); the cd(M) breakout follows
+    the f9_class_public_estimate vehicle's cd_mach table
+    (data/flightlab/vehicles/f9_class_public_estimate.yaml). Not measured
+    data -- replace with a coefficient-tables document when a CFD or
+    wind-tunnel reduction is available.
