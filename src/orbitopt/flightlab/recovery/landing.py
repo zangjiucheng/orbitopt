@@ -69,8 +69,8 @@ which is the point of re-integrating.
 
 FL-305 (``docs/adr/flightlab-0002-closed-loop-landing-guidance.md``) adds
 :func:`fly_landing_burn_closed_loop`: the same insertion SOCP as the
-feasibility certificate, but the burn flown by :class:`TerminalGuidance`, a
-throttle-limited hoverslam + ZEM/ZEV divert re-planned from the propagated
+feasibility certificate, but the burn is flown by :class:`TerminalGuidance`,
+a throttle-limited hoverslam + ZEM/ZEV divert re-planned from the propagated
 state every step, with the tilt limit in the loop and a final cutoff tuned
 to the no-hover thrust-to-weight. The referee is unchanged:
 :func:`landing_touchdown_checks` on the propagated track.
@@ -82,6 +82,32 @@ guidance's gravity, engine envelope, mass and pad position while the truth
 keeps flying the full model, and :func:`assess_landing_model_mismatch`
 sweeps the bias to show what it does to landing accuracy and fuel alone.
 Zero mismatch is bit-for-bit the plain FL-305 flight.
+
+R-05 (epic #217) makes the closed-loop law *explicitly actuator-aware*
+without moving the FL-305 baseline:
+
+* **Throttle range in the guidance, not only in the propagator.** The
+  commanded throttle is clamped into ``[throttle_min, throttle_max]`` by the
+  guidance itself (the propagator's ``effective_throttle`` clamp was already
+  doing this to the *realised* thrust, so the flown physics is bit-identical;
+  what changes is that the recorded command and the margin accounting are
+  now the honest actuator command).
+* **TVC angle and rate.** The tilt cone (``tilt_limit_deg``) was already in
+  the loop; R-05 adds an optional slew-rate limit on the commanded thrust
+  direction, ``tvc_rate_limit_deg_s`` (0 = unlimited, so the FL-305 baseline
+  reproduces bit-for-bit; :data:`TERMINAL_GUIDANCE_R05` pins 20 deg/s, the
+  repo's own JSBSim TVC actuator pin). The limit binds *inside* the law:
+  the direction command is slew-limited before it reaches the engine.
+* **Control margin in the report.** Every closed-loop flight carries an
+  :class:`ActuatorMargin`: throttle headroom at ignition and minimum over
+  the burn, throttle floor room, tilt margin, peak direction slew rate, and
+  the time the raw guidance demand rode the ceiling / floor of the throttle
+  range. It travels in the result, the touchdown/impact event data and the
+  run's assumptions -- the referee (FL-303's touchdown checks) is still
+  unchanged and unextended.
+
+The fair before/after (FL-305 default vs the R-05 preset, same dispersions
+and seed) is ``benchmarks/bench_r05_actuator_margins.py``.
 """
 from __future__ import annotations
 
@@ -257,6 +283,9 @@ class LandingResult:
     max_proper_g: float = 0.0
     ignitions_used: int = 0
     assumptions: tuple[str, ...] = ()
+    #: R-05 control-margin accounting (closed-loop flow only; ``None`` for
+    #: the FL-303 open-loop flow, which commands an open-loop schedule).
+    actuator_margin: ActuatorMargin | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -942,7 +971,8 @@ def _insertion_plan(state_enu: LandingBurnEnu, state_ecef: BoosterState,
 def _graded_result(plan: LandingPlan, track: BoosterTrack, samples: Sequence[tuple],
                    vehicle: BoosterModel, limits: LandingLimits,
                    target: RecoveryTarget, *,
-                   assumptions: tuple[str, ...]) -> LandingResult:
+                   assumptions: tuple[str, ...],
+                   actuator_margin: ActuatorMargin | None = None) -> LandingResult:
     """Grade a flown landing track with :func:`landing_touchdown_checks`
     (the referee both flows share) and pack the verdict."""
     lat, lon, pad_alt, pad_ecef = _pad_of_target(target)
@@ -968,6 +998,7 @@ def _graded_result(plan: LandingPlan, track: BoosterTrack, samples: Sequence[tup
         max_proper_g=measured.get("max_proper_g", 0.0),
         ignitions_used=int(track.ignitions_used),
         assumptions=assumptions,
+        actuator_margin=actuator_margin,
     )
 
 
@@ -1010,6 +1041,11 @@ class TerminalGuidance:
       engine shuts down for good as soon as the ballistic arrival speed
       ``sqrt(v_z^2 + 2 g h)`` is under ``cutoff_speed_m_s``. One ignition,
       one cutoff -- no restarts spent.
+    * **TVC slew rate (R-05).** With ``tvc_rate_limit_deg_s > 0`` the
+      commanded thrust *direction* cannot turn faster than that rate: the
+      law slews the new direction toward its previous command, so a large
+      divert demand is tracked at the actuator's rate rather than snapped
+      to. 0 (the FL-305 default) leaves the direction unlimited.
 
     The law commands; it never grades. The verdict is FL-303's
     :func:`landing_touchdown_checks` on the propagated track, unchanged."""
@@ -1025,6 +1061,10 @@ class TerminalGuidance:
     cutoff_speed_m_s: float = 2.2
     min_time_to_go_s: float = 0.5
     divert_ignition_fraction: float = 0.7
+    #: R-05 TVC actuator slew limit [deg/s] on the commanded thrust
+    #: direction (0 = unlimited, the FL-305 baseline; 20 matches the repo's
+    #: JSBSim TVC actuator pin ``gimbal_rate_limit_rad_s = 0.35``).
+    tvc_rate_limit_deg_s: float = 0.0
 
     def __post_init__(self) -> None:
         if not 0.0 < self.design_throttle <= 1.0:
@@ -1040,10 +1080,19 @@ class TerminalGuidance:
             raise ValueError("settle/gain/cutoff-height terms cannot be negative")
         if self.cutoff_speed_m_s <= 0.0 or self.min_time_to_go_s <= 0.0:
             raise ValueError("cutoff_speed_m_s and min_time_to_go_s must be positive")
+        if self.tvc_rate_limit_deg_s < 0.0:
+            raise ValueError("tvc_rate_limit_deg_s cannot be negative")
 
 
 #: The FL-305 policy the recovery pipeline flies by default.
 TERMINAL_GUIDANCE_DEFAULT = TerminalGuidance()
+
+#: R-05's actuator-aware preset: the FL-305 law with the repo's own JSBSim
+#: TVC actuator slew pin (0.35 rad/s ~ 20 deg/s) enforced in the loop. Every
+#: other policy term is the FL-305 default, so the Monte-Carlo before/after
+#: (``benchmarks/bench_r05_actuator_margins.py``) differs from the baseline
+#: by that one actuator term -- a fair comparison, not a re-tuned controller.
+TERMINAL_GUIDANCE_R05 = TerminalGuidance(tvc_rate_limit_deg_s=20.0)
 
 
 # ---------------------------------------------------------------------------
@@ -1130,15 +1179,83 @@ class TerminalCommand:
     ``"coast"`` (engine not yet lit), ``"burn"`` or ``"cutoff"`` (final
     shutdown); ``thrust_enu_n`` is the commanded thrust vector in pad ENU
     (zero unless burning) and ``required_decel_m_s2`` the profile's
-    ``a_req`` at this state."""
+    ``a_req`` at this state. ``rate_clipped`` says whether the R-05 TVC
+    slew-rate limit shortened this step's direction change (burn phase
+    only)."""
 
     phase: str
     thrust_enu_n: tuple[float, float, float]
     required_decel_m_s2: float
+    rate_clipped: bool = False
 
     @property
     def thrust_n(self) -> float:
         return math.sqrt(sum(c * c for c in self.thrust_enu_n))
+
+
+@dataclass(frozen=True)
+class ActuatorMargin:
+    """R-05 control-margin accounting of one closed-loop landing burn,
+    measured from the guidance's own command history (the law recording
+    itself, not the referee). All margins are *unused authority*:
+
+    ``throttle_headroom_min``
+        min over burn samples of ``1 - effective throttle``: the fraction
+        of the engine's range that was never reachable upward again. A
+        hoverslam rides this to 0 at the end of the burn by design.
+    ``throttle_headroom_at_ignition``
+        the same at the first burn sample -- the ``1 - design_throttle``
+        reserve ADR flightlab-0002 promised, as actually flown.
+    ``throttle_floor_room_min``
+        min of ``effective throttle - throttle_min``: how far the command
+        could still back off without a shutdown-restart.
+    ``tilt_margin_deg_min``
+        min of ``tilt_limit_deg - commanded tilt`` inside the loop.
+    ``slew_deg_s_max``
+        peak commanded thrust-direction slew rate over the burn (0 = no
+        direction change was measurable).
+    ``tvc_rate_limit_deg_s``
+        the slew limit that was active (0 = unlimited).
+    ``saturated_high_s`` / ``saturated_low_s``
+        burn time where the *raw* guidance demand sat above the ambient
+        thrust ceiling / below the throttle floor -- the constraint the
+        guidance had to honour (zero means the actuator range always
+        covered what the law asked for).
+    """
+
+    burn_time_s: float
+    throttle_headroom_min: float
+    throttle_headroom_at_ignition: float
+    throttle_floor_room_min: float
+    tilt_margin_deg_min: float
+    slew_deg_s_max: float
+    tvc_rate_limit_deg_s: float
+    saturated_high_s: float
+    saturated_low_s: float
+
+    def to_dict(self) -> dict[str, float]:
+        return {"burn_time_s": round(self.burn_time_s, 3),
+                "throttle_headroom_min": round(self.throttle_headroom_min, 6),
+                "throttle_headroom_at_ignition":
+                    round(self.throttle_headroom_at_ignition, 6),
+                "throttle_floor_room_min": round(self.throttle_floor_room_min, 6),
+                "tilt_margin_deg_min": round(self.tilt_margin_deg_min, 4),
+                "slew_deg_s_max": round(self.slew_deg_s_max, 4),
+                "tvc_rate_limit_deg_s": round(self.tvc_rate_limit_deg_s, 4),
+                "saturated_high_s": round(self.saturated_high_s, 3),
+                "saturated_low_s": round(self.saturated_low_s, 3)}
+
+    def summary(self) -> str:
+        rate = ("unlimited" if self.tvc_rate_limit_deg_s <= 0.0
+                else f"{self.tvc_rate_limit_deg_s:g} deg/s")
+        return (f"burn {self.burn_time_s:.1f}s; ignition headroom "
+                f"{100.0 * self.throttle_headroom_at_ignition:.1f}%, min "
+                f"throttle headroom {100.0 * self.throttle_headroom_min:.1f}%, "
+                f"floor room {100.0 * self.throttle_floor_room_min:.1f}%, "
+                f"min tilt margin {self.tilt_margin_deg_min:.1f} deg, peak "
+                f"slew {self.slew_deg_s_max:.1f} deg/s (limit {rate}), "
+                f"ceiling riding {self.saturated_high_s:.1f}s, floor riding "
+                f"{self.saturated_low_s:.1f}s")
 
 
 def _divert_needs_ignition(r: np.ndarray, v: np.ndarray, a_design: float,
@@ -1166,12 +1283,19 @@ def terminal_guidance_command(position_enu_m: Sequence[float],
                               thrust_min_n: float,
                               ignited: bool,
                               guidance: TerminalGuidance = TERMINAL_GUIDANCE_DEFAULT,
+                              prev_dir_enu: Sequence[float] | None = None,
+                              dt_s: float | None = None,
                               ) -> TerminalCommand:
     """The FL-305 law (see :class:`TerminalGuidance`) as a pure function of
     the pad-relative state. ``thrust_max_n`` is the engine's ambient maximum
     where the ignition decision should be judged (the pipeline passes the
     sea-level value: the burn ends there), ``thrust_min_n`` its floor at the
-    current altitude, ``ignited`` whether the burn already started."""
+    current altitude, ``ignited`` whether the burn already started.
+    ``prev_dir_enu`` / ``dt_s`` (R-05) carry the previous commanded thrust
+    direction and the time since it: with ``tvc_rate_limit_deg_s > 0`` the
+    returned burn direction is slew-limited toward ``prev_dir_enu`` so the
+    commanded gimbal turn never exceeds the actuator rate (no previous
+    direction = the gimbals were at neutral, vertical)."""
     g = guidance
     r = np.asarray(position_enu_m, dtype=np.float64)
     v = np.asarray(velocity_enu_m_s, dtype=np.float64)
@@ -1207,8 +1331,22 @@ def terminal_guidance_command(position_enu_m: Sequence[float],
     acc = np.array([a_h[0], a_h[1], a_up])  # a_up >= g > 0: never a zero vector
     a_mag = float(np.linalg.norm(acc))
     a_cmd = min(a_mag, g.max_thrust_accel_g * G0_M_S2)
-    thrust = acc / a_mag * (m * a_cmd)
-    return TerminalCommand("burn", tuple(float(c) for c in thrust), a_req)
+    d = acc / a_mag
+    clipped = False
+    rate = math.radians(g.tvc_rate_limit_deg_s)
+    if rate > 0.0 and prev_dir_enu is not None and dt_s is not None and dt_s > 0.0:
+        p = np.asarray(prev_dir_enu, dtype=np.float64)
+        p = p / float(np.linalg.norm(p))
+        ang = math.acos(min(1.0, max(-1.0, float(np.dot(p, d)))))
+        max_step = rate * float(dt_s)
+        if ang > max_step:  # slew the direction toward the previous command
+            sinang = math.sin(ang)
+            d = (math.sin(ang - max_step) * p + math.sin(max_step) * d) / sinang
+            d = d / float(np.linalg.norm(d))
+            clipped = True
+    thrust = d * (m * a_cmd)
+    return TerminalCommand("burn", tuple(float(c) for c in thrust), a_req,
+                           rate_clipped=clipped)
 
 
 class _ClosedLoopLanding:
@@ -1221,7 +1359,13 @@ class _ClosedLoopLanding:
     R-03: the state feedback is the truth (the propagator's own), but the
     *model* the law reasons about -- pad position, gravity, engine envelope,
     vehicle mass -- is perceived through a :class:`GuidanceModelMismatch`
-    (identity by default, which is bit-exact with the plain FL-305 law)."""
+    (identity by default, which is bit-exact with the plain FL-305 law).
+
+    R-05: the throttle command is clamped into the engine's range *here*
+    (the propagator's clamp then no-ops), the TVC slew limit is carried
+    between steps through the previous commanded direction (vertical while
+    coasting: the gimbals sit at neutral), and every burn step is
+    accounted into :meth:`margin`."""
 
     def __init__(self, vehicle: BoosterModel, guidance: TerminalGuidance, *,
                  pad_lat_deg: float, pad_lon_deg: float, pad_altitude_m: float,
@@ -1243,8 +1387,11 @@ class _ClosedLoopLanding:
         thrust_max_pad, _ = _ambient_thrust_envelope(vehicle, pad_altitude_m)
         self.thrust_max_pad = thrust_max_pad * float(mismatch.thrust_scale)
         self.samples: list[tuple] = []
+        self.margin_trace: list[tuple] = []
         self.ignition_t_s: float | None = None
         self.cutoff_t_s: float | None = None
+        self._prev_dir = np.array([0.0, 0.0, 1.0])  # coasting: gimbal neutral
+        self._prev_t: float | None = None
 
     def __call__(self, t_s: float, st: BoosterState) -> ThrustCmd | None:
         if self.cutoff_t_s is not None:
@@ -1260,11 +1407,14 @@ class _ClosedLoopLanding:
                 f"guidance-perceived mass {m_guided} kg is not positive "
                 f"(mass_bias {self.mismatch.mass_bias_kg:+g} kg at truth mass "
                 f"{st.mass_kg} kg)")
+        dt = None if self._prev_t is None else float(t_s) - self._prev_t
+        self._prev_t = float(t_s)
         cmd = terminal_guidance_command(
             r, v, m_guided, gravity_m_s2=self.gravity,
             thrust_max_n=min(t_max * scale, self.thrust_max_pad),
             thrust_min_n=t_min * scale,
-            ignited=self.ignition_t_s is not None, guidance=self.guidance)
+            ignited=self.ignition_t_s is not None, guidance=self.guidance,
+            prev_dir_enu=self._prev_dir, dt_s=dt)
         if cmd.phase == "coast":
             return None
         if cmd.phase == "cutoff":
@@ -1275,20 +1425,54 @@ class _ClosedLoopLanding:
         f = np.asarray(cmd.thrust_enu_n, dtype=np.float64)
         f_mag = float(np.linalg.norm(f))
         d_enu = f / f_mag
-        # never command a zero-throttle shutdown mid-burn (that would spend a
-        # restart); the propagator clamps up to the engine floor instead.
+        eng = self.vehicle.engine
+        # R-05: the guidance itself commands inside the throttle range (a
+        # mid-burn command below the floor would be a shutdown-restart; the
+        # cutoff logic owns the shutdown). The propagator's clamp is then
+        # idempotent -- the realised physics is exactly FL-305's.
         # The throttle is what the guidance *believes* achieves f_mag: under
         # a thrust-scale mismatch that differs from what the truth engine
         # delivers -- which is the point of the mismatch.
-        throttle = min(max(f_mag / (t_max * scale), 1e-6),
-                       self.vehicle.engine.throttle_max)
+        throttle = min(max(f_mag / (t_max * scale), eng.throttle_min),
+                       eng.throttle_max)
+        eff = eng.effective_throttle(throttle)
+        tilt = math.degrees(math.acos(min(1.0, max(-1.0, float(d_enu[2])))))
+        slew = 0.0
+        if dt is not None and dt > 0.0:
+            cosang = min(1.0, max(-1.0, float(np.dot(self._prev_dir, d_enu))))
+            slew = math.degrees(math.acos(cosang)) / dt
+        step_s = float(dt) if dt is not None and dt > 0.0 else 0.0
+        # raw demand vs the actuator range (1 N slack for float noise)
+        sat_high = f_mag > t_max * scale * eng.throttle_max + 1.0
+        sat_low = f_mag < t_min * scale - 1.0
+        self.margin_trace.append((step_s, f_mag, t_max, t_min, eff, tilt, slew,
+                                  sat_high, sat_low))
+        self._prev_dir = d_enu
         e_, n_, u_ = self.axes
         d_ecef = d_enu[0] * e_ + d_enu[1] * n_ + d_enu[2] * u_
         self.samples.append((float(t_s), tuple(float(c) for c in d_enu),
-                             float(throttle),
-                             float(self.vehicle.engine.effective_throttle(throttle))))
+                             float(throttle), float(eff)))
         return ThrustCmd(throttle=float(throttle),
                          dir_ecef=tuple(float(c) for c in d_ecef))
+
+    def margin(self) -> ActuatorMargin | None:
+        """Aggregate the R-05 control-margin trace (``None`` if the engine
+        never lit)."""
+        tr = self.margin_trace
+        if not tr:
+            return None
+        eng = self.vehicle.engine
+        return ActuatorMargin(
+            burn_time_s=sum(t[0] for t in tr),
+            throttle_headroom_min=min(1.0 - t[4] for t in tr),
+            throttle_headroom_at_ignition=1.0 - tr[0][4],
+            throttle_floor_room_min=min(t[4] - eng.throttle_min for t in tr),
+            tilt_margin_deg_min=self.guidance.tilt_limit_deg
+            - max(t[5] for t in tr),
+            slew_deg_s_max=max(t[6] for t in tr),
+            tvc_rate_limit_deg_s=self.guidance.tvc_rate_limit_deg_s,
+            saturated_high_s=sum(t[0] for t in tr if t[7]),
+            saturated_low_s=sum(t[0] for t in tr if t[8]))
 
 
 def fly_landing_burn_closed_loop(state_enu: LandingBurnEnu, state_ecef: BoosterState,
@@ -1340,22 +1524,26 @@ def fly_landing_burn_closed_loop(state_enu: LandingBurnEnu, state_ecef: BoosterS
     def _t(x: float | None) -> str:
         return "none" if x is None else f"{x - float(state_ecef.t_s):.1f}s"
 
+    margin = law.margin()
     mismatch_note = (f"R-03 guidance model mismatch: {mm.to_dict()}"
                      if not mm.is_identity else None)
+    assumptions = _FL303_ASSUMPTIONS + (
+        "FL-305 closed-loop terminal guidance (docs/adr/flightlab-0002): "
+        "the insertion SOCP is the feasibility certificate; the burn is "
+        "re-planned from the propagated state every step (hoverslam "
+        "vertical profile, ZEM/ZEV divert, tilt limit in the loop, "
+        "no-hover ballistic cutoff); verdict from the same touchdown checks.",
+        f"guidance: design_throttle={guidance.design_throttle:g} "
+        f"v_td={guidance.touchdown_speed_m_s:g}m/s "
+        f"tilt<={guidance.tilt_limit_deg:g}deg ignition={_t(law.ignition_t_s)} "
+        f"cutoff={_t(law.cutoff_t_s)} after insertion; "
+        f"insertion plan fuel_planned={plan.fuel_planned_kg:.1f}kg",
+        f"R-05 actuator margins ({guidance.tvc_rate_limit_deg_s:g} deg/s TVC "
+        f"slew limit): {margin.summary() if margin is not None else 'no burn'}",
+    ) + ((mismatch_note,) if mismatch_note else ())
     return _graded_result(
         plan, track, law.samples, vehicle, limits, target,
-        assumptions=_FL303_ASSUMPTIONS + (
-            "FL-305 closed-loop terminal guidance (docs/adr/flightlab-0002): "
-            "the insertion SOCP is the feasibility certificate; the burn is "
-            "re-planned from the propagated state every step (hoverslam "
-            "vertical profile, ZEM/ZEV divert, tilt limit in the loop, "
-            "no-hover ballistic cutoff); verdict from the same touchdown checks.",
-            f"guidance: design_throttle={guidance.design_throttle:g} "
-            f"v_td={guidance.touchdown_speed_m_s:g}m/s "
-            f"tilt<={guidance.tilt_limit_deg:g}deg ignition={_t(law.ignition_t_s)} "
-            f"cutoff={_t(law.cutoff_t_s)} after insertion; "
-            f"insertion plan fuel_planned={plan.fuel_planned_kg:.1f}kg",)
-            + ((mismatch_note,) if mismatch_note else ()))
+        assumptions=assumptions, actuator_margin=margin)
 
 
 @dataclass(frozen=True)
@@ -1437,12 +1625,15 @@ def landing_events(result: LandingResult, *, body_id: str = "booster") -> tuple[
     if result.track is not None and result.track.impact is not None:
         imp = result.track.impact
         kind = "touchdown" if result.landed else "impact"
-        events.append(Event(
-            t_s=float(imp.t_s), kind=kind, body_id=body_id,
-            data={"position_error_m": result.position_error_m,
-                  "vertical_speed_m_s": result.vertical_speed_m_s,
-                  "lateral_speed_m_s": result.lateral_speed_m_s,
-                  "reason_codes": list(result.reason_codes)}))
+        data = {"position_error_m": result.position_error_m,
+                "vertical_speed_m_s": result.vertical_speed_m_s,
+                "lateral_speed_m_s": result.lateral_speed_m_s,
+                "reason_codes": list(result.reason_codes)}
+        if result.actuator_margin is not None:
+            # R-05: the control-margin metrics travel with the flight
+            data["control_margin"] = result.actuator_margin.to_dict()
+        events.append(Event(t_s=float(imp.t_s), kind=kind, body_id=body_id,
+                            data=data))
     return tuple(events)
 
 
