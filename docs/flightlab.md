@@ -54,6 +54,17 @@ for the next segment in a chain, and the standardized verification report.
 A red verdict flows through as a best-effort export warning, never a silent
 pass (see [engineering notes](engineering-notes.md)).
 
+Inside Mission Control that single pipeline run shows as one continuous
+multi-stage mission (M-06): the exported scene carries a phase row tiling
+the timeline — On the pad → Boost → Staging → Upper-stage burn → Parking
+orbit → Propagation — and a handoff verdict per stage boundary (the M-01
+continuity/mass gates at Separation, the Gate-B insertion and re-fly checks
+at SECO). Pass/fail is visible on the timeline events themselves and in the
+VERIFICATION tab's MISSION HANDOFFS section. The post-SECO Parking-orbit and
+Propagation phases span a two-body display coast of the insertion state,
+sized by `flightlab.coast_orbits` (default 2 orbital periods, `0` to omit);
+the coast is labelled display data, never verification.
+
 ## Fidelity levels
 
 | Model | Scope |

@@ -120,7 +120,8 @@ def build_from_config(config: dict, recorder=None) -> dict:
     recorder.skip(SELECT, "single flown candidate -- nothing to select")
     recorder.skip(REFINE, "Flight Lab grades the flight it flew -- no refinement walk")
 
-    scene = run_to_scene(result.run, earth_texture=earth_texture)
+    scene = run_to_scene(result.run, earth_texture=earth_texture,
+                         coast_orbits=float(fl.get("coast_orbits", 2.0)))
     scene["id"] = mission["id"]
     scene["title"] = mission["title"]
     attach_to_scene(scene, result.report)
