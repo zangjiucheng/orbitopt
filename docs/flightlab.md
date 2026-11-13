@@ -37,6 +37,50 @@ orbitopt flight montecarlo src/orbitopt/data/flightlab/scenarios/leo_two_stage.y
 `orbitopt flight optimize --help` describes ascent optimization. Each command
 also has its own `--help`.
 
+## Mission pipeline
+
+A Flight Lab run is also a mission segment (M-03): the `flight-lab` mission
+kind flies the same Gate-B pipeline through `orbitopt run`, so the flight
+enters the unified pipeline result, Verification Gate and report outputs
+like any other mission kind:
+
+```bash
+orbitopt run src/orbitopt/data/flightlab/mission_leo_two_stage.yaml -o run/scene.json
+```
+
+`orbitopt.flightlab.segment.FlightLabSegment` is the Python-level wrapper:
+`run()` returns the `FlightRun`, the SECO handoff state (frame/epoch/r/v/mass)
+for the next segment in a chain, and the standardized verification report.
+A red verdict flows through as a best-effort export warning, never a silent
+pass (see [engineering notes](engineering-notes.md)).
+
+Inside Mission Control that single pipeline run shows as one continuous
+multi-stage mission (M-06): the exported scene carries a phase row tiling
+the timeline — On the pad → Boost → Staging → Upper-stage burn → Parking
+orbit → Propagation — and a handoff verdict per stage boundary (the M-01
+continuity/mass gates at Separation, the Gate-B insertion and re-fly checks
+at SECO). Pass/fail is visible on the timeline events themselves and in the
+VERIFICATION tab's MISSION HANDOFFS section. The post-SECO Parking-orbit and
+Propagation phases span a two-body display coast of the insertion state,
+sized by `flightlab.coast_orbits` (default 2 orbital periods, `0` to omit);
+the coast is labelled display data, never verification.
+
+M-07 freezes all of this as a *reference scenario* (`two-stage-leo` mission
+kind, `orbitopt run src/orbitopt/data/mission_two_stage_leo.yaml`): a mission
+config declares the launch site, vehicle, target orbit and expected results
+(parking-orbit elements with the Gate-B tolerances), and the run grades the
+whole chain — Launch Site → Liftoff → MECO → Separation → SECO → Parking
+Orbit → Orbit Propagation — into one unified report
+(`mission.verification.json`) that references the M-04 launch and M-05
+propagation reports by path and digest. Stage boundaries are graded on the
+ascent lineage only (debris and fairing tracks are recorded, not graded),
+with the parent and child states bridged across the backend's staging gap
+by a two-body coast before the M-01 continuity and mass gates are applied.
+`ascent.mode: run_dir` replays a previously flown run directory instead of
+optimizing, so the chain grading runs without the compute stack; the
+end-to-end green run (optimize, propagate, all gates passed) is the
+`flightlab-gateb` CI job. See `orbitopt.mission.two_stage_leo`.
+
 ## Fidelity levels
 
 | Model | Scope |

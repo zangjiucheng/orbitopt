@@ -359,3 +359,108 @@ def test_cli_rejects_mass_discontinuity_run(tmp_path):
     write_run(run_dir, FlightRun(**{**run.__dict__, "tracks": tuple(corrupted)}))
     with pytest.raises(SystemExit):
         cli_main(["flight", "to-scene", str(run_dir), "-o", str(tmp_path / "s.json")])
+
+
+# ------------------------------------------------- M-06: phases + handoffs
+
+
+def _phase_labels(scene):
+    phases = scene["timeline"]["phases"]
+    assert phases, "scene must carry a phase row"
+    assert phases[0]["start"] == pytest.approx(scene["timeline"]["min"])
+    assert phases[-1]["end"] == pytest.approx(scene["timeline"]["max"])
+    for a, b in zip(phases, phases[1:]):
+        assert a["end"] > a["start"]
+        assert b["start"] == pytest.approx(a["end"]), "phase row must be continuous"
+    return [p["label"] for p in phases]
+
+
+def test_fixture_phases_tile_the_timeline_continuously(fixture_scene):
+    assert _phase_labels(fixture_scene) == [
+        "On the pad", "Boost", "Staging", "Upper-stage burn"]
+
+
+def test_staging_and_seco_event_notes_carry_handoff_verdicts(fixture_scene):
+    notes = {e["label"]: e["note"] for e in fixture_scene["timeline"]["events"]}
+    assert "handoff" in notes["Separation"] and "FAILED" in notes["Separation"]
+    assert "handoff FAILED" in notes["SECO"]
+
+
+def test_separation_handoffs_are_m01_gated(fixture_scene):
+    by_id = {h["id"]: h for h in fixture_scene["handoffs"]}
+    gate = {"handoff.position_continuity", "handoff.velocity_continuity",
+            "handoff.epoch_monotonic", "handoff.mass_conservation"}
+    up = by_id["separation:upper_stage"]
+    assert {c["id"] for c in up["checks"]} == gate
+    assert up["from"]["frame"] == "GCRS" and up["to"]["frame"] == "GCRS"
+    # the fabricated fixture ends the LAUNCH_ECI stack at the numbers its GCRS
+    # child starts with -- through the frame bridge those are different states.
+    assert up["status"] == "failed"
+    # the fabricated booster starts heavier than the stack ended: mass_gain.
+    booster = by_id["separation:booster"]
+    assert booster["status"] == "failed"
+    mass = next(c for c in booster["checks"] if c["id"] == "handoff.mass_conservation")
+    assert mass["passed"] is False and mass["reason_code"] == "mass_gain"
+
+
+def test_seco_handoff_carries_gate_b_checks(fixture_scene):
+    seco = next(h for h in fixture_scene["handoffs"] if h["id"] == "seco")
+    assert seco["status"] == "failed"  # insertion_periapsis fails by design
+    assert [c["id"] for c in seco["checks"]] == ["insertion_periapsis"]
+    assert seco["state"]["body"] == "upper_stage"
+    assert seco["time"] == pytest.approx(540.0)
+
+
+def test_continuous_staging_handoff_passes():
+    parent = _track("stack", t=(0.0, 100.0), mass=(300000.0, 120000.0))
+    child = replace(_track("upper", t=(100.0, 200.0), mass=(100000.0, 60000.0)),
+                    parent_body_id="stack",
+                    # the child starts exactly where the parent ends
+                    position_m=((0.0, 1e3, 6.4e6), (0.0, 2e3, 6.5e6)),
+                    velocity_m_s=((0.0, 1e3, 1e3), (0.0, 2e3, 1.1e3)))
+    scene = run_to_scene(_run([parent, child], events=[
+        Event(t_s=100.0, kind="separation", body_id="stack", data={"separation_impulse_ns": 0.0})]))
+    handoff = next(h for h in scene["handoffs"] if h["id"] == "separation:upper")
+    assert handoff["status"] == "passed" and all(c["passed"] for c in handoff["checks"])
+    mass = next(c for c in handoff["checks"] if c["id"] == "handoff.mass_conservation")
+    assert mass["passed"] and mass["reason_code"] == "staging_mass_drop"
+    assert "handoff upper PASSED" in next(
+        e["note"] for e in scene["timeline"]["events"] if e["label"] == "Separation")
+
+
+def test_unassessed_refly_keeps_seco_handoff_not_checked():
+    from orbitopt.flightlab.contract import Check, Verification
+
+    run = FlightRun(run_id="not-checked", target_sha256="0" * 64, vehicle_sha256="0" * 64,
+                    git_sha="x", created_utc=EPOCH, tracks=(_track("sc"),),
+                    verification=Verification(mission_constraints_passed=True,
+                                              checks=(Check("insertion-above-atmosphere", True),)))
+    seco = next(h for h in run_to_scene(run)["handoffs"] if h["id"] == "seco")
+    assert seco["status"] == "not_checked"
+    assert "not assessed" in seco["detail"]
+
+
+def test_single_track_run_without_insertion_evidence_has_no_handoffs():
+    assert "handoffs" not in run_to_scene(_run([_track("sc")]))
+
+
+def test_coast_extends_timeline_bodies_and_phases(tmp_path):
+    scene = run_to_scene(read_run(_all_gcrs_copy_run(tmp_path)), earth_texture=False,
+                         coast_orbits=2.0)
+    assert _phase_labels(scene) == ["On the pad", "Boost", "Staging", "Upper-stage burn",
+                                    "Parking orbit", "Propagation"]
+    coast = next(b for b in scene["bodies"] if b["id"] == "parking_orbit")
+    assert coast["tStart"] == pytest.approx(540.0)
+    assert coast["trail"]["times"][0] == pytest.approx(540.0)
+    upper = next(b for b in scene["bodies"] if b["id"] == "upper_stage")
+    assert coast["trail"]["positions"][0] == upper["trail"]["positions"][-1]  # no jump at SECO
+    assert any("two-body" in a for a in scene["sceneAssumptions"])
+    one_period = scene["timeline"]["phases"][4]["end"] - 540.0
+    assert scene["timeline"]["max"] == pytest.approx(540.0 + 2.0 * one_period)
+
+
+def test_coast_disabled_by_default_and_negative_rejected():
+    scene = run_to_scene(read_run(RUN_FIXTURE), earth_texture=False)
+    assert "parking_orbit" not in {b["id"] for b in scene["bodies"]}
+    with pytest.raises(ValueError, match="coast_orbits"):
+        run_to_scene(read_run(RUN_FIXTURE), earth_texture=False, coast_orbits=-1.0)

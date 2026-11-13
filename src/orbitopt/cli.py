@@ -17,6 +17,9 @@ the single-scene 3D viewer directly, without going through examples/.
     orbitopt flight export-target --site kourou --orbit 400x400@51.6 \
         --date 2026-11-10 -o target.yaml  # build a FlightTarget from site/orbit/window
     orbitopt flight to-scene runs/run-1 -o scene.json  # run dir -> viewer scene
+    orbitopt launch --site kourou --vehicle synthetic_two_stage --orbit 400x400@51.6 \
+        --date 2026-11-10 -o runs/launch   # M-04: window -> ascent optimization ->
+                                        # injection verification, one command
 
 The same commands work as ``python -m orbitopt ...``. Installed as the
 ``orbitopt`` and ``orbitopt-app`` console scripts (see pyproject.toml), so
@@ -195,6 +198,69 @@ def _cmd_launch_window(args):
         fields.append("azimuth_corridors")
     print()
     print(format_data_sources(get_launch_site(args.site).data_sources(fields)))
+
+
+def _cmd_launch(args):
+    """M-04: the unified launch pipeline (orbitopt.mission.launch_pipeline) --
+    window selection, ascent optimization and injection verification in one
+    command; prints each stage, exits non-zero naming the reason when the
+    pipeline does not reach an in-tolerance insertion."""
+    import jsonschema
+
+    from orbitopt.mission.launch_pipeline import (STATUS_OK,
+                                                  run_launch_pipeline)
+
+    try:
+        result = run_launch_pipeline(
+            site=args.site, orbit=args.orbit, vehicle=args.vehicle,
+            date_utc=args.date, raan_deg=args.raan, window_days=args.window_days,
+            out_dir=args.output, objective=args.objective,
+            payload_kg=args.payload_kg, seed=args.seed, algorithm=args.algorithm,
+            generations=args.generations, population=args.population,
+            workers=args.workers or None, local=not args.no_local,
+            refly=not args.no_refly, timeout_s=args.timeout)
+    except (KeyError, ValueError, FileNotFoundError, RuntimeError,
+            jsonschema.ValidationError) as exc:
+        print(f"ERROR: {exc}")
+        raise SystemExit(1) from None
+
+    if result.window is not None:
+        win = result.window.get("window") or {}
+        print(f"window:  {result.window['mode']}, liftoff epoch "
+              f"{result.window['liftoff_epoch_utc']}"
+              + (f" (open {win.get('open_utc')} .. close {win.get('close_utc')}, "
+                 f"azimuth {win.get('azimuth_optimal_deg')} deg, "
+                 f"{win.get('direction')})" if win else ""))
+    print(f"ascent:  target -> {result.target_path}, run dir -> "
+          f"{result.ascent_run_dir or '(never flew)'}"
+          + (f", optimizer_converged={result.optimization.get('optimizer_converged')}"
+             if result.optimization else ""))
+    inj = result.injection
+    if inj is not None:
+        err, tol, chk = inj["error"], inj["tolerance"], inj["checks"]
+        verdict = lambda p: "PASS" if p else "FAIL"  # noqa: E731
+        if err["delta_semi_major_axis_m"] is not None:
+            print(f"injection: a   error {err['delta_semi_major_axis_m']:+12.1f} m   "
+                  f"tolerance {tol['semi_major_axis_m']:10.1f} m   {verdict(chk['semi_major_axis'])}")
+            print(f"           e   error {err['delta_eccentricity']:+12.2e}      "
+                  f"tolerance {tol['eccentricity']:10.2e}      {verdict(chk['eccentricity'])}")
+            print(f"           i   error {err['delta_inclination_deg']:+12.3f} deg  "
+                  f"tolerance {tol['inclination_deg']:10.3f} deg  {verdict(chk['inclination'])}")
+        else:
+            print("injection: achieved insertion is not an orbit (hyperbolic state)")
+        if err["delta_raan_deg"] is not None:
+            print(f"           RAAN error {err['delta_raan_deg']:+11.3f} deg  "
+                  f"tolerance {tol['raan_deg']:10.3f} deg  {verdict(chk['raan'])}")
+        else:
+            print("           RAAN not graded (target plane unconstrained)")
+    if args.json:
+        print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+    print(f"report:  {result.report_path}")
+    if result.status != STATUS_OK:
+        print(f"FAILED [{result.status}]: {result.message}")
+        print(f"  reason codes: {', '.join(result.reason_codes)}")
+        raise SystemExit(1)
+    print(f"OK [{result.status}]: {result.message}")
 
 
 def _cmd_flight(args):
@@ -589,6 +655,52 @@ def build_parser() -> argparse.ArgumentParser:
     lw.add_argument("--step", type=float, default=60.0, help="scan step [s] (default 60)")
     lw.add_argument("--json", action="store_true", help="print JSON instead of a table")
 
+    launch = sub.add_parser(
+        "launch",
+        help="M-04: launch window -> ascent optimization -> injection verification in "
+             "one command (site + rocket + target orbit in, VerificationReport out)")
+    launch.add_argument("--site", required=True,
+                        help="launch site id/name/alias (see `orbitopt launch-window`)")
+    launch.add_argument("--vehicle", required=True, metavar="NAME|PATH",
+                        help="rocket: packaged vehicle name (data/flightlab/vehicles) "
+                             "or a vehicle YAML path")
+    launch.add_argument("--orbit", required=True, metavar="PxAPO@INC",
+                        help="target orbit as PERIxAPO@INC (km altitudes, deg), "
+                             "e.g. 400x400@51.6")
+    launch.add_argument("--date", required=True,
+                        help="not-before launch epoch (ISO-8601; date-only = 00:00Z)")
+    launch.add_argument("--raan", type=float, default=None, metavar="DEG",
+                        help="target RAAN at --date [deg]; constrains the launch plane, "
+                             "the in-plane node pass becomes the liftoff epoch")
+    launch.add_argument("--window-days", type=float, default=14.0, metavar="D",
+                        help="RAAN-constrained: in-plane epoch search horizon "
+                             "[days] from --date (default 14)")
+    launch.add_argument("-o", "--output", required=True, metavar="DIR",
+                        help="output directory (target.yaml, ascent/ run, "
+                             "launch.verification.json)")
+    launch.add_argument("--objective", choices=("payload", "reserve", "booster_reserve"),
+                        default="payload", help="objective to maximize (default payload)")
+    launch.add_argument("--payload-kg", type=float, default=0.0, metavar="KG",
+                        help="fixed payload for the reserve objectives (default 0)")
+    launch.add_argument("--seed", type=int, default=42,
+                        help="RNG seed -- fixed seed gives reproducible runs (default 42)")
+    launch.add_argument("--algorithm", choices=("cmaes", "pso_gen", "sade"), default="cmaes",
+                        help="global search algorithm (default cmaes; sade is serial)")
+    launch.add_argument("--generations", type=int, default=60, metavar="G",
+                        help="global search generations (default 60)")
+    launch.add_argument("--population", type=int, default=48, metavar="N",
+                        help="population / swarm size (default 48)")
+    launch.add_argument("--workers", type=int, default=0, metavar="N",
+                        help="parallel fitness processes (default: up to 8 cores)")
+    launch.add_argument("--no-local", action="store_true",
+                        help="skip the SLSQP local refinement")
+    launch.add_argument("--no-refly", action="store_true",
+                        help="skip the tudatpy insertion re-fly of the winner")
+    launch.add_argument("--timeout", type=float, default=300.0, metavar="S",
+                        help="OpenTsiolkovsky subprocess timeout [s] (default 300)")
+    launch.add_argument("--json", action="store_true",
+                        help="also print the pipeline result as JSON")
+
     flight = sub.add_parser("flight", help="Flight Lab contract tools (FlightTarget / FlightResult)")
     flight_sub = flight.add_subparsers(dest="flight_command", required=True)
     flight_validate = flight_sub.add_parser(
@@ -743,6 +855,8 @@ def main(argv=None):
         _cmd_run(args)
     elif args.command == "launch-window":
         _cmd_launch_window(args)
+    elif args.command == "launch":
+        _cmd_launch(args)
     elif args.command == "flight":
         _cmd_flight(args)
 

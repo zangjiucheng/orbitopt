@@ -1,0 +1,111 @@
+# M-07 (task #225): the frozen two-stage LEO reference scenario.
+#
+# Epic #215's Definition of Done as one runnable, packaged document:
+#
+#   Launch Site -> Liftoff -> MECO -> Separation -> SECO -> Parking Orbit
+#                 -> Orbit Propagation
+#
+# with a continuity + mass-conservation gate at every handoff and one unified
+# task report. Run it through the unified pipeline:
+#
+#   orbitopt run src/orbitopt/data/mission_two_stage_leo.yaml -o /tmp/m07.scene.json
+#
+# or drive the chain directly:
+#
+#   from orbitopt.mission.two_stage_leo import reference_scenario, run_two_stage_leo
+#   mission = run_two_stage_leo(reference_scenario(), "runs/m07")
+#
+# `ascent.mode: optimize` flies the ascent now and needs the pinned
+# OpenTsiolkovsky v1.0.0 binary (scripts/fetch_opentsiolkovsky.py or
+# ORBITOPT_OPENTSIOLKOVSKY) plus pygmo -- that is the pipeline-gate regression
+# path (Flight Lab Gate B). `ascent.mode: run_dir` replays a flown FlightResult
+# directory instead, for a machine without the compute stack; either way the
+# station chain, the handoff gates, the mass bookkeeping and the expected
+# results are graded the same, and what cannot be assessed is recorded
+# `not_checked`, never passed.
+#
+# The expected results are not free numbers: they are this mission's own
+# `launch.orbit` target plus the Gate-B insertion-tolerance defaults (20 km
+# altitude band, 0.2 deg inclination, 1 deg RAAN), spelled out below so the
+# tolerance a CI gate enforces is visible in the file that declares it. The
+# report records which expectation was declared and which was derived under
+# `inputs.expected_basis`.
+schemaVersion: "1.0"
+mission:
+  id: m07-two-stage-leo
+  title: Two-stage LEO reference mission (Launch Site -> ... -> Orbit Propagation)
+  kind: two-stage-leo
+scenario:
+  mission:
+    id: m07-two-stage-leo
+    title: Two-stage LEO reference mission (Launch Site -> ... -> Orbit Propagation)
+    kind: two-stage-leo
+  launch:
+    site: kourou                    # Guiana Space Centre (catalog: orbitopt/data/launch_sites.yaml)
+    vehicle: synthetic_two_stage    # catalog: orbitopt/data/flightlab/vehicles
+    orbit: 400x400@51.6             # 400 km circular, 51.6 deg (km altitudes, M-04 spec)
+    date_utc: "2026-11-10"          # demonstration epoch, as the packaged Flight Lab scenario
+    raan_deg: null                  # unconstrained: liftoff is the configured date, not a node pass
+    window_days: 14.0
+  ascent:
+    mode: optimize                  # or run_dir + run_dir: <FlightResult directory>
+    objective: payload
+    payload_kg: 0.0
+    seed: 11                        # the seed the FL-305 convergence test verifies with
+    algorithm: cmaes
+    generations: 40
+    population: 40
+    workers: 4
+    local: true
+    refly: true
+    timeout_s: 300.0
+  handoff:
+    # M-01 continuity gates: 1 m position / 10 mm/s velocity / 1 s epoch across
+    # a transform handoff, 1 g of mass bookkeeping. Staging gets the declared
+    # separation-impulse headroom on velocity (a pyro push IS a delta-v).
+    position_m: 1.0
+    velocity_m_s: 0.01
+    epoch_s: 1.0
+    max_epoch_gap_s: null
+    mass_kg: 0.001
+    # DESIGN ASSUMPTION: velocity headroom across a staging boundary. The
+    # FL-004 backend ends one track and starts the next a second or two apart;
+    # the gate bridges that gap with an analytic two-body coast (see
+    # orbitopt.mission.two_stage_leo.staging_handoffs) and measures the
+    # residual of the backend's own staging bookkeeping against this limit.
+    # No separation impulse is declared for the synthetic stack, so the
+    # residual is pure bookkeeping noise; 50 mm/s bounds it at 0.3% of the
+    # ~19 m/s raw sample-to-sample jump the unbridged pair would show.
+    staging_velocity_m_s: 0.05
+    elements:                     # M-02: ascent terminal point vs parking orbit
+      semi_major_axis_m: 10.0
+      eccentricity: 1.0e-6
+      inclination_deg: 1.0e-3
+      raan_deg: 1.0e-2
+      apsides_m: 10.0
+  propagation:                    # M-05 force model and arc
+    j2: true
+    third_bodies: []
+    drag: null
+    revolutions: 1.0
+    max_step_s: 300.0
+  expected:
+    events: [liftoff, meco, separation, seco]
+    parking_orbit:                # the 400x400@51.6 target, as elements
+      semi_major_axis_m: 6778137.0
+      eccentricity: 0.0
+      inclination_deg: 51.6
+      raan_deg: null
+      periapsis_altitude_m: 400000.0
+      apoapsis_altitude_m: 400000.0
+    tolerances:                   # the Gate-B insertion band, in element form
+      semi_major_axis_m: 20000.0
+      eccentricity: 0.002951     # = 20 km * (1 + e_t) / a_t at this target's shape
+      inclination_deg: 0.2
+      raan_deg: 1.0
+      periapsis_altitude_m: 20000.0
+      apoapsis_altitude_m: 20000.0
+    propagation_result: passed
+  scene:
+    coast_orbits: 2.0
+    earth_texture: true
