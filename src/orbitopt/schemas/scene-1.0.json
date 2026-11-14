@@ -37,7 +37,7 @@
       "type": "object",
       "properties": {
         "focusBodyId": { "type": "string", "description": "Body the viewer opens focused on (selected, tracked and framed)." },
-        "faceLockBodyId": { "type": "string", "description": "Body kept lined up behind the focused one (e.g. the planet under a spacecraft)." },
+        "faceLockBodyId": { "type": "string", "description": "Body placed behind the focused one in the opening view (e.g. the planet under a spacecraft). It frames that view only; face lock stays off until the viewer picks it." },
         "distance": { "type": "number", "exclusiveMinimum": 0, "description": "Camera distance from the focused body, in distanceUnit; the viewer picks one when absent." }
       },
       "additionalProperties": true,

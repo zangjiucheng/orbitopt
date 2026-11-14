@@ -1363,9 +1363,11 @@ class MissionControlWindow(QMainWindow):
         focus = view.get("focusBodyId")
         if focus and self.state.body(focus) is not None:
             # The scene asks to open focused on a body (KSP's map view opens
-            # on the vessel), optionally with another body locked behind it.
-            lock = view.get("faceLockBodyId")
-            self._focus_on(focus, lock_body_id=lock if self.state.body(lock) is not None else None,
+            # on the vessel). Its faceLockBodyId only frames the first view
+            # (that body behind the focus); face lock itself stays off until
+            # picked in the view controls.
+            behind = view.get("faceLockBodyId")
+            self._focus_on(focus, frame_behind=behind if self.state.body(behind) is not None else None,
                            distance=view.get("distance"))
         else:
             self.plotter.render()
@@ -1387,10 +1389,11 @@ class MissionControlWindow(QMainWindow):
         target = targets[(i + direction) % len(targets)]
         ref = altitude_reference(self.state.scene)
         body = self.state.body(target)
-        # A spacecraft around a planet: lock the planet behind it, so the
-        # camera looks down at the ship with the planet as the backdrop.
-        lock = ref.body_id if ref is not None and body.get("kind") == "spacecraft" else None
-        self._focus_on(target, lock_body_id=lock)
+        # A spacecraft around a planet: frame it with the planet behind, so
+        # the camera looks down at the ship with the planet as the backdrop.
+        # Framed once, not locked: face lock is only on when picked.
+        behind = ref.body_id if ref is not None and body.get("kind") == "spacecraft" else None
+        self._focus_on(target, frame_behind=behind)
 
     def _focus_distance(self, body_id: str) -> float:
         """A camera distance that frames ``body_id``: a few radii for a body
@@ -1404,14 +1407,19 @@ class MissionControlWindow(QMainWindow):
             return max(1500.0, 0.25 * r)
         return max(0.02 * r, 1e-6)
 
-    def _focus_on(self, body_id: str, lock_body_id: str | None = None, distance: float | None = None):
-        """Select, track and frame ``body_id``."""
+    def _focus_on(self, body_id: str, lock_body_id: str | None = None, distance: float | None = None,
+                  frame_behind: str | None = None):
+        """Select, track and frame ``body_id``. ``lock_body_id`` turns face
+        lock on (that body kept behind the focus while tracking);
+        ``frame_behind`` only orients this first view that way and leaves
+        face lock off."""
         self._lock_reference_body_id = lock_body_id
         self._select_lock_combo(lock_body_id)
         self._select_body(body_id)
         if not self._tracking:
             self._set_tracking(True)
-        self.renderer.track_body(body_id, self.state.time, reference_body_id=lock_body_id, render=False)
+        self.renderer.track_body(body_id, self.state.time, reference_body_id=lock_body_id or frame_behind,
+                                 render=False)
         self.renderer.zoom_to_body(body_id, self.state.time,
                                    distance_km=float(distance) if distance else self._focus_distance(body_id))
         self._focus_zoomed = False

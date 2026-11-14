@@ -228,6 +228,7 @@ def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypat
         assert window.right_tabs.currentWidget() is window.flight_panel
         assert window.chart_panel.currentWidget() is window.telemetry_panel
         assert window.state.timeline is not None and window.timeline_bar.isVisible()
+        assert window._lock_reference_body_id is None  # face lock stays off until picked
         t = window.flight_panel.events[-1].t_s
         window.flight_panel._event_clicked(window.flight_panel.event_table.rowCount() - 1, 0)
         assert window.state.time == pytest.approx(t)

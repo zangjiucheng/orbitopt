@@ -129,8 +129,9 @@ def test_mission_control_loads_and_switches_missions(tmp_path):
         closest = next(e["time"] for e in state.events if "approach" in e["label"].lower())
         assert flyby["start"] < closest < flyby["end"]
 
-        # KSP map-view focus: Tab goes to the spacecraft first and tracks it with
-        # Earth locked behind; Shift+Tab wraps around the other way.
+        # KSP map-view focus: Tab goes to the spacecraft first and tracks it,
+        # framed with Earth behind but without turning face lock on (it is
+        # only on when picked); Shift+Tab wraps around the other way.
         # Checked through the menu actions, not synthetic key presses: Qt only
         # delivers shortcuts to the active window, which this one need not be
         # in a full test run (a key press here passed alone and failed there).
@@ -142,7 +143,13 @@ def test_mission_control_loads_and_switches_missions(tmp_path):
         focus_next.trigger()
         app.processEvents()
         assert state.selected_body_id == "spacecraft" and window._tracking
-        assert window._lock_reference_body_id == "earth"
+        assert window._lock_reference_body_id is None and window.lock_combo.currentData() is None
+        sc = window.renderer.body_display_position("spacecraft", state.time)
+        earth = window.renderer.body_display_position("earth", state.time)
+        cam = window.plotter.camera
+        import numpy as _np
+        look = _np.asarray(cam.focal_point) - _np.asarray(cam.position)
+        assert _np.dot(look, _np.asarray(earth) - _np.asarray(sc)) > 0  # Earth is in front, behind the ship
         focus_prev.trigger()
         app.processEvents()
         assert state.selected_body_id == "moon" and window._lock_reference_body_id is None
