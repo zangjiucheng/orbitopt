@@ -1,5 +1,5 @@
 """FL-503: every reason code emitted under ``orbitopt/flightlab`` has a
-plain-language catalog entry (EN + 中文 + suggested fix).
+plain-language catalog entry (English title, explanation and suggested fix).
 
 The scan is static (AST) so it covers code paths no test flies -- the
 optimizer's INFEASIBLE_* codes, the re-fly backend errors, the recovery
@@ -132,10 +132,9 @@ def test_required_codes_and_entry_quality():
         assert code in CATALOG, code
     for code, entry in CATALOG.items():
         assert entry.code == code and CODE_RE.match(code) or code == "LANDED", code
-        for text in (entry.title_en, entry.title_zh, entry.explanation_en, entry.explanation_zh,
-                     entry.fix_en, entry.fix_zh):
+        for text in (entry.title_en, entry.explanation_en, entry.fix_en):
             assert text.strip(), code
-        assert re.search(r"[一-鿿]", entry.title_zh + entry.explanation_zh), code
+            assert not re.search(r"[\u3000-\u9fff]", text), code  # the app is English-only
         assert entry.severity in ("fail", "missing", "info"), code
 
 
@@ -146,8 +145,7 @@ def test_lookup_is_case_insensitive_and_prefix_aware():
     assert lookup("") is None
     unknown = explain("synthetic_fixture_below_target_by_design")
     assert not unknown.known and "synthetic_fixture" in unknown.title_en
-    assert "Fix" in CATALOG["PERIAPSIS_IN_ATMOSPHERE"].text("en")
-    assert "建议" in CATALOG["PERIAPSIS_IN_ATMOSPHERE"].text("zh")
+    assert "Fix:" in CATALOG["PERIAPSIS_IN_ATMOSPHERE"].text()
     deduped = explain_all(["max_q_exceeded", "MAX_Q_EXCEEDED", "", "LANDING_INFEASIBLE"])
     assert [e.code for e in deduped] == ["MAX_Q_EXCEEDED", "LANDING_INFEASIBLE"]
 
@@ -166,7 +164,7 @@ def test_flown_gate_b_run_failures_are_all_explained(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("code", sorted(CATALOG))
-def test_catalog_bilingual_text_renders(code):
+def test_catalog_text_block_renders(code):
     entry = CATALOG[code]
-    block = entry.bilingual()
-    assert entry.title_en in block and entry.title_zh in block
+    block = entry.block()
+    assert entry.title_en in block and entry.fix_en in block

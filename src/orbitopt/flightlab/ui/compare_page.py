@@ -8,7 +8,7 @@ Pick two precomputed runs (A and B) and see them side by side:
   insertion errors, margins, booster propellant at touchdown, landing
   errors), with the headline trade-offs in plain sentences (e.g. "Recovery
   reserve cost X kg payload");
-* each run's failure reasons in plain language (EN + 中文, with a fix), and
+* each run's failure reasons in plain language (with a suggested fix), and
   each run's recovery panel (touchdown checks, Monte Carlo summary).
 
 All numbers come from :mod:`orbitopt.flightlab.compare`; this module only
@@ -426,7 +426,7 @@ class FlightLabComparePage(QWidget):
         self.reasons_b.clear_entries("Run B not loaded.")
         why_layout.addWidget(self.reasons_a)
         why_layout.addWidget(self.reasons_b)
-        self.tabs.addTab(why_host, "Why · 原因")
+        self.tabs.addTab(why_host, "Why")
 
         rec_host = QWidget()
         rec_layout = QHBoxLayout(rec_host)
@@ -440,7 +440,7 @@ class FlightLabComparePage(QWidget):
             col.addWidget(head)
             col.addWidget(panel)
             rec_layout.addLayout(col)
-        self.tabs.addTab(rec_host, "Recovery · 回收")
+        self.tabs.addTab(rec_host, "Recovery")
         splitter.addWidget(self.tabs)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
@@ -486,7 +486,7 @@ class FlightLabComparePage(QWidget):
         recovery = self.recovery_a if tag == "A" else self.recovery_b
         entries = failure_explanations(bundle.run)
         reasons.set_entries(entries, title=f"Run {tag} · {bundle.label}",
-                            empty="All checks passed — nothing to explain. 全部检查通过。")
+                            empty="All checks passed — nothing to explain.")
         recovery.set_summary(recovery_summary(bundle))
 
     def _populate_telemetry(self, a: RunBundle | None, b: RunBundle | None) -> None:

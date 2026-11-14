@@ -64,7 +64,7 @@ See [verification](docs/verification.md).
 ## Mission Control
 
 The desktop app links a 3D view, timeline, charts and verification inspector.
-Its Flight Lab mode adds launch design, replay and comparison. See the
+Its Flight Lab mode renders and compares launch-vehicle runs. See the
 [guide](docs/guide.md) and [Flight Lab](docs/flightlab.md).
 
 ## Checked against real missions

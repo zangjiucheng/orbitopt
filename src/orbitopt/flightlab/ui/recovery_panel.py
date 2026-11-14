@@ -4,8 +4,8 @@ Thin Qt views over :mod:`orbitopt.flightlab.reasons` and
 :func:`orbitopt.flightlab.compare.recovery_summary`, shared by the replay page
 and the Compare Runs view:
 
-* :class:`ReasonPanel` -- the plain-language "why it failed" list (EN + 中文,
-  with the suggested fix) for a set of reason codes;
+* :class:`ReasonPanel` -- the plain-language "why it failed" list (with
+  the suggested fix) for a set of reason codes;
 * :class:`RecoveryPanel` -- recovery verdict, touchdown checks, and the Monte
   Carlo summary (success rate, failure histogram, 1-sigma dispersion ellipse
   over the touchdown scatter) when ``montecarlo.json`` exists.
@@ -85,7 +85,7 @@ def reason_tooltip(check: Check) -> str:
     if not check.reason_code:
         return ""
     entry = explain(check.reason_code)
-    return f"{check.reason_code}\n\n{entry.bilingual()}"
+    return f"{check.reason_code}\n\n{entry.block()}"
 
 
 def _severity_color(entry: ReasonEntry) -> str:
@@ -103,11 +103,9 @@ def reasons_html(entries: Sequence[ReasonEntry], *, empty: str = "All checks pas
         parts.append(
             f'<div style="margin-bottom:8px">'
             f'<b style="color:{color}">{html.escape(e.title_en)}{count}</b>'
-            f' <span style="color:{INK_MUTED}">· {html.escape(e.title_zh)} · <code>{html.escape(e.code)}</code></span><br>'
+            f' <span style="color:{INK_MUTED}">· <code>{html.escape(e.code)}</code></span><br>'
             f'<span style="color:{INK_SECONDARY}">{html.escape(e.explanation_en)}</span><br>'
-            f'<span style="color:{INK_MUTED}">{html.escape(e.explanation_zh)}</span><br>'
-            f'<span style="color:{ACCENT}">Fix:</span> {html.escape(e.fix_en)}<br>'
-            f'<span style="color:{ACCENT}">建议：</span>{html.escape(e.fix_zh)}'
+            f'<span style="color:{ACCENT}">Fix:</span> {html.escape(e.fix_en)}'
             f'</div>')
     return "".join(parts)
 
@@ -274,11 +272,11 @@ class RecoveryPanel(QWidget):
                 "so the run has no touchdown result.")
             self.verdict_label.setStyleSheet(f"color: {WARNING};")
         elif gate is not None and gate.passed:
-            self.verdict_label.setText("Booster LANDED inside every touchdown limit · 助推级成功着陆")
+            self.verdict_label.setText("Booster LANDED inside every touchdown limit")
             self.verdict_label.setStyleSheet(f"color: {SUCCESS}; font-weight: 600;")
         else:
             why = explain(gate.reason_code).title_en if gate is not None and gate.reason_code else "see checks"
-            self.verdict_label.setText(f"Booster recovery FAILED — {why} · 助推级回收失败")
+            self.verdict_label.setText(f"Booster recovery FAILED — {why}")
             self.verdict_label.setStyleSheet(f"color: {DANGER}; font-weight: 600;")
         if summary.touchdown:
             td = summary.touchdown
@@ -301,7 +299,7 @@ class RecoveryPanel(QWidget):
                 self.check_table.setItem(row, col, item)
         self.check_table.resizeRowsToContents()
         if summary.explanations:
-            self.reasons.set_entries(summary.explanations, title="Why the recovery failed · 回收失败原因")
+            self.reasons.set_entries(summary.explanations, title="Why the recovery failed")
             self.reasons.setVisible(True)
         mc = summary.montecarlo
         if mc:
@@ -321,7 +319,7 @@ class RecoveryPanel(QWidget):
                              for code, count, entry in summary.mc_reasons)
             self.mc_label.setText(
                 f"<b>Monte Carlo</b> (n={n}, seed={mc.get('seed', '—')}): success rate "
-                f"<b>{rate_text}</b> · 成功率<br>{html.escape(ell_text)}<br>"
+                f"<b>{rate_text}</b><br>{html.escape(ell_text)}<br>"
                 f"<span style='color:{INK_MUTED}'>{html.escape(hist)}</span>")
             color = SUCCESS if rate is not None and rate >= 0.9 else WARNING if rate and rate > 0.5 else DANGER
             self.mc_label.setStyleSheet(f"color: {color if rate is not None else INK_SECONDARY};")
@@ -333,7 +331,7 @@ class RecoveryPanel(QWidget):
                         if entry.severity != "info"]
             if failures and not summary.explanations:
                 self.reasons.setHtml(
-                    f'<p style="color:{INK_SECONDARY}"><b>Monte Carlo failure modes · 失败模式</b></p>'
+                    f'<p style="color:{INK_SECONDARY}"><b>Monte Carlo failure modes</b></p>'
                     + _counts_html(failures))
                 self.reasons.setVisible(True)
 

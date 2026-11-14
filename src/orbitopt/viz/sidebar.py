@@ -1,7 +1,7 @@
 """The left-hand sidebar: a Missions | Flight Lab mode switch over two pages.
 Missions lists the built-in missions from orbitopt.missions plus any scene
 file opened via File > Open, each with a load-status marker; the Flight Lab
-page is the workbench's own navigation (set_flightlab_panel)."""
+page lists the flight runs on disk (set_flightlab_panel)."""
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
@@ -27,9 +27,9 @@ class MissionSidebar(QWidget):
         the loader key (mission title, or a scene file's absolute path).
       * ``open_file_clicked()`` / ``collapse_clicked()``.
       * ``mode_changed(mode)`` -- the switch at the top went to ``"missions"``
-        or ``"flightlab"``. Flight Lab is not a mission: it has its own page
-        of the sidebar (designer / replay / compare and its runs) instead of
-        a row in the mission list.
+        or ``"flightlab"``. Flight Lab has its own page of the sidebar (the
+        flight runs on disk); a run then renders in the same view as a
+        mission.
     """
 
     MISSIONS, FLIGHTLAB = "missions", "flightlab"
@@ -68,7 +68,7 @@ class MissionSidebar(QWidget):
         self._mode_group.setExclusive(True)
         self.mode_buttons: dict[str, QPushButton] = {}
         for mode, text, tip in ((self.MISSIONS, "Missions", "Mission scenes in the 3D view"),
-                                (self.FLIGHTLAB, "Flight Lab", "Design, replay and compare launch-vehicle flights")):
+                                (self.FLIGHTLAB, "Flight Lab", "Replay and compare launch-vehicle flight runs")):
             btn = QPushButton(text)
             btn.setObjectName("modeSwitch")
             btn.setCheckable(True)
@@ -125,7 +125,7 @@ class MissionSidebar(QWidget):
         return self.FLIGHTLAB if self.mode_buttons[self.FLIGHTLAB].isChecked() else self.MISSIONS
 
     def set_flightlab_panel(self, widget: QWidget) -> None:
-        """The Flight Lab page of the sidebar (the workbench's navigation)."""
+        """The Flight Lab page of the sidebar (the flight-run list)."""
         self._flightlab_panel = widget
         self.pages.addWidget(widget)
 

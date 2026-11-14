@@ -64,7 +64,7 @@ class ViewControlsPopover(QFrame):
     face-lock control) embedded in a QMenu has flaky click-through behavior
     on some platforms, where a normal popup window doesn't. Qt.Popup already
     closes on any click outside it; Escape is wired explicitly below since
-    Qt.Popup doesn't bind that key on its own (design brief: "支持 Escape 关闭")."""
+    Qt.Popup doesn't bind that key on its own (design brief: "Escape closes it")."""
 
     def __init__(self, parent=None):
         super().__init__(parent, Qt.Popup)

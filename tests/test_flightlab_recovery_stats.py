@@ -100,8 +100,8 @@ def test_unknown_codes_are_classified_as_unclassified_never_dropped():
         == FAILURE_CLASS_PLANNING_INFEASIBLE
     assert classify_failure("INSUFFICIENT_PROPELLANT_SOMETHING_NEW") \
         == FAILURE_CLASS_FUEL_INSUFFICIENT
-    assert failure_class_title(FAILURE_CLASS_FUEL_INSUFFICIENT, "zh") \
-        .startswith("燃料不足")
+    assert failure_class_title(FAILURE_CLASS_FUEL_INSUFFICIENT) == "Insufficient propellant"
+    assert failure_class_title("something_else") == "something_else"
 
 
 def test_breakdown_accounts_for_every_failure_exactly_once():

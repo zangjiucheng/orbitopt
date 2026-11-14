@@ -1,8 +1,9 @@
-"""FL-501 Flight Lab replay helpers and page tests.
+"""Flight Lab replay: telemetry helpers, the Flight / Telemetry panels and a
+run rendered in Mission Control's main view.
 
-The telemetry/cache helpers must stay Qt-free, so those tests run on a base
-install with no display. The actual page test imports the GUI stack and is
-marked slow like the Mission Control smoke test."""
+The telemetry/cache helpers are Qt-free and run on a base install. The panel
+tests need PySide6 only (offscreen); the Mission Control test needs the VTK
+view and is marked slow like the other window smoke tests."""
 from __future__ import annotations
 
 import os
@@ -117,99 +118,124 @@ def test_gate_b_run_replays_telemetry_and_failed_checks(gate_b_run):
     assert failed and all(c.reason_code for c in failed)
 
 
-@pytest.mark.slow
-def test_flightlab_replay_page_synthetic_run(tmp_path, monkeypatch):
+def _qt_app():
     pytest.importorskip("PySide6")
-    pytest.importorskip("pyvista")
-    pytest.importorskip("pyvistaqt")
-
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QColor
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
 
-    from orbitopt.flightlab.ui import FlightLabReplayPage
+    return QApplication.instance() or QApplication([])
+
+
+def test_flight_panel_shows_launch_summary_events_and_red_checks(tmp_path, monkeypatch):
+    """The Flight tab of a run: verdict badges, the launch summary, the key
+    events with altitude/speed, and every failed check in red."""
+    app = _qt_app()
+    from PySide6.QtGui import QColor
+
+    from orbitopt.flightlab.run_index import launch_summary
+    from orbitopt.flightlab.ui.flight_panel import FlightRunPanel, load_flight_bundle
     from orbitopt.viz.theme import DANGER
 
-    app = QApplication.instance() or QApplication([])
     monkeypatch.setenv("ORBITOPT_CACHE_DIR", str(tmp_path / "cache"))
-    page = FlightLabReplayPage()
-    page.show()
+    run, scene = load_run_scene(RUN_FIXTURE)
+    bundle, target, channels = load_flight_bundle(RUN_FIXTURE, run=run, scene=scene)
+    panel = FlightRunPanel()
+    panel.set_run(bundle, target, channels)
     app.processEvents()
-    try:
-        page.load_run(RUN_FIXTURE)
-        app.processEvents()
 
-        assert page._run is not None
-        assert page._scene is not None
-        assert page._events
-        assert page.fidelity_label.text() == "fast-3dof"
-        assert page.badge_optimizer._state == "verified"
-        assert page.badge_physics._state == "failed"
-        assert page.badge_constraints._state == "failed"
+    rows = {(r.section, r.label): r.value for r in launch_summary(bundle, target)}
+    assert (rows[("Result", "Optimizer converged")], rows[("Result", "Physics")],
+            rows[("Result", "Mission constraints")]) == ("PASS", "FAIL", "FAIL")
+    assert DANGER.lower() in panel.summary.toHtml().lower()  # the FAIL verdicts are red
+    text = panel.summary.toPlainText()
+    for word in ("LAUNCH", "Liftoff (UTC)", "RESULT", "Insertion orbit", run.run_id):
+        assert word in text, word
+    assert panel.event_table.rowCount() == len(run.events) > 0
+    titles = [panel.event_table.item(r, 1).text() for r in range(panel.event_table.rowCount())]
+    assert "Liftoff" in titles or "Ignition" in titles
 
-        assert page.event_list.count() == len(page._events)
-        last = page.event_list.item(page.event_list.count() - 1)
-        assert last is not None
-        event_t = float(last.data(Qt.ItemDataRole.UserRole))
-        page._event_clicked(last)  # click -> seek
-        assert page._time == pytest.approx(event_t)
-        assert all(chart._time == page._time for chart in page._charts.values())
-        assert page.event_list.currentRow() == page.event_list.count() - 1
+    seen = []
+    panel.time_requested.connect(seen.append)
+    last = panel.event_table.rowCount() - 1
+    panel._event_clicked(last, 0)
+    assert seen == [pytest.approx(panel.events[last].t_s)]
+    panel.set_time(panel.events[last].t_s)
+    assert panel.event_table.currentRow() == last
 
-        # Scrubbing the timeline moves charts and the 3D time together.
-        page.timeline_slider.setValue(page.timeline_slider.maximum() // 2)
-        assert page._time < event_t or page._time == pytest.approx(event_t)
-        assert all(chart._time == page._time for chart in page._charts.values())
-        assert page._renderer is not None
+    failed = set()
+    for row in range(panel.check_table.rowCount()):
+        if panel.check_table.item(row, 1).text() == "FAIL":
+            assert panel.check_table.item(row, 0).foreground().color() == QColor(DANGER)
+            failed.add(panel.check_table.item(row, 0).text())
+    assert "insertion_periapsis" in failed
+    assert panel.reason_panel.entries
 
-        failed_check_ids = set()
-        for row in range(page.check_table.rowCount()):
-            result = page.check_table.item(row, 1)
-            assert result is not None
-            if result.text() == "FAIL":
-                for col in range(page.check_table.columnCount()):
-                    item = page.check_table.item(row, col)
-                    assert item is not None
-                    assert item.foreground().color() == QColor(DANGER)
-                failed_check_ids.add(page.check_table.item(row, 0).text())
-        assert "insertion_periapsis" in failed_check_ids
-    finally:
-        page.hide()
-        app.processEvents()
+    panel.clear()
+    assert panel.bundle is None and panel.event_table.rowCount() == 0
+
+
+def test_telemetry_panel_follows_time_and_requests_seeks():
+    _qt_app()
+    from orbitopt.flightlab.ui.flight_panel import TELEMETRY_CHARTS, TelemetryPanel
+
+    run = read_run(RUN_FIXTURE)
+    panel = TelemetryPanel()
+    assert set(panel.charts) == {cid for cid, _l, _u in TELEMETRY_CHARTS} == REQUIRED_CHANNELS
+    panel.set_channels(build_telemetry_channels(run), 0.0, 500.0)
+    panel.set_time(123.0)
+    assert all(chart._time == 123.0 for chart in panel.charts.values())
+    seen = []
+    panel.time_requested.connect(seen.append)
+    panel.charts["altitude"].time_requested.emit(42.0)
+    assert seen == [42.0]
 
 
 @pytest.mark.slow
-def test_flightlab_replay_page_gate_b_run(gate_b_run):
-    pytest.importorskip("PySide6")
+def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypatch):
+    """Flight Lab mode: a run found on disk loads into the main 3D view and
+    timeline (no separate replay page), with the Flight and Telemetry tabs;
+    back in Missions they go away."""
     pytest.importorskip("pyvista")
     pytest.importorskip("pyvistaqt")
+    app = _qt_app()
+    import time as _time
 
-    from PySide6.QtGui import QColor
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtCore import QSettings
 
-    from orbitopt.flightlab.ui import FlightLabReplayPage
-    from orbitopt.viz.theme import DANGER
+    from orbitopt.viz.app import MissionControlWindow
 
-    app = QApplication.instance() or QApplication([])
-    page = FlightLabReplayPage()
-    page.show()
-    app.processEvents()
+    monkeypatch.setenv("ORBITOPT_CACHE_DIR", str(tmp_path / "cache"))
+    runs = tmp_path / "runs"
+    shutil.copytree(RUN_FIXTURE, runs / "demo-run")
+    monkeypatch.setenv("ORBITOPT_FLIGHT_RUNS", str(runs))
+    QSettings("orbitopt", "Mission Control").remove("flightlab/run_roots")
+
+    def pump(cond, timeout=60.0):
+        end = _time.monotonic() + timeout
+        while not cond() and _time.monotonic() < end:
+            app.processEvents()
+            _time.sleep(0.01)
+        assert cond()
+
+    window = MissionControlWindow()
+    window.show()
     try:
-        page.load_run(gate_b_run)
-        app.processEvents()
-        assert page._run is not None and page._renderer is not None
-        assert page.badge_constraints._state == "failed"
-        page.seek_relative_event(+1)
-        assert all(chart._time == page._time for chart in page._charts.values())
-        red_reasons = [
-            page.check_table.item(row, 4).text()
-            for row in range(page.check_table.rowCount())
-            if page.check_table.item(row, 1).text() == "FAIL"
-        ]
-        assert red_reasons and all(red_reasons)
-        row = next(r for r in range(page.check_table.rowCount())
-                   if page.check_table.item(r, 1).text() == "FAIL")
-        assert page.check_table.item(row, 4).foreground().color() == QColor(DANGER)
+        pump(lambda: not window._loading)
+        assert window.flightlab_nav.run_paths() == [str(runs / "demo-run")]
+        window.sidebar.set_mode(window.sidebar.FLIGHTLAB)
+        pump(lambda: not window._loading and window.flight_panel.bundle is not None)
+        assert window.center_stack.currentIndex() == 0          # the mission view itself
+        assert window.right_tabs.currentWidget() is window.flight_panel
+        assert window.chart_panel.currentWidget() is window.telemetry_panel
+        assert window.state.timeline is not None and window.timeline_bar.isVisible()
+        t = window.flight_panel.events[-1].t_s
+        window.flight_panel._event_clicked(window.flight_panel.event_table.rowCount() - 1, 0)
+        assert window.state.time == pytest.approx(t)
+
+        window.sidebar.set_mode(window.sidebar.MISSIONS)
+        pump(lambda: not window._loading)
+        assert window.right_tabs.indexOf(window.flight_panel) < 0
+        assert window.chart_panel.indexOf(window.telemetry_panel) < 0
     finally:
-        page.hide()
+        window.close()
         app.processEvents()

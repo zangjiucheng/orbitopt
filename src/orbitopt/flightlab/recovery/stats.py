@@ -77,17 +77,12 @@ FAILURE_CLASSES: tuple[str, ...] = (
     FAILURE_CLASS_UNCLASSIFIED,
 )
 
-_TITLES: Mapping[str, tuple[str, str]] = {
-    FAILURE_CLASS_PLANNING_INFEASIBLE: (
-        "Planning infeasible", "规划不可行：回飞/再入/着陆规划找不到可行方案"),
-    FAILURE_CLASS_EXECUTION_FAILURE: (
-        "Execution failure", "执行失败：方案可行但飞行未竟全功（出错、未触地、再入超限）"),
-    FAILURE_CLASS_LANDING_ACCURACY: (
-        "Landing accuracy", "着陆精度失败：触地但超出着陆限制"),
-    FAILURE_CLASS_FUEL_INSUFFICIENT: (
-        "Insufficient propellant", "燃料不足：推进剂不满足点火或储备要求"),
-    FAILURE_CLASS_UNCLASSIFIED: (
-        "Unclassified", "未归类失败：原因码不在四类映射内，请上报"),
+_TITLES: Mapping[str, str] = {
+    FAILURE_CLASS_PLANNING_INFEASIBLE: "Planning infeasible",
+    FAILURE_CLASS_EXECUTION_FAILURE: "Execution failure",
+    FAILURE_CLASS_LANDING_ACCURACY: "Landing accuracy",
+    FAILURE_CLASS_FUEL_INSUFFICIENT: "Insufficient propellant",
+    FAILURE_CLASS_UNCLASSIFIED: "Unclassified",
 }
 
 #: Every reason code the recovery chain can hand a Monte Carlo sample, mapped
@@ -131,13 +126,10 @@ _PREFIX_CLASS: tuple[tuple[str, str], ...] = (("SAMPLE_ERROR",
                                                FAILURE_CLASS_EXECUTION_FAILURE),)
 
 
-def failure_class_title(cls: str, lang: str = "en") -> str:
-    """Short human title of an R-06 failure class (``zh`` gets the Chinese
-    wording); an unknown class name comes back as-is."""
-    titles = _TITLES.get(cls)
-    if titles is None:
-        return cls
-    return titles[1] if lang.startswith("zh") else titles[0]
+def failure_class_title(cls: str) -> str:
+    """Short human title of an R-06 failure class; an unknown class name
+    comes back as-is."""
+    return _TITLES.get(cls, cls)
 
 
 def classify_failure(reason: str) -> str:

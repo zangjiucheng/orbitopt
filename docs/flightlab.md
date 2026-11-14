@@ -1,9 +1,10 @@
 # Flight Lab
 
-Flight Lab simulates rocket ascent and booster recovery. In Mission Control,
-switch to **Flight Lab** to design, replay and compare runs.
+Flight Lab simulates rocket ascent and booster recovery. Runs are made from
+code or the CLI; Mission Control's **Flight Lab** mode renders them in the same
+3D view, timeline and inspector as a mission.
 
-![Flight Lab replaying a two-stage ascent with telemetry and checks](assets/flightlab-replay.png)
+![A Flight Lab run in Mission Control: the launch summary, key events, telemetry and checks](assets/flightlab-replay.png)
 
 ## Quick start
 
@@ -14,13 +15,40 @@ pinned OpenTsiolkovsky binary and run the included example:
 python scripts/fetch_opentsiolkovsky.py
 orbitopt flight validate src/orbitopt/data/flightlab/scenarios/leo_two_stage.yaml
 orbitopt flight simulate src/orbitopt/data/flightlab/scenarios/leo_two_stage.yaml \
-  --vehicle src/orbitopt/data/flightlab/vehicles/synthetic_two_stage.yaml -o run/
-orbitopt flight to-scene run/ -o scene.json
-orbitopt view scene.json
+  --vehicle src/orbitopt/data/flightlab/vehicles/synthetic_two_stage.yaml -o runs/leo/
+orbitopt view        # switch to Flight Lab: runs/leo is in the list
 ```
 
-See the [command reference](https://zangjiucheng.github.io/orbitopt/api/cli/flight/)
+`orbitopt flight to-scene runs/leo/ -o scene.json` exports the same run as a
+plain scene file. See the [command reference](https://zangjiucheng.github.io/orbitopt/api/cli/flight/)
 for target export, optimization, simulation and recovery options.
+
+## Viewing runs in Mission Control
+
+Flight Lab only renders runs; it has no designer. Edit the target and vehicle
+YAML (or call `orbitopt.flightlab.designer` from code), run the CLI, and the
+result shows up in Mission Control.
+
+- **Run list.** The Flight Lab side of the sidebar lists every run directory
+  under `./runs`, the folders in `ORBITOPT_FLIGHT_RUNS` (separated by `:`; `;`
+  on Windows) and folders added with **Add folder…**, which are remembered.
+  `orbitopt launch -o DIR` writes `DIR/ascent`, listed as `DIR`. **Refresh**
+  picks up new runs; the marker shows whether the run passed its mission
+  constraints.
+- **Same view as a mission.** Selecting a run loads it into the 3D view,
+  timeline (dragging the playhead pauses), **Inspector** and **Verification**
+  tab (staging handoffs included). Switching back to Missions restores the
+  mission that was open.
+- **Flight tab.** The launch site and coordinates, liftoff epoch and azimuth;
+  vehicle and payload; target and achieved insertion orbit; optimizer,
+  physics and mission verdicts; the key events (liftoff, max-Q, MECO,
+  separation, SECO, …) with altitude and speed at each, which seek the
+  timeline when clicked; and **Checks**, **Why** (each failure in plain
+  language, with a fix) and **Recovery**.
+- **Telemetry tab.** Altitude, speed, dynamic pressure, g-load, mass and
+  throttle against mission time, under the view; click a chart to seek.
+- **Compare runs…** opens two runs side by side: inputs, outcomes and why
+  they differ.
 
 ## Mission pipeline
 
@@ -36,7 +64,8 @@ orbitopt run src/orbitopt/data/mission_two_stage_leo.yaml
 
 Mission Control shows the stages and handoff checks on one timeline. The
 post-insertion display coast is not verification. For the reference chain,
-only the ascent lineage is graded; a two-body coast bridges the staging gap.
+only the ascent lineage is graded; a two-body + J2 coast (the gravity the
+ascent model flies) bridges the staging gap.
 `ascent.mode: run_dir` replays an existing run instead of optimizing it. See
 [verification](verification.md) for report meanings.
 
@@ -98,7 +127,7 @@ but no turbulence; guidance re-planning is not an onboard computer simulation.
 The [vehicle catalog](../src/orbitopt/data/flightlab/vehicles/) includes an
 **illustrative** synthetic vehicle and a Falcon-9-class **public estimate**,
 not official SpaceX performance data. Numeric fields record source, date and
-provenance; uncertainty bands can supply Monte Carlo defaults. The Designer
+provenance; uncertainty bands can supply Monte Carlo defaults. The Flight tab
 shows the vehicle's provenance.
 
 ## Recovery uncertainty (R-04)

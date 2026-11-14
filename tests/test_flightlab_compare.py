@@ -241,7 +241,6 @@ def test_compare_page_ascent_only_vs_recovery(stub_pair):
         # plain-language reasons + recovery panels
         assert page.reasons_a.entries and all(e.known for e in page.reasons_a.entries)
         assert "Apoapsis off target" in page.reasons_a.toPlainText()
-        assert "远地点偏离目标" in page.reasons_a.toPlainText()
         assert page.recovery_b.summary is not None and page.recovery_b.summary.state == "flown"
         assert not page.recovery_b.mc_label.isHidden()
         assert "83%" in page.recovery_b.mc_label.text()
@@ -259,59 +258,32 @@ def test_compare_page_ascent_only_vs_recovery(stub_pair):
 
 
 @pytest.mark.slow
-def test_replay_page_shows_reasons_and_recovery(stub_pair, monkeypatch):
+def test_flight_panel_shows_reasons_and_recovery(stub_pair, monkeypatch):
     pytest.importorskip("PySide6")
-    pytest.importorskip("pyvista")
-    pytest.importorskip("pyvistaqt")
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
 
-    from orbitopt.flightlab.ui import FlightLabReplayPage
+    from orbitopt.flightlab.ui.flight_panel import FlightRunPanel, load_flight_bundle
 
     app = QApplication.instance() or QApplication([])
     _a, b = stub_pair
-    page = FlightLabReplayPage()
-    page.show()
+    panel = FlightRunPanel()
+    bundle, target, channels = load_flight_bundle(b)
+    panel.set_run(bundle, target, channels)
     app.processEvents()
-    try:
-        page.load_run(b)
-        app.processEvents()
-        assert page.run_dir == Path(b)
-        codes = [e.code for e in page.reason_panel.entries]
-        assert "INSERTION_APOAPSIS_OUT_OF_TOLERANCE" in codes
-        reason_cells = [page.check_table.item(r, 4).text() for r in range(page.check_table.rowCount())
-                        if page.check_table.item(r, 1).text() == "FAIL"]
-        assert any(cell.startswith("Apoapsis off target") for cell in reason_cells)
-        tip = next(page.check_table.item(r, 4).toolTip() for r in range(page.check_table.rowCount())
-                   if page.check_table.item(r, 1).text() == "FAIL"
-                   and "APOAPSIS" in page.check_table.item(r, 4).text())
-        assert "远地点偏离目标" in tip and "Fix:" in tip
-        summary = page.recovery_panel.summary
-        assert summary is not None and summary.state == "flown"
-        assert page.recovery_panel.check_table.rowCount() == len(summary.checks)
-        assert "LANDED" in page.recovery_panel.verdict_label.text()
-    finally:
-        page.hide()
-        app.processEvents()
-
-
-@pytest.mark.slow
-def test_workbench_has_compare_tab(tmp_path, monkeypatch):
-    pytest.importorskip("PySide6")
-    pytest.importorskip("pyvista")
-    from PySide6.QtWidgets import QApplication
-
-    from orbitopt.flightlab.ui import FlightLabWorkbench
-
-    monkeypatch.setenv("ORBITOPT_CACHE_DIR", str(tmp_path / "cache"))
-    app = QApplication.instance() or QApplication([])
-    wb = FlightLabWorkbench()
-    try:
-        assert [wb.tabs.tabText(i) for i in range(wb.tabs.count())] == ["Designer", "Replay", "Compare"]
-        run = make_ascent_only(RUN_FIXTURE, tmp_path / "r")
-        wb.replay_page.load_run(run)
-        app.processEvents()
-        assert wb.compare_page.picker_a.combo.findData(str(run)) >= 0
-    finally:
-        wb.terminate_compute()
-        wb.close()
-        app.processEvents()
+    assert panel.bundle.run_dir == Path(b)
+    codes = [e.code for e in panel.reason_panel.entries]
+    assert "INSERTION_APOAPSIS_OUT_OF_TOLERANCE" in codes
+    reason_cells = [panel.check_table.item(r, 4).text() for r in range(panel.check_table.rowCount())
+                    if panel.check_table.item(r, 1).text() == "FAIL"]
+    assert any(cell.startswith("Apoapsis off target") for cell in reason_cells)
+    tip = next(panel.check_table.item(r, 4).toolTip() for r in range(panel.check_table.rowCount())
+               if panel.check_table.item(r, 1).text() == "FAIL"
+               and "APOAPSIS" in panel.check_table.item(r, 4).text())
+    assert "Apoapsis off target" in tip and "Fix:" in tip
+    summary = panel.recovery_panel.summary
+    assert summary is not None and summary.state == "flown"
+    assert panel.recovery_panel.check_table.rowCount() == len(summary.checks)
+    assert "LANDED" in panel.recovery_panel.verdict_label.text()

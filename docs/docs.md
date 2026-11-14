@@ -14,7 +14,7 @@ results and explore them in Mission Control.
 |---|---|
 | [Quickstart](quickstart.md) | Install orbitopt and run a mission. |
 | [Mission Control](guide.md) | Navigate the viewer, timeline and verification reports. |
-| [Flight Lab](flightlab.md) | Design, simulate and compare launches; launch to orbit in one run. |
+| [Flight Lab](flightlab.md) | Simulate launches from code or the CLI, render and compare them in Mission Control; launch to orbit in one run. |
 | [Verification](verification.md) | Reports, kinds of evidence, benchmarks and convergence studies. |
 | [Missions and examples](missions.md) | Explore modeled missions, validation and source data. |
 | [API reference](api.md) | Look up Python interfaces, commands and schemas. |

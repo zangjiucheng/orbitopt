@@ -1,6 +1,6 @@
 """Flight Lab inside Mission Control: chart titles and legends, one-sided
-diff rows, and the window chrome around the workbench (found in the E5
-acceptance run on a real OpenTsiolkovsky flight)."""
+diff rows, the run list and the window chrome around a flight run (found in
+the E5 acceptance run on a real OpenTsiolkovsky flight)."""
 from __future__ import annotations
 
 import pytest
@@ -64,18 +64,23 @@ def test_one_sided_diff_rows_say_which_run_has_the_value():
     assert _fmt_delta(DiffRow("k", "Mission", "Recovery", "", "none", "rtls", None, True)) == "changed"
 
 
-def test_flight_lab_is_a_sidebar_mode_with_its_own_navigation(qapp, tmp_path, monkeypatch):
-    """Flight Lab is not a mission: the sidebar's Missions | Flight Lab switch
-    swaps the mission list for Flight Lab's own navigation (pages + runs).
-    In Flight Lab mode the window shows Flight Lab's title, not the previous
-    mission's ("Solar System"), its view buttons or its body inspector; the
-    Missions switch brings the mission back as it was."""
+def test_flight_lab_is_a_sidebar_mode_that_renders_runs_like_missions(qapp, tmp_path, monkeypatch):
+    """The sidebar's Missions | Flight Lab switch swaps the mission list for
+    the flight-run list. Flight Lab has no page of its own any more (no
+    Designer, no separate replay): the 3D view, view buttons and right column
+    stay; with no runs on disk the view keeps the mission and the list says
+    how to make one. The Missions switch brings the mission back."""
     pytest.importorskip("pyvistaqt")
     import time
 
+    from PySide6.QtCore import QSettings
+
     from orbitopt.viz.app import FLIGHTLAB_SIDEBAR_LABEL, MissionControlWindow
 
-    monkeypatch.setenv("ORBITOPT_CACHE_DIR", str(tmp_path / "cache"))  # no cached designer runs
+    monkeypatch.setenv("ORBITOPT_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("ORBITOPT_FLIGHT_RUNS", str(tmp_path / "none"))
+    monkeypatch.chdir(tmp_path)  # no ./runs
+    QSettings("orbitopt", "Mission Control").remove("flightlab/run_roots")
     window = MissionControlWindow()
     window.resize(1500, 900)
     window.show()
@@ -85,7 +90,7 @@ def test_flight_lab_is_a_sidebar_mode_with_its_own_navigation(qapp, tmp_path, mo
                 break
             qapp.processEvents()
             time.sleep(0.05)
-        sidebar, wb = window.sidebar, window.flightlab_page
+        sidebar, nav = window.sidebar, window.flightlab_nav
         labels = [sidebar.mission_list.item(i).text() for i in range(sidebar.count())]
         assert FLIGHTLAB_SIDEBAR_LABEL not in labels
         mission_title = window.scene_title_label.text()
@@ -93,80 +98,79 @@ def test_flight_lab_is_a_sidebar_mode_with_its_own_navigation(qapp, tmp_path, mo
 
         sidebar.mode_buttons[sidebar.FLIGHTLAB].click()
         qapp.processEvents()
-        assert window._flightlab_active and sidebar.pages.currentWidget() is wb.nav
-        assert window.center_stack.currentWidget() is wb
-        assert window.scene_title_label.text() == FLIGHTLAB_SIDEBAR_LABEL
-        for widget in (window.view_strip, window._view_controls_widget, window.right_stack):
-            assert not widget.isVisible()
-        assert wb.tabs.tabBar().isHidden()  # the sidebar picks the page
-        wb.nav.page_list.setCurrentRow(2)
-        assert wb.tabs.currentWidget() is wb.compare_page
-        wb.tabs.setCurrentWidget(wb.replay_page)  # e.g. a finished simulate opens Replay
-        assert wb.nav.page_list.currentRow() == 1
-        assert wb.nav.empty_label.isVisibleTo(wb.nav)
+        assert window._flightlab_active and sidebar.pages.currentWidget() is nav
+        assert window.center_stack.currentIndex() == 0  # the 3D view, not a Flight Lab page
+        for widget in (window.view_strip, window.right_stack):
+            assert widget.isVisible()
+        assert nav.run_paths() == [] and nav.empty_label.isVisibleTo(nav)
+        assert window._active_key == mission_key  # nothing to load: the mission stays
+
+        nav.compare_button.click()
+        qapp.processEvents()
+        assert window.center_stack.currentWidget() is window.flightlab_compare
+        assert window.scene_title_label.text() == "Compare runs"
 
         sidebar.mode_buttons[sidebar.MISSIONS].click()
         qapp.processEvents()
         assert not window._flightlab_active and sidebar.pages.currentIndex() == 0
+        assert window.center_stack.currentIndex() == 0
         assert window.scene_title_label.text() == mission_title
         assert window._active_key == mission_key
-        for widget in (window.view_strip, window._view_controls_widget, window.right_stack):
-            assert widget.isVisible()
     finally:
         window.plotter.close()
         window.close()
 
 
-def test_nav_lists_runs_with_their_verdict(qapp, tmp_path):
+def _fake_run(path, verdict, run_id):
     import json
+
+    path.mkdir(parents=True)
+    (path / "manifest.json").write_text(json.dumps(
+        {"schema_version": "1.0", "run_id": run_id, "created_utc": "2026-11-14T00:00:00Z", "bodies": []}))
+    if verdict is not None:
+        (path / "verification.json").write_text(json.dumps({"mission_constraints_passed": verdict}))
+
+
+def test_nav_discovers_runs_with_their_verdict(qapp, tmp_path):
+    from PySide6.QtCore import QSettings
 
     from orbitopt.flightlab.ui.nav import FlightLabNav, run_verdict
 
-    passed, failed, unknown = tmp_path / "a", tmp_path / "b", tmp_path / "c"
-    for d, v in ((passed, True), (failed, False)):
-        d.mkdir()
-        (d / "verification.json").write_text(json.dumps({"mission_constraints_passed": v}))
-    unknown.mkdir()
-    assert (run_verdict(passed), run_verdict(failed), run_verdict(unknown)) == (True, False, None)
-    nav = FlightLabNav()
+    root = tmp_path / "runs"
+    _fake_run(root / "iss" / "ascent", True, "ot-1")        # orbitopt launch layout
+    _fake_run(root / "polar", False, "ot-2")
+    _fake_run(root / "deep" / "x" / "unknown", None, "ot-3")
+    (root / "not-a-run").mkdir()
+    assert run_verdict(root / "polar") is False and run_verdict(root / "deep" / "x" / "unknown") is None
+    settings = QSettings(str(tmp_path / "nav.ini"), QSettings.IniFormat)
+    nav = FlightLabNav(settings=settings, default_roots=[root])
+    labels = sorted(nav.run_list.item(i).text() for i in range(nav.run_list.count()))
+    assert labels == ["iss", "polar", "unknown"]  # "ascent" is labelled by its folder
+    assert not nav.empty_label.isVisibleTo(nav)
     got = []
-    nav.run_activated.connect(got.append)
-    nav.set_runs([("run-a · recovery=none · 1234", passed), ("run-b", failed), ("run-c", unknown)], current=failed)
-    assert nav.run_paths() == [str(passed), str(failed), str(unknown)]
-    assert nav.run_list.item(0).text() == "run-a"  # the run id; the full label is the tooltip
-    assert nav.run_list.currentRow() == 1 and not nav.empty_label.isVisibleTo(nav)
-    nav._run_clicked(nav.run_list.item(2))
-    assert got == [str(unknown)]
-    # two runs of one flight (same run id, different form inputs) stay apart
-    nav.set_runs([("ot-1 · recovery=none · aaaa1111", passed), ("ot-1 · recovery=none · bbbb2222", failed)])
-    assert [nav.run_list.item(i).text() for i in range(2)] == ["ot-1 · aaaa1111", "ot-1 · bbbb2222"]
+    nav.run_activated.connect(lambda path, label: got.append((path, label)))
+    assert nav.select_path(root / "polar")
+    assert got == [(str(root / "polar"), "polar")]
+
+    other = tmp_path / "elsewhere"
+    _fake_run(other / "gto", True, "ot-4")
+    nav.add_root(other)                     # remembered, and its newest run selected
+    assert str(other / "gto") in nav.run_paths()
+    assert nav.current_path() == other / "gto"
+    again = FlightLabNav(settings=settings, default_roots=[root])
+    assert str(other / "gto") in again.run_paths()
 
 
-def test_flight_lab_pages_fit_a_laptop_width(qapp):
-    """The Designer (Mission beside a one-row Vehicle header, unwrapped
-    status lines) asked for ~1,070 px and Compare (two picker combos sized
-    to their longest run label) ~1,000: the window could not shrink below
-    ~1,250 px and ran past a laptop screen's edge. Each page now fits in
-    under 760 px; the Designer stacks Mission over Vehicle when narrow."""
-    from orbitopt.flightlab.ui import FlightLabWorkbench
+def test_compare_page_fits_a_laptop_width(qapp):
+    """Compare (two picker combos sized to their longest run label) asked
+    for ~1,000 px and ran past a laptop screen's edge; it fits in 760."""
+    from orbitopt.flightlab.ui.compare_page import FlightLabComparePage
 
-    wb = FlightLabWorkbench()
+    page = FlightLabComparePage()
     try:
-        for page in (wb.designer_page, wb.replay_page, wb.compare_page):
-            assert page.minimumSizeHint().width() <= 760, (type(page).__name__, page.minimumSizeHint().width())
-        d = wb.designer_page
-        wb.resize(700, 800)
-        wb.show()
-        for _ in range(5):
-            qapp.processEvents()
-        assert d._side_by_side is False  # stacked
-        wb.resize(1700, 800)
-        for _ in range(5):
-            qapp.processEvents()
-        assert d._side_by_side is True
+        assert page.minimumSizeHint().width() <= 760, page.minimumSizeHint().width()
     finally:
-        wb.terminate_compute()
-        wb.deleteLater()
+        page.deleteLater()
 
 
 def test_sidebar_mode_switch_is_never_squeezed(qapp):

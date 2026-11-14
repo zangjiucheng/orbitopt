@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QWidget
 from orbitopt.viz.theme import DANGER, INFO, INK_MUTED, SUCCESS, WARNING
 
 # Every StatusBadge state maps to exactly one semantic color -- never an
-# arbitrary per-badge choice (see design brief: "颜色必须具有语义").
+# arbitrary per-badge choice (see design brief: "colour must carry meaning").
 _STATE_COLORS = {
     "idle": INK_MUTED,
     "loading": INFO,

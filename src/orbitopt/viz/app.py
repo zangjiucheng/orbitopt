@@ -34,6 +34,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -102,9 +103,10 @@ SCRUB_MIN_INTERVAL_MS = 16.0
 
 WEBSITE_URL = "https://zangjiucheng.github.io/orbitopt/"
 REPOSITORY_URL = "https://github.com/zangjiucheng/orbitopt"
-FLIGHTLAB_SIDEBAR_KEY = "__orbitopt_flightlab__"
 FLIGHTLAB_SIDEBAR_LABEL = "Flight Lab"
-FLIGHTLAB_SUBTITLE = "Design a launch, replay its flight, compare runs"
+FLIGHTLAB_COMPARE_SUBTITLE = "Two runs side by side: inputs, outcomes and why they differ"
+#: Loader-key prefix of a Flight Lab run (the rest is the run directory).
+FLIGHT_RUN_KEY_PREFIX = "flightrun:"
 
 # Auto-slow near a timeline event (TLI burn, closest approach, entry interface,
 # ...) so fast-forwarding through a mission doesn't blow past the moments that
@@ -168,10 +170,15 @@ class MissionControlWindow(QMainWindow):
         self._mission_ids: dict[str, str] = {}
         self._active_key: str | None = None
         self._active_label: str | None = None
+        # Flight Lab is a second list in the same window: a run loads like a
+        # mission (same view, timeline, inspector). Each list remembers its
+        # last pick so switching modes brings it back.
         self._flightlab_active = False
-        self._flightlab_hidden: dict | None = None  # widgets Flight Lab hid, with their visibility
-        self._mission_active: tuple[str | None, str | None] = (None, None)  # restored on leaving Flight Lab
-        self._flightlab_saved_title = ("", "")
+        self._mission_active: tuple[str | None, str | None] = (None, None)
+        self._flight_active: tuple[str | None, str | None] = (None, None)
+        #: flight-run key -> (bundle, target, telemetry channels, manifest mtime)
+        self._flight_data: dict[str, tuple] = {}
+        self._compare_shown = False
         self._verified_keys: set[str] = set()
         self._loaders: dict[str, callable] = {}
         self._playing = False
@@ -353,12 +360,25 @@ class MissionControlWindow(QMainWindow):
         self.center_stack = QStackedWidget()
         self.center_stack.addWidget(self.plotter)
         self.center_stack.addWidget(self._build_loading_page())
-        self.flightlab_page = self._build_flightlab_page()
-        self._flightlab_index = self.center_stack.addWidget(self.flightlab_page)
-        # Flight Lab is its own mode, not a mission: the sidebar's switch
-        # swaps the mission list for Flight Lab's navigation and run list.
-        self.sidebar.set_flightlab_panel(self.flightlab_page.nav)
+        # Flight Lab: the sidebar's switch swaps the mission list for the
+        # list of flight runs on disk; a run renders in this same view. Only
+        # the run comparison is a page of its own.
+        from orbitopt.flightlab.ui.compare_page import FlightLabComparePage
+        from orbitopt.flightlab.ui.flight_panel import FlightRunPanel, TelemetryPanel
+        from orbitopt.flightlab.ui.nav import FlightLabNav
+
+        self.flightlab_nav = FlightLabNav()
+        self.flightlab_nav.run_activated.connect(self._on_flight_run_activated)
+        self.flightlab_nav.compare_clicked.connect(self._show_flight_compare)
+        self.flightlab_compare = FlightLabComparePage()
+        self._flightlab_index = self.center_stack.addWidget(self.flightlab_compare)
+        self.sidebar.set_flightlab_panel(self.flightlab_nav)
         self.sidebar.mode_changed.connect(self._on_sidebar_mode)
+        self.flight_panel = FlightRunPanel()
+        self.flight_panel.time_requested.connect(self._seek_flight_time)
+        self.telemetry_panel = TelemetryPanel()
+        self.telemetry_panel.time_requested.connect(self._seek_flight_time)
+        self.state.time_changed.connect(self._on_flight_time)
 
         # The 3D view over the linked 2D charts; the splitter lets the charts
         # be dragged smaller, never the 3D view away.
@@ -571,7 +591,7 @@ class MissionControlWindow(QMainWindow):
         # Less-frequently-used view settings (face-lock reference, reset
         # camera, panel visibility) live in a compact popover behind this
         # gear icon instead of sitting inline -- keeps the header lean per
-        # the design brief ("控件尽量不切割主视图" / low chrome), while Top/
+        # the design brief ("controls should not cut into the main view" / low chrome), while Top/
         # Front/Side/Iso/Track above stay inline since camera navigation is
         # frequent enough to earn permanent screen space.
         self.view_controls_popover = self._build_view_controls_popover()
@@ -687,11 +707,6 @@ class MissionControlWindow(QMainWindow):
 
         layout.addStretch(1)
         return page
-
-    def _build_flightlab_page(self) -> QWidget:
-        from orbitopt.flightlab.ui import FlightLabWorkbench
-
-        return FlightLabWorkbench()
 
     def _build_menu(self):
         file_menu = self.menuBar().addMenu("&File")
@@ -1137,7 +1152,13 @@ class MissionControlWindow(QMainWindow):
         if self._loading:
             return
         self._set_playing(False)
-        self._hide_flightlab()
+        self._show_view()
+        if key == self._active_key and key in self._scene_cache:
+            return  # already on screen (e.g. switching back to its list)
+        if key.startswith(FLIGHT_RUN_KEY_PREFIX):
+            self._flight_active = (key, label)
+        else:
+            self._mission_active = (key, label)
         self._active_key, self._active_label = key, label
         self._update_reload_button()
 
@@ -1161,71 +1182,145 @@ class MissionControlWindow(QMainWindow):
         else:
             self._hide_flightlab()
 
-    def _show_flightlab(self, label: str | None = None):
+    def _show_flightlab(self):
+        """Flight Lab mode: the sidebar lists flight runs and the last one
+        picked (or the newest) loads into the view, as a mission would."""
         self._set_playing(False)
-        if not self._flightlab_active:
-            self._mission_active = (self._active_key, self._active_label)
         self._flightlab_active = True
-        self._active_key = FLIGHTLAB_SIDEBAR_KEY
-        self._active_label = label or FLIGHTLAB_SIDEBAR_LABEL
-        self._update_reload_button()
         if self.sidebar.mode != self.sidebar.FLIGHTLAB:
             self.sidebar.set_mode(self.sidebar.FLIGHTLAB)
-        self.chart_panel.hide()
-        self.timeline_bar.hide()
-        # The title bar, view strip and right column describe the 3D mission
-        # scene. Left as they were, Flight Lab sat under the previous
-        # mission's title, view buttons and body list ("Solar System", Sun,
-        # Mercury, ...). Flight Lab owns the title; the rest steps aside and
-        # comes back unchanged when a mission is picked again.
-        if self._flightlab_hidden is None:
-            self._flightlab_hidden = {
-                w: w.isVisibleTo(self) for w in (
-                    self.view_strip, self._view_controls_widget, self.right_stack,
-                    self.verification_badge, self.selection_badge)}
-            self._flightlab_saved_title = (self.scene_title_label.text(),
-                                           self.scene_subtitle_label.text())
-            for widget in self._flightlab_hidden:
-                widget.hide()
-        self.scene_title_label.setText(FLIGHTLAB_SIDEBAR_LABEL)
-        self.scene_subtitle_label.setText(FLIGHTLAB_SUBTITLE)
-        self.center_stack.setCurrentIndex(self._flightlab_index)
-        self.statusBar().showMessage("Flight Lab")
-
-    def _set_mission_chrome_visible(self, widget, visible: bool) -> None:
-        """Show/hide mission chrome Flight Lab may be covering: while it is,
-        record the state for _hide_flightlab to restore instead."""
-        if self._flightlab_hidden is not None and widget in self._flightlab_hidden:
-            self._flightlab_hidden[widget] = visible
+        self.statusBar().showMessage(FLIGHTLAB_SIDEBAR_LABEL)
+        key, label = self._flight_active
+        if key is not None:
+            self._on_mission_activated(key, label)
+            return
+        current = self.flightlab_nav.current_path()
+        if current is not None:
+            item = self.flightlab_nav.run_list.currentItem()
+            self._on_flight_run_activated(str(current), item.text() if item else current.name)
         else:
-            widget.setVisible(visible)
+            self.flightlab_nav.select_first()  # emits run_activated when there is a run
 
     def _hide_flightlab(self):
+        """Back to Missions: the mission that was open comes back."""
         was_active = self._flightlab_active
         self._flightlab_active = False
-        self.flightlab_page.stop_playback()
-        if was_active:  # back to the mission that was open (it never unloaded)
-            self._active_key, self._active_label = self._mission_active
-            self._update_reload_button()
-            self.statusBar().showMessage("Ready")
+        self._show_view()
         if self.sidebar.mode != self.sidebar.MISSIONS:
             self.sidebar.set_mode(self.sidebar.MISSIONS)
-        if self.center_stack.currentWidget() is self.flightlab_page:
+        key, label = self._mission_active
+        if was_active and key is not None:
+            self._on_mission_activated(key, label)
+
+    # ------------------------------------------------------- Flight Lab runs
+    def _on_flight_run_activated(self, run_dir: str, label: str):
+        path = Path(run_dir).expanduser()
+        key = FLIGHT_RUN_KEY_PREFIX + str(path.resolve())
+        try:
+            mtime = (path / "manifest.json").stat().st_mtime
+        except OSError:
+            mtime = None
+        cached = self._flight_data.get(key)
+        if cached is not None and cached[3] != mtime:  # the run was re-flown on disk
+            self._scene_cache.pop(key, None)
+            self._flight_data.pop(key, None)
+        self._loaders[key] = lambda k=key, p=path: self._load_flight_run(k, p)
+        self._on_mission_activated(key, f"{label} (Flight Lab run)")
+
+    def _load_flight_run(self, key: str, run_dir: Path) -> dict:
+        """Loader for a flight run (runs on the load thread, pure data): the
+        run's scene for the view, plus its bundle/target/telemetry for the
+        Flight and Telemetry tabs."""
+        from orbitopt.flightlab.ui.flight_panel import load_flight_bundle
+        from orbitopt.flightlab.ui.telemetry import load_run_scene
+
+        run, scene = load_run_scene(run_dir, earth_texture=True)
+        mtime = (run_dir / "manifest.json").stat().st_mtime
+        self._flight_data[key] = (*load_flight_bundle(run_dir, run=run, scene=scene), mtime)
+        return scene
+
+    _FLIGHT_PANEL_W = 340
+
+    def _sync_flight_panels(self, scene: dict) -> None:
+        """Show the Flight / Telemetry tabs for a flight run, remove them otherwise."""
+        data = self._flight_data.get(self._active_key) if self._active_key else None
+        index = self.right_tabs.indexOf(self.flight_panel)
+        if data is None:
+            if index >= 0:
+                self.right_tabs.removeTab(index)
+            self.flight_panel.clear()
+            return
+        bundle, target, channels, _mtime = data
+        self.flight_panel.set_run(bundle, target, channels)
+        if index < 0:
+            self.right_tabs.insertTab(0, self.flight_panel, "Flight")
+            # The launch summary and event table need more than the body
+            # inspector's 260 px; take it from the 3D view, once.
+            sizes = self.splitter.sizes()
+            if self.right_stack.currentWidget() is self.right_tabs and sizes[2] < self._FLIGHT_PANEL_W:
+                grow = min(self._FLIGHT_PANEL_W - sizes[2], max(0, sizes[1] - 600))
+                self.splitter.setSizes([sizes[0], sizes[1] - grow, sizes[2] + grow])
+        self.right_tabs.setCurrentWidget(self.flight_panel)
+        timeline = scene.get("timeline") or {}
+        self.telemetry_panel.set_channels(channels, float(timeline.get("min", 0.0)),
+                                          float(timeline.get("max", 0.0)))
+        self.chart_panel.insertTab(0, self.telemetry_panel, "Telemetry")
+        self.chart_panel.setCurrentWidget(self.telemetry_panel)
+        self.chart_panel.setVisible(True)
+        self._on_flight_time(self.state.time)
+
+    def _on_flight_time(self, t: float) -> None:
+        if self.flight_panel.bundle is not None:
+            self.flight_panel.set_time(t)
+            self.telemetry_panel.set_time(t)
+
+    def _seek_flight_time(self, t: float) -> None:
+        """A key event or a telemetry chart asked for time ``t``."""
+        self._set_playing(False)
+        self.state.set_time(t)
+
+    def _show_flight_compare(self):
+        """The run comparison page (the only Flight Lab view that is not the
+        3D scene): every listed run is offered on both sides."""
+        if self._loading:
+            return
+        self._set_playing(False)
+        compare = self.flightlab_compare
+        for entry in reversed(self.flightlab_nav.entries):
+            compare.add_run(entry.path)
+        paths = [e.path for e in self.flightlab_nav.entries]
+        current = self.flightlab_nav.current_path()
+        if compare.bundle_a is None and len(paths) >= 2:
+            first = current if current is not None else paths[0]
+            other = next(p for p in paths if p != first)
+            compare.set_runs(first, other)
+        self._compare_shown = True
+        self.center_stack.setCurrentIndex(self._flightlab_index)
+        self.chart_panel.hide()
+        self.timeline_bar.hide()
+        self.scene_title_label.setText("Compare runs")
+        self.scene_subtitle_label.setText(FLIGHTLAB_COMPARE_SUBTITLE)
+
+    def _show_view(self):
+        """Leave the comparison page for the 3D view (no-op when already there)."""
+        if not self._compare_shown:
+            return
+        self._compare_shown = False
+        if self.center_stack.currentWidget() is self.flightlab_compare:
             self.center_stack.setCurrentIndex(0)
         self.chart_panel.setVisible(self.chart_panel.count() > 0)
         self.timeline_bar.setVisible((self.state.scene or {}).get("timeline") is not None)
-        if self._flightlab_hidden is not None:
-            for widget, visible in self._flightlab_hidden.items():
-                widget.setVisible(visible)
-            self._flightlab_hidden = None
-            self.scene_title_label.setText(self._flightlab_saved_title[0])
-            self.scene_subtitle_label.setText(self._flightlab_saved_title[1])
+        scene = self.state.scene or {}
+        if scene:
+            self.scene_title_label.setText(scene.get("title", ""))
+            self.scene_subtitle_label.setText(display_subtitle(scene))
 
     def _begin_switch(self, message: str):
         self._loading = True
         self._load_start_ts = time.perf_counter()
         self.load_status_badge.set_state("loading", "LOADING")
         self.sidebar.set_busy(True)
+        self.flightlab_nav.set_busy(True)
         # No wait cursor: on macOS 27 (PySide6 6.11 / VTK 9.6) setting any
         # cursor on a window that contains the pyvistaqt QtInteractor
         # segfaults -- QApplication.setOverrideCursor and widget.setCursor
@@ -1238,6 +1333,7 @@ class MissionControlWindow(QMainWindow):
     def _end_switch(self):
         self._hide_loading()
         self.sidebar.set_busy(False)
+        self.flightlab_nav.set_busy(False)
         self._loading = False
         self.statusBar().showMessage("Ready")
 
@@ -1248,7 +1344,7 @@ class MissionControlWindow(QMainWindow):
 
     def _hide_loading(self):
         self._spinner.stop()
-        if self._flightlab_active:
+        if self._compare_shown:
             self.center_stack.setCurrentIndex(self._flightlab_index)
             return
         self.center_stack.setCurrentIndex(0)
@@ -1554,13 +1650,10 @@ class MissionControlWindow(QMainWindow):
         self._maneuver_windows = maneuver_windows(events, timeline_span(timeline)) if timeline else {}
         self.renderer.clear_maneuver_vector()
 
-        if self._flightlab_hidden is not None:  # Flight Lab owns the title bar for now
-            self._flightlab_saved_title = (scene["title"], display_subtitle(scene))
-        else:
-            self.scene_title_label.setText(scene["title"])
-            self.scene_subtitle_label.setText(display_subtitle(scene))
+        self.scene_title_label.setText(scene["title"])
+        self.scene_subtitle_label.setText(display_subtitle(scene))
         badge = verification_badge_state(scene)
-        self._set_mission_chrome_visible(self.verification_badge, badge is not None)
+        self.verification_badge.setVisible(badge is not None)
         if badge is not None:
             state, text, tooltip = badge
             self.verification_badge.set_state(state, text)
@@ -1583,6 +1676,7 @@ class MissionControlWindow(QMainWindow):
         # the badge announce success before the scene was actually usable: a
         # KeyError/etc. anywhere above would leave it stuck on READY while the
         # mission's list marker never left NEUTRAL.
+        self._sync_flight_panels(scene)
         self.load_status_badge.set_state("ready", "READY")
         self.load_time_metric.set_value(f"{time.perf_counter() - self._load_start_ts:.1f}")
 
@@ -1701,7 +1795,7 @@ class MissionControlWindow(QMainWindow):
 
     def _refresh_selection_badge(self):
         badge = selection_badge_state(self.state.scene, self.state.candidate())
-        self._set_mission_chrome_visible(self.selection_badge, badge is not None)
+        self.selection_badge.setVisible(badge is not None)
         if badge is not None:
             state, text, tooltip = badge
             self.selection_badge.set_state(state, text)
@@ -1753,9 +1847,6 @@ class MissionControlWindow(QMainWindow):
         relative to the current time -- distinct from the "most recent event
         at or before now" lookup the readouts use, which only ever looks
         backward."""
-        if self._flightlab_active:
-            self.flightlab_page.seek_relative_event(direction)
-            return
         target = adjacent_event(self.state.events, self.state.time, direction)
         if target is not None:
             self._seek_to_event(target)
@@ -1764,9 +1855,6 @@ class MissionControlWindow(QMainWindow):
     def _step_time(self, direction: float):
         """Nudge the current time one step forward/back: 1% of the visible
         timeline, so the step gets finer as the timeline zooms in."""
-        if self._flightlab_active:
-            self.flightlab_page.step_time(direction)
-            return
         timeline = self.state.timeline
         if not timeline:
             return
@@ -1774,9 +1862,6 @@ class MissionControlWindow(QMainWindow):
         self.state.set_time(self.state.time + direction * (self.timeline_bar.step_size() or 0.01 * timeline_span(timeline)))
 
     def _restart_timeline(self):
-        if self._flightlab_active:
-            self.flightlab_page.restart()
-            return
         timeline = self.state.timeline
         if not timeline:
             return
@@ -1786,11 +1871,6 @@ class MissionControlWindow(QMainWindow):
     def _toggle_play(self, direction: int = 1):
         """Space plays forward, Shift+Space backwards; the key of the
         direction already playing pauses, the other one turns around."""
-        if self._flightlab_active:
-            # The mission scene is hidden behind the Flight Lab page; Space
-            # drives the replay instead of animating an invisible view.
-            self.flightlab_page.toggle_playback()
-            return
         timeline = self.state.timeline
         if not timeline:
             return
@@ -1914,11 +1994,6 @@ class MissionControlWindow(QMainWindow):
         # flag is what _on_scene_loaded/_on_scene_load_failed actually check to
         # refuse to touch self.plotter/self.renderer once we're closing.
         self._closing = True
-        # The Flight Lab designer simulates on its own compute pool (so a
-        # simulate cancel can't kill scene loads) -- tear it down first.
-        terminate_compute = getattr(self.flightlab_page, "terminate_compute", None)
-        if terminate_compute is not None:
-            terminate_compute()
         thread = self._load_thread
         worker = self._load_worker
         if thread is not None:

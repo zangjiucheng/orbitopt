@@ -1,9 +1,9 @@
 """Mission Designer / Vehicle Builder form engine (FL-502, #210).
 
-The Qt forms in :mod:`orbitopt.flightlab.ui.designer_page` are thin view
-adapters over everything in this module, which is deliberately Qt-free so the
-whole form -> target/vehicle -> simulate -> cache pipeline is testable on a
-base install without a display:
+A code API: Mission Control no longer has a designer page (Flight Lab only
+renders runs), so a run is designed here or in YAML and simulated from code
+or the CLI. Qt-free, so the whole form -> target/vehicle -> simulate -> cache
+pipeline runs and tests on a base install without a display:
 
 * :func:`target_from_form` turns Mission Designer fields into a schema-valid
   FlightTarget via :func:`orbitopt.flightlab.target_export.build_target`,
