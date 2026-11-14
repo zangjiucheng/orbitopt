@@ -212,7 +212,8 @@ def test_to_flight_run_is_a_valid_three_body_run(study, tmp_path):
     kinds = {(e.kind, e.body_id) for e in run.events}
     assert ("separation", "stack") in kinds
     assert ("ignition", "upper") in kinds
-    assert run.verification.physics_verified is True
+    assert run.verification.backend_self_check is True
+    assert run.verification.physics_verified is None
     write_run(tmp_path / "run", run)
     back = read_run(tmp_path / "run")
     assert {t.body_id for t in back.tracks} == {"stack", "booster", "upper"}

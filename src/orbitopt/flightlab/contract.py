@@ -21,12 +21,22 @@ Run directory layout (the FlightResult v1 document spans four files):
       trajectories/<body_id>.csv   # t_s,mass_kg,x_m,y_m,z_m,vx_m_s,vy_m_s,vz_m_s [+ extras]
       events.json             # [ {"t_s", "kind", "body_id", "data"}, ... ]
       verification.json       # {optimizer_converged, physics_verified,
-                              #  mission_constraints_passed, checks}
+                              #  backend_self_check, mission_constraints_passed,
+                              #  checks}
 
-The three verification booleans answer three different questions and are
-never collapsed into one "success": optimizer convergence is not physics
-verification is not mission-constraint satisfaction; ``null`` means
-"not assessed", never "passed".
+The verification booleans answer different questions and are never collapsed
+into one "success": optimizer convergence is not physics verification is not a
+backend self-check is not mission-constraint satisfaction; ``null`` means
+"not assessed", never "passed". ``physics_verified`` means ONLY that an
+*independent* re-flight or cross-model check (a propagator other than the one
+that produced the state) corroborates the trajectory -- never the producing
+backend vouching for its own output; that self-vouch is recorded separately
+as ``backend_self_check`` (the conjunction of the backend's own in-run checks:
+finite states, mass bookkeeping, handoff continuity, tracking bounds ...).
+Both backends use these fields identically: the ascent adapter fills
+``backend_self_check`` and leaves ``physics_verified`` null; the pipeline's
+independent re-fly is what sets ``physics_verified``. ``backend_self_check``
+is optional (pre-task-261 run dirs have none, read back as null).
 
     from orbitopt.flightlab.contract import load_target, read_run, write_run
     target = load_target("scenarios/leo_two_stage.yaml")   # raises on mismatch
@@ -445,14 +455,25 @@ class Check:
 
 @dataclass(frozen=True)
 class Verification:
-    """The three independent success verdicts plus their per-check evidence.
-    A ``None`` verdict means "not assessed" -- callers that treat verification
-    as a gate must map None to "not passed", never to "passed"."""
+    """The independent success verdicts plus their per-check evidence. A
+    ``None`` verdict means "not assessed" -- callers that treat verification
+    as a gate must map None to "not passed", never to "passed".
+
+    The two physics-flavoured fields answer different questions (task #261):
+    ``backend_self_check`` is the conjunction of the producing backend's own
+    in-run checks (its word on its own output); ``physics_verified`` is true
+    ONLY when an *independent* re-flight / cross-model check -- a propagator
+    other than the one that produced the state -- corroborates the trajectory.
+    A backend never sets its own ``physics_verified``; the pipeline's
+    independent re-fly does, so the field means the same thing for 3-DOF and
+    6-DOF. Optional: a run written before this field existed reads back as
+    ``None``."""
 
     optimizer_converged: bool | None = None
     physics_verified: bool | None = None
     mission_constraints_passed: bool | None = None
     checks: tuple[Check, ...] = ()
+    backend_self_check: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -662,6 +683,7 @@ def read_run(dir, *, validate: bool = True) -> FlightRun:
         verification=Verification(
             optimizer_converged=verification["optimizer_converged"],
             physics_verified=verification["physics_verified"],
+            backend_self_check=verification.get("backend_self_check"),
             mission_constraints_passed=verification["mission_constraints_passed"],
             checks=checks,
         ),
@@ -696,6 +718,7 @@ def write_run(dir, run: FlightRun, *, validate: bool = True) -> None:
     verification = {
         "optimizer_converged": run.verification.optimizer_converged,
         "physics_verified": run.verification.physics_verified,
+        "backend_self_check": run.verification.backend_self_check,
         "mission_constraints_passed": run.verification.mission_constraints_passed,
         "checks": [dataclasses.asdict(c) for c in run.verification.checks],
     }

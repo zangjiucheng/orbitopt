@@ -448,7 +448,10 @@ def _cmd_flight_simulate(args):
     print(f"run {run.run_id} -> {args.output}")
     print(f"  optimizer_converged:        {word(v.optimizer_converged)}"
           "  (E1 flies a hand-tuned program; no optimizer ran)")
-    print(f"  physics_verified:           {word(v.physics_verified)}")
+    print(f"  backend_self_check:         {word(v.backend_self_check)}"
+          "  (the backend vouching for its own output)")
+    print(f"  physics_verified:           {word(v.physics_verified)}"
+          "  (independent re-fly only)")
     print(f"  mission_constraints_passed: {word(v.mission_constraints_passed)}")
     gate = next((c for c in v.checks if c.id == "recovery-landing"), None)
     if gate is not None:
@@ -612,7 +615,10 @@ def _cmd_flight_optimize(args):
     print(f"run {run.run_id} -> {args.output}")
     print(f"  optimizer_converged:        {word(v.optimizer_converged)}"
           f"  ({result['status']})")
-    print(f"  physics_verified:           {word(v.physics_verified)}")
+    print(f"  backend_self_check:         {word(v.backend_self_check)}"
+          "  (the backend vouching for its own output)")
+    print(f"  physics_verified:           {word(v.physics_verified)}"
+          "  (independent re-fly only)")
     print(f"  mission_constraints_passed: {word(v.mission_constraints_passed)}")
     print(f"  objective {result['objective']}: {-best['objective']:.6g} kg"
           f"  [{result['algorithm']['global']}, {result['evaluations']} "
