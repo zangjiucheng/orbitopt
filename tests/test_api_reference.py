@@ -14,6 +14,7 @@ GENERATOR = runpy.run_path(str(ROOT / "scripts" / "generate_api_reference.py"))
 def test_public_modules_and_definitions_have_reference_pages():
     pages = {page["url"]: page["content"] for page in GENERATOR["pages"]()}
     for module, path in GENERATOR["public_modules"]():
+        assert f"[`{module}`]({{BASE}}{GENERATOR['module_url'](module)})" in pages["/api/python/"]
         content = pages[GENERATOR["module_url"](module)]
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in tree.body:

@@ -1127,35 +1127,15 @@
         </div>
       </div>
       <pre class="tree"><span class="comment"># src/orbitopt/</span>
-<span class="path">core/</span>        gpu.py, problem.py        <span class="comment"># numpy/cupy switch, pygmo UDP base</span>
-<span class="path">lambert/</span>     gpu_batch.py, cpu.py      <span class="comment"># batched + reference Izzo solvers</span>
-<span class="path">dynamics/</span>    nbody_gpu.py              <span class="comment"># GPU-batched coarse Earth-Moon propagator</span>
-<span class="path">problems/</span>    transfer_2body.py, mga.py
-             free_return.py, geo_raising.py
-<span class="path">optimize/</span>    gpu_bfe.py, runner.py     <span class="comment"># pygmo + custom batch fitness evaluator</span>
-             multistart.py             <span class="comment"># one optimizer per porkchop valley</span>
-<span class="path">launch_*.py</span>  sites, vehicles,          <span class="comment"># sourced data, C3/DLA constraints,</span>
-             constraints, windows      <span class="comment"># daily launch windows</span>
-<span class="path">injection.py</span>                   <span class="comment"># pad -> parking orbit -> TLI/TMI, verified</span>
-<span class="path">verify/</span>      tudat_propagate.py, events.py
-             differential_correction.py, b_plane.py
-             geo_insertion.py, mars_insertion.py
-             report.py                 <span class="comment"># schema-validated verification reports</span>
-             benchmarks.py, cross_model.py
-             integrator_convergence.py <span class="comment"># references, 3/6-DOF/TudatPy, step studies</span>
-<span class="path">viz/</span>         scene_renderer.py         <span class="comment"># one PyVista draw path, every scene</span>
-             app.py                    <span class="comment"># Mission Control (PySide6 + pyvistaqt)</span>
-             state.py, charts.py        <span class="comment"># shared selection/time, linked 2D charts</span>
-             solar_system.py, mission_timeline.py
-             geo_raising.py, mars_transfer.py, porkchop.py
-<span class="path">flightlab/</span>   simulate.py, guidance/    <span class="comment"># launch: 3-DOF ascent, Gate-B checks</span>
-             sixdof/, recovery/        <span class="comment"># 6-DOF backend, boostback + landing, Monte Carlo</span>
-<span class="path">mission/</span>     contract.py, launch_pipeline.py
-             two_stage_leo.py          <span class="comment"># segments, handoff gates, reference chain</span>
-<span class="path">pipeline.py</span>                    <span class="comment"># search -> refine -> verify -> export, one result</span>
-<span class="path">mission_config.py</span>              <span class="comment"># YAML config -> validated -> built scene</span>
-<span class="path">missions.py</span>                    <span class="comment"># named-mission registry + plugin entry points</span>
-<span class="path">scene_format.py</span>                <span class="comment"># the format's entire read/write/validate surface</span></pre>
+<span class="path">core/ · lambert/ · optimize/</span>
+  search and optimization
+<span class="path">flightlab/ · mission/</span>
+  launch and recovery
+<span class="path">verify/</span>   checks
+<span class="path">viz/</span>      viewer
+<span class="path">schemas/</span>  formats
+
+<span class="comment"># API · engineering notes</span></pre>
     </div>
   </div>
 </section>
@@ -1164,65 +1144,22 @@
   <div class="wrap">
     <div class="phase-head">
       <div class="met-chip"><span class="bar"></span><span class="phase">T+00:35 · Anomaly log</span></div>
-      <h2>Bugs that cost real debugging time</h2>
-      <p class="phase-sub">
-        Root-caused and measured, not smoothed over. Longer write-ups for the
-        early ones live in <code>docs/engineering-notes.md</code>.
-      </p>
-    </div>
-
-    <div class="anomaly">
-      <div class="anum">01</div>
-      <div class="abody">
-        <span class="atag">pygmo · silent 15× slowdown</span>
-        <p><b>Attach <code>bfe</code> before wrapping.</b> It has to go on the raw UDA
-          (<code>uda.set_bfe(bfe)</code>) <em>before</em> <code>pg.algorithm(uda)</code>.
-          Attaching it after silently falls back to evaluating one candidate at a
-          time — ~15× slower, no error raised anywhere.</p>
-      </div>
+      <h2>Engineering notes</h2>
+      <p class="phase-sub">Numerical and integration lessons from the project.</p>
     </div>
     <div class="anomaly">
-      <div class="anum">02</div>
-      <div class="abody">
-        <span class="atag">SPICE · frame mismatch</span>
-        <p><b><code>J2000</code> ≠ <code>ECLIPJ2000</code>.</b> They're related by Earth's
-          ~23.4° obliquity and aren't interchangeable — mixing states queried in
-          one against the other silently produces errors of hundreds of
-          thousands of km.</p>
-      </div>
+      <div class="anum">01</div><div class="abody"><span class="atag">pygmo · batching</span>
+        <p>Attach the batch evaluator before wrapping the algorithm.</p></div>
     </div>
     <div class="anomaly">
-      <div class="anum">03</div>
-      <div class="abody">
-        <span class="atag">RK4 · step size at close approach</span>
-        <p><b>Fine for a coast, not for a flyby.</b> A 600s step reported an
-          81,733&nbsp;km closest lunar approach for a trajectory whose true,
-          converged (≤15s step) closest approach was 4,379&nbsp;km.</p>
-      </div>
+      <div class="anum">02</div><div class="abody"><span class="atag">SPICE · frames</span>
+        <p>Convert between <code>J2000</code> and <code>ECLIPJ2000</code> rather than mixing states.</p></div>
     </div>
     <div class="anomaly">
-      <div class="anum">04</div>
-      <div class="abody">
-        <span class="atag">Mars TCM · aimed at a point, not a periapsis</span>
-        <p><b>The 2020 replay flew below the surface of Mars.</b> The correction burn
-          aimed the spacecraft at a point 3,889.5&nbsp;km from Mars's center at a fixed
-          time. Gravity bends the approach inward, so the real periapsis came out at
-          3,341&nbsp;km, under Mars's 3,389.5&nbsp;km radius, and the report still passed.
-          A second targeting stage now solves for the B-plane vector with the arrival
-          time held fixed, and the flown periapsis lands at 504.7&nbsp;km altitude.</p>
-      </div>
+      <div class="anum">03</div><div class="abody"><span class="atag">propagation · close approach</span>
+        <p>Check step convergence and target the actual periapsis.</p></div>
     </div>
-    <div class="anomaly">
-      <div class="anum">05</div>
-      <div class="abody">
-        <span class="atag">Verification report · two values of one constant</span>
-        <p><b>An energy drift that wasn't there.</b> The orbit-insertion conservation
-          check computed energy with SPICE's Mars GM while tudat integrated with its own,
-          1.9×10⁻⁸ apart. On an e&nbsp;=&nbsp;0.75 capture orbit that reads as a 1.2×10⁻⁷
-          drift, which failed every run. The tell: angular momentum, which doesn't involve
-          GM, drifted only 10⁻¹³. With the integrator's own GM the drift is 2×10⁻¹².</p>
-      </div>
-    </div>
+    <p class="phase-sub">Read the <a href="engineering-notes.html">engineering notes</a> and <a href="mars_mission_plan.html">Mars mission plan</a> for measurements and assumptions.</p>
   </div>
 </section>
 
@@ -1241,25 +1178,14 @@
     <div class="console">
       <div class="console-head">
         <span>flight-terminal — orbitopt</span>
-        <button class="copy-btn" data-copy="git clone https://github.com/zangjiucheng/orbitopt.git&#10;cd orbitopt&#10;micromamba create -n orbitopt -f envs/cpu.conda-lock.yml&#10;micromamba activate orbitopt&#10;pip install -e . --no-deps&#10;orbitopt validate examples/mars2020_replay.yaml&#10;orbitopt run examples/mars2020_replay.yaml&#10;orbitopt&#10;python scripts/fetch_opentsiolkovsky.py&#10;orbitopt launch --site cape-canaveral --vehicle synthetic_two_stage --orbit 400x400@51.6 --date 2026-11-14 -o launch/&#10;orbitopt benchmarks">copy all</button>
+        <button class="copy-btn" data-copy="git clone https://github.com/zangjiucheng/orbitopt.git&#10;cd orbitopt&#10;micromamba create -n orbitopt -f envs/cpu.conda-lock.yml&#10;micromamba activate orbitopt&#10;pip install -e . --no-deps&#10;orbitopt">copy all</button>
       </div>
-      <pre class="code"><span class="c"># install the compute stack from a checkout</span>
-<span class="k">git clone</span> https://github.com/zangjiucheng/orbitopt.git
+      <pre class="code"><span class="k">git clone</span> https://github.com/zangjiucheng/orbitopt.git
 <span class="k">cd</span> orbitopt
 <span class="k">micromamba create</span> -n orbitopt -f envs/cpu.conda-lock.yml
 <span class="k">micromamba activate</span> orbitopt
 <span class="k">pip install</span> -e . --no-deps
-
-<span class="c"># validate, run and explore a mission</span>
-<span class="k">orbitopt validate</span> examples/mars2020_replay.yaml
-<span class="k">orbitopt run</span> examples/mars2020_replay.yaml
-<span class="k">orbitopt</span>
-
-<span class="c"># launch to orbit, and check the physics against references</span>
-<span class="k">python</span> scripts/fetch_opentsiolkovsky.py
-<span class="k">orbitopt launch</span> --site cape-canaveral --vehicle synthetic_two_stage \
-  --orbit 400x400@51.6 --date 2026-11-14 -o launch/
-<span class="k">orbitopt benchmarks</span></pre>
+<span class="k">orbitopt</span></pre>
     </div>
     <p class="start-note">See the <a href="quickstart.html">quickstart</a> for installation options, mission configs and verification results.</p>
   </div>

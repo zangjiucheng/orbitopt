@@ -405,12 +405,8 @@ def pages():
         if not matching:
             continue
         index.append(f"\n## {title}\n")
-        for name, path in matching:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-            doc = ast.get_docstring(tree)
-            summary = " ".join(clean_doc(doc).split("\n\n", 1)[0].split()) if doc else ""
-            summary = html.escape(summary.replace("``", "`"))
-            index.append(f"- [`{name}`]({{BASE}}{module_url(name)})" + (f" — {summary}" if summary else "") + "\n")
+        for name, _path in matching:
+            index.append(f"- [`{name}`]({{BASE}}{module_url(name)})\n")
     result.append({"url": "/api/python/", "title": "Python API", "content": "\n".join(index)})
     for name, path in modules:
         result.append({"url": module_url(name), "title": name, "content": module_page(name, path)})
