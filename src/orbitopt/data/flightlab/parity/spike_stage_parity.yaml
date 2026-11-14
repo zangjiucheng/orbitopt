@@ -15,10 +15,17 @@
 #   * JSBSim expresses stage-1 thrust through isp * g0 * propflowmax, so its
 #     vacuum thrust is a derived number; `thrust_rel_tol` records the
 #     accepted agreement band between the derived and the canonical figure.
-#   * The JSBSim spike flies with identically ZERO aero; the native plant
+#   * The E4 jsbsim packaged vehicles (this `jsbsim` airframe and the
+#     staging stand-in) fly with identically ZERO aero; the native plant
 #     flies the packaged `spike_stage` coefficient file. Geometry/reference
 #     quantities are shared, drag/lift coefficients are NOT -- that gap IS
-#     the documented fidelity boundary of the jsbsim packaged vehicles.
+#     the documented fidelity boundary of the zero-aero packaged vehicles.
+#   * E1-04 (#253) adds the jsbsim `production_aircraft`: the same airframe with
+#     the SAME coefficient document compiled into its XML. The coefficients
+#     are now shared; what stays disclosed is the promotion residual
+#     (stability-axis tables, bilinear Mach grids, AERORP at the dry CG),
+#     the engine's token nozzle exit area, and JSBSim's actuator dynamics --
+#     quantified in docs/adr/flightlab-0004.
 #   * The JSBSim `spike_upper` model is a FL-402 handoff stand-in (6 t dry,
 #     its own inertias), not this upper stage; no cross-check applies to it.
 #   * OpenTsiolkovsky flies its own synthetic_two_stage vehicle (a 380 t
@@ -86,6 +93,11 @@ jsbsim:
   propflowmax_kg_s: 600.0            # 1322.7736 LBS/SEC, the XML's own figure
   g0_m_s2: 9.80665
   aero_zero: true                    # <aero> is identically zero by design
+  # E1-04 (#253): the production airframe -- this one with the `aero_model`
+  # below compiled into it by orbitopt.flightlab.sixdof.jsbsim_aero. It must
+  # inherit every parameter above (parity-jsbsim-production-inherited) and
+  # carry the aero document's reference geometry.
+  production_aircraft: spike_stage_aero
   # JSBSim vacuum thrust is derived: isp * g0 * propflowmax = 1882876.8 N.
   # The canonical stage-1 thrust is 1.88 MN; both sides must agree within
   # this relative band (actual gap ~0.15%).
@@ -97,5 +109,7 @@ aero_reference:
   diameter_m: 3.7
   span_m: 3.7
   length_m: 45.0
-  # jsbsim wingarea is a placeholder (zero-aero vehicle); the native side
-  # uses the body planform pi*d^2/4 = 10.7521 m^2. Geometry parity only.
+  # The zero-aero vehicles' wingarea is a placeholder; the native side uses
+  # the body planform pi*d^2/4 = 10.7521 m^2. The production aircraft's
+  # metrics are generated from these figures (wingarea/chord = area/length),
+  # so geometry parity is enforced on all three vehicles.

@@ -1,0 +1,378 @@
+<?xml version="1.0"?>
+<!--
+  orbitopt Flight Lab E4 spike (task #206, FL-401): a minimal single liquid
+  stage with gimballed TVC, throttle and propellant-driven mass/CG/inertia.
+
+  Written fresh for the go/no-go spike. The *structure* follows JSBSim's
+  bundled J246 test article (rocket engine, nozzle thruster, propellant
+  tanks, TVC through FCS actuators) but nothing is copied from it: no
+  staging, no guidance, no aerodynamic tables.
+
+  Frames: JSBSim's structural frame is used for every <location>
+  (x positive AFT from the nose, y right, z up). The stage is 45 m long,
+  nose at x=0. Body axes (x forward, z down) are what the driver reports.
+
+  * Engine: FGRocket, liquid variant (isp + propflowmax + mixtureratio):
+    vacuum thrust = Isp * g0 * mdot with mdot = throttle * propflowmax, so
+    the analytic Tsiolkovsky / constant-mdot checks are exact laws.
+  * Nozzle: token exit area, so FNozzle's ambient back-pressure debit
+    (p * A) is negligible -> "vacuum-ish" thrust at any altitude.
+  * Tanks: OXIDIZER + FUEL sized to the mixture ratio (both empty together
+    after 100 s at full throttle). FGMassBalance recomputes weight, CG and
+    inertia from the tank contents every frame.
+  * TVC: the thruster's <orient> element makes propulsion/engine[0]/
+    {pitch,yaw}-angle-rad writable; two FGActuator channels (first-order
+    lag + slew-rate limit + travel limit) drive them from command
+    properties set by the driver.
+  * Aerodynamics: generated from the packaged aero document spike_stage.yaml by
+    orbitopt.flightlab.sixdof.jsbsim_aero (E1-04, task #253). Regenerate
+    with python -m orbitopt.flightlab.sixdof.jsbsim_aero; the YAML is the
+    source, this file is a build artefact. AERORP sits at the dry CG: the
+    aero document couples about the (moving) CG, JSBSim applies forces at a
+    fixed reference point, and the difference is a disclosed, quantified
+    fidelity delta (docs/adr/flightlab-0004).
+  * No ground reactions: the spike flies free flights only.
+-->
+<aircraft name="spike_stage_aero" version="2.0" release="ALPHA">
+  <fileheader>
+    <author>orbitopt Flight Lab</author>
+    <description>Production 6-DOF stage: the E4 spike airframe with the Flight Lab aero document (aero_model=spike_stage) compiled into its aerodynamics section (data/flightlab/aero/spike_stage.yaml)</description>
+  </fileheader>
+
+  <metrics>
+    <wingarea  unit="M2"> 10.7521 </wingarea>
+    <wingspan  unit="M">   3.7 </wingspan>
+    <chord     unit="M">   45.0 </chord>
+    <htailarea unit="M2">  0.0 </htailarea>
+    <htailarm  unit="M">   0.0 </htailarm>
+    <vtailarea unit="M2">  0.0 </vtailarea>
+    <vtailarm  unit="M">   0.0 </vtailarm>
+    <location name="AERORP" unit="M"> <x> 20.0 </x> <y> 0.0 </y> <z> 0.0 </z> </location>
+  </metrics>
+
+  <mass_balance>
+    <!-- Dry stage: 10 t, CG 20 m aft of the nose. Inertia of a 45 m x 3.7 m
+         thin-walled cylinder of that mass (kg*m^2). -->
+    <ixx unit="KG*M2"> 3.4e4 </ixx>
+    <iyy unit="KG*M2"> 1.7e6 </iyy>
+    <izz unit="KG*M2"> 1.7e6 </izz>
+    <ixy unit="KG*M2"> 0.0 </ixy>
+    <ixz unit="KG*M2"> 0.0 </ixz>
+    <iyz unit="KG*M2"> 0.0 </iyz>
+    <emptywt unit="KG"> 10000.0 </emptywt>
+    <location name="CG" unit="M"> <x> 20.0 </x> <y> 0.0 </y> <z> 0.0 </z> </location>
+  </mass_balance>
+
+  <propulsion>
+    <engine file="spike_engine">
+      <feed> 0 </feed>
+      <feed> 1 </feed>
+      <thruster file="spike_nozzle">
+        <!-- 42 m aft of the nose, i.e. 22 m behind the dry CG. -->
+        <location unit="M"> <x> 42.0 </x> <y> 0.0 </y> <z> 0.0 </z> </location>
+        <orient unit="DEG">
+          <roll>  0.0 </roll>
+          <pitch> 0.0 </pitch>
+          <yaw>   0.0 </yaw>
+        </orient>
+      </thruster>
+    </engine>
+
+    <!-- Mixture ratio 2.5 (ox/fuel by mass): 60 t propellant =
+         42 857.14 kg LOX + 17 142.86 kg fuel. LOX forward, fuel aft. -->
+    <tank type="OXIDIZER">
+      <location unit="M"> <x> 14.0 </x> <y> 0.0 </y> <z> 0.0 </z> </location>
+      <radius unit="M"> 1.8 </radius>
+      <capacity unit="KG"> 42857.142857 </capacity>
+      <contents unit="KG"> 42857.142857 </contents>
+    </tank>
+    <tank type="FUEL">
+      <location unit="M"> <x> 28.0 </x> <y> 0.0 </y> <z> 0.0 </z> </location>
+      <radius unit="M"> 1.8 </radius>
+      <capacity unit="KG"> 17142.857143 </capacity>
+      <contents unit="KG"> 17142.857143 </contents>
+    </tank>
+  </propulsion>
+
+  <ground_reactions>
+    <!-- None: the spike flies free flights only. -->
+  </ground_reactions>
+
+  <flight_control name="spike_stage_fcs">
+    <!-- TVC servos. The driver writes fcs/{pitch,yaw}-gimbal-cmd-rad.
+         Each actuator: first-order lag (time constant 1/5 s; JSBSim's
+         <lag> value is the corner frequency in rad/s), 0.35 rad/s
+         (~20 deg/s) slew-rate limit, +-0.0873 rad (5 deg) travel.
+         Sign convention (checked by the tests): POSITIVE pitch command ->
+         nose-up pitching moment (q > 0); POSITIVE yaw command -> nose-right
+         yawing moment (r > 0). -->
+    <!-- Driver-written TVC commands [rad]. -->
+    <property value="0.0">fcs/pitch-gimbal-cmd-rad</property>
+    <property value="0.0">fcs/yaw-gimbal-cmd-rad</property>
+
+    <channel name="tvc-pitch">
+      <actuator name="fcs/pitch-gimbal-actuator">
+        <input>fcs/pitch-gimbal-cmd-rad</input>
+        <lag> 5.0 </lag>
+        <rate_limit> 0.35 </rate_limit>
+        <clipto>
+          <min> -0.0873 </min>
+          <max>  0.0873 </max>
+        </clipto>
+        <output>fcs/pitch-gimbal-actual-rad</output>
+      </actuator>
+      <pure_gain name="fcs/pitch-gimbal-to-engine">
+        <input>fcs/pitch-gimbal-actual-rad</input>
+        <gain> -1.0 </gain>
+        <output>propulsion/engine[0]/pitch-angle-rad</output>
+      </pure_gain>
+    </channel>
+    <channel name="tvc-yaw">
+      <actuator name="fcs/yaw-gimbal-actuator">
+        <input>fcs/yaw-gimbal-cmd-rad</input>
+        <lag> 5.0 </lag>
+        <rate_limit> 0.35 </rate_limit>
+        <clipto>
+          <min> -0.0873 </min>
+          <max>  0.0873 </max>
+        </clipto>
+        <output>fcs/yaw-gimbal-actual-rad</output>
+      </actuator>
+      <pure_gain name="fcs/yaw-gimbal-to-engine">
+        <input>fcs/yaw-gimbal-actual-rad</input>
+        <gain> -1.0 </gain>
+        <output>propulsion/engine[0]/yaw-angle-rad</output>
+      </pure_gain>
+    </channel>
+  </flight_control>
+
+  <aerodynamics>
+  <!-- generated by orbitopt.flightlab.sixdof.jsbsim_aero from the Flight Lab aero document spike_stage; regenerate instead of editing -->
+  <axis name="DRAG">
+    <function name="aero/coefficient/CD0">
+      <description>axial force (body -x): ca/cn rotated into stability axes</description>
+      <product>
+        <property>aero/qbar-psf</property>
+        <property>metrics/Sw-sqft</property>
+        <table>
+          <independentVar lookup="row">aero/alpha-rad</independentVar>
+          <independentVar lookup="column">velocities/mach</independentVar>
+          <tableData extension="linear">
+            0.0 0.8 1.1 1.5 2.5 4.0 8.0
+            -0.2617993877991494 0.36486647519382237 0.39384424998249445 0.5580516404516361 0.5097553491371827 0.4131627665082758 0.33588870040515034 0.2779331508278063
+            -0.17453292519943295 0.35674397036919536 0.3862882029595616 0.5537055209716369 0.5044651333210265 0.4059843580198058 0.32719973777882916 0.26811127259809664
+            -0.08726646259971647 0.3517065902977683 0.38159243124052067 0.5509455299161174 0.5011357950115302 0.4015163252023556 0.321820749355016 0.26204906746951123
+            0.0 0.35 0.38 0.55 0.5 0.4 0.32 0.26
+            0.08726646259971647 0.3517065902977683 0.38159243124052067 0.5509455299161174 0.5011357950115302 0.4015163252023556 0.321820749355016 0.26204906746951123
+            0.17453292519943295 0.35674397036919536 0.3862882029595616 0.5537055209716369 0.5044651333210265 0.4059843580198058 0.32719973777882916 0.26811127259809664
+            0.2617993877991494 0.36486647519382237 0.39384424998249445 0.5580516404516361 0.5097553491371827 0.4131627665082758 0.33588870040515034 0.2779331508278063
+          </tableData>
+        </table>
+      </product>
+    </function>
+    <function name="aero/coefficient/CDbeta">
+      <description>sideslip drag increment over the zero-sideslip plane</description>
+      <product>
+        <property>aero/qbar-psf</property>
+        <property>metrics/Sw-sqft</property>
+        <table>
+          <independentVar lookup="row">aero/beta-rad</independentVar>
+          <independentVar lookup="column">velocities/mach</independentVar>
+          <tableData extension="linear">
+            0.0 0.8 1.1 1.5 2.5 4.0 8.0
+            -0.2617993877991494 0.013707783890401892 0.013707783890401892 0.013707783890401837 0.013707783890401837 0.013707783890401892 0.013707783890401892 0.013707783890401892
+            -0.17453292519943295 0.006092348395734193 0.006092348395734193 0.006092348395734137 0.006092348395734137 0.006092348395734193 0.006092348395734193 0.006092348395734193
+            -0.08726646259971647 0.001523087098933562 0.001523087098933562 0.001523087098933562 0.001523087098933562 0.001523087098933562 0.001523087098933562 0.001523087098933562
+            0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+            0.08726646259971647 0.001523087098933562 0.001523087098933562 0.001523087098933562 0.001523087098933562 0.001523087098933562 0.001523087098933562 0.001523087098933562
+            0.17453292519943295 0.006092348395734193 0.006092348395734193 0.006092348395734137 0.006092348395734137 0.006092348395734193 0.006092348395734193 0.006092348395734193
+            0.2617993877991494 0.013707783890401892 0.013707783890401892 0.013707783890401837 0.013707783890401837 0.013707783890401892 0.013707783890401892 0.013707783890401892
+          </tableData>
+        </table>
+      </product>
+    </function>
+    </axis>
+  <axis name="LIFT">
+    <function name="aero/coefficient/CL0">
+      <description>normal force (body -z): ca/cn rotated into stability axes</description>
+      <product>
+        <property>aero/qbar-psf</property>
+        <property>metrics/Sw-sqft</property>
+        <table>
+          <independentVar lookup="row">aero/alpha-rad</independentVar>
+          <independentVar lookup="column">velocities/mach</independentVar>
+          <tableData extension="linear">
+            0.0 0.8 1.1 1.5 2.5 4.0 8.0
+            -0.2617993877991494 0.043558743326494655 0.05132331467957029 0.09532255234699882 0.08238160009187276 0.056499695581620706 0.035794171973419046 0.020265029267267802
+            -0.17453292519943295 0.027458511801596627 0.03266795713160455 0.0621881473349827 0.05350573845163618 0.03614092068494316 0.022249066471588724 0.011830175811572904
+            -0.08726646259971647 0.013250378276445453 0.0158650505588752 0.030681526825977093 0.02632373968859418 0.017608165413828362 0.010635705994015712 0.005406361429156219
+            0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+            0.08726646259971647 -0.013250378276445453 -0.0158650505588752 -0.030681526825977093 -0.02632373968859418 -0.017608165413828362 -0.010635705994015712 -0.005406361429156219
+            0.17453292519943295 -0.027458511801596627 -0.03266795713160455 -0.0621881473349827 -0.05350573845163618 -0.03614092068494316 -0.022249066471588724 -0.011830175811572904
+            0.2617993877991494 -0.043558743326494655 -0.05132331467957029 -0.09532255234699882 -0.08238160009187276 -0.056499695581620706 -0.035794171973419046 -0.020265029267267802
+          </tableData>
+        </table>
+      </product>
+    </function>
+    </axis>
+  <axis name="SIDE">
+    <function name="aero/coefficient/CYbeta">
+      <description>side force (body +y)</description>
+      <product>
+        <property>aero/qbar-psf</property>
+        <property>metrics/Sw-sqft</property>
+        <table>
+          <independentVar lookup="row">aero/beta-rad</independentVar>
+          <independentVar lookup="column">velocities/mach</independentVar>
+          <tableData extension="linear">
+            0.0 0.8 1.1 1.5 2.5 4.0 8.0
+            -0.2617993877991494 0.05235987755982988 0.05235987755982988 0.05235987755982988 0.05235987755982988 0.05235987755982988 0.05235987755982988 0.05235987755982988
+            -0.17453292519943295 0.03490658503988659 0.03490658503988659 0.03490658503988659 0.03490658503988659 0.03490658503988659 0.03490658503988659 0.03490658503988659
+            -0.08726646259971647 0.017453292519943295 0.017453292519943295 0.017453292519943295 0.017453292519943295 0.017453292519943295 0.017453292519943295 0.017453292519943295
+            0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+            0.08726646259971647 -0.017453292519943295 -0.017453292519943295 -0.017453292519943295 -0.017453292519943295 -0.017453292519943295 -0.017453292519943295 -0.017453292519943295
+            0.17453292519943295 -0.03490658503988659 -0.03490658503988659 -0.03490658503988659 -0.03490658503988659 -0.03490658503988659 -0.03490658503988659 -0.03490658503988659
+            0.2617993877991494 -0.05235987755982988 -0.05235987755982988 -0.05235987755982988 -0.05235987755982988 -0.05235987755982988 -0.05235987755982988 -0.05235987755982988
+          </tableData>
+        </table>
+      </product>
+    </function>
+    </axis>
+  <axis name="ROLL">
+    <function name="aero/coefficient/Clzero">
+      <description>no roll moment in this aero document</description>
+      <product>
+        <property>aero/qbar-psf</property>
+        <property>metrics/Sw-sqft</property>
+        <value>0.0</value>
+      </product>
+    </function>
+    </axis>
+  <axis name="PITCH">
+    <function name="aero/coefficient/CMcg">
+      <description>CG coupling of the normal force, cancelled (the document couples about the live CG)</description>
+      <quotient>
+        <product>
+          <value>-1.0</value>
+      <table>
+        <independentVar lookup="row">aero/alpha-rad</independentVar>
+        <independentVar lookup="column">velocities/mach</independentVar>
+        <tableData extension="linear">
+          0.0 0.8 1.1 1.5 2.5 4.0 8.0
+          -0.2617993877991494 0.043558743326494655 0.05132331467957029 0.09532255234699882 0.08238160009187276 0.056499695581620706 0.035794171973419046 0.020265029267267802
+          -0.17453292519943295 0.027458511801596627 0.03266795713160455 0.0621881473349827 0.05350573845163618 0.03614092068494316 0.022249066471588724 0.011830175811572904
+          -0.08726646259971647 0.013250378276445453 0.0158650505588752 0.030681526825977093 0.02632373968859418 0.017608165413828362 0.010635705994015712 0.005406361429156219
+          0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+          0.08726646259971647 -0.013250378276445453 -0.0158650505588752 -0.030681526825977093 -0.02632373968859418 -0.017608165413828362 -0.010635705994015712 -0.005406361429156219
+          0.17453292519943295 -0.027458511801596627 -0.03266795713160455 -0.0621881473349827 -0.05350573845163618 -0.03614092068494316 -0.022249066471588724 -0.011830175811572904
+          0.2617993877991494 -0.043558743326494655 -0.05132331467957029 -0.09532255234699882 -0.08238160009187276 -0.056499695581620706 -0.035794171973419046 -0.020265029267267802
+        </tableData>
+      </table>
+          <difference>
+            <property>inertia/cg-x-in</property>
+            <value>787.4015748031496</value>
+          </difference>
+          <value>0.08333333333333333</value>
+        </product>
+        <property>metrics/cbarw-ft</property>
+      </quotient>
+    </function>
+    <function name="aero/coefficient/CMa">
+      <description>pitch moment, nose-up positive (body +y)</description>
+      <product>
+        <property>aero/qbar-psf</property>
+        <property>metrics/Sw-sqft</property>
+        <property>metrics/cbarw-ft</property>
+        <table>
+          <independentVar lookup="row">aero/alpha-rad</independentVar>
+          <independentVar lookup="column">velocities/mach</independentVar>
+          <tableData extension="linear">
+            0.0 0.8 1.1 1.5 2.5 4.0 8.0
+            -0.2617993877991494 0.0026179938779914945 0.0026179938779914945 0.0026179938779914945 0.0026179938779914945 0.0026179938779914945 0.0026179938779914945 0.0026179938779914945
+            -0.17453292519943295 0.0017453292519943298 0.0017453292519943298 0.0017453292519943298 0.0017453292519943298 0.0017453292519943298 0.0017453292519943298 0.0017453292519943298
+            -0.08726646259971647 0.0008726646259971649 0.0008726646259971649 0.0008726646259971649 0.0008726646259971649 0.0008726646259971649 0.0008726646259971649 0.0008726646259971649
+            0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+            0.08726646259971647 -0.0008726646259971649 -0.0008726646259971649 -0.0008726646259971649 -0.0008726646259971649 -0.0008726646259971649 -0.0008726646259971649 -0.0008726646259971649
+            0.17453292519943295 -0.0017453292519943298 -0.0017453292519943298 -0.0017453292519943298 -0.0017453292519943298 -0.0017453292519943298 -0.0017453292519943298 -0.0017453292519943298
+            0.2617993877991494 -0.0026179938779914945 -0.0026179938779914945 -0.0026179938779914945 -0.0026179938779914945 -0.0026179938779914945 -0.0026179938779914945 -0.0026179938779914945
+          </tableData>
+        </table>
+      </product>
+    </function>
+    <function name="aero/coefficient/CMq">
+      <description>pitch damping</description>
+      <product>
+        <property>aero/qbar-psf</property>
+        <property>metrics/Sw-sqft</property>
+        <property>metrics/cbarw-ft</property>
+        <property>aero/ci2vel</property>
+        <property>velocities/q-rad_sec</property>
+        <value>-2.0</value>
+      </product>
+    </function>
+    </axis>
+  <axis name="YAW">
+    <function name="aero/coefficient/CNcg">
+      <description>CG coupling of the side force, cancelled (the document couples about the live CG)</description>
+      <quotient>
+        <product>
+          <value>-1.0</value>
+      <table>
+        <independentVar lookup="row">aero/beta-rad</independentVar>
+        <independentVar lookup="column">velocities/mach</independentVar>
+        <tableData extension="linear">
+          0.0 0.8 1.1 1.5 2.5 4.0 8.0
+          -0.2617993877991494 0.05235987755982988 0.05235987755982988 0.05235987755982988 0.05235987755982988 0.05235987755982988 0.05235987755982988 0.05235987755982988
+          -0.17453292519943295 0.03490658503988659 0.03490658503988659 0.03490658503988659 0.03490658503988659 0.03490658503988659 0.03490658503988659 0.03490658503988659
+          -0.08726646259971647 0.017453292519943295 0.017453292519943295 0.017453292519943295 0.017453292519943295 0.017453292519943295 0.017453292519943295 0.017453292519943295
+          0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+          0.08726646259971647 -0.017453292519943295 -0.017453292519943295 -0.017453292519943295 -0.017453292519943295 -0.017453292519943295 -0.017453292519943295 -0.017453292519943295
+          0.17453292519943295 -0.03490658503988659 -0.03490658503988659 -0.03490658503988659 -0.03490658503988659 -0.03490658503988659 -0.03490658503988659 -0.03490658503988659
+          0.2617993877991494 -0.05235987755982988 -0.05235987755982988 -0.05235987755982988 -0.05235987755982988 -0.05235987755982988 -0.05235987755982988 -0.05235987755982988
+        </tableData>
+      </table>
+          <difference>
+            <property>inertia/cg-x-in</property>
+            <value>787.4015748031496</value>
+          </difference>
+          <value>0.08333333333333333</value>
+        </product>
+        <property>metrics/cbarw-ft</property>
+      </quotient>
+    </function>
+    <function name="aero/coefficient/CNb">
+      <description>yaw moment from sideslip (body +z)</description>
+      <product>
+        <property>aero/qbar-psf</property>
+        <property>metrics/Sw-sqft</property>
+        <property>metrics/cbarw-ft</property>
+        <table>
+          <independentVar lookup="row">aero/beta-rad</independentVar>
+          <independentVar lookup="column">velocities/mach</independentVar>
+          <tableData extension="linear">
+            0.0 0.8 1.1 1.5 2.5 4.0 8.0
+            -0.2617993877991494 0.0026179938779914945 0.0026179938779914945 0.0026179938779914945 0.0026179938779914945 0.0026179938779914945 0.0026179938779914945 0.0026179938779914945
+            -0.17453292519943295 0.0017453292519943298 0.0017453292519943298 0.0017453292519943298 0.0017453292519943298 0.0017453292519943298 0.0017453292519943298 0.0017453292519943298
+            -0.08726646259971647 0.0008726646259971649 0.0008726646259971649 0.0008726646259971649 0.0008726646259971649 0.0008726646259971649 0.0008726646259971649 0.0008726646259971649
+            0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+            0.08726646259971647 -0.0008726646259971649 -0.0008726646259971649 -0.0008726646259971649 -0.0008726646259971649 -0.0008726646259971649 -0.0008726646259971649 -0.0008726646259971649
+            0.17453292519943295 -0.0017453292519943298 -0.0017453292519943298 -0.0017453292519943298 -0.0017453292519943298 -0.0017453292519943298 -0.0017453292519943298 -0.0017453292519943298
+            0.2617993877991494 -0.0026179938779914945 -0.0026179938779914945 -0.0026179938779914945 -0.0026179938779914945 -0.0026179938779914945 -0.0026179938779914945 -0.0026179938779914945
+          </tableData>
+        </table>
+      </product>
+    </function>
+    <function name="aero/coefficient/CNr">
+      <description>yaw damping</description>
+      <product>
+        <property>aero/qbar-psf</property>
+        <property>metrics/Sw-sqft</property>
+        <property>metrics/cbarw-ft</property>
+        <property>aero/ci2vel</property>
+        <property>velocities/r-rad_sec</property>
+        <value>-2.0</value>
+      </product>
+    </function>
+    </axis>
+</aerodynamics>
+</aircraft>
