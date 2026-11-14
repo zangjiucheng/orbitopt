@@ -26,6 +26,7 @@ from orbitopt.flightlab.recovery.envelope import (
     TRACK_SCHEMA,
     capture_track_rows,
     envelope_dataset,
+    landed_touchdowns,
     nominal_report,
     plot_comparison,
     plot_envelope,
@@ -150,6 +151,18 @@ def test_envelope_dataset_orders_classifies_and_ignores_uncaptured():
     assert by_idx[1]["touchdown_enu_m"] == [5.0, -4.0]
     assert data["ground"]["max_touchdown_radius_m"] == pytest.approx(6.403, abs=1e-3)
     assert all(t["rows"] for t in data["trajectories"])
+
+
+def test_landed_touchdowns_excludes_failed_ground_contacts():
+    """A failed sample can carry a touchdown point (a miss kilometres from
+    the pad). The comparison scatter is titled "landed samples", so its
+    points and sigma ellipses must come from landed samples only."""
+    miss = _sample(4, "failed", "LANDING_POSITION_OUT_OF_TOLERANCE", seed=6)
+    miss["touchdown_east_m"], miss["touchdown_north_m"] = 1800.0, -1500.0
+    landed = _sample(1, "landed", "LANDED", touchdown=(5.0, -4.0), seed=3)
+    landed2 = _sample(5, "landed", "LANDED", touchdown=(-3.0, 2.0), seed=7)
+    data = envelope_dataset([miss, landed, landed2], SITE)
+    assert landed_touchdowns(data) == [[5.0, -4.0], [-3.0, 2.0]]
 
 
 def test_envelope_band_brackets_the_population_and_gaps_sparse_tails():

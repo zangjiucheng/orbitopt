@@ -59,7 +59,7 @@ from orbitopt.flightlab.recovery.stats import FAILURE_CLASSES, classify_failure
 
 __all__ = ["CLASS_COLORS", "TRACK_COLUMNS", "TRACK_SCHEMA",
            "capture_track_rows", "envelope_dataset", "nominal_recovery",
-           "nominal_report", "plot_comparison", "plot_envelope",
+           "landed_touchdowns", "nominal_report", "plot_comparison", "plot_envelope",
            "site_from_target", "track_rows", "write_nominal_report"]
 
 #: Fixed capture column layout -- the record's ``track.rows`` are
@@ -400,6 +400,16 @@ def plot_envelope(data: Mapping[str, Any], path: Path | str, *,
     return out
 
 
+def landed_touchdowns(data: Mapping[str, Any]) -> list[list[float]]:
+    """Site-ENU touchdown points of the *landed* samples only. A failed
+    sample can still carry a ground-contact point (a crash or a miss far
+    from the pad); those are failures, not part of the touchdown
+    dispersion, so the comparison scatter and its sigma ellipses use this
+    list and match the "landed samples" they are labelled with."""
+    return [tr["touchdown_enu_m"] for tr in data["trajectories"]
+            if tr["outcome"] == "landed" and tr["touchdown_enu_m"] is not None]
+
+
 def plot_comparison(runs: Sequence[Mapping[str, Any]], path: Path | str, *,
                     title: str = "Recovery comparison under identical "
                                 "conditions") -> Path:
@@ -417,18 +427,26 @@ def plot_comparison(runs: Sequence[Mapping[str, Any]], path: Path | str, *,
     from matplotlib.patches import Ellipse
 
     colors = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd"]
+    # Runs flown under identical dispersions often land on the very same
+    # point; distinct marker shapes (hollow first) and line styles keep the
+    # earlier run visible under the later one.
+    markers = ["o", "x", "^", "s"]
+    line_styles = ["-", "--", "-.", ":"]
     fig, (axg, axt) = plt.subplots(1, 2, figsize=(13.0, 6.0))
     for i, run in enumerate(runs):
         color = colors[i % len(colors)]
         nom = _nominal_xy(run.get("nominal"))
         if nom is not None:
             axg.plot(nom[:, 1], nom[:, 2], color=color, lw=1.6,
+                     ls=line_styles[i % len(line_styles)],
                      label=f"nominal {run['label']}")
-        pts = [tr["touchdown_enu_m"] for tr in run["dataset"]["trajectories"]
-               if tr["touchdown_enu_m"] is not None]
+        pts = landed_touchdowns(run["dataset"])
         if pts:
-            axt.plot([p[0] for p in pts], [p[1] for p in pts], ".",
-                     color=color, ms=5, label=f"{run['label']} touchdowns")
+            marker = markers[i % len(markers)]
+            axt.plot([p[0] for p in pts], [p[1] for p in pts], marker,
+                     ls="", ms=6 if marker == "o" else 5, mec=color,
+                     mfc="none" if marker == "o" else color, mew=1.0,
+                     label=f"{run['label']} touchdowns (n={len(pts)})")
         if len(pts) >= 3:
             p = np.asarray(pts)
             cov = np.cov(p.T)
