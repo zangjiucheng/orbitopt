@@ -12,7 +12,7 @@ This page is the operational summary; the licenses are in
 | python / conda stack | python 3.10, tudatpy 1.0, numpy 1.26.4, … | `envs/{cpu,gpu}.yml` + `envs/*.conda-lock.yml` (CI job `lockfile-drift` fails spec/lock skew) |
 | astropy (frame bridge) | `astropy=6.1.7`, exact | `envs/{cpu,gpu}.yml` |
 | IERS Earth-orientation data | `astropy-iers-data` from the lockfile, **no download** in the Gate B regression | `scripts/fl601_reference.py` (`_pin_earth_orientation`) |
-| gfold (FL-303 landing solver) | `gfold==0.3.2`, exact | `envs/flightlab-landing.txt` |
+| gfold (FL-303 landing solver) | `gfold==0.3.2`, exact (wheels need Python >= 3.11) | `envs/flightlab-landing.txt`; CI job `flightlab-landing` runs it on Python 3.12 via `envs/flightlab-landing-ci.txt` |
 | jsbsim (E4 6-DOF spike) | `jsbsim==1.3.3`, hash-locked | `envs/sixdof-requirements.txt` |
 | OpenTsiolkovsky (external binary) | v1.0.0, per-platform SHA-256 | `scripts/fetch_opentsiolkovsky.py` (fetch refuses any other bytes; `--check` verifies what is installed) |
 

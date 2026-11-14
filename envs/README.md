@@ -117,14 +117,22 @@ so it is not part of the locked base envs. `flightlab-landing.txt` pins
 the add-on layer: `gfold==0.3.2` (exact -- the wrapper checks the
 installed distribution against this pin and refuses to run otherwise,
 since the discretization and bound semantics are solver-version
-sensitive) plus the cvxpy reference implementation. Install it on top of
-a locked env:
+sensitive) plus the cvxpy reference implementation.
+
+gfold 0.3.2 publishes wheels for Python >= 3.11 only, so it cannot be
+installed into the locked envs (Python 3.10). Install it into a Python
+3.11 or 3.12 environment instead. `flightlab-landing-ci.txt` is that layer
+with the same numpy/scipy/astropy constraints as `cpu.yml`; the
+`flightlab-landing` CI job uses it:
 
 ```bash
-pip install -r envs/flightlab-landing.txt
+python3.12 -m venv .venv-landing
+.venv-landing/bin/pip install -r envs/flightlab-landing-ci.txt
+.venv-landing/bin/pip install -e . --no-deps
 ```
 
-Tests that need it skip cleanly when it is absent.
+Tests that need it skip cleanly when it is absent, so in the locked-env
+CI jobs they skip; the `flightlab-landing` job runs them with the solver.
 
 ## Regenerating the locks
 

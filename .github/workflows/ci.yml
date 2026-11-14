@@ -74,6 +74,45 @@ jobs:
       - name: Run test suite (gpu-marked tests skip here; see gpu.yml)
         run: xvfb-run -a --server-args="-screen 0 1280x1024x24" pytest tests/ -v
 
+  flightlab-landing:
+    # FL-303 landing-burn tests with the REAL pinned G-FOLD solver. gfold
+    # 0.3.2 ships wheels for Python >= 3.11 only, and the locked conda envs
+    # are Python 3.10, so in the `test` job every gfold test skips. This job
+    # builds a Python 3.12 pip env from envs/flightlab-landing-ci.txt (same
+    # numpy/scipy/astropy constraints as envs/cpu.yml, plus the exact gfold
+    # pin) and runs the recovery suite there, slow tests included (~1 min).
+    name: flightlab landing (gfold 0.3.2, Python 3.12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            envs/flightlab-landing-ci.txt
+            envs/flightlab-landing.txt
+
+      - name: Install the landing layer and orbitopt
+        run: |
+          python -m pip install -r envs/flightlab-landing-ci.txt
+          python -m pip install -e . --no-deps
+
+      - name: The pinned solver is importable (a missing gfold must fail here, not skip)
+        run: python -c "import gfold, cvxpy; from importlib.metadata import version; assert version('gfold') == '0.3.2', version('gfold'); print('gfold', version('gfold'))"
+
+      - name: Recovery and landing tests with the real solver
+        run: >
+          pytest -m "not gpu" -rs
+          tests/test_flightlab_recovery_landing.py
+          tests/test_flightlab_recovery_terminal_guidance.py
+          tests/test_flightlab_recovery_model_mismatch.py
+          tests/test_flightlab_recovery_handoff_check.py
+          tests/test_flightlab_simulate_recovery.py
+          tests/test_flightlab_recovery_envelope.py
+
   test-macos:
     # Same locked CPU env on macOS: micromamba picks the osx-arm64 or osx-64
     # section of cpu.conda-lock.yml from the runner's native subdir. macOS

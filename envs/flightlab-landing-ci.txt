@@ -1,0 +1,17 @@
+# CI layer for the FL-303 landing tests (the `flightlab-landing` job in
+# .github/workflows/ci.yml).
+#
+# gfold 0.3.2 publishes wheels for Python >= 3.11 only (cp311-abi3), and
+# the locked conda envs (envs/cpu.yml, envs/gpu.yml) are Python 3.10, so
+# the pinned solver cannot be installed there. The landing tests therefore
+# run in their own Python 3.12 environment built from this file. The
+# versions mirror the constraints in envs/cpu.yml, so this env computes
+# with the same numpy/scipy/astropy as the locked one.
+numpy>=1.26.4,<2
+scipy>=1.11,<1.14
+matplotlib==3.9.2
+astropy==6.1.7
+pyyaml>=6.0
+jsonschema>=4.26
+pytest
+-r flightlab-landing.txt
