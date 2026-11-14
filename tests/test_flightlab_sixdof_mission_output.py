@@ -70,12 +70,13 @@ def bundle(tmp_path_factory, pair):
 def test_backend_names_are_case_insensitive_and_exhaustive():
     from orbitopt.flightlab.sixdof import mission_output as mo
 
-    assert mo.BACKENDS == ("3DOF", "6DOF")
-    assert mo.BACKEND_3DOF == "3DOF" and mo.BACKEND_6DOF == "6DOF"
+    assert mo.BACKENDS == ("native-pointmass", "native-rigidbody")
+    assert mo.BACKEND_3DOF == "native-pointmass"
+    assert mo.BACKEND_6DOF == "native-rigidbody"
 
 
 def test_unknown_backend_is_rejected_by_name():
-    with pytest.raises(ValueError, match="3DOF.*6DOF"):
+    with pytest.raises(ValueError, match="native-pointmass.*native-rigidbody"):
         run_mission(f07_scenario(**SHORT), backend="8DOF")
 
 
@@ -161,7 +162,8 @@ def test_scenes_load_as_scene_1_and_carry_the_run_verdicts(bundle):
         assert scene["schemaVersion"] == "1.0"
         assert [b["id"] for b in scene["bodies"]] == ["earth", "stack", "booster", "upper"]
         assert scene["flightRun"]["runId"].endswith(
-            {"3DOF": "3dof", "6DOF": "6dof"}[backend])
+            {"native-pointmass": "3dof", "native-rigidbody": "6dof"}[backend])
+        assert scene["flightRun"]["backend"] == backend
         stack_body = next(b for b in scene["bodies"] if b["id"] == "stack")
         assert any(i["label"] == "Frame" and "ECEF (converted to GCRS)" == i["value"]
                    for i in stack_body["info"])
@@ -185,7 +187,7 @@ def test_comparison_report_is_report_1_green_and_covers_all_bodies(bundle):
     validate_report(report)
     assert report["kind"] == "flightlab-comparison"
     assert report["status"]["result"] == "passed"
-    assert report["inputs"]["headline"] == "6dof_minus_3dof"
+    assert report["inputs"]["headline"] == "rigidbody_minus_pointmass"
     assert set(report["inputs"]["bodies"]) == {"stack", "booster", "upper"}
     for doc in report["inputs"]["bodies"].values():
         assert "error" not in doc
@@ -204,7 +206,7 @@ def test_comparison_checks_are_both_backends_own_checks(bundle):
 
 def test_comparison_orders_backends_correctly(pair):
     m3, m6 = pair["missions"][BACKEND_3DOF], pair["missions"][BACKEND_6DOF]
-    with pytest.raises(ValueError, match="3DOF.*6DOF|that order"):
+    with pytest.raises(ValueError, match="native-pointmass.*native-rigidbody|that order"):
         mission_comparison_report(m6, m3)
 
 
@@ -218,11 +220,11 @@ def test_cli_flight_mission_writes_bundle_and_exits_zero(tmp_path, monkeypatch, 
 
     monkeypatch.setattr(mo, "f07_scenario", lambda **kw: f07_scenario(**SHORT))
     with pytest.raises(SystemExit) as exit_info:
-        cli.main(["flight", "mission", "--backend", "6DOF", "-o", str(tmp_path)])
+        cli.main(["flight", "mission", "--backend", "6dof", "-o", str(tmp_path)])
     assert exit_info.value.code == 0
     out = capsys.readouterr().out
     assert "5/5 checks passed" in out
-    run_dir = tmp_path / "6DOF"
+    run_dir = tmp_path / "native-rigidbody"
     assert (run_dir / "manifest.json").is_file()
     assert (run_dir / "handoff.json").is_file()
     assert (run_dir / "scene.json").is_file()

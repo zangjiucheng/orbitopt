@@ -69,14 +69,51 @@ ascent model flies) bridges the staging gap.
 `ascent.mode: run_dir` replays an existing run instead of optimizing it. See
 [verification](verification.md) for report meanings.
 
-## Fidelity levels
+## Backend identities and fidelity levels
 
-| Model | Scope |
-|---|---|
-| Ascent | OpenTsiolkovsky 3-DOF point mass with a prescribed attitude program and Cd(Mach). |
-| Recovery | 3-DOF Earth-fixed point mass with J2, rotation, atmosphere, engines and event detection. Monte Carlo re-plans for each dispersed sample. |
-| JSBSim 6-DOF | Optional `flight simulate --backend 6DOF` backend. The packaged illustrative vehicles use zero aero; it is outside the optimization loop. See [ADR 0001](adr/flightlab-0001-jsbsim-6dof.md). |
-| Native 6-DOF study | A separate RK4 rigid-body reference plant with coefficient-table aerodynamics and TVC tracking; it is not the JSBSim backend. |
+Since E1-01 every physics engine has **one canonical backend identity**,
+defined in `orbitopt.flightlab.backends` and recorded on every artefact it
+produces: the run-directory manifest (`manifest.json` `backend`), the
+verification report (`inputs.backend` + `inputs.backend_fidelity`), and the
+Mission Control scene (`flightRun.backend`). The coarse `3DOF`/`6DOF` wording
+that used to name *two different engines* (`flight simulate --backend 6DOF`
+was JSBSim, `flight mission --backend 6DOF` the native plant) survives only
+as a deprecated input alias inside the entry point that historically took it;
+it is resolved at the CLI and never written into a run, report or scene.
+
+| Identity | Models | Where its word stops |
+|---|---|---|
+| `opentsiolkovsky` | Point-mass ascent with a prescribed attitude program and Cd(Mach); GCRS states from the pinned v1.0.0 external binary. | No attitude dynamics, no TVC, no staging forces; the Gate-B pipeline and the FL-304 recovery chain build on this lineage. |
+| `native-pointmass` | Point-mass twin on the native plant (US76 + J2 + rotation), kinematic program attitude, q-bar S CA/CN aero. | No attitude states — the program *is* the attitude. The 3-DOF side of the F-05/F-07 comparison, not the OpenTsiolkovsky adapter. |
+| `jsbsim` | Full JSBSim rigid-body dynamics with gimballed TVC and propellant-driven mass/CG/inertia on the E4 spike models; ECEF states. | Packaged vehicles fly with **zero aero** (the spike is a TVC/mass paper test); outside the optimization loop; opt-in `orbitopt[sixdof]` extra. See [ADR 0001](adr/flightlab-0001-jsbsim-6dof.md). |
+| `native-rigidbody` | Six-DOF rigid body with coefficient-table aero, the F-04 tracker and a lag/rate-limited TVC actuator; US76 + J2 + rotation; ECEF states. | The reference plant of the native studies (F-02/F-04/F-06/F-07): illustrative coefficients, basic tracker without roll control; not the JSBSim backend. |
+
+CLI mapping: `flight simulate --backend opentsiolkovsky|jsbsim` (default
+`opentsiolkovsky`; legacy `3DOF`/`6DOF` resolve to exactly these two here);
+`flight mission --backend native-pointmass|native-rigidbody|BOTH` (default
+`BOTH`; legacy `3DOF`/`6DOF` resolve to exactly these two here).
+
+### Aligned-scenario parity (E1-01)
+
+Backends may differ in fidelity but not about the scenario they claim to
+fly. `src/orbitopt/data/flightlab/parity/spike_stage_parity.yaml` is the
+shared parameter source for the aligned spike-stage family: the native
+studies build their stage pair **from that document**
+(`f06_two_stage_scenario` / `f05_scenario` via
+`orbitopt.flightlab.parity.native_stage_pair`), and
+`orbitopt.flightlab.parity.check_parity` cross-checks it against the
+parameters the packaged JSBSim XMLs actually declare. Masses, propellant,
+inertias, engine mount station and Isp match exactly; stage-1 thrust agrees
+within the documented band (JSBSim derives it from `isp·g0·ṁ`, ~0.15 % from
+the canonical 1.88 MN); aero *geometry and reference quantities* are shared
+while the JSBSim zero-aero boundary stays disclosed. The automated gate is
+`tests/test_flightlab_backend_identity_parity.py`. Deliberately *not*
+aligned: the OpenTsiolkovsky `synthetic_two_stage` demonstrator and the
+FL-402 `spike_upper` stand-in.
+
+Recovery stays the 3-DOF Earth-fixed point-mass chain (J2, rotation,
+atmosphere, engines, event detection; Monte Carlo re-plans per dispersed
+sample) regardless of the ascent backend.
 
 <span id="native-aero-model-and-the-reference-plant-f-02"></span>
 <span id="tvc-actuator-and-attitude-tracking-f-04"></span>

@@ -10,14 +10,22 @@ One mission, two backends
 gravity-turn program, separation instant, delayed upper-stage ignition) is
 the mission. :func:`run_mission` flies it on one of two backends::
 
-    backend="6DOF"  F-06's closed-loop path: rigid-body stack on the F-04
-                    tracker, analytic split, two independent rigid children
-    backend="3DOF"  the point-mass twin: the same scenario's stack flown by
+    backend="native-rigidbody"  F-06's closed-loop path: rigid-body stack on
+                    the F-04 tracker, analytic split, two independent rigid
+                    children
+    backend="native-pointmass"  the point-mass twin: the same scenario's
+                    stack flown by
                     gravity_turn.propagate_point_mass (kinematic program
                     attitude, q-bar S CA/CN aero -- the class of model the
                     OT adapter drives), the SAME split_stack_state split on
                     the frozen trace, point-mass children (booster coasted,
                     upper ignited on the SAME IgnitionPlan schedule)
+
+The identities are the canonical ones from :mod:`orbitopt.flightlab.backends`
+(E1-01, task #250): the coarse ``"3DOF"``/``"6DOF"`` spellings are accepted by
+:func:`run_mission` only as deprecated aliases -- in this module they have
+exactly one meaning each -- and the run, its report and its scene record the
+canonical identity, never the alias.
 
 Both backends consume the identical scenario object, share the F-05
 point-mass propagator and the F-06 analytic split, and run the SAME
@@ -74,6 +82,11 @@ from typing import Any
 import numpy as np
 
 from orbitopt.flightlab import frames
+from orbitopt.flightlab.backends import (
+    BACKEND_NATIVE_POINTMASS,
+    BACKEND_NATIVE_RIGIDBODY,
+    canonical_backend,
+)
 from orbitopt.flightlab.contract import (
     BodyTrack,
     Check,
@@ -121,8 +134,10 @@ __all__ = [
     "write_mission_outputs",
 ]
 
-BACKEND_3DOF = "3DOF"
-BACKEND_6DOF = "6DOF"
+#: E1-01 (task #250): canonical identities; the constant NAMES keep the F-07
+#: history readable, the VALUES are the unambiguous backend identities.
+BACKEND_3DOF = BACKEND_NATIVE_POINTMASS
+BACKEND_6DOF = BACKEND_NATIVE_RIGIDBODY
 BACKENDS: tuple[str, ...] = (BACKEND_3DOF, BACKEND_6DOF)
 
 #: The F-05 module documents WHY the native point-mass twin -- not the
@@ -352,15 +367,16 @@ def run_mission(scenario: TwoStageScenario | None = None, *,
                 backend: str = BACKEND_6DOF,
                 epoch_utc: datetime | None = None) -> MissionStudy:
     """Fly ``scenario`` (default :func:`f07_scenario`) on ``backend``:
-    ``"6DOF"`` runs F-06's closed-loop rigid-body path
+    ``"native-rigidbody"`` runs F-06's closed-loop rigid-body path
     (:func:`~orbitopt.flightlab.sixdof.two_stage.run_two_stage`),
-    ``"3DOF"`` the point-mass twin (:func:`run_two_stage_point_mass`).
-    Case-insensitive; anything else raises ``ValueError`` naming the two
-    backends. Same scenario object, same checks either way."""
-    name = str(backend).strip().upper()
-    if name not in BACKENDS:
-        raise ValueError(f"backend {backend!r} is not supported; choose "
-                         f"{', '.join(BACKENDS)}")
+    ``"native-pointmass"`` the point-mass twin
+    (:func:`run_two_stage_point_mass`). Case-insensitive; the deprecated
+    ``"3DOF"``/``"6DOF"`` aliases resolve to those two here and nowhere else.
+    Anything else raises ``ValueError`` naming the two canonical backends.
+    Same scenario object, same checks either way."""
+    name = canonical_backend(
+        backend, aliases={"3dof": BACKEND_3DOF, "6dof": BACKEND_6DOF},
+        allowed=BACKENDS)
     s = scenario or f07_scenario()
     study = (run_two_stage(s, epoch_utc=epoch_utc) if name == BACKEND_6DOF
              else run_two_stage_point_mass(s, epoch_utc=epoch_utc))
@@ -401,8 +417,9 @@ def to_flight_run_mission(mission: MissionStudy, *,
         created_utc=epoch_utc,
         engines={"stage1": "spike_stage engine (vac 1.88 MN / Isp 320 s)",
                  "stage2": "upper engine (vac 220 kN / Isp 340 s)"},
+        backend=BACKEND_NATIVE_POINTMASS,
         assumptions=SHARED_ASSUMPTIONS + tuple(s.assumptions) + (
-            (f"3-DOF backend: stack flown point-mass to t={s.separation_t_s} "
+            (f"native-pointmass backend: stack flown point-mass to t={s.separation_t_s} "
              f"s, split analytically with a {sep['separation_impulse_ns']} N.s "
              f"body-+x impulse; upper ignition at t={s.ignition.ignition_t_s} s "
              f"(delay {s.ignition.ignition_delay_s} s) via a butt-joined "
@@ -483,8 +500,9 @@ def mission_comparison_report(mission_3dof: MissionStudy,
                                         status_from_checks)
 
     if mission_3dof.backend != BACKEND_3DOF or mission_6dof.backend != BACKEND_6DOF:
-        raise ValueError("the comparison runs 3DOF minus 6DOF; pass the two "
-                         "backends' mission studies in that order")
+        raise ValueError("the comparison runs native-pointmass minus "
+                         "native-rigidbody; pass the two backends' mission "
+                         "studies in that order")
     s3, s6 = mission_3dof.study, mission_6dof.study
     runs3 = {"stack": s3.stack, "booster": s3.booster, "upper": s3.upper}
     runs6 = {"stack": s6.stack, "booster": s6.booster, "upper": s6.upper}
@@ -513,15 +531,17 @@ def mission_comparison_report(mission_3dof: MissionStudy,
         "scenario": {"name": s.name, "separation_t_s": s.separation_t_s,
                      "ignition_delay_s": s.ignition.ignition_delay_s,
                      "t_end_s": s.t_end_s, "dt_s": s.dt_s},
-        "backends": {"3dof": "native point-mass twin (gravity_turn twin of "
-                             "the OT-class model)",
-                     "6dof": "native rigid-body plant (F-02/F-04/F-06 path)"},
-        "headline": "6dof_minus_3dof",
+        "backends": {BACKEND_NATIVE_POINTMASS:
+                         "native point-mass twin (gravity_turn twin of the "
+                         "OT-class model)",
+                     BACKEND_NATIVE_RIGIDBODY:
+                         "native rigid-body plant (F-02/F-04/F-06 path)"},
+        "headline": "rigidbody_minus_pointmass",
         "checks": checks,
         "bodies": body_docs,
     }
     report = build_report("flightlab-comparison",
-                          f"{s.name}-6dof-vs-3dof", [],
+                          f"{s.name}-native-rigidbody-vs-native-pointmass", [],
                           inputs=inputs,
                           targets={"6dof_minus_3dof": {
                               b: body_docs[b].get("metrics", {})
@@ -577,10 +597,11 @@ def write_mission_pair(scenario: TwoStageScenario | None = None,
                        scene: bool = True,
                        epoch_utc: str = "2026-01-01T00:00:00Z") -> dict:
     """Fly the same mission on both backends and write the whole F-07
-    bundle: ``<out>/3DOF/``, ``<out>/6DOF/`` (each via
+    bundle: ``<out>/native-pointmass/``, ``<out>/native-rigidbody/`` (each via
     :func:`write_mission_outputs`) and the automatically generated
     comparison report ``<out>/flightlab-comparison-*.verification.json``.
-    Returns ``{"3DOF": paths, "6DOF": paths, "comparison": report,
+    Returns ``{"native-pointmass": paths, "native-rigidbody": paths,
+    "comparison": report,
     "comparison_path": Path}``."""
     from orbitopt.verify.report import default_report_path, write_report
 

@@ -41,6 +41,7 @@ import math
 from dataclasses import dataclass
 from typing import Mapping
 
+from orbitopt.flightlab.backends import BACKEND_JSBSIM
 from orbitopt.flightlab.contract import (
     BodyTrack, Check, Event, FlightRun, Verification,
 )
@@ -379,6 +380,7 @@ def to_flight_run(replay: StagingReplay, *, run_id: str = "fl-402-staging-spike"
         git_sha="0" * 40,
         created_utc=epoch_utc,
         engines={"spike_engine": "vacuum Isp 320 s, 600 kg/s (spike_engine.xml)"},
+        backend=BACKEND_JSBSIM,
         assumptions=(
             "E4 feasibility spike: JSBSim 6-DOF, zero aerodynamics, spherical+J2 gravity;"
             " numbers are illustrative, not a flight-certified run.",

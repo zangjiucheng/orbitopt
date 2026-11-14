@@ -372,23 +372,65 @@ def _cmd_flight_to_scene(args):
           f"(open with: orbitopt view {out})")
 
 
+def _flight_mission_backend_arg(value):
+    """``flight mission --backend`` resolver (E1-01, task #250): canonical
+    backend identities, case-insensitive, plus ``BOTH``; the historical
+    ``3DOF``/``6DOF`` spellings keep working as deprecated aliases that
+    resolve inside THIS entry point only."""
+    import argparse
+
+    from orbitopt.flightlab.backends import canonical_backend
+    from orbitopt.flightlab.sixdof.mission_output import BACKEND_3DOF, BACKEND_6DOF
+    if str(value).strip().upper() == "BOTH":
+        return "BOTH"
+    try:
+        return canonical_backend(
+            value, aliases={"3dof": BACKEND_3DOF, "6dof": BACKEND_6DOF},
+            allowed=(BACKEND_3DOF, BACKEND_6DOF))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
+def _flight_simulate_backend_arg(value):
+    """``flight simulate --backend`` resolver (E1-01, task #250): the
+    canonical identities of the Gate-B entry point (``opentsiolkovsky``,
+    ``jsbsim``), case-insensitive; ``3DOF``/``6DOF`` resolve here -- and only
+    here -- to exactly those two."""
+    import argparse
+
+    from orbitopt.flightlab.backends import (
+        BACKEND_JSBSIM,
+        BACKEND_OPENTSIOLOVSKY,
+        canonical_backend,
+    )
+    try:
+        return canonical_backend(
+            value, aliases={"3dof": BACKEND_OPENTSIOLOVSKY, "6dof": BACKEND_JSBSIM},
+            allowed=(BACKEND_OPENTSIOLOVSKY, BACKEND_JSBSIM))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
 def _cmd_flight_mission(args):
-    """`orbitopt flight mission --backend 3DOF|6DOF|BOTH -o runs/<id>`: F-07
+    """`orbitopt flight mission --backend native-pointmass|native-rigidbody|BOTH
+    -o runs/<id>`: F-07
     (task #232) on the native plant -- fly the packaged two-stage mission on
     the selected backend(s) and write the standard output bundle: a
     FlightResult v1 run directory per backend (M-01 ``handoff.json``,
     verification-report-1.0 and Mission Control scene beside it), and, for
-    ``BOTH``, the automatically generated 3-DOF/6-DOF comparison report.
+    ``BOTH``, the automatically generated native point-mass vs rigid-body
+    comparison report.
     Illustrative native-plant physics -- the same study as
     ``benchmarks/bench_fl607_mission_outputs.py``, printed, not asserted."""
     from orbitopt.flightlab.sixdof.mission_output import (
+        BACKENDS as _MISSION_BACKENDS,
         run_mission, write_mission_outputs, write_mission_pair,
     )
 
     scene = not args.no_scene
     if args.backend == "BOTH":
         result = write_mission_pair(out_dir=args.output, scene=scene)
-        for backend in ("3DOF", "6DOF"):
+        for backend in _MISSION_BACKENDS:
             paths = result[backend]
             print(f"{backend}: run dir {paths['run_dir']} (scene: "
                   f"{'scene.json' if scene else 'skipped'})")
@@ -427,7 +469,7 @@ def _cmd_flight_simulate(args):
         target = load_target(args.target)
         run = simulate(target, Path(args.vehicle), Path(args.output),
                        refly=not args.no_refly, timeout_s=args.timeout,
-                       backend=getattr(args, "backend", "3DOF"))
+                       backend=getattr(args, "backend", "opentsiolkovsky"))
     except (OSError, ValueError, KeyError, RuntimeError, jsonschema.ValidationError) as exc:
         # RuntimeError covers OTBinaryMissingError and every adapter subprocess failure
         print(f"ERROR: {exc}")
@@ -783,12 +825,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="F-07: fly the packaged two-stage mission on the native plant with a "
              "selectable backend and write the standard outputs (FlightResult v1 "
              "run dir, M-01 handoff.json, verification-report-1.0, Mission Control "
-             "scene; with BOTH also the auto-generated 3-DOF/6-DOF comparison report)")
-    flight_mission.add_argument("--backend", choices=("3DOF", "6DOF", "BOTH"),
-                                default="BOTH", type=str.upper,
-                                help="ascent physics for this mission: '3DOF' native "
-                                     "point-mass twin, '6DOF' closed-loop rigid body, "
-                                     "or 'BOTH' (default) to fly both and generate the "
+             "scene; with BOTH also the auto-generated native point-mass vs "
+             "rigid-body comparison report)")
+    flight_mission.add_argument("--backend", type=_flight_mission_backend_arg,
+                                default="BOTH",
+                                help="ascent physics for this mission, by canonical "
+                                     "backend identity (E1-01): 'native-pointmass' "
+                                     "twin, 'native-rigidbody' closed-loop, or 'BOTH' "
+                                     "(default) to fly both and generate the "
                                      "comparison report")
     flight_mission.add_argument("-o", "--output", default="runs/f07-mission", metavar="DIR",
                                 help="output directory (default runs/f07-mission)")
@@ -798,18 +842,20 @@ def build_parser() -> argparse.ArgumentParser:
         "simulate",
         help="Gate B (FL-006): fly a FlightTarget with a vehicle file, verify constraints "
              "and re-fly the insertion orbit with tudatpy (needs the OpenTsiolkovsky "
-             "binary; --backend 6DOF flies the JSBSim scenario config instead)")
+             "binary; --backend jsbsim flies a JSBSim scenario config instead)")
     flight_sim.add_argument("target", help="a FlightTarget YAML (see `flight export-target`)")
     flight_sim.add_argument("--vehicle", required=True, metavar="PATH",
                             help="flightlab vehicle YAML (OT stage configs + attitude "
-                                 "program); with --backend 6DOF: a 6-DOF scenario "
+                                 "program); with --backend jsbsim: a 6-DOF scenario "
                                  "config (see orbitopt/data/flightlab/sixdof/)")
-    flight_sim.add_argument("--backend", choices=("3DOF", "6DOF"), default="3DOF",
-                            type=str.upper,
-                            help="ascent physics: '3DOF' OpenTsiolkovsky (default) or "
-                                 "'6DOF' JSBSim (pip install orbitopt[sixdof]; the "
+    flight_sim.add_argument("--backend", type=_flight_simulate_backend_arg,
+                            default="opentsiolkovsky",
+                            help="ascent physics, by canonical backend identity "
+                                 "(E1-01): 'opentsiolkovsky' (default) or "
+                                 "'jsbsim' (pip install orbitopt[sixdof]; the "
                                  "recovery chain and insertion re-fly are 3-DOF "
-                                 "machinery and do not run)")
+                                 "machinery and do not run); the legacy '3DOF'/"
+                                 "'6DOF' spellings still resolve here)")
     flight_sim.add_argument("-o", "--output", required=True, metavar="RUN_DIR",
                             help="output run directory (FlightResult v1)")
     flight_sim.add_argument("--scene", action="store_true",

@@ -29,15 +29,22 @@ insertion *and* touchdown on one run. A recovery that cannot even be flown
 leaves the run ascent-only; the gate then reads as a failed data-missing
 check, never as silence.
 
-``backend="6DOF"`` (F-01, task #226) swaps the ascent adapter for the
-config-driven JSBSim 6-DOF backend (:mod:`orbitopt.flightlab.adapters.
-sixdof`): ``vehicle_path`` is then a 6-DOF *scenario config*, and the
-vehicle-file checks, the tudatpy GCRS re-fly and the FL-304 recovery chain
--- all built on the 3-DOF OpenTsiolkovsky lineage -- do not apply to its
-ECEF tracks; ``physics_verified`` comes from the backend's own checks
-instead, with the omissions recorded as assumptions on the run. The Gate-B
-verdict machinery (``evaluate``) is unchanged: the same honest, three
-independent booleans.
+``backend="jsbsim"`` (F-01, task #226; identity per E1-01, task #250) swaps
+the ascent adapter for the config-driven JSBSim 6-DOF backend
+(:mod:`orbitopt.flightlab.adapters.sixdof`): ``vehicle_path`` is then a
+6-DOF *scenario config*, and the vehicle-file checks, the tudatpy GCRS
+re-fly and the FL-304 recovery chain -- all built on the 3-DOF
+OpenTsiolkovsky lineage -- do not apply to its ECEF tracks;
+``physics_verified`` comes from the backend's own checks instead, with the
+omissions recorded as assumptions on the run. The Gate-B verdict machinery
+(``evaluate``) is unchanged: the same honest, three independent booleans.
+
+E1-01 (task #250) fixed the backend *identity* vocabulary: the selector
+takes the canonical names from :mod:`orbitopt.flightlab.backends`
+(``opentsiolkovsky`` / ``jsbsim``). The old ambiguous ``"3DOF"``/``"6DOF"``
+spellings still resolve here -- inside this entry point they always had
+exactly one meaning each -- but only as deprecated aliases, and a run never
+records them: its manifest carries the canonical identity.
 
 Determinism (acceptance criterion): every input to the pipeline -- target,
 vehicle file, attitude program, re-fly settings -- is honoured, nothing
@@ -61,6 +68,11 @@ from typing import Any, Mapping, Sequence
 
 import yaml
 
+from orbitopt.flightlab.backends import (
+    BACKEND_JSBSIM,
+    BACKEND_OPENTSIOLOVSKY,
+    canonical_backend,
+)
 from orbitopt.flightlab import checks as _checks
 from orbitopt.flightlab.adapters.opentsiolkovsky import AttitudePoint, run_ascent
 from orbitopt.flightlab.checks import Check, evaluate, insertion_state
@@ -201,15 +213,16 @@ def _simulate_6dof(target: FlightTarget, config_path: Path, out_dir: Path) -> Fl
 
     run = _sixdof_backend.run_ascent(config_path, out_dir, target=target)
     notes = (
-        "backend=6DOF (F-01, task #226): ascent flown by orbitopt.flightlab."
+        "backend=jsbsim (F-01, task #226; identity E1-01, task #250): ascent "
+        "flown by orbitopt.flightlab."
         "adapters.sixdof; the insertion checks below are assessed against the "
         "ECEF track (no frame bridge yet), so read them as ECEF-state numbers.",
-        "backend=6DOF: no tudatpy insertion re-fly (it re-flies GCRS states) and "
+        "backend=jsbsim: no tudatpy insertion re-fly (it re-flies GCRS states) and "
         "no OT vehicle-file checks (T/W, propellant reserve parse the 3-DOF "
         "vehicle schema); physics_verified is this backend's checks",
     )
     if target.recovery.kind != "none":
-        notes += ("backend=6DOF: the FL-304 recovery chain is a 3-DOF pipeline and "
+        notes += ("backend=jsbsim: the FL-304 recovery chain is a 3-DOF pipeline and "
                   "was not flown; the recovery gate reads as data-missing",)
     run = replace(run, assumptions=run.assumptions + notes)
     run = replace(run, verification=evaluate(run, target))
@@ -219,7 +232,7 @@ def _simulate_6dof(target: FlightTarget, config_path: Path, out_dir: Path) -> Fl
 
 def simulate(target: FlightTarget, vehicle_path: Path, out_dir: Path,
              *, attitude_program: Sequence[AttitudePoint] | None = None,
-             backend: str = "3DOF",
+             backend: str = BACKEND_OPENTSIOLOVSKY,
              refly: bool = True, refly_orbits: float = 1.05,
              refly_max_step_s: float = 300.0, timeout_s: float = 300.0,
              run_recovery: bool = True,
@@ -240,22 +253,22 @@ def simulate(target: FlightTarget, vehicle_path: Path, out_dir: Path,
     not an exception (a recovery that cannot even be attempted leaves the run
     ascent-only, and the recovery gate lands as a failed data-missing check).
 
-    ``backend`` (F-01, task #226) selects the ascent physics: ``"3DOF"``
-    (default) is the OpenTsiolkovsky lineage above; ``"6DOF"`` flies the
-    config-driven JSBSim backend (:mod:`orbitopt.flightlab.adapters.sixdof`)
+    ``backend`` (F-01, task #226; identities per E1-01, task #250) selects
+    the ascent physics: ``"opentsiolkovsky"`` (default) is the
+    OpenTsiolkovsky lineage above; ``"jsbsim"`` flies the config-driven
+    JSBSim backend (:mod:`orbitopt.flightlab.adapters.sixdof`)
     -- ``vehicle_path`` is then a 6-DOF *scenario config* (vehicle, initial
     conditions and integration step all from that document), and
     ``attitude_program``, ``timeout_s``, ``refly`` and the FL-304 recovery
     chain, all 3-DOF-lineage machinery, do not apply (the run's assumptions
     record each omission; ``timeout_s`` and ``recovery_options`` are simply
     unused)."""
-    backend = str(backend).strip().upper()
-    if backend not in ("3DOF", "6DOF"):
-        raise ValueError(f"backend {backend!r} is not supported; choose "
-                         "'3DOF' (OpenTsiolkovsky) or '6DOF' (JSBSim)")
+    backend = canonical_backend(
+        backend, aliases={"3dof": BACKEND_OPENTSIOLOVSKY, "6dof": BACKEND_JSBSIM},
+        allowed=(BACKEND_OPENTSIOLOVSKY, BACKEND_JSBSIM))
     vehicle_path = Path(vehicle_path)
     out_dir = Path(out_dir)
-    if backend == "6DOF":
+    if backend == BACKEND_JSBSIM:
         return _simulate_6dof(target, vehicle_path, out_dir)
     run = run_ascent(target, vehicle_path, attitude_program, out_dir, timeout_s=timeout_s)
     vehicle_doc: Mapping[str, Any] = yaml.safe_load(vehicle_path.read_text(encoding="utf-8"))
