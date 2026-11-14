@@ -427,7 +427,7 @@ def test_staging_gap_is_bridged_by_a_coast_before_the_gate():
     from orbitopt.flightlab.coast import j2_coast
 
     r0, v0 = (6.6e6, 0.0, 0.0), (0.0, 7771.0, 0.0)
-    m = itrs_to_gcrs_matrix(datetime.fromisoformat(EPOCH))  # J2 about the true pole
+    m = itrs_to_gcrs_matrix(_epoch_dt())  # J2 about the true pole (3.10: no "Z" in fromisoformat)
     r_end, v_end = j2_coast(r0, v0, 2.0, pole=(m[0][2], m[1][2], m[2][2]))
     rs, vs = [r_end], [v_end]
     parent = _track("stack", t=(0.0, 100.0), mass=(300000.0, 120000.0),
