@@ -1,4 +1,7 @@
 {
+  "README.md": [
+    "See [engineering notes](docs/engineering-notes.md) for numerical and UI pitfalls and the [Mars plan](docs/mars_mission_plan.md) for model assumptions."
+  ],
   "docs/adr/flightlab-0001-jsbsim-6dof.md": [
     "ADR flightlab-0001: JSBSim as the 6-DOF engine for Flight Lab ascent",
     "**Status:** Accepted — **GO**",
@@ -158,13 +161,20 @@
     "The first FL-403 revision reported a 24° early error and blamed the program (near-vertical elevation slew \"unachievable by TVC\"). The real cause was ours: `tracking.dcm_from_quat` returned the transpose of the `Tec2b` that `jsbsim_driver.quat_from_dcm` encodes, and the launch IC roll (φ = 90°) had been tuned until that wrong matrix read zero error — in JSBSim's real attitude it was 180° off in roll, so pitch-over was steered about the wrong body axes. Fixed: exact `dcm_from_quat`/`quat_from_dcm` round trip, IC `(θ, ψ, φ) = (90°, 90°, −90°)` verified against `Tec2b` itself (body x up / y south / z east; a nose-down gimbal tips the nose east). Lesson: check attitude conventions against JSBSim's own matrices, never only against our own helpers."
   ],
   "docs/flightlab-regression-ci.md": [
+    "`gfold==0.3.2`, exact (wheels need Python >= 3.11)",
+    "`envs/flightlab-landing.txt`; CI job `flightlab-landing` runs it on Python 3.12 via `envs/flightlab-landing-ci.txt`",
+    "jsbsim (E4 6-DOF spike)",
     "The frame bridge rotates OpenTsiolkovsky's Earth-fixed states into GCRS with astropy, which needs Earth-orientation data (UT1-UTC, polar motion). astropy downloads the latest IERS-A table by default, and that table changes every day as predictions become measurements: the same flight's GCRS positions moved by tenths of a metre between days, far beyond the micrometre tolerances (the regression's first CI run failed on 7,670 samples). `fl601_reference.py run` / `update` therefore use only the table bundled with the pinned `astropy-iers-data`. It ends before the reference epoch, so astropy takes UT1 = UTC and zero polar motion there: a frame a few tens of metres off the true one, but the same on every run with the same lockfile. Bumping `astropy-iers-data` in the lockfile changes the reference; re-record it with `update` and the `[fl601-reference-update]` tag. Record it in the locked environment (CI's), not a local one.",
-    "`tests/data/flightlab/reference/` within the tolerances declared in",
     "**`test-macos`** — the full suite on the locked env, arm64 + x86_64 (no"
   ],
   "docs/flightlab.md": [
+    "**Run list.** The Flight Lab side of the sidebar lists every run directory",
+    "**Same view as a mission.** Selecting a run loads it into the 3D view,",
+    "**Flight tab.** The launch site and coordinates, liftoff epoch and azimuth;",
+    "**Telemetry tab.** Altitude, speed, dynamic pressure, g-load, mass and",
     "OpenTsiolkovsky 3-DOF point mass with a prescribed attitude program and Cd(Mach).",
     "Optional `flight simulate --backend 6DOF` backend. The packaged illustrative vehicles use zero aero; it is outside the optimization loop. See [ADR 0001](adr/flightlab-0001-jsbsim-6dof.md).",
+    "Outputs include FlightResult runs, handoffs, verification reports, scenes and a comparison report. In the [recorded comparison](benchmarks/fl607_mission_outputs.json), the upper stages differed by 235 km at the end: the 6-DOF upper stage was inertially pointed, while the 3-DOF model followed its prescribed program. These figures are scenario results, not general accuracy bounds.",
     "In the recorded 32-sample comparison (seed 1, identical dispersions and referee), the baseline landed 14 and the newer objective landed 17. The latter's Wilson interval was [0.36, 0.69]; position failures rose from 4 to 7. See [ADR 0003](adr/flightlab-0003-landing-aware-boostback-objective.md) and [the recorded results](benchmarks/r07_nominal_dispersed.json) for the setup and failure breakdown."
   ],
   "docs/goes_gto_geo_mission_plan.md": [
@@ -176,7 +186,15 @@
     "Acceptance (task #165): a complete record exists for commit `afa0cd9` or a later one, and every failure in it is attributed.",
     "rest of `tests/test_gpu_lambert.py`",
     "rest of `tests/test_runner_device.py`",
-    "GPU model (from `nvidia-smi` and from CuPy device 0, with compute capability)"
+    "The record captures the following, as the task requires:",
+    "NVIDIA L40S (cc 8.9), driver 610.57.04",
+    "CUDA 13.0 runtime / 13.3 driver API, CuPy 13.6.0"
+  ],
+  "docs/gpu-regression/runs/20261114-000425-eadd301.md": [
+    "GPU regression record: `eadd301` on gpu-pt1-05",
+    "0, NVIDIA L40S, 610.57.04, 46068 MiB",
+    "NVIDIA L40S (cc 8.9, 45486 MiB)",
+    "Linux-6.8.0-146-generic-x86_64-with-glibc2.39"
   ],
   "docs/guide.md": [
     "<figure> <img src=\"assets/mission-control-starship-landing.png\" alt=\"Mission Control showing a Starship landing scene and its timeline\" /> <figcaption>Sentinel-2 cloudless 2024 by EOX IT Services GmbH, containing modified Copernicus Sentinel data 2024 (CC BY-NC-SA 4.0).</figcaption> </figure>",
