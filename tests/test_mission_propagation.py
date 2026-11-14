@@ -71,6 +71,12 @@ def fake_tudat(monkeypatch):
     for name, module in modules.items():
         monkeypatch.setitem(sys.modules, name, module)
 
+    # Imported here for the first time, the module binds the fake ``spice``
+    # (``from tudatpy.interface import spice``) for good: monkeypatch restores
+    # sys.modules['tudatpy...'] but not that binding. The next real-tudatpy
+    # test then loaded no kernels (SPICE KERNELVARNOTFOUND: BODY399_RADII)
+    # whenever this file ran on its own. Drop such a module on teardown.
+    fresh_import = "orbitopt.verify.tudat_propagate" not in sys.modules
     import orbitopt.verify.tudat_propagate as tp
 
     calls = {"propagate": [], "overrides": []}
@@ -93,6 +99,8 @@ def fake_tudat(monkeypatch):
     monkeypatch.setattr(tp, "_propagate_single_coast", fake_propagate)
     monkeypatch.setattr(tp, "_override_central_gravity", fake_override)
     yield {"env": env, "prop": prop, "spice": spice, "calls": calls}
+    if fresh_import:
+        sys.modules.pop("orbitopt.verify.tudat_propagate", None)
 
 
 
@@ -407,4 +415,10 @@ def test_tudatpy_real_short_arc_j2():
     assert report["inputs"]["analytic_comparison"]["max_position_m"] > 10.0
     elements = report["inputs"]["orbit_propagation"]["elements_history"]
     assert math.isfinite(elements[-1]["period_s"])
-    assert abs(elements[-1]["period_s"] - prop.period_s) / prop.period_s < 1e-6
+    # The history's last entry is the final state's own osculating elements...
+    assert elements[-1]["period_s"] == pytest.approx(prop.final_elements()["period_s"], rel=1e-12)
+    # ...and J2 + Sun/Moon move the osculating period off the injected
+    # two-body one: 5.4e-6 relative over this quarter revolution (5828.517 ->
+    # 5828.548 s), physics, not drift. A 1e-6 gate here failed in CI on every
+    # platform; under two-body alone the period holds to ~1e-15.
+    assert abs(elements[-1]["period_s"] - prop.period_s) / prop.period_s < 1e-4
