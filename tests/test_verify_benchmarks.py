@@ -125,5 +125,73 @@ def test_every_benchmark_check_is_categorised():
         CHECK_HISTORICAL: ("passed", 2)}
 
 
+def test_every_benchmark_check_carries_an_evidence_type():
+    """Task #263 (E4-03): every benchmark scenario declares what its reference
+    is made of, and each type's qualification + scope + phases is on every
+    metric so a pass is read with its limits attached."""
+    from orbitopt.verify.report import (
+        EVIDENCE_ANALYTICAL,
+        EVIDENCE_DESIGN_INPUT,
+        EVIDENCE_HISTORICAL,
+        EVIDENCE_INDEPENDENT_MODEL,
+        EVIDENCE_NUMERICAL,
+    )
+
+    assert set(bm.BENCHMARK_EVIDENCE) == set(bm.BENCHMARKS)
+    assert set(bm.BENCHMARK_SCOPE) == set(bm.BENCHMARKS)
+    assert set(bm.BENCHMARK_PHASE) == set(bm.BENCHMARKS)
+
+    status = bm.benchmark_report()["status"]
+    ev = status["check_evidence"]
+    assert set(ev) == set(status["checks"])
+    # kepler: pos/vel are analytic closed-form of the same two-body model; the
+    # energy-conservation check is bare numerical consistency.
+    kepler = {k: ev[k] for k in ev if k.startswith("kepler_two_body.")}
+    assert kepler["kepler_two_body.final_position_m"] == EVIDENCE_ANALYTICAL
+    assert kepler["kepler_two_body.final_velocity_m_s"] == EVIDENCE_ANALYTICAL
+    assert kepler["kepler_two_body.specific_energy_drift"] == EVIDENCE_NUMERICAL
+    # j2: a first-order averaged secular closed form of the same J2 physics.
+    assert {ev[k] for k in ev if k.startswith("j2_secular_drift.")} == {EVIDENCE_ANALYTICAL}
+    # starship: SpaceX's published Flight 15 timeline, never an input to the solve.
+    assert {ev[k] for k in ev if k.startswith("starship_booster_catch.")} == {EVIDENCE_HISTORICAL}
+
+    # The rollup carries the qualification on every type it lists.
+    roll = status["evidence"]
+    for t in (EVIDENCE_ANALYTICAL, EVIDENCE_INDEPENDENT_MODEL, EVIDENCE_HISTORICAL,
+              EVIDENCE_DESIGN_INPUT, EVIDENCE_NUMERICAL):
+        assert t in roll
+        assert {"proves", "cannot_prove", "label", "independent"} <= set(roll[t])
+    assert roll[EVIDENCE_HISTORICAL]["result"] == "passed"
+    assert roll[EVIDENCE_HISTORICAL]["independent"] is True
+    assert roll[EVIDENCE_ANALYTICAL]["result"] == "passed"
+    assert roll[EVIDENCE_ANALYTICAL]["independent"] is False
+    assert roll[EVIDENCE_NUMERICAL]["result"] == "passed"
+    # Only one of the three benchmarks is validation-grade -> the rollup of the
+    # independent kinds is 2 checks (the starship scenario).
+    iv = status["independent_validation"]
+    assert iv["result"] == "passed" and iv["checks_total"] == 2
+
+    # Every metric line names its evidence, scope and phases -- not just the
+    # aggregate rollup.
+    for m in bm.benchmark_report()["targets"]["metrics"]:
+        assert m["evidence"] in ("analytical", "independent_model", "historical_telemetry",
+                                  "design_input", "numerical_consistency")
+        assert m["scope"] and m["phases"]
+
+
+def test_benchmark_report_metrics_show_scope_and_phase_for_every_scenario():
+    """Task #263 acceptance: each scenario's metrics record the model range
+    and applicable phases the pass speaks to, so a benchmark green is never
+    read as validating the whole model."""
+    metrics = bm.benchmark_report()["targets"]["metrics"]
+    scopes = {m["scope"] for m in metrics}
+    assert scopes == set(bm.BENCHMARK_SCOPE.values())
+    for m in metrics:
+        assert m["scope"] in scopes
+        assert isinstance(m["phases"], list) and m["phases"]
+        # Every phase string this test suite knows about is a real one.
+        assert set(m["phases"]) <= set().union(*[set(v) for v in bm.BENCHMARK_PHASE.values()])
+
+
 def test_cli_main_exits_zero_when_all_pass():
     assert bm.main([]) == 0

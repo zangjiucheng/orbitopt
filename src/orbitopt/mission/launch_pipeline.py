@@ -315,7 +315,8 @@ def _build_report(*, inputs: Mapping, window: dict | None, ascent: dict | None,
     report = build_report("launch-pipeline", label, [], inputs=dict(inputs),
                           targets=targets)
     report["status"] = status_from_checks(
-        checks_map, {name: _check_category(name) for name in checks_map})
+        checks_map, {name: _check_category(name) for name in checks_map},
+        {name: _check_evidence(name) for name in checks_map})
     report["digest"] = report_digest(report)
     return report
 
@@ -333,6 +334,33 @@ def _check_category(name: str) -> str:
                 "ascent.mission_constraints_passed") or name.startswith("injection."):
         return CHECK_MODEL
     raise ValueError(f"launch-pipeline check {name!r} has no verification category")
+
+
+def _check_evidence(name: str) -> str:
+    """Task #263 (E4-03) evidence type of one launch-pipeline check. The
+    optimizer converging is bare numerical consistency. ``ascent.physics_verified``
+    is the *independent re-flight* verdict (task #261: set only by an
+    independent propagator replaying the solution, never the producing backend)
+    -- the only validation-grade check in this report. Every other check
+    compares the pipeline output to the aim point it was aimed at or a design
+    envelope it was constrained to (site corridor, mission constraints, target
+    orbit): internal consistency with the **design input**, not independent
+    validation. A green pipeline that has not re-flown is *numerical
+    consistency plus matching design input*."""
+    from orbitopt.verify.report import (
+        EVIDENCE_DESIGN_INPUT,
+        EVIDENCE_INDEPENDENT_MODEL,
+        EVIDENCE_NUMERICAL,
+    )
+
+    if name == "ascent.optimizer_converged":
+        return EVIDENCE_NUMERICAL
+    if name == "ascent.physics_verified":
+        return EVIDENCE_INDEPENDENT_MODEL
+    if name == "window.selected" or name == "ascent.mission_constraints_passed" \
+            or name.startswith("injection."):
+        return EVIDENCE_DESIGN_INPUT
+    raise ValueError(f"launch-pipeline check {name!r} has no evidence type")
 
 
 def _write(result_kwargs: dict, report: dict, out: Path):

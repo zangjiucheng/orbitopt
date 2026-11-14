@@ -984,7 +984,10 @@ def verify_injection(
     residuals = [_report.state_residual(
         "parking_coast_vs_analytic", "analytic circular parking orbit with secular J2",
         position=pre[:3], reference_position=burn.pre_burn_state[:3],
-        tolerance={"position_m": coast_tolerance_km * 1000.0})]
+        tolerance={"position_m": coast_tolerance_km * 1000.0},
+        evidence=_report.EVIDENCE_ANALYTICAL,
+        scope="J2-integrated coast vs a circular parking orbit propagated with first-order secular J2",
+        phases=("parking-orbit coast",))]
     targets = {
         "converged": converged, "kind": target.kind, "iterations": iterations,
         "tolerance": tol, "error_units": units,
@@ -1003,16 +1006,28 @@ def verify_injection(
         "launch.inclination_reachable": lv.inclination_reachable,
     }
     # Site-in-plane is plan geometry consistent to zero (numerical); the rest
-    # compare the achieved injection against the site/vehicle models.
+    # compare the achieved injection against the site/vehicle models. Those
+    # "models" are design *envelopes* (vehicle C3 curve, site DLA limits, the
+    # launch-azimuth corridor, the reachable-inclination bound), so a pass here
+    # says the plan matches the design it was built against -- not that the
+    # model agrees with reality (task #263).
+    _DI = _report.EVIDENCE_DESIGN_INPUT
+    _NUM = _report.EVIDENCE_NUMERICAL
     extra_categories = {
         "launch.site_in_plane": _report.CHECK_NUMERICAL,
         "launch.azimuth_in_corridor": _report.CHECK_MODEL,
         "launch.inclination_reachable": _report.CHECK_MODEL,
     }
+    extra_evidence = {
+        "launch.site_in_plane": _NUM,
+        "launch.azimuth_in_corridor": _DI,
+        "launch.inclination_reachable": _DI,
+    }
     if target.kind == "elliptic":
         targets["max_out_of_plane_deg"] = float(max_out_of_plane_deg)
         extra_checks["targeting.out_of_plane"] = bool(abs(oop) <= max_out_of_plane_deg)
         extra_categories["targeting.out_of_plane"] = _report.CHECK_MODEL
+        extra_evidence["targeting.out_of_plane"] = _DI
     if launch_constraints is not None:
         # The vehicle limit applies to every injection: C3 = 2 * specific
         # energy of the post-burn arc (negative for TLI / any elliptic
@@ -1034,10 +1049,12 @@ def verify_injection(
             targets["max_c3_km2_s2"] = launch_constraints.max_c3
             extra_checks["launch.c3_within_vehicle"] = bool(c3_achieved <= launch_constraints.max_c3)
             extra_categories["launch.c3_within_vehicle"] = _report.CHECK_MODEL
+            extra_evidence["launch.c3_within_vehicle"] = _DI
         if target.kind == "hyperbolic":
             if achieved is None:
                 extra_checks["launch.dla_within_site"] = False
                 extra_categories["launch.dla_within_site"] = _report.CHECK_MODEL
+                extra_evidence["launch.dla_within_site"] = _DI
             else:
                 v = achieved.reshape(1, 3)
                 if launch_constraints.frame == "ecliptic":
@@ -1045,6 +1062,7 @@ def verify_injection(
                 ev = launch_constraints.evaluate(v)
                 extra_checks["launch.dla_within_site"] = bool(float(ev.dla_excess_deg[0]) <= 0.0)
                 extra_categories["launch.dla_within_site"] = _report.CHECK_MODEL
+                extra_evidence["launch.dla_within_site"] = _DI
 
     report = _report.build_report(
         kind="launch-injection", label=f"{lv.site_id}-{target.name or target.kind}-{orbit.epoch_mjd2000:.5f}",
@@ -1052,7 +1070,8 @@ def verify_injection(
     )
     report["status"] = _report.status_from_checks(
         {**report["status"]["checks"], **extra_checks},
-        {**report["status"]["check_categories"], **extra_categories})
+        {**report["status"]["check_categories"], **extra_categories},
+        {**report["status"].get("check_evidence", {}), **extra_evidence})
     report["digest"] = _report.report_digest(report)
     _report.finalize_report(report, report_path)
 

@@ -91,6 +91,8 @@ from orbitopt.flightlab.frames import EARTH_ROTATION_RATE, WGS84_A, WGS84_F
 from orbitopt.verify.report import (
     CHECK_MODEL,
     CHECK_NUMERICAL,
+    EVIDENCE_ANALYTICAL,
+    EVIDENCE_INDEPENDENT_MODEL,
     REPORT_DIR_ENV,
     build_report,
     default_report_path,
@@ -779,11 +781,14 @@ def _pair_summary(pair: str, phase: str, metrics: Mapping,
 
 
 def _residual_from_metrics(pair: str, phase: str, metrics: Mapping, summary: Mapping,
-                           category: str) -> dict:
+                           category: str, evidence: str, scope: str, phases: Sequence[str]) -> dict:
     residual = {
         "name": f"{pair}.{phase}",
         "reference": f"cross-model ({pair.replace('_vs_', ' vs ')}, {phase} phase)",
         "category": category,
+        "evidence": evidence,
+        "scope": scope,
+        "phases": list(phases),
         "position_residual_m": abs(metrics["final_position_m"]),
         "velocity_residual_m_s": abs(metrics["final_velocity_m_s"]),
         "max_position_m": metrics["max_position_m"],
@@ -877,15 +882,24 @@ def run_cross_model(scenario: CrossModelScenario | None = None,
         for i, la in enumerate(with_track):
             for lb in with_track[i + 1:]:
                 pair = f"{la}_vs_{lb}"
-                category = (CHECK_NUMERICAL if {la, lb} == {"three_dof", "two_body_analytic"}
-                            else CHECK_MODEL)
+                analytic_pair = {la, lb} == {"three_dof", "two_body_analytic"}
+                category = CHECK_NUMERICAL if analytic_pair else CHECK_MODEL
+                evidence = (EVIDENCE_ANALYTICAL if analytic_pair
+                            else EVIDENCE_INDEPENDENT_MODEL)
+                scope = ("residual of the 6-DOF simulation against the closed-form two-body solution "
+                         "of the same coast -- integrator/model agreement, not real-world validation"
+                         if analytic_pair else
+                         "mutual disagreement of two independently formulated numerical models over the "
+                         "arc -- not either model's error against a reference or against reality")
                 metrics = compare_tracks(getattr(ran[la], attr), getattr(ran[lb], attr))
                 summary = _pair_summary(pair, phase, metrics, thresholds)
                 pairs.append({"pair": pair, "phase": phase, "category": category,
+                              "evidence": evidence,
                               "metrics": dict(metrics), "tolerance": summary["limits"],
                               "checks": summary["checks"],
                               "recorded_only": summary["recorded_only"]})
-                residuals.append(_residual_from_metrics(pair, phase, metrics, summary, category))
+                residuals.append(_residual_from_metrics(pair, phase, metrics, summary, category,
+                                                        evidence, scope, (phase,)))
 
     report = build_report(
         "cross-model", scenario.name, propagations=[], residuals=residuals,
