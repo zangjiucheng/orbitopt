@@ -25,7 +25,9 @@ the chain, and the one report that grades it. That is this module:
   :func:`load_scenario` / :func:`reference_scenario` -- the frozen input; the
   packaged reference is ``data/mission_two_stage_leo.yaml``.
 * :func:`run_two_stage_leo` -- the chain: station events, staging handoffs
-  (M-01 gates between a spent stage's last sample and its child's first), the
+  (M-01 gates across each staging boundary; since E2-02 the first stage's own
+  branch of the separation fork is graded too, with the cross-branch
+  ``mass.separation_fork`` conservation gate), the
   SECO-to-parking-orbit handoff (M-02), the vehicle mass bookkeeping, and the
   M-05 propagation of the parking orbit.
 * :func:`mission_report` -- the unified task report (kind
@@ -46,6 +48,15 @@ both the upper-stage insertion (the M-07 chain above) and the first-stage
 recovery (``recovery.landed`` etc.) over the same combined run. The recovery
 gate is its own link of the chain: after separation and mass bookkeeping,
 before the upper-stage expected-orbit verdict (:data:`STATUS_RECOVERY_FAILED`).
+
+Branched mission timeline (E2-02, task #255)
+--------------------------------------------
+From separation the mission is two continuous trajectories, not one: the
+upper stage and the first stage each inherit the stack's state at the split.
+:mod:`orbitopt.mission.branches` finds that fork in a run and grades both
+branch boundaries under the same M-01 contract; the mission report carries
+the fork under ``inputs.handoffs.separation_fork`` and its cross-branch mass
+gate as check ``mass.separation_fork``.
 
 Two ascent sources, one grading rule
 ------------------------------------
@@ -755,9 +766,10 @@ def _sample_state(track, index: int, stage_config: Mapping[str, Any]) -> Handoff
 def _ascent_lineage(run) -> list[str]:
     """The mission's continuing stack, upper stage first: the insertion body
     and its ancestors up to the first stage. Staging handoffs are graded along
-    this lineage only -- a spent-stage debris track or a jettisoned fairing
-    diverges on purpose, and grading its divergence as a continuity failure
-    would be grading the wrong physics (they are recorded, not graded)."""
+    this lineage and the separation fork (E2-02: the first stage is a mission
+    branch, not a lost handoff) -- a jettisoned fairing diverges off both, on
+    purpose, and grading its divergence as a continuity failure would be
+    grading the wrong physics (it is recorded, not graded)."""
     from orbitopt.flightlab import checks as gate_checks
 
     by_id = {t.body_id: t for t in run.tracks}
@@ -843,19 +855,26 @@ def staging_handoffs(run, tolerances: HandoffTolerances,
     take is gated raw and the document says why (``method:
     unavailable:``-reason) -- the failure is reported, never hidden.
 
-    Only boundaries on the :func:`_ascent_lineage` (the insertion body's
-    ancestor chain) are graded. A boundary off that lineage -- stage-1 debris,
-    a fairing -- is still recorded (``graded: false``, with the reason),
-    because the run did stage there; it is simply not the state the next
-    segment inherits, so its divergence is physics, not a lost handoff.
-    Returns one document per boundary, mission order first; empty for a
-    single-body run."""
+    Boundaries on the :func:`_ascent_lineage` (the insertion body's ancestor
+    chain) **and on the E2-02 separation fork** (the first stage's own branch,
+    :func:`orbitopt.mission.branches.separation_fork` -- two continuous
+    missions start at separation, not one) are graded. A boundary off both --
+    a fairing jettisoned off a branch -- is still recorded (``graded: false``,
+    with the reason), because the run did stage there; it is simply not the
+    state a mission segment inherits, so its divergence is physics, not a lost
+    handoff. Returns one document per boundary, mission order first; empty for
+    a single-body run."""
+    from orbitopt.mission.branches import separation_fork
+
     boundary_tol = HandoffTolerances(
         position_m=tolerances.position_m, velocity_m_s=float(staging_velocity_m_s),
         epoch_s=tolerances.epoch_s,
         max_epoch_gap_s=tolerances.max_epoch_gap_s, mass_kg=tolerances.mass_kg)
     lineage = _ascent_lineage(run)
     graded_pairs = set(zip(lineage[1:], lineage[:-1]))  # (parent, child) up the chain
+    fork = separation_fork(run)
+    if fork is not None:
+        graded_pairs |= {(fork["parent_body"], b["body_id"]) for b in fork["branches"]}
     docs: list[dict] = []
     for track in run.tracks:
         if track.parent_body_id is None:
@@ -863,9 +882,18 @@ def staging_handoffs(run, tolerances: HandoffTolerances,
         parent = next((t for t in run.tracks if t.body_id == track.parent_body_id), None)
         if parent is None:
             continue
+        # A fork boundary's separation event may name any member of the split:
+        # the parent, the child, a sibling branch (the event is recorded on the
+        # continuing stack, with ``separated_from`` naming the shed body), or
+        # -- in an E2-01 combined run -- the debris the booster track replaced.
+        family = {track.body_id, track.parent_body_id}
+        if fork is not None and track.parent_body_id == fork["parent_body"]:
+            family |= {b["body_id"] for b in fork["branches"]}
         separation = next((float(e.t_s) for e in run.events
                            if e.kind == "separation"
-                           and e.body_id in (track.body_id, track.parent_body_id)), None)
+                           and (e.body_id in family
+                                or (e.data or {}).get("separated_from") in family)),
+                          None)
         graded = (parent.body_id, track.body_id) in graded_pairs
         before = _sample_state(parent, len(parent.t_s) - 1,
                                {"body_id": parent.body_id,
@@ -883,7 +911,8 @@ def staging_handoffs(run, tolerances: HandoffTolerances,
         if not graded:
             doc["checks"] = []
             doc["passed"] = None
-            doc["reason"] = ("off the ascent lineage (debris / fairing track): recorded, "
+            doc["reason"] = ("off the ascent lineage and off the separation fork "
+                             "(a fairing jettisoned off a branch): recorded, "
                              "not graded -- its divergence is physics, not a lost handoff")
             docs.append(doc)
             continue
@@ -940,6 +969,7 @@ class TwoStageLeoMission:
     launch: dict | None = None
     stations: list = field(default_factory=list)
     staging: list = field(default_factory=list)
+    branches: dict | None = None
     parking: dict | None = None
     parking_elements: dict = field(default_factory=dict)
     expected_elements: dict = field(default_factory=dict)
@@ -965,7 +995,8 @@ class TwoStageLeoMission:
             "out_dir": str(self.out_dir),
             "ascent_run_dir": str(self.ascent_run_dir) if self.ascent_run_dir else None,
             "run_id": self.run_id, "launch": self.launch,
-            "stations": self.stations, "staging": self.staging, "parking": self.parking,
+            "stations": self.stations, "staging": self.staging,
+            "branches": self.branches, "parking": self.parking,
             "parking_elements": self.parking_elements,
             "expected_elements": self.expected_elements,
             "propagation": self.propagation,
@@ -1187,6 +1218,7 @@ def run_two_stage_leo(scenario: TwoStageLeoScenario, out_dir, *,
     run directory and the M-05 propagation report stay next to it and are
     referenced from it by path and digest."""
     from orbitopt.mission.ascent import ascent_handoff_state, check_ascent_to_parking_orbit
+    from orbitopt.mission.branches import branch_handoffs
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -1199,6 +1231,7 @@ def run_two_stage_leo(scenario: TwoStageLeoScenario, out_dir, *,
     not_assessed: list[dict] = []
     stations: list[dict] = []
     staging: list[dict] = []
+    branches: dict | None = None
     parking: dict | None = None
     parking_elements: dict = {}
     propagation: dict = {"status": "not_run"}
@@ -1250,6 +1283,13 @@ def run_two_stage_leo(scenario: TwoStageLeoScenario, out_dir, *,
             checks.extend(HandoffCheck(id=c["id"], passed=c["passed"], value=c["value"],
                                        limit=c["limit"], unit=c["unit"],
                                        reason_code=c["reason_code"]) for c in doc["checks"])
+        branches = branch_handoffs(run, scenario.handoff, scenario.staging_velocity_m_s,
+                                   staging)
+        if branches is not None:
+            checks.extend(HandoffCheck(id=c["id"], passed=c["passed"], value=c["value"],
+                                       limit=c["limit"], unit=c["unit"],
+                                       reason_code=c["reason_code"])
+                          for c in branches["checks"])
 
         state = ascent_handoff_state(run)
         report = check_ascent_to_parking_orbit(run, state, scenario.handoff, scenario.elements)
@@ -1315,7 +1355,7 @@ def run_two_stage_leo(scenario: TwoStageLeoScenario, out_dir, *,
         scenario=scenario, status=status, message=message, reason_codes=reason_codes,
         out_dir=out, ascent_run_dir=ascent_run_dir,
         run_id=getattr(run, "run_id", None), launch=launch,
-        stations=stations, staging=staging, parking=parking,
+        stations=stations, staging=staging, branches=branches, parking=parking,
         parking_elements=parking_elements, expected_elements=expected_elements,
         expected_tolerances=expected_tolerances, expected_basis=basis,
         propagation=propagation, recovery=recovery_block,
@@ -1447,6 +1487,8 @@ def mission_report(mission: TwoStageLeoMission) -> dict:
     if mission.recovery is not None:
         chain = (chain.replace("separation", "separation -> booster recovery", 1)
                  if "separation" in chain else chain + " -> booster recovery")
+    if mission.branches is not None:
+        chain += " (branched after separation: upper stage + first stage)"
     report = {
         "schemaVersion": "1.0",
         "kind": MISSION_REPORT_KIND,
@@ -1461,7 +1503,8 @@ def mission_report(mission: TwoStageLeoMission) -> dict:
                        "run_dir": str(mission.ascent_run_dir) if mission.ascent_run_dir else None,
                        "launch": mission.launch},
             "stations": mission.stations,
-            "handoffs": {"staging": mission.staging, "parking_orbit": mission.parking},
+            "handoffs": {"staging": mission.staging, "separation_fork": mission.branches,
+                         "parking_orbit": mission.parking},
             "propagation": mission.propagation,
             "recovery": mission.recovery,
             "not_assessed": mission.not_assessed,

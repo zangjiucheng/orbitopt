@@ -377,20 +377,40 @@ def test_cli_rejects_mass_discontinuity_run(tmp_path):
 # ------------------------------------------------- M-06: phases + handoffs
 
 
-def _phase_labels(scene):
+def _phase_rows(scene):
+    """Lane -> labels of that lane's phase row. Every row must be continuous;
+    the common row runs from the timeline start to the E2-02 separation fork
+    (or the timeline end when the mission never branched); each branch lane
+    starts at the fork; together the rows cover the whole timeline."""
     phases = scene["timeline"]["phases"]
     assert phases, "scene must carry a phase row"
-    assert phases[0]["start"] == pytest.approx(scene["timeline"]["min"])
-    assert phases[-1]["end"] == pytest.approx(scene["timeline"]["max"])
-    for a, b in zip(phases, phases[1:]):
-        assert a["end"] > a["start"]
-        assert b["start"] == pytest.approx(a["end"]), "phase row must be continuous"
-    return [p["label"] for p in phases]
+    fork = scene["timeline"].get("branches")
+    rows: dict[str, list[dict]] = {}
+    for p in phases:
+        rows.setdefault(p.get("lane", ""), []).append(p)
+    ends = {}
+    for lane, row in rows.items():
+        for a, b in zip(row, row[1:]):
+            assert a["end"] > a["start"]
+            assert b["start"] == pytest.approx(a["end"]), "phase row must be continuous"
+        if fork and lane:
+            assert row[0]["start"] == pytest.approx(fork["forkT"])
+        else:
+            assert row[0]["start"] == pytest.approx(scene["timeline"]["min"])
+        ends[lane] = row[-1]["end"]
+    assert max(ends.values()) == pytest.approx(scene["timeline"]["max"])
+    if fork:
+        assert ends.get("", pytest.approx(fork["forkT"])) == pytest.approx(fork["forkT"])
+    return {lane: [p["label"] for p in row] for lane, row in rows.items()}
 
 
 def test_fixture_phases_tile_the_timeline_continuously(fixture_scene):
-    assert _phase_labels(fixture_scene) == [
-        "On the pad", "Boost", "Staging", "Upper-stage burn"]
+    # E2-02: the fork at t=160 splits the phase row -- the common row stops
+    # at separation, and each branch tiles its own lane from the fork on.
+    rows = _phase_rows(fixture_scene)
+    assert rows[""] == ["On the pad", "Boost", "Staging"]
+    assert rows["upper-stage"] == ["Upper-stage burn"]
+    assert rows["booster"] == ["First stage"]
 
 
 def test_staging_and_seco_event_notes_carry_handoff_verdicts(fixture_scene):
@@ -409,13 +429,42 @@ def test_separation_handoffs_are_m01_gated(fixture_scene):
     # the fabricated fixture ends the LAUNCH_ECI stack at the numbers its GCRS
     # child starts with -- through the frame bridge those are different states.
     assert up["status"] == "failed" and up["graded"] is True
-    # The booster is off the ascent lineage (stack -> upper_stage reaches
-    # orbit): recorded, never graded, as in the M-07 reference chain. Its
-    # divergence from the stack (here even a fabricated mass gain) is the
-    # recovered stage's own physics, not a lost handoff of the mission.
+    # E2-02: both children of the fork are mission branches, so BOTH boundary
+    # cards are graded -- the first stage's path off the stack starts at the
+    # same handoff as the upper stage's and must honour it. (The fabricated
+    # fixture violates that on both branches, e.g. its booster mass gain.)
     booster = by_id["separation:booster"]
-    assert booster["status"] == "not_checked" and booster["graded"] is False
-    assert booster["checks"] == [] and "not graded" in booster["detail"]
+    assert booster["status"] == "failed" and booster["graded"] is True
+    assert {c["id"] for c in booster["checks"]} == gate
+
+
+def test_separation_fork_card_and_timeline_branches(fixture_scene):
+    """E2-02 acceptance: the scene shows the split itself -- a fork card with
+    the cross-branch mass gate, a ``timeline.branches`` block naming the two
+    lanes, and both branch trajectories visible from the fork on."""
+    fork = next(h for h in fixture_scene["handoffs"] if h["id"] == "separation:fork")
+    assert fork["graded"] is True and fork["from_body"] == "stack"
+    assert [c["id"] for c in fork["checks"]] == ["mass.separation_fork"]
+    # the fabricated fixture's branch masses don't sum to the stack's
+    assert fork["status"] == "failed"
+    assert fork["checks"][0]["reason_code"] == "mass_not_conserved_across_fork"
+    assert "stack" in fork["detail"] and "kg" in fork["detail"]
+
+    tl = fixture_scene["timeline"]["branches"]
+    assert tl["forkT"] == pytest.approx(160.0) and tl["parentBody"] == "stack"
+    assert [lane["id"] for lane in tl["lanes"]] == ["upper-stage", "booster"]
+    assert [lane["bodyId"] for lane in tl["lanes"]] == ["upper_stage", "booster"]
+
+    # both branches are visible from the fork on: a body trail per branch,
+    # a lane phase per branch, and the fork's own event note.
+    lanes = {p.get("lane", "") for p in fixture_scene["timeline"]["phases"]}
+    assert {"upper-stage", "booster"} <= lanes
+    for body in ("upper_stage", "booster"):
+        trail = next(b for b in fixture_scene["bodies"] if b["id"] == body)["trail"]
+        assert min(trail["times"]) <= 160.0 <= max(trail["times"])
+    note = next(e["note"] for e in fixture_scene["timeline"]["events"]
+                if e["label"] == "Separation")
+    assert "fork FAILED" in note   # the fork's verdict rides on the event row
 
 
 def test_staging_gap_is_bridged_by_a_coast_before_the_gate():
@@ -490,8 +539,10 @@ def test_single_track_run_without_insertion_evidence_has_no_handoffs():
 def test_coast_extends_timeline_bodies_and_phases(tmp_path):
     scene = run_to_scene(read_run(_all_gcrs_copy_run(tmp_path)), earth_texture=False,
                          coast_orbits=2.0)
-    assert _phase_labels(scene) == ["On the pad", "Boost", "Staging", "Upper-stage burn",
-                                    "Parking orbit", "Propagation"]
+    rows = _phase_rows(scene)
+    assert rows[""] == ["On the pad", "Boost", "Staging"]
+    assert rows["upper-stage"] == ["Upper-stage burn", "Parking orbit", "Propagation"]
+    assert rows["booster"] == ["First stage"]
     coast = next(b for b in scene["bodies"] if b["id"] == "parking_orbit")
     assert coast["tStart"] == pytest.approx(540.0)
     assert coast["trail"]["times"][0] == pytest.approx(540.0)

@@ -7,7 +7,9 @@ with the visible window bracketed, a ruler with MET ticks that adapt to the
 zoom, the mission phases, and the events with their names. Time is
 continuous -- scrubbing at the deepest zoom moves it by milliseconds, where
 the old 10,000-step slider moved it by eight seconds on Starship's timeline
-and by forty minutes on a Mars cruise.
+and by forty minutes on a Mars cruise. A branched mission (E2-02) draws its
+phase row as a fork: the common row ends at the separation fork and each
+branch lane (timeline.branches) gets its own row under it.
 
 Mouse: drag on the track to scrub, pausing playback (Shift-drag: ten times finer; grabbing
 the playhead nudges it from where it is instead of jumping), scroll to zoom
@@ -170,37 +172,53 @@ class TimelineTrack(QWidget):
         self.window: TimeWindow | None = None
         self._unit_s = 86400.0
         self._phases: list[dict] = []
+        self._branches: dict = {}   # timeline.branches (E2-02 separation fork)
+        self._lanes: list[str] = [""]  # phase draw order: common row, then fork lanes
         self._drag: str | None = None  # "scrub" | "pan" | "overview"
         self._drag_anchor = (0.0, 0.0)  # (x, window start) when a pan began
         self._scrub_anchor = (0.0, 0.0, False)  # (x, time, fine) the scrub is measured from
         self._hover_x: float | None = None
         self.setMouseTracking(True)
-        self.setMinimumHeight(self._height(False))
+        self.setMinimumHeight(self._height(0))
         state.scene_changed.connect(self._on_scene_changed)
         state.time_changed.connect(self._on_time_changed)
 
     # ------------------------------------------------------------ layout
-    def _height(self, phases: bool) -> int:
+    def _height(self, phase_rows: int) -> int:
         return (self.OVERVIEW_H + self.GAP + self.RULER_H + self.EVENT_H
-                + ((self.PHASE_H + self.GAP) if phases else 0) + 2)
+                + (self.PHASE_H + self.GAP) * max(0, int(phase_rows)) + 2)
 
-    def _rows(self) -> dict[str, tuple[float, float]]:
-        """(top, bottom) of each row in widget coordinates."""
+    def _rows(self) -> dict[str, object]:
+        """(top, bottom) of each row in widget coordinates; the phase row is
+        a list of ``(lane, top, bottom)`` spans -- one per fork lane under the
+        common (pre-split) row, so a branched mission draws as a fork."""
         y = 0.0
-        rows = {"overview": (y, y + self.OVERVIEW_H)}
+        rows: dict[str, object] = {"overview": (y, y + self.OVERVIEW_H)}
         y += self.OVERVIEW_H + self.GAP
         rows["ruler"] = (y, y + self.RULER_H)
         y += self.RULER_H
         if self._phases:
-            rows["phases"] = (y + 1, y + 1 + self.PHASE_H)
-            y += self.PHASE_H + self.GAP
+            rows["phases"] = []
+            for lane in self._lanes:
+                rows["phases"].append((lane, y + 1, y + 1 + self.PHASE_H))
+                y += self.PHASE_H + self.GAP
         rows["events"] = (y, y + self.EVENT_H)
         return rows
 
     def _row_at(self, y: float) -> str | None:
-        for name, (top, bottom) in self._rows().items():
+        for name, bounds in self._rows().items():
+            spans = bounds if name == "phases" else [bounds]
+            for top, bottom in spans:
+                if top - 1 <= y <= bottom + 1:
+                    return name
+        return None
+
+    def _lane_at(self, y: float) -> str | None:
+        """The phase lane under ``y`` ("" = the common row), or None."""
+        spans = self._rows().get("phases")
+        for _lane, top, bottom in spans or ():
             if top - 1 <= y <= bottom + 1:
-                return name
+                return _lane
         return None
 
     @property
@@ -235,12 +253,22 @@ class TimelineTrack(QWidget):
     def _on_scene_changed(self, _scene):
         timeline = self._state.timeline
         self._phases = list((timeline or {}).get("phases", []))
+        self._branches = dict((timeline or {}).get("branches") or {})
+        # Draw order: the common (lane-less) row, then each fork lane that
+        # actually carries phases, in scene order.
+        self._lanes = [""]
+        if self._phases:
+            for lane in self._branches.get("lanes", []):
+                lane_id = str(lane.get("id", ""))
+                if lane_id and lane_id not in self._lanes and any(
+                        p.get("lane") == lane_id for p in self._phases):
+                    self._lanes.append(lane_id)
         if timeline is None:
             self.window = None
         else:
             self._unit_s = timeline_unit_seconds(timeline.get("unitLabel"))
             self.window = TimeWindow.fit(timeline["min"], timeline["max"], self._unit_s)
-        self.setFixedHeight(self._height(bool(self._phases)))
+        self.setFixedHeight(self._height(len(self._lanes) if self._phases else 0))
         self.view_changed.emit()
         self.update()
 
@@ -251,13 +279,28 @@ class TimelineTrack(QWidget):
 
     def current_phase(self) -> dict | None:
         t = self._state.time
-        return next((p for p in self._phases if p["start"] <= t <= p["end"]), None)
+        covering = [p for p in self._phases if p["start"] <= t <= p["end"]]
+        # A branched mission has two phases covering the same instant (one per
+        # lane): the common row wins, else the first lane in draw order.
+        return next((p for p in covering if not p.get("lane")),
+                    covering[0] if covering else None)
 
-    def phase_at(self, x: float) -> dict | None:
+    def phase_at(self, x: float, lane: str | None = None) -> dict | None:
+        """The phase under widget x, in ``lane`` ("" = common row; None = any
+        lane, common row first)."""
         if self.window is None:
             return None
         t = self.time_at(x)
-        return next((p for p in self._phases if p["start"] <= t <= p["end"]), None)
+        covering = [p for p in self._phases if p["start"] <= t <= p["end"]]
+        if lane is not None:
+            return next((p for p in covering if p.get("lane", "") == lane), None)
+        return next((p for p in covering if not p.get("lane")),
+                    covering[0] if covering else None)
+
+    def branch_label(self, lane: str) -> str:
+        """Display name of a phase lane (the branch it draws)."""
+        return next((str(l.get("label", lane)) for l in self._branches.get("lanes", [])
+                     if l.get("id") == lane), lane)
 
     def events_near(self, x: float, tol: float | None = None) -> list[dict]:
         """Events within ``tol`` px of ``x`` on the zoomed rows, nearest first."""
@@ -317,7 +360,7 @@ class TimelineTrack(QWidget):
         self._paint_overview(p, *rows["overview"])
         self._paint_ruler(p, *rows["ruler"])
         if "phases" in rows:
-            self._paint_phases(p, *rows["phases"])
+            self._paint_phases(p, rows["phases"])
         self._paint_events(p, *rows["events"])
         self._paint_playhead(p, rows["ruler"][0], rows["events"][1])
         p.end()
@@ -327,10 +370,16 @@ class TimelineTrack(QWidget):
         p.setPen(Qt.NoPen)
         p.setBrush(QColor(PANEL_RAISED))
         p.drawRoundedRect(QRectF(left, top, width, bottom - top), 2, 2)
-        for k, phase in enumerate(self._phases):
-            x0, x1 = self._overview_x(phase["start"]), self._overview_x(phase["end"])
-            p.setBrush(QColor(SURFACE_HOVER if k % 2 else HAIRLINE))
-            p.drawRect(QRectF(x0, top + 3, max(1.0, x1 - x0), bottom - top - 6))
+        # Lane phases get a sub-band each (the fork reads as a fork here too).
+        lanes = self._lanes if self._phases else [""]
+        band = max(1.0, (bottom - top - 6.0) / len(lanes))
+        for li, lane in enumerate(lanes):
+            for k, phase in enumerate(self._phases):
+                if phase.get("lane", "") != lane:
+                    continue
+                x0, x1 = self._overview_x(phase["start"]), self._overview_x(phase["end"])
+                p.setBrush(QColor(SURFACE_HOVER if k % 2 else HAIRLINE))
+                p.drawRect(QRectF(x0, top + 3.0 + li * band, max(1.0, x1 - x0), band))
         p.setPen(QPen(QColor(ACCENT_MID), 1.0))
         for e in self._state.events:
             x = self._overview_x(e.get("time", 0.0))
@@ -370,27 +419,29 @@ class TimelineTrack(QWidget):
             p.setPen(QPen(QColor(INK_MUTED), 1.0, Qt.DashLine))
             p.drawLine(QPointF(self._hover_x, top), QPointF(self._hover_x, self._rows()["events"][1]))
 
-    def _paint_phases(self, p: QPainter, top: float, bottom: float):
+    def _paint_phases(self, p: QPainter, lane_rows: list):
         current = self.current_phase()
         font = QFont(self.font())
         font.setPointSizeF(8.5)
         p.setFont(font)
         left, right = self.track_left, self.track_left + self.track_width
-        for k, phase in enumerate(self._phases):
-            x0, x1 = max(self.x_of(phase["start"]), left), min(self.x_of(phase["end"]), right)
-            if x1 <= x0:
-                continue
-            rect = QRectF(x0, top, max(1.0, x1 - x0), bottom - top)
-            active = phase is current
-            p.setPen(Qt.NoPen)
-            p.setBrush(QColor(ACCENT_DIM if active else (PANEL_RAISED if k % 2 == 0 else SURFACE_HOVER)))
-            p.drawRect(rect)
-            p.setPen(QPen(QColor(HAIRLINE), 1.0))
-            p.drawLine(rect.topLeft(), rect.bottomLeft())
-            text = p.fontMetrics().elidedText(phase["label"], Qt.ElideRight, int(rect.width() - 8))
-            if text and text != "…":
-                p.setPen(QColor(INK_PRIMARY if active else INK_SECONDARY))
-                p.drawText(rect.adjusted(4, 0, -4, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
+        for lane, top, bottom in lane_rows:
+            row_phases = [phase for phase in self._phases if phase.get("lane", "") == lane]
+            for k, phase in enumerate(row_phases):
+                x0, x1 = max(self.x_of(phase["start"]), left), min(self.x_of(phase["end"]), right)
+                if x1 <= x0:
+                    continue
+                rect = QRectF(x0, top, max(1.0, x1 - x0), bottom - top)
+                active = phase is current
+                p.setPen(Qt.NoPen)
+                p.setBrush(QColor(ACCENT_DIM if active else (PANEL_RAISED if k % 2 == 0 else SURFACE_HOVER)))
+                p.drawRect(rect)
+                p.setPen(QPen(QColor(HAIRLINE), 1.0))
+                p.drawLine(rect.topLeft(), rect.bottomLeft())
+                text = p.fontMetrics().elidedText(phase["label"], Qt.ElideRight, int(rect.width() - 8))
+                if text and text != "…":
+                    p.setPen(QColor(INK_PRIMARY if active else INK_SECONDARY))
+                    p.drawText(rect.adjusted(4, 0, -4, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
 
     def _paint_events(self, p: QPainter, top: float, bottom: float):
         left, right = self.track_left, self.track_left + self.track_width
@@ -466,7 +517,7 @@ class TimelineTrack(QWidget):
             self.update()
             return
         if row == "phases":
-            phase = self.phase_at(x)
+            phase = self.phase_at(x, self._lane_at(y))
             if phase is not None:
                 self._state.set_time(phase["start"])
             return
@@ -516,12 +567,13 @@ class TimelineTrack(QWidget):
     def mouseDoubleClickEvent(self, event):  # noqa: N802
         if self.window is None:
             return
-        x, row = event.position().x(), self._row_at(event.position().y())
+        x, y = event.position().x(), event.position().y()
+        row = self._row_at(y)
         near = self.events_near(x)
         if row == "events" and near:
             self.zoom_to_event(near[0])
-        elif row == "phases" and self.phase_at(x) is not None:
-            self.zoom_to_phase(self.phase_at(x))
+        elif row == "phases" and self.phase_at(x, self._lane_at(y)) is not None:
+            self.zoom_to_phase(self.phase_at(x, self._lane_at(y)))
         elif row == "overview":
             self.fit()
 
@@ -550,9 +602,11 @@ class TimelineTrack(QWidget):
         row = self._row_at(y)
         tips = []
         if row == "phases":
-            phase = self.phase_at(x)
+            phase = self.phase_at(x, self._lane_at(y))
             if phase is not None:
-                tips.append(f"{phase['label']}\n{format_met(phase['start'] * self._unit_s)} – "
+                lane = phase.get("lane", "")
+                head = f"{self.branch_label(lane)} · {phase['label']}" if lane else phase["label"]
+                tips.append(f"{head}\n{format_met(phase['start'] * self._unit_s)} – "
                             f"{format_met(phase['end'] * self._unit_s)}")
                 if phase.get("note"):
                     tips.append(phase["note"])
