@@ -1,14 +1,14 @@
 {
   "artefacts": {
-    "comparison": "/tmp/fl607-jn4xg5o_/flightlab-comparison-f07-two-stage-6dof-vs-3dof.verification.json",
+    "comparison": "/tmp/fl607-79ztqvww/flightlab-comparison-f07-two-stage-native-rigidbody-vs-native-pointmass.verification.json",
     "kept": false,
     "run_dirs": [
-      "/tmp/fl607-jn4xg5o_/3DOF",
-      "/tmp/fl607-jn4xg5o_/6DOF"
+      "/tmp/fl607-79ztqvww/native-pointmass",
+      "/tmp/fl607-79ztqvww/native-rigidbody"
     ]
   },
   "backends": {
-    "3DOF": {
+    "native-pointmass": {
       "checks": {
         "staging-handoff-continuity": true,
         "staging-mass-closure": true,
@@ -63,7 +63,7 @@
         "upper_propellant_kg": 6000.0
       }
     },
-    "6DOF": {
+    "native-rigidbody": {
       "checks": {
         "staging-handoff-continuity": true,
         "staging-mass-closure": true,
@@ -211,22 +211,22 @@
       }
     },
     "checks": {
-      "3DOF.staging-handoff-continuity": true,
-      "3DOF.staging-mass-closure": true,
-      "3DOF.staging-momentum-residual": true,
-      "3DOF.staging-scheduled-ignition": true,
-      "3DOF.staging-trajectory-divergence": true,
-      "6DOF.staging-handoff-continuity": true,
-      "6DOF.staging-mass-closure": true,
-      "6DOF.staging-momentum-residual": true,
-      "6DOF.staging-scheduled-ignition": true,
-      "6DOF.staging-trajectory-divergence": true,
-      "comparison-shared-spans": true
+      "comparison-shared-spans": true,
+      "native-pointmass.staging-handoff-continuity": true,
+      "native-pointmass.staging-mass-closure": true,
+      "native-pointmass.staging-momentum-residual": true,
+      "native-pointmass.staging-scheduled-ignition": true,
+      "native-pointmass.staging-trajectory-divergence": true,
+      "native-rigidbody.staging-handoff-continuity": true,
+      "native-rigidbody.staging-mass-closure": true,
+      "native-rigidbody.staging-momentum-residual": true,
+      "native-rigidbody.staging-scheduled-ignition": true,
+      "native-rigidbody.staging-trajectory-divergence": true
     },
     "status": "passed"
   },
-  "generated_utc": "2026-11-13T19:43:12+00:00",
+  "generated_utc": "2026-11-14T20:37:38+00:00",
   "schema": "orbitopt-fl607-1",
   "task": "#232 (F-07, epic #216)",
-  "wall_clock_s": 181.5
+  "wall_clock_s": 79.9
 }

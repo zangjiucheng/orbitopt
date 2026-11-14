@@ -20,6 +20,11 @@
       "additionalProperties": {"type": "string", "minLength": 1},
       "description": "Simulated engine model -> version actually used (e.g. {\"synthetic-1a\": \"1.0.0\"})."
     },
+    "backend": {
+      "type": "string",
+      "enum": ["opentsiolkovsky", "native-pointmass", "jsbsim", "native-rigidbody"],
+      "description": "E1-01 canonical backend identity: the ONE physics engine that flew this run, from orbitopt.flightlab.backends. The coarse 3DOF/6DOF wording is a deprecated input alias only and is never recorded here. Optional so pre-E1-01 run dirs still validate; every run orbitopt writes from now on carries it."
+    },
     "git_sha": {"type": "string", "pattern": "^[0-9a-f]{7,40}$"},
     "created_utc": {"$ref": "#/$defs/utc_timestamp"},
     "assumptions": {"type": "array", "items": {"type": "string", "minLength": 1}},

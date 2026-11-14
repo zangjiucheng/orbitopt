@@ -65,17 +65,17 @@ from typing import Any
 
 import numpy as np
 
+from orbitopt.flightlab.backends import BACKEND_NATIVE_RIGIDBODY
 from orbitopt.flightlab.contract import Check, Event, FlightRun, Verification
+from orbitopt.flightlab.parity import load_parity_scenario, native_stage_pair
 from orbitopt.flightlab.handoff import (
     PHASE_BOOSTBACK,
     PHASE_SEPARATION,
     HandoffState,
     handoff_digest,
 )
-from orbitopt.flightlab.sixdof.aero import load_packaged_aero
 from orbitopt.flightlab.sixdof.rigidbody import (
     ControlCommand,
-    RigidBodyEngine,
     RigidBodyPhysics,
     RigidBodyState,
     RigidBodyVehicle,
@@ -351,34 +351,23 @@ def f06_two_stage_scenario(*, separation_t_s: float = 95.0, ignition_delay_s: fl
     upper stage ignites ``ignition_delay_s`` (default 8 s) after the 25 kN.s
     separation impulse and both bodies fly to ``t_end_s`` (default 260 s).
     """
-    engine = RigidBodyEngine(thrust_vacuum_n=1.88e6, isp_vacuum_s=320.0,
-                             isp_sea_level_s=282.0, nozzle_exit_area_m2=2.0,
-                             throttle_min=0.4, throttle_max=1.0, mount_x_cg_m=22.0,
-                             gimbal_limit_rad=0.0873)
-    stack = RigidBodyVehicle(name="f06_stack", dry_mass_kg=18_000.0,
-                             propellant_mass_kg=60_000.0,
-                             inertia_kg_m2=(1.0e5, 4.0e6, 4.0e6), engine=engine,
-                             aero=load_packaged_aero("spike_stage"))
-    booster = RigidBodyVehicle(name="booster", dry_mass_kg=10_000.0,
-                               propellant_mass_kg=60_000.0,
-                               inertia_kg_m2=(3.4e4, 1.7e6, 1.7e6), engine=engine,
-                               aero=load_packaged_aero("spike_stage"))
-    upper_engine = RigidBodyEngine(thrust_vacuum_n=2.2e5, isp_vacuum_s=340.0,
-                                   isp_sea_level_s=300.0, nozzle_exit_area_m2=0.35,
-                                   throttle_min=0.3, throttle_max=1.0, mount_x_cg_m=6.0)
-    upper = RigidBodyVehicle(name="upper_stage", dry_mass_kg=2_000.0,
-                             propellant_mass_kg=6_000.0,
-                             inertia_kg_m2=(5.0e3, 2.0e5, 2.0e5), engine=upper_engine,
-                             aero=None)
+    # E1-01 (task #250): the vehicle figures come from the SHARED parity
+    # source (data/flightlab/parity/spike_stage_parity.yaml via
+    # orbitopt.flightlab.parity.native_stage_pair) -- the same document the
+    # jsbsim XMLs are cross-checked against -- so this scenario and the
+    # JSBSim spike cannot drift apart silently. ``separation_impulse_ns``
+    # stays a call-level choice (it is a schedule parameter, not a vehicle
+    # parameter).
+    pair = replace(native_stage_pair(load_parity_scenario()),
+                   separation_impulse_ns=separation_impulse_ns)
     state0 = RigidBodyState.from_launch(lat_geod_deg=28.5, lon_deg=-80.6,
                                         heading_deg=90.0, pitch_deg=90.0,
-                                        roll_deg=0.0, mass_kg=stack.mass_wet_kg)
+                                        roll_deg=0.0,
+                                        mass_kg=pair.stack.mass_wet_kg)
     program = WaypointAttitudeProgram(times_s=(0.0, 10.0, 110.0),
                                       heading_deg=(90.0, 90.0, 90.0),
                                       pitch_deg=(90.0, 90.0, 20.0),
                                       roll_deg=(0.0, 0.0, 0.0))
-    pair = StagePair(stack=stack, booster=booster, upper=upper,
-                     separation_impulse_ns=separation_impulse_ns)
     ignition = IgnitionPlan(separation_t_s=separation_t_s, ignition_delay_s=ignition_delay_s)
     return TwoStageScenario(
         name="f06-two-stage", state0=state0, pair=pair, program=program,
@@ -600,15 +589,16 @@ def to_flight_run(study: TwoStageStudy, *, run_id: str = "f06-two-stage-native",
         created_utc=epoch_utc,
         engines={"stage1": "spike_stage engine (vac 1.88 MN / Isp 320 s)",
                  "stage2": "upper engine (vac 220 kN / Isp 340 s)"},
-    assumptions=tuple(s.assumptions) + (
-        (f"Separation at t={s.separation_t_s} s with a "
-         f"{sep['separation_impulse_ns']} N.s body-+x impulse "
-         f"(+{sep['dv_upper_m_s']:.3f} m/s upper / -{sep['dv_booster_m_s']:.3f} m/s "
-         f"booster); upper ignition scheduled at t={s.ignition.ignition_t_s} s "
-         f"(delay {s.ignition.ignition_delay_s} s)."),
-        ("Booster handed to recovery on the M-01 separation->boostback boundary "
-         f"(handoff digest {study.booster_handoff_digest[:12]})."),
-    ),
+        backend=BACKEND_NATIVE_RIGIDBODY,
+        assumptions=tuple(s.assumptions) + (
+            (f"Separation at t={s.separation_t_s} s with a "
+             f"{sep['separation_impulse_ns']} N.s body-+x impulse "
+             f"(+{sep['dv_upper_m_s']:.3f} m/s upper / -{sep['dv_booster_m_s']:.3f} m/s "
+             f"booster); upper ignition scheduled at t={s.ignition.ignition_t_s} s "
+             f"(delay {s.ignition.ignition_delay_s} s)."),
+            ("Booster handed to recovery on the M-01 separation->boostback boundary "
+             f"(handoff digest {study.booster_handoff_digest[:12]})."),
+        ),
         tracks=(
             study.stack.to_body_track(body_id="stack"),
             study.booster.to_body_track(body_id="booster", parent_body_id="stack"),

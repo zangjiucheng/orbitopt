@@ -459,7 +459,11 @@ class Verification:
 class FlightRun:
     """A FlightResult v1 run: manifest fields + per-body tracks + events +
     verification. Construct one, then ``write_run(dir, run)`` materialises
-    the directory; ``read_run(dir)`` is the inverse."""
+    the directory; ``read_run(dir)`` is the inverse. ``backend`` is the
+    canonical backend identity (E1-01, task #250;
+    :mod:`orbitopt.flightlab.backends`): the one physics engine that flew
+    this run, recorded so no artefact can confuse two engines behind one
+    label. None on runs written before the field existed."""
 
     run_id: str
     target_sha256: str
@@ -471,6 +475,9 @@ class FlightRun:
     tracks: tuple[BodyTrack, ...] = ()
     events: tuple[Event, ...] = ()
     verification: Verification = field(default_factory=Verification)
+    # E1-01: canonical backend identity (orbitopt.flightlab.backends); None
+    # on runs produced before the field existed.
+    backend: str | None = None
 
 
 def _validate_run_manifest(manifest: Mapping[str, Any], where: str) -> None:
@@ -583,6 +590,7 @@ def _manifest_document(run: FlightRun) -> dict:
         "target_sha256": run.target_sha256,
         "vehicle_sha256": run.vehicle_sha256,
         "engines": dict(run.engines),
+        **({"backend": run.backend} if run.backend is not None else {}),
         "git_sha": run.git_sha,
         "created_utc": run.created_utc,
         "assumptions": list(run.assumptions),
@@ -653,6 +661,7 @@ def read_run(dir, *, validate: bool = True) -> FlightRun:
         git_sha=manifest["git_sha"],
         created_utc=manifest["created_utc"],
         engines=dict(manifest["engines"]),
+        backend=manifest.get("backend"),
         assumptions=tuple(manifest["assumptions"]),
         tracks=tuple(tracks),
         events=tuple(

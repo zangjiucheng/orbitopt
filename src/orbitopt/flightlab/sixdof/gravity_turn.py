@@ -67,14 +67,14 @@ from typing import Any, Mapping
 
 import numpy as np
 
+from orbitopt.flightlab.parity import load_parity_scenario, native_booster
 from orbitopt.flightlab import frames
-from orbitopt.flightlab.sixdof.aero import MaxQ, load_packaged_aero, max_q_of
+from orbitopt.flightlab.sixdof.aero import MaxQ, max_q_of
 from orbitopt.flightlab.sixdof.rigidbody import (
     _OMEGA_ECEF,
     _air_state,
     _gravity_ecef,
     _ned2ecef,
-    RigidBodyEngine,
     RigidBodyPhysics,
     RigidBodyState,
     RigidBodyVehicle,
@@ -496,14 +496,10 @@ def f05_scenario(*, t_end_s: float = 180.0, dt_s: float = 0.05,
     pitch-over to 18 deg by ``t = 120 s`` (the tanks run dry at ``t = 99.85 s``,
     so the last of the ramp is coasted), held to ``t = 180 s``. Full throttle
     until burn-out; US76, J2 and Earth rotation on for both sides."""
-    engine = RigidBodyEngine(thrust_vacuum_n=1.88e6, isp_vacuum_s=320.0,
-                             isp_sea_level_s=282.0, nozzle_exit_area_m2=2.0,
-                             throttle_min=0.4, throttle_max=1.0, mount_x_cg_m=22.0,
-                             gimbal_limit_rad=0.0873)
-    vehicle = RigidBodyVehicle(name="spike_stage", dry_mass_kg=10_000.0,
-                               propellant_mass_kg=60_000.0,
-                               inertia_kg_m2=(3.4e4, 1.7e6, 1.7e6), engine=engine,
-                               aero=load_packaged_aero("spike_stage"))
+    # E1-01 (task #250): the shared parity source owns the vehicle figures
+    # (same stage-1 booster as the F-06/F-07 stack; see
+    # orbitopt.flightlab.parity).
+    vehicle = native_booster(load_parity_scenario(), name="spike_stage")
     state0 = RigidBodyState.from_launch(lat_geod_deg=28.5, lon_deg=-80.6,
                                         heading_deg=90.0, pitch_deg=90.0,
                                         roll_deg=0.0, mass_kg=vehicle.mass_wet_kg)
