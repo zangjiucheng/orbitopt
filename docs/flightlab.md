@@ -165,8 +165,15 @@ to N site-ENU points per sample for the envelope plots without changing draws.
 ## Nominal / dispersed comparison (R-07)
 
 In the recorded 32-sample comparison (seed 1, identical dispersions and
-referee), the baseline landed 14 and the newer objective landed 17. The
-latter's Wilson interval was [0.36, 0.69]; position failures rose from 4 to 7.
+referee), the baseline landed 14 -- but only by flying an unlimited-bandwidth
+TVC assumption (nominal demand peaking at 193 deg/s), while the stack column
+flies the declared actuator set (20 deg/s slew in series with a 0.2 s lag,
+compensated; see [ADR 0004](adr/flightlab-0004-rate-limited-landing-guidance.md))
+and also lands 14, with the nominal touching down 0.03 m from the pad at
+0.009 m/s lateral speed on a 18.8 deg/s peak slew. Position failures rose
+from 4 to 7 and the stack adds 5 terminal `LANDING_LATERAL_SPEED_EXCEEDED`
+draws the rate-limited gimbal cannot close; the baseline's edge over the
+stack is now a propellant-reserve mix (8 + 5 vs 2 + 3), not a landing one.
 See [ADR 0003](adr/flightlab-0003-landing-aware-boostback-objective.md) and
 [the recorded results](benchmarks/r07_nominal_dispersed.json) for the setup
 and failure breakdown.

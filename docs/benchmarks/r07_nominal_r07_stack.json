@@ -7,8 +7,8 @@
   "gfold 0.3.2: Environment.max_angle_deg is accepted but inert (verified); the tilt limit binds the cvxpy reference and the touchdown tilt check.",
   "FOH discretization (n nodes, h = tof/n, terminal node = engine cutoff state a short distance above the pad; ballistic coast from there); trapezoidal fuel accounting against sea-level Isp (pessimistic end).",
   "FL-305 closed-loop terminal guidance (docs/adr/flightlab-0002): the insertion SOCP is the feasibility certificate; the burn is re-planned from the propagated state every step (hoverslam vertical profile, ZEM/ZEV divert, tilt limit in the loop, no-hover ballistic cutoff); verdict from the same touchdown checks.",
-  "guidance: design_throttle=0.9 v_td=1.5m/s tilt<=30deg ignition=1.2s cutoff=19.7s after insertion; insertion plan fuel_planned=5753.0kg",
-  "R-05 actuator margins (0 deg/s TVC slew limit): burn 18.5s; ignition headroom 13.1%, min throttle headroom 13.1%, floor room 24.2%, min tilt margin 10.7 deg, peak slew 193.1 deg/s (limit unlimited), ceiling riding 0.0s, floor riding 0.0s"
+  "guidance: design_throttle=0.9 v_td=1.5m/s tilt<=30deg ignition=1.2s cutoff=none after insertion; insertion plan fuel_planned=5753.0kg",
+  "R-05/E3-01 actuator margins (20 deg/s TVC slew limit, 0.2 s TVC lag, lag-compensated command, 30 deg tilt limit, throttle slew unlimited): burn 18.6s; ignition headroom 12.8%, min throttle headroom 12.8%, floor room 24.1%, min tilt margin 10.6 deg, peak slew 18.8 deg/s (limit 20 deg/s, lag 0.2s (compensated)), throttle slew unlimited, ceiling riding 0.0s, floor riding 0.0s"
  ],
  "checks": [
   {
@@ -41,7 +41,7 @@
    "passed": true,
    "reason_code": "",
    "unit": "m",
-   "value": 0.552298530522226
+   "value": 0.032332825800109044
   },
   {
    "id": "landing-vertical-speed",
@@ -49,7 +49,7 @@
    "passed": true,
    "reason_code": "",
    "unit": "m/s",
-   "value": -1.608746295156212
+   "value": -1.5002200824281129
   },
   {
    "id": "landing-lateral-speed",
@@ -57,7 +57,7 @@
    "passed": true,
    "reason_code": "",
    "unit": "m/s",
-   "value": 0.0426696613891352
+   "value": 0.00866764168381301
   },
   {
    "id": "landing-tilt",
@@ -65,7 +65,7 @@
    "passed": true,
    "reason_code": "",
    "unit": "deg",
-   "value": 19.314362310614165
+   "value": 19.443332721225918
   },
   {
    "id": "landing-propellant-reserve",
@@ -73,7 +73,7 @@
    "passed": true,
    "reason_code": "",
    "unit": "kg",
-   "value": 992.4011328587221
+   "value": 972.595796083915
   },
   {
    "id": "landing-max-g",
@@ -81,7 +81,7 @@
    "passed": true,
    "reason_code": "",
    "unit": "g",
-   "value": 3.5189145423251444
+   "value": 3.551134435216699
   },
   {
    "id": "recovery-propellant-reserve",
@@ -89,7 +89,7 @@
    "passed": true,
    "reason_code": "",
    "unit": "kg",
-   "value": 5192.401132858722
+   "value": 5172.595796083915
   }
  ],
  "corridor": {
@@ -173,7 +173,7 @@
     "passed": true,
     "reason_code": "",
     "unit": "kg",
-    "value": 5192.401132858722
+    "value": 5172.595796083915
    },
    {
     "id": "joint-max-q-boostback",
@@ -213,7 +213,7 @@
     "passed": true,
     "reason_code": "",
     "unit": "m",
-    "value": 0.552298530522226
+    "value": 0.032332825800109044
    },
    {
     "id": "joint-touchdown-vertical-speed",
@@ -221,7 +221,7 @@
     "passed": true,
     "reason_code": "",
     "unit": "m/s",
-    "value": 1.608746295156212
+    "value": 1.5002200824281129
    },
    {
     "id": "joint-touchdown-lateral-speed",
@@ -229,7 +229,7 @@
     "passed": true,
     "reason_code": "",
     "unit": "m/s",
-    "value": 0.0426696613891352
+    "value": 0.00866764168381301
    },
    {
     "id": "joint-propellant-reserve-touchdown",
@@ -237,7 +237,7 @@
     "passed": true,
     "reason_code": "",
     "unit": "kg",
-    "value": 5192.401132858722
+    "value": 5172.595796083915
    }
   ],
   "passed": true,
@@ -264,30 +264,34 @@
  "kind": "flightlab-recovery-nominal-report",
  "landing": {
   "actuator_margin": {
-   "burn_time_s": 18.5,
+   "burn_time_s": 18.6,
    "saturated_high_s": 0,
    "saturated_low_s": 0,
-   "slew_deg_s_max": 193.1436,
-   "throttle_floor_room_min": 0.241747,
-   "throttle_headroom_at_ignition": 0.131086,
-   "throttle_headroom_min": 0.131086,
-   "tilt_margin_deg_min": 10.6856,
-   "tvc_rate_limit_deg_s": 0.0
+   "slew_deg_s_max": 18.7673,
+   "throttle_floor_room_min": 0.240781,
+   "throttle_headroom_at_ignition": 0.128484,
+   "throttle_headroom_min": 0.128484,
+   "throttle_rate_limit_per_s": 0.0,
+   "throttle_slew_max_per_s": 0.0,
+   "tilt_margin_deg_min": 10.5567,
+   "tvc_lag_compensation": true,
+   "tvc_lag_tau_s": 0.2,
+   "tvc_rate_limit_deg_s": 20.0
   },
   "feasible": true,
   "ignitions_used": 1,
   "landed": true,
-  "lateral_speed_m_s": 0.0426696613891352,
-  "max_proper_g": 3.5189145423251444,
-  "max_tilt_deg": 19.314362310614165,
-  "position_error_m": 0.552298530522226,
+  "lateral_speed_m_s": 0.00866764168381301,
+  "max_proper_g": 3.551134435216699,
+  "max_tilt_deg": 19.443332721225918,
+  "position_error_m": 0.032332825800109044,
   "reason_codes": [],
   "touchdown_enu_m": [
-   0.5512737499305791,
-   -0.03362914590658739,
-   -2.847987305007067e-07
+   0.03228485541108157,
+   -0.0017606065163900484,
+   -1.4099976479303476e-08
   ],
-  "vertical_speed_m_s": -1.608746295156212
+  "vertical_speed_m_s": -1.5002200824281129
  },
  "reason_codes": [],
  "recovered": true,
@@ -695,230 +699,230 @@
    ],
    [
     329.968,
-    -352.391,
-    21.309,
-    2533.473
+    -352.781,
+    21.334,
+    2533.551
    ],
    [
     330.468,
-    -350.336,
-    21.222,
-    2383.731
+    -352.558,
+    21.361,
+    2384.24
    ],
    [
     330.968,
-    -346.135,
-    21.0,
-    2239.553
+    -350.525,
+    21.276,
+    2240.65
    ],
    [
     331.468,
-    -339.997,
-    20.656,
-    2100.778
+    -346.198,
+    21.046,
+    2102.422
    ],
    [
     331.968,
-    -332.116,
-    20.202,
-    1967.256
+    -339.765,
+    20.683,
+    1969.396
    ],
    [
     332.468,
-    -322.68,
-    19.65,
-    1838.862
+    -331.446,
+    20.202,
+    1841.452
    ],
    [
     332.968,
-    -311.867,
-    19.011,
-    1715.495
+    -321.45,
+    19.615,
+    1718.492
    ],
    [
     333.468,
-    -299.852,
-    18.296,
-    1597.06
+    -309.978,
+    18.934,
+    1600.422
    ],
    [
     333.968,
-    -286.799,
-    17.514,
-    1483.463
+    -297.225,
+    18.171,
+    1487.151
    ],
    [
     334.468,
-    -272.868,
-    16.676,
-    1374.616
+    -283.375,
+    17.339,
+    1378.59
    ],
    [
     334.968,
-    -258.211,
-    15.792,
-    1270.429
+    -268.609,
+    16.448,
+    1274.654
    ],
    [
     335.468,
-    -242.977,
-    14.87,
-    1170.819
+    -253.096,
+    15.508,
+    1175.26
    ],
    [
     335.968,
-    -227.305,
-    13.919,
-    1075.704
+    -237.004,
+    14.531,
+    1080.327
    ],
    [
     336.468,
-    -211.333,
-    12.948,
-    985.006
+    -220.49,
+    13.526,
+    989.777
    ],
    [
     336.968,
-    -195.19,
-    11.964,
-    898.647
+    -203.706,
+    12.503,
+    903.536
    ],
    [
     337.468,
-    -179.003,
-    10.977,
-    816.556
+    -186.801,
+    11.47,
+    821.532
    ],
    [
     337.968,
-    -162.894,
-    9.993,
-    738.663
+    -169.915,
+    10.438,
+    743.696
    ],
    [
     338.468,
-    -146.978,
-    9.019,
-    664.901
+    -153.185,
+    9.413,
+    669.962
    ],
    [
     338.968,
-    -131.37,
-    8.064,
-    595.205
+    -136.742,
+    8.405,
+    600.266
    ],
    [
     339.468,
-    -116.178,
-    7.133,
-    529.514
+    -120.713,
+    7.421,
+    534.548
    ],
    [
     339.968,
-    -101.508,
-    6.233,
-    467.772
+    -105.22,
+    6.47,
+    472.75
    ],
    [
     340.468,
-    -87.462,
-    5.372,
-    409.923
+    -90.382,
+    5.558,
+    414.819
    ],
    [
     340.968,
-    -74.138,
-    4.554,
-    355.916
+    -76.312,
+    4.693,
+    360.702
    ],
    [
     341.468,
-    -61.632,
-    3.786,
-    305.701
+    -63.12,
+    3.882,
+    310.352
    ],
    [
     341.968,
-    -50.037,
-    3.073,
-    259.234
+    -50.913,
+    3.131,
+    263.722
    ],
    [
     342.468,
-    -39.443,
-    2.422,
-    216.471
+    -39.794,
+    2.447,
+    220.771
    ],
    [
     342.968,
-    -29.935,
-    1.838,
-    177.375
+    -29.86,
+    1.836,
+    181.459
    ],
    [
     343.468,
-    -21.599,
-    1.326,
-    141.908
+    -21.206,
+    1.303,
+    145.749
    ],
    [
     343.968,
-    -14.513,
-    0.891,
-    110.038
+    -13.921,
+    0.855,
+    113.61
    ],
    [
     344.468,
-    -8.755,
-    0.537,
-    81.736
+    -8.091,
+    0.497,
+    85.01
    ],
    [
     344.968,
-    -4.397,
-    0.27,
-    56.975
+    -3.791,
+    0.233,
+    59.923
    ],
    [
     345.468,
-    -1.502,
-    0.092,
-    35.732
+    -1.087,
+    0.067,
+    38.326
    ],
    [
     345.968,
-    -0.088,
-    0.005,
-    17.987
+    0.051,
+    -0.003,
+    20.189
    ],
    [
     346.468,
-    0.392,
-    -0.024,
-    3.724
+    0.177,
+    -0.011,
+    5.471
    ],
    [
     346.968,
-    0.538,
-    -0.033,
-    -7.07
+    0.082,
+    -0.005,
+    -5.791
    ],
    [
     347.468,
-    0.568,
-    -0.035,
-    -14.406
+    0.047,
+    -0.003,
+    -13.599
    ],
    [
     347.968,
-    0.559,
-    -0.034,
-    -18.291
+    0.035,
+    -0.002,
+    -17.958
    ],
    [
-    348.173,
-    0.551,
-    -0.034,
+    348.242,
+    0.032,
+    -0.002,
     -18.887
    ]
   ],

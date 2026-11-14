@@ -86,6 +86,7 @@ import numpy as np
 
 from orbitopt.flightlab.contract import FlightRun, FlightTarget, read_run, write_run
 from orbitopt.flightlab.recovery.envelope import capture_track_rows, site_from_target
+from orbitopt.flightlab.recovery.landing import DECLARED_LANDING_ACTUATOR
 from orbitopt.flightlab.recovery.pipeline import (
     NOMINAL_PLAN_GUESS,
     _booster_track,
@@ -102,11 +103,19 @@ from orbitopt.flightlab.recovery.stats import (
 )
 from orbitopt.flightlab.recovery.uncertainty import UncertaintyModel
 
-__all__ = ["Dispersions", "MonteCarloResult", "run_monte_carlo"]#: The MC default plan options: every sample re-plans locally around the
+__all__ = ["Dispersions", "MonteCarloResult", "run_monte_carlo"]
+#: The MC default plan options: every sample re-plans locally around the
 #: accepted nominal script (a guidance computer would refine, not restart a
 #: cold search) -- ``max_fevals`` below 40 keeps FL-302 where it started.
+#: E3-01 (task #258) pins the declared actuator set into the default
+#: landing options: recovery Monte Carlo runs fly the repo's own JSBSim TVC
+#: pins (20 deg/s slew, 0.2 s lag) with the rate-aware divert by default --
+#: no recorded recovery benchmark is flown under an unlimited-bandwidth
+#: actuator any more. Pre-E3-01 before/after benches pin the FL-305-era
+#: (unlimited-slew) landing behaviour explicitly in their baseline columns.
 MC_PLAN_OPTIONS: dict[str, Any] = {"initial_guess": NOMINAL_PLAN_GUESS,
-                                   "max_fevals": 30}
+                                   "max_fevals": 30,
+                                   "landing": dict(DECLARED_LANDING_ACTUATOR)}
 
 
 @dataclass(frozen=True)
