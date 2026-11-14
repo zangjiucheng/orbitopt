@@ -189,8 +189,11 @@ def _real_binary():
 @pytest.mark.skipif(not _has_pygmo_and_scipy() or _real_binary() is None,
                     reason="pygmo/scipy/OpenTsiolkovsky binary missing")
 def test_leo_two_stage_real_converges(tmp_path):
+    # With the local SLSQP polish, as every production run (`orbitopt
+    # launch`, the M-07 chain) flies it: the global stage alone can stop a
+    # few hundred metres outside the 20 km band for an unlucky seed.
     result = _solve(load_target(TARGET), tmp_path / "real",
-                    generations=40, population=40, workers=4, seed=11)
+                    generations=40, population=40, workers=4, seed=11, local=True)
     assert result["optimizer_converged"] is True
     assert result["status"] == "CONVERGED"
 

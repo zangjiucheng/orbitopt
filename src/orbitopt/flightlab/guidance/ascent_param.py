@@ -21,13 +21,15 @@ ix  name                                      role
 3   ``pitch2_end_elev_deg``                   stage-2 linear-tangent pitch ramp ends here
 4   ``launch_azimuth_deg``                    constant azimuth (nominal from inclination+site)
 5   ``coast_s``                               stage-2 ``engine.burn_start_s`` after separation
-6   ``stage2_burn_end_s``                     stage-2 ``engine.burn_end_s`` (cutoff, stage-local)
+6   ``stage2_burn_s``                         stage-2 burn duration from ignition to cutoff
 7   ``payload_kg``                            present only when the objective is payload
 === ========================================= =====================================
 
 Pitch segments are linear in elevation vs time ("linear tangent"): a vertical
 rise, a kick, then a straight ramp down to the segment's end elevation -- one
-gravity-turn-shaped ramp per stage. The azimuth is constant; its bounds centre
+gravity-turn-shaped ramp per stage. A coast holds the stage-1 end elevation;
+the stage-2 ramp spans the stage-2 burn (ignition to ``PITCH2_LEAD_S``
+before cutoff). The azimuth is constant; its bounds centre
 on the classic flat-Earth launch azimuth for the target inclination and the
 site latitude, so the optimizer tunes the achieved inclination around the
 feasible nominal.
@@ -81,7 +83,7 @@ class AscentParams:
     pitch2_end_elev_deg: float
     launch_azimuth_deg: float
     coast_s: float
-    stage2_burn_end_s: float
+    stage2_burn_s: float
     payload_kg: float = 0.0
 
 
@@ -91,7 +93,7 @@ def decision_names(objective: str) -> tuple[str, ...]:
     if objective not in OBJECTIVES:
         raise GuidanceError(f"unknown objective {objective!r}; expected one of {OBJECTIVES}")
     names = ("vertical_rise_time_s", "pitch_kick_deg", "pitch1_end_elev_deg",
-             "pitch2_end_elev_deg", "launch_azimuth_deg", "coast_s", "stage2_burn_end_s")
+             "pitch2_end_elev_deg", "launch_azimuth_deg", "coast_s", "stage2_burn_s")
     return names + (("payload_kg",) if objective == "payload" else ())
 
 
@@ -116,7 +118,7 @@ def as_vector(p: AscentParams) -> list[float]:
     """Decision vector back from an :class:`AscentParams` (7 components when
     payload is zero, 8 when it is a decision)."""
     v = [p.vertical_rise_time_s, p.pitch_kick_deg, p.pitch1_end_elev_deg,
-         p.pitch2_end_elev_deg, p.launch_azimuth_deg, p.coast_s, p.stage2_burn_end_s]
+         p.pitch2_end_elev_deg, p.launch_azimuth_deg, p.coast_s, p.stage2_burn_s]
     return v + ([p.payload_kg] if p.payload_kg else [])
 
 
@@ -248,7 +250,10 @@ def derive_vehicle(base_vehicle: Mapping[str, Any], x: Sequence[float], *,
                    payload_kg: float | None = None) -> dict:
     """Copy of ``base_vehicle`` with the timing/payload decisions applied: the
     **last** stage's ``engine.burn_start_s`` = coast (``x[5]``),
-    ``engine.burn_end_s`` = cutoff (``x[6]``), and ``payload_kg`` (the
+    ``engine.burn_end_s`` = coast + burn duration (``x[5] + x[6]``; both are
+    stage-local OT times, so the burn lasts exactly ``x[6]`` whatever the
+    coast -- the bounds and the attitude program read ``x[6]`` the same
+    way), and ``payload_kg`` (the
     vector's 8th component when present, else the keyword) added to that last
     stage's initial and dry mass. The base mapping is never mutated."""
     doc = copy.deepcopy(dict(base_vehicle))
@@ -262,7 +267,7 @@ def derive_vehicle(base_vehicle: Mapping[str, Any], x: Sequence[float], *,
     if "engine" not in last:
         raise GuidanceError("the last stage needs an 'engine' to carry the coast/cutoff decisions")
     last["engine"]["burn_start_s"] = x[5]
-    last["engine"]["burn_end_s"] = x[6]
+    last["engine"]["burn_end_s"] = x[5] + x[6]
     mass = x[7] if (payload_kg is None and len(x) == 8) else float(payload_kg or 0.0)
     if mass > 0.0:
         last["mass_initial_kg"] = float(last["mass_initial_kg"]) + mass
@@ -295,7 +300,7 @@ def attitude_program(p: AscentParams, vehicle_doc: Mapping[str, Any]) -> list[At
     t1_end = clamp(sep - MECO_MARGIN_S, t_kick + 1.0, max(t_kick + 1.0, sep - 1.0))
     coast = clamp(p.coast_s, 0.0, COAST_MAX_S)
     ign2 = sep + coast
-    cutoff = ign2 + clamp(p.stage2_burn_end_s, 1.0,
+    cutoff = ign2 + clamp(p.stage2_burn_s, 1.0,
                           max(1.0, end_time - ign2 - PROGRAM_TAIL_S))
     t2_end = clamp(cutoff - PITCH2_LEAD_S, ign2 + 1.0, cutoff - 0.5)
 
@@ -305,9 +310,13 @@ def attitude_program(p: AscentParams, vehicle_doc: Mapping[str, Any]) -> list[At
         (t_kick, az, el_kick),
         (t1_end, az, el1),
     ]
-    if coast > 1.0:  # mid-coast waypoint: the coasting stack keeps pitching down
-        pts.append((ign2 - 0.5 * coast, az, 0.5 * (el1 + el2)))
-    pts.append((ign2, az, el1 if coast <= 1.0 else el2))
+    # The coasting stack holds el1 (no thrust, so attitude is free) and the
+    # stage-2 ramp runs el1 -> el2 over the burn itself, coast or not. An
+    # earlier shape pitched down to el2 *during* the coast and then held el2
+    # for the whole burn, so any coast removed the stage-2 ramp; a low-T/W
+    # upper stage (the F9-class one, T/W ~0.8) then could not flatten its
+    # climb gradually and inserted ~100 km low.
+    pts.append((ign2, az, el1))
     pts.append((t2_end, az, el2))
     pts.append((min(end_time - 1.0, cutoff + PROGRAM_TAIL_S), az, el2))
 

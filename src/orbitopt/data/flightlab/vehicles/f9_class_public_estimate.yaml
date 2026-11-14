@@ -32,6 +32,12 @@ assumptions:
     were deliberately NOT copied -- this file flies LEO insertion.
   - "Aero is the example's generic tube-and-fins table: no grid fins, landing
     legs, or fairing separation dynamics; booster Cd treats fins stowed."
+  - The parametric ascent optimizer flies ONE continuous upper-stage burn.
+    At stage-2 T/W ~0.8 that burn cannot end horizontal at 400 km, so a
+    400x400 km target is infeasible (periapsis ~100 km short at any payload).
+    Like the real vehicle, target a low insertion orbit (e.g. 200x360 km at
+    51.6 deg from the Cape, which converges with ~10.4 t); raising it to a
+    higher circular orbit needs a second burn this guidance does not model.
 simulation:
   end_time_s: 2400.0
   output_step_s: 2.0

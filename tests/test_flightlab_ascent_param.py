@@ -40,7 +40,7 @@ def _mid(lo, hi):
 # --- vector layout ----------------------------------------------------------
 
 def test_decision_names_by_objective():
-    assert ap.decision_names("reserve")[-1] == "stage2_burn_end_s"
+    assert ap.decision_names("reserve")[-1] == "stage2_burn_s"
     assert ap.decision_names("reserve") == ap.decision_names("booster_reserve")
     assert ap.decision_names("payload")[-1] == "payload_kg"
     assert ap.vector_size("payload") == 8 and ap.vector_size("reserve") == 7
@@ -131,7 +131,8 @@ def test_derive_vehicle_purity_and_payload(vehicle_doc, target):
     assert sN["mass_initial_kg"] - base["stages"][-1]["mass_initial_kg"] == pytest.approx(x[7])
     assert sN["mass_dry_kg"] - base["stages"][-1]["mass_dry_kg"] == pytest.approx(x[7])
     assert sN["engine"]["burn_start_s"] == x[5]      # coast after separation
-    assert sN["engine"]["burn_end_s"] == x[6]        # cutoff
+    # cutoff, stage-local: the burn lasts x[6] whatever the coast
+    assert sN["engine"]["burn_end_s"] == pytest.approx(x[5] + x[6])
     if len(base["stages"]) > 2:
         for a, b in zip(doc["stages"][1:-1], base["stages"][1:-1]):
             assert a == b                            # payload only in the LAST stage
@@ -180,6 +181,30 @@ def test_program_shape(vehicle_doc, target):
     assert prog[0].elevation_deg == 90.0             # starts vertical
     # pitch-down is monotone after the kick
     assert prog[-1].elevation_deg <= prog[3].elevation_deg <= prog[2].elevation_deg
+
+
+@pytest.mark.parametrize("coast_s", [0.0, 30.0])
+def test_stage2_ramp_spans_the_burn_whatever_the_coast(vehicle_doc, coast_s):
+    """The stage-2 pitch ramp runs el1 -> el2 between ignition and
+    PITCH2_LEAD_S before cutoff, with or without a coast. (It used to reach
+    el2 during the coast and hold it for the whole burn, which left a
+    low-T/W upper stage no way to flatten its climb.)"""
+    p = ap.AscentParams(10.0, 8.0, 40.0, 5.0, 45.0, coast_s, 300.0)
+    prog = ap.attitude_program(p, vehicle_doc)
+    sep = ap.separation_time_s(vehicle_doc)
+    ign2, cutoff = sep + coast_s, sep + coast_s + 300.0
+
+    def elev(t):
+        pts = [(pt.t_s, pt.elevation_deg) for pt in prog]
+        for (t0, e0), (t1, e1) in zip(pts, pts[1:]):
+            if t0 <= t <= t1:
+                return e0 + (e1 - e0) * (t - t0) / (t1 - t0)
+        return pts[-1][1]
+
+    assert elev(ign2) == pytest.approx(40.0)            # held through the coast
+    mid = 0.5 * (ign2 + cutoff - ap.PITCH2_LEAD_S)
+    assert elev(mid) == pytest.approx(22.5, abs=0.1)    # halfway down the ramp
+    assert elev(cutoff - ap.PITCH2_LEAD_S) == pytest.approx(5.0)
 
 
 def test_program_degrades_gracefully_out_of_bounds(vehicle_doc, target):
