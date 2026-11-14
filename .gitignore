@@ -16,3 +16,7 @@ docs/.jekyll-metadata
 docs/.sass-cache/
 docs/vendor/
 docs/.bundle/
+
+# Local/CI documentation translation model data
+/.translation-data/
+/.translation-cache/

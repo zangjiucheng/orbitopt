@@ -1,0 +1,2 @@
+# Optional documentation tooling; separate from orbitopt's compute environment.
+argostranslate==1.11.0

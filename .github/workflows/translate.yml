@@ -1,0 +1,80 @@
+name: Translate documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - README.md
+      - docs/**/*.md
+      - scripts/translate_docs.py
+      - scripts/install_argos_model.py
+      - requirements-translation.txt
+      - .github/workflows/translate.yml
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Retranslate all English sources
+        type: boolean
+        default: false
+
+concurrency:
+  group: translate-zh
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  translate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ARGOS_DEVICE_TYPE: cpu
+      ARGOS_INTRA_THREADS: '2'
+      XDG_DATA_HOME: ${{ github.workspace }}/.translation-data
+      XDG_CACHE_HOME: ${{ github.workspace }}/.translation-cache
+      OMP_NUM_THREADS: '2'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-translation.txt
+      - name: Cache Argos model data
+        uses: actions/cache@v4
+        with:
+          path: |
+            .translation-data
+            .translation-cache
+          key: argos-en-zh-1.9-${{ runner.os }}-${{ hashFiles('requirements-translation.txt', 'scripts/install_argos_model.py') }}
+      - name: Install CPU translation engine and English-to-Chinese model
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -r requirements-translation.txt
+          python scripts/install_argos_model.py
+      - name: Translate changed English documents and validate structure
+        env:
+          FORCE: ${{ inputs.force || false }}
+        run: |
+          args=()
+          if [ "$FORCE" = true ]; then args+=(--force); fi
+          python scripts/translate_docs.py "${args[@]}"
+      - name: Create or update the translation review PR
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
+        with:
+          branch: automation/translate-zh
+          add-paths: translations/zh/
+          commit-message: 'docs: update Simplified Chinese translations'
+          title: 'docs: update Simplified Chinese translations'
+          body: |
+            Generated from the English README and Markdown documentation using offline Argos Translate.
+            Code, links, HTML/Liquid and frontmatter were checked before writing.
+            Review technical terminology and numerical claims before merging.
+            See translations/zh/review.json for paragraphs retained in English after placeholder checks failed.
+            English remains authoritative. These review copies are browsable on GitHub.
+          delete-branch: true

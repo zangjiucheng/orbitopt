@@ -84,6 +84,7 @@ see the [performance overview](https://zangjiucheng.github.io/orbitopt/#results)
 pipelines and visualization; `examples/`, `docs/` and `tests/` contain their
 examples, guides and regression tests. Preview the site with
 `cd docs && bundle install && bundle exec jekyll serve`.
+See the [translation workflow](translations/README.md) for automatic Chinese review copies.
 
 ## Installing without conda
 
