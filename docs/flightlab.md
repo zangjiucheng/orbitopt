@@ -171,6 +171,17 @@ See [ADR 0003](adr/flightlab-0003-landing-aware-boostback-objective.md) and
 [the recorded results](benchmarks/r07_nominal_dispersed.json) for the setup
 and failure breakdown.
 
+## Joint chance-constrained planning (E3-02)
+
+`plan_boostback_entry(joint_chance=...)` replaces the R-01 soft terms with
+joint chance constraints (fuel-margin quantile, scatter-derived divert bar,
+landing-probability floor) aggregated as a worst-violation exact penalty.
+In the recorded paired 32-sample comparison the joint arm landed 17 (+4,
+−0 vs the baseline; identical touchdowns on the shared landings) with the
+best landed-conditional scatter. See
+[ADR 0004](adr/flightlab-0004-joint-recovery-chance-constraints.md) and
+[the recorded results](benchmarks/e3_02_joint_recovery.json).
+
 For implementation and reproducibility details, see [JSBSim findings](flightlab-jsbsim-spike-findings.md),
 [regression CI](flightlab-regression-ci.md) and
 [landing guidance](adr/flightlab-0002-closed-loop-landing-guidance.md).
