@@ -224,3 +224,52 @@ def test_shift_drag_scrubs_finely_and_grabbing_the_playhead_does_not_jump():
     track.mousePressEvent(_mouse(QMouseEvent.Type.MouseButtonPress, track.x_of(1.0), y, Qt.LeftButton, Qt.NoModifier))
     assert state.time == pytest.approx(1.0, abs=per_px)
     bar.close()
+
+
+def test_a_branched_scene_draws_the_fork_and_its_lanes():
+    """E2-02: a scene whose timeline carries `branches` renders the common
+    phase row ending at the fork, one lane row per mission branch, and every
+    lane resolves its own phase (a click in the booster lane follows the
+    booster, not whatever else covers the same time)."""
+    from PySide6.QtWidgets import QApplication
+
+    from orbitopt.viz.state import MissionState
+    from orbitopt.viz.timeline_bar import TimelineBar
+
+    app = QApplication.instance() or QApplication([])
+    scene = _scene()
+    tl = scene["timeline"]
+    tl["min"], tl["max"], tl["unitLabel"] = 0.0, 400.0, "seconds"
+    tl["phases"] = [
+        {"start": 0.0, "end": 100.0, "label": "Boost"},
+        {"start": 100.0, "end": 400.0, "label": "Upper-stage burn", "lane": "upper-stage"},
+        {"start": 100.0, "end": 300.0, "label": "First stage", "lane": "booster"},
+    ]
+    tl["branches"] = {"forkT": 100.0, "parentBody": "stack", "lanes": [
+        {"id": "upper-stage", "label": "Upper stage", "bodyId": "upper"},
+        {"id": "booster", "label": "First stage", "bodyId": "booster"},
+    ]}
+
+    state = MissionState()
+    bar = TimelineBar(state)
+    bar.show()
+    plain = bar.track.height()
+    state.set_scene(scene)
+    app.processEvents()
+    track = bar.track
+
+    assert track._lanes == ["", "upper-stage", "booster"]
+    assert track.height() > plain          # the bar grew a row per branch
+    rows = {lane: (top, bottom) for lane, top, bottom in track._rows()["phases"]}
+    assert track._lane_at(sum(rows["booster"]) / 2) == "booster"
+    assert track._lane_at(sum(rows[""]) / 2) == ""
+    assert track.branch_label("booster") == "First stage"
+
+    state.set_time(200.0)                  # after the fork: both branches fly
+    assert track.current_phase()["lane"] == "upper-stage"   # the road to orbit leads
+    x = track.x_of(200.0)
+    assert track.phase_at(x, "booster")["label"] == "First stage"
+    assert track.phase_at(x, "upper-stage")["label"] == "Upper-stage burn"
+    assert track.phase_at(track.x_of(50.0), "booster") is None  # pre-fork: no lane yet
+    assert not bar.grab().isNull()
+    bar.close()

@@ -196,11 +196,17 @@ def test_replayed_reference_flight_is_red_where_the_flight_is_off_target(tmp_pat
     # every station of the DoD chain, in order
     assert [s["kind"] for s in mission.stations] == list(REQUIRED_EVENT_CHAIN)
     assert all(s["passed"] for s in mission.stations)
-    # every graded handoff of the chain is green (the recorded flight stages cleanly)
+    # every graded handoff of the chain is green (the recorded flight stages
+    # cleanly -- E2-02 grades both mission branches of the separation fork)
     graded = [d for d in mission.staging if d["graded"]]
-    assert [d["child_body"] for d in graded] == ["stage2"]
+    assert [d["child_body"] for d in graded] == ["stage2", "stage1_debris"]
     assert all(d["passed"] for d in graded)
     assert mission.staging[0]["bridge"]["method"] == "j2_coast"  # epochs compared like-for-like
+    # E2-02: the fork itself -- both branches, and mass conserved across the split
+    assert mission.branches["passed"] is True
+    assert [b["kind"] for b in mission.branches["branches"]] == ["upper-stage", "booster"]
+    assert mission.branches["mass_residual_kg"] == pytest.approx(0.0, abs=1e-3)
+    assert next(c for c in mission.checks if c.id == "mass.separation_fork").passed
     assert mission.parking["passed"] is True
     assert mission.status == STATUS_PARKING_ORBIT_OUT_OF_TOLERANCE
     failed = {c.id for c in mission.checks if not c.passed}
@@ -215,17 +221,26 @@ def test_replayed_reference_flight_is_red_where_the_flight_is_off_target(tmp_pat
     assert report["kind"] == MISSION_REPORT_KIND
     assert report["status"]["result"] == "failed"        # never a defaulted pass
     assert report["status"]["checks"]["parking.mass_conservation"] is True
+    assert report["status"]["checks"]["mass.separation_fork"] is True
+    assert report["inputs"]["handoffs"]["separation_fork"]["branches"]  # the fork itself, in the report
+    assert "(branched after separation: upper stage + first stage)" in report["label"]
     assert report["targets"]["achieved_parking_orbit"]["apoapsis_altitude_m"] < 550000.0
 
 
-def test_debris_and_fairing_boundaries_are_recorded_not_graded(tmp_path):
+def test_booster_branch_is_graded_and_the_fairing_recorded_not_graded(tmp_path):
+    """E2-02: the first stage's branch of the separation fork is a mission
+    trajectory -- its boundary is graded under M-01 like the upper stage's.
+    A fairing jettisoned off a branch stays recorded-but-not-graded."""
     docs = {d["child_body"]: d for d in staging_handoffs(
         read_run(GATEB), reference_scenario().handoff,
         reference_scenario().staging_velocity_m_s)}
     assert docs["stage2"]["graded"] is True
-    for off_lineage in ("stage1_debris", "stage2_fairing"):
-        assert docs[off_lineage]["graded"] is False
-        assert "lineage" in docs[off_lineage]["reason"]
+    assert docs["stage1_debris"]["graded"] is True       # the branch, not a lost handoff
+    assert docs["stage1_debris"]["passed"] is True       # the recorded split honours M-01
+    assert docs["stage1_debris"]["separation_t_s"] is not None
+    assert docs["stage2_fairing"]["graded"] is False
+    assert "fairing" in docs["stage2_fairing"]["reason"]
+    assert "recorded, not graded" in docs["stage2_fairing"]["reason"]
 
 
 def test_event_chain_checks_report_a_broken_chain():

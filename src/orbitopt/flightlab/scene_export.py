@@ -302,14 +302,17 @@ def _staging_handoffs(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dic
       sample -- a backend samples each body on its own clock, and the 2 s
       between the FL-004 stage-1 end and stage-2 start is ~7 km of flight,
       physics, not a lost handoff;
-    * only boundaries on the ascent lineage (first stage -> insertion body)
-      are graded. Debris and fairing boundaries are recorded as not graded:
-      they diverge on purpose.
+    * boundaries on the ascent lineage (first stage -> insertion body) AND on
+      the E2-02 separation fork (the first stage's own branch) are graded --
+      from separation the mission is two continuous trajectories, each
+      inheriting the stack state. A fairing jettisoned off a branch is
+      recorded as not graded: it diverges on purpose.
 
     Graded raw, the scene showed every staging of a nominal flight as FAILED
     (position/velocity discontinuity across the gap, a fairing's
     "epoch_backwards"). A declared separation impulse is a real, intended
     delta-v, so the velocity gate gets that much headroom."""
+    from orbitopt.mission.branches import separation_fork
     from orbitopt.mission.contract import HandoffTolerances, check_handoff
     from orbitopt.mission.two_stage_leo import (BRIDGE_METHOD, _ascent_lineage,
                                                 _bridge_across_gap)
@@ -317,6 +320,9 @@ def _staging_handoffs(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dic
     by_id = {track.body_id: track for track in run.tracks}
     lineage = _ascent_lineage(run)
     graded_pairs = set(zip(lineage[1:], lineage[:-1]))  # (parent, child) up the chain
+    fork = separation_fork(run)
+    if fork is not None:
+        graded_pairs |= {(fork["parent_body"], b["body_id"]) for b in fork["branches"]}
     out = []
     for child in run.tracks:
         parent_id = getattr(child, "parent_body_id", None)
@@ -334,7 +340,8 @@ def _staging_handoffs(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dic
         }
         if (parent_id, child.body_id) not in graded_pairs:
             out.append({**base, "status": "not_checked", "graded": False,
-                        "detail": "off the ascent lineage (debris / fairing): recorded, not graded",
+                        "detail": "off the ascent lineage and off the separation fork "
+                                  "(a fairing jettisoned off a branch): recorded, not graded",
                         "from": _state_doc(parent_id, float(parent.t_end_s), before, epoch),
                         "checks": []})
             continue
@@ -394,12 +401,56 @@ def _seco_handoff(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dict):
     }
 
 
-def _mission_phases(run: FlightRun, total: float, coast) -> list:
+def _fork_handoff(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dict,
+                  fork) -> dict | None:
+    """The E2-02 separation-fork card: the split itself, graded as the mass
+    gate the per-boundary cards cannot see -- the branches' initial masses sum
+    to the stack's mass at separation within the contract's mass tolerance
+    (``mass.separation_fork``). Epoch/frame/r/v continuity across the split is
+    each branch's own ``separation:<body>`` card; this card is the one the
+    timeline's fork marker and the branched phase row refer to."""
+    if fork is None:
+        return None
+    from orbitopt.mission.contract import HandoffTolerances
+
+    by_id = {track.body_id: track for track in run.tracks}
+    parent = by_id[fork["parent_body"]]
+    branch_mass = sum(float(by_id[b["body_id"]].mass_kg[0]) for b in fork["branches"]
+                      if b["body_id"] in by_id)
+    residual = branch_mass - float(fork["parent_mass_kg"])
+    limit = HandoffTolerances().mass_kg
+    check = {"id": "mass.separation_fork", "passed": bool(abs(residual) <= limit),
+             "value": float(residual), "limit": float(limit), "unit": "kg",
+             "reason_code": "" if abs(residual) <= limit else "mass_not_conserved_across_fork"}
+    state = _handoff_state(parent, len(parent.t_s) - 1, gcrs, epoch, mjd2000, run.run_id)
+    return {
+        "id": "separation:fork",
+        "label": ("Separation fork \u2014 {} \u2192 {}".format(
+            fork["parent_body"], " + ".join(b["label"] for b in fork["branches"]))),
+        "time": float(fork["t_s"]), "from_body": fork["parent_body"],
+        "status": _tri_state([check], True), "graded": True,
+        "detail": (f"branches {branch_mass:,.1f} kg vs stack {fork['parent_mass_kg']:,.1f} kg "
+                   f"at separation (residual {residual:+.3g} kg) \u00b7 both branches inherit the "
+                   "stack state under the M-01 contract"),
+        "from": _state_doc(fork["parent_body"], float(parent.t_end_s), state, epoch),
+        "checks": [check],
+    }
+
+
+def _mission_phases(run: FlightRun, total: float, coast, fork=None) -> list:
     """Contiguous phase row covering [0, total] from the run's own event
     boundaries: Pad -> Boost (liftoff to MECO) -> Staging coast (MECO to
     separation) -> Upper-stage burn (separation to SECO) -> Parking orbit /
     Propagation over the coast, when one was exported. Missing events merge
-    neighbouring phases rather than inventing boundaries."""
+    neighbouring phases rather than inventing boundaries.
+
+    E2-02: when the run has a separation fork, the phases after the split are
+    per-branch *lanes* -- everything the upper stage does carries
+    ``lane: "upper-stage"``, the first stage gets its own lane phase from
+    separation to the end of its track, and the base row stops at the fork.
+    A phase without a ``lane`` key belongs to the common (pre-split) row."""
+    from orbitopt.mission.branches import BRANCH_BOOSTER, BRANCH_UPPER_STAGE
+
     liftoff = _first_event(run, "liftoff")
     meco = _first_event(run, "meco")
     separation = _first_event(run, "separation")
@@ -410,19 +461,23 @@ def _mission_phases(run: FlightRun, total: float, coast) -> list:
     t_seco = float(seco.t_s) if seco else None
     child_starts = [float(t.t_start_s) for t in run.tracks
                     if getattr(t, "parent_body_id", None)]
+    t_fork = float(fork["t_s"]) if fork else None
     if t_meco is None:
-        t_meco = t_separation
-    if t_separation is None and child_starts:
-        t_separation = min(child_starts)
+        t_meco = t_separation if t_separation is not None else t_fork
+    if t_separation is None:
+        t_separation = t_fork if t_fork is not None else (min(child_starts) if child_starts else None)
 
     phases: list[dict] = []
+    upper_lane = BRANCH_UPPER_STAGE if fork is not None else ""
 
-    def add(label: str, start: float, end: float, note: str = "") -> None:
+    def add(label: str, start: float, end: float, note: str = "", lane: str = "") -> None:
         start, end = max(0.0, min(start, total)), min(max(end, 0.0), total)
         if end > start:
             phase = {"label": label, "start": start, "end": end}
             if note:
                 phase["note"] = note
+            if lane:
+                phase["lane"] = lane
             phases.append(phase)
 
     if t_liftoff is not None and t_liftoff > 0.0:
@@ -434,19 +489,28 @@ def _mission_phases(run: FlightRun, total: float, coast) -> list:
     if t_seco is not None:
         upper_start = t_separation if t_separation is not None else (
             t_meco if t_meco is not None else (t_liftoff or 0.0))
-        add("Upper-stage burn", upper_start, t_seco, "second stage to SECO")
+        add("Upper-stage burn", upper_start, t_seco, "second stage to SECO", upper_lane)
         if coast is not None:
             t0, period, coast_end = coast
             add("Parking orbit", t0, min(t0 + period, coast_end),
-                "one revolution of the inserted parking orbit")
-            add("Propagation", t0 + period, coast_end, "two-body display coast")
+                "one revolution of the inserted parking orbit", upper_lane)
+            add("Propagation", t0 + period, coast_end, "two-body display coast", upper_lane)
         elif total > t_seco:
-            add("Parking orbit", t_seco, total, "coast after SECO")
+            add("Parking orbit", t_seco, total, "coast after SECO", upper_lane)
     covered = max((p["end"] for p in phases), default=0.0)
     if covered < total:  # the run ends before any further event boundary
         add("Coast", covered, total, "no further event boundary in the run data")
     if not phases:
         add("Flight", 0.0, total)
+    if fork is not None:  # E2-02: the first stage's lane, from the split to its track end
+        by_id = {track.body_id: track for track in run.tracks}
+        booster = next((b for b in fork["branches"] if b["kind"] == BRANCH_BOOSTER), None)
+        track = by_id.get(booster["body_id"]) if booster else None
+        if track is not None and float(track.t_end_s) > float(fork["t_s"]):
+            note = ("recovered booster (FL-304) after separation"
+                    if booster["body_id"] == "booster"
+                    else "first-stage branch after separation (ballistic debris track)")
+            add("First stage", float(fork["t_s"]), float(track.t_end_s), note, BRANCH_BOOSTER)
     return phases
 
 
@@ -585,6 +649,11 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
                                         positions_km, velocities_km_s))
 
     handoffs = _staging_handoffs(run, epoch, mjd2000, gcrs)
+    from orbitopt.mission.branches import fork_lanes, separation_fork
+    fork = separation_fork(run)
+    fork_card = _fork_handoff(run, epoch, mjd2000, gcrs, fork)
+    if fork_card is not None:
+        handoffs.append(fork_card)
     seco = _seco_handoff(run, epoch, mjd2000, gcrs)
     if seco is not None:
         handoffs.append(seco)
@@ -609,7 +678,8 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
                     and h.get("from_body") == event.body_id]
             if mine:
                 entry["note"] += " \u00b7 handoff " + " | ".join(
-                    f"{h['to']['body']} {h['status'].upper()} ({h['detail']})" for h in mine)
+                    f"{h.get('to', {}).get('body', 'fork')} {h['status'].upper()} ({h['detail']})"
+                    for h in mine)
         elif event.kind == "seco" and seco is not None:
             entry["note"] += f" \u00b7 handoff {seco['status'].upper()} ({seco['detail']})"
         events.append(entry)
@@ -625,8 +695,15 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
         # seconds past J2000, so the viewer's date readout is exact).
         "referenceEpochEt": utc_mjd2000_to_tdb_seconds(mjd2000),
         "phases": _mission_phases(run, t_max,
-                                  (coast["t0"], coast["period"], t_max) if coast else None),
+                                  (coast["t0"], coast["period"], t_max) if coast else None,
+                                  fork=fork),
     }
+    if fork is not None:
+        # E2-02: the branched timeline -- where the mission split, and the
+        # lane each branch occupies in the phase row after the fork.
+        timeline["branches"] = {"forkT": float(fork["t_s"]),
+                                "parentBody": fork["parent_body"],
+                                "lanes": fork_lanes(fork)}
     if events:
         timeline["events"] = events
 
