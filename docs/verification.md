@@ -39,7 +39,8 @@ orbitopt benchmarks --json
 
 Compare a single-stage ascent and coast across available 3-DOF, JSBSim,
 TudatPy and analytic backends. Results are resampled onto a common time grid;
-thresholds can be overridden by phase and metric.
+thresholds can be overridden by phase and metric. The agreed acceptance line
+for these pairs is the [acceptance matrix](#cross-backend-acceptance-matrix).
 
 ```bash
 python -m orbitopt.verify.cross_model --backends three_dof,six_dof,tudatpy
@@ -54,6 +55,29 @@ and assesses the production setting for each scenario.
 
 ```bash
 python -m orbitopt.verify.integrator_convergence --plot
+```
+
+## Cross-backend acceptance matrix
+
+The acceptance matrix grades the cross-model comparison above against a
+configurable line per **backend pair × phase × metric**: which differences
+are accepted, what evidence justifies each tolerance (a convergence budget,
+a measured deviation, a physical argument, or ill-conditioning — recorded
+but never gated), and which cause class a violation carries
+(`numerical_integration`, `model_formulation`, `state_handoff`, …). The
+default lives in `src/orbitopt/data/acceptance_matrix.yaml` (schema
+`acceptance-matrix-1.0`); edit or replace it — the numbers are the
+acceptance line, not code constants.
+
+The result is an `acceptance-matrix` verification report, so it flows
+through the same pipeline gate as every other check. A row whose backend is
+not installed is `not_checked` with its cause (`backend_environment`, …),
+never a silent pass; `--threshold key=none` records a row without gating.
+
+```bash
+python -m orbitopt.verify.acceptance_matrix                      # default matrix
+python -m orbitopt.verify.acceptance_matrix --matrix my.yaml \
+    --threshold three_dof_vs_two_body_analytic.coast.position_m=0.005
 ```
 
 ## Model coverage and declared conventions
