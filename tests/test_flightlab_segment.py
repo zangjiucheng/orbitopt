@@ -140,6 +140,34 @@ def test_flight_run_report_is_a_valid_verification_report(target):
     assert green_report["status"]["checks"]["physics_verified"] is True
 
 
+def test_refly_checks_are_independent_model_evidence(target):
+    """E4-03 (#263): the graded orbit-refly checks are tudatpy's own findings
+    -- the parts physics_verified rolls up -- so they are independent_model,
+    not design_input; the "could not run" marker is not evidence at all and
+    must not turn the independent-validation rollup into a failure."""
+    refly = tuple(Check(cid, True, value=0.0, limit=1.0) for cid in (
+        "orbit-refly-semimajor-axis", "orbit-refly-eccentricity",
+        "orbit-refly-inclination", "orbit-refly-raan"))
+    flown = FlightRun(
+        run_id="hand-0002", target_sha256="0" * 64, vehicle_sha256="0" * 64,
+        git_sha="deadbeef", created_utc="2026-11-10T12:00:00Z",
+        verification=Verification(
+            optimizer_converged=True, physics_verified=True, mission_constraints_passed=True,
+            checks=refly + (Check("insertion-apoapsis-within-tolerance", True),)))
+    status = flight_run_report(flown, target)["status"]
+    for c in refly:
+        assert status["check_evidence"][f"check.{c.id}"] == "independent_model", c.id
+    assert status["check_evidence"]["check.insertion-apoapsis-within-tolerance"] == "design_input"
+    assert status["independent_validation"]["result"] == RESULT_PASSED
+
+    missing = replace(flown, verification=Verification(
+        optimizer_converged=True, physics_verified=None, mission_constraints_passed=True,
+        checks=(Check("orbit-refly-not-assessed", False, reason_code="REFLY_BACKEND_MISSING"),)))
+    status = flight_run_report(missing, target)["status"]
+    assert status["check_evidence"]["check.orbit-refly-not-assessed"] == "design_input"
+    assert status["independent_validation"]["result"] == "not_checked"
+
+
 # ------------------------------------------------------------ config layer
 
 
