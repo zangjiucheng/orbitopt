@@ -42,6 +42,19 @@ trajectory the optimizer ever sees is one ``propagate()`` call; nothing is
 estimated with a kinematic shortcut, and the accepted plan is re-integrated
 at the final (finer) step before it is reported.
 
+E3-02 (epic #248) offers a third objective mode beside FL-305 and R-01: the
+same landing coupling expressed as **joint chance constraints**
+(``joint_chance=``; :mod:`orbitopt.flightlab.recovery.chance`, ADR
+flightlab-0004). Fuel margin, divert feasibility and landing probability
+enter as constraints with deterministic equivalents (a quantile margin on
+the dispersion loss, a divert budget *derived* from a touchdown-scatter
+requirement, a joint landing-probability bound), aggregated as a
+worst-normalized-violation exact penalty instead of R-01's additive soft
+terms -- so the tail a weighted sum can trade away cannot be traded.
+``joint_chance`` replaces the two R-01 soft terms, so the R-01 knobs must
+be pinned off alongside it; everything else (physics, checks, reason codes)
+is unchanged.
+
 Feasibility language (acceptance criteria): a plan that cannot make the
 corridor comes back ``feasible=False`` with ``reason_codes[0]`` the governing
 one, drawn from::
@@ -86,6 +99,11 @@ from scipy.optimize import brentq, minimize
 
 from orbitopt.entry import G0_M_S2
 from orbitopt.flightlab.frames import WGS84_A, WGS84_F, geodetic_to_ecef
+from orbitopt.flightlab.recovery.chance import (
+    JointChanceSpec,
+    evaluate_joint_chance,
+    joint_penalty,
+)
 from orbitopt.flightlab.recovery.propagator import (
     AltitudeThreshold,
     BoosterModel,
@@ -324,6 +342,11 @@ class CorridorReport:
     entry_max_proper_g: float | None = None
     landing_divert_budget_m: float | None = None
     min_landing_reserve_margin_kg: float | None = None
+    #: E3-02 joint chance mode: the predicted landing probability at the
+    #: accepted handoff and the worst normalized constraint violation
+    #: (both None when the joint mode is off).
+    landing_probability: float | None = None
+    joint_violation: float | None = None
 
 
 @dataclass(frozen=True)
@@ -518,6 +541,8 @@ class _Rollout:
     exhausted: str | None = None          # "boostback" | "entry"
     impact_miss_m: float = float("inf")
     penalty: float = float("inf")
+    p_land: float | None = None           # E3-02 joint landing probability
+    joint_violation: float | None = None  # E3-02 worst normalized violation
 
 
 def _entry_window_loads(track: BoosterTrack, vehicle: BoosterModel,
@@ -553,14 +578,21 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
               q_lim: float, g_lim: float, reserve: float, horizon_s: float,
               dt: float, bb_window: tuple[float, float],
               divert_budget: float = float("inf"),
-              reserve_margin: float = 0.0) -> _Rollout:
+              reserve_margin: float = 0.0,
+              chance: JointChanceSpec | None = None,
+              sep_prop_kg: float | None = None) -> _Rollout:
     """One full-physics flight through the FL-301 propagator plus the
     corridor residual. Penalty is a sum of dimensionless squared violations:
     the corridor/entry/propellant violations in-flight, plus the R-01 soft
     constraints -- corridor miss against ``divert_budget`` and corridor
     propellant against landing need + reserve + ``reserve_margin``. The
     defaults (infinite budget, zero margin) reproduce the FL-305 objective
-    bit-for-bit."""
+    bit-for-bit. With ``chance`` (E3-02) the R-01 soft terms are replaced
+    (the caller pins them off) by the joint chance constraints of
+    :mod:`orbitopt.flightlab.recovery.chance`, graded on the crossed
+    corridor handoff and added as the worst-violation exact penalty;
+    ``sep_prop_kg`` (separation propellant) gives the burn exposure the
+    loss scale is computed from."""
     out = _Rollout()
     h0_name = "fl302_corridor_h0"
     try:
@@ -631,6 +663,20 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
         pen += (max(0.0, short) / 1000.0) ** 2
         pen += (max(0.0, out.entry_q_pa - q_lim) / 50_000.0) ** 2
         pen += (max(0.0, out.entry_g - g_lim) / 2.0) ** 2
+        if chance is not None:
+            # E3-02: fuel margin, divert feasibility and landing probability
+            # as joint chance constraints (worst-violation exact penalty --
+            # no cross-constraint trade). Exposure: propellant burned to the
+            # corridor plus the landing need still to spend.
+            burned = max(0.0, sep_prop_kg - out.prop_kg) \
+                if sep_prop_kg is not None else 0.0
+            verdict = evaluate_joint_chance(
+                chance, miss_m=out.miss_m,
+                margin_kg=out.prop_kg - out.landing_need_kg - reserve,
+                exposure_kg=burned + out.landing_need_kg)
+            pen += joint_penalty(verdict)
+            out.p_land = verdict.p_land
+            out.joint_violation = verdict.worst_violation
     elif tr.impact is not None:
         pen += 25.0 + 2.0 * min(out.impact_miss_m, 20.0 * corridor.radius_m) / corridor.radius_m
     else:
@@ -665,7 +711,9 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                          landing_divert_budget_m: float | None =
                              DEFAULT_LANDING_DIVERT_BUDGET_M,
                          landing_reserve_margin_kg: float =
-                             DEFAULT_LANDING_RESERVE_MARGIN_KG) -> ReturnPlan:
+                             DEFAULT_LANDING_RESERVE_MARGIN_KG,
+                         joint_chance: JointChanceSpec | Mapping[str, Any] | None =
+                             None) -> ReturnPlan:
     """Optimize the boostback/entry-burn script so the FL-301-propagated
     booster reaches ``recovery_target.corridor``; returns the corridor
     insertion state, its pad-ENU mirror, and the flown track.
@@ -676,9 +724,15 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     DESIGN ASSUMPTIONs. R-01's landing-aware objective terms (module
     docstring) default to :data:`DEFAULT_LANDING_DIVERT_BUDGET_M` and
     :data:`DEFAULT_LANDING_RESERVE_MARGIN_KG`; ``landing_divert_budget_m=
-    None`` and ``landing_reserve_margin_kg=0.0`` turn them off and reproduce
+     None`` and ``landing_reserve_margin_kg=0.0`` turn them off and reproduce
     the FL-305 objective exactly (the fair-baseline switch used by the
-    before/after benchmarks). All trajectories are flown by
+    before/after benchmarks). ``joint_chance`` (E3-02) selects the joint
+    chance-constraint objective instead: a :class:`JointChanceSpec` (or a
+    mapping of its fields) whose divert / fuel-margin / landing-probability
+    constraints replace the R-01 soft terms -- which must then be pinned off
+    alongside it. Every rollout additionally reports the handoff's predicted
+    landing probability and worst constraint violation on the corridor
+    report. All trajectories are flown by
     ``orbitopt.flightlab.recovery.propagator.propagate`` -- the optimizer
     only ever sees full-physics rollouts, and the accepted solution is
     re-integrated at ``dt_final`` before it is reported (no kinematic
@@ -703,6 +757,13 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     divert_budget = float("inf") if landing_divert_budget_m is None \
         else float(landing_divert_budget_m)
     reserve_margin = float(landing_reserve_margin_kg)
+    chance = JointChanceSpec.from_option(joint_chance)
+    if chance is not None:
+        if landing_divert_budget_m is not None or reserve_margin != 0.0:
+            raise ValueError(
+                "joint_chance replaces the R-01 soft objective terms: pin them "
+                "off alongside it (landing_divert_budget_m=None, "
+                "landing_reserve_margin_kg=0.0)")
     dry = float(booster.dry_mass_kg)
     sep_mass = float(sep_state.mass_kg)
     reserve = float(booster.landing_propellant_reserve_kg)
@@ -743,7 +804,8 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
         window = (sep_state.t_s + float(x[0]), sep_state.t_s + float(x[0]) + float(x[1]))
         return _evaluate(sep_state, to_mission(x), booster, recovery_target, corridor,
                          entry_q_max_pa, entry_g_max, reserve, horizon_s, dt, window,
-                         divert_budget=divert_budget, reserve_margin=reserve_margin)
+                         divert_budget=divert_budget, reserve_margin=reserve_margin,
+                         chance=chance, sep_prop_kg=sep_prop)
 
     # --- analytic floor check (see _propellant_floor_kg)
     sep_prop = sep_mass - dry
@@ -798,20 +860,23 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                                      f"{prop_floor:.0f} kg analytic floor to null the "
                                      f"{horiz_speed:.0f} m/s horizontal separation velocity"),
                          q_lim=entry_q_max_pa, g_lim=entry_g_max, reserve=reserve,
-                         divert_budget=divert_budget, reserve_margin=reserve_margin)
+                         divert_budget=divert_budget, reserve_margin=reserve_margin,
+                         chance=chance)
 
     final = rollout(best_x, dt_final)
     return _assemble(final, best_x, sep_state, booster, recovery_target, corridor,
                      None, q_lim=entry_q_max_pa, g_lim=entry_g_max, reserve=reserve,
-                     divert_budget=divert_budget, reserve_margin=reserve_margin)
+                     divert_budget=divert_budget, reserve_margin=reserve_margin,
+                     chance=chance)
 
 
 def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
               booster: BoosterModel, target: RecoveryTarget, corridor: RecoveryCorridor,
-              forced: tuple[str, ...] | None, *, q_lim: float, g_lim: float,
-              reserve: float, assumption: str | None = None,
-              divert_budget: float = float("inf"),
-              reserve_margin: float = 0.0) -> ReturnPlan:
+               forced: tuple[str, ...] | None, *, q_lim: float, g_lim: float,
+               reserve: float, assumption: str | None = None,
+               divert_budget: float = float("inf"),
+               reserve_margin: float = 0.0,
+               chance: JointChanceSpec | None = None) -> ReturnPlan:
     """Turn the final re-integrated rollout into the ReturnPlan: feasibility
     checks in physical order (first violation governs), corridor report,
     insertion state + ENU mirror."""
@@ -851,6 +916,8 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
         entry_max_proper_g=final.entry_g if final.entry_q_pa > 0.0 or final.crossed else None,
         landing_divert_budget_m=None if math.isinf(divert_budget) else divert_budget,
         min_landing_reserve_margin_kg=reserve_margin if reserve_margin > 0.0 else None,
+        landing_probability=final.p_land,
+        joint_violation=final.joint_violation,
     )
 
     state: BoosterState | None = None
@@ -882,6 +949,15 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
             f"{divert_budget:.0f} m landing-divert budget, corridor propellant against "
             f"landing need + reserve + {reserve_margin:.0f} kg fuel margin "
             "(DESIGN ASSUMPTIONs unless overridden)")
+    if chance is not None:
+        assumptions.append(
+            f"E3-02 joint chance constraints: landing probability >= "
+            f"{chance.min_landing_probability:.2f} (fuel margin covering the "
+            f"{chance.p_fuel_min:.2f} quantile of the dispersion loss, touchdown "
+            f"{chance.scatter_quantile:.2f}-quantile radius <= "
+            f"{chance.scatter_budget_m:.0f} m -> divert bar "
+            f"{chance.divert_budget_m():.0f} m), worst-violation exact penalty; "
+            "replaces the R-01 soft terms (DESIGN ASSUMPTIONs unless overridden)")
 
     return ReturnPlan(
         feasible=not reasons, reason_codes=tuple(reasons),
