@@ -7,6 +7,11 @@ the analytic one-step values), saturation and slew-limiting are then covered
 the command into the travel limit and the rate limit, and the recorded
 seconds must be non-zero), and the aero ascent must track its program without
 diverging while the deflection margin is recorded in the summary.
+
+E1-02 (task #251) adds the powered/coast phase split: its sample-window half
+is tested on a synthetic record, and a deliberately short burn flown past
+burn-out pins that ``burn_s`` is the burn, that the coast is unpowered, and
+that the two phases partition the flight.
 """
 from __future__ import annotations
 
@@ -24,11 +29,14 @@ from orbitopt.flightlab.sixdof.rigidbody import (
     propagate,
 )
 from orbitopt.flightlab.sixdof.tvc import (
+    COAST,
+    POWERED,
     AttitudeTvcLaw,
     TvcActuator,
     TvcGains,
     WaypointAttitudeProgram,
     attitude_error_body,
+    phase_aero_metrics,
     run_closed_loop_ascent,
 )
 
@@ -259,3 +267,77 @@ def test_aggressive_initial_offset_proves_saturation_in_the_loop():
     assert abs(math.degrees(float(s["q_rad_s"][-1]))) < 0.01  # pitch rate killed
     assert float(s["altitude_m"][-1]) > 8_000.0              # still flying, not tumbling
     assert ascent.summary()["burn_s"] == pytest.approx(40.0, rel=1e-6)
+
+
+# --------------------------------------------------------------------------
+# E1-02 (task #251): the powered / coast split
+# --------------------------------------------------------------------------
+
+def test_phase_aero_metrics_window_semantics():
+    """The sample-window half of the phase split, on a synthetic record: peaks
+    are found *inside* the window with their sample time, and an empty window
+    raises instead of reporting a silent zero."""
+    t = np.arange(0.0, 6.0)
+    samples = {"t_s": t,
+               "alpha_deg": np.array([1.0, -2.0, 3.0, -40.0, 5.0, -6.0]),
+               "q_bar_pa": np.array([10.0, 500.0, 50.0, 1.0, 0.5, 0.1]),
+               "altitude_m": np.array([0.0, 1e3, 2e3, 3e3, 4e3, 5e3]),
+               "mach": np.array([0.1, 0.9, 1.1, 1.5, 2.0, 3.0])}
+    powered = phase_aero_metrics(samples, keep=t <= 2.0)
+    assert powered["n_samples"] == 3.0
+    assert powered["alpha_max_deg"] == pytest.approx(3.0)
+    assert powered["alpha_max_t_s"] == pytest.approx(2.0)
+    assert powered["alpha_max_altitude_m"] == pytest.approx(2e3)
+    assert powered["q_alpha_max_pa_deg"] == pytest.approx(1000.0)   # q=500 at t=1
+    assert powered["q_alpha_max_t_s"] == pytest.approx(1.0)
+    assert powered["max_q_pa"] == pytest.approx(500.0)
+    assert powered["max_q_mach"] == pytest.approx(0.9)
+    coast = phase_aero_metrics(samples, keep=t > 2.0)
+    # the -40 deg sample sits in the coast window and dominates it, even though
+    # its dynamic pressure is nearly gone -- which is exactly why a whole-run
+    # alpha_max says nothing about load
+    assert coast["alpha_max_deg"] == pytest.approx(40.0)
+    assert coast["alpha_max_t_s"] == pytest.approx(3.0)
+    assert coast["q_alpha_max_pa_deg"] == pytest.approx(40.0)
+    assert coast["max_q_pa"] == pytest.approx(1.0)
+    with pytest.raises(ValueError, match="no samples"):
+        phase_aero_metrics(samples, keep=t < 0.0)
+    with pytest.raises(ValueError, match="must match"):
+        phase_aero_metrics(samples, keep=np.ones(3, dtype=bool))
+
+
+def test_phase_split_separates_the_burn_from_the_coast():
+    """A deliberately short burn (8 t of propellant) flown well past burn-out:
+    the split must find the coast, the coast must be unpowered and unloaded,
+    and ``burn_s`` must be the burn rather than the flight span (task #251 --
+    the F-05 study used to record the 180 s span as a 99.85 s burn)."""
+    prog = WaypointAttitudeProgram.vertical()
+    ascent = run_closed_loop_ascent(pad_state(mass_kg=18_000.0),
+                                    vehicle(propellant_mass_kg=8_000.0), prog, 40.0,
+                                    dt_s=0.05, sample_every=10)
+    burn_out = ascent.run.propellant_exhausted_t_s
+    assert ascent.run.terminal == "t_end" and burn_out is not None
+    assert 8.0 < burn_out < 20.0                              # the 8 t load, ~12 s
+    assert set(ascent.phases) == {POWERED, COAST}
+    powered, coast = ascent.phases[POWERED], ascent.phases[COAST]
+
+    assert powered.engine_s == pytest.approx(burn_out, rel=0.02)   # tick granularity
+    assert coast.engine_s == 0.0                                   # the coast is coasting
+    assert powered.t0_s == pytest.approx(0.0)
+    assert powered.t1_s <= burn_out
+    assert coast.t0_s > burn_out and coast.t1_s == pytest.approx(40.0, rel=1e-6)
+    assert coast.n_ticks > 0 and coast.aero["n_samples"] > 0
+    # the coast of a vertical program is a ballistic arc, not a load case
+    assert coast.aero["max_q_pa"] < powered.aero["max_q_pa"]
+    assert coast.aero["q_alpha_max_pa_deg"] < powered.aero["q_alpha_max_pa_deg"]
+
+    d = ascent.diagnostics
+    assert d.burn_s == pytest.approx(powered.engine_s)
+    assert d.coast_s > 0.0
+    assert d.coast_s == pytest.approx(40.0 - burn_out, rel=0.02)
+    assert d.burn_s + d.coast_s == pytest.approx(40.0, rel=1e-9)   # a partition, not a guess
+    s = ascent.summary()
+    assert s["burn_s"] < 0.6 * 40.0                          # no longer the flight span
+    assert s["powered_engine_s"] == pytest.approx(d.burn_s)
+    assert s["coast_engine_s"] == 0.0
+    assert s["powered_att_err_max_deg"] < 1.0                 # tracked while it had authority
