@@ -55,6 +55,9 @@ from scipy.integrate import solve_ivp
 
 from orbitopt.entry import J2_EARTH, MU_EARTH_M3_S2, R_EARTH_M
 from orbitopt.verify.report import (
+    EVIDENCE_ANALYTICAL,
+    EVIDENCE_HISTORICAL,
+    EVIDENCE_NUMERICAL,
     CHECK_HISTORICAL,
     CHECK_MODEL,
     CHECK_NUMERICAL,
@@ -409,11 +412,64 @@ BENCHMARK_CATEGORIES = {
     "starship_booster_catch": CHECK_HISTORICAL,
 }
 
+# Evidence type of each scenario's checks (task #263, E4-03): the *kind of
+# reference* a pass is graded against, and how far it reaches. This is a finer
+# read than the category above and deliberately not in lockstep with it.
+# * kepler_two_body grades a numerical propagation against the closed-form
+#   two-body solution of the *same* model -- analytic evidence: it validates the
+#   integrator, not the model's contact with reality. Its energy-conservation
+#   check is a bare numerical-consistency check (energy is exact under a point
+#   mass, so any drift is integration error).
+# * j2_secular_drift grades an osculating J2 integration against first-order
+#   averaged secular theory and the sun-synchronous definition -- also analytic
+#   (a simplified closed form of the same J2 physics), not an independent force
+#   model and not a flown observation.
+# * starship_booster_catch grades the solved return against SpaceX's *published*
+#   Flight 15 timeline, which is never an input to the solve -- genuine
+#   historical-telemetry evidence, the only one of the three that reaches outside
+#   the model.
+BENCHMARK_EVIDENCE = {
+    "kepler_two_body": EVIDENCE_ANALYTICAL,
+    "j2_secular_drift": EVIDENCE_ANALYTICAL,
+    "starship_booster_catch": EVIDENCE_HISTORICAL,
+}
+
+# Per-check exceptions to a scenario's default evidence type.
+BENCHMARK_CHECK_EVIDENCE = {
+    ("kepler_two_body", "specific_energy_drift"): EVIDENCE_NUMERICAL,
+}
+
+# Model scope and applicable phase of each scenario (task #263): a benchmark
+# pass is only as broad as the dynamics and mission phase it actually exercises
+# -- recorded so a green scenario is never read as validating the whole model.
+# ``cannot_prove`` rides with the evidence type (report.EVIDENCE_QUALIFICATION);
+# a closed-form-or-published reference reaches as far as its own assumptions.
+BENCHMARK_SCOPE = {
+    "kepler_two_body": "Earth point-mass two-body; a single 7500 s coast arc",
+    "j2_secular_drift": "Earth gravity field truncated at J2; secular (one-day averaged) drift, no other perturbation",
+    "starship_booster_catch": "Starship Super Heavy booster return: boostback + ballistic fall + landing burn, 3-DOF",
+}
+BENCHMARK_PHASE = {
+    "kepler_two_body": ("unpowered coast",),
+    "j2_secular_drift": ("unpowered coast (secular drift)",),
+    "starship_booster_catch": ("boostback", "ballistic descent", "powered landing"),
+}
+
 
 def run_all_benchmarks(keys: Sequence[str] | None = None) -> list:
     """Run every benchmark (or the given subset), in declaration order."""
     keys = list(BENCHMARKS) if keys is None else list(keys)
     return [run_benchmark(k) for k in keys]
+
+
+def benchmark_evidence(key: str, check_name: str) -> str:
+    """Evidence type of one benchmark check (task #263): a per-check override
+    (``BENCHMARK_CHECK_EVIDENCE``) else the scenario's default
+    (``BENCHMARK_EVIDENCE``)."""
+    if key not in BENCHMARK_EVIDENCE:
+        raise ValueError(f"benchmark {key!r} declares no evidence type "
+                         "(add it to BENCHMARK_EVIDENCE)")
+    return BENCHMARK_CHECK_EVIDENCE.get((key, check_name), BENCHMARK_EVIDENCE[key])
 
 
 def benchmark_report(results: Sequence[BenchmarkResult] | None = None) -> dict:
@@ -422,7 +478,7 @@ def benchmark_report(results: Sequence[BenchmarkResult] | None = None) -> dict:
     pair in ``targets["metrics"]``. Digest covers everything but itself, so
     the same code on the same library versions re-runs byte-identically."""
     results = run_all_benchmarks() if results is None else list(results)
-    checks, categories, metrics = {}, {}, []
+    checks, categories, evidence, metrics = {}, {}, {}, []
     for r in results:
         if r.key not in BENCHMARK_CATEGORIES:
             raise ValueError(f"benchmark {r.key!r} declares no verification category "
@@ -430,13 +486,17 @@ def benchmark_report(results: Sequence[BenchmarkResult] | None = None) -> dict:
         for c in r.checks:
             checks[f"{r.key}.{c['name']}"] = c["passed"]
             categories[f"{r.key}.{c['name']}"] = BENCHMARK_CATEGORIES[r.key]
+            evidence[f"{r.key}.{c['name']}"] = benchmark_evidence(r.key, c["name"])
             metrics.append({"name": f"{r.label}: {c['meaning']}",
                             "expected": c["expected"], "actual": c["actual"],
-                            "tolerance": c["tolerance"], "unit": c["unit"], "ok": c["passed"]})
+                            "tolerance": c["tolerance"], "unit": c["unit"], "ok": c["passed"],
+                            "evidence": evidence[f"{r.key}.{c['name']}"],
+                            "scope": BENCHMARK_SCOPE[r.key],
+                            "phases": list(BENCHMARK_PHASE[r.key])})
     report = build_report("benchmark_scenarios", "public reference data / analytic solutions",
                           propagations=[], inputs={"benchmarks": [r.to_dict() for r in results]},
                           targets={"metrics": metrics})
-    report["status"] = status_from_checks(checks, categories)
+    report["status"] = status_from_checks(checks, categories, evidence)
     report["digest"] = report_digest(report)
     return report
 
@@ -456,7 +516,7 @@ def main(argv=None) -> int:
                 verdict = "ok" if c["passed"] else "FAIL"
                 print(f"    {verdict:4} {c['name']}: actual {c['actual']:.6g} "
                       f"expected {c['expected']:.6g} +/- {c['tolerance']:g} {c['unit']} "
-                      f"(|err| {c['abs_error']:.3g})")
+                      f"(|err| {c['abs_error']:.3g}, evidence {benchmark_evidence(r.key, c['name'])})")
     return 0 if all(r.passed for r in results) else 1
 
 

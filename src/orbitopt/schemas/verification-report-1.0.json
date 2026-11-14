@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://zangjiucheng.github.io/orbitopt/schemas/verification-report-1.0.json",
   "title": "orbitopt verification report",
-  "description": "Machine-readable output of every high-fidelity verification (orbitopt.verify.report): residuals, integrator tolerances + step convergence, energy / angular-momentum error, and the perturbation-model inventory. Every check is categorised as numerical consistency, model agreement or historical validation. Deterministic (no timestamps, sorted keys); `digest` is the SHA-256 of the canonical JSON of everything else.",
+  "description": "Machine-readable output of every high-fidelity verification (orbitopt.verify.report): residuals, integrator tolerances + step convergence, energy / angular-momentum error, and the perturbation-model inventory. Every check is categorised as numerical consistency, model agreement or historical validation, and additionally carries an evidence type (analytical / independent_model / historical_telemetry / design_input / numerical_consistency) with its qualification: what a pass on that check proves, its scope and what it cannot prove. Deterministic (no timestamps, sorted keys); `digest` is the SHA-256 of the canonical JSON of everything else.",
   "oneOf": [
     { "$ref": "#/$defs/report" },
     { "$ref": "#/$defs/bundle" }
@@ -24,6 +24,34 @@
         "checks_total": { "type": "integer", "minimum": 0 }
       }
     },
+    "evidenceType": {
+      "enum": ["analytical", "independent_model", "historical_telemetry", "design_input", "numerical_consistency"],
+      "description": "What the reference a check is graded against is made of (task #263, E4-03): analytical = a closed form of the same/simplified model; independent_model = a model formulated separately from the one under test; historical_telemetry = published data from a real flight, not an input to the model; design_input = the reference IS the aim point / target / envelope the solution was built to hit (internal consistency, NOT validation); numerical_consistency = the same model re-run by independent numerics."
+    },
+    "evidenceQualification": {
+      "type": "object",
+      "required": ["type", "independent", "cannot_prove"],
+      "properties": {
+        "type": { "$ref": "#/$defs/evidenceType" },
+        "independent": { "type": "boolean", "description": "True only for historical_telemetry and independent_model -- the two kinds of reference that reach outside the model under test." },
+        "scope": { "type": "string", "description": "The model range the check actually covers (a pass is only as broad as this)." },
+        "phases": { "type": "array", "items": { "type": "string" }, "description": "Mission phases the comparison covers." },
+        "cannot_prove": { "type": "string", "description": "What a pass here cannot demonstrate -- printed on every verdict so a green check is never read broader than its evidence supports." }
+      }
+    },
+    "evidenceRollup": {
+      "type": "object",
+      "required": ["result", "checks_passed", "checks_total", "label", "independent", "proves", "cannot_prove"],
+      "properties": {
+        "result": { "enum": ["passed", "failed", "not_checked"] },
+        "checks_passed": { "type": "integer", "minimum": 0 },
+        "checks_total": { "type": "integer", "minimum": 0 },
+        "label": { "type": "string" },
+        "independent": { "type": "boolean" },
+        "proves": { "type": "string" },
+        "cannot_prove": { "type": "string" }
+      }
+    },
     "status": {
       "type": "object",
       "required": ["result", "passed", "checks"],
@@ -43,6 +71,20 @@
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/categoryRollup" },
           "description": "Per-category rollup of the checks: a category with no check is not_checked (absent evidence, never a pass)."
+        },
+        "check_evidence": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/evidenceType" },
+          "description": "Every check name mapped to its evidence type (task #263). Optional on documents written before evidence was recorded."
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/evidenceRollup" },
+          "description": "Per-evidence-type rollup of the checks with its qualification; a type with no check is not_checked (absent evidence, never a pass)."
+        },
+        "independent_validation": {
+          "$ref": "#/$defs/categoryRollup",
+          "description": "The rollup over validation-grade evidence only (historical_telemetry + independent_model). `not_checked` here means the report never independently re-checked the model it reports on -- whatever its overall `result`, no external evidence backs it."
         }
       }
     },
@@ -168,6 +210,15 @@
         "name": { "type": "string" },
         "reference": { "type": "string" },
         "category": { "$ref": "#/$defs/checkCategory" },
+        "evidence": {
+          "description": "Evidence type (task #263) a residual carries: either the bare type name (hand-written residual dict) or the full qualification block (from state_residual / _report helpers).",
+          "oneOf": [
+            { "$ref": "#/$defs/evidenceType" },
+            { "$ref": "#/$defs/evidenceQualification" }
+          ]
+        },
+        "scope": { "type": "string", "description": "Model range the comparison covers (used by hand-written residual dicts that set evidence as a bare string; state_residual records scope inside the evidence block instead)." },
+        "phases": { "type": "array", "items": { "type": "string" }, "description": "Mission phases the comparison covers." },
         "position_residual_m": { "$ref": "#/$defs/num" },
         "position_residual_vector_m": { "$ref": "#/$defs/vec" },
         "velocity_residual_m_s": { "$ref": "#/$defs/num" },

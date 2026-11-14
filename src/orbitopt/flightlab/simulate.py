@@ -32,12 +32,16 @@ check, never as silence.
 ``backend="6DOF"`` (F-01, task #226) swaps the ascent adapter for the
 config-driven JSBSim 6-DOF backend (:mod:`orbitopt.flightlab.adapters.
 sixdof`): ``vehicle_path`` is then a 6-DOF *scenario config*, and the
-vehicle-file checks, the tudatpy GCRS re-fly and the FL-304 recovery chain
--- all built on the 3-DOF OpenTsiolkovsky lineage -- do not apply to its
-ECEF tracks; ``physics_verified`` comes from the backend's own checks
-instead, with the omissions recorded as assumptions on the run. The Gate-B
-verdict machinery (``evaluate``) is unchanged: the same honest, three
-independent booleans.
+vehicle-file checks and the FL-304 recovery chain -- built on the 3-DOF
+OpenTsiolkovsky lineage -- do not apply to its ECEF tracks. Task #261 gave the
+6-DOF backend the SAME independent physics check the 3-DOF lineage has: the
+adapter records only its ``backend_self_check``, and ``physics_verified`` is
+set by :func:`orbit_refly_6dof`, which rotates the ECEF coast state to GCRS
+with the frame bridge and re-integrates it point-mass with tudatpy -- so
+``physics_verified`` is never the producing backend's own word on either
+backend, with the omissions recorded as assumptions on the run. The Gate-B
+verdict machinery (``evaluate``) is unchanged: the same honest, independent
+booleans.
 
 Determinism (acceptance criterion): every input to the pipeline -- target,
 vehicle file, attitude program, re-fly settings -- is honoured, nothing
@@ -71,7 +75,7 @@ from orbitopt.flightlab.contract import (
     write_run,
 )
 
-__all__ = ["simulate", "evaluate", "orbit_refly"]
+__all__ = ["simulate", "evaluate", "orbit_refly", "orbit_refly_6dof"]
 
 
 def _parse_utc(text: str) -> datetime:
@@ -105,17 +109,25 @@ def _spice_rotation(spice, from_frame: str, to_frame: str, et: float):
     raise RuntimeError(f"SPICE cannot rotate {from_frame!r} -> {to_frame!r}: {last_error}") from last_error
 
 
-def orbit_refly(run: FlightRun, *, orbits: float = 1.05,
-               max_step_s: float = 300.0) -> tuple[bool | None, tuple[Check, ...], str]:
-    """Independent re-fly of the run's GCRS insertion state: rotate the SECO
-    state GCRS -> ECLIPJ2000 with SPICE (exact, tudatpy's own frame service),
-    re-integrate it point-mass-Earth with
+def _refly_gcrs_state(st: Mapping, *, orbits: float, max_step_s: float,
+                      not_orbital: bool | None = False
+                      ) -> tuple[bool | None, tuple[Check, ...], str]:
+    """The one independent re-fly core, shared by the 3-DOF and 6-DOF
+    pipelines so ``physics_verified`` means the same thing for both: take a
+    GCRS state dict (``position_m``/``velocity_m_s``/``epoch_utc``/``t_s``),
+    rotate GCRS -> ECLIPJ2000 with SPICE (exact, tudatpy's own frame service),
+    re-integrate point-mass-Earth with
     :func:`orbitopt.verify.tudat_propagate.propagate_two_body_leg` for
     ``orbits`` periods (>= 1 full orbit is the task; 1.05 overshoots the
     return-to-start point so a wrapped-around drift cannot hide), rotate the
     final state back with the SPICE rotation *at the final epoch*, and compare
     osculating elements computed with the propagator's own mu. Drift limits
     are the Gate-G5 constants in orbitopt.flightlab.checks.
+
+    ``not_orbital`` is the physics verdict for a state that is not a closed
+    orbit: ``False`` (3-DOF: an ascent that did not reach orbit failed its
+    physics) or ``None`` (6-DOF: a suborbital hop is not applicable to an
+    orbit re-fly, so the independent check is "not assessed", never a failure).
 
     Returns ``(physics_verified, checks, note)``: ``None`` physics when the
     backend is missing/failed ("not assessed", reason
@@ -134,12 +146,14 @@ def orbit_refly(run: FlightRun, *, orbits: float = 1.05,
         from orbitopt.timescales import utc_datetime_to_mjd2000, utc_mjd2000_to_tdb_seconds
         from orbitopt.verify.tudat_propagate import propagate_two_body_leg
 
-        st = insertion_state(run)
         el = _checks.orbital_elements(st["position_m"], st["velocity_m_s"])
         if not math.isfinite(el["period_s"]) or el["period_s"] <= 0.0:
-            return False, (Check(
+            return not_orbital, (Check(
                 id="orbit-refly", passed=False, reason_code="REFLY_NOT_ORBITAL",
-            ),), "orbit re-fly: insertion state is not a closed orbit (physics_verified=false)"
+            ),), ("orbit re-fly: insertion state is not a closed orbit (physics_verified=false)"
+                  if not_orbital is False else
+                  "orbit re-fly: state is not a closed orbit (not assessed -- "
+                  "an orbit re-fly does not apply to a suborbital scenario)")
 
         et0 = utc_mjd2000_to_tdb_seconds(
             utc_datetime_to_mjd2000(_parse_utc(st["epoch_utc"])) + st["t_s"] / 86400.0)
@@ -185,28 +199,90 @@ def orbit_refly(run: FlightRun, *, orbits: float = 1.05,
     return physics, out, note
 
 
-def _simulate_6dof(target: FlightTarget, config_path: Path, out_dir: Path) -> FlightRun:
-    """The Gate-B pipeline over the 6-DOF backend (F-01, task #226): fly the
-    scenario config (``config_path`` is the adapter's scenario document --
-    vehicle, ICs and integration step all come from it), settle the mission
-    constraints against ``target`` with the same ``evaluate``, and write the
-    run. The 3-DOF-lineage machinery deliberately does not run, and the run
-    says so: no tudatpy insertion re-fly (it compares GCRS states, the 6-DOF
-    tracks are ECEF until the frame bridge covers them -- physics_verified
-    is then this backend's own checks, never the integrator's word), no
-    vehicle-file checks (they parse the OT vehicle schema), no FL-304
-    recovery (3-DOF pipeline; a declared recovery gate reads as the
-    data-missing failure ``evaluate`` gives it)."""
+def orbit_refly(run: FlightRun, *, orbits: float = 1.05,
+                max_step_s: float = 300.0) -> tuple[bool | None, tuple[Check, ...], str]:
+    """Independent re-fly of the run's GCRS insertion state (the 3-DOF
+    lineage; see :func:`_refly_gcrs_state` for the shared core). ``None``
+    physics when the re-fly cannot run, never a fake ``True``."""
+    return _refly_gcrs_state(insertion_state(run), orbits=orbits,
+                             max_step_s=max_step_s)
+
+
+def orbit_refly_6dof(run: FlightRun, *, orbits: float = 1.05,
+                     max_step_s: float = 300.0) -> tuple[bool | None, tuple[Check, ...], str]:
+    """Independent re-fly of a 6-DOF run's coast/insertion state (task #261).
+
+    The 6-DOF tracks are ECEF, so the state is first rotated Earth-fixed ->
+    GCRS by the frame bridge (:func:`orbitopt.flightlab.frames.to_gcrs`, which
+    carries the omega x r velocity term) -- the bridge the F-01 backend had not
+    crossed yet. The SAME tudatpy point-mass re-fly and Gate-G5 element-drift
+    checks then run on it as on the 3-DOF state, so ``physics_verified`` means
+    exactly the same thing for both backends. A suborbital scenario (a hop
+    whose coast state is not a closed orbit) is "not assessed", never a physics
+    failure. Returns ``(physics_verified, checks, note)``; ``None`` when
+    tudatpy or the astropy frame bridge is unavailable -- never a fake True."""
+    from orbitopt.flightlab import frames as _frames
+
+    st = insertion_state(run)
+    try:
+        epoch = _parse_utc(st["epoch_utc"])
+        r_gcrs, v_gcrs = _frames.to_gcrs([st["position_m"]], [st["velocity_m_s"]],
+                                          "ECEF", epoch, [st["t_s"]])
+    except Exception as exc:  # frame bridge (astropy) unavailable, bad state: not assessed
+        return None, (Check(
+            id="orbit-refly-not-assessed", passed=False, reason_code="REFLY_BACKEND_ERROR",
+        ),), f"orbit re-fly: not assessed (6-DOF frame bridge: {type(exc).__name__}: {exc})"
+    st_gcrs = dict(st, position_m=tuple(float(x) for x in r_gcrs[0]),
+                   velocity_m_s=tuple(float(x) for x in v_gcrs[0]))
+    physics, checks, note = _refly_gcrs_state(st_gcrs, orbits=orbits,
+                                              max_step_s=max_step_s, not_orbital=None)
+    return physics, checks, "6-DOF " + note
+
+
+def _simulate_6dof(target: FlightTarget, config_path: Path, out_dir: Path,
+                   *, refly: bool = True, refly_orbits: float = 1.05,
+                   refly_max_step_s: float = 300.0) -> FlightRun:
+    """The Gate-B pipeline over the 6-DOF backend (F-01, task #226; independent
+    re-fly added by task #261): fly the scenario config (``config_path`` is the
+    adapter's scenario document -- vehicle, ICs and integration step all come
+    from it), INDEPENDENTLY re-fly the coast/insertion state, settle the
+    mission constraints against ``target`` with the same ``evaluate``, and write
+    the run. The 3-DOF-lineage vehicle-file checks and FL-304 recovery do not
+    run, and the run says so: no OT vehicle-file checks (they parse the OT
+    vehicle schema), no FL-304 recovery (3-DOF pipeline; a declared recovery
+    gate reads as the data-missing failure ``evaluate`` gives it).
+
+    Physics verification is now an *independent* check, exactly like the 3-DOF
+    pipeline: the adapter records only its self-check, and
+    :func:`orbit_refly_6dof` rotates the ECEF coast state to GCRS with the frame
+    bridge and re-integrates it point-mass with tudatpy, so ``physics_verified``
+    is set only by that re-fly (``None`` = not assessed when tudatpy / the frame
+    bridge are unavailable, or the scenario is suborbital; never the backend's
+    own word)."""
     from orbitopt.flightlab.adapters import sixdof as _sixdof_backend
 
     run = _sixdof_backend.run_ascent(config_path, out_dir, target=target)
+    if refly:
+        physics, refly_checks, note = orbit_refly_6dof(run, orbits=refly_orbits,
+                                                        max_step_s=refly_max_step_s)
+    else:
+        physics, refly_checks = None, ()
+        note = ("6-DOF orbit re-fly: not requested (physics_verified stays None "
+                "= not assessed)")
+    run = replace(
+        run,
+        verification=replace(run.verification, physics_verified=physics,
+                             checks=run.verification.checks + tuple(refly_checks)),
+    )
     notes = (
         "backend=6DOF (F-01, task #226): ascent flown by orbitopt.flightlab."
         "adapters.sixdof; the insertion checks below are assessed against the "
-        "ECEF track (no frame bridge yet), so read them as ECEF-state numbers.",
-        "backend=6DOF: no tudatpy insertion re-fly (it re-flies GCRS states) and "
-        "no OT vehicle-file checks (T/W, propellant reserve parse the 3-DOF "
-        "vehicle schema); physics_verified is this backend's checks",
+        "ECEF track, so read them as ECEF-state numbers.",
+        note,
+        "backend=6DOF (task #261): physics_verified is set only by the independent "
+        "tudatpy re-fly of the frame-bridged (ECEF->GCRS) coast state -- never by "
+        "this backend vouching for itself (that is backend_self_check); no OT "
+        "vehicle-file checks (T/W, propellant reserve parse the 3-DOF vehicle schema)",
     )
     if target.recovery.kind != "none":
         notes += ("backend=6DOF: the FL-304 recovery chain is a 3-DOF pipeline and "
@@ -256,7 +332,8 @@ def simulate(target: FlightTarget, vehicle_path: Path, out_dir: Path,
     vehicle_path = Path(vehicle_path)
     out_dir = Path(out_dir)
     if backend == "6DOF":
-        return _simulate_6dof(target, vehicle_path, out_dir)
+        return _simulate_6dof(target, vehicle_path, out_dir, refly=refly,
+                              refly_orbits=refly_orbits, refly_max_step_s=refly_max_step_s)
     run = run_ascent(target, vehicle_path, attitude_program, out_dir, timeout_s=timeout_s)
     vehicle_doc: Mapping[str, Any] = yaml.safe_load(vehicle_path.read_text(encoding="utf-8"))
 
@@ -290,13 +367,16 @@ def simulate(target: FlightTarget, vehicle_path: Path, out_dir: Path,
         verification=Verification(
             optimizer_converged=run.verification.optimizer_converged,
             physics_verified=physics,
+            backend_self_check=run.verification.backend_self_check,
             mission_constraints_passed=run.verification.mission_constraints_passed,
             checks=run.verification.checks + tuple(extra) + tuple(refly_checks),
         ),
         assumptions=run.assumptions + (
             note,
-            "Gate-B verdict (FL-006): orbitopt.flightlab.checks.evaluate -- the three "
-            "verification booleans are independent; None means not assessed, never passed",
+            "Gate-B verdict (FL-006): orbitopt.flightlab.checks.evaluate -- the "
+            "verification booleans are independent; physics_verified is this independent "
+            "re-fly, backend_self_check the adapter's own checks; None means not "
+            "assessed, never passed",
         ),
     )
     run = replace(run, verification=evaluate(run, target))
