@@ -290,7 +290,11 @@ def fly_recovery(ascent_run: FlightRun, target: FlightTarget, vehicle_path, *,
     ``plan_options`` pass straight through to FL-302/FL-303 (``plan_options``
     keys: ``max_fevals``, ``initial_guess``, ``horizon_s``, ``dt_opt``,
     ``dt_final``, entry limits, the R-01 objective knobs
-    ``landing_divert_budget_m`` / ``landing_reserve_margin_kg``, and
+    ``landing_divert_budget_m`` / ``landing_reserve_margin_kg``, the E3-02
+    joint chance-constraint objective ``joint_chance`` (a
+    :class:`~orbitopt.flightlab.recovery.chance.JointChanceSpec` or a mapping
+    of its fields; replaces the R-01 knobs, which must be pinned off with it),
+    and
     ``handoff_check`` (merge the R-02 handoff / joint-constraint checks into
     the run's verification) plus one landing key, ``landing``: a mapping
     with ``mode`` (:data:`LANDING_MODES`, default ``"closed-loop"``), any
