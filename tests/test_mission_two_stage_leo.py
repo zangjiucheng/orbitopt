@@ -189,7 +189,7 @@ def test_replayed_reference_flight_is_red_where_the_flight_is_off_target(tmp_pat
     graded = [d for d in mission.staging if d["graded"]]
     assert [d["child_body"] for d in graded] == ["stage2"]
     assert all(d["passed"] for d in graded)
-    assert mission.staging[0]["bridge"]["method"] == "two_body_coast"  # epochs compared like-for-like
+    assert mission.staging[0]["bridge"]["method"] == "j2_coast"  # epochs compared like-for-like
     assert mission.parking["passed"] is True
     assert mission.status == STATUS_PARKING_ORBIT_OUT_OF_TOLERANCE
     failed = {c.id for c in mission.checks if not c.passed}

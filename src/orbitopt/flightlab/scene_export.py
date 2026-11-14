@@ -298,7 +298,7 @@ def _staging_handoffs(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dic
     the way the M-07 reference chain grades staging
     (:func:`orbitopt.mission.two_stage_leo.staging_handoffs`):
 
-    * the parent state is first coasted (two-body) to the child's first
+    * the parent state is first coasted (two-body + J2) to the child's first
       sample -- a backend samples each body on its own clock, and the 2 s
       between the FL-004 stage-1 end and stage-2 start is ~7 km of flight,
       physics, not a lost handoff;
@@ -311,7 +311,8 @@ def _staging_handoffs(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dic
     "epoch_backwards"). A declared separation impulse is a real, intended
     delta-v, so the velocity gate gets that much headroom."""
     from orbitopt.mission.contract import HandoffTolerances, check_handoff
-    from orbitopt.mission.two_stage_leo import _ascent_lineage, _bridge_across_gap
+    from orbitopt.mission.two_stage_leo import (BRIDGE_METHOD, _ascent_lineage,
+                                                _bridge_across_gap)
 
     by_id = {track.body_id: track for track in run.tracks}
     lineage = _ascent_lineage(run)
@@ -339,7 +340,7 @@ def _staging_handoffs(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dic
             continue
         bridge = _bridge_across_gap(before, after)
         from_time = float(parent.t_end_s)
-        if bridge is not None and bridge["method"] == "two_body_coast":
+        if bridge is not None and bridge["method"] == BRIDGE_METHOD:
             before, from_time = bridge["state"], float(child.t_start_s)
         impulse_ns = next((float(ev.data.get("separation_impulse_ns")
                                 or ev.data.get("impulse_ns") or 0.0)
@@ -352,11 +353,12 @@ def _staging_handoffs(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dic
         detail = _check_summary(checks)
         if bridge is not None:
             detail += (f" \u00b7 parent coasted {bridge['gap_s']:.1f} s to the child's first sample"
-                       if bridge["method"] == "two_body_coast" else f" \u00b7 {bridge['method']}")
+                       if bridge["method"] == BRIDGE_METHOD else f" \u00b7 {bridge['method']}")
         out.append({**base, "status": _tri_state(checks, True), "graded": True,
                     "detail": detail,
                     "bridge": None if bridge is None else {"gap_s": bridge["gap_s"],
-                                                           "method": bridge["method"]},
+                                                           "method": bridge["method"],
+                                                           "pole": bridge["pole"]},
                     "from": _state_doc(parent_id, from_time, report.before, epoch),
                     "checks": checks})
     return out

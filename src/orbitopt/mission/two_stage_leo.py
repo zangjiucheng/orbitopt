@@ -154,6 +154,8 @@ EXPECTED_PROPAGATION_RESULTS = ("passed", "failed", "not_checked")
 #: headroom (a spring or pyro push IS a delta-v -- the same rule the M-06 scene
 #: exporter applies).
 DEFAULT_STAGING_VELOCITY_M_S = 0.01
+#: How the staging gap is bridged (:func:`_bridge_across_gap`).
+BRIDGE_METHOD = "j2_coast"
 
 #: Element vocabulary of ``expected.parking_orbit`` / ``expected.tolerances``
 #: (same names ``orbitopt.mission.launch_pipeline`` grades).
@@ -661,29 +663,53 @@ def _ascent_lineage(run) -> list[str]:
     return lineage
 
 
+def _earth_pole(state: HandoffState) -> tuple[tuple[float, float, float], str]:
+    """Earth's rotation axis in ``state``'s frame at its epoch, plus a label
+    saying where it came from. GCRS needs the ITRS->GCRS rotation (the pole
+    has precessed ~0.4 deg from GCRS z since J2000); without astropy the
+    frame's z axis is the documented fallback."""
+    if state.frame == "GCRS":
+        try:
+            from datetime import datetime, timedelta
+            from orbitopt.flightlab.frames import itrs_to_gcrs_matrix
+
+            when = datetime(2000, 1, 1) + timedelta(days=state.epoch.to_utc_mjd2000())
+            m = itrs_to_gcrs_matrix(when)
+            return (m[0][2], m[1][2], m[2][2]), "itrs_z_in_gcrs"
+        except Exception:  # astropy missing or epoch outside its tables
+            return (0.0, 0.0, 1.0), "gcrs_z_approximation"
+    return (0.0, 0.0, 1.0), "frame_z"
+
+
 def _bridge_across_gap(before: HandoffState, after: HandoffState) -> dict | None:
     """Coast ``before`` to ``after``'s epoch when the two samples are not
-    simultaneous: returns ``{state, gap_s, method}``, or ``None`` when no
-    bridge is needed (same epoch) or none is possible (suborbital parent --
-    then the caller gates the raw pair and records why)."""
+    simultaneous: returns ``{state, gap_s, method, pole}``, or ``None`` when
+    no bridge is needed (same epoch). The coast is two-body + J2 gravity
+    (:func:`orbitopt.flightlab.coast.j2_coast`), the gravity model the ascent
+    backend itself flies across the gap; a Kepler bridge left ~0.03 m/s of
+    J2 in the residual, above the 0.01 m/s staging gate. Drag over the gap
+    is not modelled. A state the coast cannot take (``ValueError``) is
+    returned unbridged with ``method: unavailable: ...``, and the caller
+    gates the raw pair and records why."""
     gap = before.epoch.delta_seconds(after.epoch)
     if gap < 1e-9:
         return None
-    from orbitopt.flightlab.coast import coast_arc
+    from orbitopt.flightlab.coast import j2_coast
 
+    pole, pole_source = _earth_pole(before)
     try:
-        _, positions, velocities = coast_arc(before.r_m, before.v_m_s, gap, samples=2)
+        r, v = j2_coast(before.r_m, before.v_m_s, gap, pole=pole)
     except ValueError as exc:
-        return {"state": before, "gap_s": gap,
-                "method": f"unavailable: two-body bridge impossible ({exc})"}
+        return {"state": before, "gap_s": gap, "pole": pole_source,
+                "method": f"unavailable: J2 coast bridge impossible ({exc})"}
     return {"state": HandoffState(
                 epoch=after.epoch, frame=before.frame,
-                r_m=tuple(float(x) for x in positions[-1]),
-                v_m_s=tuple(float(x) for x in velocities[-1]),
+                r_m=tuple(float(x) for x in r),
+                v_m_s=tuple(float(x) for x in v),
                 mass_kg=before.mass_kg, stage_config=before.stage_config,
-                metadata={**before.metadata, "staging_bridge": "two_body_coast",
-                          "bridge_gap_s": gap}),
-            "gap_s": gap, "method": "two_body_coast"}
+                metadata={**before.metadata, "staging_bridge": BRIDGE_METHOD,
+                          "bridge_gap_s": gap, "bridge_pole": pole_source}),
+            "gap_s": gap, "method": BRIDGE_METHOD, "pole": pole_source}
 
 
 def staging_handoffs(run, tolerances: HandoffTolerances,
@@ -699,11 +725,11 @@ def staging_handoffs(run, tolerances: HandoffTolerances,
     (the FL-004 two-stage output does exactly that, 206 s vs 208 s). Comparing
     those two samples raw measures the coast in between -- thousands of metres,
     physics, not a lost handoff. The parent state is therefore bridged across
-    the gap by an analytic two-body coast (:func:`orbitopt.flightlab.coast.
-    coast_arc`, the same coast the propagation segment compares against) before
+    the gap by a two-body + J2 coast (:func:`orbitopt.flightlab.coast.j2_coast`,
+    the gravity the ascent backend flies over the gap) before
     the gate runs, and the bridge is recorded on the handoff document
-    (``bridge``). A suborbital parent state cannot be coasted; then the gate
-    runs on the raw pair and the document says why (``method:
+    (``bridge``: gap, method and the pole source). A state the coast cannot
+    take is gated raw and the document says why (``method:
     unavailable:``-reason) -- the failure is reported, never hidden.
 
     Only boundaries on the :func:`_ascent_lineage` (the insertion body's
@@ -741,7 +767,7 @@ def staging_handoffs(run, tolerances: HandoffTolerances,
         doc: dict = {"parent_body": parent.body_id, "child_body": track.body_id,
                      "separation_t_s": separation, "graded": graded,
                      "bridge": (None if bridge is None else
-                                {k: bridge[k] for k in ("gap_s", "method")}),
+                                {k: bridge[k] for k in ("gap_s", "method", "pole")}),
                      "before": _state_doc(before), "after": _state_doc(after)}
         if not graded:
             doc["checks"] = []

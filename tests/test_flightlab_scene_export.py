@@ -422,11 +422,14 @@ def test_staging_gap_is_bridged_by_a_coast_before_the_gate():
     """A backend samples each stage on its own clock: the parent ends 2 s
     before the child begins (FL-004: 206 s vs 208 s). Graded raw, that gap
     is ~7 km and ~18 m/s of flight and every staging read FAILED; the parent
-    is coasted to the child's first sample first, as in the M-07 chain."""
-    from orbitopt.flightlab.coast import coast_arc
+    is coasted (two-body + J2, the backend's own gravity) to the child's
+    first sample first, as in the M-07 chain."""
+    from orbitopt.flightlab.coast import j2_coast
 
     r0, v0 = (6.6e6, 0.0, 0.0), (0.0, 7771.0, 0.0)
-    _, rs, vs = coast_arc(r0, v0, 2.0, samples=2)
+    m = itrs_to_gcrs_matrix(datetime.fromisoformat(EPOCH))  # J2 about the true pole
+    r_end, v_end = j2_coast(r0, v0, 2.0, pole=(m[0][2], m[1][2], m[2][2]))
+    rs, vs = [r_end], [v_end]
     parent = _track("stack", t=(0.0, 100.0), mass=(300000.0, 120000.0),
                     pos=((6.5e6, 0.0, 0.0), r0), vel=((0.0, 7700.0, 0.0), v0))
     child = replace(_track("upper", t=(102.0, 200.0), mass=(100000.0, 60000.0),
@@ -436,7 +439,8 @@ def test_staging_gap_is_bridged_by_a_coast_before_the_gate():
     scene = run_to_scene(_run([parent, child], events=[
         Event(t_s=100.0, kind="separation", body_id="stack", data={"separation_impulse_ns": 0.0})]))
     handoff = next(h for h in scene["handoffs"] if h["id"] == "separation:upper")
-    assert handoff["bridge"]["method"] == "two_body_coast"
+    assert handoff["bridge"]["method"] == "j2_coast"
+    assert handoff["bridge"]["pole"] == "itrs_z_in_gcrs"
     assert handoff["bridge"]["gap_s"] == pytest.approx(2.0)
     assert handoff["status"] == "passed", handoff["detail"]
     assert "coasted 2.0 s" in handoff["detail"]

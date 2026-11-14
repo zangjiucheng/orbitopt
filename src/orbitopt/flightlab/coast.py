@@ -9,6 +9,13 @@ whether the insertion orbit actually holds.
 
 Elliptical orbits only: a state whose two-body orbit is not closed (a <= 0
 or e >= 1) raises -- there is no parking orbit to coast along.
+
+:func:`j2_coast` is the short-gap companion: two-body gravity plus the J2
+zonal term about a given pole, integrated with fixed-step RK4. It bridges
+the second or two between a parent stage's last sample and its child's
+first one, where the ascent backend (OpenTsiolkovsky) itself flies J2
+gravity -- a Kepler bridge over that gap leaves ~0.03 m/s of J2 in the
+staging residual. Gravity only: drag over the gap is not modelled.
 """
 from __future__ import annotations
 
@@ -16,8 +23,10 @@ import math
 from typing import Sequence
 
 EARTH_MU = 3.986004418e14  # m^3/s^2, same constant as orbitopt.flightlab.checks
+EARTH_J2 = 1.08262668e-3  # same constants as orbitopt.entry
+EARTH_R_EQ_M = 6378137.0
 
-__all__ = ["coast_arc"]
+__all__ = ["coast_arc", "j2_coast"]
 
 
 def _cross(a: Sequence[float], b: Sequence[float]) -> list[float]:
@@ -105,3 +114,60 @@ def coast_arc(r0: Sequence[float], v0: Sequence[float], duration_s: float,
         positions.append([rp * p_hat[i] + rq * q_hat[i] for i in range(3)])
         velocities.append([vp * p_hat[i] + vq * q_hat[i] for i in range(3)])
     return times, positions, velocities
+
+
+def j2_coast(r0: Sequence[float], v0: Sequence[float], duration_s: float, *,
+             pole: Sequence[float] = (0.0, 0.0, 1.0), mu: float = EARTH_MU,
+             j2: float = EARTH_J2, r_eq_m: float = EARTH_R_EQ_M,
+             max_step_s: float = 0.25) -> tuple[list[float], list[float]]:
+    """Propagate the inertial state ``(r0, v0)`` (m, m/s) for ``duration_s``
+    seconds under two-body + J2 gravity, J2 symmetric about the unit vector
+    ``pole`` (Earth's rotation axis in the state's frame; the default is the
+    frame's z axis). Fixed-step RK4 with steps no longer than
+    ``max_step_s``: meant for gaps of seconds, where its error is far below
+    a millimetre per second. Unlike :func:`coast_arc` it needs no closed
+    orbit, so a suborbital state can be coasted too.
+
+    Returns ``(r, v)`` at ``duration_s``. Raises ``ValueError`` on a
+    non-positive duration, a zero pole or a state inside the Earth's centre.
+    """
+    r = [float(x) for x in r0]
+    v = [float(x) for x in v0]
+    if len(r) != 3 or len(v) != 3 or len(pole) != 3:
+        raise ValueError("j2_coast needs 3-vector position, velocity and pole")
+    if not (duration_s > 0.0) or not (max_step_s > 0.0):
+        raise ValueError(f"j2_coast needs duration_s > 0 (got {duration_s!r})")
+    pn = _norm(pole)
+    if not (pn > 0.0):
+        raise ValueError("j2_coast needs a non-zero pole vector")
+    k_hat = [float(x) / pn for x in pole]
+    if not (_norm(r) > 0.0):
+        raise ValueError("j2_coast needs a state away from the Earth's centre")
+
+    def accel(rv: list[float]) -> list[float]:
+        rn2 = _dot(rv, rv)
+        rn = math.sqrt(rn2)
+        z = _dot(rv, k_hat)
+        a_kepler = -mu / (rn2 * rn)
+        c = 1.5 * j2 * mu * r_eq_m * r_eq_m / (rn2 * rn2 * rn)
+        zz = 5.0 * z * z / rn2
+        return [a_kepler * rv[i] + c * ((zz - 1.0) * rv[i] - 2.0 * z * k_hat[i])
+                for i in range(3)]
+
+    n = max(1, math.ceil(duration_s / max_step_s))
+    h = duration_s / n
+    for _ in range(n):
+        k1v = accel(r)
+        k1r = v
+        r2 = [r[i] + 0.5 * h * k1r[i] for i in range(3)]
+        k2r = [v[i] + 0.5 * h * k1v[i] for i in range(3)]
+        k2v = accel(r2)
+        r3 = [r[i] + 0.5 * h * k2r[i] for i in range(3)]
+        k3r = [v[i] + 0.5 * h * k2v[i] for i in range(3)]
+        k3v = accel(r3)
+        r4 = [r[i] + h * k3r[i] for i in range(3)]
+        k4r = [v[i] + h * k3v[i] for i in range(3)]
+        k4v = accel(r4)
+        r = [r[i] + h / 6.0 * (k1r[i] + 2.0 * k2r[i] + 2.0 * k3r[i] + k4r[i]) for i in range(3)]
+        v = [v[i] + h / 6.0 * (k1v[i] + 2.0 * k2v[i] + 2.0 * k3v[i] + k4v[i]) for i in range(3)]
+    return r, v

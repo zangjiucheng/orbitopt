@@ -10,7 +10,7 @@ import math
 import pytest
 
 from orbitopt.flightlab.checks import orbital_elements
-from orbitopt.flightlab.coast import EARTH_MU, coast_arc
+from orbitopt.flightlab.coast import EARTH_MU, coast_arc, j2_coast
 
 RE = 6378137.0
 
@@ -81,3 +81,47 @@ def test_input_validation():
         coast_arc(r0, v0, 100.0, samples=1)
     with pytest.raises(ValueError, match="3-vector"):
         coast_arc([r0[0], r0[1]], v0, 100.0)
+
+
+# --- j2_coast: the short staging-gap bridge ---------------------------------
+
+def test_j2_coast_without_j2_matches_the_kepler_arc():
+    r0, v0 = _circular_state(400e3)
+    v0 = [v0[0], v0[1] * 0.98, 300.0]  # eccentric, inclined
+    _, pos, vel = coast_arc(r0, v0, 30.0, samples=2)
+    r, v = j2_coast(r0, v0, 30.0, j2=0.0)
+    assert max(abs(a - b) for a, b in zip(r, pos[-1])) < 1e-6
+    assert max(abs(a - b) for a, b in zip(v, vel[-1])) < 1e-9
+
+
+def test_j2_coast_adds_the_oblateness_acceleration():
+    """Over the 2 s FL-004 staging gap J2 moves velocity by centimetres per
+    second -- the residual a Kepler bridge left above the 0.01 m/s gate."""
+    r0, v0 = [RE + 185e3, 0.0, 0.0], [0.0, 7500.0, 1000.0]  # equatorial point
+    _, _, vel = coast_arc(r0, v0, 2.0, samples=2)
+    r, v = j2_coast(r0, v0, 2.0)
+    dv = math.dist(v, vel[-1])
+    # |a_J2| on the equator = 1.5 J2 mu Re^2 / r^4, radially inward
+    a_j2 = 1.5 * 1.08262668e-3 * EARTH_MU * RE ** 2 / (RE + 185e3) ** 4
+    assert dv == pytest.approx(2.0 * a_j2, rel=0.02)
+    assert v[0] < vel[-1][0]  # extra inward pull on the equator
+
+
+def test_j2_coast_follows_the_pole_axis():
+    """J2 is symmetric about the pole: rotating the state and the pole
+    together rotates the result the same way."""
+    r0, v0 = [RE + 300e3, 1e5, 2e5], [10.0, 7600.0, 900.0]
+    r, v = j2_coast(r0, v0, 5.0)
+    rot = lambda p: [p[1], p[2], p[0]]  # cyclic axis permutation
+    r2, v2 = j2_coast(rot(r0), rot(v0), 5.0, pole=(0.0, 1.0, 0.0))
+    assert max(abs(a - b) for a, b in zip(r2, rot(r))) < 1e-6
+    assert max(abs(a - b) for a, b in zip(v2, rot(v))) < 1e-9
+
+
+def test_j2_coast_coasts_suborbital_states_and_rejects_bad_input():
+    r, v = j2_coast([RE + 80e3, 0.0, 0.0], [500.0, 2000.0, 0.0], 2.0)
+    assert math.hypot(*r) > RE
+    with pytest.raises(ValueError):
+        j2_coast([RE, 0.0, 0.0], [0.0, 7000.0, 0.0], 0.0)
+    with pytest.raises(ValueError):
+        j2_coast([RE, 0.0, 0.0], [0.0, 7000.0, 0.0], 1.0, pole=(0.0, 0.0, 0.0))
