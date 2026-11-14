@@ -130,6 +130,31 @@ tracker does not control roll or represent a complete autopilot. In the
 6-DOF minus 3-DOF differences were 2.13 km in altitude, 2.08 m/s in speed
 and 0.47° in flight-path angle for that scenario.
 
+**Phase split (E1-02).** That study flies 180 s but runs out of propellant at
+99.85 s, so a whole-run maximum mixes two phases with nothing in common. Every
+metric is therefore reported per phase, and the ascent is qualified on the
+powered phase alone, against the constraints declared in
+`F05_PHASE_CONSTRAINTS` (the report's `qualification` block carries the
+verdicts). Committed values: powered attitude error 4.77° peak / 2.78° RMS,
+angle of attack 14.34°, `q·α` 483 kPa·deg at t = 37 s, max-Q 71.4 kPa at
+35.3 s, TVC deflection margin 0.98 — no saturation, no slew limiting.
+
+This also settles the 6-DOF `alpha_max` 62.8° against the 3-DOF 26.7° that the
+whole-run numbers used to suggest was a fidelity problem. Neither number is a
+load case: the 6-DOF peak is the *last coast sample* at t = 180 s and 366 km
+altitude, where the whole coast phase never sees more than 0.18 Pa of dynamic
+pressure (`q·α` ≤ 2.6 Pa·deg). Past burn-out the tracker trims its gimbals to
+neutral, so the body is unactuated and un-restored in all but a vanishing aero
+moment; its attitude freezes near the last commanded pitch while the ballistic
+velocity vector keeps turning down, and the body-vs-velocity angle grows with
+the arc. The point-mass model cannot show that, because its body axis *is* the
+program and simply keeps following the ramp down to 18°. While the vehicle is
+loaded the two backends agree: the powered angle of attack is 14.34° (6-DOF)
+against 14.33° (3-DOF), and the whole-run 3-DOF value of 26.7° is likewise a
+coast-phase geometry reading at 185 km. `tvc.burn_s` is now the time the engine
+was lit (99.8 s of control ticks against the 99.85 s event), not the flight
+span the earlier report recorded as a 180 s burn.
+
 The two-stage study applies equal and opposite separation impulses, then
 propagates each stage independently. Compare its native point-mass and
 rigid-body backends with:
