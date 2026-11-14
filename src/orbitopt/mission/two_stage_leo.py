@@ -36,6 +36,17 @@ the chain, and the one report that grades it. That is this module:
   ``two-stage-leo``, so the same scenario runs through the unified pipeline,
   its Verification Gate and its scene export.
 
+Optional first-stage recovery (E2-01, task #254)
+------------------------------------------------
+A ``recovery:`` block makes the same mission one-stage-recoverable: after the
+ascent is acquired, :func:`orbitopt.flightlab.recovery.pipeline.fly_recovery`
+(FL-304) flies the FL-302/FL-303/FL-305 chain from the run's separation state
+and merges the booster track back into the ``FlightRun``, so one call reports
+both the upper-stage insertion (the M-07 chain above) and the first-stage
+recovery (``recovery.landed`` etc.) over the same combined run. The recovery
+gate is its own link of the chain: after separation and mass bookkeeping,
+before the upper-stage expected-orbit verdict (:data:`STATUS_RECOVERY_FAILED`).
+
 Two ascent sources, one grading rule
 ------------------------------------
 ``ascent.mode: optimize`` flies the ascent now (needs the pinned
@@ -60,7 +71,7 @@ with tolerances derived from the target's own constraint block
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib import resources
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -93,9 +104,11 @@ __all__ = [
     "STATUS_OK",
     "STATUS_PARKING_ORBIT_OUT_OF_TOLERANCE",
     "STATUS_PROPAGATION_FAILED",
+    "STATUS_RECOVERY_FAILED",
     "STATUS_STATION_MISSING",
     "ExpectedResults",
     "PropagationPlan",
+    "RecoveryPlan",
     "TwoStageLeoMission",
     "TwoStageLeoScenario",
     "build_from_config",
@@ -135,11 +148,13 @@ STATUS_STATION_MISSING = "EVENT_CHAIN_INCOMPLETE"
 STATUS_HANDOFF_FAILED = "HANDOFF_CHECK_FAILED"
 STATUS_PARKING_ORBIT_OUT_OF_TOLERANCE = "PARKING_ORBIT_OUT_OF_TOLERANCE"
 STATUS_MASS_BOOKKEEPING_FAILED = "MASS_BOOKKEEPING_FAILED"
+STATUS_RECOVERY_FAILED = "RECOVERY_FAILED"
 STATUS_PROPAGATION_FAILED = "PROPAGATION_FAILED"
 STATUS_NOT_CHECKED = "NOT_CHECKED"
 STATUSES = (STATUS_OK, STATUS_ASCENT_NOT_CONVERGED, STATUS_STATION_MISSING,
             STATUS_HANDOFF_FAILED, STATUS_PARKING_ORBIT_OUT_OF_TOLERANCE,
-            STATUS_MASS_BOOKKEEPING_FAILED, STATUS_PROPAGATION_FAILED, STATUS_NOT_CHECKED)
+            STATUS_MASS_BOOKKEEPING_FAILED, STATUS_RECOVERY_FAILED,
+            STATUS_PROPAGATION_FAILED, STATUS_NOT_CHECKED)
 
 #: ``ascent.mode`` values: fly it now, or replay a flown run directory.
 ASCENT_MODES = ("optimize", "run_dir")
@@ -320,6 +335,76 @@ class ExpectedResults:
 
 
 # ---------------------------------------------------------------------------
+# The recovery stage (E2-01: the same mission, first stage coming home)
+# ---------------------------------------------------------------------------
+
+
+#: Keys of ``recovery.spec`` -- the flight-target ``recovery`` block the M-04
+#: target builder accepts (``kind: none`` is not a recovery stage).
+RECOVERY_SPEC_KEYS = ("kind", "target", "max_touchdown_speed_m_s",
+                      "max_touchdown_lateral_speed_m_s", "min_propellant_reserve_kg")
+RECOVERY_SPEC_KINDS = ("downrange", "rtls")
+
+
+@dataclass(frozen=True)
+class RecoveryPlan:
+    """The optional first-stage recovery stage of the mission (task #254):
+    the same flight, with the booster flown back through FL-302/FL-303/FL-305
+    and merged into the ``FlightRun`` before the chain is graded.
+
+    ``spec`` is the optimize-mode knob: the flight-target recovery block
+    forwarded verbatim to ``run_launch_pipeline(recovery=...)``, so the flown
+    target itself declares the recovery. ``target_file`` is the run_dir-mode
+    knob: the FlightTarget the recorded flight is graded against (defaults to
+    ``ascent.target_file``); its declared recovery is what
+    :func:`~orbitopt.flightlab.recovery.pipeline.fly_recovery` flies.
+    ``vehicle_file`` is the vehicle the booster model is read from (default:
+    ``launch.vehicle``); ``plan_options`` and ``landing_sites`` pass straight
+    through to the recovery pipeline."""
+
+    spec: Mapping[str, Any] | None = None
+    target_file: str | None = None
+    vehicle_file: str | None = None
+    plan_options: Mapping[str, Any] = field(default_factory=dict)
+    landing_sites: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if self.spec is not None:
+            if not isinstance(self.spec, Mapping):
+                raise ValueError(f"recovery.spec must be a mapping or None, got {self.spec!r}")
+            spec = dict(self.spec)
+            _reject_unknown(spec, RECOVERY_SPEC_KEYS, "recovery.spec")
+            kind = str(spec.get("kind") or "")
+            if kind not in RECOVERY_SPEC_KINDS:
+                raise ValueError(f"recovery.spec.kind {kind!r} not in {RECOVERY_SPEC_KINDS}")
+            object.__setattr__(self, "spec", spec)
+        for name in ("target_file", "vehicle_file"):
+            value = str(getattr(self, name) or "").strip() or None
+            object.__setattr__(self, name, value)
+        object.__setattr__(self, "plan_options", dict(self.plan_options or {}))
+        sites = dict(self.landing_sites or {})
+        object.__setattr__(self, "landing_sites",
+                           {str(k): dict(v) for k, v in sites.items()})
+
+    def to_dict(self) -> dict:
+        return {"spec": None if self.spec is None else dict(self.spec),
+                "target_file": self.target_file, "vehicle_file": self.vehicle_file,
+                "plan_options": dict(self.plan_options),
+                "landing_sites": {k: dict(v) for k, v in self.landing_sites.items()}}
+
+    @staticmethod
+    def from_dict(doc: Mapping[str, Any] | None) -> "RecoveryPlan":
+        doc = doc or {}
+        _reject_unknown(doc, ("spec", "target_file", "vehicle_file", "plan_options",
+                              "landing_sites"), "recovery")
+        return RecoveryPlan(
+            spec=None if doc.get("spec") is None else dict(doc["spec"]),
+            target_file=doc.get("target_file"), vehicle_file=doc.get("vehicle_file"),
+            plan_options=dict(doc.get("plan_options") or {}),
+            landing_sites=dict(doc.get("landing_sites") or {}))
+
+
+# ---------------------------------------------------------------------------
 # The scenario
 # ---------------------------------------------------------------------------
 
@@ -356,6 +441,7 @@ class TwoStageLeoScenario:
     elements: ElementTolerances = field(default_factory=ElementTolerances)
     propagation: PropagationPlan = field(default_factory=PropagationPlan)
     expected: ExpectedResults = field(default_factory=ExpectedResults)
+    recovery: RecoveryPlan | None = None
     coast_orbits: float = 2.0
     earth_texture: bool = True
 
@@ -383,18 +469,33 @@ class TwoStageLeoScenario:
         object.__setattr__(self, "coast_orbits", coast)
         object.__setattr__(self, "earth_texture", bool(self.earth_texture))
         object.__setattr__(self, "ascent", dict(self.ascent or {}))
+        if self.recovery is not None:
+            if self.ascent_mode == "optimize" and self.recovery.spec is None:
+                raise ValueError("ascent.mode 'optimize' + recovery needs recovery.spec: the "
+                                 "flight-target recovery block the ascent is flown against")
+            if self.ascent_mode == "run_dir" and self.recovery.spec is not None:
+                raise ValueError("recovery.spec is the optimize-mode knob: a replayed run was "
+                                 "flown against its recorded target -- use recovery.target_file "
+                                 "(or ascent.target_file) to grade it")
+            if self.ascent_mode == "run_dir" and not (self.recovery.target_file
+                                                      or self.ascent_target_file):
+                raise ValueError("ascent.mode 'run_dir' + recovery needs recovery.target_file (or "
+                                 "ascent.target_file): the FlightTarget the replayed flight is "
+                                 "graded against")
 
     # -- (de)serialisation --------------------------------------------------
 
     def to_dict(self) -> dict:
         """The canonical config document -- what :meth:`from_dict` reads back
-        and what a ``two-stage-leo`` mission config's ``scenario`` carries."""
+        and what a ``two-stage-leo`` mission config's ``scenario`` carries.
+        The optional ``recovery`` block is written only when the scenario has
+        one, so an expendable scenario round-trips unchanged."""
         ascent: dict[str, Any] = {"mode": self.ascent_mode, **dict(self.ascent)}
         if self.ascent_run_dir:
             ascent["run_dir"] = str(self.ascent_run_dir)
         if self.ascent_target_file:
             ascent["target_file"] = str(self.ascent_target_file)
-        return {
+        doc = {
             "mission": {"id": self.mission_id, "title": self.title, "kind": MISSION_KIND},
             "launch": {"site": self.site, "vehicle": self.vehicle, "orbit": self.orbit,
                        "date_utc": self.date_utc, "raan_deg": self.raan_deg,
@@ -416,6 +517,9 @@ class TwoStageLeoScenario:
             "scene": {"coast_orbits": float(self.coast_orbits),
                       "earth_texture": bool(self.earth_texture)},
         }
+        if self.recovery is not None:
+            doc["recovery"] = self.recovery.to_dict()
+        return doc
 
     @staticmethod
     def from_dict(doc: Mapping[str, Any]) -> "TwoStageLeoScenario":
@@ -475,6 +579,8 @@ class TwoStageLeoScenario:
                 apsides_m=float(elements.get("apsides_m", 10.0))),
             propagation=PropagationPlan.from_dict(doc.get("propagation")),
             expected=ExpectedResults.from_dict(doc.get("expected")),
+            recovery=None if doc.get("recovery") is None else RecoveryPlan.from_dict(
+                doc["recovery"]),
             coast_orbits=float(scene.get("coast_orbits", 2.0)),
             earth_texture=bool(scene.get("earth_texture", True)))
 
@@ -530,6 +636,11 @@ def scenario_warnings(scenario: TwoStageLeoScenario) -> list[str]:
     if scenario.expected.propagation_result != "passed":
         notes.append(f"expected.propagation_result is {scenario.expected.propagation_result!r}: "
                      "a passing M-05 report is not required for the mission to pass")
+    if scenario.recovery is not None:
+        notes.append("recovery: the first stage flies the FL-302/FL-303(/FL-305) chain after "
+                     "separation and is merged into the run; recovery.landed must be green for "
+                     "the mission to pass (an unassessed landing -- solver stack missing -- is "
+                     "reported failed with its reason code, never as a pass)")
     return notes
 
 
@@ -835,6 +946,8 @@ class TwoStageLeoMission:
     expected_tolerances: dict = field(default_factory=dict)
     expected_basis: dict = field(default_factory=dict)
     propagation: dict = field(default_factory=dict)
+    recovery: dict | None = None
+    recovery_run_dir: Path | None = None
     checks: tuple[HandoffCheck, ...] = ()
     not_assessed: list = field(default_factory=list)
     report: dict = field(default_factory=dict)
@@ -856,6 +969,9 @@ class TwoStageLeoMission:
             "parking_elements": self.parking_elements,
             "expected_elements": self.expected_elements,
             "propagation": self.propagation,
+            "recovery": self.recovery,
+            "recovery_run_dir": (str(self.recovery_run_dir) if self.recovery_run_dir
+                                 else None),
             "checks": _checks_doc(self.checks), "not_assessed": self.not_assessed,
             "report_file": str(self.report_path) if self.report_path else None,
         }
@@ -887,12 +1003,115 @@ def _acquire_ascent(scenario: TwoStageLeoScenario, out: Path):
         site=scenario.site, orbit=scenario.orbit, vehicle=scenario.vehicle,
         date_utc=scenario.date_utc, raan_deg=scenario.raan_deg,
         window_days=scenario.window_days, out_dir=out / "launch",
+        recovery=None if scenario.recovery is None else dict(scenario.recovery.spec or {}),
         **dict(scenario.ascent))
     if pipeline.ascent_run_dir is None:
         # No flight at all (infeasible window, optimizer abort): there is no
         # chain to grade -- the diagnosis is the pipeline's own status.
         return None, pipeline.to_dict(), pipeline.message
     return read_run(pipeline.ascent_run_dir), pipeline.to_dict(), None
+
+
+def _fly_recovery_stage(scenario: TwoStageLeoScenario, run, out: Path,
+                        ) -> tuple[object, dict, list[HandoffCheck], list[dict]]:
+    """Fly the FL-304 recovery stage over the acquired ascent (task #254): the
+    booster is planned (FL-302), flown and, when the landing stack is present,
+    landed (FL-303/FL-305); the combined run (module docstring) is written to
+    ``<out>/recovery/run`` and re-evaluated against the recovery target, so
+    ``ascent.flight_verified`` downstream means insertion *and* touchdown --
+    the Gate-B semantics of :func:`orbitopt.flightlab.simulate.simulate`.
+
+    Returns ``(combined_run, block, checks, not_assessed)``. Input trouble
+    (target without a recovery declaration, unreadable vehicle) raises; a
+    mission-level failure -- infeasible plan, missed touchdown, a landing the
+    solver stack could not assess -- comes back as a red ``recovery.*`` check,
+    never as an exception."""
+    from orbitopt.flightlab import checks as gate_checks
+    from orbitopt.flightlab.contract import load_target, write_run
+    from orbitopt.flightlab.recovery.pipeline import fly_recovery
+    from orbitopt.flightlab.vehicle_source import data_root
+
+    plan = scenario.recovery
+    if scenario.ascent_mode == "run_dir":
+        target = load_target(plan.target_file or scenario.ascent_target_file)
+    else:
+        target = load_target(out / "launch" / "target.yaml")
+    if target.recovery.kind == "none":
+        raise ValueError(
+            "recovery needs a target that declares one: the flight target has "
+            "recovery.kind 'none' (set recovery.spec in optimize mode, or point "
+            "recovery.target_file at the flown target in run_dir mode)")
+    vehicle = plan.vehicle_file or scenario.vehicle
+    vehicle_path = Path(vehicle)
+    if not vehicle_path.is_file():
+        vehicle_path = data_root() / "vehicles" / f"{vehicle_path.stem}.yaml"
+        if not vehicle_path.is_file():
+            raise FileNotFoundError(f"recovery vehicle {vehicle!r}: not a file and not in the "
+                                    "packaged vehicle catalog")
+
+    outcome = fly_recovery(run, target, vehicle_path,
+                           plan_options=dict(plan.plan_options) or None,
+                           landing_sites=dict(plan.landing_sites) or None)
+    # Gate-B re-assessment over the merged run: the checks the pipeline
+    # contributed (landing gate, touchdown limits, reserve) are kept, the
+    # target-declared limits are re-measured against the flown booster track --
+    # the same post-merge semantics as orbitopt.flightlab.simulate.
+    combined = replace(outcome.run,
+                       verification=gate_checks.evaluate(outcome.run, target))
+    run_dir = out / "recovery" / "run"
+    write_run(run_dir, combined)
+    target_file = (str(Path(plan.target_file or scenario.ascent_target_file))
+                   if scenario.ascent_mode == "run_dir"
+                   else str(out / "launch" / "target.yaml"))
+
+    checks: list[HandoffCheck] = []
+    landing_gate = next((c for c in outcome.checks if c.id == gate_checks.RECOVERY_GATE_CHECK_ID),
+                        None)
+    checks.append(_check(
+        "recovery.landed", bool(outcome.success),
+        reason_code=(landing_gate.reason_code
+                     if landing_gate is not None and landing_gate.reason_code
+                     else (outcome.reason_codes[0] if outcome.reason_codes else "failed"))))
+    reserve = next((c for c in outcome.checks if c.id == "recovery-propellant-reserve"), None)
+    if reserve is not None:
+        checks.append(_check("recovery.propellant_reserve", bool(reserve.passed),
+                             value=reserve.value, limit=reserve.limit, unit=reserve.unit,
+                             reason_code=reserve.reason_code))
+    for c in (outcome.landing.checks if outcome.landing is not None else ()):
+        checks.append(_check(f"recovery.{c.id}", bool(c.passed), value=c.value, limit=c.limit,
+                             unit=c.unit, reason_code=c.reason_code))
+    handoff = outcome.handoff
+    for c in (handoff.checks if handoff is not None else ()):
+        checks.append(_check(f"recovery.{c.id}", bool(c.passed), value=c.value, limit=c.limit,
+                             unit=c.unit, reason_code=c.reason_code))
+    notes = [{"id": f"recovery.{u.id}", "reason": f"phase {u.phase}: {u.note}"}
+             for u in (handoff.unassessed if handoff is not None else ())]
+
+    block: dict = {
+        "status": "flown",
+        "target_file": target_file,
+        "kind": target.recovery.kind,
+        "target": target.recovery.target,
+        "vehicle": str(vehicle_path),
+        "run_dir": str(run_dir),
+        "success": bool(outcome.success),
+        "reason_codes": list(outcome.reason_codes),
+        "plan_feasible": None if outcome.plan is None else bool(outcome.plan.feasible),
+        "ignitions_used": int(outcome.plan.ignitions_used) if outcome.plan is not None else 0,
+        "landing_feasible": None if outcome.landing is None else bool(outcome.landing.feasible),
+        "landed": bool(outcome.landing.landed) if outcome.landing is not None else False,
+        "touchdown_enu_m": (list(outcome.landing.touchdown_enu_m)
+                            if outcome.landing is not None
+                            and outcome.landing.touchdown_enu_m is not None else None),
+        "vertical_speed_m_s": (outcome.landing.vertical_speed_m_s
+                               if outcome.landing is not None else None),
+        "position_error_m": (outcome.landing.position_error_m
+                             if outcome.landing is not None else None),
+        "max_tilt_deg": (outcome.landing.max_tilt_deg if outcome.landing is not None else None),
+        "handoff_passed": None if handoff is None else bool(handoff.passed),
+        "assumptions": [str(a) for a in outcome.assumptions],
+    }
+    return combined, block, checks, notes
 
 
 def _propagate(scenario: TwoStageLeoScenario, parking_state, out: Path,
@@ -960,10 +1179,13 @@ def run_two_stage_leo(scenario: TwoStageLeoScenario, out_dir, *,
                       propagate: bool | None = None) -> TwoStageLeoMission:
     """Drive the frozen scenario end to end and grade it: ascent (flown now or
     replayed) -> station chain -> staging handoffs -> SECO-to-parking handoff
-    -> mass bookkeeping -> expected-orbit agreement -> orbit propagation. The
-    unified report lands at ``<out_dir>/mission.verification.json``; the M-04
-    launch-pipeline report (``optimize`` mode) and the M-05 propagation report
-    stay next to it and are referenced from it by path and digest."""
+    -> mass bookkeeping -> [first-stage recovery, when the scenario declares
+    one: FL-304 ``fly_recovery`` over the acquired ascent, its gates graded as
+    :data:`STATUS_RECOVERY_FAILED`] -> expected-orbit agreement -> orbit
+    propagation. The unified report lands at ``<out_dir>/mission.verification
+    .json``; the M-04 launch-pipeline report (``optimize`` mode), the recovery
+    run directory and the M-05 propagation report stay next to it and are
+    referenced from it by path and digest."""
     from orbitopt.mission.ascent import ascent_handoff_state, check_ascent_to_parking_orbit
 
     out = Path(out_dir)
@@ -980,13 +1202,25 @@ def run_two_stage_leo(scenario: TwoStageLeoScenario, out_dir, *,
     parking: dict | None = None
     parking_elements: dict = {}
     propagation: dict = {"status": "not_run"}
+    recovery_block: dict | None = None
+    recovery_run_dir: Path | None = None
 
     if run is None:
         checks.append(_check("ascent.flight_verified", False,
                              reason_code=(launch or {}).get("reason_codes", ["no_flight"])[0]
                              if launch else "no_flight"))
         message = f"ascent did not produce a flown run: {ascent_failure}"
+        if scenario.recovery is not None:
+            not_assessed.append({"id": "recovery",
+                                 "reason": "the first stage never separated: the ascent "
+                                           "produced no flown run"})
     else:
+        if scenario.recovery is not None:
+            run, recovery_block, recovery_checks, recovery_notes = _fly_recovery_stage(
+                scenario, run, out)
+            recovery_run_dir = Path(recovery_block["run_dir"])
+            checks.extend(recovery_checks)
+            not_assessed.extend(recovery_notes)
         checks.append(_check("ascent.flight_verified",
                              bool(run.verification.mission_constraints_passed),
                              reason_code="mission_constraints_failed"))
@@ -1084,7 +1318,9 @@ def run_two_stage_leo(scenario: TwoStageLeoScenario, out_dir, *,
         stations=stations, staging=staging, parking=parking,
         parking_elements=parking_elements, expected_elements=expected_elements,
         expected_tolerances=expected_tolerances, expected_basis=basis,
-        propagation=propagation, checks=tuple(checks), not_assessed=not_assessed)
+        propagation=propagation, recovery=recovery_block,
+        recovery_run_dir=recovery_run_dir,
+        checks=tuple(checks), not_assessed=not_assessed)
     mission.report = mission_report(mission)
     mission.report_path = _write_report(mission)
     return mission
@@ -1124,6 +1360,13 @@ def _grade(checks: Sequence[HandoffCheck], run) -> tuple[str, str, tuple[str, ..
         return (STATUS_MASS_BOOKKEEPING_FAILED,
                 "mass bookkeeping failed: " + ", ".join(c.id for c in failed if c.id.startswith("mass.")),
                 ("mass_bookkeeping",))
+    if any_failed("recovery."):
+        return (STATUS_RECOVERY_FAILED,
+                "first-stage recovery failed: "
+                + ", ".join(f"{c.id.split('.', 1)[1]} ({c.reason_code})" for c in failed
+                            if c.id.startswith("recovery.")),
+                tuple(sorted({c.reason_code or "failed" for c in failed
+                              if c.id.startswith("recovery.")})))
     if any_failed("expected."):
         return (STATUS_PARKING_ORBIT_OUT_OF_TOLERANCE,
                 "achieved parking orbit outside the expected results: "
@@ -1154,6 +1397,10 @@ def _check_category(name: str) -> str:
 
     if name.startswith(("station.", "handoff.", "mass.", "parking.")):
         return CHECK_NUMERICAL
+    if name.startswith("recovery.handoff"):
+        return CHECK_NUMERICAL
+    if name.startswith("recovery.") or name == "recovery.landed":
+        return CHECK_MODEL
     if name in ("ascent.optimizer_converged", "propagation.ran",
                 "propagation.epoch_forward", "propagation.mass_conservation"):
         return CHECK_NUMERICAL
@@ -1196,10 +1443,14 @@ def mission_report(mission: TwoStageLeoMission) -> dict:
         if got is None or want is None or tol is None or want is None:
             continue
         deviations[key] = {"deviation": abs(float(got) - float(want)), "tolerance": float(tol)}
+    chain = " -> ".join(mission.scenario.expected.events)
+    if mission.recovery is not None:
+        chain = (chain.replace("separation", "separation -> booster recovery", 1)
+                 if "separation" in chain else chain + " -> booster recovery")
     report = {
         "schemaVersion": "1.0",
         "kind": MISSION_REPORT_KIND,
-        "label": f"{mission.scenario.mission_id}: " + " -> ".join(mission.scenario.expected.events)
+        "label": f"{mission.scenario.mission_id}: " + chain
                  + " -> parking orbit -> orbit propagation",
         "status": status,
         "inputs": {
@@ -1212,6 +1463,7 @@ def mission_report(mission: TwoStageLeoMission) -> dict:
             "stations": mission.stations,
             "handoffs": {"staging": mission.staging, "parking_orbit": mission.parking},
             "propagation": mission.propagation,
+            "recovery": mission.recovery,
             "not_assessed": mission.not_assessed,
             "child_reports": child_reports,
         },
@@ -1286,7 +1538,10 @@ def build_from_config(config: dict, recorder=None) -> dict:
 
     if mission.ascent_run_dir is None:
         raise RuntimeError(f"{mission.status}: {mission.message} -- no scene to export")
-    scene = run_to_scene(read_run(mission.ascent_run_dir),
+    # With a recovery stage the scene carries the flown booster, not the
+    # ballistic debris: export the combined run the recovery stage wrote.
+    scene_run_dir = mission.recovery_run_dir or mission.ascent_run_dir
+    scene = run_to_scene(read_run(scene_run_dir),
                          earth_texture=scenario.earth_texture,
                          coast_orbits=scenario.coast_orbits)
     scene["id"] = mission_doc["id"]
