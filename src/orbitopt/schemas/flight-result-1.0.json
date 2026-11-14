@@ -78,7 +78,8 @@
       "additionalProperties": false,
       "properties": {
         "optimizer_converged": {"type": ["boolean", "null"], "description": "null = no optimizer ran or its outcome was not recorded."},
-        "physics_verified": {"type": ["boolean", "null"], "description": "Independent re-flight / analytic checks corroborate the trajectory."},
+        "physics_verified": {"type": ["boolean", "null"], "description": "An INDEPENDENT re-flight / cross-model check (a propagator other than the one that produced the state) corroborates the trajectory. Never the producing backend's own word -- that is backend_self_check. null = no independent re-fly ran."},
+        "backend_self_check": {"type": ["boolean", "null"], "description": "The conjunction of the producing backend's own in-run checks (finite states, mass bookkeeping, handoff continuity, tracking bounds ...). Optional: a run written before this field existed reads back as null. Recorded separately from physics_verified so a backend vouching for itself is never mistaken for independent verification."},
         "mission_constraints_passed": {"type": ["boolean", "null"], "description": "Every FlightTarget constraint verdict."},
         "checks": {"type": "array", "items": {"$ref": "#/$defs/check"}}
       }

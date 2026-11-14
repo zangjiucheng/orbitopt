@@ -132,7 +132,8 @@ def test_config_rejects_typos_naming_the_key():
 def test_hold_run_roundtrips_and_is_deterministic(tmp_path):
     cfg = load_config(packaged_config("fl401_vertical_hop"))
     run = run_ascent(cfg, tmp_path / "run-a")
-    assert run.verification.physics_verified is True
+    assert run.verification.backend_self_check is True
+    assert run.verification.physics_verified is None  # re-fly is the pipeline's call, not the adapter's
     assert run.verification.mission_constraints_passed is None  # not run_ascent's call
     assert all(t.frame == "ECEF" for t in run.tracks)
     assert run.engines.get("jsbsim") == JSBSIM_VERSION
@@ -159,7 +160,7 @@ def test_vehicle_and_ic_switch_is_config_only(tmp_path):
     r_alt = run_ascent(load_config(swapped), tmp_path / "alt")
     assert r_alt.run_id != r_orig.run_id       # identity tracks the document
     assert r_alt.vehicle_sha256 != r_orig.vehicle_sha256
-    assert r_alt.verification.physics_verified is True
+    assert r_alt.verification.backend_self_check is True
     assert r_alt.engines["aircraft"] == "spike_booster"
     # the IC really flew: track starts at the configured 100 km geodetic alt
     t0 = r_alt.tracks[0]
@@ -172,12 +173,14 @@ def test_simulate_dispatches_backend_without_touching_the_default(tmp_path):
     run = simulate(target, packaged_config("fl401_vertical_hop"),
                    tmp_path / "gateb6", backend="6dof", refly=False)
     v = run.verification
-    assert v.physics_verified is True   # backend checks
+    assert v.backend_self_check is True     # backend checks
+    assert v.physics_verified is None       # refly=False: independent re-fly not run
     # a vertical hop never reaches orbit: the insertion checks are there and
     # honest, and the 3-DOF-only omissions are recorded
     assert v.mission_constraints_passed is False
     assert any(c.id == "insertion-above-atmosphere" for c in v.checks)
-    assert any("no tudatpy insertion re-fly" in a for a in run.assumptions)
+    assert any("physics_verified is set only by the independent" in a
+               for a in run.assumptions)
     read_run(tmp_path / "gateb6")  # the final run dir validates
     with pytest.raises(ValueError, match="8DOF"):
         simulate(target, packaged_config("fl401_vertical_hop"),
@@ -206,7 +209,8 @@ def test_cli_accepts_backend_flag_case_insensitively():
 @pytest.mark.slow
 def test_staging_run_carries_the_handoff_as_checks(tmp_path):
     run = run_ascent(packaged_config("fl402_staging_handoff"), tmp_path / "stg")
-    assert run.verification.physics_verified is True
+    assert run.verification.backend_self_check is True
+    assert run.verification.physics_verified is None
     assert [t.body_id for t in run.tracks] == ["stack", "booster", "upper"]
     assert run.tracks[1].parent_body_id == run.tracks[2].parent_body_id == "stack"
     by_id = {t.body_id: t for t in run.tracks}
@@ -231,7 +235,8 @@ def test_staging_run_carries_the_handoff_as_checks(tmp_path):
 def test_tracking_run_meets_the_configured_go_bounds(tmp_path):
     run = run_ascent(packaged_config("fl403_program_tracking"), tmp_path / "trk")
     checks = {c.id: c for c in run.verification.checks}
-    assert run.verification.physics_verified is True
+    assert run.verification.backend_self_check is True
+    assert run.verification.physics_verified is None
     # the config's bounds are the limits the checks carry (2 deg settled
     # max / 0.6 deg RMS / 0 % saturation / 500 m / 20 m/s / 0.2 deg)
     cfg = load_config(packaged_config("fl403_program_tracking"))
@@ -260,7 +265,7 @@ def test_tracking_dt_halving_agrees(tmp_path):
     r2 = run_ascent(dict(base, dt_s=0.005), tmp_path / "dt005")
     c1 = {c.id: c for c in r1.verification.checks}
     c2 = {c.id: c for c in r2.verification.checks}
-    assert r1.verification.physics_verified and r2.verification.physics_verified
+    assert r1.verification.backend_self_check and r2.verification.backend_self_check
     assert abs(c1["sixdof-meco-altitude-deviation"].value
                - c2["sixdof-meco-altitude-deviation"].value) < 100.0
     assert abs(c1["sixdof-att-tracking-full-max"].value
@@ -279,11 +284,12 @@ def test_missing_reference_reports_not_assessed(tmp_path):
     assert skip.passed is False
     assert skip.reason_code == "REFLY_BACKEND_MISSING"
     assert not any(c.id == "sixdof-meco-altitude-deviation" for c in run.verification.checks)
-    assert run.verification.physics_verified is False  # not-assessed is a failed check
+    assert run.verification.backend_self_check is False  # not-assessed is a failed check
+    assert run.verification.physics_verified is None     # run_ascent never sets it
 
 
 def test_run_ascent_accepts_config_object(tmp_path):
     cfg = load_config(packaged_config("fl401_vertical_hop"))
     assert isinstance(cfg, SixDofConfig)
     run = run_ascent(cfg, tmp_path / "obj")
-    assert run.verification.physics_verified is True
+    assert run.verification.backend_self_check is True
