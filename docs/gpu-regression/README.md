@@ -89,7 +89,7 @@ were failures. Then add a row to the run index below.
 
 | Date (UTC) | Commit | GPU | CUDA / CuPy | Result | Record |
 |---|---|---|---|---|---|
-| _pending: first run on the local GPU server_ | | | | | |
+| 2026-11-14 | `eadd301` | NVIDIA L40S (cc 8.9), driver 610.57.04 | CUDA 13.0 runtime / 13.3 driver API, CuPy 13.6.0 | cuda 14 passed, 2 skipped; cpu-reference 35 passed, 6 skipped; 0 failures. The skips are the numba / numba-cuda / JAX kernels (not in the locked GPU env) and the no-GPU fallback case (a GPU was present) | [record](runs/20261114-000425-eadd301.md) |
 
 ## Automation (optional, lower priority)
 
