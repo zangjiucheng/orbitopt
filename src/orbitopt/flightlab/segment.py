@@ -70,6 +70,36 @@ def _check_category(name: str) -> str:
     raise ValueError(f"flight-run report check {name!r} has no verification category")
 
 
+def _check_evidence(name: str) -> str:
+    """Task #263 (E4-03) evidence type of one flight-run report check. Bare
+    numerical consistency: ``optimizer_converged`` and the run's own
+    integrity checks (mass bookkeeping, sixdof-states-finite, sixdof-mass-
+    non-negative). ``physics_verified`` is the Gate-B *independent re-flight*
+    verdict -- the only validation-grade evidence a run can carry (task #261:
+    it is set by a separate propagator replaying the run, never by the
+    backend that produced it). ``mission_constraints_passed`` and every other
+    Gate-B check (target band, vehicle limit) grade the flight against the
+    **design envelope it was constrained to** -- internal consistency, not
+    independent validation."""
+    from orbitopt.verify.report import (
+        EVIDENCE_DESIGN_INPUT,
+        EVIDENCE_INDEPENDENT_MODEL,
+        EVIDENCE_NUMERICAL,
+    )
+
+    if name == "optimizer_converged":
+        return EVIDENCE_NUMERICAL
+    if name == "physics_verified":
+        return EVIDENCE_INDEPENDENT_MODEL
+    if name == "mission_constraints_passed":
+        return EVIDENCE_DESIGN_INPUT
+    if name.startswith("check."):
+        cid = name[len("check."):]
+        return (EVIDENCE_NUMERICAL if cid.startswith(_NUMERICAL_CHECK_PREFIXES)
+                else EVIDENCE_DESIGN_INPUT)
+    raise ValueError(f"flight-run report check {name!r} has no evidence type")
+
+
 def flight_run_report(run: FlightRun, target: FlightTarget | None = None) -> dict:
     """The run's :class:`~orbitopt.flightlab.contract.Verification` as a
     standardized verification-report-1.0 document (kind ``"flightlab"``,
@@ -114,7 +144,8 @@ def flight_run_report(run: FlightRun, target: FlightTarget | None = None) -> dic
     }
     report = build_report("flightlab", run.run_id, [], inputs=inputs, targets=targets)
     report["status"] = status_from_checks(
-        checks, {name: _check_category(name) for name in checks})
+        checks, {name: _check_category(name) for name in checks},
+        {name: _check_evidence(name) for name in checks})
     report["digest"] = report_digest(report)
     return report
 
