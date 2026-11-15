@@ -211,6 +211,32 @@ best landed-conditional scatter. See
 [ADR 0004](adr/flightlab-0004-joint-recovery-chance-constraints.md) and
 [the recorded results](benchmarks/e3_02_joint_recovery.json).
 
+## Robust Monte Carlo qualification (E3-03)
+
+Every recorded recovery Monte Carlo above flew one seed and n=32, and at that
+size the Wilson intervals overlap into meaninglessness (36.4-69.1 % against
+28.2-60.7 %). E3-03 re-qualifies the arms with statistics that can separate
+them: a fixed seed list (1-4), a sample count derived from a 0.15-wide Wilson
+target at the worst-case planning rate
+(`orbitopt.flightlab.recovery.stats.required_sample_size`, 167 required, 168
+flown), identical perturbations per sample index in every arm, and identical
+declared actuator physics everywhere (20 deg/s slew in series with the 0.2 s
+lag; only the E3-01 arm compensates for the lag -- that is the law under
+test). Pooled over the 168 paired samples, FL-305 lands 45 (26.8 %, CI
+20.7-33.9 %); the E3-01 declared chain adds 4 and loses none (49, exact
+McNemar p = 0.125); R-01 lands 55 (+14/-4, p = 0.031) and E3-02 lands 56
+(+15/-4, p = 0.019) -- both significantly above the baseline, while E3-02 vs
+R-01 stays unresolved (2/1 discordant) and the paired sign tests on
+landed-conditional touchdown radius reject nothing. The objective modes shift
+failures from propellant shortfall to corridor miss (38+14 to 12+22). The
+baseline's per-seed readings spread 23.8-31.0 % -- one seed is not a
+population, and now the quoted intervals (every arm <= 0.15 wide, every
+failure class counted, per-source sensitivity ranked) say how much the
+benchmark actually supports. Sensitivity rankings, failure classes and the
+per-sample paired rows are in
+[the recorded results](benchmarks/e3_03_robust_montecarlo.json)
+(`benchmarks/bench_e3_03_robust_montecarlo.py`).
+
 For implementation and reproducibility details, see [JSBSim findings](flightlab-jsbsim-spike-findings.md),
 [regression CI](flightlab-regression-ci.md) and
 [landing guidance](adr/flightlab-0002-closed-loop-landing-guidance.md).
