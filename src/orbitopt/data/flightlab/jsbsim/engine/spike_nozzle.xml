@@ -1,8 +1,18 @@
 <?xml version="1.0"?>
 <!--
-  Flight Lab E4 spike (#206): nozzle with a token exit area so the ambient
-  back-pressure term (p * A) in FGNozzle is negligible ("vacuum-ish").
+  Flight Lab E4 spike (#206) nozzle, E6-01 (#273) aligned.
+
+  The E4 spike ran a token 0.001 ft^2 exit area so that FGNozzle's ambient
+  back-pressure debit (p * A_exit) stayed negligible and the model was
+  "vacuum-ish" at any altitude.  That debit is what made the pad thrust 12%
+  richer than the native / 3-DOF model, so the exit area now carries the
+  physical spike nozzle: 2 m^2 = 21.527821 ft^2, the same figure as the
+  parity source's stage1_engine.nozzle_exit_area_m2.
+
+  With it JSBSim flies the same thrust law the native engine and
+  OpenTsiolkovsky do,  T = thrust_vac - A_exit * p_ambient  (101325 Pa at the
+  pad -> 1.6774 MN, 1.8800 MN in vacuum).
 -->
 <nozzle name="spike_nozzle">
-  <area unit="FT2"> 0.001 </area>
+  <area unit="FT2"> 21.527821 </area>
 </nozzle>

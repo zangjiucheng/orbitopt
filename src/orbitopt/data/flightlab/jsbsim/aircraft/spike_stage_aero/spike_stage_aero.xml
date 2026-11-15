@@ -15,11 +15,15 @@
   * Engine: FGRocket, liquid variant (isp + propflowmax + mixtureratio):
     vacuum thrust = Isp * g0 * mdot with mdot = throttle * propflowmax, so
     the analytic Tsiolkovsky / constant-mdot checks are exact laws.
-  * Nozzle: token exit area, so FNozzle's ambient back-pressure debit
-    (p * A) is negligible -> "vacuum-ish" thrust at any altitude.
+    E6-01 (#273) derived propflowmax off the parity source's thrust/Isp
+    (choked flow, 599.083 kg/s) instead of rounding it to 600 kg/s.
+  * Nozzle: physical 2 m^2 exit area (E6-01), so FNozzle's ambient
+    back-pressure debit (p * A) reproduces the native / 3-DOF thrust law
+    T = thrust_vac - A*p: 1.6774 MN on the pad, 1.8800 MN in vacuum.
   * Tanks: OXIDIZER + FUEL sized to the mixture ratio (both empty together
-    after 100 s at full throttle). FGMassBalance recomputes weight, CG and
-    inertia from the tank contents every frame.
+    after 100.153 s at full throttle, i.e. 60 t at the choked 599.083 kg/s).
+    FGMassBalance recomputes weight, CG and inertia from the tank contents
+    every frame.
   * TVC: the thruster's <orient> element makes propulsion/engine[0]/
     {pitch,yaw}-angle-rad writable; two FGActuator channels (first-order
     lag + slew-rate limit + travel limit) drive them from command

@@ -45,12 +45,15 @@ stage_budgets:
   control:
     source: docs/flightlab-jsbsim-spike-findings.md (FL-403 closed-loop run)
     note: >
-      Measured JSBSim-vs-3-DOF deviations of the FL-403 fixture: 51 m MECO
-      altitude, 2.0 m/s velocity, 0.51 deg whole-burn attitude error, with
-      dt-halving showing the numbers are not integration artefacts. The
-      control-stage line is a multiple of this measured spread.
+      Measured JSBSim-vs-3-DOF deviations of the FL-403 fixture: 52 m MECO
+      altitude, 2.0 m/s velocity, 0.51 deg whole-burn attitude error. dt-halving
+      (0.02/0.01/0.005 s) moves the MECO altitude deviation by 58/30 m, so the
+      spread is step-size-limited TVC lag rather than formulation error.
+      Re-measured after the E6-01 (#273) engine alignment: the 1 m shift is the
+      choked mass-flow change, not a control change. The control-stage line is a
+      multiple of this measured spread.
     measured:
-      meco_position_m: 51.0
+      meco_position_m: 52.0
       meco_velocity_m_s: 2.0
       attitude_whole_burn_deg: 0.51
   propagation:
@@ -90,12 +93,15 @@ cells:
         limit: 500.0
         basis_kind: measured_agreement
         basis: >
-          FL-403 measured a 51 m MECO altitude deviation between the JSBSim
-          6-DOF run and the 3-DOF reference (spike findings; dt-halving
-          confirmed it is not integration noise). The line is ~10x the
-          measured spread: it catches a broken tracking loop, staging or
-          frame bridge, not the last metre. The point-mass side contributes
-          <= 0.1 m numerical error (V-03 meco_ascent bound), negligible here.
+          FL-403 measured a 52 m MECO altitude deviation between the JSBSim
+          6-DOF run and the 3-DOF reference (spike findings). dt-halving
+          spread is 58 m and the Richardson-extrapolated deviation ~8 m
+          (E6-01 re-measure, ADR-0009), i.e. the line is dominated by
+          step-size-limited TVC lag, not a formulation disagreement -- which
+          is why the line is set ~10x the measured spread: it catches a broken
+          tracking loop, staging or frame bridge, not the last metre. The
+          point-mass side contributes <= 0.1 m numerical error (V-03
+          meco_ascent bound), negligible here.
         on_fail: attitude_control
       velocity_m_s:
         limit: 20.0
@@ -124,7 +130,7 @@ cells:
           The MECO state is suborbital (a ~ 3300 km); the two-body
           sensitivity da = a^2/mu * delta(2E) propagates the 500 m / 20 m/s
           state line to roughly 1 km of a, and the FL-403 measured state
-          deviation (51 m / 2 m/s) to well under 0.1 km. 20 km flags a
+          deviation (52 m / 2 m/s) to well under 0.1 km. 20 km flags a
           structural disagreement (units, frame bridge, wrong handoff mass),
           not the tracked model spread.
         on_fail: model_formulation

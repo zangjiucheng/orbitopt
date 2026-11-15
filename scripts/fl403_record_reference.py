@@ -63,9 +63,12 @@ def main() -> int:
     traj = json.loads((args.out / "summary.json").read_text())
     meco = float(vehicle.stages[0]["engine"]["burn_end_s"])
     import csv as _csv
-    row = [r for r in _csv.DictReader(open(args.out / "trajectory.csv"))
-           if float(r["time_s"]) == meco][-1]
-    print(f"MECO @ {meco}s: alt {float(row['altitude_m'])/1000:.2f} km, "
+    # OT writes its own sample grid, which need not land on the burn-end
+    # instant (the choked 60 t load runs out at 100.153 s), so echo the nearest
+    # sampled row rather than demanding an exact one.
+    rows = [(float(r["time_s"]), r) for r in _csv.DictReader(open(args.out / "trajectory.csv"))]
+    t_row, row = min(rows, key=lambda r: abs(r[0] - meco))
+    print(f"MECO @ {meco:.3f}s (row {t_row:.3f}s): alt {float(row['altitude_m'])/1000:.2f} km, "
           f"v_earth {float(row['speed_earth_mps']):.1f} m/s, "
           f"mach {float(row['mach']):.2f}, max_q {traj['maxima']['dynamic_pressure_pa']['value']:.0f} Pa")
     return 0

@@ -1,12 +1,21 @@
 <?xml version="1.0"?>
 <!--
   Flight Lab E4 spike (#206): single throttleable liquid engine.
-  Vacuum Isp 320 s; 600 kg/s total propellant flow at full throttle
-  (1322.774 lbm/s) -> 1.8828 MN vacuum thrust, 100 s burn on 60 t.
+  E6-01 (#273) re-derived the flow off the choked-flow identity, so the
+  engine matches the native/3-DOF and OpenTsiolkovsky model instead of
+  carrying a round number:
+
+    propflowmax = thrust_vac / (Isp_vac * g0)
+                = 1.88e6 / (320 * 9.80665) = 599.083275 kg/s = 1320.7525 lbm/s
+
+  -> 1.8800 MN vacuum thrust (exactly the parity source's stage1_thrust_vac_n,
+  which used to sit 0.15% off), 100.15 s burn on 60 t.  The flow is choked, so
+  it is constant with altitude; what the ambient pressure buys instead is the
+  FNozzle back-pressure debit in engine/spike_nozzle.xml.
 -->
 <rocket_engine name="spike_engine">
   <isp> 320.0 </isp>
-  <propflowmax unit="LBS/SEC"> 1322.7736 </propflowmax>
+  <propflowmax unit="LBS/SEC"> 1320.7525 </propflowmax>
   <mixtureratio> 2.5 </mixtureratio>
   <minthrottle> 0.0 </minthrottle>
   <maxthrottle> 1.0 </maxthrottle>

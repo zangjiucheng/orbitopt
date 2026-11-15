@@ -432,12 +432,19 @@ class TrackingResult:
 def run_tracking_spike(reference: ReferenceTrajectory, program: AttitudeProgram,
                        meco_t_s: float, *, dt_s: float = 0.01,
                        burn_t_s: float | None = None,
+                       cutoff_t_s: float | None = None,
                        gains: PidGains | None = None,
                        ic: InitialConditions | None = None,
                        sim: SixDofSim | None = None) -> TrackingResult:
     """Fly the JSBSim spike stage closed-loop on the program to ``meco_t_s``
     (+ 5 s coast), return the :class:`TrackingResult`. ``burn_t_s`` bounds
-    the metrics window (default: ``meco_t_s``)."""
+    the metrics window (default: ``meco_t_s``).
+
+    ``cutoff_t_s`` commands the engine shut down at that time -- the
+    commanded-MECO convention a 3-DOF harness carries in its ``burn_end``.
+    Without it the plant runs to tank depletion, which since E6-01 (#273) is
+    100.153 s for a choked 599.083 kg/s flow, not the rounded 100 s the
+    pre-alignment 600 kg/s happened to give."""
     if sim is None:
         sim = SixDofSim(dt_s)
     if ic is None:
@@ -459,6 +466,8 @@ def run_tracking_spike(reference: ReferenceTrajectory, program: AttitudeProgram,
     def control(t: float, s: SixDofSim) -> None:
         cmd_p, cmd_y, _, _ = ctrl.command(s.sample(), program, s.dt_s)
         s.set_gimbal(cmd_p, cmd_y)
+        if cutoff_t_s is not None and t + s.dt_s >= cutoff_t_s:
+            s.set_throttle(0.0)
         if abs(t + s.dt_s - meco_t_s) <= 0.5 * s.dt_s:
             meco_mach.append(float(s["velocities/mach"]))
 
