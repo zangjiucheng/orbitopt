@@ -85,7 +85,7 @@ it is resolved at the CLI and never written into a run, report or scene.
 |---|---|---|
 | `opentsiolkovsky` | Point-mass ascent with a prescribed attitude program and Cd(Mach); GCRS states from the pinned v1.0.0 external binary. | No attitude dynamics, no TVC, no staging forces; the Gate-B pipeline and the FL-304 recovery chain build on this lineage. |
 | `native-pointmass` | Point-mass twin on the native plant (US76 + J2 + rotation), kinematic program attitude, q-bar S CA/CN aero. | No attitude states — the program *is* the attitude. The 3-DOF side of the F-05/F-07 comparison, not the OpenTsiolkovsky adapter. |
-| `jsbsim` | Full JSBSim rigid-body dynamics with gimballed TVC and propellant-driven mass/CG/inertia on the E4 spike models; ECEF states. | Packaged vehicles fly with **zero aero** (the spike is a TVC/mass paper test); outside the optimization loop; opt-in `orbitopt[sixdof]` extra. See [ADR 0001](adr/flightlab-0001-jsbsim-6dof.md). |
+| `jsbsim` | Full JSBSim rigid-body dynamics with gimballed TVC and propellant-driven mass/CG/inertia on the E4 spike models; ECEF states. | The packaged *base* aircraft fly with **zero aero** (a TVC/mass paper test); since E1-04 the **production path** is the generated `spike_stage_aero` aircraft, compiled from the packaged aero document, and it is the aero-bearing ascent reference. Outside the optimization loop; opt-in `orbitopt[sixdof]` extra. See [ADR 0001](adr/flightlab-0001-jsbsim-6dof.md) and [ADR 0004](adr/flightlab-0004-production-jsbsim-aero-path.md). |
 | `native-rigidbody` | Six-DOF rigid body with coefficient-table aero, the F-04 tracker and a lag/rate-limited TVC actuator; US76 + J2 + rotation; ECEF states. | The reference plant of the native studies (F-02/F-04/F-06/F-07): illustrative coefficients, basic tracker without roll control; not the JSBSim backend. |
 
 CLI mapping: `flight simulate --backend opentsiolkovsky|jsbsim` (default
@@ -105,8 +105,11 @@ studies build their stage pair **from that document**
 parameters the packaged JSBSim XMLs actually declare. Masses, propellant,
 inertias, engine mount station and Isp match exactly; stage-1 thrust agrees
 within the documented band (JSBSim derives it from `isp·g0·ṁ`, ~0.15 % from
-the canonical 1.88 MN); aero *geometry and reference quantities* are shared
-while the JSBSim zero-aero boundary stays disclosed. The automated gate is
+the canonical 1.88 MN); aero *geometry and reference quantities* are shared,
+the zero-aero boundary of the *base* aircraft stays disclosed, and the
+generated production aircraft (`jsbsim.production_aircraft`,
+[ADR 0004](adr/flightlab-0004-production-jsbsim-aero-path.md)) carries the
+aero document's compiled tables. The automated gate is
 `tests/test_flightlab_backend_identity_parity.py`. Deliberately *not*
 aligned: the OpenTsiolkovsky `synthetic_two_stage` demonstrator and the
 FL-402 `spike_upper` stand-in.

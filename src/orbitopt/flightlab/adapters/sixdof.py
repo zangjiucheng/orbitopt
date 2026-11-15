@@ -125,6 +125,7 @@ from orbitopt.flightlab.contract import (
 )
 from orbitopt.flightlab.sixdof.jsbsim_driver import InitialConditions, SixDofSim, \
     mass_state_from_sample
+from orbitopt.flightlab.sixdof.jsbsim_aero import aircraft_aero_note
 from orbitopt.flightlab.sixdof.mass_properties import MassModelConfig, load_mass_model
 
 #: Canonical identity (E1-01, task #250) of this physics engine, as recorded
@@ -828,8 +829,8 @@ def run_ascent(config, out_dir, *, target=None) -> FlightRun:
     self_check = all(c.passed for c in checks)
     assumptions = [
         f"6-DOF backend (jsbsim {JSBSIM_VERSION}): vehicle {vehicle_note!r} from the "
-        "config, ECEF states (frame ECEF, no frame bridge), zero-aero spike "
-        "models: illustrative, not flight-certified.",
+        "config, ECEF states (frame ECEF, no frame bridge); the config's aircraft "
+        f"flies {aircraft_aero_note(cfg.model)}: illustrative, not flight-certified.",
         "config-driven: vehicle, initial conditions and integration step come "
         f"from the scenario document (sha256 {cfg.digest[:16]}), not from code",
         "created_utc is the config epoch: run_ascent is a pure function of the "

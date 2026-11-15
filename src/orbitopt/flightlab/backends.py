@@ -1,7 +1,9 @@
 """E1-01 (task #250): the canonical identity of every Flight Lab ascent backend.
 
 Before this module, ``6DOF`` named two different things: ``orbitopt flight
-simulate --backend 6DOF`` flew the JSBSim adapter (zero-aero spike models,
+simulate --backend 6DOF`` flew the JSBSim adapter (zero-aero spike models;
+since E1-04 the production path is a generated aircraft with the packaged
+aero document compiled in — ADR flightlab-0004),
 :mod:`orbitopt.flightlab.adapters.sixdof`) while ``orbitopt flight mission
 --backend 6DOF`` flew the native RK4 rigid-body plant
 (:mod:`orbitopt.flightlab.sixdof`). The same label with two meanings is a
@@ -14,7 +16,9 @@ took it, resolved here, never echoed into a run, report or scene.
 The identities (lower-case, exactly as they are recorded in every output):
 
 ``jsbsim``             JSBSim 6-DOF adapter (F-01): config-driven scenarios
-                       on the E4 spike aircraft models (zero aero), ECEF
+                       on the E4 spike models (zero-aero base or the
+                       generated production aircraft with the aero document's
+                       tables compiled in), ECEF
                        states, opt-in ``jsbsim`` extra.
 ``native-rigidbody``   the native RK4 rigid-body plant (F-02/F-04/F-06/F-07):
                        six states + coefficient-table aero + TVC actuator,
@@ -68,12 +72,14 @@ FIDELITY: dict[str, dict[str, str]] = {
                       "the OpenTsiolkovsky adapter",
     },
     BACKEND_JSBSIM: {
-        "label": "JSBSim 6-DOF (spike models)",
+        "label": "JSBSim 6-DOF (E4 spike models)",
         "models": "full JSBSim rigid-body dynamics with gimballed TVC and "
                   "propellant-driven mass/CG/inertia on the E4 spike models, "
                   "ECEF states",
-        "boundaries": "packaged vehicles fly with ZERO aero (the spike is a "
-                      "TVC/mass paper test); outside the optimization loop; "
+        "boundaries": "the packaged base aircraft fly with ZERO aero (a "
+                      "TVC/mass paper test); the generated production "
+                      "aircraft flies the packaged aero document "
+                      "(ADR flightlab-0004); outside the optimization loop; "
                       "opt-in jsbsim==1.3.3 extra",
     },
     BACKEND_NATIVE_RIGIDBODY: {

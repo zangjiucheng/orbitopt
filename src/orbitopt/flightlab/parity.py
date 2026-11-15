@@ -18,10 +18,14 @@ Alignment is deliberately narrow and disclosed (see the header of
 * stage-1 thrust: JSBSim derives ``isp * g0 * propflowmax``, the native
   plant states ``thrust_vacuum_n`` -- agreement within the scenario's
   documented relative band (actual gap ~0.15%);
-* aero: shared geometry and reference quantities; the jsbsim packaged
-  vehicles fly ZERO aero by design while the native plant flies the
-  packaged coefficient file -- a fidelity boundary, asserted (and disclosed),
-  not hidden.
+* aero: shared geometry and reference quantities; the jsbsim *base* aircraft
+  fly ZERO aero by design while the native plant flies the packaged
+  coefficient file -- a fidelity boundary, asserted (and disclosed), not
+  hidden.  The generated production aircraft (``jsbsim.production_aircraft``,
+  E1-04) closes that boundary for the production path: its aerodynamics
+  section is compiled from the same coefficient file, asserted by
+  ``parity-jsbsim-production-aero`` and quantified against the native plant
+  in ADR flightlab-0004.
 
 Nothing here flies anything; it only reads, compares and reports.
 """
@@ -159,6 +163,24 @@ def _text(root: ET.Element, path: str) -> str:
     return node.text.strip()
 
 
+def _aerodynamics_declared(ac: ET.Element) -> bool:
+    """Does this aircraft declare *non-zero* aerodynamics?
+
+    An ``<aerodynamics>`` section full of zeros is a placeholder, not aero: the
+    E4 spike declares one and flies ballistically. What counts as aero is a
+    tabulated coefficient, a non-zero constant, or a coefficient wired to a
+    flight-state property."""
+    root = ac.find('aerodynamics')
+    if root is None:
+        return False
+    if root.findall('.//table'):
+        return True
+    for node in root.iter('value'):
+        if node.text and abs(float(node.text)) > 0.0:
+            return True
+    return bool(root.findall('.//property'))
+
+
 def _kg(node: ET.Element) -> float:
     unit = (node.get("unit") or "LBS").upper()
     value = float(node.text)
@@ -218,9 +240,10 @@ def jsbsim_declared_params(aircraft: str = "spike_stage",
         "propflowmax_kg_s": flow_kg_s,
         "min_throttle": float(_text(en, "minthrottle")),
         "gimbal_limit_rad": max(gimbals) if gimbals else 0.0,
-        "aero_declared": ac.find("aero") is not None,
+        "aero_declared": _aerodynamics_declared(ac),
         "wingarea_m2": float(_text(ac, "./metrics/wingarea")),
         "wingspan_m": float(_text(ac, "./metrics/wingspan")),
+        "chord_m": float(_text(ac, "./metrics/chord")),
     }
 
 
@@ -317,6 +340,31 @@ def check_parity(scenario: ParityScenario | None = None) -> tuple[Check, ...]:
         note="spike_stage.xml now declares aerodynamics: the zero-aero "
              "fidelity boundary of the jsbsim packaged vehicles has changed "
              "-- update docs and this parity source")
+
+    # -- the production (aero-bearing) JSBSim vehicle, E1-04 (#253) --------
+    production = p.jsbsim.get("production_aircraft")
+    if production:
+        pr = jsbsim_declared_params(str(production), p.document.get("jsbsim_engine",
+                                                                    "spike_engine"))
+        shared = ("empty_mass_kg", "propellant_mass_kg", "cg_x_m",
+                  "thruster_x_m", "isp_s", "propflowmax_kg_s", "min_throttle",
+                  "gimbal_limit_rad")
+        inherited = max([_rel(jb[k], pr[k]) for k in shared]
+                        + [_rel(n, x) for n, x in zip(jb["inertia_kg_m2"],
+                                                     pr["inertia_kg_m2"])])
+        add("parity-jsbsim-production-inherited", inherited == 0.0, value=inherited,
+            limit=0.0, unit="",
+            note=f"{production}.xml no longer carries the same vehicle parameters "
+                 "as the airframe it is generated from")
+        add("parity-jsbsim-production-aero", pr["aero_declared"], unit="",
+            note=f"{production}.xml declares no (or zero) aerodynamics: the "
+                 "production JSBSim path is not aero-bearing")
+        prod_geom = (_close(aero.reference_area_m2, pr["wingarea_m2"], 1e-4)
+                     and _close(aero.reference_span_m, pr["wingspan_m"], 1e-9)
+                     and _close(aero.reference_length_m, pr["chord_m"], 1e-9))
+        add("parity-jsbsim-production-aero-geometry", prod_geom, unit="",
+            note=f"{production}.xml reference geometry no longer matches the "
+                 "aero document the native plant flies")
     return tuple(checks)
 
 
