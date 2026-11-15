@@ -16,8 +16,10 @@ the recovery E2E tests and the FL-304/R-05 evidence runs:
   figure overlays nominal tracks and touchdown ellipses;
 * **fairness** -- identical ascent, seed, dispersion setup, FL-302 warm
   start and referee; the guidance/objective differs by exactly what the
-  epic changed (the baseline pins the FL-305-era objective terms off,
-  matching docs/benchmarks/fl305_recovery_montecarlo.json).
+  epic changed (the baseline pins the FL-305-era objective terms off AND
+  the FL-305-era unlimited-slew landing, matching
+  docs/benchmarks/fl305_recovery_montecarlo.json; since E3-01 the stack
+  column flies the declared actuator set from the MC default).
 
 Real physics, ~20-30 s per sample per core:
 
@@ -53,8 +55,11 @@ from orbitopt.flightlab.recovery.montecarlo import (  # noqa: E402
 FL305_OBJECTIVE = {"landing_divert_budget_m": None, "landing_reserve_margin_kg": 0.0}
 
 CONFIGS = {
-    "baseline_fl305": {**MC_PLAN_OPTIONS, **FL305_OBJECTIVE},
-    "r07_stack": dict(MC_PLAN_OPTIONS),  # current defaults (R-01 on)
+    # E3-01 (task #258): the FL-305-era baseline pins the unlimited-slew
+    # landing ("landing": {}); "current defaults" now include the declared
+    # actuator set (TERMINAL_GUIDANCE_E301 via MC_PLAN_OPTIONS["landing"]).
+    "baseline_fl305": {**MC_PLAN_OPTIONS, "landing": {}, **FL305_OBJECTIVE},
+    "r07_stack": dict(MC_PLAN_OPTIONS),  # current defaults (R-01 + E3-01 on)
 }
 
 

@@ -252,11 +252,55 @@ to N site-ENU points per sample for the envelope plots without changing draws.
 ## Nominal / dispersed comparison (R-07)
 
 In the recorded 32-sample comparison (seed 1, identical dispersions and
-referee), the baseline landed 14 and the newer objective landed 17. The
-latter's Wilson interval was [0.36, 0.69]; position failures rose from 4 to 7.
+referee), the baseline landed 14 -- but only by flying an unlimited-bandwidth
+TVC assumption (nominal demand peaking at 193 deg/s), while the stack column
+flies the declared actuator set (20 deg/s slew in series with a 0.2 s lag,
+compensated; see [ADR 0006](adr/flightlab-0006-rate-limited-landing-guidance.md))
+and also lands 14, with the nominal touching down 0.03 m from the pad at
+0.009 m/s lateral speed on a 18.8 deg/s peak slew. Position failures rose
+from 4 to 7 and the stack adds 5 terminal `LANDING_LATERAL_SPEED_EXCEEDED`
+draws the rate-limited gimbal cannot close; the baseline's edge over the
+stack is now a propellant-reserve mix (8 + 5 vs 2 + 3), not a landing one.
 See [ADR 0003](adr/flightlab-0003-landing-aware-boostback-objective.md) and
 [the recorded results](benchmarks/r07_nominal_dispersed.json) for the setup
 and failure breakdown.
+
+## Joint chance-constrained planning (E3-02)
+
+`plan_boostback_entry(joint_chance=...)` replaces the R-01 soft terms with
+joint chance constraints (fuel-margin quantile, scatter-derived divert bar,
+landing-probability floor) aggregated as a worst-violation exact penalty.
+In the recorded paired 32-sample comparison the joint arm landed 17 (+4,
+−0 vs the baseline; identical touchdowns on the shared landings) with the
+best landed-conditional scatter. See
+[ADR 0005](adr/flightlab-0005-joint-recovery-chance-constraints.md) and
+[the recorded results](benchmarks/e3_02_joint_recovery.json).
+
+## Robust Monte Carlo qualification (E3-03)
+
+Every recorded recovery Monte Carlo above flew one seed and n=32, and at that
+size the Wilson intervals overlap into meaninglessness (36.4-69.1 % against
+28.2-60.7 %). E3-03 re-qualifies the arms with statistics that can separate
+them: a fixed seed list (1-4), a sample count derived from a 0.15-wide Wilson
+target at the worst-case planning rate
+(`orbitopt.flightlab.recovery.stats.required_sample_size`, 167 required, 168
+flown), identical perturbations per sample index in every arm, and identical
+declared actuator physics everywhere (20 deg/s slew in series with the 0.2 s
+lag; only the E3-01 arm compensates for the lag -- that is the law under
+test). Pooled over the 168 paired samples, FL-305 lands 45 (26.8 %, CI
+20.7-33.9 %); the E3-01 declared chain adds 4 and loses none (49, exact
+McNemar p = 0.125); R-01 lands 55 (+14/-4, p = 0.031) and E3-02 lands 56
+(+15/-4, p = 0.019) -- both significantly above the baseline, while E3-02 vs
+R-01 stays unresolved (2/1 discordant) and the paired sign tests on
+landed-conditional touchdown radius reject nothing. The objective modes shift
+failures from propellant shortfall to corridor miss (38+14 to 12+22). The
+baseline's per-seed readings spread 23.8-31.0 % -- one seed is not a
+population, and now the quoted intervals (every arm <= 0.15 wide, every
+failure class counted, per-source sensitivity ranked) say how much the
+benchmark actually supports. Sensitivity rankings, failure classes and the
+per-sample paired rows are in
+[the recorded results](benchmarks/e3_03_robust_montecarlo.json)
+(`benchmarks/bench_e3_03_robust_montecarlo.py`).
 
 For implementation and reproducibility details, see [JSBSim findings](flightlab-jsbsim-spike-findings.md),
 [regression CI](flightlab-regression-ci.md) and

@@ -27,6 +27,19 @@ seed still reproduces the report byte-for-byte:
   :func:`~orbitopt.flightlab.recovery.montecarlo.run_monte_carlo`'s
   ``sensitivity="solo"``) is what isolates a source.
 
+E3-03 (task #260) adds the reading a *multi-seed, paired* benchmark needs on
+top: :func:`required_sample_size` derives the sample count that actually
+supports a requested Wilson interval width (the 32-sample runs quote CIs
+~30 points wide -- they cannot separate two recovery modes), and
+:func:`mcnemar_test` / :func:`sign_test` grade two configurations flown over
+*the same* perturbation samples -- McNemar on the paired landed/failed
+verdict, a paired sign test on a continuous per-sample metric (touchdown
+radius) over the samples both arms landed. Both are exact binomial tests
+computed with integer arithmetic (``math.comb`` + ``fractions.Fraction``),
+so no distribution tables, no normal-approximation caveats at small
+discordant counts, and the chi-squared-with-continuity-correction companion
+is reported alongside for readers who want the classical number.
+
 Determinism: everything is a pure function of the record list and the
 declared model, computed with fixed numpy/stdlib arithmetic -- no RNG use.
 
@@ -36,9 +49,9 @@ declared model, computed with fixed numpy/stdlib arithmetic -- no RNG use.
 """
 from __future__ import annotations
 
-from math import sqrt
+from math import comb, erfc, sqrt
 from statistics import NormalDist
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
@@ -56,6 +69,9 @@ __all__ = [
     "failure_breakdown",
     "failure_class_title",
     "solo_models",
+    "mcnemar_test",
+    "required_sample_size",
+    "sign_test",
     "source_sensitivity",
     "statistics_summary",
     "success_rate_interval",
@@ -389,4 +405,106 @@ def statistics_summary(*, successes: int, n: int,
     }
     if solo is not None:
         out["solo_sensitivity"] = solo
+    return out
+
+
+# ------------------------------------------------------------- E3-03 paired
+def required_sample_size(target_ci_width: float, level: float = 0.95,
+                         planning_rate: float = 0.5) -> int:
+    """Smallest ``n`` whose :func:`success_rate_interval` is at most
+    ``target_ci_width`` wide at ``planning_rate`` (E3-03 sample-size
+    planning: "how many samples do I need before the success-rate CI means
+    anything?"). The planning rate defaults to 0.5, the worst case of the
+    binomial variance -- the number then holds whatever the true rate turns
+    out to be. Wilson, not the Wald rule of thumb, so the answer is exact
+    for the interval the report will actually quote."""
+    if not 0.0 < float(target_ci_width) < 2.0:
+        raise ValueError(f"target_ci_width must be inside (0, 2), got "
+                         f"{target_ci_width}")
+    if not 0.0 < float(planning_rate) < 1.0:
+        raise ValueError(f"planning_rate must be inside (0, 1), got "
+                         f"{planning_rate}")
+    for n in range(1, 10 ** 7):
+        ci = success_rate_interval(round(float(planning_rate) * n), n, level)
+        if ci["upper"] - ci["lower"] <= float(target_ci_width):
+            return n
+    raise RuntimeError(f"no sample size below 1e7 reaches width "
+                       f"{target_ci_width}")  # pragma: no cover
+
+
+def _exact_two_sided_p(successes: int, n: int) -> float:
+    """Two-sided exact binomial p-value against p = 1/2, doubling the
+    smaller tail (the McNemar/sign-test convention). Integer numerator and
+    denominator (``math.comb`` / ``2**n``) through ``Fraction`` so the test
+    stays exact far past where ``0.5**n`` would underflow; the result is
+    capped at 1.0."""
+    from fractions import Fraction
+    m = int(n)
+    k = min(int(successes), m - int(successes))
+    if m <= 0:
+        return 1.0
+    tail = sum(comb(m, i) for i in range(k + 1))
+    return min(1.0, float(Fraction(2 * tail, 1 << m)))
+
+
+def mcnemar_test(pairs: Iterable[tuple[Any, Any]]) -> dict[str, Any]:
+    """Exact paired comparison of two binary verdicts (landed / not landed)
+    flown over the *same* samples (E3-03). Only the discordant pairs carry
+    evidence: ``b`` = successes of A where B failed, ``c`` = the reverse.
+    The p-value is the exact binomial test of ``b`` out of ``b + c`` against
+    1/2 (no large-sample requirement -- a 32-sample benchmark is exactly
+    where the chi-squared approximation misbehaves), with the classical
+    continuity-corrected chi-squared reported alongside. ``pairs`` takes any
+    truth-value pair per sample; samples the two configurations did not both
+    fly must not be passed (the pairing is the point)."""
+    b = c = 0
+    n = 0
+    for a, x in pairs:
+        n += 1
+        if bool(a) and not bool(x):
+            b += 1
+        elif not bool(a) and bool(x):
+            c += 1
+    m = b + c
+    out: dict[str, Any] = {
+        "method": "exact binomial on discordant pairs (McNemar); "
+                  "chi-squared with continuity correction alongside",
+        "n_pairs": n, "n_discordant": m,
+        "successes_a_only": b, "successes_b_only": c,
+        "paired_rate_difference": (b - c) / n if n else None,
+        "exact": {"statistic": min(b, c), "p_value": _exact_two_sided_p(m - c, m)
+                  if m else 1.0},
+    }
+    if m:
+        chi2 = (abs(b - c) - 1.0) ** 2 / m
+        out["chi2_continuity"] = {"statistic": chi2,
+                                  "p_value": erfc(sqrt(chi2 / 2.0))}
+    else:
+        out["chi2_continuity"] = None
+    return out
+
+
+def sign_test(differences: Sequence[float]) -> dict[str, Any]:
+    """Exact paired sign test on a continuous per-sample metric (E3-03:
+    touchdown radius A minus B over the samples *both* arms landed -- the
+    landed-conditional scatter comparison, paired so the selection effect of
+    different landed subsets cannot leak in). Zero differences are ties and
+    carry no direction; missing values are dropped. The p-value is the same
+    exact binomial as :func:`mcnemar_test`."""
+    diffs = [float(d) for d in differences if d is not None]
+    nz = [d for d in diffs if d != 0.0]
+    wins_a = sum(1 for d in nz if d > 0.0)
+    out: dict[str, Any] = {
+        "method": "exact sign test (two-sided binomial on the nonzero "
+                  "differences against p = 1/2)",
+        "n_pairs": len(diffs), "n_ties": len(diffs) - len(nz),
+        "n_compared": len(nz), "wins_a": wins_a, "wins_b": len(nz) - wins_a,
+        "median_difference": None,
+        "p_value": _exact_two_sided_p(wins_a, len(nz)),
+    }
+    if nz:
+        srt = sorted(nz)
+        mid = len(srt) // 2
+        out["median_difference"] = (float(srt[mid]) if len(srt) % 2
+                                    else (srt[mid - 1] + srt[mid]) / 2.0)
     return out

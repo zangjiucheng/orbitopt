@@ -11,8 +11,10 @@ the textbook RTLS ascent fixture of the recovery E2E tests, FL-304 default
 dispersions, the FL-305 warm start, closed-loop landing, one seed, n=32:
 
 * **fl305_baseline** -- R-01 terms off (``landing_divert_budget_m=None``,
-  ``landing_reserve_margin_kg=0.0``): must reproduce the recorded
-  after_fl305 success rate and reason histogram;
+  ``landing_reserve_margin_kg=0.0``) and the FL-305-era landing pinned
+  (``landing={}``: unlimited TVC slew -- the MC default now carries the
+  E3-01 declared actuator set): must reproduce the recorded after_fl305
+  success rate and reason histogram;
 * **r01_landing_aware** -- R-01 defaults (1000 m divert budget, 1000 kg
   reserve margin).
 
@@ -52,7 +54,10 @@ from orbitopt.flightlab.recovery.montecarlo import (  # noqa: E402
 FL305_OBJECTIVE = {"landing_divert_budget_m": None, "landing_reserve_margin_kg": 0.0}
 
 CONFIGS = {
-    "fl305_baseline": {**MC_PLAN_OPTIONS, **FL305_OBJECTIVE},
+    # E3-01 (task #258): pin the FL-305-era landing behaviour ("landing":
+    # {} = unlimited slew) -- the MC default now flies the declared
+    # actuator set, this column must reproduce the FL-305-era evidence.
+    "fl305_baseline": {**MC_PLAN_OPTIONS, "landing": {}, **FL305_OBJECTIVE},
     "r01_landing_aware": dict(MC_PLAN_OPTIONS),
 }
 

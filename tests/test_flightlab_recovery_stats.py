@@ -34,6 +34,9 @@ from orbitopt.flightlab.recovery.stats import (
     classify_failure,
     failure_breakdown,
     failure_class_title,
+    mcnemar_test,
+    required_sample_size,
+    sign_test,
     solo_models,
     source_sensitivity,
     success_rate_interval,
@@ -422,3 +425,83 @@ def test_solo_sensitivity_is_marginal_per_source(tmp_path, monkeypatch):
     assert (tmp_path / "mc.json").read_text(encoding="utf-8").count(
         "solo_sensitivity") == 1
     assert any("one-at-a-time" in a for a in result.assumptions)
+
+
+# ---------------------------------------------------------------------------
+# E3-03: sample-size planning and paired comparison
+# ---------------------------------------------------------------------------
+
+
+def test_required_sample_size_delivers_the_requested_width():
+    """167 is the planning answer for a 15-point-wide 95 % Wilson interval at
+    the worst-case rate -- the property, not the number, is the contract:
+    n delivers the width, n-1 does not, and a stricter target costs more."""
+    n = required_sample_size(0.15)
+    assert n == 167
+    ok = success_rate_interval(n // 2, n)
+    assert ok["upper"] - ok["lower"] <= 0.15
+    n1 = success_rate_interval((n - 1) // 2, n - 1)
+    assert n1["upper"] - n1["lower"] > 0.15
+    assert required_sample_size(0.10) > n
+    assert required_sample_size(0.15, planning_rate=0.9) < n
+    wide = required_sample_size(0.30)
+    assert wide < n
+    for bad in ((0.0,), (2.0,), (-0.1,)):
+        with pytest.raises(ValueError):
+            required_sample_size(bad[0])
+    with pytest.raises(ValueError):
+        required_sample_size(0.15, planning_rate=0.0)
+
+
+def test_mcnemar_matches_the_exact_reference_case():
+    """10 flips one way, 2 the other: the exact two-sided binomial tail
+    2 * sum(C(12, k), k <= 2) / 2**12 = 158/4096, and the classical
+    continuity-corrected chi-squared (|b-c|-1)**2/(b+c) = 49/12 with
+    1-d.f. p = erfc(sqrt(x/2))."""
+    pairs = [(1, 0)] * 10 + [(0, 1)] * 2 + [(1, 1)] * 5 + [(0, 0)] * 3
+    r = mcnemar_test(pairs)
+    assert r["n_pairs"] == 20 and r["n_discordant"] == 12
+    assert r["successes_a_only"] == 10 and r["successes_b_only"] == 2
+    assert r["paired_rate_difference"] == pytest.approx(8 / 20)
+    assert r["exact"]["statistic"] == 2
+    assert r["exact"]["p_value"] == pytest.approx(158 / 4096)
+    assert r["chi2_continuity"]["statistic"] == pytest.approx(49 / 12)
+    assert r["chi2_continuity"]["p_value"] == pytest.approx(
+        math.erfc(math.sqrt(49 / 24)))
+    assert 0.0 <= r["exact"]["p_value"] <= 1.0
+
+
+def test_mcnemar_symmetry_no_discordance_and_small_counts():
+    a, b = ([(1, 0)] * 3 + [(0, 1)] * 3), ([(1, 0)] * 3 + [(0, 1)] * 3)
+    ra, rb = mcnemar_test(a), mcnemar_test(b)
+    assert ra["exact"]["p_value"] == rb["exact"]["p_value"] == 1.0
+    silent = mcnemar_test([(1, 1), (0, 0), (1, 0)])
+    assert silent["n_discordant"] == 1
+    assert silent["exact"]["p_value"] == 1.0          # 1/2: no evidence
+    assert silent["chi2_continuity"]["statistic"] == 0.0
+    assert mcnemar_test([])["n_pairs"] == 0 and mcnemar_test([])["exact"][
+        "p_value"] == 1.0
+    # the E3-02 recorded discordance (+4/-0 out of 32): b=4, c=0, exact
+    # p = 2 * C(4,0)/2**4 = 0.125 — real but far from conclusive at n=32
+    flips = mcnemar_test([(1, 0)] * 4 + [(0, 0)] * 28)
+    assert flips["exact"]["p_value"] == pytest.approx(0.125)
+
+
+def test_sign_test_is_the_exact_paired_median_test():
+    r = sign_test([1.0] * 8)
+    assert r["n_compared"] == 8 and r["wins_a"] == 8 and r["wins_b"] == 0
+    assert r["p_value"] == pytest.approx(2 * 2 ** -8)
+    mixed = sign_test([1.0, 2.0, -3.0])
+    assert mixed["p_value"] == 1.0                    # 2-3: nothing to see
+    ties = sign_test([0.0, -1.0, 0.0])
+    assert ties["n_ties"] == 2 and ties["n_compared"] == 1
+    assert ties["wins_a"] == 0 and ties["p_value"] == 1.0
+    assert sign_test([])["p_value"] == 1.0
+    assert sign_test([])["median_difference"] is None
+    med = sign_test([1.0, 2.0, 3.0, 4.0])
+    assert med["median_difference"] == pytest.approx(2.5)
+    # swapped arguments swap the verdict but not the evidence
+    d = [1.0, 2.0, -0.5, 3.0]
+    one, other = sign_test(d), sign_test([-x for x in d])
+    assert one["p_value"] == other["p_value"]
+    assert one["median_difference"] == -other["median_difference"]

@@ -1,0 +1,1528 @@
+{
+  "ascent": "tests/test_flightlab_simulate_recovery.py::_ascent_with_textbook_separation",
+  "baseline_evidence": "docs/benchmarks/fl305_recovery_montecarlo.json, docs/benchmarks/r01_boostback_objective.json, docs/benchmarks/r07_nominal_dispersed.json",
+  "dispersions": {
+    "cd_pct": 8.0,
+    "density_pct": 10.0,
+    "isp_pct": 3.0,
+    "sep_altitude_m": 400.0,
+    "sep_crossrange_m": 800.0,
+    "sep_downrange_m": 800.0,
+    "sep_heading_deg": 0.15,
+    "sep_speed_m_s": 4.0,
+    "thrust_pct": 5.0
+  },
+  "fairness": "same ascent, seed, dispersions, FL-302 warm start, referee and declared 20 deg/s TVC actuator (E3-01 consistency); the objective mode is the only difference",
+  "kind": "e3-02-joint-chance-vs-fl305-and-r01",
+  "n": 32,
+  "runs": {
+    "e3_02_joint_chance": {
+      "corridor_stats": {
+        "divert_m": {
+          "max": 3667.8223820909807,
+          "min": 202.6764938723224,
+          "n": 32,
+          "p50": 873.3359534981051,
+          "p90": 1797.2887646247166
+        },
+        "fuel_margin_kg": {
+          "max": 2580.9502196276735,
+          "min": -448.2138546688293,
+          "n": 32,
+          "p50": 1443.9551151498526,
+          "p90": 2313.785534033559
+        },
+        "joint_violation": {
+          "max": 2.8158411785216684,
+          "min": 0.0,
+          "n": 32,
+          "p50": 0.186677829350387,
+          "p90": 1.0273510375426813
+        },
+        "landing_probability": {
+          "max": 0.9672231475914927,
+          "min": 0.08175827877616848,
+          "n": 32,
+          "p50": 0.8115758329708177,
+          "p90": 0.9352445435391206
+        }
+      },
+      "ellipse": {
+        "bearing_deg": 159.27788251922078,
+        "mean_east_m": -0.049846420758947886,
+        "mean_north_m": 0.15665290121919104,
+        "n": 17,
+        "sigma_along_m": 1.08433642199488,
+        "sigma_cross_m": 0.6387061505261549,
+        "state": "assessed"
+      },
+      "landed_stats": {
+        "control_margin": {
+          "burn_time_s": {
+            "max": 21.9,
+            "mean": 20.735294117647058,
+            "min": 17.3,
+            "n": 17
+          },
+          "n": 17,
+          "saturated_high_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 17
+          },
+          "saturated_low_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 17
+          },
+          "slew_deg_s_max": {
+            "max": 20.0,
+            "mean": 20.0,
+            "min": 20.0,
+            "n": 17
+          },
+          "throttle_floor_room_min": {
+            "max": 0.240098,
+            "mean": 0.18825752941176468,
+            "min": 0.006673,
+            "n": 17
+          },
+          "throttle_headroom_at_ignition": {
+            "max": 0.231794,
+            "mean": 0.148061,
+            "min": 0.073423,
+            "n": 17
+          },
+          "throttle_headroom_min": {
+            "max": 0.231794,
+            "mean": 0.148061,
+            "min": 0.073423,
+            "n": 17
+          },
+          "tilt_margin_deg_min": {
+            "max": 18.4577,
+            "mean": 4.991005882352941,
+            "min": -0.0,
+            "n": 17
+          },
+          "tvc_rate_limit_deg_s": {
+            "max": 20.0,
+            "mean": 20.0,
+            "min": 20.0,
+            "n": 17
+          }
+        },
+        "lateral_speed_m_s": {
+          "n": 17,
+          "p50": 0.03713591729353501,
+          "p95": 0.3111399478009809
+        },
+        "position_error_m": {
+          "n": 17,
+          "p50": 0.4643483387585262,
+          "p95": 2.4252077055619234
+        },
+        "vertical_speed_m_s": {
+          "n": 17,
+          "p50": -1.5002888074085108,
+          "p95": -1.500198092913299
+        }
+      },
+      "paired_rows": [
+        {
+          "corridor_fuel_margin_kg": 2187.061578899811,
+          "corridor_miss_m": 520.5700510496004,
+          "idx": 0,
+          "joint_violation": 0.0,
+          "landing_probability": 0.9672231475914927,
+          "position_error_m": 0.4643483387585262,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.2952524425502984,
+          "touchdown_north_m": 0.35839276620529054
+        },
+        {
+          "corridor_fuel_margin_kg": 1950.9027278642097,
+          "corridor_miss_m": 629.9235081971124,
+          "idx": 1,
+          "joint_violation": 0.0,
+          "landing_probability": 0.9352445435391206,
+          "position_error_m": 0.38568487961498366,
+          "reason": "LANDED",
+          "touchdown_east_m": -0.028880555095635186,
+          "touchdown_north_m": 0.3846020539365229
+        },
+        {
+          "corridor_fuel_margin_kg": 1622.3043244698129,
+          "corridor_miss_m": 710.2908376719253,
+          "idx": 2,
+          "joint_violation": 0.0,
+          "landing_probability": 0.8788179877878345,
+          "position_error_m": 0.01840360610505734,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.007836426374247675,
+          "touchdown_north_m": -0.01665182090146502
+        },
+        {
+          "corridor_fuel_margin_kg": -448.2138546688293,
+          "corridor_miss_m": 2398.355711253779,
+          "idx": 3,
+          "joint_violation": 1.6373375677850648,
+          "landing_probability": 0.10032777400399312,
+          "position_error_m": null,
+          "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": 290.08270078093483,
+          "corridor_miss_m": 1797.2887646247166,
+          "idx": 4,
+          "joint_violation": 1.0457158487528913,
+          "landing_probability": 0.25690007948520566,
+          "position_error_m": 220.26483996554435,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": 219.56037131094214,
+          "touchdown_north_m": -17.602359482442697
+        },
+        {
+          "corridor_fuel_margin_kg": 2305.041055941925,
+          "corridor_miss_m": 982.0960265018572,
+          "idx": 5,
+          "joint_violation": 0.13011482293254506,
+          "landing_probability": 0.8115758329708177,
+          "position_error_m": 3.2176732653923605,
+          "reason": "LANDED",
+          "touchdown_east_m": -0.48834127901704055,
+          "touchdown_north_m": -3.1803999807227967
+        },
+        {
+          "corridor_fuel_margin_kg": 1015.3335209721627,
+          "corridor_miss_m": 1879.3322411119934,
+          "idx": 6,
+          "joint_violation": 1.0273510375426813,
+          "landing_probability": 0.32529241020601973,
+          "position_error_m": 344.2396219366548,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": 341.4612561599773,
+          "touchdown_north_m": -43.6477692462363
+        },
+        {
+          "corridor_fuel_margin_kg": 1950.7038561633526,
+          "corridor_miss_m": 852.6441341280527,
+          "idx": 7,
+          "joint_violation": 0.000662930558740527,
+          "landing_probability": 0.8576110596213916,
+          "position_error_m": 0.7113861789793523,
+          "reason": "LANDED",
+          "touchdown_east_m": -0.470849624083265,
+          "touchdown_north_m": 0.5332644063940264
+        },
+        {
+          "corridor_fuel_margin_kg": 1977.7296272113817,
+          "corridor_miss_m": 861.2489142877962,
+          "idx": 8,
+          "joint_violation": 0.009267710718484068,
+          "landing_probability": 0.8556521668404687,
+          "position_error_m": 1.733094531055003,
+          "reason": "LANDED",
+          "touchdown_east_m": -1.327404082178586,
+          "touchdown_north_m": 1.1142778181934576
+        },
+        {
+          "corridor_fuel_margin_kg": 1308.9912476798781,
+          "corridor_miss_m": 285.00028387969724,
+          "idx": 9,
+          "joint_violation": 0.1805805301785083,
+          "landing_probability": 0.8645451069845602,
+          "position_error_m": 0.5141406476370648,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.5054063182908267,
+          "touchdown_north_m": 0.0943666200722948
+        },
+        {
+          "corridor_fuel_margin_kg": 609.8839351295319,
+          "corridor_miss_m": 1538.1164617573172,
+          "idx": 10,
+          "joint_violation": 0.7804668104573166,
+          "landing_probability": 0.3695365478051314,
+          "position_error_m": 118.16330268371458,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": 81.33393309268986,
+          "touchdown_north_m": 85.71672782257528
+        },
+        {
+          "corridor_fuel_margin_kg": 2342.352060967176,
+          "corridor_miss_m": 852.7175562975954,
+          "idx": 11,
+          "joint_violation": 0.0007363527282832365,
+          "landing_probability": 0.8811097350845157,
+          "position_error_m": 1.5905767608314896,
+          "reason": "LANDED",
+          "touchdown_east_m": 1.4590425856898452,
+          "touchdown_north_m": -0.6333475864125879
+        },
+        {
+          "corridor_fuel_margin_kg": 1349.283600609153,
+          "corridor_miss_m": 910.6818610757857,
+          "idx": 12,
+          "joint_violation": 0.14513865978313217,
+          "landing_probability": 0.7584592647214945,
+          "position_error_m": 1.6381263812299147,
+          "reason": "LANDED",
+          "touchdown_east_m": -0.5435402791045122,
+          "touchdown_north_m": 1.5453226218930036
+        },
+        {
+          "corridor_fuel_margin_kg": 1294.7746765582633,
+          "corridor_miss_m": 1059.954082912755,
+          "idx": 13,
+          "joint_violation": 0.20797287934344286,
+          "landing_probability": 0.6768805693908091,
+          "position_error_m": 0.9455708064921476,
+          "reason": "LANDING_LATERAL_SPEED_EXCEEDED",
+          "touchdown_east_m": 0.945169086411906,
+          "touchdown_north_m": -0.027559901694551095
+        },
+        {
+          "corridor_fuel_margin_kg": 1916.035960835492,
+          "corridor_miss_m": 925.4951394651729,
+          "idx": 14,
+          "joint_violation": 0.07351393589586075,
+          "landing_probability": 0.8186477511136967,
+          "position_error_m": 2.227091315604315,
+          "reason": "LANDED",
+          "touchdown_east_m": -1.5900859751093073,
+          "touchdown_north_m": 1.5593467605585134
+        },
+        {
+          "corridor_fuel_margin_kg": 1078.8289987553871,
+          "corridor_miss_m": 1210.2020804564993,
+          "idx": 15,
+          "joint_violation": 0.3811930547846803,
+          "landing_probability": 0.5706122759207842,
+          "position_error_m": 3.3218126815659437,
+          "reason": "LANDING_LATERAL_SPEED_EXCEEDED",
+          "touchdown_east_m": 2.5220529848790947,
+          "touchdown_north_m": 2.16187146533342
+        },
+        {
+          "corridor_fuel_margin_kg": 2313.785534033559,
+          "corridor_miss_m": 594.5184686756852,
+          "idx": 16,
+          "joint_violation": 0.0,
+          "landing_probability": 0.965975941880615,
+          "position_error_m": 0.44139291120772545,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.39945336709620194,
+          "touchdown_north_m": -0.18778900281373948
+        },
+        {
+          "corridor_fuel_margin_kg": 1135.7419064919231,
+          "corridor_miss_m": 1502.1914046838037,
+          "idx": 17,
+          "joint_violation": 0.6502102011144916,
+          "landing_probability": 0.4560333824367166,
+          "position_error_m": 102.52263626167044,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": 48.50472481273662,
+          "touchdown_north_m": 90.32265838020521
+        },
+        {
+          "corridor_fuel_margin_kg": 362.1318106068502,
+          "corridor_miss_m": 3667.8223820909807,
+          "idx": 18,
+          "joint_violation": 2.8158411785216684,
+          "landing_probability": 0.08175827877616848,
+          "position_error_m": 627.8249122246149,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": -627.5558680964809,
+          "touchdown_north_m": 18.37802717765536
+        },
+        {
+          "corridor_fuel_margin_kg": 2085.7525506340316,
+          "corridor_miss_m": 460.78328351546213,
+          "idx": 19,
+          "joint_violation": 0.0,
+          "landing_probability": 0.9631745108209425,
+          "position_error_m": 0.5130704279622378,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.2274681558268713,
+          "touchdown_north_m": 0.4598907502022015
+        },
+        {
+          "corridor_fuel_margin_kg": 2580.9502196276735,
+          "corridor_miss_m": 1263.814876486311,
+          "idx": 20,
+          "joint_violation": 0.4118336729169989,
+          "landing_probability": 0.6618245399814958,
+          "position_error_m": null,
+          "reason": "CORRIDOR_MISSED",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": 978.545627010797,
+          "corridor_miss_m": 202.6764938723224,
+          "idx": 21,
+          "joint_violation": 0.4676328414780529,
+          "landing_probability": 0.7921542432992643,
+          "position_error_m": 0.3654109510914512,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.1279381510899976,
+          "touchdown_north_m": 0.3422820367274157
+        },
+        {
+          "corridor_fuel_margin_kg": 2462.111543896979,
+          "corridor_miss_m": 1084.0737671772988,
+          "idx": 22,
+          "joint_violation": 0.23209256360798666,
+          "landing_probability": 0.7594200164548754,
+          "position_error_m": 0.9717165548238607,
+          "reason": "LANDING_LATERAL_SPEED_EXCEEDED",
+          "touchdown_east_m": -0.21012606527402425,
+          "touchdown_north_m": 0.9487255132852369
+        },
+        {
+          "corridor_fuel_margin_kg": 2303.203256594483,
+          "corridor_miss_m": 873.3359534981051,
+          "idx": 23,
+          "joint_violation": 0.021354749928793014,
+          "landing_probability": 0.869258795409461,
+          "position_error_m": null,
+          "reason": "CORRIDOR_MISSED",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": 1302.0483702772908,
+          "corridor_miss_m": 643.1564145565197,
+          "idx": 24,
+          "joint_violation": 0.186677829350387,
+          "landing_probability": 0.8443691035509413,
+          "position_error_m": 0.29018802124883397,
+          "reason": "LANDED",
+          "touchdown_east_m": -0.2885578431673287,
+          "touchdown_north_m": 0.030715774821412387
+        },
+        {
+          "corridor_fuel_margin_kg": 1519.1541162498397,
+          "corridor_miss_m": 627.867108505359,
+          "idx": 25,
+          "joint_violation": 0.0,
+          "landing_probability": 0.8842930045259894,
+          "position_error_m": 0.38563473139409304,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.38455791191194005,
+          "touchdown_north_m": -0.02879858404970195
+        },
+        {
+          "corridor_fuel_margin_kg": 1827.421695032841,
+          "corridor_miss_m": 1150.0167909721774,
+          "idx": 26,
+          "joint_violation": 0.2980355874028653,
+          "landing_probability": 0.6902213879357446,
+          "position_error_m": 3.9289239770140147,
+          "reason": "LANDING_LATERAL_SPEED_EXCEEDED",
+          "touchdown_east_m": -0.2911416474520578,
+          "touchdown_north_m": -3.9181220191922335
+        },
+        {
+          "corridor_fuel_margin_kg": 675.3217251404203,
+          "corridor_miss_m": 548.3456489582529,
+          "idx": 27,
+          "joint_violation": 0.7254974202720686,
+          "landing_probability": 0.7064272284246307,
+          "position_error_m": 0.5110908396738951,
+          "reason": "LANDING_PROPELLANT_RESERVE_LOW",
+          "touchdown_east_m": 0.4499801632619982,
+          "touchdown_north_m": -0.24234623798539703
+        },
+        {
+          "corridor_fuel_margin_kg": 1443.9551151498526,
+          "corridor_miss_m": 415.2272849953862,
+          "idx": 28,
+          "joint_violation": 0.061481057387721305,
+          "landing_probability": 0.888525568887663,
+          "position_error_m": 0.4360069075808992,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.15924019244635995,
+          "touchdown_north_m": 0.4058874037933749
+        },
+        {
+          "corridor_fuel_margin_kg": 1066.0458046319764,
+          "corridor_miss_m": 1272.1860235279496,
+          "idx": 29,
+          "joint_violation": 0.42020481995863745,
+          "landing_probability": 0.5407598200470941,
+          "position_error_m": null,
+          "reason": "CORRIDOR_MISSED",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": 544.6519474198722,
+          "corridor_miss_m": 571.3216898303928,
+          "idx": 30,
+          "joint_violation": 0.8350266609608347,
+          "landing_probability": 0.6663636049643994,
+          "position_error_m": 0.43363932492875534,
+          "reason": "LANDING_PROPELLANT_RESERVE_LOW",
+          "touchdown_east_m": 0.4308756356208183,
+          "touchdown_north_m": 0.04887996269321997
+        },
+        {
+          "corridor_fuel_margin_kg": 1378.6497910711187,
+          "corridor_miss_m": 596.4116743519161,
+          "idx": 31,
+          "joint_violation": 0.11924647824074576,
+          "landing_probability": 0.866357570090709,
+          "position_error_m": 0.3449791774099357,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.32407493357697154,
+          "touchdown_north_m": -0.11826271717097529
+        }
+      ],
+      "plan_options": {
+        "initial_guess": [
+          18.4,
+          17.75,
+          1.0,
+          4.36,
+          0.0,
+          17456.0,
+          23.0
+        ],
+        "joint_chance": {},
+        "landing": {
+          "tvc_rate_limit_deg_s": 20.0
+        },
+        "landing_divert_budget_m": null,
+        "landing_reserve_margin_kg": 0.0,
+        "max_fevals": 30
+      },
+      "reason_histogram": {
+        "CORRIDOR_MISSED": 3,
+        "INSUFFICIENT_PROPELLANT_RESERVE": 1,
+        "LANDED": 17,
+        "LANDING_LATERAL_SPEED_EXCEEDED": 4,
+        "LANDING_POSITION_OUT_OF_TOLERANCE": 5,
+        "LANDING_PROPELLANT_RESERVE_LOW": 2
+      },
+      "success_rate": 0.53125,
+      "success_rate_ci": {
+        "confidence_level": 0.95,
+        "lower": 0.36449517118974645,
+        "method": "wilson_score",
+        "n": 32,
+        "point": 0.53125,
+        "standard_error": 0.08821554523934542,
+        "successes": 17,
+        "upper": 0.6913061289193116
+      },
+      "touchdown_radius_m": {
+        "max": 627.824911472355,
+        "min": 0.018403606104605473,
+        "n": 28,
+        "p50": 0.9455708064921052,
+        "p90": 118.16330268292099
+      }
+    },
+    "fl305_baseline": {
+      "corridor_stats": {
+        "divert_m": {
+          "max": 2691.7951379917845,
+          "min": 202.6764938723224,
+          "n": 32,
+          "p50": 925.4951394651729,
+          "p90": 1723.812480973906
+        },
+        "fuel_margin_kg": {
+          "max": 2462.111543896979,
+          "min": -1460.5629262344664,
+          "n": 32,
+          "p50": 1078.8289987553871,
+          "p90": 2305.041055941925
+        }
+      },
+      "ellipse": {
+        "bearing_deg": 158.5343956443221,
+        "mean_east_m": -0.07051223868556783,
+        "mean_north_m": 0.10630794907482582,
+        "n": 13,
+        "sigma_along_m": 1.2480288803325306,
+        "sigma_cross_m": 0.7193947719243338,
+        "state": "assessed"
+      },
+      "landed_stats": {
+        "control_margin": {
+          "burn_time_s": {
+            "max": 21.9,
+            "mean": 20.72307692307692,
+            "min": 17.3,
+            "n": 13
+          },
+          "n": 13,
+          "saturated_high_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 13
+          },
+          "saturated_low_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 13
+          },
+          "slew_deg_s_max": {
+            "max": 20.0,
+            "mean": 20.0,
+            "min": 20.0,
+            "n": 13
+          },
+          "throttle_floor_room_min": {
+            "max": 0.240098,
+            "mean": 0.1847993076923077,
+            "min": 0.006673,
+            "n": 13
+          },
+          "throttle_headroom_at_ignition": {
+            "max": 0.197187,
+            "mean": 0.14505223076923077,
+            "min": 0.073423,
+            "n": 13
+          },
+          "throttle_headroom_min": {
+            "max": 0.197187,
+            "mean": 0.14505223076923077,
+            "min": 0.073423,
+            "n": 13
+          },
+          "tilt_margin_deg_min": {
+            "max": 18.4577,
+            "mean": 4.477161538461538,
+            "min": -0.0,
+            "n": 13
+          },
+          "tvc_rate_limit_deg_s": {
+            "max": 20.0,
+            "mean": 20.0,
+            "min": 20.0,
+            "n": 13
+          }
+        },
+        "lateral_speed_m_s": {
+          "n": 13,
+          "p50": 0.039697333840306395,
+          "p95": 0.3719869560990159
+        },
+        "position_error_m": {
+          "n": 13,
+          "p50": 0.5141406476370648,
+          "p95": 2.6233240955195316
+        },
+        "vertical_speed_m_s": {
+          "n": 13,
+          "p50": -1.5002844318266932,
+          "p95": -1.5001797703617477
+        }
+      },
+      "paired_rows": [
+        {
+          "corridor_fuel_margin_kg": 2187.061578899811,
+          "corridor_miss_m": 520.5700510496004,
+          "idx": 0,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.4643483387585262,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.2952524425502984,
+          "touchdown_north_m": 0.35839276620529054
+        },
+        {
+          "corridor_fuel_margin_kg": -829.6016061680275,
+          "corridor_miss_m": 756.5539684439156,
+          "idx": 1,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": null,
+          "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": 1622.3043244698129,
+          "corridor_miss_m": 710.2908376719253,
+          "idx": 2,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.01840360610505734,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.007836426374247675,
+          "touchdown_north_m": -0.01665182090146502
+        },
+        {
+          "corridor_fuel_margin_kg": 1891.043348928586,
+          "corridor_miss_m": 1723.812480973906,
+          "idx": 3,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.5400541082687168,
+          "reason": "LANDING_LATERAL_SPEED_EXCEEDED",
+          "touchdown_east_m": 0.4747547094298284,
+          "touchdown_north_m": -0.257422620855379
+        },
+        {
+          "corridor_fuel_margin_kg": 467.73539204950794,
+          "corridor_miss_m": 1950.4466547179613,
+          "idx": 4,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 435.9064179484193,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": 434.98648191533596,
+          "touchdown_north_m": -28.30486762755753
+        },
+        {
+          "corridor_fuel_margin_kg": 2305.041055941925,
+          "corridor_miss_m": 982.0960265018572,
+          "idx": 5,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 3.2176732653923605,
+          "reason": "LANDED",
+          "touchdown_east_m": -0.48834127901704055,
+          "touchdown_north_m": -3.1803999807227967
+        },
+        {
+          "corridor_fuel_margin_kg": 1015.3335209721627,
+          "corridor_miss_m": 1879.3322411119934,
+          "idx": 6,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 344.2396219366548,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": 341.4612561599773,
+          "touchdown_north_m": -43.6477692462363
+        },
+        {
+          "corridor_fuel_margin_kg": 1950.7038561633526,
+          "corridor_miss_m": 852.6441341280527,
+          "idx": 7,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.7113861789793523,
+          "reason": "LANDED",
+          "touchdown_east_m": -0.470849624083265,
+          "touchdown_north_m": 0.5332644063940264
+        },
+        {
+          "corridor_fuel_margin_kg": 1977.7296272113817,
+          "corridor_miss_m": 861.2489142877962,
+          "idx": 8,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 1.733094531055003,
+          "reason": "LANDED",
+          "touchdown_east_m": -1.327404082178586,
+          "touchdown_north_m": 1.1142778181934576
+        },
+        {
+          "corridor_fuel_margin_kg": 1308.9912476798781,
+          "corridor_miss_m": 285.00028387969724,
+          "idx": 9,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.5141406476370648,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.5054063182908267,
+          "touchdown_north_m": 0.0943666200722948
+        },
+        {
+          "corridor_fuel_margin_kg": 609.8839351295319,
+          "corridor_miss_m": 1538.1164617573172,
+          "idx": 10,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 118.16330268371458,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": 81.33393309268986,
+          "touchdown_north_m": 85.71672782257528
+        },
+        {
+          "corridor_fuel_margin_kg": 2342.352060967176,
+          "corridor_miss_m": 852.7175562975954,
+          "idx": 11,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 1.5905767608314896,
+          "reason": "LANDED",
+          "touchdown_east_m": 1.4590425856898452,
+          "touchdown_north_m": -0.6333475864125879
+        },
+        {
+          "corridor_fuel_margin_kg": 1349.283600609153,
+          "corridor_miss_m": 910.6818610757857,
+          "idx": 12,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 1.6381263812299147,
+          "reason": "LANDED",
+          "touchdown_east_m": -0.5435402791045122,
+          "touchdown_north_m": 1.5453226218930036
+        },
+        {
+          "corridor_fuel_margin_kg": 1294.7746765582633,
+          "corridor_miss_m": 1059.954082912755,
+          "idx": 13,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.9455708064921476,
+          "reason": "LANDING_LATERAL_SPEED_EXCEEDED",
+          "touchdown_east_m": 0.945169086411906,
+          "touchdown_north_m": -0.027559901694551095
+        },
+        {
+          "corridor_fuel_margin_kg": 1916.035960835492,
+          "corridor_miss_m": 925.4951394651729,
+          "idx": 14,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 2.227091315604315,
+          "reason": "LANDED",
+          "touchdown_east_m": -1.5900859751093073,
+          "touchdown_north_m": 1.5593467605585134
+        },
+        {
+          "corridor_fuel_margin_kg": 1078.8289987553871,
+          "corridor_miss_m": 1210.2020804564993,
+          "idx": 15,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 3.3218126815659437,
+          "reason": "LANDING_LATERAL_SPEED_EXCEEDED",
+          "touchdown_east_m": 2.5220529848790947,
+          "touchdown_north_m": 2.16187146533342
+        },
+        {
+          "corridor_fuel_margin_kg": 2313.785534033559,
+          "corridor_miss_m": 594.5184686756852,
+          "idx": 16,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.44139291120772545,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.39945336709620194,
+          "touchdown_north_m": -0.18778900281373948
+        },
+        {
+          "corridor_fuel_margin_kg": 497.8077980574526,
+          "corridor_miss_m": 1653.2430328633186,
+          "idx": 17,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 294.5974748019588,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": 294.54380141563485,
+          "touchdown_north_m": 5.62326966187915
+        },
+        {
+          "corridor_fuel_margin_kg": -1226.8549622586943,
+          "corridor_miss_m": 1215.911273956538,
+          "idx": 18,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": null,
+          "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": -703.0158934475112,
+          "corridor_miss_m": 595.514891921306,
+          "idx": 19,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": null,
+          "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": -270.3210896878227,
+          "corridor_miss_m": 1224.3882637004745,
+          "idx": 20,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": null,
+          "reason": "CORRIDOR_MISSED",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": 978.545627010797,
+          "corridor_miss_m": 202.6764938723224,
+          "idx": 21,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.3654109510914512,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.1279381510899976,
+          "touchdown_north_m": 0.3422820367274157
+        },
+        {
+          "corridor_fuel_margin_kg": 2462.111543896979,
+          "corridor_miss_m": 1084.0737671772988,
+          "idx": 22,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.9717165548238607,
+          "reason": "LANDING_LATERAL_SPEED_EXCEEDED",
+          "touchdown_east_m": -0.21012606527402425,
+          "touchdown_north_m": 0.9487255132852369
+        },
+        {
+          "corridor_fuel_margin_kg": -600.9016029549166,
+          "corridor_miss_m": 1124.9617879621303,
+          "idx": 23,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": null,
+          "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": -1331.5685526351444,
+          "corridor_miss_m": 2691.7951379917845,
+          "idx": 24,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": null,
+          "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": 1519.1541162498397,
+          "corridor_miss_m": 627.867108505359,
+          "idx": 25,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.38563473139409304,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.38455791191194005,
+          "touchdown_north_m": -0.02879858404970195
+        },
+        {
+          "corridor_fuel_margin_kg": -979.6344158931024,
+          "corridor_miss_m": 1006.1997804934759,
+          "idx": 26,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": null,
+          "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": 675.3217251404203,
+          "corridor_miss_m": 548.3456489582529,
+          "idx": 27,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.5110908396738951,
+          "reason": "LANDING_PROPELLANT_RESERVE_LOW",
+          "touchdown_east_m": 0.4499801632619982,
+          "touchdown_north_m": -0.24234623798539703
+        },
+        {
+          "corridor_fuel_margin_kg": -1460.5629262344664,
+          "corridor_miss_m": 1707.6861436029503,
+          "idx": 28,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": null,
+          "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": -32.39069942362403,
+          "corridor_miss_m": 774.6956402435209,
+          "idx": 29,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": null,
+          "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": 646.8884333894457,
+          "corridor_miss_m": 490.3050026551047,
+          "idx": 30,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.4850695615794345,
+          "reason": "LANDING_PROPELLANT_RESERVE_LOW",
+          "touchdown_east_m": 0.4808071044124146,
+          "touchdown_north_m": 0.0641639144471826
+        },
+        {
+          "corridor_fuel_margin_kg": 1378.6497910711187,
+          "corridor_miss_m": 596.4116743519161,
+          "idx": 31,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.3449791774099357,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.32407493357697154,
+          "touchdown_north_m": -0.11826271717097529
+        }
+      ],
+      "plan_options": {
+        "initial_guess": [
+          18.4,
+          17.75,
+          1.0,
+          4.36,
+          0.0,
+          17456.0,
+          23.0
+        ],
+        "landing": {
+          "tvc_rate_limit_deg_s": 20.0
+        },
+        "landing_divert_budget_m": null,
+        "landing_reserve_margin_kg": 0.0,
+        "max_fevals": 30
+      },
+      "reason_histogram": {
+        "CORRIDOR_MISSED": 1,
+        "INSUFFICIENT_PROPELLANT_RESERVE": 8,
+        "LANDED": 13,
+        "LANDING_LATERAL_SPEED_EXCEEDED": 4,
+        "LANDING_POSITION_OUT_OF_TOLERANCE": 4,
+        "LANDING_PROPELLANT_RESERVE_LOW": 2
+      },
+      "success_rate": 0.40625,
+      "success_rate_ci": {
+        "confidence_level": 0.95,
+        "lower": 0.2551963484266544,
+        "method": "wilson_score",
+        "n": 32,
+        "point": 0.40625,
+        "standard_error": 0.08682074519880027,
+        "successes": 13,
+        "upper": 0.5773997512461714
+      },
+      "touchdown_radius_m": {
+        "max": 435.90641768674897,
+        "min": 0.018403606104605473,
+        "n": 23,
+        "p50": 0.9455708064921052,
+        "p90": 294.59747472451824
+      }
+    },
+    "r01_landing_aware": {
+      "corridor_stats": {
+        "divert_m": {
+          "max": 3717.2866993479633,
+          "min": 285.00028387969724,
+          "n": 32,
+          "p50": 910.6818610757857,
+          "p90": 1879.3322411119934
+        },
+        "fuel_margin_kg": {
+          "max": 2462.111543896979,
+          "min": -448.2138546688293,
+          "n": 32,
+          "p50": 1349.283600609153,
+          "p90": 2305.041055941925
+        }
+      },
+      "ellipse": {
+        "bearing_deg": 159.15108077646116,
+        "mean_east_m": -0.060957956499506985,
+        "mean_north_m": 0.145051080249927,
+        "n": 16,
+        "sigma_along_m": 1.1195119285920812,
+        "sigma_cross_m": 0.6567545135028781,
+        "state": "assessed"
+      },
+      "landed_stats": {
+        "control_margin": {
+          "burn_time_s": {
+            "max": 21.9,
+            "mean": 20.95,
+            "min": 17.9,
+            "n": 16
+          },
+          "n": 16,
+          "saturated_high_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 16
+          },
+          "saturated_low_s": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 16
+          },
+          "slew_deg_s_max": {
+            "max": 20.0,
+            "mean": 20.0,
+            "min": 20.0,
+            "n": 16
+          },
+          "throttle_floor_room_min": {
+            "max": 0.240098,
+            "mean": 0.185444375,
+            "min": 0.006673,
+            "n": 16
+          },
+          "throttle_headroom_at_ignition": {
+            "max": 0.231794,
+            "mean": 0.147271875,
+            "min": 0.073423,
+            "n": 16
+          },
+          "throttle_headroom_min": {
+            "max": 0.231794,
+            "mean": 0.147271875,
+            "min": 0.073423,
+            "n": 16
+          },
+          "tilt_margin_deg_min": {
+            "max": 13.6321,
+            "mean": 4.1493375,
+            "min": -0.0,
+            "n": 16
+          },
+          "tvc_rate_limit_deg_s": {
+            "max": 20.0,
+            "mean": 20.0,
+            "min": 20.0,
+            "n": 16
+          }
+        },
+        "lateral_speed_m_s": {
+          "n": 16,
+          "p50": 0.0384166255669207,
+          "p95": 0.32635169987548995
+        },
+        "position_error_m": {
+          "n": 16,
+          "p50": 0.488709383360382,
+          "p95": 2.4747368030513264
+        },
+        "vertical_speed_m_s": {
+          "n": 16,
+          "p50": -1.5003014503445458,
+          "p95": -1.5001935122754113
+        }
+      },
+      "paired_rows": [
+        {
+          "corridor_fuel_margin_kg": 2187.061578899811,
+          "corridor_miss_m": 520.5700510496004,
+          "idx": 0,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.4643483387585262,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.2952524425502984,
+          "touchdown_north_m": 0.35839276620529054
+        },
+        {
+          "corridor_fuel_margin_kg": 1950.9027278642097,
+          "corridor_miss_m": 629.9235081971124,
+          "idx": 1,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.38568487961498366,
+          "reason": "LANDED",
+          "touchdown_east_m": -0.028880555095635186,
+          "touchdown_north_m": 0.3846020539365229
+        },
+        {
+          "corridor_fuel_margin_kg": 1622.3043244698129,
+          "corridor_miss_m": 710.2908376719253,
+          "idx": 2,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.01840360610505734,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.007836426374247675,
+          "touchdown_north_m": -0.01665182090146502
+        },
+        {
+          "corridor_fuel_margin_kg": -448.2138546688293,
+          "corridor_miss_m": 2398.355711253779,
+          "idx": 3,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": null,
+          "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": 503.57952748361276,
+          "corridor_miss_m": 1384.7353123269256,
+          "idx": 4,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 75.39395408297553,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": 57.89088926789698,
+          "touchdown_north_m": -48.300033658013305
+        },
+        {
+          "corridor_fuel_margin_kg": 2305.041055941925,
+          "corridor_miss_m": 982.0960265018572,
+          "idx": 5,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 3.2176732653923605,
+          "reason": "LANDED",
+          "touchdown_east_m": -0.48834127901704055,
+          "touchdown_north_m": -3.1803999807227967
+        },
+        {
+          "corridor_fuel_margin_kg": 1015.3335209721627,
+          "corridor_miss_m": 1879.3322411119934,
+          "idx": 6,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 344.2396219366548,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": 341.4612561599773,
+          "touchdown_north_m": -43.6477692462363
+        },
+        {
+          "corridor_fuel_margin_kg": 1950.7038561633526,
+          "corridor_miss_m": 852.6441341280527,
+          "idx": 7,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.7113861789793523,
+          "reason": "LANDED",
+          "touchdown_east_m": -0.470849624083265,
+          "touchdown_north_m": 0.5332644063940264
+        },
+        {
+          "corridor_fuel_margin_kg": 1977.7296272113817,
+          "corridor_miss_m": 861.2489142877962,
+          "idx": 8,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 1.733094531055003,
+          "reason": "LANDED",
+          "touchdown_east_m": -1.327404082178586,
+          "touchdown_north_m": 1.1142778181934576
+        },
+        {
+          "corridor_fuel_margin_kg": 1308.9912476798781,
+          "corridor_miss_m": 285.00028387969724,
+          "idx": 9,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.5141406476370648,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.5054063182908267,
+          "touchdown_north_m": 0.0943666200722948
+        },
+        {
+          "corridor_fuel_margin_kg": 609.8839351295319,
+          "corridor_miss_m": 1538.1164617573172,
+          "idx": 10,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 118.16330268371458,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": 81.33393309268986,
+          "touchdown_north_m": 85.71672782257528
+        },
+        {
+          "corridor_fuel_margin_kg": 2342.352060967176,
+          "corridor_miss_m": 852.7175562975954,
+          "idx": 11,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 1.5905767608314896,
+          "reason": "LANDED",
+          "touchdown_east_m": 1.4590425856898452,
+          "touchdown_north_m": -0.6333475864125879
+        },
+        {
+          "corridor_fuel_margin_kg": 1349.283600609153,
+          "corridor_miss_m": 910.6818610757857,
+          "idx": 12,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 1.6381263812299147,
+          "reason": "LANDED",
+          "touchdown_east_m": -0.5435402791045122,
+          "touchdown_north_m": 1.5453226218930036
+        },
+        {
+          "corridor_fuel_margin_kg": 1294.7746765582633,
+          "corridor_miss_m": 1059.954082912755,
+          "idx": 13,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.9455708064921476,
+          "reason": "LANDING_LATERAL_SPEED_EXCEEDED",
+          "touchdown_east_m": 0.945169086411906,
+          "touchdown_north_m": -0.027559901694551095
+        },
+        {
+          "corridor_fuel_margin_kg": 1916.035960835492,
+          "corridor_miss_m": 925.4951394651729,
+          "idx": 14,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 2.227091315604315,
+          "reason": "LANDED",
+          "touchdown_east_m": -1.5900859751093073,
+          "touchdown_north_m": 1.5593467605585134
+        },
+        {
+          "corridor_fuel_margin_kg": 1078.8289987553871,
+          "corridor_miss_m": 1210.2020804564993,
+          "idx": 15,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 3.3218126815659437,
+          "reason": "LANDING_LATERAL_SPEED_EXCEEDED",
+          "touchdown_east_m": 2.5220529848790947,
+          "touchdown_north_m": 2.16187146533342
+        },
+        {
+          "corridor_fuel_margin_kg": 2313.785534033559,
+          "corridor_miss_m": 594.5184686756852,
+          "idx": 16,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.44139291120772545,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.39945336709620194,
+          "touchdown_north_m": -0.18778900281373948
+        },
+        {
+          "corridor_fuel_margin_kg": 1135.7419064919231,
+          "corridor_miss_m": 1502.1914046838037,
+          "idx": 17,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 102.52263626167044,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": 48.50472481273662,
+          "touchdown_north_m": 90.32265838020521
+        },
+        {
+          "corridor_fuel_margin_kg": 376.7115764694754,
+          "corridor_miss_m": 3695.1114119907857,
+          "idx": 18,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 637.8283178736979,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": -629.9328505639965,
+          "touchdown_north_m": 100.04781804150211
+        },
+        {
+          "corridor_fuel_margin_kg": 2085.7525506340316,
+          "corridor_miss_m": 460.78328351546213,
+          "idx": 19,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.5130704279622378,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.2274681558268713,
+          "touchdown_north_m": 0.4598907502022015
+        },
+        {
+          "corridor_fuel_margin_kg": -270.3210896878227,
+          "corridor_miss_m": 1224.3882637004745,
+          "idx": 20,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": null,
+          "reason": "CORRIDOR_MISSED",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": 906.1857373732855,
+          "corridor_miss_m": 1025.1164216219083,
+          "idx": 21,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 2.090266332056781,
+          "reason": "LANDING_PROPELLANT_RESERVE_LOW",
+          "touchdown_east_m": -2.05143202903061,
+          "touchdown_north_m": -0.4010485870634385
+        },
+        {
+          "corridor_fuel_margin_kg": 2462.111543896979,
+          "corridor_miss_m": 1084.0737671772988,
+          "idx": 22,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.9717165548238607,
+          "reason": "LANDING_LATERAL_SPEED_EXCEEDED",
+          "touchdown_east_m": -0.21012606527402425,
+          "touchdown_north_m": 0.9487255132852369
+        },
+        {
+          "corridor_fuel_margin_kg": 1625.9952172249104,
+          "corridor_miss_m": 1650.221371839451,
+          "idx": 23,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 182.21372759533273,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": 124.89429566820631,
+          "touchdown_north_m": -132.67726791170304
+        },
+        {
+          "corridor_fuel_margin_kg": 1302.0483702772908,
+          "corridor_miss_m": 643.1564145565197,
+          "idx": 24,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.29018802124883397,
+          "reason": "LANDED",
+          "touchdown_east_m": -0.2885578431673287,
+          "touchdown_north_m": 0.030715774821412387
+        },
+        {
+          "corridor_fuel_margin_kg": 1519.1541162498397,
+          "corridor_miss_m": 627.867108505359,
+          "idx": 25,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.38563473139409304,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.38455791191194005,
+          "touchdown_north_m": -0.02879858404970195
+        },
+        {
+          "corridor_fuel_margin_kg": 1294.7056339835326,
+          "corridor_miss_m": 3717.2866993479633,
+          "idx": 26,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 628.6580270179854,
+          "reason": "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "touchdown_east_m": 626.8072838354747,
+          "touchdown_north_m": -48.20314183982998
+        },
+        {
+          "corridor_fuel_margin_kg": 675.3217251404203,
+          "corridor_miss_m": 548.3456489582529,
+          "idx": 27,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.5110908396738951,
+          "reason": "LANDING_PROPELLANT_RESERVE_LOW",
+          "touchdown_east_m": 0.4499801632619982,
+          "touchdown_north_m": -0.24234623798539703
+        },
+        {
+          "corridor_fuel_margin_kg": 1443.9551151498526,
+          "corridor_miss_m": 415.2272849953862,
+          "idx": 28,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.4360069075808992,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.15924019244635995,
+          "touchdown_north_m": 0.4058874037933749
+        },
+        {
+          "corridor_fuel_margin_kg": -32.39069942362403,
+          "corridor_miss_m": 774.6956402435209,
+          "idx": 29,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": null,
+          "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+          "touchdown_east_m": null,
+          "touchdown_north_m": null
+        },
+        {
+          "corridor_fuel_margin_kg": 646.8884333894457,
+          "corridor_miss_m": 490.3050026551047,
+          "idx": 30,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.4850695615794345,
+          "reason": "LANDING_PROPELLANT_RESERVE_LOW",
+          "touchdown_east_m": 0.4808071044124146,
+          "touchdown_north_m": 0.0641639144471826
+        },
+        {
+          "corridor_fuel_margin_kg": 1378.6497910711187,
+          "corridor_miss_m": 596.4116743519161,
+          "idx": 31,
+          "joint_violation": null,
+          "landing_probability": null,
+          "position_error_m": 0.3449791774099357,
+          "reason": "LANDED",
+          "touchdown_east_m": 0.32407493357697154,
+          "touchdown_north_m": -0.11826271717097529
+        }
+      ],
+      "plan_options": {
+        "initial_guess": [
+          18.4,
+          17.75,
+          1.0,
+          4.36,
+          0.0,
+          17456.0,
+          23.0
+        ],
+        "landing": {
+          "tvc_rate_limit_deg_s": 20.0
+        },
+        "max_fevals": 30
+      },
+      "reason_histogram": {
+        "CORRIDOR_MISSED": 1,
+        "INSUFFICIENT_PROPELLANT_RESERVE": 2,
+        "LANDED": 16,
+        "LANDING_LATERAL_SPEED_EXCEEDED": 3,
+        "LANDING_POSITION_OUT_OF_TOLERANCE": 7,
+        "LANDING_PROPELLANT_RESERVE_LOW": 3
+      },
+      "success_rate": 0.5,
+      "success_rate_ci": {
+        "confidence_level": 0.95,
+        "lower": 0.33630882869327483,
+        "method": "wilson_score",
+        "n": 32,
+        "point": 0.5,
+        "standard_error": 0.08838834764831845,
+        "successes": 16,
+        "upper": 0.6636911713067252
+      },
+      "touchdown_radius_m": {
+        "max": 637.828317115623,
+        "min": 0.018403606104605473,
+        "n": 29,
+        "p50": 0.9717165547966545,
+        "p90": 182.2137275590705
+      }
+    }
+  },
+  "seed": 1
+}

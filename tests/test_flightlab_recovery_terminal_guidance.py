@@ -21,6 +21,12 @@ limit (clipped vs unconstrained commands, rate-bounded step tracking) and,
 flown, the :class:`ActuatorMargin` report on the closed-loop result --
 constraints held as commanded, metrics in the assumption line and the
 touchdown event data, FL-305 baseline measured alongside.
+
+E3-01 (task #258) makes the actuator set the declared default: the closed
+loop now realises the repo's own JSBSim TVC pin set as a servo chain --
+command -> (optional lag compensation) -> slew limiter -> first-order lag
+-- with a realised-direction rate and throttle-rate accounting, plus the
+TERMINAL_GUIDANCE_E301 preset the recovery Monte Carlo flies by default.
 """
 from __future__ import annotations
 
@@ -34,8 +40,10 @@ import pytest
 from orbitopt.entry import G0_M_S2
 from orbitopt.flightlab.frames import geodetic_to_ecef
 from orbitopt.flightlab.recovery import (
+    DECLARED_LANDING_ACTUATOR,
     LANDING_INFEASIBLE,
     TERMINAL_GUIDANCE_DEFAULT,
+    TERMINAL_GUIDANCE_E301,
     TERMINAL_GUIDANCE_R05,
     TOUCHDOWN_CHECK_IDS,
     BoosterModel,
@@ -49,7 +57,12 @@ from orbitopt.flightlab.recovery import (
     terminal_guidance_command,
 )
 from orbitopt.flightlab.recovery.boostback import _enu_basis
-from orbitopt.flightlab.recovery.landing import DEFAULT_LANDING_LIMITS
+from orbitopt.flightlab.recovery.landing import (
+    DEFAULT_LANDING_LIMITS,
+    _ClosedLoopLanding,
+    _lag_compensated_command,
+    _slew_step,
+)
 from orbitopt.flightlab.recovery.pipeline import LANDING_MODES, _landing_flight
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -105,7 +118,9 @@ def _tilt_deg(cmd) -> float:
     {"design_throttle": 0.0}, {"design_throttle": 1.2},
     {"touchdown_speed_m_s": 0.0}, {"tilt_limit_deg": 90.0},
     {"max_thrust_accel_g": 1.0}, {"settle_s": -1.0}, {"cutoff_speed_m_s": 0.0},
-    {"tvc_rate_limit_deg_s": -1.0},
+    {"tvc_rate_limit_deg_s": -1.0}, {"tvc_lag_tau_s": -1.0},
+    {"throttle_rate_limit_per_s": -1.0}, {"tvc_lag_compensation": True},
+    {"tvc_lag_tau_s": 0.2, "tvc_lag_compensation_cap_deg": 0.0},
 ])
 def test_guidance_policy_rejects_nonsense(kwargs):
     with pytest.raises(ValueError):
@@ -311,7 +326,7 @@ def test_r05_preset_lands_with_the_actuator_constraints_held():
     assert m.burn_time_s > 0.0
     # the metrics travel in the run's report: an assumption line and the
     # touchdown event data (the referee checks stay FL-303's, unchanged)
-    assert any("R-05 actuator margins" in a for a in res.assumptions)
+    assert any("actuator margins (" in a for a in res.assumptions)
     touch = [e for e in landing_events(res) if e.kind in ("touchdown", "impact")]
     assert touch and "control_margin" in touch[0].data
     assert touch[0].data["control_margin"]["tvc_rate_limit_deg_s"] == 20.0
@@ -327,3 +342,136 @@ def test_closed_loop_reports_the_baseline_control_margin_too():
     # and the honest indictment of the unlimited baseline: a TVC slew no real
     # actuator delivers, which the R-05 preset above keeps at its 20 deg/s
     assert m.slew_deg_s_max > TERMINAL_GUIDANCE_R05.tvc_rate_limit_deg_s
+
+
+# ---------------------------------------------------------------------------
+# E3-01 (task #258): the declared actuator set, guidance-aware and default
+# ---------------------------------------------------------------------------
+
+def test_lag_compensation_requires_a_declared_lag_and_cap():
+    with pytest.raises(ValueError, match="tvc_lag_compensation"):
+        TerminalGuidance(tvc_lag_compensation=True)  # nothing to invert
+    with pytest.raises(ValueError, match="tvc_lag_compensation_cap_deg"):
+        TerminalGuidance(tvc_lag_tau_s=0.2, tvc_lag_compensation=True,
+                         tvc_lag_compensation_cap_deg=0.0)
+
+
+def test_lag_compensation_inverts_the_declared_lag():
+    # a demand ramp inside the slew limit, driven through the declared
+    # chain (compensated command -> lag -> slew limiter): the state-error
+    # lead pulls the lag output onto the demand, the naive chain eats the
+    # lag's own tracking error of it
+    tau, dt = 0.2, 0.1
+    rate = math.radians(20.0) * dt
+    cap = math.radians(30.0)
+
+    def ride(compensate):
+        y = s_state = np.array([0.0, 0.0, 1.0])
+        for i in range(21):
+            ang = math.radians(10.0) * dt * i  # 10 deg/s ramp, 2 s long
+            d = np.array([math.sin(ang), 0.0, math.cos(ang)])
+            u = (_lag_compensated_command(d, s_state, cap)
+                 if compensate else d)
+            s_state = s_state + (1.0 - math.exp(-dt / tau)) * (u - s_state)
+            y = _slew_step(y, s_state, rate)[0]
+        return math.degrees(math.acos(min(1.0, float(np.dot(y, d)))))
+
+    naive, comp = ride(False), ride(True)
+    assert naive > 1.5          # the lag's own tracking error
+    assert comp < 0.5 * naive   # the state-error lead cancels most of it
+
+
+def test_e301_handover_is_a_response_time_earlier():
+    # the ZEM branch of the law is handed to the damped terminal law one
+    # declared time constant earlier under lag compensation: same state,
+    # ZEM-saturated without, terminal-PD with (ADR flightlab-0006)
+    off = ((0.0, 20.0, 53.9), (0.0, 0.0, -40.0))   # t_go - settle in (0.5, 0.7)
+    naive = _cmd(*off, guidance=TerminalGuidance(tvc_rate_limit_deg_s=20.0,
+                                                 tvc_lag_tau_s=0.2))
+    comp = _cmd(*off, guidance=TERMINAL_GUIDANCE_E301)
+    assert naive.phase == comp.phase == "burn"
+    assert _tilt_deg(naive) == pytest.approx(30.0, abs=1e-6)  # ZEM capped
+    a_up = (40.0 ** 2 - 1.5 ** 2) / (2.0 * 53.9) + G          # a_req + g
+    assert _tilt_deg(comp) == pytest.approx(
+        math.degrees(math.atan2(0.2 * 20.0, a_up)), abs=0.2)
+
+
+def test_e301_preset_declares_the_full_chain():
+    assert (TERMINAL_GUIDANCE_E301.tvc_rate_limit_deg_s == 20.0
+            and TERMINAL_GUIDANCE_E301.tvc_lag_tau_s == 0.2
+            and TERMINAL_GUIDANCE_E301.tvc_lag_compensation)
+    # the FL-305 default and the naive R-05 clip are untouched: no lag, no
+    # compensation -- the declared set is an opt-in preset, not a retune
+    assert (TERMINAL_GUIDANCE_DEFAULT.tvc_lag_tau_s == 0.0
+            and not TERMINAL_GUIDANCE_DEFAULT.tvc_lag_compensation)
+    assert (TERMINAL_GUIDANCE_R05.tvc_lag_tau_s == 0.0
+            and not TERMINAL_GUIDANCE_R05.tvc_lag_compensation)
+
+
+def test_closed_loop_tvc_lag_delays_the_realised_direction():
+    # the lag sits BEFORE the slew limiter (spike_stage.xml), so a step the
+    # limiter saturates looks the same either way -- the lag shows when the
+    # demand REVERSES: the no-lag gimbal starts returning to vertical at
+    # once, the lagged one keeps slewing outward while its internal state
+    # catches up (the terminal limit-cycle E3-01 compensates, ADR
+    # flightlab-0006)
+    burn = ((1500.0, -400.0, 900.0), (40.0, -10.0, -150.0), 40_000.0)
+    coast = ((0.0, 0.0, 3000.0), (0.0, 0.0, -200.0), 40_000.0)
+    over_pad = ((0.0, 0.0, 300.0), (0.0, 0.0, -200.0), 40_000.0)
+    _, ecef_burn = _states(burn)
+    _, ecef_coast = _states(coast)
+    _, ecef_over = _states(over_pad)
+    tilts = {}
+    for lag in (0.0, 0.2):
+        law = _ClosedLoopLanding(VEHICLE, TerminalGuidance(
+            tvc_rate_limit_deg_s=20.0, tvc_lag_tau_s=lag),
+            pad_lat_deg=PAD[0], pad_lon_deg=PAD[1], pad_altitude_m=PAD[2],
+            pad_ecef_m=PAD_ECEF, gravity_m_s2=G)
+        assert law(300.0, ecef_coast) is None     # coasting: no trace entry
+        law(300.1, ecef_burn)
+        law(300.2, ecef_burn)
+        law(300.3, ecef_over)                    # demand reverses to vertical
+        tilts[lag] = [tr[5] for tr in law.margin_trace]
+    assert tilts[0.0][0] == pytest.approx(2.0, abs=0.05)   # rate clip, no lag
+    assert 0.0 < tilts[0.2][0] < tilts[0.0][0]             # lag trails it
+    assert tilts[0.0][2] < tilts[0.0][1]     # returns toward vertical
+    assert tilts[0.2][2] > tilts[0.2][1]     # still slewing outward
+    assert tilts[0.2][2] > tilts[0.0][2]
+
+
+def test_e301_preset_lands_with_the_realised_gimbal_inside_the_limit():
+    res = _fly(CASE_TEXTBOOK_HANDOFF, guidance=TERMINAL_GUIDANCE_E301)
+    assert res.landed, res.reason_codes
+    assert res.ignitions_used == 1
+    m = res.actuator_margin
+    assert m is not None
+    assert m.tvc_rate_limit_deg_s == 20.0 and m.tvc_lag_tau_s == 0.2
+    assert m.tvc_lag_compensation
+    # the accounting is of the REALISED gimbal now: the chain never lets
+    # the realised direction rate exceed the declared 20 deg/s pin
+    assert m.slew_deg_s_max <= m.tvc_rate_limit_deg_s + 1e-6
+    assert res.lateral_speed_m_s < 1.0
+    assert any("actuator margins" in a and "0.2 s TVC lag" in a
+               and "lag-compensated" in a for a in res.assumptions)
+    touch = [e for e in landing_events(res) if e.kind in ("touchdown", "impact")]
+    cm = touch[0].data["control_margin"]
+    assert cm["tvc_lag_tau_s"] == 0.2 and cm["tvc_lag_compensation"]
+
+
+def test_closed_loop_throttle_slew_caps_the_commanded_throttle_rate():
+    res = _fly(CASE_TEXTBOOK_HANDOFF, guidance=TerminalGuidance(
+        tvc_rate_limit_deg_s=20.0, tvc_lag_tau_s=0.2,
+        tvc_lag_compensation=True, throttle_rate_limit_per_s=0.05))
+    assert res.landed, res.reason_codes  # the nominal burn demands <= 0.09/s
+    m = res.actuator_margin
+    assert m.throttle_rate_limit_per_s == 0.05
+    assert m.throttle_slew_max_per_s <= 0.05 + 1e-9
+    assert m.throttle_slew_max_per_s > 0.03  # the cap actually binds
+    assert any("throttle slew <= 0.05/s" in a for a in res.assumptions)
+
+
+def test_recovery_monte_carlo_flies_the_declared_actuator_by_default():
+    # "all recovery benchmarks default-enable the declared actuator limits":
+    # the MC plan default carries the E3-01 set verbatim
+    from orbitopt.flightlab.recovery.montecarlo import MC_PLAN_OPTIONS
+    assert dict(MC_PLAN_OPTIONS["landing"]) == dict(DECLARED_LANDING_ACTUATOR)
