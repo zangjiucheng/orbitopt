@@ -99,12 +99,14 @@ entry point; they are not canonical output identities.
 
 The [parity document](../src/orbitopt/data/flightlab/parity/spike_stage_parity.yaml)
 drives native stage construction and checks packaged JSBSim mass, inertia,
-propellant, mounting and aero geometry. Shared parameters do not make the
-engines identical: the JSBSim spike retains a vacuum-like nozzle and fixed
-propellant flow. The generated production airframe adds the aero tables and
-cancels the fixed-AERORP/live-CG force couple. See
-[ADR 0007](adr/flightlab-0007-production-jsbsim-aero-path.md) for measured
-residuals; [ADR 0001](adr/flightlab-0001-jsbsim-6dof.md) covers the base spike.
+propellant, mounting and aero geometry. Since E6-01 the engines share the
+propulsion law too: a choked `T_vac/(Isp_vac*g0)` = 599.083 kg/s flow through
+the same physical 2 m^2 exit, so both sides pay the same ambient back-pressure
+debit and agree on 1.6774 MN of pad thrust. The generated production airframe
+adds the aero tables and cancels the fixed-AERORP/live-CG force couple. See
+[ADR 0009](adr/flightlab-0009-engine-and-mass-flow-parity.md) for the aligned
+residuals, [ADR 0007](adr/flightlab-0007-production-jsbsim-aero-path.md) for
+the aero path, [ADR 0001](adr/flightlab-0001-jsbsim-6dof.md) for the base spike.
 
 Recovery remains a separate Earth-fixed 3-DOF chain with J2, rotation,
 atmosphere and engine/event models. Selecting a 6-DOF ascent does not make
