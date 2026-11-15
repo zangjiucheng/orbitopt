@@ -147,6 +147,10 @@ run/ -o scene.json`, or run a `flight-lab` or `two-stage-leo` config with
   must be continuous between the stages; at engine cutoff the insertion is
   checked against the target orbit. The verdict appears in the event's note
   on the timeline and in the Verification tab's **MISSION HANDOFFS** section.
+- A separation fork adds **Upper stage** and **First stage** timeline lanes.
+  A declared recovery stage replaces the booster debris arc with the flown
+  return. The [full-mission gate](verification.md#full-mission-verification-gate-e2-03-task-256)
+  lists insertion, propagation and touchdown verdicts separately.
 
 See [Flight Lab](flightlab.md#mission-pipeline) for the gates.
 

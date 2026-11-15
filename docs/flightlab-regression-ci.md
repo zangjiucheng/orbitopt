@@ -111,43 +111,50 @@ update-script + tagged-commit route as the reference itself.
 
 ## E2-04: the frozen dual-branch reference mission (task #257)
 
-FL-601 freezes the ascent-only Gate B regression. **E2-04** freezes the
-*complete dual-branch mission* end to end as the E2 closure baseline: the
-same `leo_two_stage` / `synthetic_two_stage` campaign, but an ascent whose
-separation hands the booster 35 t of propellant (frozen run directory,
-pinned constants in `scripts/e204_reference.py`), the upper branch parked at
-400 km @ 51.6 deg, and the booster branch flown back and landed through the
-full recovery chain (FL-302 plan recipe, gfold 0.3.2 landing stack) — the
-E2-03 full-mission verdict (`status: OK`, `mass.separation_fork`, station
-chain, landing gates) as one comparable artifact.
+E2-04 tests mission integration using an **illustrative ascent fixture** and
+an actual simulated booster return. `scripts/e204_reference.py` constructs
+its two-sample ascent arcs from constants: separation has 35 t of booster
+propellant, and insertion is prescribed at 400 km / 51.6°. Neither ascent
+optimization nor continuous ascent propagation runs in this regression.
 
-* **Frozen inputs:** the mission is declared in the packaged scenario
-  `src/orbitopt/data/mission_two_stage_leo_recovery.yaml` (recovery plan
-  recipe pinned: the proven-green nominal 7-vector guess, `max_fevals 18`;
-  `expected.propagation_result: not_checked` — the tudatpy leg belongs to
-  M-07, the gfold-pinned stack cannot run it). The ascent input is rebuilt
-  from the literal `ASCENT` constants (pad, epoch `2026-11-10T12:00:00Z`,
-  textbook separation state, masses) — a past epoch plus the no-download
-  IERS pin (above) makes the frame-bridge numbers identical across IERS
-  table versions.
-* **Frozen result + backend versions:** `tests/data/mission/reference/`
-  `e2-04-frozen-mission/` holds the reference report + merged recovery run
-  and `tolerances.json`; `PROVENANCE.json` records the sha256 of every file
-  plus the toolchain fingerprint (gfold pin, numpy/scipy/astropy/
-  astropy-iers-data versions, Python, platform) that produced it.
-* **CI gate:** the `flightlab-landing` job (gfold 0.3.2, Python 3.12) runs
-  `tests/test_e204_reference.py` — fast provenance/pin/tolerance guards
-  (which also run, skipping the numerical test, in every other job) and the
-  slow regression: re-fly the dual-branch mission and compare every
-  trajectory sample, event, check value and verdict within the declared
-  tolerances. Out of band = red. The G5 pair (`verify` + `tag-check`,
-  `[e204-reference-update]`) guards the committed reference the same way.
+The scenario is `src/orbitopt/data/mission_two_stage_leo_recovery.yaml`.
+It replays the frozen ascent, checks the separation fork and mass bookkeeping,
+and flies the pinned recovery plan with gfold 0.3.2. Parking propagation is
+explicitly `not_checked` and non-applicable to its full-mission gate; the
+separate M-07 regression covers that leg. The shipped CI environments separate
+landing and TudatPy, rather than proving these packages can never coexist.
+
+`tests/data/mission/reference/e2-04-frozen-mission/` contains the reference,
+tolerances and `PROVENANCE.json` (input/file hashes and recording toolchain).
+The landing CI job checks provenance, reference-update tags, rebuilt inputs
+and the numerical rerun:
 
 ```bash
-python scripts/e204_reference.py run --out /tmp/e204        # re-fly
-python scripts/e204_reference.py compare /tmp/e204          # vs reference
-python scripts/e204_reference.py update                     # intended change:
-git add tests/data/mission/reference/e2-04-frozen-mission \
-        src/orbitopt/data/mission_two_stage_leo_recovery.yaml
-git commit -m "test(mission): re-record E2-04 frozen reference [e204-reference-update]"
+python scripts/e204_reference.py verify
+python scripts/e204_reference.py run --out /tmp/e204
+python scripts/e204_reference.py compare /tmp/e204
 ```
+
+The reference runner scopes a four-row `earth_orientation.json` snapshot to
+its frame conversions and restores the caller's table afterwards. This avoids
+Astropy 6/8 selecting different IERS tables offline. Nested numeric event
+arrays use declared tolerances; booleans, keys and check outcomes remain exact.
+
+| Quantity | Absolute comparison budget |
+|---|---|
+| Rebuilt ascent position / velocity | `1e-6 m` / `1e-6 m/s` |
+| Flown position / velocity | `0.01 m` / `1e-4 m/s` (unchanged) |
+| Landing-start planned fuel / duration | `0.001 kg` / `0.01 s` |
+
+The planning budgets apply only to advisory `landing_start` fields: 1 g is
+50 times tighter than the solver's 0.05 kg stopping budget, and 10 ms is a
+tenth of the closed-loop integrator step. See the [acceptance results](acceptance-e1-e4.md).
+The portability fix preserves every recorded flight output. Its metadata-only
+update used `python scripts/e204_reference.py update --tolerances-only`, which
+verifies existing hashes before adding the frame snapshot and comparison
+policy, while retaining the original recording toolchain.
+
+For an independently justified reference change, use
+`python scripts/e204_reference.py update`, review the resulting provenance and
+numeric diff, and commit with `[e204-reference-update]`. CI's `verify` and
+`tag-check` guards remain required.

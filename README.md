@@ -60,6 +60,8 @@ Reports record models, numerical settings, residuals and evidence categories.
 A pass applies only to the stated checks and assumptions; GOES loads **not
 checked** by default, and an unverified Mars result may be **best effort**.
 See [verification](docs/verification.md).
+The [E1–E4 acceptance review](docs/acceptance-e1-e4.md) records current coverage
+and open mission-verification/regression blockers.
 
 ## Mission Control
 

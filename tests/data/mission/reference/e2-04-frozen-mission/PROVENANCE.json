@@ -1,4 +1,21 @@
 {
+  "comparison_policy_update": {
+    "generated_by": "scripts/e204_reference.py update --tolerances-only",
+    "previous_tolerances_sha256": "42783ac92e9cff1e079182797da7f5329f89109fb1ace79cc211b3dda455f531",
+    "toolchain": {
+      "astropy": "8.0.2",
+      "astropy_iers_data": "0.2026.11.9.0.35.9",
+      "cvxpy": "1.9.3",
+      "gfold": "0.3.2",
+      "numpy": "2.5.4",
+      "opentsiolkovsky": "not used: the ascent input is a frozen run directory",
+      "orbitopt": "0.1.0",
+      "platform": "macOS-27.2.1-arm64-arm-64bit",
+      "python": "3.12.13",
+      "scipy": "1.18.1",
+      "tudatpy": "not used: propagation leg declared not_checked (see scenario header)"
+    }
+  },
   "earth_orientation": "bundled IERS only, astropy-iers-data 0.2026.11.9.0.35.9",
   "files": {
     "ascent/events.json": "4e8cb530062eb5973d66329547a8c0b5c14057f7c8fae7321c4b729b64ab3e26",
@@ -7,6 +24,7 @@
     "ascent/trajectories/stage1_debris.csv": "d228909ba7d847127e4f7b7c43973fea3fc6ce1cd34e99639b52366443f37a0f",
     "ascent/trajectories/stage2.csv": "6c45da5b750e5c54dee292f4bdcc661c77a0bf176f38a0fd396c6772ee229bfc",
     "ascent/verification.json": "c831db778b673669e0318f5bb72e41ea7b2279b1d2b81e7f82667779bca09ce3",
+    "earth_orientation.json": "403398f08f601dd4129be94bc6dba2260ed05f28d3652e5941b1fa4f10e6ecf2",
     "mission/mission.verification.json": "002f0d25243bf619ea74e3c3535fbda9b5e8bcc2d23798022e40173917ea7a0e",
     "mission/recovery/run/events.json": "3a9f08471bf380e1d114a12f2a03006bf076aef3e82bc4060f5c28a4509c791a",
     "mission/recovery/run/manifest.json": "5d0ea450cdff93925aed7f9afc846983a11cb1332e73077e22352577ae078ada",
@@ -14,7 +32,7 @@
     "mission/recovery/run/trajectories/stage1.csv": "c2ee0cad8d23386a97b3b912314e6ef9d5f60d2cfc40364e4262053b65a2c198",
     "mission/recovery/run/trajectories/stage2.csv": "6c45da5b750e5c54dee292f4bdcc661c77a0bf176f38a0fd396c6772ee229bfc",
     "mission/recovery/run/verification.json": "9908b5383c8cf5b63d8d65e6bf76f17fac251e649cdf9155ff980c791b4b0782",
-    "tolerances.json": "42783ac92e9cff1e079182797da7f5329f89109fb1ace79cc211b3dda455f531"
+    "tolerances.json": "6b05bd38f8a2f36536594044e133f2c68659c8d7079d93b7ed3995c489077a58"
   },
   "frozen_inputs": {
     "ascent_constants": {

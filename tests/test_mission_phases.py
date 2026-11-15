@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import dataclasses
 import itertools
+import runpy
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -203,6 +204,48 @@ def _mission(scenario, checks, *, not_assessed=(), propagation=None):
     return SimpleNamespace(scenario=scenario, checks=tuple(checks),
                            not_assessed=list(not_assessed),
                            propagation=propagation or {"status": "not_run"})
+
+
+@pytest.mark.parametrize('physics', [True, False, None])
+@pytest.mark.parametrize('with_recovery', [False, True])
+def test_mission_preserves_the_independent_ascent_physics_verdict(tmp_path, monkeypatch, physics, with_recovery):
+    from orbitopt.flightlab.contract import read_run
+    from orbitopt.mission_config import load_mission_config
+    from orbitopt.mission.two_stage_leo import scenario_from_config
+    import orbitopt.mission.two_stage_leo as chain
+
+    reference = REPO / 'tests/data/mission/reference/e2-04-frozen-mission/ascent'
+    run = read_run(reference)
+    run = dataclasses.replace(run, verification=dataclasses.replace(
+        run.verification, physics_verified=physics))
+    monkeypatch.setattr(chain, '_acquire_ascent', lambda *args: (run, None, None))
+    scenario = scenario_from_config(load_mission_config(
+        REPO / 'src/orbitopt/data/mission_two_stage_leo_recovery.yaml'))
+    if with_recovery:
+        _stub_fly_recovery(monkeypatch, success=True)
+    else:
+        scenario = dataclasses.replace(scenario, recovery=None)
+    reference_script = runpy.run_path(str(REPO / 'scripts/e204_reference.py'))
+    with reference_script['frozen_earth_orientation']():
+        mission = run_two_stage_leo(scenario, tmp_path / 'mission', propagate=False)
+    status = mission.report['status']
+    injection = next(p for p in mission.full_mission['phases']
+                     if p['phase'] == PHASE_ORBIT_INJECTION)
+    if physics is None:
+        assert 'ascent.physics_verified' not in status['checks']
+        assert status['independent_validation']['result'] == RESULT_NOT_CHECKED
+        assert status['independent_validation']['checks_total'] == 0
+        assert any(n['id'] == 'ascent.physics_verified' for n in mission.not_assessed)
+    else:
+        expected = RESULT_PASSED if physics else RESULT_FAILED
+        assert status['checks']['ascent.physics_verified'] is physics
+        assert status['check_evidence']['ascent.physics_verified'] == 'independent_model'
+        assert status['independent_validation']['result'] == expected
+        assert status['independent_validation']['checks_total'] == 1
+        assert status['result'] == injection['verdict'] == mission.full_mission['verdict'] == expected
+        if not physics:
+            assert 'physics_verification_failed' in injection['reason_codes']
+    validate_report(mission.report)
 
 
 def test_gate_reads_applicability_from_the_scenario_not_from_the_run():

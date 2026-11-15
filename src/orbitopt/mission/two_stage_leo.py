@@ -1309,6 +1309,10 @@ def run_two_stage_leo(scenario: TwoStageLeoScenario, out_dir, *,
             not_assessed.append({"id": "ascent.physics_verified",
                                  "reason": "Gate-B re-fly skipped or unavailable -- never "
                                            "treated as passed"})
+        else:
+            checks.append(_check("ascent.physics_verified",
+                                 bool(run.verification.physics_verified),
+                                 reason_code="physics_verification_failed"))
         if scenario.ascent_mode == "run_dir":
             not_assessed.append({"id": "launch.window_and_optimization",
                                  "reason": "run_dir mode replays a flown run; its launch window "

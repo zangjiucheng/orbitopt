@@ -109,6 +109,14 @@ defaults:
     values: { title: "ADR 0002 · Landing guidance", parent: "Flight Lab", nav_order: 4 }
   - scope: { path: "adr/flightlab-0003-landing-aware-boostback-objective.md" }
     values: { title: "ADR 0003 · Boostback objective", parent: "Flight Lab", nav_order: 5 }
+  - scope: { path: "adr/flightlab-0004-independent-physics-verification.md" }
+    values: { title: "ADR 0004 · Independent verification", parent: "Flight Lab", nav_order: 6 }
+  - scope: { path: "adr/flightlab-0005-joint-recovery-chance-constraints.md" }
+    values: { title: "ADR 0005 · Joint chance constraints", parent: "Flight Lab", nav_order: 7 }
+  - scope: { path: "adr/flightlab-0006-rate-limited-landing-guidance.md" }
+    values: { title: "ADR 0006 · Landing actuator chain", parent: "Flight Lab", nav_order: 8 }
+  - scope: { path: "adr/flightlab-0007-production-jsbsim-aero-path.md" }
+    values: { title: "ADR 0007 · JSBSim aero path", parent: "Flight Lab", nav_order: 9 }
 
   # Verification: between Flight Lab and Missions in the sidebar
   - scope: { path: "verification.md" }

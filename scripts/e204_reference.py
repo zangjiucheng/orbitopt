@@ -2,7 +2,8 @@
 """E2-04 frozen dual-branch reference mission: run, compare, verify, update.
 
 The committed reference under ``tests/data/mission/reference/e2-04-frozen-mission/``
-is ONE complete dual-branch mission, frozen end to end (task #257):
+is a dual-branch integration fixture (task #257), with synthetic ascent
+endpoints and a simulated booster return:
 
 * ``ascent/``   -- the frozen FLIGHT INPUT: a two-stage ascent run directory
   (liftoff -> MECO -> separation -> SECO) recorded in ECEF, whose separation
@@ -32,6 +33,7 @@ Subcommands
     compare DIR           compare a fresh run against the reference
     verify                provenance check: committed files unmodified
     update                regenerate ascent fixture + reference (maintainers)
+      --tolerances-only   update policy/EOP metadata; preserve flight outputs
     tag-check --base SHA  enforce the [e204-reference-update] commit tag
 
 G5 discipline (as in FL-601): the reference is updated ONLY by ``update``,
@@ -47,6 +49,7 @@ reference files) and ``tag-check`` (catches untagged updates).
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import math
@@ -74,7 +77,7 @@ GOLDEN_GFOLD = "0.3.2"
 #: frozen separation state and the recovery numerics.
 ASCENT = {
     "run_id": "e2-04-frozen-ascent",
-    "epoch_utc": "2026-11-10T12:00:00Z",   # the target's epoch; past -> finalized IERS
+    "epoch_utc": "2026-11-10T12:00:00Z",   # covered by the frozen EOP snapshot
     "pad": (28.5619, -80.5772, 3.0),       # the scenario target's launch_site
     "t_liftoff_s": 0.0,
     "t_max_q_s": 57.339,
@@ -98,7 +101,7 @@ ASCENT = {
     "insertion_altitude_m": 400000.0,
     "insertion_inclination_deg": 51.6,
     "stage2_seco_kg": 13282.392560150383,
-    # ascent loads recorded on the flight (Gate-B checks of the flown arc)
+    # illustrative ascent loads (Gate-B constraint checks on the fixture)
     "max_q_pa": 36690.0,
     "max_accel_g": 4.1,
 }
@@ -113,6 +116,11 @@ ASCENT = {
 #: leaves the pinned-solver results far more room than gfold's own solver
 #: tolerances need while still failing any physics change that matters.
 DEFAULT_TOLERANCES = {
+    # Coordinate/velocity transforms involve platform-dependent matrix and
+    # finite-difference roundoff (~1.4e-7 in the reviewed Linux/macOS builds).
+    # Keep this separate from the centimetre / 0.1 mm/s flight-state budgets.
+    "ascent_build_position_m_abs": 1e-6,
+    "ascent_build_velocity_m_s_abs": 1e-6,
     "t_s_abs": 1e-6,
     "mass_kg_abs": 1e-6,
     "position_m_abs": 1e-2,
@@ -133,6 +141,10 @@ DEFAULT_TOLERANCES = {
     "check_value_rel": 1e-9,
     "event_data_abs": 1e-6,
     "event_data_rel": 1e-9,
+    # Advisory SOCP insertion-plan diagnostics, not flown touchdown values.
+    # 1 g is 50x tighter than plan_scp's 0.05 kg stopping budget; 10 ms is
+    # one tenth of the closed-loop landing integrator's default 0.1 s step.
+    "landing_plan_diagnostic_abs": {"fuel_planned_kg": 1e-3, "tof_flying_s": 1e-2},
     "report_value_abs": 1e-4,
     "report_value_rel": 1e-9,
 }
@@ -151,8 +163,9 @@ def _digest(path: Path) -> str:
 
 
 def _pin_earth_orientation() -> str:
-    """Freeze the frame bridge's Earth orientation to the IERS data the env
-    ships (FL-601's pin, same reasoning: no daily IERS-A download)."""
+    """Disable daily IERS downloads and identify the installed data package.
+    The reference frame bridge itself uses :func:`frozen_earth_orientation`.
+    """
     from astropy.utils import iers
 
     iers.conf.auto_download = False
@@ -163,6 +176,49 @@ def _pin_earth_orientation() -> str:
         return str(astropy_iers_data.__version__)
     except ImportError:
         return "astropy bundled"
+
+
+@contextmanager
+def frozen_earth_orientation():
+    """Use the reference's EOP snapshot locally, restoring the caller's table.
+
+    Astropy 6 selects IERS-B offline while later versions can select IERS-A;
+    disabling downloads alone does not freeze the reference's frame bridge.
+    """
+    from astropy.utils import iers
+    import astropy.units as u
+    import numpy as np
+
+    snapshot = json.loads((REF_ROOT / "earth_orientation.json").read_text())
+    units = {"MJD": u.day, "UT1_UTC": u.s, "PM_x": u.arcsec, "PM_y": u.arcsec}
+    table = iers.IERS({name: np.array([row[name] for row in snapshot["rows"]]) * unit
+                        for name, unit in units.items()})
+    with iers.earth_orientation_table.set(table):
+        yield
+
+
+def _write_earth_orientation_snapshot() -> None:
+    """Bootstrap from the original recording data, never a newer prediction."""
+    path = REF_ROOT / "earth_orientation.json"
+    if path.exists():
+        return
+    from astropy.time import Time
+    from astropy.utils import iers
+    import astropy_iers_data
+
+    recorded = json.loads(PROVENANCE.read_text())["toolchain"]["astropy_iers_data"]
+    if astropy_iers_data.__version__ != recorded:
+        raise RuntimeError(f"snapshot creation needs recorded astropy-iers-data {recorded}")
+    table = iers.IERS_A.open(iers.IERS_A_FILE)
+    day = math.floor(Time(ASCENT["epoch_utc"].removesuffix("Z")).mjd)
+    rows = [{name: float(row[name].value) for name in ("MJD", "UT1_UTC", "PM_x", "PM_y")}
+            for row in table if day - 1 <= float(row["MJD"].value) <= day + 2]
+    if len(rows) != 4:
+        raise RuntimeError("recording table does not bracket the frozen mission epoch")
+    path.write_text(json.dumps({"source": "IERS-A finals2000A.all",
+                               "source_version": recorded,
+                               "units": {"MJD": "day", "UT1_UTC": "s", "PM_x": "arcsec", "PM_y": "arcsec"},
+                               "rows": rows}, indent=2, sort_keys=True) + "\n")
 
 
 def _toolchain() -> dict:
@@ -238,8 +294,9 @@ def _build_ascent_run():
     seco_r = tuple(float(c) for c in np.array([r_orb, 0.0, 0.0]))
     seco_v = tuple(float(c) for c in np.array(
         [0.0, v_orb * math.cos(inc), v_orb * math.sin(inc)]))
-    sep_g, sep_gv = frames.to_gcrs(np.array([sep_r]), np.array([sep_v]),
-                                   "ECEF", epoch, np.array([float(a["t_separation_s"])]))
+    with frozen_earth_orientation():
+        sep_g, sep_gv = frames.to_gcrs(np.array([sep_r]), np.array([sep_v]),
+                                       "ECEF", epoch, np.array([float(a["t_separation_s"])]))
     sep_r_g = tuple(float(c) for c in sep_g[0])
     sep_v_g = tuple(float(c) for c in sep_gv[0])
 
@@ -343,14 +400,15 @@ def _run_mission(out_dir: Path):
     from orbitopt.mission.two_stage_leo import run_two_stage_leo
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    mission = run_two_stage_leo(load_scenario(), out_dir, propagate=False)
+    with frozen_earth_orientation():
+        mission = run_two_stage_leo(load_scenario(), out_dir, propagate=False)
     return mission
 
 
 def cmd_run(out_dir: Path) -> int:
     _load_repo_package()
     iers_data = _pin_earth_orientation()
-    print(f"Earth orientation: bundled IERS data only (astropy-iers-data {iers_data}), no download")
+    print(f"Earth orientation: frozen E2-04 snapshot (installed IERS data {iers_data}), no download")
     mission = _run_mission(out_dir)
     print(f"mission status: {mission.status}")
     print(f"report: {mission.report_path}")
@@ -369,23 +427,39 @@ def _num_diff(label: str, got, ref, atol: float, rtol: float, fails: list[str]) 
         if got != ref:
             fails.append(f"{label}: {got!r} != reference {ref!r}")
         return
+    if not math.isfinite(got) or not math.isfinite(ref):
+        fails.append(f"{label}: non-finite numeric value {got!r} or reference {ref!r}")
+        return
     if abs(got - ref) > atol + rtol * abs(ref):
         fails.append(f"{label}: {got!r} differs from reference {ref!r} by "
                      f"{abs(got - ref):.3e} > {atol:.1e} + {rtol:.1e}*|ref|")
 
 
+def _compare_values(label: str, got, ref, atol: float, rtol: float,
+                    fails: list[str]) -> None:
+    if isinstance(got, bool) or isinstance(ref, bool):
+        if type(got) is not type(ref) or got != ref:
+            fails.append(f"{label}: {got!r} != reference {ref!r}")
+    elif isinstance(got, (int, float)) and isinstance(ref, (int, float)):
+        _num_diff(label, float(got), float(ref), atol, rtol, fails)
+    elif isinstance(got, dict) and isinstance(ref, dict):
+        _compare_dicts(label, got, ref, atol, rtol, fails)
+    elif isinstance(got, (list, tuple)) and isinstance(ref, (list, tuple)):
+        if len(got) != len(ref):
+            fails.append(f"{label}: sequence lengths {len(got)} != reference {len(ref)}")
+        for i, (g, r) in enumerate(zip(got, ref)):
+            _compare_values(f"{label}[{i}]", g, r, atol, rtol, fails)
+    elif got != ref:
+        fails.append(f"{label}: {got!r} != reference {ref!r}")
+
+
 def _compare_dicts(label: str, got: dict, ref: dict, atol: float, rtol: float,
-                   fails: list[str]) -> None:
+                   fails: list[str], absolute_overrides: dict | None = None) -> None:
     if set(got) != set(ref):
         fails.append(f"{label}: keys {sorted(set(got) ^ set(ref))} differ")
     for k in sorted(set(got) & set(ref)):
-        g, r = got[k], ref[k]
-        if isinstance(g, (int, float)) and isinstance(r, (int, float)):
-            _num_diff(f"{label}[{k}]", float(g), float(r), atol, rtol, fails)
-        elif isinstance(g, dict) and isinstance(r, dict):
-            _compare_dicts(f"{label}[{k}]", g, r, atol, rtol, fails)
-        elif g != r:
-            fails.append(f"{label}[{k}]: {g!r} != reference {r!r}")
+        _compare_values(f"{label}[{k}]", got[k], ref[k],
+                        (absolute_overrides or {}).get(k, atol), rtol, fails)
 
 
 def compare_runs(candidate_dir: Path, tol: dict) -> list[str]:
@@ -442,7 +516,9 @@ def compare_runs(candidate_dir: Path, tol: dict) -> list[str]:
         if ce.kind != re_.kind or ce.body_id != re_.body_id:
             fails.append(f"events[{i}]: {ce.kind}@{ce.body_id} != reference {re_.kind}@{re_.body_id}")
         _compare_dicts(f"events[{i}].data", dict(ce.data), dict(re_.data),
-                       tol["event_data_abs"], tol["event_data_rel"], fails)
+                       tol["event_data_abs"], tol["event_data_rel"], fails,
+                       absolute_overrides=(tol.get("landing_plan_diagnostic_abs")
+                                           if ce.kind == re_.kind == "landing_start" else None))
 
     for verdict in ("optimizer_converged", "physics_verified", "mission_constraints_passed"):
         cv, rv = getattr(cand.verification, verdict), getattr(ref.verification, verdict)
@@ -466,11 +542,7 @@ def compare_runs(candidate_dir: Path, tol: dict) -> list[str]:
 
 
 def _check_report_field(label: str, got, ref, tol, fails: list[str]) -> None:
-    if isinstance(got, (int, float)) and isinstance(ref, (int, float)):
-        _num_diff(label, float(got), float(ref), tol["report_value_abs"],
-                  tol["report_value_rel"], fails)
-    elif got != ref:
-        fails.append(f"{label}: {got!r} != reference {ref!r}")
+    _compare_values(label, got, ref, tol["report_value_abs"], tol["report_value_rel"], fails)
 
 
 def compare_report(candidate_report: dict, tol: dict) -> list[str]:
@@ -575,16 +647,40 @@ def cmd_verify() -> int:
     return 0
 
 
-def cmd_update() -> int:
+def cmd_update(*, tolerances_only: bool = False) -> int:
     """Regenerate the frozen ascent AND the mission reference from the pinned
     inputs, and rewrite the provenance digests + toolchain fingerprint. The
     ONLY sanctioned way to change the reference; the commit carrying the
     change must additionally carry COMMIT_TAG (CI's tag-check enforces that,
     and CI's verify fails any change this script did not write)."""
+    if tolerances_only:
+        # Amend the comparison policy without re-recording flight output or
+        # changing the original recording toolchain. Verify the old hashes
+        # first so this cannot bless an unrelated edited reference file.
+        if cmd_verify() != 0:
+            return 1
+        prov = json.loads(PROVENANCE.read_text(encoding="utf-8"))
+        previous = prov.get("comparison_policy_update", {}).get(
+            "previous_tolerances_sha256", _digest(TOLERANCES))
+        _write_earth_orientation_snapshot()
+        TOLERANCES.write_text(json.dumps(DEFAULT_TOLERANCES, indent=2) + "\n", encoding="utf-8")
+        key = str(TOLERANCES.relative_to(REF_ROOT))
+        prov["files"][key] = _digest(TOLERANCES)
+        prov["files"]["earth_orientation.json"] = _digest(REF_ROOT / "earth_orientation.json")
+        prov["comparison_policy_update"] = {
+            "generated_by": "scripts/e204_reference.py update --tolerances-only",
+            "previous_tolerances_sha256": previous,
+            "toolchain": _toolchain(),
+        }
+        PROVENANCE.write_text(json.dumps(prov, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print("Updated comparison policy, EOP snapshot and provenance; frozen flight output unchanged")
+        return 0
+
     import shutil
     import tempfile
 
     _pin_earth_orientation()
+    snapshot_bytes = (REF_ROOT / "earth_orientation.json").read_bytes()
     with tempfile.TemporaryDirectory(prefix="e204-ref-") as tmp:
         tmp_root = Path(tmp)
         if cmd_build(tmp_root / "ascent") != 0:
@@ -595,8 +691,9 @@ def cmd_update() -> int:
         from orbitopt.mission.two_stage_leo import run_two_stage_leo
 
         scenario_dir.mkdir(parents=True, exist_ok=True)
-        mission = run_two_stage_leo(load_scenario(ascent_dir=tmp_root / "ascent"),
-                                    scenario_dir, propagate=False)
+        with frozen_earth_orientation():
+            mission = run_two_stage_leo(load_scenario(ascent_dir=tmp_root / "ascent"),
+                                        scenario_dir, propagate=False)
         if mission.status != "OK":
             print(f"refusing to record a red reference mission (status {mission.status!r}); "
                   "fix the mission before updating the reference", file=sys.stderr)
@@ -604,6 +701,7 @@ def cmd_update() -> int:
         if REF_ROOT.exists():
             shutil.rmtree(REF_ROOT)
         REF_ROOT.mkdir(parents=True)
+        (REF_ROOT / "earth_orientation.json").write_bytes(snapshot_bytes)
         shutil.copytree(tmp_root / "ascent", ASCENT_DIR)
         shutil.copytree(scenario_dir, MISSION_DIR)
     if not TOLERANCES.is_file():
@@ -683,7 +781,9 @@ def main(argv: list[str]) -> int:
     sub.add_parser("verify", help="check committed reference files against PROVENANCE.json")
     build_p = sub.add_parser("build", help="materialise the frozen ascent fixture only")
     build_p.add_argument("--out", required=True, type=Path)
-    sub.add_parser("update", help=f"regenerate the reference (commit the result with {COMMIT_TAG})")
+    update_p = sub.add_parser("update", help=f"regenerate the reference (commit the result with {COMMIT_TAG})")
+    update_p.add_argument("--tolerances-only", action="store_true",
+                          help="update comparison policy/EOP metadata without re-recording flight output")
     tag_p = sub.add_parser("tag-check", help="CI: reference diffs need the commit tag")
     tag_p.add_argument("--base", default=None)
     args = parser.parse_args(argv)
@@ -696,7 +796,7 @@ def main(argv: list[str]) -> int:
     if args.cmd == "build":
         return cmd_build(args.out)
     if args.cmd == "update":
-        return cmd_update()
+        return cmd_update(tolerances_only=args.tolerances_only)
     if args.cmd == "tag-check":
         return cmd_tag_check(args.base)
     raise AssertionError(args.cmd)

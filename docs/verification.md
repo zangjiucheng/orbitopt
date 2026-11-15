@@ -1,159 +1,118 @@
 # Verification and benchmarks
 
-A verification report records checks, tolerances, numerical settings and the
-physical model. A pass applies only to those assumptions; it does not establish
-real-world flight safety. Mission Control displays **VERIFIED**, **VERIFY
-FAILED** or **NOT CHECKED**.
+Reports record checks, tolerances, force models and numerical settings. A
+pass applies to those assumptions; it does not establish flight safety.
+Mission Control displays **VERIFIED**, **VERIFY FAILED** or **NOT CHECKED**.
+For the reviewed E1–E4 integration and its fixes, see the
+[2026-11-15 acceptance report](acceptance-e1-e4.md).
 
 ## What a report contains
 
-Reports use the `verification-report-1.0` schema and include residuals, force
-models and omitted effects, integrator settings and a canonical SHA-256
-digest. They are written beside mission scenes and by Flight Lab,
-`orbitopt launch` and the reference-scenario chain.
+The `verification-report-1.0` document contains residuals, omitted effects,
+integrator settings, provenance and a canonical SHA-256 digest. Reports are
+written beside mission scenes and by Flight Lab, `orbitopt launch` and the
+reference-scenario chain. Inspect both the overall result and its evidence.
 
 ## Three kinds of evidence
 
-Every check is first classified by **what it is testing** (task #243):
+The check category describes its purpose:
 
-| Category | What it checks |
+| Category | Purpose |
 |---|---|
-| `numerical_consistency` | Numerical convergence or conservation within a model. |
-| `model_agreement` | Agreement with another model, prediction or constraint. |
+| `numerical_consistency` | Convergence or conservation within a model. |
+| `model_agreement` | Agreement with another prediction, model or constraint. |
 | `historical_validation` | Agreement with published real-world data. |
 
-A category without checks is **not checked**, not passed.
+A category without checks is **not checked**.
 
 ## Five evidence types (task #263)
 
-The category tells you *what shape* the check has; the **evidence type**
-(task #263) tells you what the *reference on the other side of the tolerance*
-is actually made of, and therefore how far a pass there reaches. Two checks
-can share a category and still mean very different things: a `model_agreement`
-residual that compares against the closed-form solution of the same two-body
-problem is not evidence of the model's contact with reality, and a
-`model_agreement` residual that compares against the *design aim point* is not
-a comparison against anything independent. Every check in a report therefore
-carries both a category and one of:
+Evidence type identifies the reference used by the check:
 
-| Evidence type | Independent? | Reference | A pass proves | A pass cannot prove |
-|---|---|---|---|---|
-| `analytical` | no | a closed form of the same (or a simplified) model | the numerics agree with the closed form over the covered phase | the model describes reality |
-| `independent_model` | **yes** | a model formulated separately (JSBSim, tudatpy, a hand-written propagator) | the model agrees with another independent formulation over the covered phase | real-world validity — no independent model is the truth |
-| `historical_telemetry` | **yes** | published data from a real flight (never an input to the model) | the model matches an actual observed flight over the covered phase | other mission phases, other vehicles, or the vehicle's full envelope |
-| `design_input` | no | the aim point / target / envelope the solution was built against | the solver hit its aim or respected its envelope — internal consistency | **anything about fidelity to reality**; a design-input match is *not* validation and must never be read as historical proof |
-| `numerical_consistency` | no | the same model re-run by independent numerics | the solver converged (energy, angular momentum, integration error) | that the model is the right one to have converged |
+| Type | Reference | Scope of a pass |
+|---|---|---|
+| `analytical` | Closed form of the same/simplified model. | Agreement with that solution. |
+| `independent_model` | Separately formulated propagator or model. | Cross-model agreement over the checked phase. |
+| `historical_telemetry` | Published flight observations, not model inputs. | Agreement with those observations. |
+| `design_input` | Target orbit, aim point or declared envelope. | The solution satisfies its design constraints. |
+| `numerical_consistency` | Same model under independent/tighter numerics. | Numerical error or conservation checks pass. |
 
-A report's `status.evidence` field rolls up every type with its qualification,
-`status.check_evidence` maps every check to its type, and
-`status.independent_validation` rolls up the **validation-grade** types only
-(`historical_telemetry` + `independent_model`). A green report whose
-`independent_validation.result` is `not_checked` was never checked against
-anything outside the model — its `passed` verdict is internal consistency
-plus matching design input, nothing more. **Read `independent_validation`
-before you trust `passed`.**
+`status.check_evidence` maps checks to types; `status.evidence` rolls them up.
+`status.independent_validation` includes only `independent_model` and
+`historical_telemetry`. Its `not_checked` result means no independent evidence
+was included, even if the report's overall result is green. Independent-model
+agreement still does not establish real-world validity.
 
 ### Design-input comparisons and why they must be labelled
 
-A targeting loop drives a trajectory to an aim point; the residual it converges
-is between the propagated state and the aim. That residual is a *fact* — the
-solver did converge — but comparing the answer to the target the solver used
-to produce the answer cannot confirm the model against reality. `design_input`
-labels these checks so a report's headline status cannot silently upgrade
-"the solver converged" to "the mission is validated". The same applies to
-vehicle-limit envelopes, site DLA limits, launch-azimuth corridors, expected
-orbital-element bands and safe-entry corridors: those are constraints the
-plan is *built to satisfy*, not external observations.
-
-Where a mission verifier's `model_agreement` check is really one of these, its
-producer passes `evidence=...` on the residual / status call to override the
-default; where the reference is a genuine independent model or published
-flown data (the Gate-B re-fly, cross-backend comparisons, the Starship F15
-timeline benchmark), the default is already the correct reading and no
-override is needed.
+Hitting the orbit or corridor the optimizer targeted is `design_input`, not
+historical validation. Producers must supply that evidence override rather
+than inheriting the `model_agreement` default of `independent_model`.
+Missing references or skipped checks must remain visibly unassessed.
 
 ### The three reference benchmarks
 
-The three public benchmarks in `orbitopt benchmarks` are individually
-classified in `BENCHMARK_EVIDENCE`:
+| Benchmark | Evidence |
+|---|---|
+| Kepler two-body | `analytical`; energy drift is `numerical_consistency`. |
+| J2 secular drift | `analytical`. |
+| Starship Flight 15 booster catch | `historical_telemetry` against its published timeline. |
 
-| Benchmark | Evidence | Reference |
-|---|---|---|
-| `kepler_two_body` | `analytical` (energy check: `numerical_consistency`) | a closed-form Kepler solution of the same two-body model |
-| `j2_secular_drift` | `analytical` | first-order averaged secular-J2 formulas + the sun-synchronous definition |
-| `starship_booster_catch` | `historical_telemetry` | SpaceX's published Flight 15 timeline, never an input to the solve |
-
-Only the third carries validation-grade evidence. The benchmark suite's
-`independent_validation` rollup is therefore 2/2 (the F15 catch has two
-checks); the other five checks are analytic or numerical and reach only as
-far as their closed-form or their integration error.
+The catch contributes two independent-validation checks; the other five
+benchmark checks are analytic or numerical. This is scoped evidence, not a
+claim that every mission phase was validated.
 
 ## Full mission verification gate (E2-03, task #256)
 
-The two-stage LEO mission report carries, under `inputs.full_mission`, a gate
-that grades the mission as three independent phases — `orbit_injection`
-(station chain, ascent run verdict, staging and parking-orbit handoffs, mass
-bookkeeping, expected-orbit agreement), `parking_propagation` (the M-05
-propagation link) and `recovery_touchdown` (the FL-302/303/304 booster
-return) — each with its own tri-state verdict and failure reason codes,
-followed by one overall verdict. `orbitopt.mission.phases` owns the rule; the
-chain's own `status` (which link broke) is unchanged beside it.
+`inputs.full_mission` grades three phases separately:
 
-The overall verdict is the conjunction of the **applicable** phases with the
-unified evidence semantics above (absent evidence is never a pass):
+| Phase | Checks / applicability |
+|---|---|
+| `orbit_injection` | Ascent verdict, station order, staging, mass and expected orbit; always applicable. |
+| `parking_propagation` | M-05 propagation; out of scope only when `expected.propagation_result: not_checked` is declared. |
+| `recovery_touchdown` | Recovery/handoff/touchdown limits; applicable when `recovery:` is declared. |
 
-| orbit_injection | parking_propagation | recovery_touchdown | full mission |
-|---|---|---|---|
-| any `failed` | — | — | **failed** |
-| otherwise, any applicable `not_checked` | | | **not_checked** |
-| `passed` | `passed` | `passed` or not applicable | **passed** |
+Among applicable phases, **failed** takes precedence over **not_checked**,
+which takes precedence over **passed**. An applicable phase with no checks
+is `not_checked`. A declared out-of-scope phase does not block the verdict.
+The chain's diagnostic `status` and the pipeline's `full_mission_verdict`
+are separate fields; inspect the phase document when a run is only partially
+successful.
 
-A phase is applicable when the mission flies it: orbit injection always,
-propagation unless the scenario declares `expected.propagation_result:
-not_checked`, recovery when a `recovery:` stage is declared. A phase the
-mission declares but that produced no evidence (the ascent never flew, the
-caller skipped propagation) is `not_checked` and caps the overall verdict —
-it never silently passes. This is what makes a partial success readable:
-injection green with a lost booster is overall **failed** with a green
-`orbit_injection` phase, and an expendable mission's `recovery_touchdown` is
-not applicable, not failed. The `orbitopt run` pipeline gate records the
-verdict as `full_mission_verdict` on its verify stage.
+The chain preserves `ascent.physics_verified` as independent-model evidence:
+`true` passes the check; `false` fails orbit injection and the full-mission
+gate. `null` remains explicitly unassessed and contributes no independent
+validation. A green design-constraint rollup with a null flag does not prove
+independent verification. See the [acceptance report](acceptance-e1-e4.md).
 
 ## Benchmarks against public references
-
-`orbitopt benchmarks` checks a Kepler two-body orbit, J2 secular drift and the
-Starship Flight 15 booster catch against analytic or published references. It
-returns exit status 1 if any check fails; `--json` outputs a verification
-report. See [engineering notes](engineering-notes.md#benchmark-scenarios-with-public-references--analytic-solutions-task-245)
-for the references.
 
 ```bash
 orbitopt benchmarks
 orbitopt benchmarks --json
 ```
 
+The command exits 1 if any benchmark fails. References and assumptions are
+in the [engineering notes](engineering-notes.md#benchmark-scenarios-with-public-references--analytic-solutions-task-245).
+
 ## Cross-model comparison
 
-Compare a single-stage ascent and coast across available 3-DOF, JSBSim,
-TudatPy and analytic backends. Results are resampled onto a common time grid;
-thresholds can be overridden by phase and metric. The agreed acceptance line
-for these pairs is the [acceptance matrix](#cross-backend-acceptance-matrix).
-Every backend-pair check carries `evidence=independent_model` **except** the
-`three_dof_vs_two_body_analytic` pair, which is graded against a closed-form
-two-body reference and is labelled `analytical` — a pass there is agreement
-with an analytic coast, not validation of the 6-DOF sim.
+Compare a common ascent/coast across the available 3-DOF, JSBSim, TudatPy
+and analytic backends:
 
 ```bash
 python -m orbitopt.verify.cross_model --backends three_dof,six_dof,tudatpy
 python -m orbitopt.verify.cross_model --threshold ascent.position_m=1000 -o cross_model.json
 ```
 
+The `three_dof_vs_two_body_analytic` pair is `analytical`; other backend pairs
+are `independent_model`. These harness names are distinct from Flight Lab's
+[canonical run backend identities](flightlab.md#backend-identities-and-fidelity-levels).
+
 ## Integrator convergence
 
-The convergence study sweeps tolerances and, where applicable, step sizes for
-LEO and GTO coasts, re-entry and powered ascent. It estimates numerical error
-and assesses the production setting for each scenario. Every check is
-`numerical_consistency`: the same model, run tighter.
+LEO/GTO coast, re-entry and powered-ascent studies sweep tolerances and,
+where supported, step sizes. Their checks are `numerical_consistency`:
 
 ```bash
 python -m orbitopt.verify.integrator_convergence --plot
@@ -161,33 +120,29 @@ python -m orbitopt.verify.integrator_convergence --plot
 
 ## Cross-backend acceptance matrix
 
-The acceptance matrix grades the cross-model comparison above against a
-configurable line per **backend pair × phase × metric**: which differences
-are accepted, what evidence justifies each tolerance (a convergence budget,
-a measured deviation, a physical argument, or ill-conditioning — recorded
-but never gated), and which cause class a violation carries
-(`numerical_integration`, `model_formulation`, `state_handoff`, …). The
-default lives in `src/orbitopt/data/acceptance_matrix.yaml` (schema
-`acceptance-matrix-1.0`); edit or replace it — the numbers are the
-acceptance line, not code constants.
-
-The result is an `acceptance-matrix` verification report, so it flows
-through the same pipeline gate as every other check. A row whose backend is
-not installed is `not_checked` with its cause (`backend_environment`, …),
-never a silent pass; `--threshold key=none` records a row without gating.
+`src/orbitopt/data/acceptance_matrix.yaml` declares limits per backend pair,
+phase and metric, with their justification and failure cause classes.
+Results use the standard report/gate machinery. An unavailable backend is
+`not_checked` with a cause, not silently passed. Ill-conditioned or explicitly
+ungated rows are recorded; `--threshold key=none` disables that row's gate.
 
 ```bash
-python -m orbitopt.verify.acceptance_matrix                      # default matrix
+python -m orbitopt.verify.acceptance_matrix
 python -m orbitopt.verify.acceptance_matrix --matrix my.yaml \
-    --threshold three_dof_vs_two_body_analytic.coast.position_m=0.005
+  --threshold three_dof_vs_two_body_analytic.coast.position_m=0.005
 ```
+
+A pass on one available pair does not cover the remaining matrix. The current
+acceptance ran the real numerical/analytic pair, not every backend pair.
 
 ## Model coverage and declared conventions
 
-Mission results record each phase's model and limitations. `orbitopt.physics_io`
-checks declared frame, time and unit conventions at physics boundaries.
+Mission results record each phase's model and limitations.
+`orbitopt.physics_io` checks frame, epoch, timescale and unit conventions at
+physics boundaries. Boundary continuity establishes consistent handoffs; it
+does not prove a sparse recorded ascent was dynamically propagated.
 
 ## Further reading
 
 [Flight Lab](flightlab.md) · [Regression CI](flightlab-regression-ci.md) ·
-[Examples and validation](examples.md) · [Engineering notes](engineering-notes.md)
+[Examples and validation](examples.md) · [Acceptance findings](acceptance-e1-e4.md)

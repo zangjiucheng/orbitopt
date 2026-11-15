@@ -45,8 +45,9 @@ Rate damping and the reference point
     and the body rate.  The aerodynamic reference point is placed at the
     airframe's *dry* CG: the aero module's couple is CG-referenced while JSBSim
     applies its forces at a fixed ``AERORP``, so a travelling CG shows up as a
-    force-times-CG-shift couple.  That is a disclosed fidelity difference,
-    quantified in the E1-04 ADR and by
+    force-times-CG-shift couple. The generated correction cancels that extra
+    couple at the live CG; the remaining interpolation and engine differences
+    are quantified in the E1-04 ADR and by
     :mod:`orbitopt.flightlab.sixdof.production_compare`.
 """
 from __future__ import annotations

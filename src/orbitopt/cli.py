@@ -859,8 +859,9 @@ def build_parser() -> argparse.ArgumentParser:
                             help="ascent physics, by canonical backend identity "
                                  "(E1-01): 'opentsiolkovsky' (default) or "
                                  "'jsbsim' (pip install orbitopt[sixdof]; the "
-                                 "recovery chain and insertion re-fly are 3-DOF "
-                                 "machinery and do not run); the legacy '3DOF'/"
+                                 "recovery chain does not run for this backend; "
+                                 "independent insertion re-fly needs tudatpy and "
+                                 "the frame bridge); the legacy '3DOF'/"
                                  "'6DOF' spellings still resolve here)")
     flight_sim.add_argument("-o", "--output", required=True, metavar="RUN_DIR",
                             help="output run directory (FlightResult v1)")
