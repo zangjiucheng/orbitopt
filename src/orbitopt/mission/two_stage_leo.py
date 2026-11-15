@@ -1065,7 +1065,8 @@ def _acquire_ascent(scenario: TwoStageLeoScenario, out: Path):
     return read_run(pipeline.ascent_run_dir), pipeline.to_dict(), None
 
 
-def _fly_recovery_stage(scenario: TwoStageLeoScenario, run, out: Path,
+def _fly_recovery_stage(scenario: TwoStageLeoScenario, run, out: Path, *,
+                        handoff_report_file: Path | None = None,
                         ) -> tuple[object, dict, list[HandoffCheck], list[dict]]:
     """Fly the FL-304 recovery stage over the acquired ascent (task #254): the
     booster is planned (FL-302), flown and, when the landing stack is present,
@@ -1078,7 +1079,11 @@ def _fly_recovery_stage(scenario: TwoStageLeoScenario, run, out: Path,
     (target without a recovery declaration, unreadable vehicle) raises; a
     mission-level failure -- infeasible plan, missed touchdown, a landing the
     solver stack could not assess -- comes back as a red ``recovery.*`` check,
-    never as an exception."""
+    never as an exception. ``handoff_report_file`` (E5-03, task #270)
+    additionally writes the R-02 ``RecoveryHandoffReport`` document there, so
+    a cross-environment orchestrator can seal the M-01 boundary states without
+    re-flying anything; it does not change the returned block.
+    """
     from orbitopt.flightlab import checks as gate_checks
     from orbitopt.flightlab.contract import load_target, write_run
     from orbitopt.flightlab.recovery.pipeline import fly_recovery
@@ -1113,6 +1118,14 @@ def _fly_recovery_stage(scenario: TwoStageLeoScenario, run, out: Path,
                        verification=gate_checks.evaluate(outcome.run, target))
     run_dir = out / "recovery" / "run"
     write_run(run_dir, combined)
+    if handoff_report_file is not None and outcome.handoff is not None:
+        import json
+
+        report_path = Path(handoff_report_file)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(
+            json.dumps(outcome.handoff.to_dict(), indent=1, ensure_ascii=False) + "\n",
+            encoding="utf-8")
     target_file = (str(Path(plan.target_file or scenario.ascent_target_file))
                    if scenario.ascent_mode == "run_dir"
                    else str(out / "launch" / "target.yaml"))

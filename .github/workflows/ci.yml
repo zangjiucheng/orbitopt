@@ -155,6 +155,63 @@ jobs:
           tests/test_flightlab_recovery_envelope.py
           tests/test_e204_reference.py
 
+  # E5-03 (task #270): cross-environment end to end. tudatpy lives only in
+  # the conda-locked Python 3.10 env; gfold 0.3.2 only has >=3.11 wheels --
+  # this job is exactly that split: the ascent leg runs in the locked conda
+  # env, the recovery leg in a Python 3.12 venv, and the mission crosses
+  # between them solely over the versioned, digest-sealed exchange envelopes
+  # (orbitopt/schemas/crossenv-exchange-1.0.json). One `orbitopt crossenv
+  # run` completes the whole dual-environment mission.
+  cross-env:
+    name: cross-env e2e (tudatpy 3.10 + gfold 3.12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create locked CPU env (tudatpy, Python 3.10)
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: envs/cpu.conda-lock.yml
+          environment-name: orbitopt
+          cache-downloads: true
+
+      - name: Install orbitopt in the tudat env (editable, no-deps)
+        run: python -m pip install -e . --no-deps
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: envs/flightlab-landing-ci.txt
+
+      - name: Build the Python 3.12 landing env (gfold 0.3.2) and install orbitopt
+        run: |
+          python3.12 -m venv .venv-landing
+          .venv-landing/bin/python -m pip install -r envs/flightlab-landing-ci.txt
+          .venv-landing/bin/python -m pip install -e . --no-deps
+
+      - name: One command orchestrates both environments; provenance proves the split
+        env:
+          ORBITOPT_GFOLD_PYTHON: ${{ github.workspace }}/.venv-landing/bin/python
+        run: |
+          export ORBITOPT_TUDAT_PYTHON="${MAMBA_ROOT_PREFIX:?}/envs/orbitopt/bin/python"
+          test -x "$ORBITOPT_TUDAT_PYTHON" && test -x "$ORBITOPT_GFOLD_PYTHON"
+          pytest tests/test_crossenv.py -m cross_env -v
+
+      - name: The standalone one-command CLI runs the same plan
+        env:
+          ORBITOPT_GFOLD_PYTHON: ${{ github.workspace }}/.venv-landing/bin/python
+        run: |
+          export ORBITOPT_TUDAT_PYTHON="${MAMBA_ROOT_PREFIX:?}/envs/orbitopt/bin/python"
+          python -m orbitopt crossenv run --plan src/orbitopt/data/crossenv_e2e_plan.yaml \
+            -o runs/crossenv-ci
+          python -m orbitopt crossenv verify runs/crossenv-ci/ascent/exchange
+          python -m orbitopt crossenv verify runs/crossenv-ci/recovery/exchange
+
   test-macos:
     # Same locked CPU env on macOS: micromamba picks the osx-arm64 or osx-64
     # section of cpu.conda-lock.yml from the runner's native subdir. macOS

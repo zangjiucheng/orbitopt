@@ -952,6 +952,36 @@ def build_parser() -> argparse.ArgumentParser:
                             help="RAAN-constrained only: liftoff offsets [s] the winner is "
                                  "re-flown at for the RAAN window-sensitivity report "
                                  "(default: -60 60; pass no values to skip)")
+
+    # E5-03 (task #270): cross-environment mission orchestration. The parser
+    # is declared here (not delegated) so scripts/generate_api_reference.py
+    # can extract it from this file's AST; execution lives in
+    # orbitopt.crossenv.
+    crossenv = sub.add_parser(
+        "crossenv",
+        help="E5-03 cross-environment mission orchestration (versioned FlightRun / "
+             "HandoffState exchange between the tudatpy and gfold environments)")
+    crossenv_sub = crossenv.add_subparsers(dest="crossenv_command", required=True)
+    crossenv_run = crossenv_sub.add_parser(
+        "run", help="run the whole plan: each stage in its declared Python environment")
+    crossenv_run.add_argument("--plan", required=True, metavar="FILE",
+                              help="crossenv plan YAML (orbitopt.crossenv.plan v1)")
+    crossenv_run.add_argument("-o", "--out", metavar="DIR",
+                              help="output root (default: the plan's `out` key)")
+    crossenv_run.add_argument("--env", action="append", default=[], metavar="NAME=PYTHON",
+                              help="override/add an environment interpreter (repeatable)")
+    crossenv_run.add_argument("--json", action="store_true",
+                              help="print the mission report as JSON")
+    crossenv_run.add_argument("--quiet", action="store_true", help="no progress output")
+    crossenv_verify = crossenv_sub.add_parser(
+        "verify", help="re-validate one sealed exchange (schema + all digests)")
+    crossenv_verify.add_argument("exchange_dir", metavar="EXCHANGE_DIR")
+    crossenv_verify.add_argument("--json", action="store_true")
+    crossenv_stage = crossenv_sub.add_parser(
+        "stage", help="internal: run one plan stage in the interpreter this process uses")
+    crossenv_stage.add_argument("--plan", required=True)
+    crossenv_stage.add_argument("--stage", required=True)
+    crossenv_stage.add_argument("--out", required=True)
     return parser
 
 
@@ -978,6 +1008,9 @@ def main(argv=None):
         _cmd_launch(args)
     elif args.command == "flight":
         _cmd_flight(args)
+    elif args.command == "crossenv":
+        from orbitopt.crossenv.__main__ import dispatch as _crossenv_dispatch
+        raise SystemExit(_crossenv_dispatch(args))
 
 
 if __name__ == "__main__":
