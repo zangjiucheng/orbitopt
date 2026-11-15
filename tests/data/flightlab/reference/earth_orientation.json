@@ -1,0 +1,50 @@
+{
+  "active_table": "IERS_B",
+  "astropy_series": "6.1",
+  "effective": {
+    "max_deviation_arcsec": 0.01,
+    "max_deviation_s": 0.001,
+    "pm_x_arcsec": 0.218616,
+    "pm_y_arcsec": 0.369544,
+    "ut1_utc_s": 0.0097405
+  },
+  "epoch_mjd_utc": 61354.5,
+  "epoch_utc": "2026-11-10T12:00:00",
+  "format": 1,
+  "mode": "pinned-bundled",
+  "note": "Gate B GCRS reference frames are defined by the DEFAULT table path of astropy 6.1.x with downloads off: the active table is IERS_B from astropy-iers-data 0.2026.8.31 (effective UT1-UTC +0.0097405 s at the epoch). The snapshot pins that table by version + effective values, NOT by an override built from the finals2000A (IERS-A) rows -- those rows carry a different UT1-UTC (-0.0613499 s; delta 0.071 s = 1.07 arcsec ~ 28 m at orbital radius), so an override table is a different Earth orientation, not the recorded one. See docs/reference-tolerance-audit.md.",
+  "rows": [
+    {
+      "MJD": 61353.0,
+      "PM_x": 0.133393,
+      "PM_y": 0.308562,
+      "UT1_UTC": -0.0605533
+    },
+    {
+      "MJD": 61354.0,
+      "PM_x": 0.131974,
+      "PM_y": 0.308731,
+      "UT1_UTC": -0.06115
+    },
+    {
+      "MJD": 61355.0,
+      "PM_x": 0.130555,
+      "PM_y": 0.308922,
+      "UT1_UTC": -0.0615498
+    },
+    {
+      "MJD": 61356.0,
+      "PM_x": 0.129136,
+      "PM_y": 0.309133,
+      "UT1_UTC": -0.0618104
+    }
+  ],
+  "source": "IERS-A finals2000A.all",
+  "source_version": "0.2026.8.31.0.57.9",
+  "units": {
+    "MJD": "day",
+    "PM_x": "arcsec",
+    "PM_y": "arcsec",
+    "UT1_UTC": "s"
+  }
+}

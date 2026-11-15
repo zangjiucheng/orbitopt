@@ -1,6 +1,7 @@
 {
-  "earth_orientation": "bundled IERS only, astropy-iers-data 0.2026.8.31.0.57.9",
+  "earth_orientation": "bundled IERS only, pinned snapshot earth_orientation.json (mode pinned-bundled, no download), astropy-iers-data 0.2026.8.31.0.57.9",
   "files": {
+    "earth_orientation.json": "5d03c9b4354d87abaff8671f449a03929aeb5afa3fc5def9b66bd03547cf3775",
     "gateb-leo-two-stage/events.json": "7b21e24af0ce3342997bd727eb127eb1900c415b8d0034da64cac8890e23c13a",
     "gateb-leo-two-stage/manifest.json": "2dc838eba5f336ea9866d481687d5618c702566eb593b90a83e24600df53c100",
     "gateb-leo-two-stage/opentsiolkovsky/bodies/stage1.csv": "c5f41641b525da6e4e62fc2139980b688feb0b44c8de8e75b23f36bc82f4ac94",
@@ -12,7 +13,7 @@
     "gateb-leo-two-stage/trajectories/stage2.csv": "98f64168bb5d2c43db0f42dfc9e60c449b6e162019dbaffaa130ca701bf928a1",
     "gateb-leo-two-stage/trajectories/stage2_fairing.csv": "f7a9f21a7133fb2724783bb48ccf35305b0ee0888931b2a66d8edfce180080e4",
     "gateb-leo-two-stage/verification.json": "3cf47caedfbb69eeadb541fc69e408bf6df506702a69e8f5ddab6516435cb8c7",
-    "tolerances.json": "6b6b9e27192855b6c36ab7da1c629dfb92c7080a838e8975b90245df37a4bccf"
+    "tolerances.json": "009a1304da67aa2011cdd9ca46f73aca4f2a3ca63a796ff2760ba01bcdac70de"
   },
   "generated_by": "scripts/fl601_reference.py update",
   "git_sha_recording": "286ebe228ee5652ec43df67d46f80540faca4570",
@@ -23,5 +24,23 @@
     "run_recovery": false
   },
   "target": "src/orbitopt/data/flightlab/scenarios/leo_two_stage.yaml",
+  "tolerance_audit": [
+    {
+      "changes": {
+        "cross_platform.position_m_abs": {
+          "new": 0.0001,
+          "old": null
+        },
+        "cross_platform.velocity_m_s_abs": {
+          "new": 1e-06,
+          "old": null
+        }
+      },
+      "date": "2026-11-15T21:22:12Z",
+      "previous_tolerances_sha256": "6b6b9e27192855b6c36ab7da1c629dfb92c7080a838e8975b90245df37a4bccf",
+      "reason": "E8-04: add cross_platform band (re-derivation of committed GCRS tracks from raw recorded OT outputs on any lock-stack platform, via the unified pinned-EOP mechanism); equals flight bands because it exercises the same pinned frame bridge",
+      "tolerances_sha256": "009a1304da67aa2011cdd9ca46f73aca4f2a3ca63a796ff2760ba01bcdac70de"
+    }
+  ],
   "vehicle": "src/orbitopt/data/flightlab/vehicles/synthetic_two_stage.yaml"
 }

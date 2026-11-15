@@ -228,7 +228,7 @@ def test_tolerances_only_update_preserves_flight_outputs_and_recording_toolchain
         monkeypatch.setattr(script, name, value)
     monkeypatch.setattr(script, '_toolchain', lambda: {'python': 'test'})
     before = {p.relative_to(root): p.read_bytes() for p in root.rglob('*') if p.is_file()}
-    assert script.cmd_update(tolerances_only=True) == 0
+    assert script.cmd_update(tolerances_only=True, reason="test: audited policy round-trip") == 0
     assert script.cmd_verify() == 0
     for relative, content in before.items():
         if str(relative) not in ('PROVENANCE.json', 'tolerances.json'):
@@ -248,7 +248,7 @@ def test_tolerances_only_update_refuses_an_already_tampered_reference(tmp_path, 
     monkeypatch.setattr(script, 'TOLERANCES', root / 'tolerances.json')
     provenance = script.PROVENANCE.read_bytes()
     (root / 'ascent/events.json').write_text('[]')
-    assert script.cmd_update(tolerances_only=True) == 1
+    assert script.cmd_update(tolerances_only=True, reason="test: tampered reference") == 1
     assert script.PROVENANCE.read_bytes() == provenance
 
 
