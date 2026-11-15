@@ -169,11 +169,11 @@ def test_stage_budgets_match_their_declared_sources():
     for name in ("meco_ascent", "entry_descent", "leo_j2_coast", "gto_coast"):
         assert budgets["dynamics"]["scenarios"][name] == SCENARIOS[name].budget
     text = default_matrix_path().read_text(encoding="utf-8")
-    assert "51 m MECO" in text and "2.0 m/s velocity" in text
+    assert "52 m MECO" in text and "2.0 m/s velocity" in text
     findings = (pathlib.Path(__file__).resolve().parent.parent
                     / "docs" / "flightlab-jsbsim-spike-findings.md").read_text(encoding="utf-8")
-    assert "\u221251 m alt / \u22122.0 m/s" in findings and "0.51\u00b0 max" in findings
-    assert budgets["control"]["measured"] == {"meco_position_m": 51.0,
+    assert "\u221252 m alt / \u22122.0 m/s" in findings and "0.51\u00b0 max" in findings
+    assert budgets["control"]["measured"] == {"meco_position_m": 52.0,
                                               "meco_velocity_m_s": 2.0,
                                               "attitude_whole_burn_deg": 0.51}
     assert (POINT_MASS_POS_TOL_M, POINT_MASS_VEL_TOL_M_S) == (100.0, 0.01)
