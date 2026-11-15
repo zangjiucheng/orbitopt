@@ -169,6 +169,22 @@ guidance slew-limiter corruption; the convergence curves and the
 [ADR 0008](adr/flightlab-0008-sampled-data-control-and-rk4-plant.md) and
 [the recorded sweep](benchmarks/e604_step_convergence.json).
 
+**E6-02:** the closed-loop ascent is flown on the **JSBSim production path**:
+the F-04/F-06 gravity-turn program (steepened to 140 s to keep the tabulated
+airframe inside its ±15° envelope under production servo lag), the FL-403 PID
+gimbal law and the E6-01 engine, then the FL-402 split with commanded MECO at
+t = 95 s and delayed ignition on the upper child. The five phases
+(stack powered, booster coast, upper coast, upper powered, upper coast after
+burn-out) are graded separately against a declared constraint table: stack
+powered 0.44° peak / 0.22° RMS attitude error, alpha 11.7° (inside the table
+envelope), max-Q 71.4 kPa, TVC margin 0.96 with zero saturation, staging
+mass/momentum/continuity inside the declared property-round-trip bands. The
+native twin passes its own constraints with 4.26° peak (tracker lineage, cf.
+FL-605's 4.77°) and agrees on max-Q to 0.25%; the residuals are attributed by
+channel in [ADR 0010](adr/flightlab-0010-guided-jsbsim-ascent.md) and the
+[recorded study](benchmarks/e6_02_guided_ascent.json) — law difference
+(guidance), not model difference.
+
 ## Hard gates
 
 Orbit and touchdown checks apply the declared velocity, position, orbital,

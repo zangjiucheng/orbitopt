@@ -1,0 +1,736 @@
+{
+ "meta": {
+  "task": "E6-02 guided JSBSim ascent with staging (#274)",
+  "generated_utc": "2026-11-15T23:06:32+00:00",
+  "runtime_s": 86.4,
+  "dt_s": 0.02,
+  "sample_every": 10,
+  "phases": [
+   "stack.powered",
+   "booster.coast",
+   "upper.coast_before_ignition",
+   "upper.powered",
+   "upper.coast_after_burnout"
+  ],
+  "all_checks_passed": true
+ },
+ "scenario": {
+  "name": "e602-guided-ascent",
+  "model": "spike_stage_aero",
+  "booster_model": "spike_booster",
+  "upper_model": "spike_upper",
+  "pad": {
+   "lat_deg": 28.5,
+   "lon_deg": -80.6,
+   "heading_deg": 90.0
+  },
+  "program_times_s": [
+   0.0,
+   10.0,
+   140.0
+  ],
+  "program_elevation_deg": [
+   90.0,
+   90.0,
+   20.0
+  ],
+  "separation_t_s": 95.0,
+  "ignition_delay_s": 8.0,
+  "ignition_t_s": 103.0,
+  "t_end_s": 260.0,
+  "separation_impulse_ns": 10000.0,
+  "split_dry_fraction": 0.4,
+  "split_propellant_fraction": 0.4,
+  "assumptions": [
+   "Production-path study of the packaged spike vehicle -- illustrative physics, not a flight run (ADR flightlab-0010).",
+   "Commanded MECO at separation (E6-01 #273): the stack engine shuts down because the flight computer commands it, with ~3.1 t of propellant still in the tanks; the split is bookkeeping, not depletion.",
+   "The JSBSim children are the FL-402 airframes (both carry the stage-1 spike engine, zero aero); the native twin is built from those child XMLs' own declared masses/inertias, so the upper stage flies a stage-1-sized engine and burns its 60 % propellant share in ~3 s. This differs from F-06's 220 kN upper stage by construction.",
+   "Coast-phase attitude error and AoA are reported but not gated (the E1-02 discipline: an unactuated drift is geometry, not control); the structural q*alpha budget and the gimbal-off-its-stops checks still bind."
+  ]
+ },
+ "constraints": {
+  "stack.powered|att_err_max_deg": {
+   "limit": 6.0,
+   "sense": "max",
+   "unit": "deg",
+   "rationale": "F-05's closed-loop band for this vehicle on this program (E1-02): the production loop must hold the program at least as well as the tracker lineage did."
+  },
+  "stack.powered|att_err_rms_deg": {
+   "limit": 3.5,
+   "sense": "max",
+   "unit": "deg",
+   "rationale": "F-05 powered RMS band, same rationale."
+  },
+  "stack.powered|alpha_max_deg": {
+   "limit": 15.0,
+   "sense": "max",
+   "unit": "deg",
+   "rationale": "the aero document's tables end at +/-15 deg; beyond that the production model is extrapolating flat tables (ADR flightlab-0007)."
+  },
+  "stack.powered|q_alpha_max_pa_deg": {
+   "limit": 500000.0,
+   "sense": "max",
+   "unit": "Pa.deg",
+   "rationale": "E1-02's study-level side-load budget for this booster -- a property of the vehicle, so it binds in every phase."
+  },
+  "stack.powered|max_q_pa": {
+   "limit": 100000.0,
+   "sense": "max",
+   "unit": "Pa",
+   "rationale": "study-level Max-Q allowance: 1.4x the held-vertical production ascent this airframe already flies in ADR flightlab-0007 (71.3 kPa there); a gravity turn sheds vertical speed earlier, so it should not bind -- a declared allowance, not a measurement."
+  },
+  "stack.powered|deflection_margin_min": {
+   "limit": 0.85,
+   "sense": "min",
+   "unit": "fraction",
+   "rationale": "F-05 demanded 0.90; the production servo is the disclosed slower-lagging one (lag parameter 5.0, i.e. tau 0.2 s, in the aircraft XML vs the native tau 0.10 s, ADR flightlab-0007), so the reserve is relaxed to 0.85 -- disclosed, and the TVC is still never the actuating limit."
+  },
+  "stack.powered|saturated_s": {
+   "limit": 0.0,
+   "sense": "max",
+   "unit": "s",
+   "rationale": "a gimbal at its hard stop means the loop demanded authority the production actuator does not have (FL-403's saturation rule)."
+  },
+  "booster.coast|q_alpha_max_pa_deg": {
+   "limit": 500000.0,
+   "sense": "max",
+   "unit": "Pa.deg",
+   "rationale": "structural budget, same vehicle: uncontrolled side-load must not exceed it either."
+  },
+  "booster.coast|saturated_s": {
+   "limit": 0.0,
+   "sense": "max",
+   "unit": "s",
+   "rationale": "the booster's gimbal must come back to rest and stay off its stops."
+  },
+  "upper.coast_before_ignition|q_alpha_max_pa_deg": {
+   "limit": 500000.0,
+   "sense": "max",
+   "unit": "Pa.deg",
+   "rationale": "structural budget; the pre-ignition coast is the first phase in which the upper airframe sees live air on its own."
+  },
+  "upper.powered|alpha_max_deg": {
+   "limit": 25.0,
+   "sense": "max",
+   "unit": "deg",
+   "rationale": "the child airframes carry no aerodynamics at all (FL-402), so no table envelope applies; this upper bound keeps the free-drift angle geometry (separation impulse + coast tumble at ~5 Pa of q) inside the attitude at which the FL-402 handoff frame re-projection stays meaningful -- the structural side-load gate q*alpha is the real one here, and it binds two orders of magnitude below."
+  },
+  "upper.powered|q_alpha_max_pa_deg": {
+   "limit": 500000.0,
+   "sense": "max",
+   "unit": "Pa.deg",
+   "rationale": "structural budget."
+  },
+  "upper.powered|deflection_margin_min": {
+   "limit": 0.85,
+   "sense": "min",
+   "unit": "fraction",
+   "rationale": "the upper stage's gimbal is idle at neutral until F-07-class guidance uses it; the full travel must therefore be available."
+  },
+  "upper.powered|saturated_s": {
+   "limit": 0.0,
+   "sense": "max",
+   "unit": "s",
+   "rationale": "as the booster coast."
+  },
+  "upper.coast_after_burnout|q_alpha_max_pa_deg": {
+   "limit": 500000.0,
+   "sense": "max",
+   "unit": "Pa.deg",
+   "rationale": "structural budget."
+  }
+ },
+ "phases": {
+  "jsbsim": {
+   "stack.powered": {
+    "t0_s": 0.0,
+    "t1_s": 95.0,
+    "n_samples": 476.0,
+    "engine_s": 95.0,
+    "att_err_max_deg": 0.435375,
+    "att_err_rms_deg": 0.219408,
+    "alpha_max_deg": 11.671484,
+    "q_alpha_max_pa_deg": 391409.985966,
+    "max_q_pa": 71353.154887,
+    "max_q_t_s": 35.2,
+    "deflection_margin_min": 0.95998,
+    "command_peak_deg": 0.200178,
+    "saturated_s": 0.0,
+    "deflection_lag_max_deg": 0.075862
+   },
+   "booster.coast": {
+    "t0_s": 95.0,
+    "t1_s": 260.0,
+    "n_samples": 826.0,
+    "engine_s": 0.0,
+    "att_err_max_deg": 91.926566,
+    "att_err_rms_deg": 53.089834,
+    "alpha_max_deg": 89.201727,
+    "q_alpha_max_pa_deg": 15.71998,
+    "max_q_pa": 1.346232,
+    "max_q_t_s": 95.0,
+    "deflection_margin_min": 1.0,
+    "command_peak_deg": 0.0,
+    "saturated_s": 0.0,
+    "deflection_lag_max_deg": 0.0
+   },
+   "upper.coast_before_ignition": {
+    "t0_s": 95.0,
+    "t1_s": 102.8,
+    "n_samples": 40.0,
+    "engine_s": 0.0,
+    "att_err_max_deg": 4.345595,
+    "att_err_rms_deg": 2.524962,
+    "alpha_max_deg": 15.470971,
+    "q_alpha_max_pa_deg": 15.732071,
+    "max_q_pa": 1.348333,
+    "max_q_t_s": 95.0,
+    "deflection_margin_min": 1.0,
+    "command_peak_deg": 0.0,
+    "saturated_s": 0.0,
+    "deflection_lag_max_deg": 0.0
+   },
+   "upper.powered": {
+    "t0_s": 103.0,
+    "t1_s": 106.0,
+    "n_samples": 16.0,
+    "engine_s": 3.0,
+    "att_err_max_deg": 6.128404,
+    "att_err_rms_deg": 5.317578,
+    "alpha_max_deg": 15.568352,
+    "q_alpha_max_pa_deg": 0.202124,
+    "max_q_pa": 0.012983,
+    "max_q_t_s": 103.0,
+    "deflection_margin_min": 1.0,
+    "command_peak_deg": 0.0,
+    "saturated_s": 0.0,
+    "deflection_lag_max_deg": 0.0
+   },
+   "upper.coast_after_burnout": {
+    "t0_s": 106.2,
+    "t1_s": 260.0,
+    "n_samples": 770.0,
+    "engine_s": 0.0,
+    "att_err_max_deg": 91.926573,
+    "att_err_rms_deg": 54.978142,
+    "alpha_max_deg": 89.157206,
+    "q_alpha_max_pa_deg": 0.037876,
+    "max_q_pa": 0.002661,
+    "max_q_t_s": 106.2,
+    "deflection_margin_min": 1.0,
+    "command_peak_deg": 0.0,
+    "saturated_s": 0.0,
+    "deflection_lag_max_deg": 0.0
+   }
+  },
+  "native": {
+   "stack.powered": {
+    "t0_s": 0.0,
+    "t1_s": 94.98,
+    "n_samples": 477.0,
+    "engine_s": 94.98,
+    "att_err_max_deg": 4.263034,
+    "att_err_rms_deg": 2.565098,
+    "alpha_max_deg": 11.560542,
+    "q_alpha_max_pa_deg": 400167.313902,
+    "max_q_pa": 71179.525026,
+    "max_q_t_s": 35.2,
+    "deflection_margin_min": 0.986099,
+    "command_peak_deg": 0.089929,
+    "saturated_s": 0.0,
+    "deflection_lag_max_deg": 0.0
+   },
+   "booster.coast": {
+    "t0_s": 95.0,
+    "t1_s": 260.0,
+    "n_samples": 826.0,
+    "engine_s": 0.0,
+    "att_err_max_deg": 92.221524,
+    "att_err_rms_deg": 53.260254,
+    "alpha_max_deg": 88.782941,
+    "q_alpha_max_pa_deg": 11.070808,
+    "max_q_pa": 0.957183,
+    "max_q_t_s": 95.0,
+    "deflection_margin_min": 1.0,
+    "command_peak_deg": 0.0,
+    "saturated_s": 0.0,
+    "deflection_lag_max_deg": 0.0
+   },
+   "upper.coast_before_ignition": {
+    "t0_s": 95.0,
+    "t1_s": 103.0,
+    "n_samples": 41.0,
+    "engine_s": 0.0,
+    "att_err_max_deg": 4.471347,
+    "att_err_rms_deg": 2.597618,
+    "alpha_max_deg": 15.434348,
+    "q_alpha_max_pa_deg": 11.079321,
+    "max_q_pa": 0.958677,
+    "max_q_t_s": 95.0,
+    "deflection_margin_min": 1.0,
+    "command_peak_deg": 0.0,
+    "saturated_s": 0.0,
+    "deflection_lag_max_deg": 0.0
+   },
+   "upper.powered": {
+    "t0_s": 103.2,
+    "t1_s": 106.0,
+    "n_samples": 15.0,
+    "engine_s": 3.0,
+    "att_err_max_deg": 6.148102,
+    "att_err_rms_deg": 5.387308,
+    "alpha_max_deg": 15.364427,
+    "q_alpha_max_pa_deg": 0.109315,
+    "max_q_pa": 0.007115,
+    "max_q_t_s": 103.2,
+    "deflection_margin_min": 1.0,
+    "command_peak_deg": 0.0,
+    "saturated_s": 0.0,
+    "deflection_lag_max_deg": 0.0
+   },
+   "upper.coast_after_burnout": {
+    "t0_s": 106.2,
+    "t1_s": 260.0,
+    "n_samples": 770.0,
+    "engine_s": 0.0,
+    "att_err_max_deg": 92.221524,
+    "att_err_rms_deg": 55.15462,
+    "alpha_max_deg": 88.766114,
+    "q_alpha_max_pa_deg": 0.020947,
+    "max_q_pa": 0.001481,
+    "max_q_t_s": 106.2,
+    "deflection_margin_min": 1.0,
+    "command_peak_deg": 0.0,
+    "saturated_s": 0.0,
+    "deflection_lag_max_deg": 0.0
+   }
+  }
+ },
+ "bookkeeping": {
+  "jsbsim": {
+   "mass_before_kg": 13099.072283,
+   "mass_after_kg": 13099.072283,
+   "mass_residual_kg": -0.0,
+   "momentum_before_kg_m_s": [
+    35448105.351207,
+    -32532535.417332,
+    20577520.709905
+   ],
+   "momentum_residual_kg_m_s": 91.646733,
+   "dv_booster_m_s": 1.908532,
+   "dv_upper_m_s": 1.272355,
+   "sep_speed_m_s": 3994.895267,
+   "position_continuity_err_m": 0.0,
+   "attitude_continuity_err_rad": 2e-06,
+   "velocity_continuity_err_m_s": 0.006998
+  },
+  "native": {
+   "mass_before_kg": 13087.088864,
+   "mass_after_kg": 13087.088864,
+   "mass_residual_kg": 0.0,
+   "momentum_before_kg_m_s": [
+    35793432.808097,
+    -32561047.418455,
+    20034561.973948
+   ],
+   "momentum_residual_kg_m_s": 0.0,
+   "dv_booster_m_s": 1.91028,
+   "dv_upper_m_s": 1.27352,
+   "sep_speed_m_s": 4001.769452,
+   "position_continuity_err_m": 0.0,
+   "attitude_continuity_err_rad": 0.0,
+   "velocity_continuity_err_m_s": 0.0
+  },
+  "jsbsim_ignition_onset_err_s": 0.0,
+  "native_ignition_onset_err_s": 0.2,
+  "jsbsim_upper_burnout_t_s": 106.1,
+  "native_upper_burnout_t_s": 106.0
+ },
+ "comparison": {
+  "dynamics": [
+   {
+    "id": "stack.deflection_lag_jsbsim_deg",
+    "value": 0.075862,
+    "explanation": "max |cmd - actual| on the JSBSim gimbals during the powered phase: the production FCS servo (lag 5.0, rate 0.35 rad/s) against the native law-internal actuator (tau 0.10 s, rate 0.10 rad/s).  A delta of the actuator implementation (ADR flightlab-0007), not of the commanded loop."
+   },
+   {
+    "id": "stack.command_peak_rel",
+    "value": 0.550754,
+    "explanation": "peak TVC deflection each plant had to apply for the same program on the same airframe: different actuators, and JSBSim recomputes mass/CG/inertia per frame while the native tensor is constant."
+   },
+   {
+    "id": "booster.coast_att_drift_diff_deg",
+    "value": 0.294958,
+    "explanation": "the unactuated coast attitude drift differs on any two plants whose gravity, frame integration and CG/inertia history differ -- reported, not gated (E1-02 discipline)."
+   }
+  ],
+  "guidance": [
+   {
+    "id": "stack.att_err_max_pair_deg",
+    "value": [
+     0.435375,
+     4.263034
+    ],
+    "explanation": "the guidance channel *is* this pair: the FL-403 PID samples every plant frame with a live instrumented gain schedule; the F-04 tracker ticks at 0.05 s with a rated-thrust schedule.  Both are separately inside the declared 6 deg band."
+   },
+   {
+    "id": "stack.att_err_rms_pair_deg",
+    "value": [
+     0.219408,
+     2.565098
+    ],
+    "explanation": "same rationale as the peak."
+   }
+  ],
+  "integration": [
+   {
+    "id": "stack.separation_shift_dt_half",
+    "value": {
+     "jsbsim_alt_rel": 0.000578,
+     "jsbsim_speed_rel": 0.000397,
+     "native_alt_rel": 1e-06,
+     "native_speed_rel": 1e-06
+    },
+    "explanation": "the separation state's response to halving the step on each plant (E6-04's method, #276): what the numerics -- JSBSim's internal sequence vs the plant's fixed-step RK4 -- explain of the backend gap."
+   }
+  ],
+  "model": [
+   {
+    "id": "stack.max_q_pair_pa",
+    "value": [
+     71179.525026,
+     71353.154887
+    ],
+    "explanation": "max-Q is one airframe in two atmosphere models (US76 vs JSBSim's standard atmosphere) -- the disclosed model delta E1-04 already bounded."
+   },
+   {
+    "id": "stack.pad_thrust_ratio",
+    "value": 0.999997,
+    "explanation": "both engines debit ambient over the same 2 m^2 exit (E6-01, ADR flightlab-0009): the expected ratio is exactly 1; drift is the two atmosphere models and JSBSim's unit rounding."
+   },
+   {
+    "id": "stack.sep_state_pair",
+    "value": {
+     "jsbsim": {
+      "alt_m": 106970.292362,
+      "speed_m_s": 3994.895267,
+      "fpa_deg": 55.881663
+     },
+     "native": {
+      "alt_m": 106786.708219,
+      "speed_m_s": 4001.769452,
+      "fpa_deg": 55.471079
+     }
+    },
+    "explanation": "the separation state both paths handed to the split: everything left after the numerics and the laws -- the shared laws (engine, atmosphere, gravity) implemented twice, per the E6-01 classification."
+   }
+  ]
+ },
+ "checks": [
+  {
+   "id": "e602-stack.powered-att_err_max_deg",
+   "passed": true,
+   "value": 0.435375,
+   "limit": 6.0,
+   "unit": "deg",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-stack.powered-att_err_rms_deg",
+   "passed": true,
+   "value": 0.219408,
+   "limit": 3.5,
+   "unit": "deg",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-stack.powered-alpha_max_deg",
+   "passed": true,
+   "value": 11.671484,
+   "limit": 15.0,
+   "unit": "deg",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-stack.powered-q_alpha_max_pa_deg",
+   "passed": true,
+   "value": 391409.985966,
+   "limit": 500000.0,
+   "unit": "Pa.deg",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-stack.powered-max_q_pa",
+   "passed": true,
+   "value": 71353.154887,
+   "limit": 100000.0,
+   "unit": "Pa",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-stack.powered-deflection_margin_min",
+   "passed": true,
+   "value": 0.95998,
+   "limit": 0.85,
+   "unit": "fraction",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-stack.powered-saturated_s",
+   "passed": true,
+   "value": 0.0,
+   "limit": 0.0,
+   "unit": "s",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-booster.coast-q_alpha_max_pa_deg",
+   "passed": true,
+   "value": 15.71998,
+   "limit": 500000.0,
+   "unit": "Pa.deg",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-booster.coast-saturated_s",
+   "passed": true,
+   "value": 0.0,
+   "limit": 0.0,
+   "unit": "s",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-upper.coast_before_ignition-q_alpha_max_pa_deg",
+   "passed": true,
+   "value": 15.732071,
+   "limit": 500000.0,
+   "unit": "Pa.deg",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-upper.powered-alpha_max_deg",
+   "passed": true,
+   "value": 15.568352,
+   "limit": 25.0,
+   "unit": "deg",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-upper.powered-q_alpha_max_pa_deg",
+   "passed": true,
+   "value": 0.202124,
+   "limit": 500000.0,
+   "unit": "Pa.deg",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-upper.powered-deflection_margin_min",
+   "passed": true,
+   "value": 1.0,
+   "limit": 0.85,
+   "unit": "fraction",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-upper.powered-saturated_s",
+   "passed": true,
+   "value": 0.0,
+   "limit": 0.0,
+   "unit": "s",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-upper.coast_after_burnout-q_alpha_max_pa_deg",
+   "passed": true,
+   "value": 0.037876,
+   "limit": 500000.0,
+   "unit": "Pa.deg",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-mass-closure",
+   "passed": true,
+   "value": 0.0,
+   "limit": 0.013099,
+   "unit": "kg",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-momentum-residual",
+   "passed": true,
+   "value": 91.646733,
+   "limit": 261.647109,
+   "unit": "N.s",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-position-continuity",
+   "passed": true,
+   "value": 0.0,
+   "limit": 0.001,
+   "unit": "m",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-attitude-continuity",
+   "passed": true,
+   "value": 2e-06,
+   "limit": 1e-05,
+   "unit": "rad",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-velocity-continuity",
+   "passed": true,
+   "value": 0.006998,
+   "limit": 0.019974,
+   "unit": "m/s",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-ignition-onset-schedule",
+   "passed": true,
+   "value": 0.0,
+   "limit": 0.03,
+   "unit": "s",
+   "reason_code": ""
+  },
+  {
+   "id": "native-mass-closure",
+   "passed": true,
+   "value": 0.0,
+   "limit": 0.013087,
+   "unit": "kg",
+   "reason_code": ""
+  },
+  {
+   "id": "native-momentum-residual",
+   "passed": true,
+   "value": 0.0,
+   "limit": 261.857562,
+   "unit": "N.s",
+   "reason_code": ""
+  },
+  {
+   "id": "native-position-continuity",
+   "passed": true,
+   "value": 0.0,
+   "limit": 0.001,
+   "unit": "m",
+   "reason_code": ""
+  },
+  {
+   "id": "native-attitude-continuity",
+   "passed": true,
+   "value": 0.0,
+   "limit": 1e-05,
+   "unit": "rad",
+   "reason_code": ""
+  },
+  {
+   "id": "native-velocity-continuity",
+   "passed": true,
+   "value": 0.0,
+   "limit": 0.020009,
+   "unit": "m/s",
+   "reason_code": ""
+  },
+  {
+   "id": "native-ignition-onset-schedule",
+   "passed": true,
+   "value": 0.2,
+   "limit": 0.3,
+   "unit": "s",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-tvc-margin-agreement",
+   "passed": true,
+   "value": 0.026119,
+   "limit": 0.05,
+   "unit": "fraction",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-att-peak-agreement",
+   "passed": true,
+   "value": 3.827659,
+   "limit": 5.0,
+   "unit": "deg",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-att-rms-agreement",
+   "passed": true,
+   "value": 2.34569,
+   "limit": 3.0,
+   "unit": "deg",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-jsbsim-integration-stable",
+   "passed": true,
+   "value": 0.000578,
+   "limit": 0.02,
+   "unit": "fraction",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-native-grid-converged",
+   "passed": true,
+   "value": 1e-06,
+   "limit": 0.002,
+   "unit": "fraction",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-max-q-agreement",
+   "passed": true,
+   "value": 0.002433,
+   "limit": 0.05,
+   "unit": "fraction",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-pad-thrust-agreement",
+   "passed": true,
+   "value": 3e-06,
+   "limit": 0.005,
+   "unit": "fraction",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-sep-alt-agreement",
+   "passed": true,
+   "value": 0.001716,
+   "limit": 0.15,
+   "unit": "fraction",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-sep-speed-agreement",
+   "passed": true,
+   "value": 0.001718,
+   "limit": 0.1,
+   "unit": "fraction",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-sep-fpa-agreement",
+   "passed": true,
+   "value": 0.410583,
+   "limit": 3.0,
+   "unit": "deg",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-mass-agreement",
+   "passed": true,
+   "value": 11.983238,
+   "limit": 120.0,
+   "unit": "kg",
+   "reason_code": ""
+  }
+ ],
+ "failed_checks": []
+}
