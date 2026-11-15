@@ -240,6 +240,10 @@ def test_jsbsim_xmls_declare_what_the_parity_source_states():
     assert jb["isp_s"] == float(p.stage1_engine["isp_vacuum_s"])
     assert jb["propflowmax_kg_s"] == pytest.approx(
         float(p.jsbsim["propflowmax_kg_s"]), rel=1e-5)
+    assert jb["nozzle_exit_area_m2"] == pytest.approx(
+        float(p.jsbsim["nozzle_exit_area_m2"]), rel=1e-4)
+    assert jb["nozzle_exit_area_m2"] == pytest.approx(
+        float(p.stage1_engine["nozzle_exit_area_m2"]), rel=1e-4)
     assert jb["aero_declared"] is False
 
 
@@ -275,12 +279,31 @@ def test_f05_booster_and_parity_booster_are_the_same_vehicle():
 
 
 def test_thrust_band_is_the_documented_derived_value_gap():
+    """E6-01 (#273): propflowmax is DERIVED from the canonical pair (choked
+    flow), so the derived-vs-canonical gap is the XML's lb/s rounding, not the
+    ~0.15% E4 spike left behind."""
     p = load_parity_scenario()
     jb = jsbsim_declared_params()
     derived = jb["isp_s"] * float(p.jsbsim["g0_m_s2"]) * jb["propflowmax_kg_s"]
     rel = abs(derived - float(p.stage1_engine["thrust_vacuum_n"])) / derived
-    assert rel == pytest.approx(0.00153, abs=1e-4)   # the ~0.15% JSBSim gap
+    assert rel == pytest.approx(3.1e-8, abs=1e-8)   # lb/s rounding, nothing else
     assert rel <= p.thrust_rel_tol
+
+
+def test_pad_thrust_is_parity_checked_not_assumed():
+    """The shared exit area means the ambient debit, not just the vacuum
+    thrust, is a parity parameter: at ISA sea level both engines must report
+    thrust_vacuum_n - 2 m^2 * 101325 Pa = 1.6774 MN."""
+    p = load_parity_scenario()
+    jb = jsbsim_declared_params()
+    area = float(p.stage1_engine["nozzle_exit_area_m2"])
+    pad = float(p.stage1_engine["thrust_vacuum_n"]) - area * 101325.0
+    assert pad == pytest.approx(1.67735e6, rel=1e-5)
+    by_id = {c.id: c for c in check_parity(p)}
+    area_check = by_id["parity-jsbsim-nozzle-area-vs-source"]
+    pad_check = by_id["parity-engine-pad-thrust-vs-jsbsim"]
+    assert area_check.passed and pad_check.passed
+    assert pad_check.value <= pad_check.limit
 
 
 def test_run_result_schema_enum_matches_the_vocabulary():
