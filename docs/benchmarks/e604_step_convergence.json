@@ -1,0 +1,203 @@
+{
+ "meta": {
+  "task": "E6-04 numerical control audit (#276)",
+  "generated_utc": "2026-11-15T20:33:07+00:00",
+  "t_end_s": 12.0,
+  "runtime_s": 158.3,
+  "defaults": {
+   "dt_s": 0.02,
+   "dt_c_s": 0.02
+  },
+  "scenario": "single pitch-over ramp 90->60 deg over 12 s; the law is sampled once per integration step at the step boundary and held across the four RK4 stages (E6-04)"
+ },
+ "integration": {
+  "plant_truncation": {
+   "scenario": "open_loop_constant_command",
+   "reference": {
+    "dt_s": 0.0025
+   },
+   "rows": [
+    {
+     "dt_s": 0.04,
+     "dt_c_s": null,
+     "d_alt_m": -9.184703230857849e-06,
+     "d_tilt_deg": null,
+     "d_max_abs_err_pitch_rad": null,
+     "magnitude": 9.184703230857849e-06,
+     "order": null
+    },
+    {
+     "dt_s": 0.02,
+     "dt_c_s": null,
+     "d_alt_m": -5.718320608139038e-07,
+     "d_tilt_deg": null,
+     "d_max_abs_err_pitch_rad": null,
+     "magnitude": 5.718320608139038e-07,
+     "order": 4.00556969213094
+    },
+    {
+     "dt_s": 0.01,
+     "dt_c_s": null,
+     "d_alt_m": -2.514570951461792e-08,
+     "d_tilt_deg": null,
+     "d_max_abs_err_pitch_rad": null,
+     "magnitude": 2.514570951461792e-08,
+     "order": 4.507207343206711
+    },
+    {
+     "dt_s": 0.005,
+     "dt_c_s": null,
+     "d_alt_m": -4.6566128730773926e-09,
+     "d_tilt_deg": null,
+     "d_max_abs_err_pitch_rad": null,
+     "magnitude": 4.6566128730773926e-09,
+     "order": 2.4329594072761065
+    }
+   ],
+   "slew_limit_ticks_max": 0.0
+  },
+  "closed_loop": {
+   "scenario": "single_ramp_closed_loop",
+   "reference": {
+    "dt_s": 0.0025
+   },
+   "rows": [
+    {
+     "dt_s": 0.04,
+     "dt_c_s": 0.04,
+     "d_alt_m": 1.3969838619232178e-08,
+     "d_tilt_deg": -2.4086546090984484e-09,
+     "d_max_abs_err_pitch_rad": -6.711788069768687e-11,
+     "magnitude": 1.3969838619232178e-08,
+     "order": null
+    },
+    {
+     "dt_s": 0.02,
+     "dt_c_s": 0.04,
+     "d_alt_m": -1.3969838619232178e-08,
+     "d_tilt_deg": -1.369322433220077e-10,
+     "d_max_abs_err_pitch_rad": -3.799988101960139e-12,
+     "magnitude": 1.3969838619232178e-08,
+     "order": 0.0
+    },
+    {
+     "dt_s": 0.01,
+     "dt_c_s": 0.04,
+     "d_alt_m": 2.2351741790771484e-08,
+     "d_tilt_deg": -1.5084822280186927e-11,
+     "d_max_abs_err_pitch_rad": -3.7547048803432403e-13,
+     "magnitude": 2.2351741790771484e-08,
+     "order": -0.6780719051126377
+    },
+    {
+     "dt_s": 0.005,
+     "dt_c_s": 0.04,
+     "d_alt_m": 2.2351741790771484e-08,
+     "d_tilt_deg": 1.2434497875801753e-13,
+     "d_max_abs_err_pitch_rad": 1.2635725799015063e-14,
+     "magnitude": 2.2351741790771484e-08,
+     "order": 0.0
+    }
+   ],
+   "slew_limit_ticks_max": 0.0,
+   "vertical_max_magnitude": 4.377216100692749e-08
+  }
+ },
+ "control": {
+  "scenario": "single_ramp_closed_loop",
+  "fixed": {
+   "dt_s": 0.005
+  },
+  "reference": {
+   "dt_c_s": 0.0025
+  },
+  "rows": [
+   {
+    "dt_c_s": 0.16,
+    "dt_s": 0.005,
+    "d_alt_m": 0.09540663193911314,
+    "d_tilt_deg": 0.00882300190961871,
+    "d_max_abs_err_pitch_rad": 0.0002022188935110955,
+    "magnitude": 0.09540663193911314,
+    "order": null
+   },
+   {
+    "dt_c_s": 0.08,
+    "dt_s": 0.005,
+    "d_alt_m": 0.04376581031829119,
+    "d_tilt_deg": 0.003978065213033233,
+    "d_max_abs_err_pitch_rad": 8.524472862067589e-05,
+    "magnitude": 0.04376581031829119,
+    "order": 1.1242852728104722
+   },
+   {
+    "dt_c_s": 0.04,
+    "dt_s": 0.005,
+    "d_alt_m": 0.018895277753472328,
+    "d_tilt_deg": 0.001651871769720259,
+    "d_max_abs_err_pitch_rad": 3.081188456420525e-05,
+    "magnitude": 0.018895277753472328,
+    "order": 1.2117785561995096
+   },
+   {
+    "dt_c_s": 0.02,
+    "dt_s": 0.005,
+    "d_alt_m": 0.00676839891821146,
+    "d_tilt_deg": 0.0005219327037018218,
+    "d_max_abs_err_pitch_rad": 5.107526669857754e-06,
+    "magnitude": 0.00676839891821146,
+    "order": 1.481139219697585
+   },
+   {
+    "dt_c_s": 0.01,
+    "dt_s": 0.005,
+    "d_alt_m": 0.002255450002849102,
+    "d_tilt_deg": 0.00017422501834118975,
+    "d_max_abs_err_pitch_rad": 1.7542124988167984e-06,
+    "magnitude": 0.002255450002849102,
+    "order": 1.5853992952047893
+   }
+  ],
+  "slew_limit_ticks_max": 0.0
+ },
+ "alignment": {
+  "dt_c_s": 0.05,
+  "rows": [
+   {
+    "dt_s": 0.05,
+    "alt_m": 1031.2187179308385,
+    "tilt_deg": 31.96657317047418,
+    "max_abs_err_pitch_rad": 0.03880954204376571,
+    "n_ticks": 240
+   },
+   {
+    "dt_s": 0.025,
+    "alt_m": 1031.216863966547,
+    "tilt_deg": 31.966674523710395,
+    "max_abs_err_pitch_rad": 0.03880964159678362,
+    "n_ticks": 240
+   },
+   {
+    "dt_s": 0.02,
+    "alt_m": 1031.226258661598,
+    "tilt_deg": 31.967525791567105,
+    "max_abs_err_pitch_rad": 0.038829880795103154,
+    "n_ticks": 200
+   }
+  ]
+ },
+ "default_vs_fine": {
+  "d_alt_m": 0.007895838469266891,
+  "d_tilt_deg": 0.0006091390394615814,
+  "d_max_abs_err_pitch_rad": 5.98253994011505e-06
+ },
+ "tick_bookkeeping": {
+  "dt_s": 0.01,
+  "dt_c_s": 0.03,
+  "n_ticks": 400,
+  "tick_time_off_boundary_max_s": 2.1145751816220583e-13,
+  "tick_period_min_s": 0.02999999999999936,
+  "tick_period_max_s": 0.030000000000000027,
+  "tick_period_in_band": true
+ }
+}

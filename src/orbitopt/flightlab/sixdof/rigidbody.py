@@ -356,7 +356,10 @@ class ControlCommand:
 
 
 #: ``(t_s, state) -> ControlCommand``; the plant is open loop, guidance is the
-#: caller's job (F-06/F-07 close that loop).
+#: caller's job (F-06/F-07 close that loop). :func:`propagate` samples the law
+#: once per integration step at the step-boundary state and holds the command
+#: through the step's four RK4 stages (E6-04, task #276), so a stateful law
+#: sees one call per step boundary, never a mid-stage evaluation.
 ControlLaw = Callable[[float, RigidBodyState], ControlCommand]
 
 
@@ -552,8 +555,13 @@ def _state_from_y(y: np.ndarray, t_s: float = 0.0) -> RigidBodyState:
 
 
 def _deriv(t_s: float, y: np.ndarray, vehicle: RigidBodyVehicle, physics: RigidBodyPhysics,
-           control: ControlLaw, dry_mass_kg: float) -> np.ndarray:
-    """RHS of the 13-component ECEF rigid-body equations."""
+           cmd: "ControlCommand", dry_mass_kg: float) -> np.ndarray:
+    """RHS of the 13-component ECEF rigid-body equations, flown on the
+    *held* command (E6-04, task #276): :func:`propagate` samples the control
+    law once at the step boundary and passes the same command into every RK4
+    stage, so a stateful law never advances its tick, integrators or actuator
+    state at a mid-step stage estimate and the derivative sees one constant
+    command across the step it integrates."""
     r, v, q4, omega = y[0:3], y[3:6], y[6:10], y[10:13]
     mass = max(float(y[13]), dry_mass_kg)
     norm = float(np.linalg.norm(q4)) or 1.0
@@ -570,7 +578,6 @@ def _deriv(t_s: float, y: np.ndarray, vehicle: RigidBodyVehicle, physics: RigidB
             float(air["q_bar_pa"]), float(air["mach"]), float(air["alpha_deg"]),
             float(air["beta_deg"]), omega, float(air["speed_of_sound_m_s"]))
 
-    cmd = control(t_s, _state_from_y(y, t_s))
     throttle = vehicle.engine.throttle(cmd.throttle) if mass > dry_mass_kg else 0.0
     force_thrust, mdot, moment_thrust = vehicle.engine.force_body_n(
         throttle, cmd.gimbal_pitch_rad, cmd.gimbal_yaw_rad, p_pa)
@@ -707,10 +714,18 @@ def propagate(state0: RigidBodyState, vehicle: RigidBodyVehicle, control: Contro
 
     while t < float(t_end_s) - 1e-12:
         h = min(dt, float(t_end_s) - t)
-        k1 = _deriv(t, y, vehicle, physics, control, dry)
-        k2 = _deriv(t + 0.5 * h, y + 0.5 * h * k1, vehicle, physics, control, dry)
-        k3 = _deriv(t + 0.5 * h, y + 0.5 * h * k2, vehicle, physics, control, dry)
-        k4 = _deriv(t + h, y + h * k3, vehicle, physics, control, dry)
+        # E6-04 (task #276): the control law is sampled once per step at the
+        # step-boundary state and the command is HELD through all four RK4
+        # stages -- a zero-order hold is piecewise constant by definition, so
+        # evaluating a stateful law at the mid-stage times would advance its
+        # tick/actuator state at stage estimates and put the *next* interval's
+        # command into the current step's k4 (a first-order error that
+        # plateaus integration convergence at a fixed control tick).
+        cmd = control(t, _state_from_y(y, t))
+        k1 = _deriv(t, y, vehicle, physics, cmd, dry)
+        k2 = _deriv(t + 0.5 * h, y + 0.5 * h * k1, vehicle, physics, cmd, dry)
+        k3 = _deriv(t + 0.5 * h, y + 0.5 * h * k2, vehicle, physics, cmd, dry)
+        k4 = _deriv(t + h, y + h * k3, vehicle, physics, cmd, dry)
         y = y + (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
         y[6:10] = y[6:10] / float(np.linalg.norm(y[6:10]))
         y[13] = max(float(y[13]), dry)

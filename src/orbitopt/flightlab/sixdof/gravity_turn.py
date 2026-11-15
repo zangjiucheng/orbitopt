@@ -213,25 +213,27 @@ class PointMassRun:
 def _point_mass_deriv(t_s: float, y: np.ndarray, vehicle: RigidBodyVehicle,
                       physics: RigidBodyPhysics, program: WaypointAttitudeProgram,
                       throttle_command: float, use_aero: bool, dry: float,
-                      guidance=None) -> np.ndarray:
+                      guidance_cmd=None) -> np.ndarray:
     """RHS of the 7-component point-mass state ``(r, v, m)``: the plant's own
     gravity/J2/rotation and air model, thrust along the *program* axis with a
     zero gimbal deflection (kinematic attitude -- the OT ``free_flight:
     attitude_program`` assumption), aero as the same coefficient tables read
     at the velocity-vs-program angles, moment-free.
 
-    With ``guidance=`` (E1-03, task #252 -- any object with
-    ``command_from_state(t, r, v, m) -> (Tec2b, throttle)``, e.g.
-    :class:`orbitopt.flightlab.guidance.upper_stage.UpperStageGuidance`)
-    the attitude and the *commanded* throttle level come from the
-    state-feedback law instead of the open-loop program; the scenario
-    throttle scales the guidance level, so a guidance-driven coast leg
-    with ``throttle=0.0`` stays a coast."""
+    With ``guidance_cmd=`` (E1-03, task #252, E6-04 task #276) a HELD
+    ``(Tec2b, throttle)`` command from the state-feedback law: the
+    propagator samples the guidance once per step at the step boundary and
+    passes the same tuple into every stage, so a stateful guidance (its own
+    command slew limiter, task #244) never advances at a mid-stage time.
+    The attitude and the *commanded* throttle level then come from that
+    tuple instead of the open-loop program; the scenario throttle scales
+    the guidance level, so a guidance-driven coast leg with ``throttle=0.0``
+    stays a coast."""
     r, v = y[0:3], y[3:6]
     mass = max(float(y[6]), dry)
     lat_deg, lon_deg, _ = frames.ecef_to_geodetic(r)
-    if guidance is not None:
-        tec2b, guidance_level = guidance.command_from_state(t_s, r, v, mass)
+    if guidance_cmd is not None:
+        tec2b, guidance_level = guidance_cmd
         throttle_command = throttle_command * guidance_level
     else:
         tec2b = program.dcm_at(t_s, float(lat_deg), float(lon_deg))
@@ -372,14 +374,21 @@ def propagate_point_mass(state: RigidBodyState, vehicle: RigidBodyVehicle,
 
     while t < float(t_end_s) - 1e-12:
         h = min(dt, float(t_end_s) - t)
+        # E6-04 (task #276): a stateful guidance is sampled once per step at
+        # the step boundary and HELD through the step's four RK4 stages (the
+        # command slew limiter and cutoff latch must not advance at a
+        # mid-stage time; an open-loop program is a pure function of the
+        # stage state and stays stage-resolved).
+        gcmd = (guidance.command_from_state(t, y[0:3], y[3:6], float(y[6]))
+                if guidance is not None else None)
         k1 = _point_mass_deriv(t, y, vehicle, physics, program, throttle, use_aero,
-                               dry, guidance)
+                               dry, gcmd)
         k2 = _point_mass_deriv(t + 0.5 * h, y + 0.5 * h * k1, vehicle, physics, program,
-                               throttle, use_aero, dry, guidance)
+                               throttle, use_aero, dry, gcmd)
         k3 = _point_mass_deriv(t + 0.5 * h, y + 0.5 * h * k2, vehicle, physics, program,
-                               throttle, use_aero, dry, guidance)
+                               throttle, use_aero, dry, gcmd)
         k4 = _point_mass_deriv(t + h, y + h * k3, vehicle, physics, program,
-                               throttle, use_aero, dry, guidance)
+                               throttle, use_aero, dry, gcmd)
         y = y + (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
         y[6] = max(float(y[6]), dry)
         t += h

@@ -157,6 +157,16 @@ mass, 7 t propellant, 3° gimbal), not the original F-06 vehicle. Shared law
 does not mean identical commands along different states or general accuracy.
 Runs, handoffs, reports, scenes and residual-attribution data are exported.
 
+**E6-04:** the sampled-data TVC loop is audited against the RK4 plant: the
+control law and the stateful guidance are sampled once per integration step
+at the step boundary and held across the four stages, so no mid-stage
+estimate advances controller state. The audit removed a first-order
+integration plateau (1st-order plateau → 2.3e-8 m flat loop output) and a
+guidance slew-limiter corruption; the convergence curves and the
+`dt_s = dt_c_s = 0.02` default justification live in
+[ADR 0008](adr/flightlab-0008-sampled-data-control-and-rk4-plant.md) and
+[the recorded sweep](benchmarks/e604_step_convergence.json).
+
 ## Hard gates
 
 Orbit and touchdown checks apply the declared velocity, position, orbital,
