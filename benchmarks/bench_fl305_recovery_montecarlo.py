@@ -47,7 +47,10 @@ CONFIGS = {
     "before_fl304": {"initial_guess": FL304_PLAN_GUESS,
                      "max_fevals": MC_PLAN_OPTIONS["max_fevals"],
                      "landing": {"mode": "single"}, **FL305_OBJECTIVE},
-    "after_fl305": {**MC_PLAN_OPTIONS, **FL305_OBJECTIVE},
+    # E3-01 (task #258): the MC default now carries the declared actuator
+    # set; this historical column re-fly the FL-305-era default and pins it
+    # ("landing": {} = unlimited slew, TerminalGuidance defaults).
+    "after_fl305": {**MC_PLAN_OPTIONS, "landing": {}, **FL305_OBJECTIVE},
 }
 
 
