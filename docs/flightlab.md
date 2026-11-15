@@ -250,3 +250,16 @@ The [benchmark script](../benchmarks/bench_e3_03_robust_montecarlo.py) records
 all sample rows, failure classes and sensitivities. Statistics were recomputed
 from those rows in the current acceptance review; the 672 flights were not
 re-run.
+
+## Probability calibration of p_land (E7-02)
+
+The [calibration report](benchmarks/e7_02_probability_calibration.md) grades
+the joint-chance planner's per-sample `p_land` forecast against the E3-03
+pooled 168-sample record (seeds 1–4, no re-flying). Above the 0.8 floor the
+forecast is consistent (mean prediction inside the observed Wilson interval);
+below it, overconfident — the 0.5–0.8 bin predicts 0.656 and lands 0.076, the
+0–0.5 bin predicts 0.268 and lands 0/42 (ECE 0.313, MCE 0.581, Brier skill
+≈ 0 against climatology). Low-`p_land` samples must not be traded on their
+forecast; the constraint comparison at 0.8 is what the surrogate currently
+supports. Reliability diagram and per-bin Wilson intervals in the report;
+reading via `orbitopt.flightlab.recovery.calibration`.

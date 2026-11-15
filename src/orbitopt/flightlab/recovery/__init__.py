@@ -145,6 +145,13 @@ from orbitopt.flightlab.recovery.stats import (  # noqa: F401
     statistics_summary,
     success_rate_interval,
 )
+from orbitopt.flightlab.recovery.calibration import (  # noqa: F401
+    DEFAULT_CALIBRATION_BINS,
+    brier_score,
+    calibration_report,
+    pairs_from_records,
+    reliability_table,
+)
 from orbitopt.flightlab.recovery.uncertainty import (  # noqa: F401
     ComponentScale,
     SOURCE_ORDER,
