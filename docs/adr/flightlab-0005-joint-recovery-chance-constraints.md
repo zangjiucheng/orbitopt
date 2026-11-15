@@ -142,3 +142,30 @@ the `paired_rows` for per-sample tests; the paired-flip counts and the
 landed-conditional scatter, not the raw max radius, are the numbers to
 quote. If E3-03 confirms, R-01's soft terms become the fallback mode and
 `joint_chance` can become the default objective.
+
+## Amendment (E7-01, task #277): penalized optimization, enforced verdict
+
+The method adopted above is a **penalized optimization** — Nelder–Mead on a
+worst-violation exact penalty — not a constrained optimization, and the E3-02
+benchmark exposed the gap that left: 26 of 32 planned joints carried
+`joint_violation > 0` (p50 0.19, p90 1.03, max 2.8), ten of them with
+`p_land ≥ 0.8` yet still busting fuel/divert, while `ReturnPlan.feasible`
+said nothing about the joint constraints and reported them satisfied.
+
+E7-01 settles the naming question explicitly — the API and docs say
+*penalized optimization* (ADR text here, `chance.py` module docstring, the
+FL-302 planner docstring) — and closes the semantics:
+
+* `JointChanceSpec` carries a `violation_tolerance` (default 1e-6, a
+  numerical floor, not a trade knob) and `JointChanceSpec.satisfies(worst)`
+  defines satisfaction: `worst_violation <= violation_tolerance`.
+* FL-302's feasibility verdict now includes the joint constraint: an
+  accepted handoff whose worst normalized violation exceeds the tolerance
+  comes back `feasible=False` with reason code **`JOINT_CHANCE_VIOLATED`**
+  (failure class `planning_infeasible` in the R-06 classification), checked
+  after the hard corridor/propellant/entry limits, so the governing code
+  stays the physical one when both break.
+
+A `joint_violation > tolerance` plan can therefore never be marked as
+satisfying the chance constraint, at the planner verdict, the Monte Carlo
+reason histogram, or the failure-class breakdown.

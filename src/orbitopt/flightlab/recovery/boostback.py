@@ -53,7 +53,12 @@ worst-normalized-violation exact penalty instead of R-01's additive soft
 terms -- so the tail a weighted sum can trade away cannot be traded.
 ``joint_chance`` replaces the two R-01 soft terms, so the R-01 knobs must
 be pinned off alongside it; everything else (physics, checks, reason codes)
-is unchanged.
+is unchanged. E7-01 (task #277) closes the semantic gap this left: the
+search stays what it is -- a **penalized optimization** (exact-penalty
+method, no constrained solver) -- and the constraints are enforced as a
+verdict instead of implied by the penalty: a joint-mode plan whose worst
+normalized violation exceeds ``JointChanceSpec.violation_tolerance`` comes
+back ``feasible=False`` with ``JOINT_CHANCE_VIOLATED``.
 
 Feasibility language (acceptance criteria): a plan that cannot make the
 corridor comes back ``feasible=False`` with ``reason_codes[0]`` the governing
@@ -70,6 +75,14 @@ one, drawn from::
                                          proper g above the entry limit
     CORRIDOR_NOT_REACHED                 never crossed h0 after entry ignition
     CORRIDOR_MISSED                      crossed, outside the corridor
+    JOINT_CHANCE_VIOLATED                joint chance mode only (E7-01):
+                                         crossed within the hard limits but
+                                         the accepted handoff's worst
+                                         normalized joint violation exceeds
+                                         the spec's violation_tolerance --
+                                         the plan does not satisfy the
+                                         chance constraints it was planned
+                                         under
 
 The corridor is the *landing-burn initiation* corridor: FL-303 picks the
 plan up at ``ReturnPlan.landing_burn_initial_state`` (an ECEF ``BoosterState``
@@ -130,6 +143,7 @@ __all__ = [
     "INSUFFICIENT_PROPELLANT_BOOSTBACK",
     "INSUFFICIENT_PROPELLANT_ENTRY_BURN",
     "INSUFFICIENT_PROPELLANT_RESERVE",
+    "JOINT_CHANCE_VIOLATED",
     "BoostbackPlan",
     "CorridorReport",
     "EntryBurnPlan",
@@ -153,6 +167,10 @@ ENTRY_Q_LIMIT_EXCEEDED = "ENTRY_Q_LIMIT_EXCEEDED"
 ENTRY_G_LIMIT_EXCEEDED = "ENTRY_G_LIMIT_EXCEEDED"
 CORRIDOR_NOT_REACHED = "CORRIDOR_NOT_REACHED"
 CORRIDOR_MISSED = "CORRIDOR_MISSED"
+#: E7-01 (task #277): joint chance mode only -- the accepted handoff's worst
+#: normalized violation is above the spec's tolerance, so the plan is never
+#: reported as satisfying the chance constraints.
+JOINT_CHANCE_VIOLATED = "JOINT_CHANCE_VIOLATED"
 
 #: Fixed pitch-lead of the entry-burn thrust vector from pure retro-grade
 #: toward vertical-down [rad]: retro-grade brakes, lead verticalizes. An
@@ -732,7 +750,12 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     constraints replace the R-01 soft terms -- which must then be pinned off
     alongside it. Every rollout additionally reports the handoff's predicted
     landing probability and worst constraint violation on the corridor
-    report. All trajectories are flown by
+    report. E7-01 feasibility semantics: in joint mode the accepted plan is
+    graded against the spec -- a handoff whose worst normalized violation
+    exceeds ``JointChanceSpec.violation_tolerance`` comes back
+    ``feasible=False`` with reason code ``JOINT_CHANCE_VIOLATED``; the
+    search itself remains a penalized optimization (exact-penalty method on
+    Nelder-Mead), not a constrained solver. All trajectories are flown by
     ``orbitopt.flightlab.recovery.propagator.propagate`` -- the optimizer
     only ever sees full-physics rollouts, and the accepted solution is
     re-integrated at ``dt_final`` before it is reported (no kinematic
@@ -905,6 +928,14 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
             reasons.append(ENTRY_Q_LIMIT_EXCEEDED)
         if final.entry_g > g_lim:
             reasons.append(ENTRY_G_LIMIT_EXCEEDED)
+        # E7-01 (task #277): the joint chance verdict is a feasibility check,
+        # not just a penalty term -- a crossed handoff whose worst normalized
+        # violation exceeds the spec's tolerance does not satisfy the
+        # constraints and is never reported feasible.
+        if (chance is not None and final.crossed
+                and final.joint_violation is not None
+                and not chance.satisfies(final.joint_violation)):
+            reasons.append(JOINT_CHANCE_VIOLATED)
 
     report = CorridorReport(
         reached=final.crossed,
@@ -956,7 +987,9 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
             f"{chance.p_fuel_min:.2f} quantile of the dispersion loss, touchdown "
             f"{chance.scatter_quantile:.2f}-quantile radius <= "
             f"{chance.scatter_budget_m:.0f} m -> divert bar "
-            f"{chance.divert_budget_m():.0f} m), worst-violation exact penalty; "
+            f"{chance.divert_budget_m():.0f} m), worst-violation exact "
+            f"penalty (penalized optimization; feasibility tolerance "
+            f"{chance.violation_tolerance:g}); "
             "replaces the R-01 soft terms (DESIGN ASSUMPTIONs unless overridden)")
 
     return ReturnPlan(
