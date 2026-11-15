@@ -106,7 +106,7 @@ pitfalls and the [Mars plan](docs/mars_mission_plan.md) for model assumptions.
 - Mars targeters may fail to converge; the modeled mission ends at orbit
   insertion, not landing. Flight Lab uses simplified dynamics and public or
   illustrative vehicle data; its 6-DOF backend is opt-in and outside the
-  ascent optimizer. See [fidelity and limitations](docs/flightlab.md#fidelity-levels).
+  ascent optimizer. See [fidelity and limitations](docs/flightlab.md#backend-identities-and-fidelity-levels).
 
 ## License
 

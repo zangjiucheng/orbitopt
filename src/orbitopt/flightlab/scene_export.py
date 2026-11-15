@@ -645,6 +645,7 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
         # assessed", never "passed".
         "flightRun": {
             "runId": run.run_id,
+            **({"backend": run.backend} if run.backend else {}),
             "optimizerConverged": verification.optimizer_converged,
             "physicsVerified": verification.physics_verified,
             "missionConstraintsPassed": verification.mission_constraints_passed,

@@ -70,12 +70,13 @@ def bundle(tmp_path_factory, pair):
 def test_backend_names_are_case_insensitive_and_exhaustive():
     from orbitopt.flightlab.sixdof import mission_output as mo
 
-    assert mo.BACKENDS == ("3DOF", "6DOF")
-    assert mo.BACKEND_3DOF == "3DOF" and mo.BACKEND_6DOF == "6DOF"
+    assert mo.BACKENDS == ("native-pointmass", "native-rigidbody")
+    assert mo.BACKEND_3DOF == "native-pointmass"
+    assert mo.BACKEND_6DOF == "native-rigidbody"
 
 
 def test_unknown_backend_is_rejected_by_name():
-    with pytest.raises(ValueError, match="3DOF.*6DOF"):
+    with pytest.raises(ValueError, match="native-pointmass.*native-rigidbody"):
         run_mission(f07_scenario(**SHORT), backend="8DOF")
 
 
@@ -161,7 +162,8 @@ def test_scenes_load_as_scene_1_and_carry_the_run_verdicts(bundle):
         assert scene["schemaVersion"] == "1.0"
         assert [b["id"] for b in scene["bodies"]] == ["earth", "stack", "booster", "upper"]
         assert scene["flightRun"]["runId"].endswith(
-            {"3DOF": "3dof", "6DOF": "6dof"}[backend])
+            {"native-pointmass": "3dof", "native-rigidbody": "6dof"}[backend])
+        assert scene["flightRun"]["backend"] == backend
         stack_body = next(b for b in scene["bodies"] if b["id"] == "stack")
         assert any(i["label"] == "Frame" and "ECEF (converted to GCRS)" == i["value"]
                    for i in stack_body["info"])
@@ -185,7 +187,7 @@ def test_comparison_report_is_report_1_green_and_covers_all_bodies(bundle):
     validate_report(report)
     assert report["kind"] == "flightlab-comparison"
     assert report["status"]["result"] == "passed"
-    assert report["inputs"]["headline"] == "6dof_minus_3dof"
+    assert report["inputs"]["headline"] == "rigidbody_minus_pointmass"
     assert set(report["inputs"]["bodies"]) == {"stack", "booster", "upper"}
     for doc in report["inputs"]["bodies"].values():
         assert "error" not in doc
@@ -204,7 +206,7 @@ def test_comparison_checks_are_both_backends_own_checks(bundle):
 
 def test_comparison_orders_backends_correctly(pair):
     m3, m6 = pair["missions"][BACKEND_3DOF], pair["missions"][BACKEND_6DOF]
-    with pytest.raises(ValueError, match="3DOF.*6DOF|that order"):
+    with pytest.raises(ValueError, match="native-pointmass.*native-rigidbody|that order"):
         mission_comparison_report(m6, m3)
 
 
@@ -218,11 +220,11 @@ def test_cli_flight_mission_writes_bundle_and_exits_zero(tmp_path, monkeypatch, 
 
     monkeypatch.setattr(mo, "f07_scenario", lambda **kw: f07_scenario(**SHORT))
     with pytest.raises(SystemExit) as exit_info:
-        cli.main(["flight", "mission", "--backend", "6DOF", "-o", str(tmp_path)])
+        cli.main(["flight", "mission", "--backend", "6dof", "-o", str(tmp_path)])
     assert exit_info.value.code == 0
     out = capsys.readouterr().out
     assert "5/5 checks passed" in out
-    run_dir = tmp_path / "6DOF"
+    run_dir = tmp_path / "native-rigidbody"
     assert (run_dir / "manifest.json").is_file()
     assert (run_dir / "handoff.json").is_file()
     assert (run_dir / "scene.json").is_file()
@@ -251,15 +253,27 @@ def test_committed_benchmark_satisfies_the_regression_thresholds():
         assert all(doc["backends"][backend]["checks"].values())
         assert doc["backends"][backend]["handoff"]["frame"] == "ECEF"
     bodies = doc["comparison"]["bodies"]
-    # Regression thresholds (2026-11-13 study, see docs/flightlab.md F-07):
-    # the stack must separate within ~400 m of altitude between backends,
-    # the booster handoff corridor within ~3.5 km, the (unguided) upper
-    # stage is allowed to diverge hard -- its thrust direction is the 6-DOF
-    # story -- and mass must agree to well under a kilogram everywhere.
+    # Regression thresholds (2026-11-15 E1-03 study, see docs/flightlab.md
+    # F-07): with the SHARED upper-stage guidance (task #252) the 2026-11
+    # upper-stage divergence story became an agreement story -- the upper
+    # must now track to single-digit kilometres / tens of m/s (the residual
+    # is execution, not guidance). Stack/booster thresholds unchanged (the
+    # ascent is untouched); the upper mass threshold allows a couple of
+    # throttle steps of MECO-timing difference between the backends.
     assert bodies["stack"]["metrics"]["d_altitude_m_max_abs_m"] < 400.0
     assert bodies["booster"]["metrics"]["d_altitude_m_max_abs_m"] < 3500.0
-    assert bodies["upper"]["metrics"]["d_speed_m_s_max_abs_m_s"] > 100.0  # divergence is real
-    for body in ("stack", "booster", "upper"):
+    assert bodies["upper"]["metrics"]["d_altitude_m_max_abs_m"] < 5000.0
+    assert bodies["upper"]["metrics"]["d_speed_m_s_max_abs_m_s"] < 100.0
+    for body in ("stack", "booster"):
         assert bodies[body]["metrics"]["d_mass_kg_max_abs_kg"] < 2.0
         assert bodies[body]["run_3dof"]["terminal"] == "t_end"
         assert bodies[body]["run_6dof"]["terminal"] == "t_end"
+    assert bodies["upper"]["metrics"]["d_mass_kg_max_abs_kg"] < 50.0
+    assert bodies["upper"]["run_3dof"]["terminal"] == "t_end"
+    assert bodies["upper"]["run_6dof"]["terminal"] == "t_end"
+    # E1-03: both backends reached guided MECO and both terminal orbits are
+    # inside the declared insertion tolerances.
+    ins = doc["comparison"]["upper_insertion"]
+    assert "both backends reached guided MECO" in ins["note"]
+    for backend in BACKENDS:
+        assert ins[backend]["inserted"] is True

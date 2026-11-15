@@ -1,0 +1,115 @@
+# E1-01 (task #250): shared parameter source for the aligned 6-DOF test
+# scenario -- the F-02/F-04/F-06 "spike stage" booster.
+#
+# This file is the single source of truth for the masses, thrust, Isp and
+# inertias that the native rigid-body studies (native-rigidbody /
+# native-pointmass, via two_stage.f06_two_stage_scenario ->
+# orbitopt.flightlab.parity.native_stage_pair) and the JSBSim packaged
+# aircraft/engine XMLs (jsbsim, via
+# orbitopt.flightlab.parity.jsbsim_declared_params) are required to agree
+# on. orbitopt.flightlab.parity.check_parity() asserts that agreement from
+# this document against BOTH sides' actual artifacts, so a silent drift on
+# either side is a test failure, not a surprise.
+#
+# Deliberate, disclosed non-parity (fidelity boundaries, docs/flightlab.md):
+#   * JSBSim expresses stage-1 thrust through isp * g0 * propflowmax, so its
+#     vacuum thrust is a derived number; `thrust_rel_tol` records the
+#     accepted agreement band between the derived and the canonical figure.
+#   * The E4 jsbsim packaged vehicles (this `jsbsim` airframe and the
+#     staging stand-in) fly with identically ZERO aero; the native plant
+#     flies the packaged `spike_stage` coefficient file. Geometry/reference
+#     quantities are shared, drag/lift coefficients are NOT -- that gap IS
+#     the documented fidelity boundary of the zero-aero packaged vehicles.
+#   * E1-04 (#253) adds the jsbsim `production_aircraft`: the same airframe with
+#     the SAME coefficient document compiled into its XML. The coefficients
+#     are now shared; what stays disclosed is the promotion residual
+#     (stability-axis tables, bilinear Mach grids, AERORP at the dry CG),
+#     the engine's token nozzle exit area, and JSBSim's actuator dynamics --
+#     quantified in docs/adr/flightlab-0007.
+#   * The JSBSim `spike_upper` model is a FL-402 handoff stand-in (6 t dry,
+#     its own inertias), not this upper stage; no cross-check applies to it.
+#   * OpenTsiolkovsky flies its own synthetic_two_stage vehicle (a 380 t
+#     demonstrator); the two-stage-leo scenario is not parameter-aligned.
+name: spike-stage-parity
+description: >-
+  Mass/thrust/Isp/inertia/aero-reference parity of the packaged spike-stage
+  booster across the jsbsim XML models and the native rigid-body plant
+  (and, through the shared StagePair, the native point-mass twin).
+
+# --- native-rigidbody / native-pointmass: the StagePair -------------------
+# Values are consumed verbatim by orbitopt.flightlab.parity.native_stage_pair
+# and therefore by f06_two_stage_scenario()/f07_scenario().
+stack:
+  name: f06_stack
+  dry_mass_kg: 18000.0
+  propellant_mass_kg: 60000.0
+  inertia_kg_m2: [1.0e5, 4.0e6, 4.0e6]
+  engine: stage1
+booster:
+  name: booster
+  dry_mass_kg: 10000.0
+  propellant_mass_kg: 60000.0
+  inertia_kg_m2: [3.4e4, 1.7e6, 1.7e6]
+  engine: stage1
+upper:
+  name: upper_stage
+  dry_mass_kg: 2000.0
+  propellant_mass_kg: 6000.0
+  inertia_kg_m2: [5.0e3, 2.0e5, 2.0e5]
+  engine: stage2
+separation_impulse_ns: 25000.0
+stage1_engine:
+  thrust_vacuum_n: 1880000.0
+  isp_vacuum_s: 320.0
+  isp_sea_level_s: 282.0
+  nozzle_exit_area_m2: 2.0
+  throttle_min: 0.4        # native TVC policy; JSBSim minthrottle is 0.0 --
+                           # a control-law difference, disclosed, not checked
+  throttle_max: 1.0
+  mount_x_cg_m: 22.0       # XML: thruster at 42 m aft of nose, dry CG at 20 m
+  gimbal_limit_rad: 0.0873
+stage2_engine:
+  thrust_vacuum_n: 220000.0
+  isp_vacuum_s: 340.0
+  isp_sea_level_s: 300.0
+  nozzle_exit_area_m2: 0.35
+  throttle_min: 0.3
+  throttle_max: 1.0
+  mount_x_cg_m: 6.0
+
+# --- jsbsim: the packaged spike aircraft ----------------------------------
+# The parity keys the checker reads OUT OF the XMLs (authoritative source:
+# the XMLs themselves; these figures state the expectation the checker
+# enforces, so a one-sided XML edit breaks the test).
+jsbsim_aircraft: spike_stage
+jsbsim_engine: spike_engine
+jsbsim:
+  empty_mass_kg: 10000.0
+  propellant_mass_kg: 60000.0
+  inertia_kg_m2: [3.4e4, 1.7e6, 1.7e6]
+  cg_x_m: 20.0
+  thruster_x_m: 42.0
+  isp_s: 320.0
+  propflowmax_kg_s: 600.0            # 1322.7736 LBS/SEC, the XML's own figure
+  g0_m_s2: 9.80665
+  aero_zero: true                    # <aero> is identically zero by design
+  # E1-04 (#253): the production airframe -- this one with the `aero_model`
+  # below compiled into it by orbitopt.flightlab.sixdof.jsbsim_aero. It must
+  # inherit every parameter above (parity-jsbsim-production-inherited) and
+  # carry the aero document's reference geometry.
+  production_aircraft: spike_stage_aero
+  # JSBSim vacuum thrust is derived: isp * g0 * propflowmax = 1882876.8 N.
+  # The canonical stage-1 thrust is 1.88 MN; both sides must agree within
+  # this relative band (actual gap ~0.15%).
+  thrust_rel_tol: 2.0e-3
+
+# --- aero: shared geometry, disclosed coefficient divergence --------------
+aero_model: spike_stage              # data/flightlab/aero/spike_stage.yaml
+aero_reference:
+  diameter_m: 3.7
+  span_m: 3.7
+  length_m: 45.0
+  # The zero-aero vehicles' wingarea is a placeholder; the native side uses
+  # the body planform pi*d^2/4 = 10.7521 m^2. The production aircraft's
+  # metrics are generated from these figures (wingarea/chord = area/length),
+  # so geometry parity is enforced on all three vehicles.
