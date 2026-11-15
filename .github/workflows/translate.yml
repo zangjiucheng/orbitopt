@@ -8,6 +8,7 @@ on:
       - docs/**/*.md
       - scripts/translate_docs.py
       - scripts/install_argos_model.py
+      - scripts/publish_translation_draft.py
       - requirements-translation.txt
       - .github/workflows/translate.yml
   workflow_dispatch:
@@ -37,7 +38,6 @@ jobs:
       OMP_NUM_THREADS: '2'
     permissions:
       contents: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -58,23 +58,38 @@ jobs:
           python -m pip install -r requirements-translation.txt
           python scripts/install_argos_model.py
       - name: Translate changed English documents and validate structure
+        id: translate
         env:
           FORCE: ${{ inputs.force || false }}
         run: |
           args=()
           if [ "$FORCE" = true ]; then args+=(--force); fi
           python scripts/translate_docs.py "${args[@]}"
-      - name: Create or update the translation review PR
-        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
+      - name: Upload Chinese review drafts
+        id: drafts
+        uses: actions/upload-artifact@v4
         with:
-          branch: automation/translate-zh
-          add-paths: translations/zh/
-          commit-message: 'docs: update Simplified Chinese translations'
-          title: 'docs: update Simplified Chinese translations'
-          body: |
-            Generated from the English README and Markdown documentation using offline Argos Translate.
-            Code, links, HTML/Liquid and frontmatter were checked before writing.
-            Review technical terminology and numerical claims before merging.
-            See translations/zh/review.json for paragraphs retained in English after placeholder checks failed.
-            English remains authoritative. These review copies are browsable on GitHub.
-          delete-branch: true
+          name: chinese-documentation-drafts
+          path: translations/zh/
+          include-hidden-files: true
+          retention-days: 14
+      - name: Publish the translation review branch
+        id: publish
+        run: python scripts/publish_translation_draft.py
+      - name: Link translation review outputs
+        env:
+          REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
+          ARTIFACT_URL: ${{ steps.drafts.outputs.artifact-url }}
+          HAS_CHANGES: ${{ steps.publish.outputs.has_changes }}
+        run: |
+          {
+            echo '## Chinese translation drafts'
+            printf 'Download: [Chinese review copies](%s)\n\n' "$ARTIFACT_URL"
+            if [ "$HAS_CHANGES" = true ]; then
+              printf 'Browse: [draft branch](%s/tree/automation/translate-zh/translations/zh)\n\n' "$REPOSITORY_URL"
+              printf 'Review: [create a pull request](%s/compare/main...automation/translate-zh?expand=1)\n\n' "$REPOSITORY_URL"
+            else
+              echo 'No translation changes need review.'
+            fi
+            echo 'English remains authoritative. Review terminology, numbers and review.json before merging.'
+          } >> "$GITHUB_STEP_SUMMARY"

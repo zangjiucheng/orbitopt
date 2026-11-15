@@ -7,13 +7,18 @@ to create Simplified Chinese review copies under `translations/zh/`.
 No translation API key or paid translation service is required. The first run
 downloads the English-to-Chinese model; translation then runs locally.
 
-Enable **Allow GitHub Actions to create and approve pull requests** under
-**Settings → Actions → General**. Run **Translate documentation** manually for
-the initial batch; later English Markdown changes trigger it automatically.
-The workflow updates one review PR. Review orbital terminology, units and
-numerical claims before merging. Copies are readable on GitHub; generated
-Python API pages and landing-page HTML are outside this Markdown pipeline.
-The published Jekyll site uses the English sources.
+Run **Translate documentation** manually for the initial batch; later English
+Markdown changes trigger it automatically. Each successful run uploads a
+`chinese-documentation-drafts` artifact and updates
+[`automation/translate-zh`](https://github.com/zangjiucheng/orbitopt/tree/automation/translate-zh/translations/zh).
+Its job summary links the download, draft branch and PR creation page. Create
+the review PR from that link when ready; the workflow needs only repository
+contents-write permission and never creates, approves or merges a PR.
+
+Review terminology, units, numerical claims and `zh/review.json` before
+merging. Drafts are readable on GitHub; the published Jekyll site remains
+English. Generated Python API pages and landing-page HTML are outside this
+Markdown pipeline.
 
 Preview pending work without installing the engine:
 
@@ -47,6 +52,4 @@ Unchanged documents retain reviewed translations. Changed documents are
 translated again in full, replacing that document's earlier edits. Merging
 the review PR persists new hashes; unmerged runs may repeat the same work.
 Deleted sources remove their generated copies. The manual **force** option
-retranslates everything. The workflow does not merge its own PR; inspect its
-diff before merging because GitHub may suppress workflows triggered by PRs
-opened using `GITHUB_TOKEN`.
+retranslates everything. The workflow does not merge drafts; inspect the review diff before merging.

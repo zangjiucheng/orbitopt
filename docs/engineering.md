@@ -12,3 +12,18 @@ description: Implementation notes, numerical benchmarks and regression tests.
 - [CUDA kernel benchmark](benchmarks/fused_kernel_evaluation.md): measurements and backend decisions.
 - [GPU regression testing](gpu-regression/README.md): procedure and recorded runs.
 - [E1–E4 acceptance review](acceptance-e1-e4.md): tested revision, resolved findings and evidence limits.
+
+## Workflow triggers
+
+| Change | Automatic workflows |
+|---|---|
+| English Markdown in `docs/` | Pages build and translation drafts. |
+| README | Translation drafts. |
+| `translations/` drafts | No compute tests or repeat translation. |
+| Runtime code, tests or compute configuration | CPU CI; GPU CI still requires its PR label or a manual run. |
+
+CI skips documentation-only pushes and PRs. Benchmark JSON under
+`docs/benchmarks/` remains tested because some suites read it as regression
+input. Pages also rebuilds when its source/API inputs change; translation
+reruns when its scripts, model requirements or workflow change. Manual runs
+remain available regardless of changed paths.

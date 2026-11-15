@@ -3,8 +3,24 @@ name: CI
 on:
   push:
     branches: [main]
+    # Prose/site/translation changes do not need the scientific test stack.
+    # These benchmark JSON files are also regression inputs, so keep testing them.
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!translations/**'
+      - '!**/*.md'
+      - 'docs/benchmarks/**/*.json'
   pull_request:
     branches: [main]
+    # Prose/site/translation changes do not need the scientific test stack.
+    # These benchmark JSON files are also regression inputs, so keep testing them.
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!translations/**'
+      - '!**/*.md'
+      - 'docs/benchmarks/**/*.json'
   workflow_dispatch:
 
 jobs:
