@@ -43,7 +43,7 @@
       "type": "object",
       "required": ["mission", "launch"],
       "additionalProperties": false,
-      "description": "The frozen scenario: what to fly (launch), how to fly it (ascent), the handoff gates (handoff), the propagation plan (propagation), the expected results with their tolerances (expected), and -- optionally -- the first-stage recovery stage (recovery, E2-01).",
+      "description": "The frozen scenario: what to fly (launch), how to fly it (ascent), the handoff gates (handoff), the propagation plan (propagation), the expected results with their tolerances (expected), -- optionally -- the first-stage recovery stage (recovery, E2-01) and the full-mission declaration (full_mission, E8-03).",
       "properties": {
         "mission": {
           "type": "object",
@@ -184,6 +184,11 @@
             "plan_options": { "type": "object" },
             "landing_sites": { "type": "object" }
           }
+        },
+        "full_mission": {
+          "type": "boolean",
+          "default": false,
+          "description": "Declare the run the complete physical mission (E8-03, task #283). Every required physical phase (orbit injection, parking-orbit propagation, recovery touchdown) is then forced into the full-mission gate: an out-of-scope declaration of a required phase (e.g. `expected.propagation_result: not_checked`) is refused rather than honoured, an ungraded required phase caps the verdict at not_checked, and the report's overall description may claim independent verification only with complete required-phase coverage and passing validation-grade independent evidence (`inputs.full_mission.coverage` / `inputs.full_mission.qualification`)."
         }
       }
     },
