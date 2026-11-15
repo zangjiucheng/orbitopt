@@ -139,9 +139,28 @@ orbitopt flight mission --backend BOTH -o runs/f07-mission
 ```
 
 Outputs include FlightResult runs, handoffs, verification reports, scenes and
-a comparison report. In the [recorded comparison](benchmarks/fl607_mission_outputs.json),
-the upper stages differed by 235 km at the end: the 6-DOF upper stage was
-inertially pointed, while the 3-DOF model followed its prescribed program.
+a comparison report. In the originally recorded comparison (2026-11, task
+#232) the upper stages differed by 235 km at the end: the 6-DOF upper stage
+was inertially pointed, while the 3-DOF model followed its prescribed
+program -- a guidance delta, not a dynamics one. E1-03 (task #252) closed
+that gap with one **shared upper-stage guidance law**
+(`orbitopt.flightlab.guidance.upper_stage`): a PEG-class
+velocity-to-be-gained steering (`Λ = V_c·v̂_t − v_inertial`, gravity feed
+optional and off by default) with an osculating-periapsis cutoff latch, a
+velocity-frame AoA/sideslip command clamp (30°/3°) and a 3°/s command slew
+limiter, flown by both backends from one frozen spec object. The guided F-07
+is a disclosed non-parity variant (upper gimbal unlocked to 3°, upper split
+1 t dry / 7 t propellant so the stage reaches the target; the F-06 parity
+pair cannot); stage-1 ascent, separation and booster handling are
+untouched. In the [recorded comparison](benchmarks/fl607_mission_outputs.json)
+both backends now reach guided MECO at the same instant and insert inside
+the declared ±25 km parking-orbit tolerance (3DOF 226.1/231.5 km, 6DOF
+221.5/228.6 km peri/apo), and the terminal upper-stage difference shrank
+from −234.8 km to −1.65 km altitude and −0.05 m/s speed. The residual is
+classified in the benchmark's `residual_attribution` block: guidance 0 m
+(one law, by construction), integration −40 m (3-DOF at `dt/2`), actuator
++150 m (6-DOF through a near-ideal servo), and the −1758 m remainder is
+dynamics/model (rigid-body attitude realisation vs the point-mass assumption).
 These figures are scenario results, not general accuracy bounds.
 
 ## Hard gates

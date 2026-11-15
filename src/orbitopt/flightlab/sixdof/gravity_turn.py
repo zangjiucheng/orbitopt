@@ -187,16 +187,29 @@ class PointMassRun:
 
 def _point_mass_deriv(t_s: float, y: np.ndarray, vehicle: RigidBodyVehicle,
                       physics: RigidBodyPhysics, program: WaypointAttitudeProgram,
-                      throttle_command: float, use_aero: bool, dry: float) -> np.ndarray:
+                      throttle_command: float, use_aero: bool, dry: float,
+                      guidance=None) -> np.ndarray:
     """RHS of the 7-component point-mass state ``(r, v, m)``: the plant's own
     gravity/J2/rotation and air model, thrust along the *program* axis with a
     zero gimbal deflection (kinematic attitude -- the OT ``free_flight:
     attitude_program`` assumption), aero as the same coefficient tables read
-    at the velocity-vs-program angles, moment-free."""
+    at the velocity-vs-program angles, moment-free.
+
+    With ``guidance=`` (E1-03, task #252 -- any object with
+    ``command_from_state(t, r, v, m) -> (Tec2b, throttle)``, e.g.
+    :class:`orbitopt.flightlab.guidance.upper_stage.UpperStageGuidance`)
+    the attitude and the *commanded* throttle level come from the
+    state-feedback law instead of the open-loop program; the scenario
+    throttle scales the guidance level, so a guidance-driven coast leg
+    with ``throttle=0.0`` stays a coast."""
     r, v = y[0:3], y[3:6]
     mass = max(float(y[6]), dry)
     lat_deg, lon_deg, _ = frames.ecef_to_geodetic(r)
-    tec2b = program.dcm_at(t_s, float(lat_deg), float(lon_deg))
+    if guidance is not None:
+        tec2b, guidance_level = guidance.command_from_state(t_s, r, v, mass)
+        throttle_command = throttle_command * guidance_level
+    else:
+        tec2b = program.dcm_at(t_s, float(lat_deg), float(lon_deg))
     air = _air_state(r, v, tec2b, physics)
     rho = float(air["density_kg_m3"])
     p_pa = float(air["pressure_pa"])
@@ -237,10 +250,16 @@ def _speed_fpa_deg(r: np.ndarray, v: np.ndarray) -> tuple[float, float]:
 
 def _point_mass_sample(t_s: float, y: np.ndarray, vehicle: RigidBodyVehicle,
                        physics: RigidBodyPhysics, program: WaypointAttitudeProgram,
-                       throttle_command: float, use_aero: bool, dry: float) -> dict[str, float]:
+                       throttle_command: float, use_aero: bool, dry: float,
+                       guidance=None) -> dict[str, float]:
     r, v = y[0:3], y[3:6]
     lat_deg, lon_deg, _ = frames.ecef_to_geodetic(r)
-    tec2b = program.dcm_at(t_s, float(lat_deg), float(lon_deg))
+    mass = max(float(y[6]), dry)
+    if guidance is not None:
+        tec2b, guidance_level = guidance.command_from_state(t_s, r, v, mass)
+        throttle_command = throttle_command * guidance_level
+    else:
+        tec2b = program.dcm_at(t_s, float(lat_deg), float(lon_deg))
     air = _air_state(r, v, tec2b, physics)
     rho = float(air["density_kg_m3"])
     if not use_aero or vehicle.aero is None or rho <= 0.0 or float(air["q_bar_pa"]) <= 0.0:
@@ -274,17 +293,23 @@ def propagate_point_mass(state: RigidBodyState, vehicle: RigidBodyVehicle,
                          *, dt_s: float = 0.02, sample_every: int = 1,
                          physics: RigidBodyPhysics | None = None,
                          throttle: float = 1.0, use_aero: bool = True,
-                         epoch_utc: datetime | None = None) -> PointMassRun:
+                         epoch_utc: datetime | None = None,
+                         guidance=None) -> PointMassRun:
     """Fly the point-mass reference for ``t_end_s`` on the same core the
     6-DOF plant uses: fixed-step RK4 in ECEF, the same gravity/J2/rotation,
     the same atmosphere, the same engine law, the propellant floored at dry
     mass and a ground stop with interpolated crossing.
 
-    Attitude is *kinematic*: ``Tec2b`` comes straight from ``program`` at the
-    live site, so the trajectory never sees quaternion states or body rates,
-    the gimbal is always zero, and aerodynamics act as forces only. This is
-    the 3-DOF side of the F-05 comparison (module docstring for why a native
-    reference, not the pinned OT binary)."""
+    Attitude is *kinematic*: ``Tec2b`` comes straight from ``program`` at
+    the live site, so the trajectory never sees quaternion states or body
+    rates, the gimbal is always zero, and aerodynamics act as forces only.
+    This is the 3-DOF side of the F-05 comparison (module docstring for
+    why a native reference, not the pinned OT binary).
+
+    With ``guidance=`` (E1-03, task #252) the attitude and commanded
+    throttle level come from the state-feedback law instead of the
+    program -- the F-07 upper stage flies the SAME guidance object on both
+    backends; see :mod:`orbitopt.flightlab.guidance.upper_stage`."""
     if dt_s <= 0.0:
         raise ValueError(f"dt_s must be positive, got {dt_s}")
     if int(sample_every) < 1:
@@ -304,7 +329,8 @@ def propagate_point_mass(state: RigidBodyState, vehicle: RigidBodyVehicle,
     samples: dict[str, list[float]] = {column: [] for column in RUN_COLUMNS_3DOF}
 
     def append(t_s: float, yy: np.ndarray) -> None:
-        row = _point_mass_sample(t_s, yy, vehicle, physics, program, throttle, use_aero, dry)
+        row = _point_mass_sample(t_s, yy, vehicle, physics, program, throttle,
+                                 use_aero, dry, guidance)
         for column in RUN_COLUMNS_3DOF:
             samples[column].append(row[column])
 
@@ -321,13 +347,14 @@ def propagate_point_mass(state: RigidBodyState, vehicle: RigidBodyVehicle,
 
     while t < float(t_end_s) - 1e-12:
         h = min(dt, float(t_end_s) - t)
-        k1 = _point_mass_deriv(t, y, vehicle, physics, program, throttle, use_aero, dry)
+        k1 = _point_mass_deriv(t, y, vehicle, physics, program, throttle, use_aero,
+                               dry, guidance)
         k2 = _point_mass_deriv(t + 0.5 * h, y + 0.5 * h * k1, vehicle, physics, program,
-                               throttle, use_aero, dry)
+                               throttle, use_aero, dry, guidance)
         k3 = _point_mass_deriv(t + 0.5 * h, y + 0.5 * h * k2, vehicle, physics, program,
-                               throttle, use_aero, dry)
+                               throttle, use_aero, dry, guidance)
         k4 = _point_mass_deriv(t + h, y + h * k3, vehicle, physics, program,
-                               throttle, use_aero, dry)
+                               throttle, use_aero, dry, guidance)
         y = y + (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
         y[6] = max(float(y[6]), dry)
         t += h
