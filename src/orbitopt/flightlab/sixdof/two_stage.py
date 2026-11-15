@@ -67,6 +67,10 @@ import numpy as np
 
 from orbitopt.flightlab.backends import BACKEND_NATIVE_RIGIDBODY
 from orbitopt.flightlab.contract import Check, Event, FlightRun, Verification
+from orbitopt.flightlab.guidance.upper_stage import (
+    GuidedUpperStageControl,
+    UpperStageGuidanceSpec,
+)
 from orbitopt.flightlab.parity import load_parity_scenario, native_stage_pair
 from orbitopt.flightlab.handoff import (
     PHASE_BOOSTBACK,
@@ -99,6 +103,7 @@ __all__ = [
     "TwoStageStudy",
     "delayed_ignition_control",
     "f06_two_stage_scenario",
+    "guided_upper_stage_pair",
     "run_two_stage",
     "split_stack_state",
     "to_flight_run",
@@ -316,6 +321,17 @@ class TwoStageScenario:
     gains: TvcGains = field(default_factory=TvcGains)
     physics: RigidBodyPhysics = field(default_factory=RigidBodyPhysics)
     assumptions: tuple[str, ...] = ()
+    #: E1-03 (task #252): the upper stage's state-feedback guidance. When
+    #: set, BOTH backends fly it -- the point-mass twin through
+    #: ``propagate_point_mass(guidance=...)``, the rigid body through
+    #: :class:`GuidedUpperStageControl` around the F-04 tracker -- instead
+    #: of the open-loop program attitude / neutral gimbal. ``None`` keeps
+    #: the F-06 open-loop upper stage.
+    upper_guidance: UpperStageGuidanceSpec | None = None
+    #: The actuator :attr:`upper_guidance` steers with (default: the
+    #: standard servo at the upper engine's own travel limit; the
+    #: benchmark's ideal-actuator attribution rung sets it explicitly).
+    upper_actuator: TvcActuator | None = None
 
     def __post_init__(self) -> None:
         if not 0.0 < self.separation_t_s < float(self.t_end_s):
@@ -329,6 +345,10 @@ class TwoStageScenario:
                              f"run ends at t_end_s={self.t_end_s} s")
         if self.dt_s <= 0.0 or int(self.sample_every) < 1:
             raise ValueError("dt_s must be positive and sample_every >= 1")
+        if self.upper_guidance is not None and (abs(self.upper_guidance.ignition_t_s
+                                                    - self.ignition.ignition_t_s) > 1e-9):
+            raise ValueError("the guidance's ignition gate must be the scenario's "
+                             "scheduled ignition instant")
 
     def real_actuator(self) -> TvcActuator:
         """F-04's default hydraulic axis at the stack engine's travel limit
@@ -385,6 +405,43 @@ def f06_two_stage_scenario(*, separation_t_s: float = 95.0, ignition_delay_s: fl
              "property-injection round-trip is not in this path."),
         ),
     )
+
+
+def guided_upper_stage_pair(pair: StagePair, *, upper_dry_mass_kg: float,
+                            upper_propellant_mass_kg: float,
+                            gimbal_limit_rad: float) -> StagePair:
+    """Mass- and actuator-consistent variant of ``pair`` with a
+    TVC-capable, larger-tank upper stage (E1-03, task #252).
+
+    The frozen parity pair flies an upper stage with a fixed engine
+    (gimbal travel 0 -- the tracker would command what the plant clamps
+    back to zero) and a 6 t tank whose ideal delta-v cannot reach any
+    parking orbit. State-feedback guidance needs both an actuator and
+    enough propellant to insert, so the guided F-07 mission flies this
+    variant instead: stage 1, the split bookkeeping and the booster
+    handoff are untouched, the upper engine and inertia are untouched,
+    and the E1-01 parity document is untouched -- this is a scenario
+    variant built *beside* the parity source, and the resulting pair
+    still satisfies the invariants :meth:`StagePair.__post_init__`
+    enforces (stage-1 propellant unchanged; the upper stage, structure
+    *and* tank, is inert ballast inside the stack's dry floor). The F-07
+    default keeps the upper stage's *wet* mass at the parity value (more
+    propellant, less structure), so the stack's liftoff state and the
+    whole stage-1 ascent up to separation stay bit-identical and only the
+    upper stage's own flight changes.
+    """
+    if gimbal_limit_rad <= 0.0:
+        raise ValueError(f"gimbal_limit_rad must be positive, got {gimbal_limit_rad}")
+    if upper_dry_mass_kg <= 0.0 or upper_propellant_mass_kg <= 0.0:
+        raise ValueError("the upper stage masses must be positive")
+    upper = replace(pair.upper,
+                    dry_mass_kg=float(upper_dry_mass_kg),
+                    propellant_mass_kg=float(upper_propellant_mass_kg),
+                    engine=replace(pair.upper.engine,
+                                   gimbal_limit_rad=float(gimbal_limit_rad)))
+    stack = replace(pair.stack,
+                    dry_mass_kg=pair.booster.dry_mass_kg + upper.mass_wet_kg)
+    return replace(pair, stack=stack, upper=upper)
 
 
 # --------------------------------------------------------------------------
@@ -549,7 +606,16 @@ def run_two_stage(scenario: TwoStageScenario | None = None, *,
     booster_run = propagate(booster_s, booster_v, constant_control(0.0), s.t_end_s,
                             dt_s=s.dt_s, sample_every=s.sample_every,
                             physics=s.physics, epoch_utc=epoch)
-    upper_run = propagate(upper_s, upper_v, delayed_ignition_control(s.ignition),
+    # E1-03 (task #252): with a guidance spec the upper stage closes its own
+    # loop (the same law the point-mass twin flies); without one it stays
+    # the F-06 open-loop delayed ignition.
+    if s.upper_guidance is not None:
+        upper_law = GuidedUpperStageControl(s.upper_guidance, upper_v,
+                                           actuator=s.upper_actuator,
+                                           gains=s.gains, dt_c_s=s.dt_c_s)
+    else:
+        upper_law = delayed_ignition_control(s.ignition)
+    upper_run = propagate(upper_s, upper_v, upper_law,
                           s.t_end_s, dt_s=s.dt_s, sample_every=s.sample_every,
                           physics=s.physics, epoch_utc=epoch)
 

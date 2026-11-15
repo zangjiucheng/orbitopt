@@ -253,15 +253,27 @@ def test_committed_benchmark_satisfies_the_regression_thresholds():
         assert all(doc["backends"][backend]["checks"].values())
         assert doc["backends"][backend]["handoff"]["frame"] == "ECEF"
     bodies = doc["comparison"]["bodies"]
-    # Regression thresholds (2026-11-13 study, see docs/flightlab.md F-07):
-    # the stack must separate within ~400 m of altitude between backends,
-    # the booster handoff corridor within ~3.5 km, the (unguided) upper
-    # stage is allowed to diverge hard -- its thrust direction is the 6-DOF
-    # story -- and mass must agree to well under a kilogram everywhere.
+    # Regression thresholds (2026-11-15 E1-03 study, see docs/flightlab.md
+    # F-07): with the SHARED upper-stage guidance (task #252) the 2026-11
+    # upper-stage divergence story became an agreement story -- the upper
+    # must now track to single-digit kilometres / tens of m/s (the residual
+    # is execution, not guidance). Stack/booster thresholds unchanged (the
+    # ascent is untouched); the upper mass threshold allows a couple of
+    # throttle steps of MECO-timing difference between the backends.
     assert bodies["stack"]["metrics"]["d_altitude_m_max_abs_m"] < 400.0
     assert bodies["booster"]["metrics"]["d_altitude_m_max_abs_m"] < 3500.0
-    assert bodies["upper"]["metrics"]["d_speed_m_s_max_abs_m_s"] > 100.0  # divergence is real
-    for body in ("stack", "booster", "upper"):
+    assert bodies["upper"]["metrics"]["d_altitude_m_max_abs_m"] < 5000.0
+    assert bodies["upper"]["metrics"]["d_speed_m_s_max_abs_m_s"] < 100.0
+    for body in ("stack", "booster"):
         assert bodies[body]["metrics"]["d_mass_kg_max_abs_kg"] < 2.0
         assert bodies[body]["run_3dof"]["terminal"] == "t_end"
         assert bodies[body]["run_6dof"]["terminal"] == "t_end"
+    assert bodies["upper"]["metrics"]["d_mass_kg_max_abs_kg"] < 50.0
+    assert bodies["upper"]["run_3dof"]["terminal"] == "t_end"
+    assert bodies["upper"]["run_6dof"]["terminal"] == "t_end"
+    # E1-03: both backends reached guided MECO and both terminal orbits are
+    # inside the declared insertion tolerances.
+    ins = doc["comparison"]["upper_insertion"]
+    assert "both backends reached guided MECO" in ins["note"]
+    for backend in BACKENDS:
+        assert ins[backend]["inserted"] is True

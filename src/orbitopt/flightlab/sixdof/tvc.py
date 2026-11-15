@@ -384,9 +384,16 @@ class AttitudeTvcLaw:
         # module docstring. asin keeps the command inside the small-angle
         # inversion at large demand instead of pretending the moment is linear.
         authority = self._rated_thrust_n * self.vehicle.engine.mount_x_cg_m
-        i_pitch, i_yaw = self.vehicle.inertia_kg_m2[1], self.vehicle.inertia_kg_m2[2]
-        s_p = max(-1.0, min(1.0, a_p * i_pitch / authority))
-        s_y = max(-1.0, min(1.0, -a_y * i_yaw / authority))
+        if engine_off or authority <= 0.0:
+            # A shut engine has no control authority to invert -- neutral
+            # deflection by definition (E1-03, task #252: the F-07 guided
+            # upper stage ticks this law across engine-off coast legs; the
+            # F-04 stack never reached this path, its throttle stays open).
+            s_p = s_y = 0.0
+        else:
+            i_pitch, i_yaw = self.vehicle.inertia_kg_m2[1], self.vehicle.inertia_kg_m2[2]
+            s_p = max(-1.0, min(1.0, a_p * i_pitch / authority))
+            s_y = max(-1.0, min(1.0, -a_y * i_yaw / authority))
         cmd_p = math.asin(s_p)
         cmd_y = math.asin(s_y)
         limit = self.actuator.limit_rad
