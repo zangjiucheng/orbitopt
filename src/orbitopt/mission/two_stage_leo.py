@@ -387,13 +387,21 @@ class RecoveryPlan:
     :func:`~orbitopt.flightlab.recovery.pipeline.fly_recovery` flies.
     ``vehicle_file`` is the vehicle the booster model is read from (default:
     ``launch.vehicle``); ``plan_options`` and ``landing_sites`` pass straight
-    through to the recovery pipeline."""
+    through to the recovery pipeline. ``drive_from_separation`` (E5-02, task
+    #269) couples the run: the booster branch is flown from the canonical
+    separation ``HandoffState`` (:func:`~orbitopt.mission.coupled_branches.
+    separation_handoff` -- the stack's state at separation, digest-identified)
+    instead of a separately read-out debris-track sample, and the coupled
+    branch gates (``handoff.coupled.*``, ``mass.coupled.*``) are graded into
+    the chain. Default False: replayed/frozen scenarios keep the E2-01
+    read-out path byte-for-byte."""
 
     spec: Mapping[str, Any] | None = None
     target_file: str | None = None
     vehicle_file: str | None = None
     plan_options: Mapping[str, Any] = field(default_factory=dict)
     landing_sites: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    drive_from_separation: bool = False
 
     def __post_init__(self):
         if self.spec is not None:
@@ -412,23 +420,28 @@ class RecoveryPlan:
         sites = dict(self.landing_sites or {})
         object.__setattr__(self, "landing_sites",
                            {str(k): dict(v) for k, v in sites.items()})
+        object.__setattr__(self, "drive_from_separation", bool(self.drive_from_separation))
 
     def to_dict(self) -> dict:
-        return {"spec": None if self.spec is None else dict(self.spec),
-                "target_file": self.target_file, "vehicle_file": self.vehicle_file,
-                "plan_options": dict(self.plan_options),
-                "landing_sites": {k: dict(v) for k, v in self.landing_sites.items()}}
+        doc = {"spec": None if self.spec is None else dict(self.spec),
+               "target_file": self.target_file, "vehicle_file": self.vehicle_file,
+               "plan_options": dict(self.plan_options),
+               "landing_sites": {k: dict(v) for k, v in self.landing_sites.items()}}
+        if self.drive_from_separation:  # keep the default document byte-identical
+            doc["drive_from_separation"] = True
+        return doc
 
     @staticmethod
     def from_dict(doc: Mapping[str, Any] | None) -> "RecoveryPlan":
         doc = doc or {}
         _reject_unknown(doc, ("spec", "target_file", "vehicle_file", "plan_options",
-                              "landing_sites"), "recovery")
+                              "landing_sites", "drive_from_separation"), "recovery")
         return RecoveryPlan(
             spec=None if doc.get("spec") is None else dict(doc["spec"]),
             target_file=doc.get("target_file"), vehicle_file=doc.get("vehicle_file"),
             plan_options=dict(doc.get("plan_options") or {}),
-            landing_sites=dict(doc.get("landing_sites") or {}))
+            landing_sites=dict(doc.get("landing_sites") or {}),
+            drive_from_separation=bool(doc.get("drive_from_separation", False)))
 
 
 # ---------------------------------------------------------------------------
@@ -998,6 +1011,7 @@ class TwoStageLeoMission:
     propagation: dict = field(default_factory=dict)
     recovery: dict | None = None
     recovery_run_dir: Path | None = None
+    coupled_branches: dict | None = None
     checks: tuple[HandoffCheck, ...] = ()
     not_assessed: list = field(default_factory=list)
     report: dict = field(default_factory=dict)
@@ -1024,6 +1038,7 @@ class TwoStageLeoMission:
             "recovery": self.recovery,
             "recovery_run_dir": (str(self.recovery_run_dir) if self.recovery_run_dir
                                  else None),
+            "coupled_branches": self.coupled_branches,
             "checks": _checks_doc(self.checks), "not_assessed": self.not_assessed,
             "full_mission": self.full_mission,
             "report_file": str(self.report_path) if self.report_path else None,
@@ -1067,6 +1082,7 @@ def _acquire_ascent(scenario: TwoStageLeoScenario, out: Path):
 
 def _fly_recovery_stage(scenario: TwoStageLeoScenario, run, out: Path, *,
                         handoff_report_file: Path | None = None,
+                        separation=None,
                         ) -> tuple[object, dict, list[HandoffCheck], list[dict]]:
     """Fly the FL-304 recovery stage over the acquired ascent (task #254): the
     booster is planned (FL-302), flown and, when the landing stack is present,
@@ -1082,7 +1098,12 @@ def _fly_recovery_stage(scenario: TwoStageLeoScenario, run, out: Path, *,
     never as an exception. ``handoff_report_file`` (E5-03, task #270)
     additionally writes the R-02 ``RecoveryHandoffReport`` document there, so
     a cross-environment orchestrator can seal the M-01 boundary states without
-    re-flying anything; it does not change the returned block.
+    re-flying anything; it does not change the returned block. ``separation``
+    (E5-02, task #269) is the canonical ``SeparationHandoff`` computed from
+    the ascent run before the merge: when given, the booster is flown from
+    that shared state (``fly_recovery(sep_state=...)`` at the branch's own
+    separation mass) instead of a separately read-out debris sample, and the
+    block records ``driven_from_separation`` with the handoff's digest.
     """
     from orbitopt.flightlab import checks as gate_checks
     from orbitopt.flightlab.contract import load_target, write_run
@@ -1107,9 +1128,13 @@ def _fly_recovery_stage(scenario: TwoStageLeoScenario, run, out: Path, *,
             raise FileNotFoundError(f"recovery vehicle {vehicle!r}: not a file and not in the "
                                     "packaged vehicle catalog")
 
-    outcome = fly_recovery(run, target, vehicle_path,
-                           plan_options=dict(plan.plan_options) or None,
-                           landing_sites=dict(plan.landing_sites) or None)
+    fly_kwargs: dict = {"plan_options": dict(plan.plan_options) or None,
+                        "landing_sites": dict(plan.landing_sites) or None}
+    if separation is not None:  # E5-02: fly the booster from the shared handoff
+        from orbitopt.mission.coupled_branches import booster_state_from_run
+
+        fly_kwargs["sep_state"] = booster_state_from_run(run, separation)
+    outcome = fly_recovery(run, target, vehicle_path, **fly_kwargs)
     # Gate-B re-assessment over the merged run: the checks the pipeline
     # contributed (landing gate, touchdown limits, reserve) are kept, the
     # target-declared limits are re-measured against the flown booster track --
@@ -1196,6 +1221,9 @@ def _fly_recovery_stage(scenario: TwoStageLeoScenario, run, out: Path, *,
         "handoff_passed": None if handoff is None else bool(handoff.passed),
         "assumptions": [str(a) for a in outcome.assumptions],
     }
+    if separation is not None:
+        block["driven_from_separation"] = True
+        block["separation_handoff_id"] = separation.handoff_id
     return combined, block, checks, notes
 
 
@@ -1291,6 +1319,8 @@ def run_two_stage_leo(scenario: TwoStageLeoScenario, out_dir, *,
     propagation: dict = {"status": "not_run"}
     recovery_block: dict | None = None
     recovery_run_dir: Path | None = None
+    separation = None
+    coupled_doc: dict | None = None
 
     if run is None:
         checks.append(_check("ascent.flight_verified", False,
@@ -1303,8 +1333,12 @@ def run_two_stage_leo(scenario: TwoStageLeoScenario, out_dir, *,
                                            "produced no flown run"})
     else:
         if scenario.recovery is not None:
+            if scenario.recovery.drive_from_separation:  # E5-02 (task #269)
+                from orbitopt.mission.coupled_branches import separation_handoff
+
+                separation = separation_handoff(run)
             run, recovery_block, recovery_checks, recovery_notes = _fly_recovery_stage(
-                scenario, run, out)
+                scenario, run, out, separation=separation)
             recovery_run_dir = Path(recovery_block["run_dir"])
             checks.extend(recovery_checks)
             not_assessed.extend(recovery_notes)
@@ -1348,6 +1382,22 @@ def run_two_stage_leo(scenario: TwoStageLeoScenario, out_dir, *,
                                        limit=c["limit"], unit=c["unit"],
                                        reason_code=c["reason_code"])
                           for c in branches["checks"])
+
+        from orbitopt.mission.coupled_branches import coupled_branches
+
+        coupled_doc = coupled_branches(run, scenario.handoff,
+                                       scenario.staging_velocity_m_s, staging,
+                                       handoff=separation)
+        if coupled_doc is not None and separation is not None:
+            coupled_doc["driven_from_separation"] = True
+            checks.extend(HandoffCheck(id=c["id"], passed=c["passed"], value=c["value"],
+                                       limit=c["limit"], unit=c["unit"],
+                                       reason_code=c["reason_code"])
+                          for c in coupled_doc["checks"])
+        if (scenario.recovery is not None and scenario.recovery.drive_from_separation
+                and separation is None):
+            checks.append(_check("handoff.coupled.separation_found", False,
+                                 reason_code="no_separation_fork_to_drive_from"))
 
         state = ascent_handoff_state(run)
         report = check_ascent_to_parking_orbit(run, state, scenario.handoff, scenario.elements)
@@ -1399,6 +1449,15 @@ def run_two_stage_leo(scenario: TwoStageLeoScenario, out_dir, *,
                            "reason": "propagation not requested (expected result: "
                                      f"{scenario.expected.propagation_result!r})"}
             not_assessed.append({"id": "propagation", "reason": "skipped by caller"})
+        if coupled_doc is not None:  # both branch outcomes in one run (E5-02)
+            from orbitopt.mission.coupled_branches import record_branch_results
+
+            record_branch_results(
+                coupled_doc,
+                upper_stage={"insertion_passed": bool(parking and parking["passed"]),
+                             "parking_elements": dict(parking_elements),
+                             "propagation_status": propagation.get("status")},
+                booster=None if recovery_block is None else dict(recovery_block))
         message = ""
 
     status, message, reason_codes = _grade(checks, run)
@@ -1417,7 +1476,7 @@ def run_two_stage_leo(scenario: TwoStageLeoScenario, out_dir, *,
         parking_elements=parking_elements, expected_elements=expected_elements,
         expected_tolerances=expected_tolerances, expected_basis=basis,
         propagation=propagation, recovery=recovery_block,
-        recovery_run_dir=recovery_run_dir,
+        recovery_run_dir=recovery_run_dir, coupled_branches=coupled_doc,
         checks=tuple(checks), not_assessed=not_assessed)
     mission.report = mission_report(mission)
     mission.full_mission = mission.report["inputs"]["full_mission"]
@@ -1605,7 +1664,8 @@ def mission_report(mission: TwoStageLeoMission) -> dict:
                        "launch": mission.launch},
             "stations": mission.stations,
             "handoffs": {"staging": mission.staging, "separation_fork": mission.branches,
-                         "parking_orbit": mission.parking},
+                         "parking_orbit": mission.parking,
+                         "coupled_branches": mission.coupled_branches},
             "propagation": mission.propagation,
             "recovery": mission.recovery,
             "full_mission": full_mission_gate(mission),
