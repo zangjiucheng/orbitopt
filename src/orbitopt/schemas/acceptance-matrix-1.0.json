@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zangjiucheng.github.io/orbitopt/schemas/acceptance-matrix-1.0.json",
+  "title": "orbitopt cross-backend acceptance matrix",
+  "description": "Configuration of the E4-02 cross-backend acceptance matrix (orbitopt.verify.acceptance_matrix, task #262): one cell per backend pair and phase, one row per gateable metric, each row carrying a tolerance (or null = record only), its evidence basis and the cause classification a violation carries. Cells are labelled with the physics stages they guard; stage_budgets anchors the tolerances to a convergence study or measured spread.",
+  "type": "object",
+  "required": ["schemaVersion", "name", "stages", "cells"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "name": {"type": "string", "minLength": 1},
+    "description": {"type": "string"},
+    "harness": {"type": "string"},
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["dynamics", "control", "propagation", "handoff"]}
+    },
+    "stage_budgets": {"type": "object"},
+    "cells": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/cell"}
+    }
+  },
+  "$defs": {
+    "metric": {
+      "enum": ["position_m", "velocity_m_s", "mass_kg", "semi_major_axis_m",
+               "eccentricity", "inclination_deg", "raan_deg",
+               "argument_of_perigee_deg"]
+    },
+    "onFail": {
+      "enum": ["numerical_integration", "model_formulation", "attitude_control",
+               "propellant_accounting", "state_handoff", "frame_bridge"]
+    },
+    "basisKind": {
+      "enum": ["convergence_analysis", "physical_reasoning",
+               "measured_agreement", "ill_conditioned"]
+    },
+    "row": {
+      "type": "object",
+      "required": ["basis_kind", "basis"],
+      "additionalProperties": false,
+      "properties": {
+        "limit": {"type": ["number", "null"]},
+        "basis_kind": {"$ref": "#/$defs/basisKind"},
+        "basis": {"type": "string", "minLength": 24},
+        "on_fail": {"$ref": "#/$defs/onFail"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"limit": {"type": "number"}}, "required": ["limit"]},
+          "then": {"required": ["on_fail"]}
+        }
+      ]
+    },
+    "cell": {
+      "type": "object",
+      "required": ["pair", "phase", "stages", "category", "scope", "not_proven", "tolerances"],
+      "additionalProperties": false,
+      "properties": {
+        "pair": {"type": "string", "pattern": "^[A-Za-z0-9_]+_vs_[A-Za-z0-9_]+$"},
+        "phase": {"enum": ["ascent", "coast"]},
+        "stages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["dynamics", "control", "propagation", "handoff"]}
+        },
+        "category": {"enum": ["numerical_consistency", "model_agreement", "historical_validation"]},
+        "scope": {"type": "string", "minLength": 24},
+        "not_proven": {"type": "string", "minLength": 16},
+        "tolerances": {
+          "type": "object",
+          "propertyNames": {"$ref": "#/$defs/metric"},
+          "additionalProperties": {"$ref": "#/$defs/row"},
+          "required": ["position_m", "velocity_m_s", "mass_kg", "semi_major_axis_m",
+                       "eccentricity", "inclination_deg", "raan_deg",
+                       "argument_of_perigee_deg"]
+        }
+      }
+    }
+  }
+}

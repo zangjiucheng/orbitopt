@@ -1,0 +1,399 @@
+# E4-02 cross-backend acceptance matrix (task #262, V-06).
+#
+# One row per (backend pair x phase x metric) comparison item: the tolerance,
+# its evidence basis, the stage(s) it guards and the cause classification a
+# violation carries. This file -- not code constants -- is the acceptance
+# line; `orbitopt.verify.acceptance_matrix` loads it, feeds the tolerances
+# into the V-02 harness (orbitopt.verify.cross_model) and grades the result
+# into an `acceptance-matrix` verification report for the pipeline gate.
+#
+# Validated against schemas/acceptance-matrix-1.0.json; every cell must
+# declare a row for every harness metric, and every row must carry a basis.
+schemaVersion: "1.0"
+name: e4-02-cross-backend-default
+description: >
+  Default cross-backend acceptance matrix for the V-02 harness scenario (FL-403
+  spike ascent to MECO plus a 300 s point-mass coast). Tolerances are the
+  numbers the acceptance review signs off, each with a convergence-analysis,
+  measured-agreement or physical-reasoning basis; a row without a limit is
+  recorded but never gated.
+harness: orbitopt.verify.cross_model
+
+# Stage vocabulary the cells label themselves with (task #262 asks for
+# per-stage convergence lines: dynamics, control, propagation, handoff).
+stages: [dynamics, control, propagation, handoff]
+
+# The numerical-error budgets these stage tolerances are built on, so a
+# reader can see the acceptance line is anchored to a convergence study and
+# not to taste. `tests/test_verify_acceptance_matrix.py` asserts the
+# integrator_convergence numbers below match that module's scenario budgets
+# (drift guard); the FL-403 measured line matches the spike findings doc.
+stage_budgets:
+  dynamics:
+    source: orbitopt.verify.integrator_convergence
+    note: >
+      Numerical error bound of the production integrator at its default
+      tolerances (V-03 Richardson bound). The point-mass ascent and coast
+      tracks the matrix compares are each this clean, so a backend-pair
+      difference at the acceptance line is formulation, not integration
+      error.
+    scenarios:
+      meco_ascent: {position_m: 0.1, velocity_m_s: 0.005}
+      entry_descent: {position_m: 5.0, velocity_m_s: 0.05}
+      leo_j2_coast: {position_m: 1.0, velocity_m_s: 0.001}
+      gto_coast: {position_m: 20.0, velocity_m_s: 0.05}
+  control:
+    source: docs/flightlab-jsbsim-spike-findings.md (FL-403 closed-loop run)
+    note: >
+      Measured JSBSim-vs-3-DOF deviations of the FL-403 fixture: 51 m MECO
+      altitude, 2.0 m/s velocity, 0.51 deg whole-burn attitude error, with
+      dt-halving showing the numbers are not integration artefacts. The
+      control-stage line is a multiple of this measured spread.
+    measured:
+      meco_position_m: 51.0
+      meco_velocity_m_s: 2.0
+      attitude_whole_burn_deg: 0.51
+  propagation:
+    source: orbitopt.verify.integrator_convergence + mission.propagation M-05 gate
+    note: >
+      M-05 gates a point-mass analytic-vs-numerical coast at 100 m / 0.01 m/s
+      (POINT_MASS_POS_TOL_M / POINT_MASS_VEL_TOL_M_S): centimetre-level at the
+      verify tolerances, so 100 m flags a broken handoff. Cross-backend coast
+      lines sit at or above that line for different implementations and far
+      below it for the same-model numerical pair.
+  handoff:
+    source: flightlab.contract HandoffState + mission.contract HandoffState
+    note: >
+      Every coast backend starts from the same 3-DOF MECO handoff state; the
+      coast mass channel must therefore agree bit for bit. A difference there
+      is plumbing, not physics -- the reason class is state_handoff.
+
+cells:
+  # ---- ascent: point-mass reference vs the closed-loop JSBSim 6-DOF -------
+  - pair: six_dof_vs_three_dof
+    phase: ascent
+    stages: [dynamics, control]
+    category: model_agreement
+    scope: >
+      FL-403 spike ascent, pad to MECO (T+105 s): JSBSim spike_stage flown
+      closed-loop on the FL-403 PID gimbal controller against the V-02 3-DOF
+      point-mass reference (thrust + gravity + Coriolis, zero aerodynamics on
+      both sides, same vehicle numbers). Earth-fixed states bridged to GCRS
+      at the scenario epoch; mass read from the JSBSim tanks.
+    not_proven: >
+      Nothing about real flight: zero-lift vehicle, idealised atmosphere
+      table, and the JSBSim model is tracked onto the reference by a
+      controller tuned for this exact program, so agreement here bounds
+      the *implementation* spread, not the physics error.
+    tolerances:
+      position_m:
+        limit: 500.0
+        basis_kind: measured_agreement
+        basis: >
+          FL-403 measured a 51 m MECO altitude deviation between the JSBSim
+          6-DOF run and the 3-DOF reference (spike findings; dt-halving
+          confirmed it is not integration noise). The line is ~10x the
+          measured spread: it catches a broken tracking loop, staging or
+          frame bridge, not the last metre. The point-mass side contributes
+          <= 0.1 m numerical error (V-03 meco_ascent bound), negligible here.
+        on_fail: attitude_control
+      velocity_m_s:
+        limit: 20.0
+        basis_kind: measured_agreement
+        basis: >
+          Measured FL-403 MECO velocity deviation 2.0 m/s (same findings
+          run); 10x margin, mirroring the position line. The 3-DOF side's
+          own numerical error is <= 5 mm/s (V-03 meco_ascent), so a
+          violation is model/control spread, never numerics.
+        on_fail: attitude_control
+      mass_kg:
+        limit: 500.0
+        basis_kind: physical_reasoning
+        basis: >
+          Both sides burn the same total propellant (60 t at 600 kg/s);
+          JSBSim integrates the tank drain at its own rate. A bookkeeping
+          lag between constant-mdot and the tank model is bounded by a few
+          integration steps (<= ~6 kg at 10 ms); the line gates a *broken*
+          mass model (double-burn, staging mass lost), orders of magnitude
+          above the lag.
+        on_fail: propellant_accounting
+      semi_major_axis_m:
+        limit: 20000.0
+        basis_kind: physical_reasoning
+        basis: >
+          The MECO state is suborbital (a ~ 3300 km); the two-body
+          sensitivity da = a^2/mu * delta(2E) propagates the 500 m / 20 m/s
+          state line to roughly 1 km of a, and the FL-403 measured state
+          deviation (51 m / 2 m/s) to well under 0.1 km. 20 km flags a
+          structural disagreement (units, frame bridge, wrong handoff mass),
+          not the tracked model spread.
+        on_fail: model_formulation
+      eccentricity:
+        limit: 0.05
+        basis_kind: physical_reasoning
+        basis: >
+          Same propagation as the a line: a near-parabolic suborbital
+          MECO orbit turns the state budget into well under 0.01 of e;
+          0.05 is the "the models disagree about what flight this is"
+          line, matching the cross-model default.
+        on_fail: model_formulation
+      inclination_deg:
+        limit: 0.5
+        basis_kind: physical_reasoning
+        basis: >
+          The FL-403 program flies due east from the equator, so inclination
+          is ill-conditioned (|i| < 0.2 deg) and dominated by cross-range
+          tracking jitter; 0.5 deg is 100x the FL-403 0.51 deg whole-burn
+          attitude error scaled through the residual cross-range drift.
+        on_fail: attitude_control
+      raan_deg:
+        limit: null
+        basis_kind: ill_conditioned
+        basis: >
+          Recorded, never gated: the node line of a near-equatorial MECO
+          orbit is numerically meaningless (the harness itself refuses to
+          gate angles below 1 deg inclination). The raw difference is
+          written into the report for inspection.
+      argument_of_perigee_deg:
+        limit: null
+        basis_kind: ill_conditioned
+        basis: >
+          Recorded, never gated: same ill-conditioned node as raan_deg on
+          this equatorial profile; perigee direction additionally needs a
+          well-defined ellipse. Raw values go to the report.
+
+  # ---- coast: point-mass reference vs the same model, analytic numerics ---
+  - pair: three_dof_vs_two_body_analytic
+    phase: coast
+    stages: [propagation]
+    category: numerical_consistency
+    scope: >
+      300 s coast from the identical 3-DOF MECO state: DOP853 (rtol=1e-11)
+      point-mass integration re-run by the closed-form Kepler propagation
+      (orbitopt.verify.benchmarks.propagate_kepler_analytic). Identical
+      force model -- the difference is pure numerics of the two
+      implementations plus the Hermite resampling onto the common grid.
+    not_proven: >
+      Only that the adaptive integrator, the analytic propagator and the
+      resampler agree with each other. It cannot see force-model errors:
+      both sides are the same two-body model.
+    tolerances:
+      position_m:
+        limit: 0.01
+        basis_kind: convergence_analysis
+        basis: >
+          Measured at the default scenario: final difference 2e-6 m, max-along-arc
+          1.4e-4 m (this file's test suite re-measures it as a slow
+          regression). The line sits two orders above the measured max and
+          two orders *below* the V-03 leo_j2_coast numerical bound (1 m),
+          so it certifies the pair is numerically consistent, not merely
+          inside the mission-level budget.
+        on_fail: numerical_integration
+      velocity_m_s:
+        limit: 0.0001
+        basis_kind: convergence_analysis
+        basis: >
+          Measured 8e-9 m/s at the scenario end (max along arc 8e-6).
+          1e-4 m/s is four orders of margin on the endpoint metric and
+          still 100x tighter than the M-05 coast velocity gate; a violation
+          means the two numerics diverged, not that they differ.
+        on_fail: numerical_integration
+      mass_kg:
+        limit: 0.000001
+        basis_kind: physical_reasoning
+        basis: >
+          Both tracks carry the identical handed-off MECO mass constant, so
+          the only legitimate difference is float round-off. Any difference
+          above microgram level means the handoff plumbing copied something
+          else.
+        on_fail: state_handoff
+      semi_major_axis_m:
+        limit: 0.05
+        basis_kind: convergence_analysis
+        basis: >
+          Measured 1.8e-6 m. a is the integral of the same state difference
+          the position row gates; 0.05 m keeps the four-order margin between
+          measurement and line.
+        on_fail: numerical_integration
+      eccentricity:
+        limit: 0.000000001
+        basis_kind: convergence_analysis
+        basis: >
+          Measured 4e-13 on a ~0.54 eccentricity coast orbit; 1e-9 keeps
+          three orders of margin and still catches a real (e.g. sign or
+          frame) disagreement in the element conversion.
+        on_fail: numerical_integration
+      inclination_deg:
+        limit: 0.000001
+        basis_kind: convergence_analysis
+        basis: >
+          Measured exactly 0.0 deg: with no out-of-plane force the plane is
+          a flight-path invariant, so any nonzero difference is round-off
+          through the element conversion. 1e-6 deg documents that nothing
+          but noise may move the plane.
+        on_fail: numerical_integration
+      raan_deg:
+        limit: null
+        basis_kind: ill_conditioned
+        basis: >
+          Recorded, never gated: MECO inclination is ~0.15 deg, below the
+          harness' 1 deg conditioning gate -- the node line is meaningless
+          here even though the raw difference is exactly zero.
+      argument_of_perigee_deg:
+        limit: null
+        basis_kind: ill_conditioned
+        basis: >
+          Recorded, never gated: ill-conditioned node as for raan_deg;
+          measured ~5e-11 deg, i.e. already indistinguishable from noise.
+
+  # ---- coast: point-mass reference vs tudatpy (M-05 machinery) ------------
+  - pair: three_dof_vs_tudatpy
+    phase: coast
+    stages: [propagation]
+    category: model_agreement
+    scope: >
+      The same MECO handoff coasted by the M-05 machinery
+      (orbitopt.mission.propagation.propagate_injected_orbit, tudatpy,
+      GCRS in/out, same GM/radius/J2 triple) over the same arc. Different
+      propagator *implementations* (integrator internals, frame handling)
+      of one declared force model.
+    not_proven: >
+      That tudatpy's *environment* is correct (SPICE data, frame kernels)
+      beyond what the M-05 provenance block records; and nothing about
+      forces the scenario does not model.
+    tolerances:
+      position_m:
+        limit: 200.0
+        basis_kind: convergence_analysis
+        basis: >
+          The M-05 point-mass gate is 100 m / 0.01 m/s because a
+          DOP853 rtol=1e-11 coast is centimetre clean -- 100 m there flags
+          a broken handoff, not physics (mission/propagation.py). The
+          cross-backend line doubles it: the two implementations share no
+          code, so the line must absorb the frame-bridge and epoch
+          convention between them as well as integration error.
+        on_fail: frame_bridge
+      velocity_m_s:
+        limit: 0.05
+        basis_kind: convergence_analysis
+        basis: >
+          Five times the M-05 0.01 m/s point-mass gate for the same
+          independent-implementation margin; the V-03 coast bounds (1e-3 /
+          0.05 m/s) show neither side contributes velocity error near the
+          line. A violation at this scale is a frame/epoch bridge bug
+          (Earth-rotation rates are ~465 m/s, badly bridged they leak
+          metres per second).
+        on_fail: frame_bridge
+      mass_kg:
+        limit: 0.000001
+        basis_kind: physical_reasoning
+        basis: >
+          The tudatpy coast carries the handed-off mass constant unchanged
+          (no propulsion in the scenario), so it must equal the reference
+          to float round-off; anything else is handoff plumbing.
+        on_fail: state_handoff
+      semi_major_axis_m:
+        limit: 500.0
+        basis_kind: physical_reasoning
+        basis: >
+          Cross-model default, consistent with the 200 m state line through
+          the a-sensitivity of this suborbital-to-elliptic coast state: the
+          state budget propagates far below 500 m of a; the row exists to
+          catch element-convention breaks (J2 mean vs osculating, GM units).
+        on_fail: model_formulation
+      eccentricity:
+        limit: 0.005
+        basis_kind: physical_reasoning
+        basis: >
+          Matches the cross-model default: 0.005 on a ~0.54 e arc is three
+          orders above the propagated state budget; it gates element
+          convention mismatches (osculating vs mean, GM triple), not
+          physics.
+        on_fail: model_formulation
+      inclination_deg:
+        limit: 0.05
+        basis_kind: physical_reasoning
+        basis: >
+          No out-of-plane torque difference is possible between the two
+          declared force models on this arc, so 0.05 deg gates only a
+          frame-convention leak (pole offset), not model spread.
+        on_fail: frame_bridge
+      raan_deg:
+        limit: null
+        basis_kind: ill_conditioned
+        basis: >
+          Recorded, never gated: ~0.15 deg inclination, node ill-defined;
+          a frame leak would show on inclination first (gated above).
+      argument_of_perigee_deg:
+        limit: null
+        basis_kind: ill_conditioned
+        basis: >
+          Recorded, never gated: ill-conditioned node as for raan_deg.
+
+  # ---- coast: tudatpy vs the analytic reference ---------------------------
+  - pair: tudatpy_vs_two_body_analytic
+    phase: coast
+    stages: [propagation]
+    category: model_agreement
+    scope: >
+      Transitivity check: the tudatpy coast against the closed-form Kepler
+      propagation of the same MECO state. Closes the triangle -- if both
+      legs above pass but this row fails, the two gateable legs compared
+      the wrong states against each other.
+    not_proven: >
+      Nothing more than the sum of the two legs it closes; it exists to
+      make a contradiction visible, not to add new physics evidence.
+    tolerances:
+      position_m:
+        limit: 200.0
+        basis_kind: convergence_analysis
+        basis: >
+          Same budget as the three_dof_vs_tudatpy position row: this row is
+          that leg plus the (1e-2 m) analytic/reference consistency of the
+          V-02 numerical pair, so the same line is essentially free to
+          satisfy and independently catches a mismatch the other leg could
+          not see (both legs sharing one broken frame bridge).
+        on_fail: frame_bridge
+      velocity_m_s:
+        limit: 0.05
+        basis_kind: convergence_analysis
+        basis: >
+          Mirrors the three_dof_vs_tudatpy velocity line for the same
+          reasons; the numerical leg contributes five orders less.
+        on_fail: frame_bridge
+      mass_kg:
+        limit: 0.000001
+        basis_kind: physical_reasoning
+        basis: >
+          Both sides copy the identical handoff constant; round-off only.
+        on_fail: state_handoff
+      semi_major_axis_m:
+        limit: 500.0
+        basis_kind: physical_reasoning
+        basis: >
+          Mirrors the three_dof_vs_tudatpy element lines (same conventions
+          under test), bounded by the transitivity argument above.
+        on_fail: model_formulation
+      eccentricity:
+        limit: 0.005
+        basis_kind: physical_reasoning
+        basis: >
+          Same as the three_dof_vs_tudatpy eccentricity row.
+        on_fail: model_formulation
+      inclination_deg:
+        limit: 0.05
+        basis_kind: physical_reasoning
+        basis: >
+          Same as the three_dof_vs_tudatpy inclination row: plane is an
+          invariant of the declared model, so this gates frame leaks.
+        on_fail: frame_bridge
+      raan_deg:
+        limit: null
+        basis_kind: ill_conditioned
+        basis: >
+          Recorded, never gated: equatorial profile, node meaningless.
+      argument_of_perigee_deg:
+        limit: null
+        basis_kind: ill_conditioned
+        basis: >
+          Recorded, never gated: equatorial profile, node meaningless.

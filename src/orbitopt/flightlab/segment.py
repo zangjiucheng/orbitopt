@@ -54,6 +54,8 @@ PHYSICAL_MODEL = {
 #: against a target band, a vehicle limit or an independent propagator
 #: (model agreement).
 _NUMERICAL_CHECK_PREFIXES = ("mass-", "sixdof-states-finite", "sixdof-mass-non-negative")
+#: The re-fly's "could not run" marker (simulate.orbit_refly); not evidence.
+_REFLY_NOT_ASSESSED = "orbit-refly-not-assessed"
 
 
 def _check_category(name: str) -> str:
@@ -68,6 +70,46 @@ def _check_category(name: str) -> str:
         cid = name[len("check."):]
         return CHECK_NUMERICAL if cid.startswith(_NUMERICAL_CHECK_PREFIXES) else CHECK_MODEL
     raise ValueError(f"flight-run report check {name!r} has no verification category")
+
+
+def _check_evidence(name: str) -> str:
+    """Task #263 (E4-03) evidence type of one flight-run report check. Bare
+    numerical consistency: ``optimizer_converged`` and the run's own
+    integrity checks (mass bookkeeping, sixdof-states-finite, sixdof-mass-
+    non-negative). ``physics_verified`` is the Gate-B *independent re-flight*
+    verdict, and the graded ``orbit-refly*`` checks are its parts -- the only
+    validation-grade evidence a run can carry (task #261: set by a separate
+    propagator replaying the run, never by the backend that produced it; the
+    ``orbit-refly-not-assessed`` marker is the absence of that evidence and
+    stays design-input). ``mission_constraints_passed`` and every other
+    Gate-B check (target band, vehicle limit) grade the flight against the
+    **design envelope it was constrained to** -- internal consistency, not
+    independent validation."""
+    from orbitopt.verify.report import (
+        EVIDENCE_DESIGN_INPUT,
+        EVIDENCE_INDEPENDENT_MODEL,
+        EVIDENCE_NUMERICAL,
+    )
+
+    if name == "optimizer_converged":
+        return EVIDENCE_NUMERICAL
+    if name == "physics_verified":
+        return EVIDENCE_INDEPENDENT_MODEL
+    if name == "mission_constraints_passed":
+        return EVIDENCE_DESIGN_INPUT
+    if name.startswith("check."):
+        cid = name[len("check."):]
+        if cid.startswith(_NUMERICAL_CHECK_PREFIXES):
+            return EVIDENCE_NUMERICAL
+        # The graded re-fly checks (element drift under tudatpy, not-a-closed-
+        # orbit) are the independent propagator's own findings -- the evidence
+        # physics_verified rolls up -- not a design envelope. The
+        # "-not-assessed" marker is the absence of that evidence, so it stays
+        # out of the validation-grade rollup.
+        if cid.startswith("orbit-refly") and cid != _REFLY_NOT_ASSESSED:
+            return EVIDENCE_INDEPENDENT_MODEL
+        return EVIDENCE_DESIGN_INPUT
+    raise ValueError(f"flight-run report check {name!r} has no evidence type")
 
 
 def flight_run_report(run: FlightRun, target: FlightTarget | None = None) -> dict:
@@ -114,7 +156,8 @@ def flight_run_report(run: FlightRun, target: FlightTarget | None = None) -> dic
     }
     report = build_report("flightlab", run.run_id, [], inputs=inputs, targets=targets)
     report["status"] = status_from_checks(
-        checks, {name: _check_category(name) for name in checks})
+        checks, {name: _check_category(name) for name in checks},
+        {name: _check_evidence(name) for name in checks})
     report["digest"] = report_digest(report)
     return report
 

@@ -281,7 +281,8 @@ def test_packaged_f03_scenario_passes_its_declared_checks():
         assert cid in by_id, cid
         assert by_id[cid].passed, (cid, by_id[cid].value, by_id[cid].limit)
         assert by_id[cid].limit is not None  # limits come from the config
-    assert run.verification.physics_verified
+    assert run.verification.backend_self_check
+    assert run.verification.physics_verified is None
     assert not any(c.id.endswith("burnout-not-assessed") for c in run.verification.checks)
 
 

@@ -41,6 +41,10 @@ from orbitopt.verify.report import (
     CHECK_HISTORICAL,
     CHECK_MODEL,
     CHECK_NUMERICAL,
+    EVIDENCE_DESIGN_INPUT,
+    EVIDENCE_HISTORICAL,
+    EVIDENCE_INDEPENDENT_MODEL,
+    EVIDENCE_NUMERICAL,
     build_report,
     report_digest,
     state_residual,
@@ -109,12 +113,16 @@ def _metric(name: str, value: str, limit: str, ok: bool | None, category: str = 
 
 
 def _report(kind: str, label: str, checks: dict, metrics: list, inputs: dict, residuals=(),
-            category: str = CHECK_MODEL) -> dict:
-    """One report: every check (and metric) belongs to ``category`` -- these
-    reports check one thing each, so all their checks share a category."""
+            category: str = CHECK_MODEL, evidence: str | None = None) -> dict:
+    """One report: every check (and metric) belongs to ``category`` and
+    (task #263) carries evidence type ``evidence`` -- these reports check
+    one thing each, so all their checks share a category *and* an evidence
+    type; ``evidence=None`` lets the type default from the category (see
+    :func:`orbitopt.verify.report.default_evidence`)."""
     report = build_report(kind, label, propagations=[], residuals=list(residuals), inputs=inputs,
                           targets={"metrics": metrics})
-    report["status"] = status_from_checks(checks, dict.fromkeys(checks, category))
+    report["status"] = status_from_checks(checks, dict.fromkeys(checks, category),
+                                          dict.fromkeys(checks, evidence) if evidence else None)
     report["digest"] = report_digest(report)
     return report
 
@@ -151,7 +159,7 @@ def refly_report(pred, tight, sol) -> dict:
                 checks["refly_reaches_starbase"], CHECK_NUMERICAL),
     ]
     return _report("starship_return_refly", "independent re-fly", checks, metrics, residuals=[residual],
-                   category=CHECK_NUMERICAL, inputs={
+                   category=CHECK_NUMERICAL, evidence=EVIDENCE_NUMERICAL, inputs={
         "orbit": "tudatpy, rtol/atol x0.01 of the nominal propagation",
         "entry": "scipy RK45, rtol 1e-11, atol 1e-5, max step 10 s (nominal: DOP853, 1e-9 / 1e-6, 60 s)",
         "burn_time_s": sol.burn_time_s, "bank_deg": sol.bank_deg, "dv_normal_m_s": sol.dv_normal_m_s})
@@ -276,7 +284,8 @@ def dispersion_report(sol, outcomes: list[dict], inclinations: dict | None = Non
         if key in (inclinations or {}):
             metrics.append(_metric(label, "not in the searched range" if inc is None else f"inclination <= {inc:.2f} deg",
                                    f"assumed {sf.INCLINATION_DEG:g} deg (Flight 14)", None))
-    return _report("starship_return_dispersions", "guided recovery of dispersed entries", checks, metrics, inputs={
+    return _report("starship_return_dispersions", "guided recovery of dispersed entries", checks, metrics,
+                   evidence=EVIDENCE_DESIGN_INPUT, inputs={
         "nominal_bank_deg": sol.bank_deg,
         "method": "per case: burn as executed, bank re-solved for Starbase's downrange; "
                   "one bank reversal allowed if it overshoots sideways",
@@ -309,7 +318,8 @@ def limits_report(sol, outcomes: list[dict]) -> dict:
         _metric("Landing burn incl. gravity loss", f"{sol.landing_dv_m_s:.0f} m/s",
                 f"<= {LANDING_DV_BUDGET_M_S:g} m/s (assumed)", checks["landing_dv_budget"]),
     ]
-    return _report("starship_entry_limits", "loads and propellant", checks, metrics, inputs={
+    return _report("starship_entry_limits", "loads and propellant", checks, metrics,
+                   evidence=EVIDENCE_DESIGN_INPUT, inputs={
         "note": "SpaceX publishes no Starship V3 limits: every limit here is an assumption"})
 
 

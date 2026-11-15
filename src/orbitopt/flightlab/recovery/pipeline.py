@@ -269,6 +269,7 @@ def _merged_run(ascent_run: FlightRun, booster_track: BoosterTrack,
         verification=Verification(
             optimizer_converged=ascent_run.verification.optimizer_converged,
             physics_verified=ascent_run.verification.physics_verified,
+            backend_self_check=ascent_run.verification.backend_self_check,
             mission_constraints_passed=ascent_run.verification.mission_constraints_passed,
             checks=tuple(ascent_run.verification.checks) + tuple(extra_checks),
         ),

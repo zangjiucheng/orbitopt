@@ -547,6 +547,7 @@ def evaluate(run: FlightRun, target: FlightTarget) -> Verification:
     return Verification(
         optimizer_converged=run.verification.optimizer_converged,
         physics_verified=run.verification.physics_verified,
+        backend_self_check=run.verification.backend_self_check,
         mission_constraints_passed=all(c.passed for c in constraints) if constraints else None,
         checks=tuple(checks),
     )
