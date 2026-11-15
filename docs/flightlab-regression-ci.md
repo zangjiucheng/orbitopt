@@ -109,6 +109,11 @@ within the declared tolerances only if the tolerances are too tight --
 that is a `tolerances.json` update, which goes through the same
 update-script + tagged-commit route as the reference itself.
 
+RAAN sensitivity and fixed-epoch optimizer tests compare against an
+unoptimized insertion under the same Earth-orientation table. They exercise
+both offline IERS-A and IERS-B; an absolute RAAN recorded with another table
+is not their oracle. The production RAAN tolerance remains unchanged.
+
 ## E2-04: the frozen dual-branch reference mission (task #257)
 
 E2-04 tests mission integration using an **illustrative ascent fixture** and

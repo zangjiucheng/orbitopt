@@ -35,7 +35,7 @@ TARGET = REPO / "src/orbitopt/data/flightlab/scenarios/leo_two_stage.yaml"
 VEHICLE = REPO / "src/orbitopt/data/flightlab/vehicles/synthetic_two_stage.yaml"
 FIX = REPO / "tests/fixtures/flightlab/opentsiolkovsky"
 
-STUB_RAAN_DEG = 125.74252437465294     # stub insertion state's GCRS RAAN
+TARGET_RAAN_DEG = 125.7425  # target near the stub plane, not a frozen IERS-dependent result
 
 
 @pytest.fixture
@@ -46,7 +46,7 @@ def target():
 @pytest.fixture
 def raan_target(target):
     return replace(target, target_orbit=replace(
-        target.target_orbit, raan_deg=round(STUB_RAAN_DEG, 4)))
+        target.target_orbit, raan_deg=TARGET_RAAN_DEG))
 
 
 @pytest.fixture
@@ -65,6 +65,29 @@ def stub_run(raan_target, stub, tmp_path):
     from orbitopt.flightlab.adapters.opentsiolkovsky import run_ascent
 
     return run_ascent(raan_target, VEHICLE, None, tmp_path / "flight")
+
+
+@pytest.fixture(params=("IERS_A", "IERS_B"))
+def baseline_raan(request, raan_target, stub, tmp_path):
+    """Unoptimized GCRS insertion at the same epoch and Earth orientation.
+
+    The absolute RAAN changes with the installed IERS data/default table.
+    These tests check sensitivity and optimizer feed-through, so compare to
+    a baseline flight, while exercising both offline table choices. Keep
+    the table scoped to the test; never change the production frame policy.
+    """
+    from astropy.utils import iers
+    from orbitopt.flightlab.adapters.opentsiolkovsky import run_ascent
+
+    with iers.conf.set_temp("auto_download", False), \
+         iers.conf.set_temp("iers_degraded_accuracy", "ignore"):
+        table = getattr(iers, request.param).open()
+        with iers.earth_orientation_table.set(table):
+            run = run_ascent(raan_target, VEHICLE, None, tmp_path / "baseline")
+            insertion = checks.insertion_state(run)
+            elements = checks.orbital_elements(insertion["position_m"],
+                                               insertion["velocity_m_s"])
+            yield elements["raan_deg"]
 
 
 # --- epoch derivation ---------------------------------------------------------
@@ -203,7 +226,7 @@ def test_raan_weight_and_slot_names(raan_target):
 
 # --- window sensitivity ---------------------------------------------------------
 
-def test_window_sensitivity_stub_shows_earth_rotation(raan_target, stub):
+def test_window_sensitivity_stub_shows_earth_rotation(raan_target, stub, baseline_raan):
     # the stub replays a fixed LAUNCH_ECI insertion state, which the frame
     # bridge converts to GCRS at the launch epoch -- so even the stub shows
     # the physical slope: one sidereal day of Earth rotation per day of
@@ -212,7 +235,7 @@ def test_window_sensitivity_stub_shows_earth_rotation(raan_target, stub):
                               offsets_s=(-60.0, 60.0), timeout_s=60.0)
     assert [r["liftoff_offset_s"] for r in rows] == [0.0, -60.0, 60.0]
     assert rows[0]["liftoff_epoch_utc"] == raan_target.mission.epoch_utc
-    assert rows[0]["achieved_raan_deg"] == pytest.approx(STUB_RAAN_DEG, abs=1e-4)
+    assert rows[0]["achieved_raan_deg"] == pytest.approx(baseline_raan, abs=1e-9)
     slope = (rows[2]["achieved_raan_deg"] - rows[1]["achieved_raan_deg"]) / 120.0
     assert slope == pytest.approx(EARTH_ROTATION_DEG_S, rel=0.05)
     assert all(abs(r["error_deg"]) < checks.RAAN_TOLERANCE_DEG + 0.3
@@ -348,7 +371,7 @@ def test_optimize_stub_derives_epoch_and_reports_raan(raan_target, stub, tmp_pat
     assert doc["raan"]["error_deg"] == pytest.approx(result["raan"]["error_deg"])
 
 
-def test_optimize_fixed_epoch_skips_derivation(raan_target, stub, tmp_path):
+def test_optimize_fixed_epoch_skips_derivation(raan_target, stub, tmp_path, baseline_raan):
     pytest.importorskip("pygmo")
     pytest.importorskip("scipy")
     from orbitopt.flightlab.optimize.run import optimize_ascent
@@ -360,8 +383,7 @@ def test_optimize_fixed_epoch_skips_derivation(raan_target, stub, tmp_path):
                              target_path=str(TARGET))
     assert result["raan"].get("liftoff_window") is None
     assert "window_sensitivity" not in result["raan"]
-    # 1e-4 deg like the sensitivity test: the frame bridge reads IERS Earth
-    # orientation data, and an older astropy-iers-data release (the locked
-    # env's) moves the result by ~5e-6 deg
-    assert result["raan"]["achieved_raan_deg"] == pytest.approx(STUB_RAAN_DEG,
-                                                                abs=1e-4)
+    # No derivation means the insertion must match an unoptimized flight
+    # at the original epoch, under the same (test-scoped) Earth orientation.
+    assert result["raan"]["achieved_raan_deg"] == pytest.approx(baseline_raan,
+                                                                abs=1e-9)
