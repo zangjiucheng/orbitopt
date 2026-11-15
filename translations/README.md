@@ -14,6 +14,7 @@ Markdown changes trigger it automatically. Each successful run uploads a
 Its job summary links the download, draft branch and PR creation page. Create
 the review PR from that link when ready; the workflow needs only repository
 contents-write permission and never creates, approves or merges a PR.
+This works when the repository forbids Actions-created pull requests.
 
 Review terminology, units, numerical claims and `zh/review.json` before
 merging. Drafts are readable on GitHub; the published Jekyll site remains
