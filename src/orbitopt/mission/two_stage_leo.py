@@ -58,6 +58,21 @@ branch boundaries under the same M-01 contract; the mission report carries
 the fork under ``inputs.handoffs.separation_fork`` and its cross-branch mass
 gate as check ``mass.separation_fork``.
 
+Full mission verification gate (E2-03, task #256)
+-------------------------------------------------
+The chain status answers "which link broke?"; the full-mission gate answers
+"did injection, the parking-orbit propagation and the recovery touchdown each
+succeed, and is the whole mission therefore a success?"
+:func:`orbitopt.mission.phases.full_mission_gate` grades the chain's checks per
+phase (tri-state verdict + reason codes per phase, overall rule
+``orbitopt.mission.phases.OVERALL_RULE``) and the mission report carries the
+document under ``inputs.full_mission``. A partial success is never an overall
+pass: an injected upper stage with a lost booster is overall ``failed`` with a
+green ``orbit_injection`` phase. When the recovery stage runs over the merged
+run it additionally records ``ascent.insertion_verified`` -- the Gate-B
+conjunction with the touchdown checks excluded -- so a red touchdown cannot
+red-grade the injection phase.
+
 Two ascent sources, one grading rule
 ------------------------------------
 ``ascent.mode: optimize`` flies the ascent now (needs the pinned
@@ -99,6 +114,7 @@ from orbitopt.mission.contract import (
     HandoffTolerances,
     check_handoff,
 )
+from orbitopt.mission.phases import full_mission_gate
 
 __all__ = [
     "ASCENT_MODES",
@@ -652,6 +668,10 @@ def scenario_warnings(scenario: TwoStageLeoScenario) -> list[str]:
                      "separation and is merged into the run; recovery.landed must be green for "
                      "the mission to pass (an unassessed landing -- solver stack missing -- is "
                      "reported failed with its reason code, never as a pass)")
+    else:
+        notes.append("full-mission gate: no recovery stage declared -- the recovery_touchdown "
+                     "phase is not applicable and the full-mission verdict grades only the "
+                     "phases this mission flies (E2-03)")
     return notes
 
 
@@ -981,6 +1001,7 @@ class TwoStageLeoMission:
     checks: tuple[HandoffCheck, ...] = ()
     not_assessed: list = field(default_factory=list)
     report: dict = field(default_factory=dict)
+    full_mission: dict = field(default_factory=dict)
     report_path: Path | None = None
 
     @property
@@ -1004,6 +1025,7 @@ class TwoStageLeoMission:
             "recovery_run_dir": (str(self.recovery_run_dir) if self.recovery_run_dir
                                  else None),
             "checks": _checks_doc(self.checks), "not_assessed": self.not_assessed,
+            "full_mission": self.full_mission,
             "report_file": str(self.report_path) if self.report_path else None,
         }
 
@@ -1103,6 +1125,25 @@ def _fly_recovery_stage(scenario: TwoStageLeoScenario, run, out: Path,
         reason_code=(landing_gate.reason_code
                      if landing_gate is not None and landing_gate.reason_code
                      else (outcome.reason_codes[0] if outcome.reason_codes else "failed"))))
+    # E2-03 (task #256): the merged run's Gate-B conjunction grades touchdown
+    # inside ``ascent.flight_verified``; record the insertion-only half
+    # separately so a red recovery cannot red-grade the injection phase.
+    insertion = [c for c in combined.verification.checks
+                 if c.id in gate_checks.CONSTRAINT_CHECK_IDS
+                 and c.id not in gate_checks.LANDING_CONSTRAINT_CHECK_IDS
+                 and c.id not in (gate_checks.RECOVERY_GATE_CHECK_ID,
+                                  "recovery-propellant-reserve")]
+    insertion_failures = [c for c in insertion if not c.passed]
+    insertion_notes: list[dict] = []
+    if insertion:
+        checks.append(_check(
+            "ascent.insertion_verified", not insertion_failures,
+            reason_code=(insertion_failures[0].reason_code or "insertion_constraints_failed")
+            if insertion_failures else ""))
+    else:
+        insertion_notes = [{"id": "ascent.insertion_verified",
+                            "reason": "the combined run records no insertion constraint checks "
+                                      "-- never treated as passed"}]
     reserve = next((c for c in outcome.checks if c.id == "recovery-propellant-reserve"), None)
     if reserve is not None:
         checks.append(_check("recovery.propellant_reserve", bool(reserve.passed),
@@ -1115,8 +1156,8 @@ def _fly_recovery_stage(scenario: TwoStageLeoScenario, run, out: Path,
     for c in (handoff.checks if handoff is not None else ()):
         checks.append(_check(f"recovery.{c.id}", bool(c.passed), value=c.value, limit=c.limit,
                              unit=c.unit, reason_code=c.reason_code))
-    notes = [{"id": f"recovery.{u.id}", "reason": f"phase {u.phase}: {u.note}"}
-             for u in (handoff.unassessed if handoff is not None else ())]
+    notes = insertion_notes + [{"id": f"recovery.{u.id}", "reason": f"phase {u.phase}: {u.note}"}
+                               for u in (handoff.unassessed if handoff is not None else ())]
 
     block: dict = {
         "status": "flown",
@@ -1362,6 +1403,7 @@ def run_two_stage_leo(scenario: TwoStageLeoScenario, out_dir, *,
         recovery_run_dir=recovery_run_dir,
         checks=tuple(checks), not_assessed=not_assessed)
     mission.report = mission_report(mission)
+    mission.full_mission = mission.report["inputs"]["full_mission"]
     mission.report_path = _write_report(mission)
     return mission
 
@@ -1445,7 +1487,8 @@ def _check_category(name: str) -> str:
                 "propagation.epoch_forward", "propagation.mass_conservation"):
         return CHECK_NUMERICAL
     if name.startswith("expected.") or name in (
-            "ascent.flight_verified", "ascent.physics_verified", "propagation.report_passed"):
+            "ascent.flight_verified", "ascent.insertion_verified",
+            "ascent.physics_verified", "propagation.report_passed"):
         return CHECK_MODEL
     raise ValueError(f"mission check {name!r} has no verification category")
 
@@ -1507,6 +1550,7 @@ def mission_report(mission: TwoStageLeoMission) -> dict:
                          "parking_orbit": mission.parking},
             "propagation": mission.propagation,
             "recovery": mission.recovery,
+            "full_mission": full_mission_gate(mission),
             "not_assessed": mission.not_assessed,
             "child_reports": child_reports,
         },
@@ -1572,8 +1616,12 @@ def build_from_config(config: dict, recorder=None) -> dict:
                              "fidelity": "high-fidelity"}
         st.convergence.update({"converged": mission.status == STATUS_OK,
                                "mission_status": mission.status,
+                               "full_mission_verdict": mission.full_mission.get("verdict"),
                                "checks_passed": sum(1 for c in mission.checks if c.passed),
                                "checks_total": len(mission.checks)})
+        st.notes.append("full-mission gate: " + mission.full_mission.get("verdict", "not_checked")
+                        + " (" + ", ".join(f"{p['phase']}={p['verdict']}"
+                                           for p in mission.full_mission.get("phases", [])) + ")")
         st.notes.extend(f"not assessed: {n['id']} ({n['reason']})" for n in mission.not_assessed)
 
     recorder.skip(SELECT, "one frozen reference mission -- nothing to select")
