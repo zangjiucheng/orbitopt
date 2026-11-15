@@ -38,7 +38,8 @@ from orbitopt.flightlab.contract import (
     load_target,
     read_run,
 )
-from orbitopt.flightlab.simulate import _spice_rotation, orbit_refly, simulate
+from orbitopt.flightlab.simulate import (_spice_rotation, orbit_refly, orbit_refly_6dof,
+                                         simulate)
 from orbitopt.flightlab.checks import evaluate
 from orbitopt.flightlab.target_export import build_target, save_target
 
@@ -373,6 +374,71 @@ def test_orbit_refly_rotates_position_and_velocity_separately(monkeypatch):
     assert physics is True
     assert not any(c.reason_code == "REFLY_BACKEND_ERROR" for c in checks)
     assert elements_calls[2] == ([0.0, 1.0, 0.0], [0.0, 7600.0, 0.0])
+
+
+def _ecef_coast_run() -> FlightRun:
+    """A 6-DOF-style run: an ECEF coast/insertion track (circular-ish), the
+    shape orbit_refly_6dof re-flies after rotating it Earth-fixed -> GCRS."""
+    r = checks.EARTH_RADIUS_M + 400000.0
+    return FlightRun(
+        run_id="synthetic-ecef", target_sha256="0" * 64, vehicle_sha256="0" * 64,
+        git_sha="unknown", created_utc="2026-11-10T12:00:00Z",
+        tracks=(BodyTrack(
+            body_id="upper", parent_body_id="stack", frame="ECEF",
+            epoch_utc="2026-11-10T12:00:00Z", provenance="illustrative",
+            t_s=(620.0, 622.0), mass_kg=(9000.0, 9000.0),
+            position_m=((r, 0.0, 0.0), (r, 0.0, 0.0)),
+            velocity_m_s=((0.0, 7660.0, 0.0), (0.0, 7660.0, 0.0)),
+        ),),
+        events=(Event(t_s=620.0, kind="seco", body_id="upper", data={}),),
+        verification=Verification(backend_self_check=True),
+    )
+
+
+def test_orbit_refly_6dof_bridges_ecef_to_gcrs_before_the_refly(monkeypatch):
+    """Task #261: the 6-DOF independent check is the SAME tudatpy re-fly as the
+    3-DOF lineage, run on the frame-bridged state -- so ECEF must become GCRS
+    BEFORE the re-fly sees it, and physics_verified comes from the re-fly only."""
+    import orbitopt.flightlab.simulate as sim
+    import orbitopt.flightlab.frames as frames
+
+    bridged = {}
+
+    def fake_to_gcrs(pos, vel, frame, epoch, t_s):
+        bridged["frame"] = frame
+        # rotate the input by a fixed offset so we can tell it was bridged
+        gcrs_pos = [(p[0], p[1] + 123.0, p[2]) for p in pos]
+        gcrs_vel = [(vx, vy + 1.0, vz) for vx, vy, vz in vel]
+        return gcrs_pos, gcrs_vel
+
+    def fake_refly(st, **kwargs):
+        bridged["fed_position_m"] = st["position_m"]
+        bridged["fed_velocity_m_s"] = st["velocity_m_s"]
+        return True, (Check(id="orbit-refly-a", passed=True),), "re-flew"
+
+    monkeypatch.setattr(frames, "to_gcrs", fake_to_gcrs)
+    monkeypatch.setattr(sim, "_refly_gcrs_state", fake_refly)
+
+    physics, checks, note = orbit_refly_6dof(_ecef_coast_run())
+    assert bridged["frame"] == "ECEF"                     # the Earth-fixed track is the input
+    assert bridged["fed_position_m"][1] == pytest.approx(123.0)  # the re-fly saw the GCRS state
+    assert bridged["fed_velocity_m_s"][1] == pytest.approx(7661.0)
+    assert physics is True and "6-DOF" in note            # physics comes from the re-fly
+
+
+def test_orbit_refly_6dof_frame_bridge_failure_is_not_assessed(monkeypatch):
+    """If the frame bridge (astropy) cannot convert the state the run is not
+    faked as verified -- physics_verified stays None with an honest reason."""
+    import orbitopt.flightlab.frames as frames
+
+    def boom(*a, **k):
+        raise RuntimeError("no polar motion table")
+
+    monkeypatch.setattr(frames, "to_gcrs", boom)
+    physics, checks, note = orbit_refly_6dof(_ecef_coast_run())
+    assert physics is None
+    assert checks[0].reason_code == "REFLY_BACKEND_ERROR"
+    assert "frame bridge" in note
 
 
 def test_missing_constraint_data_fails_instead_of_passing(target):

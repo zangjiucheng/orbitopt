@@ -1450,6 +1450,40 @@ def _check_category(name: str) -> str:
     raise ValueError(f"mission check {name!r} has no verification category")
 
 
+def _check_evidence(name: str) -> str:
+    """Task #263 (E4-03) evidence type of one mission-chain check. Chain
+    integrity (stations, handoffs, mass bookkeeping, parking-orbit transform,
+    propagation running forward, optimizer converged) is bare numerical
+    consistency. ``ascent.physics_verified`` is the *independent Gate-B
+    re-flight* verdict (task #261: only set when an independent propagator
+    replays the flown run, never by the producing backend) -- the sole
+    validation-grade evidence in this report. ``propagation.report_passed``
+    grades the M-05 propagation against an *analytic* coast: an
+    ``analytical`` reference, not real-world data. Every other ``model_agreement``
+    check (``expected.*`` vs the design orbit; ``ascent.flight_verified`` = the
+    Gate-B mission-constraints verdict) is graded against the **design input**
+    itself -- internal consistency, not independent validation."""
+    from orbitopt.verify.report import (
+        EVIDENCE_ANALYTICAL,
+        EVIDENCE_DESIGN_INPUT,
+        EVIDENCE_INDEPENDENT_MODEL,
+        EVIDENCE_NUMERICAL,
+    )
+
+    if name.startswith(("station.", "handoff.", "mass.", "parking.")):
+        return EVIDENCE_NUMERICAL
+    if name in ("ascent.optimizer_converged", "propagation.ran",
+                "propagation.epoch_forward", "propagation.mass_conservation"):
+        return EVIDENCE_NUMERICAL
+    if name == "ascent.physics_verified":
+        return EVIDENCE_INDEPENDENT_MODEL
+    if name == "propagation.report_passed":
+        return EVIDENCE_ANALYTICAL
+    if name.startswith("expected.") or name == "ascent.flight_verified":
+        return EVIDENCE_DESIGN_INPUT
+    raise ValueError(f"mission check {name!r} has no evidence type")
+
+
 def mission_report(mission: TwoStageLeoMission) -> dict:
     """The unified task report of the reference mission (kind
     ``two-stage-leo-mission``, schema ``verification-report-1.0``): one status
@@ -1461,7 +1495,8 @@ def mission_report(mission: TwoStageLeoMission) -> dict:
     from orbitopt.verify.report import provenance, report_digest, status_from_checks, to_jsonable
 
     checks = {c.id: bool(c.passed) for c in mission.checks}
-    status = status_from_checks(checks, {name: _check_category(name) for name in checks})
+    status = status_from_checks(checks, {name: _check_category(name) for name in checks},
+                                {name: _check_evidence(name) for name in checks})
     child_reports = []
     for kind, block in (("launch-pipeline", mission.launch),
                         ("orbit-propagation", mission.propagation)):

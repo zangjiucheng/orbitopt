@@ -158,6 +158,47 @@ def test_write_run_round_trips(tmp_path):
     assert read_run(out) == run  # frozen dataclasses compare by value, extras included
 
 
+def test_backend_self_check_round_trips_and_defaults_to_none(tmp_path):
+    """Task #261: the backend's own checks are recorded separately from the
+    independent physics re-fly, and old run dirs (no field) read as None."""
+    from dataclasses import replace
+
+    base = read_run(RUN_FIXTURE)
+    run = replace(base, verification=replace(
+        base.verification, physics_verified=None, backend_self_check=True))
+    out = tmp_path / "run"
+    write_run(out, run)
+    back = read_run(out)
+    validate_run(out)  # the optional field validates
+    assert back.verification.backend_self_check is True
+    assert back.verification.physics_verified is None  # self-check does NOT imply physics
+    # an older run dir without the field still validates and reads as None
+    vdoc = json.loads((out / "verification.json").read_text(encoding="utf-8"))
+    del vdoc["backend_self_check"]
+    (out / "verification.json").write_text(json.dumps(vdoc), encoding="utf-8")
+    legacy = read_run(out)
+    validate_run(out)
+    assert legacy.verification.backend_self_check is None
+
+
+def test_backend_self_check_and_physics_verified_are_independent(tmp_path):
+    """The two verdicts can disagree in either direction and both survive the
+    round-trip (backend self-vouches but was not independently checked, and
+    vice-versa) -- they are never collapsed onto one another."""
+    from dataclasses import replace
+
+    base = read_run(RUN_FIXTURE)
+    for physics, self_check in ((False, True), (True, False)):
+        run = replace(base, verification=replace(
+            base.verification, physics_verified=physics, backend_self_check=self_check))
+        out = tmp_path / f"run-{physics}-{self_check}"
+        write_run(out, run)
+        back = read_run(out)
+        validate_run(out)
+        assert back.verification.physics_verified is physics
+        assert back.verification.backend_self_check is self_check
+
+
 def test_written_run_survives_manifest_resort_and_extra(tmp_path):
     """write_run must emit a manifest that validates even after its bodies[]
     entry is built straight from a fresh BodyTrack (bounds from the CSV)."""

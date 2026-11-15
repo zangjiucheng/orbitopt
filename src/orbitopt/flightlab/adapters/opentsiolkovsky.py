@@ -478,7 +478,10 @@ def _verification(summary: Mapping[str, Any], tracks: Sequence[BodyTrack],
     are evaluated against the target's own limits when it states them.
     Convergence and physics verification are NOT assessed here: OT is a
     simulator (no optimizer) and a higher-fidelity check (e.g. tudatpy) is
-    what sets physics_verified -- both stay None."""
+    what sets physics_verified -- both stay None. The OT bookkeeping verdict
+    (mass non-negative + stack-mass continuity across separations) is recorded
+    as backend_self_check -- the backend vouching for its own output, kept
+    apart from the independent physics re-fly the pipeline runs."""
     checks: list[Check] = []
     checks.append(Check(id="mass-non-negative",
                         passed=all(min(tr.mass_kg) >= 0.0 for tr in tracks),
@@ -518,9 +521,11 @@ def _verification(summary: Mapping[str, Any], tracks: Sequence[BodyTrack],
         checks.append(Check(id="max-accel-within-limit", passed=passed, value=value,
                             limit=float(constraints.max_specific_acceleration_g), unit="g",
                             reason_code="" if passed else "max_accel_exceeded"))
+    self_check = all(c.passed for c in checks if c.id.startswith("mass-"))
     return Verification(
         optimizer_converged=None,
         physics_verified=None,
+        backend_self_check=self_check,
         mission_constraints_passed=(all(verdicts) if verdicts else None),
         checks=tuple(checks),
     )

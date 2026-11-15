@@ -257,7 +257,9 @@ def verify_geo_raising(problem, decision_vector, step_size=120.0, stationkeeping
         residuals.append(_report.state_residual(
             "pre_final_burn_vs_screening", "analytic two-body apogee state of the screening schedule",
             state=pre_final, reference_state=states[n - 1],
-        ))
+            evidence=_report.EVIDENCE_ANALYTICAL,
+            scope="unperturbed two-body apogee of the screening Keplerian schedule",
+            phases=("orbit raising (pre-final-burn coast)",)))
     propagations.append(propagation_report_section(sk, "stationkeeping"))
     # Achieved GEO vs ideal circular equatorial GEO at the same in-plane phase
     # (same position direction, circular speed perpendicular in the equator).
@@ -271,7 +273,9 @@ def verify_geo_raising(problem, decision_vector, step_size=120.0, stationkeeping
     residuals.append(_report.state_residual(
         "post_insertion_vs_ideal_geo", "circular equatorial orbit at r_geo through the burn longitude",
         state=corrected_state, reference_state=ideal_geo,
-    ))
+        evidence=_report.EVIDENCE_DESIGN_INPUT,
+        scope="ideal circular equatorial GEO (the design aim point) at the corrected final-burn longitude",
+        phases=("GEO insertion (post final-burn)",)))
     report = _report.build_report(
         kind="geo-insertion", label=f"epoch-mjd2000-{epoch_mjd2000:.6f}",
         propagations=propagations, residuals=residuals,

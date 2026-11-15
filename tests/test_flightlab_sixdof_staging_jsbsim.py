@@ -155,7 +155,8 @@ def test_flight_run_has_three_validated_bodies(replay, tmp_path):
     for child in ("booster", "upper"):
         assert abs(by_id[child].t_start_s - replay.frozen.t_s) < 1e-9
         assert by_id[child].t_end_s - by_id[child].t_start_s >= COAST_S - replay.dt_s
-    assert run.verification.physics_verified is True
+    assert run.verification.backend_self_check is True
+    assert run.verification.physics_verified is None
     assert all(c.passed for c in run.verification.checks)
     assert any(e.kind == "separation" and e.body_id == "stack" for e in run.events)
     write_run(tmp_path, run)
