@@ -83,6 +83,7 @@ import yaml
 
 from orbitopt.flightlab import frames
 from orbitopt.flightlab import checks as gate_checks
+from orbitopt.flightlab.backends import BACKEND_OPENTSIOLOVSKY
 from orbitopt.flightlab.contract import (
     Event,
     FlightRun,
@@ -590,6 +591,7 @@ def parse_ot_outputs(ot_out_dir: Path, target: FlightTarget, vehicle: Vehicle,
         git_sha=git_sha,
         created_utc=epoch_utc,
         engines={"opentsiolkovsky-cli": OT_VERSION},
+        backend=BACKEND_OPENTSIOLOVSKY,
         assumptions=tuple(assumptions + [f"vehicle: {a}" for a in vehicle.assumptions]
                           + [f"target: {a}" for a in target.assumptions]),
         tracks=tuple(tracks),

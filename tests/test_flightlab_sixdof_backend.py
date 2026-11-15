@@ -195,7 +195,7 @@ def test_cli_accepts_backend_flag_case_insensitively():
     assert args.backend == BACKEND
     default = build_parser().parse_args(
         ["flight", "simulate", "t.yaml", "--vehicle", "v.yaml", "-o", "run"])
-    assert default.backend == "3DOF"
+    assert default.backend == "opentsiolkovsky"
     with pytest.raises(SystemExit):
         build_parser().parse_args(
             ["flight", "simulate", "t.yaml", "--vehicle", "v.yaml", "-o", "run",

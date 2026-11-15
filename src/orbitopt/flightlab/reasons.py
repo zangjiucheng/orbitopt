@@ -347,6 +347,43 @@ _ENTRIES: tuple[ReasonEntry, ...] = (
        "There were not enough touchdowns/impacts to estimate a dispersion ellipse.",
        "Run the Monte Carlo with more samples.", "missing"),
 
+    # ------------------------------------- E1-04 production JSBSim vs native plant
+    # (orbitopt.flightlab.sixdof.production_compare; bands in ADR flightlab-0007)
+    _e("E104_PROPELLANT_DRAIN_DIVERGED", "physics",
+       "Backends drain different propellant",
+       "The two backends drain measurably different propellant: the engine flow models drifted apart.",
+       "Compare the engine Isp / mass-flow parameters of the JSBSim XML and the native vehicle."),
+    _e("E104_MAX_Q_DIVERGED", "physics",
+       "Max-Q diverged between backends",
+       "Max-Q moved beyond the disclosed band: the aero or the thrust model changed.",
+       "Diff the compiled aero tables and the thrust law against the parity source."),
+    _e("E104_MECO_ALTITUDE_DIVERGED", "physics",
+       "Burnout altitude diverged",
+       "Burnout altitude diverged between the backends beyond the disclosed band.",
+       "Re-check the shared scenario parameters (parity source) and the aero tables."),
+    _e("E104_MECO_SPEED_DIVERGED", "physics",
+       "Burnout speed diverged",
+       "Burnout speed diverged between the backends beyond the disclosed band.",
+       "Re-check thrust, Isp and drag between the JSBSim XML and the native plant."),
+    _e("E104_ATTITUDE_RATE_DIVERGED", "physics",
+       "Attitude dynamics diverged",
+       "The peak pitch-rate difference between the backends left the disclosed band.",
+       "Compare the inertia tensor, gimbal geometry and tracker gains of the two plants."),
+    _e("E104_ALPHA_DIVERGED", "physics",
+       "Angle of attack diverged through max-Q",
+       "The plants fly measurably different attitudes while the aero has authority: an aero term or "
+       "the thrust behind it changed.",
+       "Diff the moment coefficients and the thrust model against the parity source."),
+    _e("E104_AERO_ATTITUDE_NOT_HELD", "physics",
+       "Production airframe off its commanded ascent",
+       "The production airframe stopped flying the commanded ascent on its own aerodynamics.",
+       "Regenerate the production aircraft from the aero document and check its static margin."),
+    _e("E104_PAD_THRUST_RATIO_UNEXPLAINED", "physics",
+       "Pad thrust ratio no longer explained",
+       "The JSBSim/native pad thrust ratio is no longer explained by isp_vacuum/isp_sea_level: an engine "
+       "parameter drifted.",
+       "Compare the engine nozzle area and the vacuum / sea-level Isp of both backends."),
+
     # ----------------------------------------------------------- Monte Carlo (FL-304)
     _e("LANDED", "montecarlo",
        "Landed in limits",

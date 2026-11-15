@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from orbitopt.flightlab import checks as _checks
+from orbitopt.flightlab.backends import describe
 from orbitopt.flightlab.contract import (
     Event,
     FlightRun,
@@ -144,6 +145,11 @@ def flight_run_report(run: FlightRun, target: FlightTarget | None = None) -> dic
         "git_sha": run.git_sha,
         "created_utc": run.created_utc,
         "engines": dict(run.engines),
+        # E1-01 (task #250): which physics engine actually flew this run --
+        # canonical identity + fidelity boundary (orbitopt.flightlab.
+        # backends), so a report never leans on an ambiguous 3DOF/6DOF label.
+        **({"backend": run.backend, "backend_fidelity": describe(run.backend)}
+           if run.backend else {}),
         "assumptions": list(run.assumptions),
         "events": [{"t_s": e.t_s, "kind": e.kind, "body_id": e.body_id} for e in run.events],
         "target_file": (target.mission.id if target is not None else None),

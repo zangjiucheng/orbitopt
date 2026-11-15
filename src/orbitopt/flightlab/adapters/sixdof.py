@@ -1,6 +1,7 @@
 """Formal Flight Lab 6-DOF JSBSim backend (F-01, task #226): a config-driven
 ascent adapter built on the E4 spike drivers (FL-401 #206, FL-402 #207,
-FL-403 #208), selectable as ``backend="6DOF"`` next to the 3-DOF
+FL-403 #208), selectable as ``backend="jsbsim"`` (canonical identity,
+E1-01 task #250; ``"6DOF"`` only as a deprecated alias) next to the
 OpenTsiolkovsky lineage.
 
 What this refactor changes over the spike drivers: every input they took as
@@ -14,7 +15,7 @@ edit of YAML, never a code change::
     run = run_ascent(Path("sixdof_scenario.yaml"), Path("runs/jsb6-0001"))
 
 or through the Gate-B pipeline: ``orbitopt flight simulate <target>
---vehicle <sixdof-config.yaml> --backend 6DOF -o runs/<id>`` (the packaged
+--vehicle <sixdof-config.yaml> --backend jsbsim -o runs/<id>`` (the packaged
 spike scenarios resolve through :func:`packaged_config`).
 
 Config document (SI units; required keys ``name``, ``model``; unknown
@@ -112,6 +113,7 @@ from typing import Any, Mapping
 import numpy as np
 import yaml
 
+from orbitopt.flightlab.backends import BACKEND_JSBSIM
 from orbitopt.flightlab.contract import (
     FLIGHT_PROVENANCE_TAGS,
     Check,
@@ -123,12 +125,17 @@ from orbitopt.flightlab.contract import (
 )
 from orbitopt.flightlab.sixdof.jsbsim_driver import InitialConditions, SixDofSim, \
     mass_state_from_sample
+from orbitopt.flightlab.sixdof.jsbsim_aero import aircraft_aero_note
 from orbitopt.flightlab.sixdof.mass_properties import MassModelConfig, load_mass_model
 
-#: Backend selector value accepted by ``simulate(backend=...)`` /
-#: ``orbitopt flight simulate --backend``.
-BACKEND = "6DOF"
-BACKENDS = ("3DOF", "6DOF")
+#: Canonical identity (E1-01, task #250) of this physics engine, as recorded
+#: on every run it writes and as spelled on
+#: ``simulate(backend=...)`` / ``orbitopt flight simulate --backend``. The
+#: historical ``"6DOF"`` spelling is a deprecated alias resolved by
+#: :func:`orbitopt.flightlab.backends.canonical_backend` -- it is ambiguous
+#: across entry points (``flight mission --backend 6DOF`` means the *native*
+#: plant), so it never names this backend in an output artefact.
+BACKEND = BACKEND_JSBSIM
 
 #: The jsbsim pip version this backend is written and tested against
 #: (opt-in extra ``orbitopt[sixdof]``, the FL-401 spike environment).
@@ -822,8 +829,8 @@ def run_ascent(config, out_dir, *, target=None) -> FlightRun:
     self_check = all(c.passed for c in checks)
     assumptions = [
         f"6-DOF backend (jsbsim {JSBSIM_VERSION}): vehicle {vehicle_note!r} from the "
-        "config, ECEF states (frame ECEF, no frame bridge), zero-aero spike "
-        "models: illustrative, not flight-certified.",
+        "config, ECEF states (frame ECEF, no frame bridge); the config's aircraft "
+        f"flies {aircraft_aero_note(cfg.model)}: illustrative, not flight-certified.",
         "config-driven: vehicle, initial conditions and integration step come "
         f"from the scenario document (sha256 {cfg.digest[:16]}), not from code",
         "created_utc is the config epoch: run_ascent is a pure function of the "
@@ -841,6 +848,7 @@ def run_ascent(config, out_dir, *, target=None) -> FlightRun:
         git_sha="0" * 40,
         created_utc=cfg.epoch_utc,
         engines={"jsbsim": JSBSIM_VERSION, "aircraft": vehicle_note},
+        backend=BACKEND,
         assumptions=tuple(assumptions),
         tracks=tracks,
         events=tuple(events),

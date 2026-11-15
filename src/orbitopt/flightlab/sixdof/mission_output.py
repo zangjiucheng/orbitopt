@@ -10,14 +10,22 @@ One mission, two backends
 gravity-turn program, separation instant, delayed upper-stage ignition) is
 the mission. :func:`run_mission` flies it on one of two backends::
 
-    backend="6DOF"  F-06's closed-loop path: rigid-body stack on the F-04
-                    tracker, analytic split, two independent rigid children
-    backend="3DOF"  the point-mass twin: the same scenario's stack flown by
+    backend="native-rigidbody"  F-06's closed-loop path: rigid-body stack on
+                    the F-04 tracker, analytic split, two independent rigid
+                    children
+    backend="native-pointmass"  the point-mass twin: the same scenario's
+                    stack flown by
                     gravity_turn.propagate_point_mass (kinematic program
                     attitude, q-bar S CA/CN aero -- the class of model the
                     OT adapter drives), the SAME split_stack_state split on
                     the frozen trace, point-mass children (booster coasted,
                     upper ignited on the SAME IgnitionPlan schedule)
+
+The identities are the canonical ones from :mod:`orbitopt.flightlab.backends`
+(E1-01, task #250): the coarse ``"3DOF"``/``"6DOF"`` spellings are accepted by
+:func:`run_mission` only as deprecated aliases -- in this module they have
+exactly one meaning each -- and the run, its report and its scene record the
+canonical identity, never the alias.
 
 Both backends consume the identical scenario object, share the F-05
 point-mass propagator and the F-06 analytic split, and run the SAME
@@ -66,6 +74,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -74,6 +83,16 @@ from typing import Any
 import numpy as np
 
 from orbitopt.flightlab import frames
+from orbitopt.flightlab.backends import (
+    BACKEND_NATIVE_POINTMASS,
+    BACKEND_NATIVE_RIGIDBODY,
+    canonical_backend,
+)
+from orbitopt.flightlab.guidance.upper_stage import (
+    ParkingOrbitTarget,
+    UpperStageGuidanceSpec,
+    insertion_report,
+)
 from orbitopt.flightlab.contract import (
     BodyTrack,
     Check,
@@ -103,6 +122,7 @@ from orbitopt.flightlab.sixdof.two_stage import (
     TwoStageStudy,
     _acceptance_checks,
     f06_two_stage_scenario,
+    guided_upper_stage_pair,
     run_two_stage,
     split_stack_state,
     to_flight_run,
@@ -112,17 +132,25 @@ __all__ = [
     "BACKEND_3DOF",
     "BACKEND_6DOF",
     "BACKENDS",
+    "F07_INSERTION_TOLERANCE_M",
+    "F07_PARKING_ALTITUDE_M",
+    "F07_UPPER_DRY_MASS_KG",
+    "F07_UPPER_GIMBAL_LIMIT_RAD",
+    "F07_UPPER_PROPELLANT_MASS_KG",
     "MissionStudy",
     "f07_scenario",
     "flight_run_report",
+    "insertion_report",
     "run_mission",
     "to_flight_run_mission",
     "mission_comparison_report",
     "write_mission_outputs",
 ]
 
-BACKEND_3DOF = "3DOF"
-BACKEND_6DOF = "6DOF"
+#: E1-01 (task #250): canonical identities; the constant NAMES keep the F-07
+#: history readable, the VALUES are the unambiguous backend identities.
+BACKEND_3DOF = BACKEND_NATIVE_POINTMASS
+BACKEND_6DOF = BACKEND_NATIVE_RIGIDBODY
 BACKENDS: tuple[str, ...] = (BACKEND_3DOF, BACKEND_6DOF)
 
 #: The F-05 module documents WHY the native point-mass twin -- not the
@@ -261,6 +289,11 @@ def run_two_stage_point_mass(scenario: TwoStageScenario | None = None, *,
                                        s.t_end_s, use_aero=True,
                                        throttle=0.0, **kw)
     ignition_t = s.ignition.ignition_t_s
+    # E1-03 (task #252): the guided burn flies the SAME state-feedback law
+    # the rigid-body backend flies (one fresh instance per flight); the
+    # coast leg never needs it -- the engine is shut and the law's own
+    # ignition gate would hold 0 throttle across it anyway.
+    guidance = s.upper_guidance.new_guidance() if s.upper_guidance is not None else None
     if ignition_t < s.t_end_s:
         coast = propagate_point_mass(upper_s, upper_v, s.program, ignition_t,
                                      use_aero=True, throttle=0.0, **kw)
@@ -270,12 +303,14 @@ def run_two_stage_point_mass(scenario: TwoStageScenario | None = None, *,
             burn_start = _point_mass_terminal_state(coast, s.program, s.physics)
             burn = propagate_point_mass(burn_start, upper_v, s.program,
                                         s.t_end_s, use_aero=True,
-                                        throttle=s.ignition.throttle, **kw)
+                                        throttle=s.ignition.throttle,
+                                        guidance=guidance, **kw)
             upper_run = _concat_point_mass_runs(coast, burn)
     else:
         upper_run = propagate_point_mass(upper_s, upper_v, s.program,
                                          s.t_end_s, use_aero=True,
-                                         throttle=s.ignition.throttle, **kw)
+                                         throttle=s.ignition.throttle,
+                                         guidance=guidance, **kw)
 
     handoff = HandoffState(
         from_phase=PHASE_SEPARATION, to_phase=PHASE_BOOSTBACK,
@@ -341,26 +376,97 @@ class MissionStudy:
         return out
 
 
-def f07_scenario(**kwargs) -> TwoStageScenario:
-    """The packaged F-07 mission: the F-06 two-stage scenario (the mission
-    both backends fly), named for this task. Keyword-for-key pass-through to
-    :func:`~orbitopt.flightlab.sixdof.two_stage.f06_two_stage_scenario`."""
-    return replace(f06_two_stage_scenario(**kwargs), name="f07-two-stage")
+#: E1-03 (task #252): the packaged guided mission's declared target and
+#: insertion tolerances, and the disclosed stage-variant figures (see
+#: :func:`f07_scenario`).
+F07_PARKING_ALTITUDE_M = 220_000.0
+F07_INSERTION_TOLERANCE_M = 25_000.0
+F07_UPPER_DRY_MASS_KG = 1_000.0
+F07_UPPER_PROPELLANT_MASS_KG = 7_000.0
+F07_UPPER_GIMBAL_LIMIT_RAD = math.radians(3.0)
+
+
+def f07_scenario(*, guided_upper_stage: bool = True,
+                 parking_altitude_m: float = F07_PARKING_ALTITUDE_M,
+                 insertion_periapsis_tolerance_m: float = F07_INSERTION_TOLERANCE_M,
+                 insertion_apoapsis_tolerance_m: float = F07_INSERTION_TOLERANCE_M,
+                 cutoff_periapsis_margin_m: float = 0.0,
+                 upper_dry_mass_kg: float = F07_UPPER_DRY_MASS_KG,
+                 upper_propellant_mass_kg: float = F07_UPPER_PROPELLANT_MASS_KG,
+                 upper_gimbal_limit_rad: float = F07_UPPER_GIMBAL_LIMIT_RAD,
+                 **kwargs) -> TwoStageScenario:
+    """The packaged F-07 mission: the F-06 two-stage flight, but from the
+    ignition on the upper stage is CLOSED-LOOP GUIDED (E1-03, task #252) --
+    the point of the scenario is that both backends fly the SAME
+    state-feedback law (``orbitopt.flightlab.guidance.upper_stage``), so
+    their terminal difference is an execution delta, not a guidance delta.
+
+    The law targets a circular parking orbit of ``parking_altitude_m`` and
+    cuts off on osculating periapsis and rate-limits its own attitude
+    command; the declared insertion tolerances
+    live on the target (:func:`insertion_report` grades both backends'
+    terminal states against them).
+
+    Executing a guidance law needs what the frozen parity upper stage does
+    not have -- a TVC axis (its gimbal travel is 0) and a tank whose
+    delta-v reaches orbit -- so the guided mission flies the disclosed
+    stage variant of
+    :func:`~orbitopt.flightlab.sixdof.two_stage.guided_upper_stage_pair`
+    (default: 1 t dry / 7 t prop, 3 deg gimbal; wet mass, engine and
+    inertia unchanged, so stage 1 and the separation state stay bit-exact).
+    The E1-01 parity source is untouched: this is a scenario variant, and
+    the parity pair still flies F-06. ``guided_upper_stage=False`` returns
+    the old open-loop F-07 definition (the frozen benchmark scenario)
+    under its old name. Keyword-for-key pass-through to
+    :func:`~orbitopt.flightlab.sixdof.two_stage.f06_two_stage_scenario`
+    for everything else."""
+    base = f06_two_stage_scenario(**kwargs)
+    if not guided_upper_stage:
+        return replace(base, name="f07-two-stage")
+    pair = guided_upper_stage_pair(base.pair,
+                                   upper_dry_mass_kg=upper_dry_mass_kg,
+                                   upper_propellant_mass_kg=upper_propellant_mass_kg,
+                                   gimbal_limit_rad=upper_gimbal_limit_rad)
+    target = ParkingOrbitTarget(altitude_m=float(parking_altitude_m),
+                                periapsis_tolerance_m=float(insertion_periapsis_tolerance_m),
+                                apoapsis_tolerance_m=float(insertion_apoapsis_tolerance_m))
+    engine = base.pair.upper.engine
+    guidance = UpperStageGuidanceSpec(
+        target=target, dry_mass_kg=float(upper_dry_mass_kg),
+        rated_thrust_vacuum_n=float(engine.count) * float(engine.thrust_vacuum_n),
+        isp_vacuum_s=float(engine.isp_vacuum_s),
+        ignition_t_s=base.ignition.ignition_t_s,
+        cutoff_periapsis_margin_m=float(cutoff_periapsis_margin_m))
+    assumptions = tuple(a for a in base.assumptions
+                        if "open-loop with a neutral gimbal" not in a) + (
+        "E1-03 (task #252): the upper stage is guided by the SHARED PEG-class "
+        "law in orbitopt.flightlab.guidance.upper_stage on BOTH backends "
+        "(point-mass twin and rigid-body tracker alike), targeting the declared "
+        "parking orbit with an osculating-periapsis cutoff and a slew-limited "
+        "-- attitude command, on a disclosed "
+        "stage variant (TVC axis + tank sized to reach orbit) that keeps the "
+        "parity stage's wet mass, engine and inertia. The reported "
+        "6dof-minus-3dof upper-body delta is therefore guidance EXECUTION "
+        "(attitude dynamics + actuator lag), not a guidance-design delta.",
+    )
+    return replace(base, name="f07-two-stage-guided", pair=pair,
+                   upper_guidance=guidance, assumptions=assumptions)
 
 
 def run_mission(scenario: TwoStageScenario | None = None, *,
                 backend: str = BACKEND_6DOF,
                 epoch_utc: datetime | None = None) -> MissionStudy:
     """Fly ``scenario`` (default :func:`f07_scenario`) on ``backend``:
-    ``"6DOF"`` runs F-06's closed-loop rigid-body path
+    ``"native-rigidbody"`` runs F-06's closed-loop rigid-body path
     (:func:`~orbitopt.flightlab.sixdof.two_stage.run_two_stage`),
-    ``"3DOF"`` the point-mass twin (:func:`run_two_stage_point_mass`).
-    Case-insensitive; anything else raises ``ValueError`` naming the two
-    backends. Same scenario object, same checks either way."""
-    name = str(backend).strip().upper()
-    if name not in BACKENDS:
-        raise ValueError(f"backend {backend!r} is not supported; choose "
-                         f"{', '.join(BACKENDS)}")
+    ``"native-pointmass"`` the point-mass twin
+    (:func:`run_two_stage_point_mass`). Case-insensitive; the deprecated
+    ``"3DOF"``/``"6DOF"`` aliases resolve to those two here and nowhere else.
+    Anything else raises ``ValueError`` naming the two canonical backends.
+    Same scenario object, same checks either way."""
+    name = canonical_backend(
+        backend, aliases={"3dof": BACKEND_3DOF, "6dof": BACKEND_6DOF},
+        allowed=BACKENDS)
     s = scenario or f07_scenario()
     study = (run_two_stage(s, epoch_utc=epoch_utc) if name == BACKEND_6DOF
              else run_two_stage_point_mass(s, epoch_utc=epoch_utc))
@@ -401,8 +507,9 @@ def to_flight_run_mission(mission: MissionStudy, *,
         created_utc=epoch_utc,
         engines={"stage1": "spike_stage engine (vac 1.88 MN / Isp 320 s)",
                  "stage2": "upper engine (vac 220 kN / Isp 340 s)"},
+        backend=BACKEND_NATIVE_POINTMASS,
         assumptions=SHARED_ASSUMPTIONS + tuple(s.assumptions) + (
-            (f"3-DOF backend: stack flown point-mass to t={s.separation_t_s} "
+            (f"native-pointmass backend: stack flown point-mass to t={s.separation_t_s} "
              f"s, split analytically with a {sep['separation_impulse_ns']} N.s "
              f"body-+x impulse; upper ignition at t={s.ignition.ignition_t_s} s "
              f"(delay {s.ignition.ignition_delay_s} s) via a butt-joined "
@@ -469,6 +576,17 @@ def _diff_summary(diff) -> dict[str, Any]:
             "t_span_s": [float(diff.t_s[0]), float(diff.t_s[-1])]}
 
 
+def _cutoff_t_s_of(run) -> float | None:
+    """The first sampled instant at which a guided burn is found shut after
+    having been alight (``None``: still burning at the last sample). The
+    sampling grid, not the integrator's sub-step MECO instant."""
+    th = np.asarray(run.samples["throttle"], dtype=float)
+    burning = np.nonzero(th > 0.0)[0]
+    if burning.size == 0 or int(burning[-1]) >= th.size - 1:
+        return None
+    return float(run.samples["t_s"][int(burning[-1]) + 1])
+
+
 def mission_comparison_report(mission_3dof: MissionStudy,
                               mission_6dof: MissionStudy,
                               *, bodies: tuple[str, ...] = ("stack", "booster",
@@ -484,8 +602,9 @@ def mission_comparison_report(mission_3dof: MissionStudy,
                                         build_report, report_digest, status_from_checks)
 
     if mission_3dof.backend != BACKEND_3DOF or mission_6dof.backend != BACKEND_6DOF:
-        raise ValueError("the comparison runs 3DOF minus 6DOF; pass the two "
-                         "backends' mission studies in that order")
+        raise ValueError("the comparison runs native-pointmass minus "
+                         "native-rigidbody; pass the two backends' mission "
+                         "studies in that order")
     s3, s6 = mission_3dof.study, mission_6dof.study
     runs3 = {"stack": s3.stack, "booster": s3.booster, "upper": s3.upper}
     runs6 = {"stack": s6.stack, "booster": s6.booster, "upper": s6.upper}
@@ -514,15 +633,63 @@ def mission_comparison_report(mission_3dof: MissionStudy,
         "scenario": {"name": s.name, "separation_t_s": s.separation_t_s,
                      "ignition_delay_s": s.ignition.ignition_delay_s,
                      "t_end_s": s.t_end_s, "dt_s": s.dt_s},
-        "backends": {"3dof": "native point-mass twin (gravity_turn twin of "
-                             "the OT-class model)",
-                     "6dof": "native rigid-body plant (F-02/F-04/F-06 path)"},
-        "headline": "6dof_minus_3dof",
+        "backends": {BACKEND_NATIVE_POINTMASS:
+                         "native point-mass twin (gravity_turn twin of the "
+                         "OT-class model)",
+                     BACKEND_NATIVE_RIGIDBODY:
+                         "native rigid-body plant (F-02/F-04/F-06 path)"},
+        "headline": "rigidbody_minus_pointmass",
         "checks": checks,
         "bodies": body_docs,
     }
+    # E1-03 (task #252): with the guided scenario the comparison report also
+    # carries the parking-orbit insertion grading of BOTH terminal states
+    # against the target's declared tolerances -- the acceptance's "insertion
+    # accuracy with a declared tolerance that passes" artefact. The check is
+    # graded only when the guided burn actually completed on both sides
+    # (cutoff latched before t_end): a scenario truncated mid-burn did not
+    # exercise insertion, and a truncated mission is not a failed mission --
+    # the report says so in `upper_insertion.note` instead of grading it.
+    # Without a guidance spec the entry says so explicitly.
+    spec = s.upper_guidance
+    if spec is not None:
+        insertion = {
+            "law": "shared PEG-class guidance (orbitopt.flightlab.guidance."
+                   "upper_stage) -- both backends fly one law",
+            "target_altitude_m": float(spec.target.altitude_m),
+            "periapsis_tolerance_m": float(spec.target.periapsis_tolerance_m),
+            "apoapsis_tolerance_m": float(spec.target.apoapsis_tolerance_m),
+            "cutoff_periapsis_margin_m": float(spec.cutoff_periapsis_margin_m),
+            "command_slew_rate_deg_s": float(spec.command_slew_rate_deg_s),
+        }
+        cutoffs: dict[str, float | None] = {}
+        inserted = True
+        for tag, study in ((BACKEND_3DOF, s3), (BACKEND_6DOF, s6)):
+            run = study.upper
+            r = (float(run.samples["x_m"][-1]), float(run.samples["y_m"][-1]),
+                 float(run.samples["z_m"][-1]))
+            v = (float(run.samples["vx_m_s"][-1]), float(run.samples["vy_m_s"][-1]),
+                 float(run.samples["vz_m_s"][-1]))
+            report_i = insertion_report(spec.target, r, v)
+            cutoffs[tag] = _cutoff_t_s_of(run)
+            report_i["cutoff_t_s"] = cutoffs[tag]
+            insertion[tag] = report_i
+            inserted = inserted and report_i["inserted"]
+        if all(t is not None for t in cutoffs.values()):
+            checks["upper-insertion-within-tolerance"] = bool(inserted)
+            insertion["note"] = "both backends reached guided MECO; the check " \
+                                "is graded (both terminal orbits inside the " \
+                                "declared tolerances or the comparison is red)"
+        else:
+            insertion["note"] = "insertion not graded: the scenario ended " \
+                               "before guided MECO on " \
+                               f"{', '.join(t for t, c in cutoffs.items() if c is None)}"
+        inputs["upper_insertion"] = insertion
+    else:
+        inputs["upper_insertion"] = {
+            "law": "none (open-loop upper stage: program attitude / neutral gimbal)"}
     report = build_report("flightlab-comparison",
-                          f"{s.name}-6dof-vs-3dof", [],
+                          f"{s.name}-native-rigidbody-vs-native-pointmass", [],
                           inputs=inputs,
                           targets={"6dof_minus_3dof": {
                               b: body_docs[b].get("metrics", {})
@@ -583,10 +750,11 @@ def write_mission_pair(scenario: TwoStageScenario | None = None,
                        scene: bool = True,
                        epoch_utc: str = "2026-01-01T00:00:00Z") -> dict:
     """Fly the same mission on both backends and write the whole F-07
-    bundle: ``<out>/3DOF/``, ``<out>/6DOF/`` (each via
+    bundle: ``<out>/native-pointmass/``, ``<out>/native-rigidbody/`` (each via
     :func:`write_mission_outputs`) and the automatically generated
     comparison report ``<out>/flightlab-comparison-*.verification.json``.
-    Returns ``{"3DOF": paths, "6DOF": paths, "comparison": report,
+    Returns ``{"native-pointmass": paths, "native-rigidbody": paths,
+    "comparison": report,
     "comparison_path": Path}``."""
     from orbitopt.verify.report import default_report_path, write_report
 

@@ -65,17 +65,21 @@ from typing import Any
 
 import numpy as np
 
+from orbitopt.flightlab.backends import BACKEND_NATIVE_RIGIDBODY
 from orbitopt.flightlab.contract import Check, Event, FlightRun, Verification
+from orbitopt.flightlab.guidance.upper_stage import (
+    GuidedUpperStageControl,
+    UpperStageGuidanceSpec,
+)
+from orbitopt.flightlab.parity import load_parity_scenario, native_stage_pair
 from orbitopt.flightlab.handoff import (
     PHASE_BOOSTBACK,
     PHASE_SEPARATION,
     HandoffState,
     handoff_digest,
 )
-from orbitopt.flightlab.sixdof.aero import load_packaged_aero
 from orbitopt.flightlab.sixdof.rigidbody import (
     ControlCommand,
-    RigidBodyEngine,
     RigidBodyPhysics,
     RigidBodyState,
     RigidBodyVehicle,
@@ -99,6 +103,7 @@ __all__ = [
     "TwoStageStudy",
     "delayed_ignition_control",
     "f06_two_stage_scenario",
+    "guided_upper_stage_pair",
     "run_two_stage",
     "split_stack_state",
     "to_flight_run",
@@ -316,6 +321,17 @@ class TwoStageScenario:
     gains: TvcGains = field(default_factory=TvcGains)
     physics: RigidBodyPhysics = field(default_factory=RigidBodyPhysics)
     assumptions: tuple[str, ...] = ()
+    #: E1-03 (task #252): the upper stage's state-feedback guidance. When
+    #: set, BOTH backends fly it -- the point-mass twin through
+    #: ``propagate_point_mass(guidance=...)``, the rigid body through
+    #: :class:`GuidedUpperStageControl` around the F-04 tracker -- instead
+    #: of the open-loop program attitude / neutral gimbal. ``None`` keeps
+    #: the F-06 open-loop upper stage.
+    upper_guidance: UpperStageGuidanceSpec | None = None
+    #: The actuator :attr:`upper_guidance` steers with (default: the
+    #: standard servo at the upper engine's own travel limit; the
+    #: benchmark's ideal-actuator attribution rung sets it explicitly).
+    upper_actuator: TvcActuator | None = None
 
     def __post_init__(self) -> None:
         if not 0.0 < self.separation_t_s < float(self.t_end_s):
@@ -329,6 +345,10 @@ class TwoStageScenario:
                              f"run ends at t_end_s={self.t_end_s} s")
         if self.dt_s <= 0.0 or int(self.sample_every) < 1:
             raise ValueError("dt_s must be positive and sample_every >= 1")
+        if self.upper_guidance is not None and (abs(self.upper_guidance.ignition_t_s
+                                                    - self.ignition.ignition_t_s) > 1e-9):
+            raise ValueError("the guidance's ignition gate must be the scenario's "
+                             "scheduled ignition instant")
 
     def real_actuator(self) -> TvcActuator:
         """F-04's default hydraulic axis at the stack engine's travel limit
@@ -351,34 +371,23 @@ def f06_two_stage_scenario(*, separation_t_s: float = 95.0, ignition_delay_s: fl
     upper stage ignites ``ignition_delay_s`` (default 8 s) after the 25 kN.s
     separation impulse and both bodies fly to ``t_end_s`` (default 260 s).
     """
-    engine = RigidBodyEngine(thrust_vacuum_n=1.88e6, isp_vacuum_s=320.0,
-                             isp_sea_level_s=282.0, nozzle_exit_area_m2=2.0,
-                             throttle_min=0.4, throttle_max=1.0, mount_x_cg_m=22.0,
-                             gimbal_limit_rad=0.0873)
-    stack = RigidBodyVehicle(name="f06_stack", dry_mass_kg=18_000.0,
-                             propellant_mass_kg=60_000.0,
-                             inertia_kg_m2=(1.0e5, 4.0e6, 4.0e6), engine=engine,
-                             aero=load_packaged_aero("spike_stage"))
-    booster = RigidBodyVehicle(name="booster", dry_mass_kg=10_000.0,
-                               propellant_mass_kg=60_000.0,
-                               inertia_kg_m2=(3.4e4, 1.7e6, 1.7e6), engine=engine,
-                               aero=load_packaged_aero("spike_stage"))
-    upper_engine = RigidBodyEngine(thrust_vacuum_n=2.2e5, isp_vacuum_s=340.0,
-                                   isp_sea_level_s=300.0, nozzle_exit_area_m2=0.35,
-                                   throttle_min=0.3, throttle_max=1.0, mount_x_cg_m=6.0)
-    upper = RigidBodyVehicle(name="upper_stage", dry_mass_kg=2_000.0,
-                             propellant_mass_kg=6_000.0,
-                             inertia_kg_m2=(5.0e3, 2.0e5, 2.0e5), engine=upper_engine,
-                             aero=None)
+    # E1-01 (task #250): the vehicle figures come from the SHARED parity
+    # source (data/flightlab/parity/spike_stage_parity.yaml via
+    # orbitopt.flightlab.parity.native_stage_pair) -- the same document the
+    # jsbsim XMLs are cross-checked against -- so this scenario and the
+    # JSBSim spike cannot drift apart silently. ``separation_impulse_ns``
+    # stays a call-level choice (it is a schedule parameter, not a vehicle
+    # parameter).
+    pair = replace(native_stage_pair(load_parity_scenario()),
+                   separation_impulse_ns=separation_impulse_ns)
     state0 = RigidBodyState.from_launch(lat_geod_deg=28.5, lon_deg=-80.6,
                                         heading_deg=90.0, pitch_deg=90.0,
-                                        roll_deg=0.0, mass_kg=stack.mass_wet_kg)
+                                        roll_deg=0.0,
+                                        mass_kg=pair.stack.mass_wet_kg)
     program = WaypointAttitudeProgram(times_s=(0.0, 10.0, 110.0),
                                       heading_deg=(90.0, 90.0, 90.0),
                                       pitch_deg=(90.0, 90.0, 20.0),
                                       roll_deg=(0.0, 0.0, 0.0))
-    pair = StagePair(stack=stack, booster=booster, upper=upper,
-                     separation_impulse_ns=separation_impulse_ns)
     ignition = IgnitionPlan(separation_t_s=separation_t_s, ignition_delay_s=ignition_delay_s)
     return TwoStageScenario(
         name="f06-two-stage", state0=state0, pair=pair, program=program,
@@ -396,6 +405,43 @@ def f06_two_stage_scenario(*, separation_t_s: float = 95.0, ignition_delay_s: fl
              "property-injection round-trip is not in this path."),
         ),
     )
+
+
+def guided_upper_stage_pair(pair: StagePair, *, upper_dry_mass_kg: float,
+                            upper_propellant_mass_kg: float,
+                            gimbal_limit_rad: float) -> StagePair:
+    """Mass- and actuator-consistent variant of ``pair`` with a
+    TVC-capable, larger-tank upper stage (E1-03, task #252).
+
+    The frozen parity pair flies an upper stage with a fixed engine
+    (gimbal travel 0 -- the tracker would command what the plant clamps
+    back to zero) and a 6 t tank whose ideal delta-v cannot reach any
+    parking orbit. State-feedback guidance needs both an actuator and
+    enough propellant to insert, so the guided F-07 mission flies this
+    variant instead: stage 1, the split bookkeeping and the booster
+    handoff are untouched, the upper engine and inertia are untouched,
+    and the E1-01 parity document is untouched -- this is a scenario
+    variant built *beside* the parity source, and the resulting pair
+    still satisfies the invariants :meth:`StagePair.__post_init__`
+    enforces (stage-1 propellant unchanged; the upper stage, structure
+    *and* tank, is inert ballast inside the stack's dry floor). The F-07
+    default keeps the upper stage's *wet* mass at the parity value (more
+    propellant, less structure), so the stack's liftoff state and the
+    whole stage-1 ascent up to separation stay bit-identical and only the
+    upper stage's own flight changes.
+    """
+    if gimbal_limit_rad <= 0.0:
+        raise ValueError(f"gimbal_limit_rad must be positive, got {gimbal_limit_rad}")
+    if upper_dry_mass_kg <= 0.0 or upper_propellant_mass_kg <= 0.0:
+        raise ValueError("the upper stage masses must be positive")
+    upper = replace(pair.upper,
+                    dry_mass_kg=float(upper_dry_mass_kg),
+                    propellant_mass_kg=float(upper_propellant_mass_kg),
+                    engine=replace(pair.upper.engine,
+                                   gimbal_limit_rad=float(gimbal_limit_rad)))
+    stack = replace(pair.stack,
+                    dry_mass_kg=pair.booster.dry_mass_kg + upper.mass_wet_kg)
+    return replace(pair, stack=stack, upper=upper)
 
 
 # --------------------------------------------------------------------------
@@ -560,7 +606,16 @@ def run_two_stage(scenario: TwoStageScenario | None = None, *,
     booster_run = propagate(booster_s, booster_v, constant_control(0.0), s.t_end_s,
                             dt_s=s.dt_s, sample_every=s.sample_every,
                             physics=s.physics, epoch_utc=epoch)
-    upper_run = propagate(upper_s, upper_v, delayed_ignition_control(s.ignition),
+    # E1-03 (task #252): with a guidance spec the upper stage closes its own
+    # loop (the same law the point-mass twin flies); without one it stays
+    # the F-06 open-loop delayed ignition.
+    if s.upper_guidance is not None:
+        upper_law = GuidedUpperStageControl(s.upper_guidance, upper_v,
+                                           actuator=s.upper_actuator,
+                                           gains=s.gains, dt_c_s=s.dt_c_s)
+    else:
+        upper_law = delayed_ignition_control(s.ignition)
+    upper_run = propagate(upper_s, upper_v, upper_law,
                           s.t_end_s, dt_s=s.dt_s, sample_every=s.sample_every,
                           physics=s.physics, epoch_utc=epoch)
 
@@ -600,15 +655,16 @@ def to_flight_run(study: TwoStageStudy, *, run_id: str = "f06-two-stage-native",
         created_utc=epoch_utc,
         engines={"stage1": "spike_stage engine (vac 1.88 MN / Isp 320 s)",
                  "stage2": "upper engine (vac 220 kN / Isp 340 s)"},
-    assumptions=tuple(s.assumptions) + (
-        (f"Separation at t={s.separation_t_s} s with a "
-         f"{sep['separation_impulse_ns']} N.s body-+x impulse "
-         f"(+{sep['dv_upper_m_s']:.3f} m/s upper / -{sep['dv_booster_m_s']:.3f} m/s "
-         f"booster); upper ignition scheduled at t={s.ignition.ignition_t_s} s "
-         f"(delay {s.ignition.ignition_delay_s} s)."),
-        ("Booster handed to recovery on the M-01 separation->boostback boundary "
-         f"(handoff digest {study.booster_handoff_digest[:12]})."),
-    ),
+        backend=BACKEND_NATIVE_RIGIDBODY,
+        assumptions=tuple(s.assumptions) + (
+            (f"Separation at t={s.separation_t_s} s with a "
+             f"{sep['separation_impulse_ns']} N.s body-+x impulse "
+             f"(+{sep['dv_upper_m_s']:.3f} m/s upper / -{sep['dv_booster_m_s']:.3f} m/s "
+             f"booster); upper ignition scheduled at t={s.ignition.ignition_t_s} s "
+             f"(delay {s.ignition.ignition_delay_s} s)."),
+            ("Booster handed to recovery on the M-01 separation->boostback boundary "
+             f"(handoff digest {study.booster_handoff_digest[:12]})."),
+        ),
         tracks=(
             study.stack.to_body_track(body_id="stack"),
             study.booster.to_body_track(body_id="booster", parent_body_id="stack"),

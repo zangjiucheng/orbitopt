@@ -13,7 +13,20 @@ writes the acceptance's deliverables as JSON:
   point-mass aero, the rigid-body attitude loop, the TVC actuator lag and
   body-oriented aero each contribute;
 * per-rung run records (terminal state, max-Q, apogee, burn-out, tracker
-  diagnostics for the closed-loop rungs).
+   diagnostics for the closed-loop rungs), each with its
+   ``powered``/``coast`` phase split (E1-02, task #251: the study runs 180 s
+   but burns out at 99.85 s, so a whole-run maximum is a mix of the powered
+   phase -- the one with control authority and aero load -- and an unactuated,
+   near-vacuum coast);
+* the phase qualification: the pre-declared constraints of
+   ``orbitopt.flightlab.sixdof.gravity_turn.F05_PHASE_CONSTRAINTS``, each with
+   the measured value and its verdict.
+
+``tvc.burn_s`` is the control time with the engine lit (task #251 fixed it from
+the flight span to the burn); ``burn_out_t_s`` is the event-detected
+propellant exhaustion, and the two must agree within the constraint's tick
+tolerance.
+
 
 Real RK4 physics of the F-02/F-04 reference plant -- a study is a handful of
 minutes of single-core CPU:
@@ -44,6 +57,8 @@ from orbitopt.flightlab.sixdof.gravity_turn import (  # noqa: E402
     ascent_channels,
     f05_scenario,
     run_f05_study,
+    run_phase_metrics,
+    tvc_record,
 )
 
 
@@ -67,9 +82,10 @@ def _run_record(run) -> dict:
         "max_q": {"q_pa": r.max_q.q_pa, "t_s": r.max_q.t_s,
                   "altitude_m": r.max_q.altitude_m, "mach": r.max_q.mach},
         "alpha_max_deg": r.alpha_max_deg,
+        "phases": run_phase_metrics(run),
     }
     if ascent:
-        out["tvc"] = {k: v for k, v in run.summary().items() if not isinstance(v, tuple)}
+        out["tvc"] = tvc_record(run)
     return out
 
 
@@ -99,8 +115,8 @@ def main() -> None:
     s = study.scenario
 
     payload = {
-        "schema": "orbitopt-fl605-1",
-        "task": "#230 (F-05, epic #216)",
+        "schema": "orbitopt-fl605-2",
+        "task": "#230 (F-05, epic #216); phase split #251 (E1-02, epic #246)",
         "generated_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "command": " ".join(sys.argv),
         "wall_clock_s": round(wall_s, 1),
@@ -138,14 +154,23 @@ def main() -> None:
                                "metrics": study.attribution[name].summary(),
                                "curves": _curves(study.attribution[name])}
                         for name, desc in ATTRIBUTION_STEPS},
+        "phases": study.phase_metrics(),
+        "alpha_max_attribution": study.alpha_max_attribution(),
+        "qualification": study.qualification(),
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8")
     hl = study.headline.summary()
+    qual = study.qualification()
+    powered = {c["metric"]: c["value"] for c in qual["checks"] if c["phase"] == "powered"}
+    failed = [c for c in qual["checks"] if not c["pass"]]
     print(f"{args.out} written ({wall_s:.0f}s): d_alt max {hl['d_altitude_m_max_abs_m']:.1f} m,"
           f" d_speed max {hl['d_speed_m_s_max_abs_m_s']:.2f} m/s,"
           f" d_fpa max {hl['d_fpa_deg_max_abs_deg']:.3f} deg,"
-          f" d_mass max {hl['d_mass_kg_max_abs_kg']:.1f} kg")
+          f" d_mass max {hl['d_mass_kg_max_abs_kg']:.1f} kg;"
+          f" powered att_err max {powered['att_err_max_deg']:.2f} deg;"
+          f" {'all' if not failed else 'FAILED'} constraints"
+          f" ({len(failed)} of {len(qual['checks'])} failed)")
 
 
 if __name__ == "__main__":

@@ -6,9 +6,10 @@ single-body simulation, :mod:`staging` two-instance handoff, :mod:`tracking`
 closed-loop TVC) plus :mod:`mass_properties`, the declared variable mass / CG
 / inertia model F-03 (task #228) checks the drivers' mass bookkeeping against.
 F-01 (task #226) promoted the spike path to a supported,
-config-driven backend -- ``backend="6DOF"`` in
+config-driven backend -- ``backend="jsbsim"`` (canonical identity, E1-01
+task #250) in
 :func:`orbitopt.flightlab.simulate.simulate` / ``orbitopt flight simulate
---backend 6DOF``, scenario configs in ``orbitopt/data/flightlab/sixdof/``:
+--backend jsbsim``, scenario configs in ``orbitopt/data/flightlab/sixdof/``:
 
     from orbitopt.flightlab.adapters.sixdof import run_ascent, packaged_config
     run = run_ascent(packaged_config("fl401_vertical_hop"), Path("runs/jsb6-1"))
@@ -66,8 +67,9 @@ burning to dry::
     # tests/test_flightlab_sixdof_two_stage.py (the staging acceptance gates)
 
 F-07 (task #232) turns that study into mission artefacts: the same
-``TwoStageScenario`` is selectable between a ``"3DOF"`` point-mass twin and
-the ``"6DOF"`` closed-loop path, and each flown backend writes the standard
+``TwoStageScenario`` is selectable between the ``"native-pointmass"``
+point-mass twin and the ``"native-rigidbody"`` closed-loop path, and each
+flown backend writes the standard
 bundle -- a FlightResult v1 run directory, its verification-report-1.0
 document, the M-01 ``handoff.json`` the 6-DOF run produces at separation,
 and a Mission Control scene; flying both backends auto-generates the

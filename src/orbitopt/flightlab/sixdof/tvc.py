@@ -28,6 +28,12 @@ something:
 * :class:`TvcDiagnostics` / :func:`attitude_metrics` -- what the acceptance
   asks to record: max/commanded deflection, deflection margin, saturated and
   slew-limited seconds, and the closed-loop attitude error.
+* :func:`ascent_phase_metrics` / :class:`PhaseMetrics` -- the same numbers
+  measured over the powered and the coast phase separately (E1-02, task #251),
+  because a whole-run maximum spans both: an unactuated, near-vacuum coast is
+  not a control-load case and must not qualify or disqualify the ascent with
+  it. :func:`phase_aero_metrics` is the sample-window half of the split, shared
+  with the 3-DOF rungs of the F-05 study.
 
 Sign conventions are the plant's (body x forward, y right, z down; positive
 pitch gimbal ``dp`` -> ``+My`` nose-up, positive yaw gimbal ``dy`` -> ``-Mz``,
@@ -62,14 +68,21 @@ from orbitopt.flightlab.sixdof.rigidbody import (
 )
 
 __all__ = [
+    "COAST",
+    "POWERED",
     "AttitudeTvcLaw",
     "ControlledAscent",
+    "PhaseMetrics",
     "TvcActuator",
     "TvcDiagnostics",
     "TvcGains",
     "WaypointAttitudeProgram",
+    "ascent_phase_metrics",
     "attitude_error_body",
+    "attitude_error_deg_series",
     "attitude_metrics",
+    "axis_margins",
+    "phase_aero_metrics",
     "run_closed_loop_ascent",
     "so3_log",
 ]
@@ -280,7 +293,7 @@ class TvcGains:
             raise ValueError("i_max_alpha must be positive")
 
 
-_HISTORY_KEYS = ("t_s", "dt_s", "err_pitch_rad", "err_yaw_rad",
+_HISTORY_KEYS = ("t_s", "dt_s", "engine_on", "err_pitch_rad", "err_yaw_rad",
                  "alpha_pitch_rad_s2", "alpha_yaw_rad_s2",
                  "cmd_pitch_rad", "cmd_yaw_rad",
                  "delta_pitch_rad", "delta_yaw_rad",
@@ -371,9 +384,16 @@ class AttitudeTvcLaw:
         # module docstring. asin keeps the command inside the small-angle
         # inversion at large demand instead of pretending the moment is linear.
         authority = self._rated_thrust_n * self.vehicle.engine.mount_x_cg_m
-        i_pitch, i_yaw = self.vehicle.inertia_kg_m2[1], self.vehicle.inertia_kg_m2[2]
-        s_p = max(-1.0, min(1.0, a_p * i_pitch / authority))
-        s_y = max(-1.0, min(1.0, -a_y * i_yaw / authority))
+        if engine_off or authority <= 0.0:
+            # A shut engine has no control authority to invert -- neutral
+            # deflection by definition (E1-03, task #252: the F-07 guided
+            # upper stage ticks this law across engine-off coast legs; the
+            # F-04 stack never reached this path, its throttle stays open).
+            s_p = s_y = 0.0
+        else:
+            i_pitch, i_yaw = self.vehicle.inertia_kg_m2[1], self.vehicle.inertia_kg_m2[2]
+            s_p = max(-1.0, min(1.0, a_p * i_pitch / authority))
+            s_y = max(-1.0, min(1.0, -a_y * i_yaw / authority))
         cmd_p = math.asin(s_p)
         cmd_y = math.asin(s_y)
         limit = self.actuator.limit_rad
@@ -384,6 +404,7 @@ class AttitudeTvcLaw:
         d_y, slew_y = self.actuator.step(self._delta[1], cmd_y, dt_s)
         self._delta = [d_p, d_y]
         self._rows.append({"t_s": float(t_s), "dt_s": float(dt_s),
+                           "engine_on": 0.0 if engine_off else 1.0,
                            "err_pitch_rad": e_p, "err_yaw_rad": e_y,
                            "alpha_pitch_rad_s2": a_p, "alpha_yaw_rad_s2": a_y,
                            "cmd_pitch_rad": cmd_p, "cmd_yaw_rad": cmd_y,
@@ -431,10 +452,17 @@ class AttitudeTvcLaw:
 class TvcDiagnostics:
     """Control-margin summary of one closed-loop run (units in the names; the
     *applied* deflection is what the actuator delivered, the *command* is the
-    pre-saturation PID output -- their difference is the saturation story)."""
+    pre-saturation PID output -- their difference is the saturation story).
+
+    ``burn_s`` / ``coast_s`` are the control seconds the ticker spent with the
+    engine lit / shut, from its own per-tick ``engine_on`` bookkeeping -- for a
+    run that flies past burn-out, ``burn_s`` is the burn, not the flight span
+    (E1-02, task #251: the F-05 study's coast phase must not be counted as
+    burn time)."""
 
     n_ticks: int
     burn_s: float
+    coast_s: float
     limit_rad: float
     pitch_command_peak_deg: float
     pitch_applied_peak_deg: float
@@ -454,26 +482,58 @@ class TvcDiagnostics:
         if n == 0:
             raise ValueError("empty actuator/ticker history")
         dt = history["dt_s"]
-        lim_deg = math.degrees(actuator.limit_rad)
+        on = history.get("engine_on")
+        if on is None:                                    # a hand-built history
+            burn, coast = float(np.sum(dt)), 0.0
+        else:
+            lit = np.asarray(on, dtype=float) > 0.5
+            burn = float(np.sum(dt[lit]))
+            coast = float(np.sum(dt[~lit]))
 
-        def axis(cmd_key: str, delta_key: str, sat_key: str, slew_key: str) -> tuple[float, ...]:
-            cmd_peak = math.degrees(float(np.max(np.abs(history[cmd_key]))))
-            app_peak = math.degrees(float(np.max(np.abs(history[delta_key]))))
-            sat_s = float(np.sum(dt[history[sat_key] > 0.5]))
-            slew_s = float(np.sum(dt[history[slew_key] > 0.5]))
-            margin = 1.0 - min(1.0, app_peak / lim_deg)
-            return (cmd_peak, app_peak, margin, sat_s, slew_s)
-
-        p = axis("cmd_pitch_rad", "delta_pitch_rad", "pitch_saturated", "pitch_slew_limited")
-        y = axis("cmd_yaw_rad", "delta_yaw_rad", "yaw_saturated", "yaw_slew_limited")
-        burn = float(history["t_s"][-1] - history["t_s"][0])
-        return TvcDiagnostics(n_ticks=n - 1, burn_s=burn, limit_rad=actuator.limit_rad,
+        p = axis_margins(history, prefix="pitch", limit_rad=actuator.limit_rad)
+        y = axis_margins(history, prefix="yaw", limit_rad=actuator.limit_rad)
+        return TvcDiagnostics(n_ticks=n - 1, burn_s=burn, coast_s=coast,
+                              limit_rad=actuator.limit_rad,
                               pitch_command_peak_deg=p[0], pitch_applied_peak_deg=p[1],
                               pitch_deflection_margin=p[2], pitch_saturated_s=p[3],
                               pitch_slew_limited_s=p[4],
                               yaw_command_peak_deg=y[0], yaw_applied_peak_deg=y[1],
                               yaw_deflection_margin=y[2], yaw_saturated_s=y[3],
                               yaw_slew_limited_s=y[4])
+
+    def summary(self) -> dict[str, float]:
+        """Flat, JSON-friendly view of the margins (``n_ticks`` as a float, the
+        travel limit also in the degrees the acceptance is stated in). The
+        attitude-error metrics are the run's, not the ticker's, so they live on
+        :meth:`ControlledAscent.summary`."""
+        return {"n_ticks": float(self.n_ticks), "burn_s": self.burn_s,
+                "coast_s": self.coast_s,
+                "pitch_command_peak_deg": self.pitch_command_peak_deg,
+                "pitch_applied_peak_deg": self.pitch_applied_peak_deg,
+                "pitch_deflection_margin": self.pitch_deflection_margin,
+                "pitch_saturated_s": self.pitch_saturated_s,
+                "pitch_slew_limited_s": self.pitch_slew_limited_s,
+                "yaw_command_peak_deg": self.yaw_command_peak_deg,
+                "yaw_applied_peak_deg": self.yaw_applied_peak_deg,
+                "yaw_deflection_margin": self.yaw_deflection_margin,
+                "yaw_saturated_s": self.yaw_saturated_s,
+                "yaw_slew_limited_s": self.yaw_slew_limited_s,
+                "tvc_limit_deg": math.degrees(self.limit_rad)}
+
+
+def axis_margins(history: Mapping[str, np.ndarray], *, prefix: str,
+                 limit_rad: float) -> tuple[float, float, float, float, float]:
+    """One gimbal axis' control margins over the rows of a tick history:
+    ``(command peak, applied peak, deflection margin, saturated s,
+    slew-limited s)``, the units being degrees, degrees, -, seconds, seconds.
+    Shared by :meth:`TvcDiagnostics.from_history` and the phase split below, so
+    a per-phase margin is measured exactly the way the whole-run one is."""
+    cmd_peak = math.degrees(float(np.max(np.abs(history[f"cmd_{prefix}_rad"]))))
+    app_peak = math.degrees(float(np.max(np.abs(history[f"delta_{prefix}_rad"]))))
+    sat_s = float(np.sum(history["dt_s"][history[f"{prefix}_saturated"] > 0.5]))
+    slew_s = float(np.sum(history["dt_s"][history[f"{prefix}_slew_limited"] > 0.5]))
+    margin = 1.0 - min(1.0, app_peak / math.degrees(limit_rad))
+    return cmd_peak, app_peak, margin, sat_s, slew_s
 
 
 @dataclass(frozen=True)
@@ -487,21 +547,31 @@ class AttitudeMetrics:
     rates_max_dps: tuple[float, float, float]
 
 
-def attitude_metrics(run: SixDofRun, program: WaypointAttitudeProgram) -> AttitudeMetrics:
-    """Per-sample geodesic attitude error against the program, from the run's
-    quaternion columns (the actual flown attitude -- the same measurement a
-    reader would make from the track, independent of the controller's own
-    tick bookkeeping)."""
-    errs: list[float] = []
+def attitude_error_deg_series(run: SixDofRun,
+                              program: WaypointAttitudeProgram) -> np.ndarray:
+    """Per-sample geodesic attitude error against the program, in degrees (the
+    actual flown attitude -- the same measurement a reader would make from the
+    track, independent of the controller's own tick bookkeeping). One array, so
+    the whole-run :func:`attitude_metrics` and the E1-02 phase split measure
+    the identical quantity over different windows."""
     s = run.samples
-    for i in range(s["t_s"].size):
+    errs = np.empty(int(s["t_s"].size), dtype=float)
+    for i in range(errs.size):
         lat_deg, lon_deg, _ = frames.ecef_to_geodetic(
             np.array([s["x_m"][i], s["y_m"][i], s["z_m"][i]]))
         r_cmd = program.dcm_at(float(s["t_s"][i]), float(lat_deg), float(lon_deg))
         r_act = dcm_from_quaternion((s["q_w"][i], s["q_x"][i], s["q_y"][i], s["q_z"][i]))
         angle = so3_log(r_cmd.T @ r_act)
-        errs.append(math.degrees(float(np.linalg.norm(angle))))
-    errs_arr = np.asarray(errs)
+        errs[i] = math.degrees(float(np.linalg.norm(angle)))
+    return errs
+
+
+def attitude_metrics(run: SixDofRun, program: WaypointAttitudeProgram) -> AttitudeMetrics:
+    """Per-sample attitude error metrics against the program, from the run's
+    quaternion columns (see :func:`attitude_error_deg_series`), plus the angle
+    of attack and the body-rate peaks."""
+    errs_arr = attitude_error_deg_series(run, program)
+    s = run.samples
     rates = [math.degrees(float(np.max(np.abs(s[c]))))
              for c in ("p_rad_s", "q_rad_s", "r_rad_s")]
     return AttitudeMetrics(att_err_max_deg=float(np.max(errs_arr)),
@@ -510,36 +580,185 @@ def attitude_metrics(run: SixDofRun, program: WaypointAttitudeProgram) -> Attitu
                            rates_max_dps=(rates[0], rates[1], rates[2]))
 
 
+# --------------------------------------------------------------------------
+# the E1-02 phase split (task #251)
+# --------------------------------------------------------------------------
+
+#: The two phases a booster ascent is qualified in: engine lit (``powered``)
+#: and engine shut (``coast``). A run that never shuts down has no coast phase.
+POWERED, COAST = "powered", "coast"
+
+
+def phase_aero_metrics(samples: Mapping[str, np.ndarray], *,
+                       keep: np.ndarray) -> dict[str, float]:
+    """Angle of attack, side load and dynamic pressure of a *window* of a run's
+    samples: the largest ``|alpha|`` and ``q * |alpha|`` and the peak ``q``,
+    each with the sample time (and, for alpha and max-Q, the altitude) of the
+    sample that set it. ``keep`` is the boolean sample mask of the window;
+    raises :class:`ValueError` when it keeps nothing.
+
+    Works on any run that samples ``t_s`` / ``alpha_deg`` / ``q_bar_pa`` /
+    ``altitude_m`` -- the native 6-DOF run and the 3-DOF point-mass ascent both
+    do -- which is what lets the F-05 study (E1-02) report the same window
+    metrics for every rung of its ladder."""
+    t = np.asarray(samples["t_s"], dtype=float).ravel()
+    keep = np.asarray(keep, dtype=bool)
+    if t.shape != keep.shape:
+        raise ValueError(f"window mask ({keep.shape}) and samples ({t.shape}) must match")
+    if not bool(keep.any()):
+        raise ValueError("no samples in this phase window")
+    tw = t[keep]
+    alpha = np.abs(np.asarray(samples["alpha_deg"], dtype=float).ravel()[keep])
+    q = np.asarray(samples["q_bar_pa"], dtype=float).ravel()[keep]
+    alt = np.asarray(samples["altitude_m"], dtype=float).ravel()[keep]
+    q_alpha = q * alpha
+    i, j, k = int(np.argmax(alpha)), int(np.argmax(q_alpha)), int(np.argmax(q))
+    out = {"n_samples": float(keep.sum()), "t0_s": float(tw[0]), "t1_s": float(tw[-1]),
+           "alpha_max_deg": float(alpha[i]), "alpha_max_t_s": float(tw[i]),
+           "alpha_max_altitude_m": float(alt[i]),
+           "q_alpha_max_pa_deg": float(q_alpha[j]), "q_alpha_max_t_s": float(tw[j]),
+           "max_q_pa": float(q[k]), "max_q_t_s": float(tw[k]),
+           "max_q_altitude_m": float(alt[k])}
+    if "mach" in samples:
+        out["max_q_mach"] = float(np.asarray(samples["mach"], dtype=float).ravel()[keep][k])
+    return out
+
+
+@dataclass(frozen=True)
+class PhaseMetrics:
+    """One flight phase of a closed-loop ascent: the attitude error, the
+    angle-of-attack / side-load / max-Q window metrics and the gimbal margins,
+    all measured *inside* the phase only.
+
+    ``engine_s`` is the control seconds the phase spent with the engine lit, so
+    a coast phase reports 0 and a powered phase reports its share of the burn.
+    The margin fields are the :func:`axis_margins` of the phase's ticks, i.e.
+    exactly what :class:`TvcDiagnostics` reports for the whole run, windowed."""
+
+    phase: str
+    t0_s: float
+    t1_s: float
+    n_ticks: int
+    engine_s: float
+    att_err_max_deg: float
+    att_err_rms_deg: float
+    pitch_command_peak_deg: float
+    pitch_applied_peak_deg: float
+    pitch_deflection_margin: float
+    pitch_saturated_s: float
+    pitch_slew_limited_s: float
+    yaw_command_peak_deg: float
+    yaw_applied_peak_deg: float
+    yaw_deflection_margin: float
+    yaw_saturated_s: float
+    yaw_slew_limited_s: float
+    aero: Mapping[str, float] = field(default_factory=dict)
+
+    def summary(self) -> dict[str, float]:
+        """Flat, JSON-friendly view (``phase`` itself is the key it is filed
+        under); the aero keys come through unchanged."""
+        out: dict[str, float] = {
+            "t0_s": self.t0_s, "t1_s": self.t1_s, "n_ticks": float(self.n_ticks),
+            "engine_s": self.engine_s,
+            "att_err_max_deg": self.att_err_max_deg,
+            "att_err_rms_deg": self.att_err_rms_deg,
+            "pitch_command_peak_deg": self.pitch_command_peak_deg,
+            "pitch_applied_peak_deg": self.pitch_applied_peak_deg,
+            "pitch_deflection_margin": self.pitch_deflection_margin,
+            "pitch_saturated_s": self.pitch_saturated_s,
+            "pitch_slew_limited_s": self.pitch_slew_limited_s,
+            "yaw_command_peak_deg": self.yaw_command_peak_deg,
+            "yaw_applied_peak_deg": self.yaw_applied_peak_deg,
+            "yaw_deflection_margin": self.yaw_deflection_margin,
+            "yaw_saturated_s": self.yaw_saturated_s,
+            "yaw_slew_limited_s": self.yaw_slew_limited_s,
+        }
+        out.update(self.aero)
+        return out
+
+
+def ascent_phase_metrics(run: SixDofRun, program: WaypointAttitudeProgram,
+                         history: Mapping[str, np.ndarray], *,
+                         actuator: TvcActuator,
+                         burn_out_t_s: float | None = None) -> dict[str, PhaseMetrics]:
+    """Split one closed-loop ascent into its :data:`POWERED` and :data:`COAST`
+    phases and measure each separately (E1-02, task #251).
+
+    ``burn_out_t_s`` is the phase boundary -- normally the run's own
+    ``propellant_exhausted_t_s``, and ``None`` for a run that flies until its
+    propellant is still lit, in which case the whole run is the powered phase
+    and there is no coast entry. The boundaries are *sample- and tick-granular*:
+    the powered window ends at the last sample/tick at or before burn-out, the
+    coast window starts at the first after it.
+
+    The attitude error is measured against the program in both phases, which is
+    the point of the split: an unactuated coast (the tracker trims to neutral
+    once the engine is off, so a growing attitude error costs no load and is
+    not a control failure) inflates a whole-run number without inflating the
+    powered one."""
+    t_hist = np.asarray(history["t_s"], dtype=float).ravel()
+    dt = np.asarray(history["dt_s"], dtype=float).ravel()
+    t_samples = np.asarray(run.samples["t_s"], dtype=float).ravel()
+    boundary = float(burn_out_t_s) if burn_out_t_s is not None else float(t_samples[-1])
+
+    windows = [(POWERED, t_hist <= boundary, t_samples <= boundary)]
+    if bool((t_samples > boundary).any()) and bool((t_hist > boundary).any()):
+        windows.append((COAST, t_hist > boundary, t_samples > boundary))
+
+    errs = attitude_error_deg_series(run, program)
+    out: dict[str, PhaseMetrics] = {}
+    for phase, hkeep, sheep in windows:
+        sliced = {k: np.asarray(history[k], dtype=float).ravel()[hkeep]
+                  for k in _HISTORY_KEYS}
+        e = errs[sheep]
+        p = axis_margins(sliced, prefix="pitch", limit_rad=actuator.limit_rad)
+        y = axis_margins(sliced, prefix="yaw", limit_rad=actuator.limit_rad)
+        out[phase] = PhaseMetrics(
+            phase=phase,
+            t0_s=float(sliced["t_s"][0]),
+            t1_s=float(sliced["t_s"][-1]),
+            n_ticks=int(np.count_nonzero(sliced["dt_s"] > 0.0)),
+            engine_s=float(sliced["dt_s"][sliced["engine_on"] > 0.5].sum()),
+            att_err_max_deg=float(np.max(e)),
+            att_err_rms_deg=float(np.sqrt(np.mean(e ** 2))),
+            pitch_command_peak_deg=p[0], pitch_applied_peak_deg=p[1],
+            pitch_deflection_margin=p[2], pitch_saturated_s=p[3],
+            pitch_slew_limited_s=p[4],
+            yaw_command_peak_deg=y[0], yaw_applied_peak_deg=y[1],
+            yaw_deflection_margin=y[2], yaw_saturated_s=y[3],
+            yaw_slew_limited_s=y[4],
+            aero=phase_aero_metrics(run.samples, keep=sheep))
+    return out
+
+
+
 @dataclass(frozen=True)
 class ControlledAscent:
     """A closed-loop ascent: the plant's :class:`SixDofRun` (whose
     ``gimbal_*_cmd_rad`` columns carry the applied deflection), the tracker's
-    :class:`TvcDiagnostics` and the :class:`AttitudeMetrics`."""
+    :class:`TvcDiagnostics`, the whole-run :class:`AttitudeMetrics` and the
+    E1-02 :data:`POWERED` / :data:`COAST` split of both (:func:`PhaseMetrics`)."""
 
     run: SixDofRun
     diagnostics: TvcDiagnostics
     metrics: AttitudeMetrics
+    phases: Mapping[str, PhaseMetrics] = field(default_factory=dict)
 
     def summary(self) -> dict[str, float | tuple[float, float, float]]:
         """Everything the F-04 acceptance asks to record, in one plain dict
         (deflection margin, max deflection, saturation/slew seconds, attitude
-        error) -- suitable for a run-directory JSON sidecar."""
-        d, m = self.diagnostics, self.metrics
-        return {"att_err_max_deg": m.att_err_max_deg, "att_err_rms_deg": m.att_err_rms_deg,
-                "alpha_max_deg": m.alpha_max_deg,
-                "rates_max_dps": m.rates_max_dps,
-                "pitch_command_peak_deg": d.pitch_command_peak_deg,
-                "pitch_applied_peak_deg": d.pitch_applied_peak_deg,
-                "pitch_deflection_margin": d.pitch_deflection_margin,
-                "pitch_saturated_s": d.pitch_saturated_s,
-                "pitch_slew_limited_s": d.pitch_slew_limited_s,
-                "yaw_command_peak_deg": d.yaw_command_peak_deg,
-                "yaw_applied_peak_deg": d.yaw_applied_peak_deg,
-                "yaw_deflection_margin": d.yaw_deflection_margin,
-                "yaw_saturated_s": d.yaw_saturated_s,
-                "yaw_slew_limited_s": d.yaw_slew_limited_s,
-                "tvc_limit_deg": math.degrees(d.limit_rad),
-                "n_ticks": float(d.n_ticks), "burn_s": d.burn_s}
+        error), plus the E1-02 phase split under ``powered_`` / ``coast_``
+        prefixes -- suitable for a run-directory JSON sidecar. A report that
+        prints the phase block separately should drop those prefixed keys
+        rather than print the same numbers twice."""
+        m = self.metrics
+        out: dict[str, float | tuple[float, float, float]] = {
+            "att_err_max_deg": m.att_err_max_deg, "att_err_rms_deg": m.att_err_rms_deg,
+            "alpha_max_deg": m.alpha_max_deg, "rates_max_dps": m.rates_max_dps}
+        out.update(self.diagnostics.summary())
+        for phase, pm in self.phases.items():
+            out.update({f"{phase}_{k}": v for k, v in pm.summary().items()})
+        return out
 
 
 def run_closed_loop_ascent(state: RigidBodyState, vehicle: RigidBodyVehicle,
@@ -558,4 +777,7 @@ def run_closed_loop_ascent(state: RigidBodyState, vehicle: RigidBodyVehicle,
     run = propagate(state, vehicle, law, t_end_s, dt_s=dt_s, sample_every=sample_every,
                     physics=physics, epoch_utc=epoch_utc)
     return ControlledAscent(run=run, diagnostics=law.diagnostics,
-                            metrics=attitude_metrics(run, program))
+                            metrics=attitude_metrics(run, program),
+                            phases=ascent_phase_metrics(
+                                run, program, law.history(), actuator=law.actuator,
+                                burn_out_t_s=run.propellant_exhausted_t_s))

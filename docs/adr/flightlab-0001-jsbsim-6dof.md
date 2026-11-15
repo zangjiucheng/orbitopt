@@ -15,6 +15,12 @@
   artifacts through the formal backend). MECO is a real throttle cut in the
   formal backend (the spike coasted 5 s with the engine still open; metrics stop
   at MECO, so the numbers here are unchanged).
+- **Addendum (E1-01, task #250):** `6DOF` turned out to be ambiguous —
+  `orbitopt flight mission --backend 6DOF` means the *native* rigid-body
+  plant, not this engine. The canonical identity of the backend this ADR
+  made formal is now `jsbsim` (`orbitopt.flightlab.backends`), recorded on
+  every run/report/scene; `--backend 6DOF` remains a deprecated input alias
+  in `flight simulate` only. See [Flight Lab backends](../flightlab.md#backend-identities-and-fidelity-levels).
 
 ## Context and problem
 

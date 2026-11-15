@@ -1,0 +1,63 @@
+# Packaged 6-DOF backend scenario: the production aero ascent (E1-04, task
+# #253). The F-03 depletion vehicle flown from the LAUNCH PAD on the
+# aero-bearing airframe spike_stage_aero -- the same airframe as spike_stage,
+# with the native aero document data/flightlab/aero/spike_stage.yaml compiled
+# into its XML by orbitopt.flightlab.sixdof.jsbsim_aero.
+#
+# Why sea level: the zero-aero spike scenarios launch at 300 km, where a
+# coefficient set would be scenery. Here the stage climbs through max-Q, so
+# the aero tables, the propellant-driven mass/CG/inertia trace and the TVC
+# actuator dynamics are all exercised by the same run. The mass_model section
+# is the same declared truth F-03 checks (read off the shared XML the
+# production aircraft is generated from), so "quality properties follow the
+# fuel" is asserted on the aero path, not assumed.
+name: e104-aero-ascent
+provenance: illustrative
+model: spike_stage_aero
+dt_s: 0.02
+duration_s: 104.0
+epoch_utc: '2026-01-01T00:00:00Z'
+ic:
+  lat_geod_deg: 0.0
+  lon_deg: 0.0
+  alt_m: 0.0
+  pitch_deg: 90.0
+  heading_deg: 90.0
+ignition:
+  t_s: 0.0
+  throttle: 1.0
+control:
+  mode: hold
+mass_model:
+  full:
+    mass_kg: 70000.0
+    cg_m: [18.2857143, 0.0, 0.0]
+    inertia_kg_m2: {ixx: 111760.0, iyy: 4212000.0, izz: 4212000.0}
+  empty:
+    mass_kg: 10000.0
+    cg_m: [20.0, 0.0, 0.0]
+    inertia_kg_m2: {ixx: 34000.0, iyy: 1.7e+6, izz: 1.7e+6}
+  tolerances:
+    flow_lag_frames: 2.0
+    mass_abs_kg: 2.0
+    cg_abs_m: 0.02
+    inertia_rel: 0.002
+    interpolation_cg_abs_m: 0.05
+    interpolation_inertia_rel: 0.02
+    burnout_fraction: 0.001
+output:
+  every: 20
+assumptions:
+  - "Sea-level ascent of the production (aero-bearing) spike stage, flown
+    open-loop on full throttle past burnout: illustrative vehicle, not a
+    flight-certified ascent; the attitude is held at the pad heading by a
+    neutral gimbal, not steered."
+  - "Aerodynamics are generated from the packaged aero document spike_stage
+    (promotion residual and AERORP-at-dry-CG difference disclosed in
+    docs/adr/flightlab-0007); the engine keeps the spike's token nozzle exit
+    area, so JSBSim thrust stays vacuum-like at sea level."
+  - "flow_lag_frames: JSBSim applies a step's drain to inertia/mass-slugs
+    one frame late, and the ignition step's trapezoid sees half a frame, so
+    the flow integral runs ~1.5 frames ahead of the mass trace; the declared
+    allowance is 2 frames of peak flow (2 * 600 kg/s * 0.02 s = 24 kg) plus a
+    2 kg floor."
