@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zangjiucheng/orbitopt/schemas/crossenv-plan-1.0.json",
+  "title": "orbitopt cross-environment mission plan (CrossEnvPlan v1)",
+  "description": "One command's worth of cross-environment orchestration (task #270, E5-03): the shared mission scenario, a map from environment label to Python interpreter, and the stages in execution order -- each stage naming the runner that flies its leg, the environment that runs it, and the earlier stages whose sealed exchanges it consumes. Interpreter values may use ${VAR} / ${VAR:-default} so one packaged plan serves any machine; orbitopt.crossenv.plan.load_plan expands, checks the cross-field rules the schema cannot express (unique stage ids, consumes referencing only earlier stages, env defined) and resolves every relative path against the repository root. Compatibility policy as everywhere: unknown optional fields ignored; breaking changes get crossenv-plan-2.0.json.",
+  "type": "object",
+  "required": ["kind", "schema_version", "mission", "scenario", "environments", "stages"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {"const": "orbitopt.crossenv.plan"},
+    "schema_version": {"const": "1.0"},
+    "mission": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {"id": {"type": "string", "minLength": 1}}
+    },
+    "scenario": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The mission scenario (two-stage-leo config) every stage loads. Relative paths resolve against the repository root."
+    },
+    "out": {
+      "type": "string",
+      "description": "Default output root; the CLI --out flag overrides it."
+    },
+    "environments": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[A-Za-z][A-Za-z0-9_-]*$"},
+      "additionalProperties": {"type": "string", "minLength": 1},
+      "description": "Environment label -> Python interpreter (a command on PATH or a path); values pass through ${VAR} / ${VAR:-default} expansion."
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "runner", "env"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"},
+          "runner": {"enum": ["ascent", "recovery"]},
+          "env": {"type": "string", "minLength": 1},
+          "consumes": {"type": "array", "items": {"type": "string"}, "description": "Earlier stage ids whose sealed exchange must validate before this stage runs."},
+          "options": {"type": "object", "propertyNames": {"type": "string"}, "description": "Runner options (e.g. ascent propagate)."}
+        }
+      }
+    }
+  }
+}
