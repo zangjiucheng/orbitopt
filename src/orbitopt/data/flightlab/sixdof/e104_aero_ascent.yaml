@@ -54,7 +54,7 @@ assumptions:
     neutral gimbal, not steered."
   - "Aerodynamics are generated from the packaged aero document spike_stage
     (promotion residual and AERORP-at-dry-CG difference disclosed in
-    docs/adr/flightlab-0004); the engine keeps the spike's token nozzle exit
+    docs/adr/flightlab-0007); the engine keeps the spike's token nozzle exit
     area, so JSBSim thrust stays vacuum-like at sea level."
   - "flow_lag_frames: JSBSim applies a step's drain to inertia/mass-slugs
     one frame late, and the ignition step's trapezoid sees half a frame, so

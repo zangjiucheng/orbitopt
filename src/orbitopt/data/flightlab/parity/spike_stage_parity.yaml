@@ -25,7 +25,7 @@
 #     are now shared; what stays disclosed is the promotion residual
 #     (stability-axis tables, bilinear Mach grids, AERORP at the dry CG),
 #     the engine's token nozzle exit area, and JSBSim's actuator dynamics --
-#     quantified in docs/adr/flightlab-0004.
+#     quantified in docs/adr/flightlab-0007.
 #   * The JSBSim `spike_upper` model is a FL-402 handoff stand-in (6 t dry,
 #     its own inertias), not this upper stage; no cross-check applies to it.
 #   * OpenTsiolkovsky flies its own synthetic_two_stage vehicle (a 380 t

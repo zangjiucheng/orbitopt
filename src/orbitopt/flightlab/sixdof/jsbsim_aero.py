@@ -546,7 +546,7 @@ def production_aircraft_xml(model: AeroModel, *, name: str = PRODUCTION_AIRCRAFT
                 '    source, this file is a build artefact. AERORP sits at the dry CG: the\n'
                 '    aero document couples about the (moving) CG, JSBSim applies forces at a\n'
                 '    fixed reference point, and the difference is a disclosed, quantified\n'
-                '    fidelity delta (docs/adr/flightlab-0004).\n',
+                '    fidelity delta (docs/adr/flightlab-0007).\n',
                 xml, 'aerodynamics comment')
     xml = _sub1(r'<wingarea  unit="M2">[^<]*</wingarea>',
                 '<wingarea  unit="M2"> ' + _num(model.reference_area_m2) + ' </wingarea>',

@@ -30,7 +30,7 @@
     source, this file is a build artefact. AERORP sits at the dry CG: the
     aero document couples about the (moving) CG, JSBSim applies forces at a
     fixed reference point, and the difference is a disclosed, quantified
-    fidelity delta (docs/adr/flightlab-0004).
+    fidelity delta (docs/adr/flightlab-0007).
   * No ground reactions: the spike flies free flights only.
 -->
 <aircraft name="spike_stage_aero" version="2.0" release="ALPHA">

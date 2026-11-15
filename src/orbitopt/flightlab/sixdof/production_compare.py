@@ -23,7 +23,7 @@ keep documented differences that no parity source removes:
 This module therefore flies the SAME scenario -- the packaged E1-04 ascent,
 open loop, neutral gimbal, full throttle to burnout -- through both plants
 from the same initial state, and reports the divergence trace-by-trace with
-checks whose bands the ADR (docs/adr/flightlab-0004) explains: what is
+checks whose bands the ADR (docs/adr/flightlab-0007) explains: what is
 engine, what is actuator, what is aero reference point, what is gravity and
 frame integration.  The angle-of-attack checks therefore cover the *powered*
 window only (through and shortly after max-Q): after the engine stops the
@@ -120,11 +120,11 @@ def jsbsim_ascent(*, dt_s: float = SCENARIO_DT_S, duration_s: float = SCENARIO_D
 #: Declared bands for the backend-to-backend comparison (E1-04). They are
 #: NOT tolerances on a shared truth -- the two plants disagree by design (see
 #: the module docstring) -- they are the bands inside which the disagreement
-#: observed in docs/adr/flightlab-0004 stays the *disclosed* one, and a
+#: observed in docs/adr/flightlab-0007 stays the *disclosed* one, and a
 #: regression (a swapped engine, an aero term dropped in the XML) is caught.
 #: The native engine integrates mass flow from the ambient-corrected thrust
 #: and Isp, the JSBSim engine burns the fixed ``propflowmax``: up to half a
-#: percent of the propellant load over the burn (ADR flightlab-0004).
+#: percent of the propellant load over the burn (ADR flightlab-0007).
 MASS_PROP_REL_BAND = 0.006
 ALT_MECO_REL_BAND = 0.15
 SPEED_MECO_REL_BAND = 0.10
@@ -189,7 +189,7 @@ def compare_production_paths(*, dt_s: float = SCENARIO_DT_S,
     vehicle = native_booster(load_parity_scenario())
     # j2 off on the native side: JSBSim's standard gravity is central, and
     # leaving the native J2 on would fold a gravity-model difference into an
-    # aero comparison (disclosed in ADR flightlab-0004).
+    # aero comparison (disclosed in ADR flightlab-0007).
     nat = native_ascent(dt_s=dt_s, duration_s=duration_s, throttle=throttle,
                         sample_every=sample_every, vehicle=vehicle,
                         physics=RigidBodyPhysics(j2=False))
@@ -230,47 +230,42 @@ def compare_production_paths(*, dt_s: float = SCENARIO_DT_S,
               value=m['mass_abs_kg'],
               limit=MASS_PROP_REL_BAND * m['mass_propellant_kg'], unit='kg',
               reason_code='' if m['mass_abs_kg'] <= MASS_PROP_REL_BAND * m['mass_propellant_kg']
-              else 'the two backends drain measurably different propellant: the engine '
-                   'flow models drifted apart'),
+              else 'E104_PROPELLANT_DRAIN_DIVERGED'),
         Check(id='e104-max-q-agreement', passed=m['max_q_rel'] <= MAXQ_REL_BAND,
               value=m['max_q_rel'], limit=MAXQ_REL_BAND,
               reason_code='' if m['max_q_rel'] <= MAXQ_REL_BAND else
-              'max-Q moved beyond the disclosed band: the aero or the thrust '
-              'model changed'),
+              'E104_MAX_Q_DIVERGED'),
         Check(id='e104-meco-altitude-agreement',
               passed=m['alt_meco_rel'] <= ALT_MECO_REL_BAND, value=m['alt_meco_rel'],
               limit=ALT_MECO_REL_BAND,
               reason_code='' if m['alt_meco_rel'] <= ALT_MECO_REL_BAND else
-              'burnout altitude diverged beyond the disclosed band'),
+              'E104_MECO_ALTITUDE_DIVERGED'),
         Check(id='e104-meco-speed-agreement',
               passed=m['speed_meco_rel'] <= SPEED_MECO_REL_BAND,
               value=m['speed_meco_rel'], limit=SPEED_MECO_REL_BAND,
               reason_code='' if m['speed_meco_rel'] <= SPEED_MECO_REL_BAND else
-              'burnout speed diverged beyond the disclosed band'),
+              'E104_MECO_SPEED_DIVERGED'),
         Check(id='e104-pitch-rate-agreement',
               passed=m['pitch_rate_max_abs_rad_s'] <= PITCH_RATE_ABS_BAND_RAD_S,
               value=m['pitch_rate_max_abs_rad_s'], limit=PITCH_RATE_ABS_BAND_RAD_S,
               unit='rad/s',
               reason_code='' if m['pitch_rate_max_abs_rad_s'] <= PITCH_RATE_ABS_BAND_RAD_S
-              else 'attitude dynamics diverged beyond the disclosed band'),
+              else 'E104_ATTITUDE_RATE_DIVERGED'),
         Check(id='e104-alpha-agreement-through-max-q',
               passed=m['alpha_window_deg'] <= ALPHA_WINDOW_BAND_DEG,
               value=m['alpha_window_deg'], limit=ALPHA_WINDOW_BAND_DEG, unit='deg',
               reason_code='' if m['alpha_window_deg'] <= ALPHA_WINDOW_BAND_DEG else
-              'the plants fly measurably different attitudes while the aero has '
-              'authority: an aero term or the thrust behind it changed'),
+              'E104_ALPHA_DIVERGED'),
         Check(id='e104-jsbsim-alpha-held',
               passed=m['alpha_jsbsim_max_deg'] <= JSBSIM_ALPHA_MAX_BAND_DEG,
               value=m['alpha_jsbsim_max_deg'], limit=JSBSIM_ALPHA_MAX_BAND_DEG, unit='deg',
               reason_code='' if m['alpha_jsbsim_max_deg'] <= JSBSIM_ALPHA_MAX_BAND_DEG else
-              'the production airframe stopped flying the commanded ascent on its '
-              'own aerodynamics'),
+              'E104_AERO_ATTITUDE_NOT_HELD'),
         Check(id='e104-pad-thrust-debit-is-the-nozzle-area',
               passed=m['pad_thrust_ratio_rel'] <= PAD_THRUST_RATIO_REL_BAND,
               value=m['pad_thrust_ratio_rel'], limit=PAD_THRUST_RATIO_REL_BAND,
               reason_code='' if m['pad_thrust_ratio_rel'] <= PAD_THRUST_RATIO_REL_BAND
-              else 'the JSBSim/native pad thrust ratio is no longer explained by '
-                   'isp_vacuum/isp_sea_level: an engine parameter drifted'),
+              else 'E104_PAD_THRUST_RATIO_UNEXPLAINED'),
     ]
     return ProductionComparison(jsbsim=jbs, native=nat, metrics=m,
                                 checks=tuple(checks))

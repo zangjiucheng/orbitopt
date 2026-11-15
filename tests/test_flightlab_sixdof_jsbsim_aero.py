@@ -13,7 +13,7 @@ tests below hold that pipeline up:
   the *production* airframe, not just the zero-aero spike,
 * the packaged ``e104_aero_ascent`` scenario flies it end to end, and the
   backend-to-backend comparison (``production_compare``) stays inside the
-  bands its ADR (docs/adr/flightlab-0004) discloses.
+  bands its ADR (docs/adr/flightlab-0007) discloses.
 
 Skipped without ``jsbsim`` for the runtime tests (opt-in pip dep:
 ``pip install -r envs/sixdof-requirements.txt``); the XML/parity tests run
@@ -168,7 +168,11 @@ def test_sea_level_ascent_thrusts_through_real_dynamic_pressure():
 def test_e104_scenario_flys_on_the_production_path(tmp_path):
     from orbitopt.flightlab.adapters.sixdof import packaged_config, run_ascent
     run = run_ascent(packaged_config('e104_aero_ascent'), tmp_path / 'e104')
-    assert run.verification.physics_verified is True
+    # ADR flightlab-0004 (independent verification): the adapter vouches for
+    # its own output only through backend_self_check; physics_verified is set
+    # by the independent re-fly in simulate(), never by the backend itself.
+    assert run.verification.backend_self_check is True
+    assert run.verification.physics_verified is None
     ids = {c.id for c in run.verification.checks if c.id.startswith('sixdof-mass')}
     assert ids, 'the F-03 mass-model checks must run on the production path too'
     assert all(c.passed for c in run.verification.checks)

@@ -25,7 +25,7 @@ Alignment is deliberately narrow and disclosed (see the header of
   E1-04) closes that boundary for the production path: its aerodynamics
   section is compiled from the same coefficient file, asserted by
   ``parity-jsbsim-production-aero`` and quantified against the native plant
-  in ADR flightlab-0004.
+  in ADR flightlab-0007.
 
 Nothing here flies anything; it only reads, compares and reports.
 """

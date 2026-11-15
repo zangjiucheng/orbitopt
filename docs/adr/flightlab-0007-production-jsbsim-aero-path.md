@@ -1,4 +1,4 @@
-# ADR flightlab-0004: Production JSBSim fidelity (aero-bearing ascent path)
+# ADR flightlab-0007: Production JSBSim fidelity (aero-bearing ascent path)
 
 - **Status:** Accepted
 - **Date:** 2026-11-14
@@ -113,7 +113,8 @@ module and are asserted by
   `backends.py` say so.
 - New scenario `e104_aero_ascent` is the reference aero-bearing 6-DOF ascent;
   the F-03 mass-model checks run on it through the formal adapter
-  (`physics_verified`, all mass/CG/inertia checks pass).
+  (`backend_self_check`, all mass/CG/inertia checks pass; `physics_verified` is
+  left to the independent re-fly, ADR flightlab-0004).
 - Regeneration is deterministic: the artefact, its ADR and the parity source
   move together or the test gate fails (`stale artefact` and the three
   production parity checks).
