@@ -152,6 +152,15 @@ from orbitopt.flightlab.recovery.calibration import (  # noqa: F401
     pairs_from_records,
     reliability_table,
 )
+from orbitopt.flightlab.recovery.joint_risk import (  # noqa: F401
+    FITTED_LANDING_DEPENDENCE_RHO,
+    back_out_component_probabilities,
+    contingency_table,
+    coupled_pairs_from_records,
+    failure_channels,
+    fit_gaussian_copula_rho,
+    phi_report,
+)
 from orbitopt.flightlab.recovery.uncertainty import (  # noqa: F401
     ComponentScale,
     SOURCE_ORDER,
