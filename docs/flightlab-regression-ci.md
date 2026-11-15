@@ -117,7 +117,8 @@ is not their oracle. The production RAAN tolerance remains unchanged.
 ## E2-04: the frozen dual-branch reference mission (task #257)
 
 E2-04 tests mission integration using an **illustrative ascent fixture** and
-an actual simulated booster return. `scripts/e204_reference.py` constructs
+an actual simulated booster return (kept by E5-01 as a fast-test exception --
+see the E5-01 section below). `scripts/e204_reference.py` constructs
 its two-sample ascent arcs from constants: separation has 35 t of booster
 propellant, and insertion is prescribed at 400 km / 51.6°. Neither ascent
 optimization nor continuous ascent propagation runs in this regression.
@@ -163,3 +164,31 @@ For an independently justified reference change, use
 `python scripts/e204_reference.py update`, review the resulting provenance and
 numeric diff, and commit with `[e204-reference-update]`. CI's `verify` and
 `tag-check` guards remain required.
+
+## E5-01: the full mission chain flies a computed ascent (task #268)
+
+E5-01 closes the E2-04 evidence gap for the ascent leg: the packaged M-07
+scenario (`src/orbitopt/data/mission_two_stage_leo.yaml`, `ascent.mode:
+optimize`) is flown now, and `tests/test_mission_e5_real_ascent.py` grades
+WHERE the chain's evidence came from -- station times equal the engine's
+event log (including solver-determined `max_q`/`impact` times the chain never
+asks for), the parking handoff equals the computed track sample at the
+engine's `seco` event, staging states equal flown track samples, and the raw
+OpenTsiolkovsky outputs sit beside the run directory. Run it like the M-07
+step (same `flightlab-gateb` job, same stack):
+
+```bash
+python scripts/fetch_opentsiolkovsky.py
+pytest tests/test_mission_e5_real_ascent.py -m slow -v
+```
+
+Without tudatpy the M-05 propagation leg is recorded `not_checked` (never
+passed), exactly as the E2-04 scenario declares it; the fast guards run
+anywhere and the recorded-flight contract check needs no compute stack.
+
+The E5-01 exception, kept deliberately: the E2-04 frozen mission retains its
+synthetic two-sample ascent with preset separation/SECO constants as a FAST
+integration test. The exception is annotated in the scenario, the builder,
+its test module and `PROVENANCE.json` (`opentsiolkovsky: not used ...`), and
+`tests/test_mission_e5_real_ascent.py` trips if any other consumer appears or
+if the scenario surface grows a knob for injecting an ascent/SECO state.

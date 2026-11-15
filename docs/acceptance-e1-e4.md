@@ -93,6 +93,10 @@ pairwise tests; the 672 recovery flights were not re-run.
 E2-04 uses a synthetic, two-sample ascent handoff and prescribed orbit plus a
 real recovery simulation. Parking propagation is out of scope. Passing this
 fixture does not establish one continuously propagated ascent, orbit and return.
+(E5-01, task #268: that gap is closed on the mission code path -- the full
+mission chain's ascent is now computed by OpenTsiolkovsky with event-determined
+staging and full time histories, `tests/test_mission_e5_real_ascent.py`; the
+synthetic E2-04 fixture remains annotated as a fast-test exception only.)
 The native F-07 comparison uses a disclosed modified upper stage.
 
 This review does not establish full expensive optimizer/M-07 launch,

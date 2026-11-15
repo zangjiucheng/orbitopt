@@ -14,6 +14,12 @@ Two guards, in the FL-601 pattern:
   red, with FL-601's advice: an INTENDED change goes in via
   ``scripts/e204_reference.py update`` + an ``[e204-reference-update]``
   commit tag (G5), which CI's verify + tag-check pair enforces.
+
+E5-01 (task #268) exception: the ascent this mission replays is a SYNTHETIC
+two-sample handoff built from the constants in ``scripts/e204_reference.py``
+(preset separation/SECO states). It is kept as the annotated fast
+integration-test exception; ``tests/test_mission_e5_real_ascent.py`` guards
+that no other full-mission path consumes a preset SECO state.
 """
 from __future__ import annotations
 

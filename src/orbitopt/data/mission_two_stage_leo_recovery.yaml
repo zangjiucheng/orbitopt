@@ -14,6 +14,14 @@
 # flightlab-landing job -- the one job whose pinned stack can fly the
 # landing: gfold 0.3.2 per envs/flightlab-landing-ci.txt).
 #
+# E5-01 EXCEPTION (task #268): the ascent this scenario replays is the
+# SYNTHETIC two-sample handoff built from the literal constants in
+# scripts/e204_reference.py -- a preset separation/SECO state, not a
+# computed flight. It is kept, annotated, as the E2-04 FAST integration
+# test only: every full mission chain consumes an ascent COMPUTED by the
+# pinned OpenTsiolkovsky binary (ascent.mode: optimize,
+# mission_two_stage_leo.yaml; guard: tests/test_mission_e5_real_ascent.py).
+#
 # The inputs are deliberately astropy-light: every frozen track is ECEF, so
 # the staging boundaries, the separation-fork bookkeeping and the whole
 # recovery branch are graded without a frame bridge, and the astropy frame
