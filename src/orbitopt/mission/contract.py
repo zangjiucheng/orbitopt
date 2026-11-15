@@ -75,6 +75,7 @@ either side of the seam without importing each other's compute stack.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from dataclasses import dataclass, field
@@ -315,6 +316,17 @@ def is_valid_state_document(doc: Mapping[str, Any]) -> bool:
     except (jsonschema.ValidationError, ValueError):
         return False
     return True
+
+
+def state_digest(state: HandoffState) -> str:
+    """SHA-256 of the state's canonical handoff-state-1.0 JSON (the same
+    canonicalization as ``orbitopt.flightlab.handoff.handoff_digest``) --
+    what a report records (E5-02, task #269) so a cited handoff -- e.g. the
+    one separation state both mission branches inherit -- is traceable to
+    the exact bytes it was checked against."""
+    text = json.dumps(state_to_dict(state), sort_keys=True,
+                      separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 # --------------------------------------------------------------------------
