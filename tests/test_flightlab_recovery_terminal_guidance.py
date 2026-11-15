@@ -384,7 +384,7 @@ def test_lag_compensation_inverts_the_declared_lag():
 def test_e301_handover_is_a_response_time_earlier():
     # the ZEM branch of the law is handed to the damped terminal law one
     # declared time constant earlier under lag compensation: same state,
-    # ZEM-saturated without, terminal-PD with (ADR flightlab-0004)
+    # ZEM-saturated without, terminal-PD with (ADR flightlab-0006)
     off = ((0.0, 20.0, 53.9), (0.0, 0.0, -40.0))   # t_go - settle in (0.5, 0.7)
     naive = _cmd(*off, guidance=TerminalGuidance(tvc_rate_limit_deg_s=20.0,
                                                  tvc_lag_tau_s=0.2))
@@ -414,7 +414,7 @@ def test_closed_loop_tvc_lag_delays_the_realised_direction():
     # demand REVERSES: the no-lag gimbal starts returning to vertical at
     # once, the lagged one keeps slewing outward while its internal state
     # catches up (the terminal limit-cycle E3-01 compensates, ADR
-    # flightlab-0004)
+    # flightlab-0006)
     burn = ((1500.0, -400.0, 900.0), (40.0, -10.0, -150.0), 40_000.0)
     coast = ((0.0, 0.0, 3000.0), (0.0, 0.0, -200.0), 40_000.0)
     over_pad = ((0.0, 0.0, 300.0), (0.0, 0.0, -200.0), 40_000.0)

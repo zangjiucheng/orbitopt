@@ -109,7 +109,7 @@ without moving the FL-305 baseline:
 The fair before/after (FL-305 default vs the R-05 preset, same dispersions
 and seed) is ``benchmarks/bench_r05_actuator_margins.py``.
 
-E3-01 (task #258, ``docs/adr/flightlab-0004-rate-limited-landing-guidance.md``)
+E3-01 (task #258, ``docs/adr/flightlab-0006-rate-limited-landing-guidance.md``)
 makes the declared actuator set the default and lets the law see it. The
 servo chain is the repo's own JSBSim spike-stage pin set -- a 20 deg/s slew
 limit *in series with* a 0.2 s first-order TVC lag (``<lag>`` before
@@ -1067,7 +1067,7 @@ class TerminalGuidance:
       law slews the new direction toward its previous command, so a large
       divert demand is tracked at the actuator's rate rather than snapped
       to. 0 (the FL-305 default) leaves the direction unlimited.
-    * **E3-01 (task #258, docs/adr/flightlab-0004): the declared actuator
+    * **E3-01 (task #258, docs/adr/flightlab-0006): the declared actuator
       set, and a law that compensates it.** The declared model is the
       servo chain the repo's own JSBSim spike stage declares: a slew-rate
       limit (``tvc_rate_limit_deg_s``, 20 deg/s) *in series with* a
@@ -1126,7 +1126,7 @@ class TerminalGuidance:
     #: time earlier (the settle window effectively grows by
     #: ``tvc_lag_tau_s``), because a ZEM spike inside a response time
     #: cannot be tracked by a rate-limited gimbal and limit-cycles
-    #: instead (measured, ADR flightlab-0004). No differentiator anywhere:
+    #: instead (measured, ADR flightlab-0006). No differentiator anywhere:
     #: a variable integration step cannot blow either term up. Needs a
     #: declared lag; off (the FL-305/R-05 flow) otherwise.
     tvc_lag_compensation: bool = False
@@ -1439,7 +1439,7 @@ def _divert_needs_ignition(r: np.ndarray, v: np.ndarray, a_design: float,
     lives at the actuator interface and in the terminal hand-over
     (:attr:`TerminalGuidance.tvc_lag_compensation`), not on the ignition
     boundary, which stays the FL-305 law's. A response-reserved ignition
-    boundary was measured (ADR flightlab-0004): it costs landings."""
+    boundary was measured (ADR flightlab-0006): it costs landings."""
     if a_design <= 0.0 or g.divert_ignition_fraction <= 0.0:
         return False
     t_h = abs(float(v[2])) / a_design - g.settle_s

@@ -45,7 +45,7 @@ at the final (finer) step before it is reported.
 E3-02 (epic #248) offers a third objective mode beside FL-305 and R-01: the
 same landing coupling expressed as **joint chance constraints**
 (``joint_chance=``; :mod:`orbitopt.flightlab.recovery.chance`, ADR
-flightlab-0004). Fuel margin, divert feasibility and landing probability
+flightlab-0005). Fuel margin, divert feasibility and landing probability
 enter as constraints with deterministic equivalents (a quantile margin on
 the dispersion loss, a divert budget *derived* from a touchdown-scatter
 requirement, a joint landing-probability bound), aggregated as a

@@ -1,4 +1,4 @@
-# ADR flightlab-0004: Joint chance-constrained recovery planning (E3-02)
+# ADR flightlab-0005: Joint chance-constrained recovery planning (E3-02)
 
 - **Status:** Accepted
 - **Date:** 2026-11-14

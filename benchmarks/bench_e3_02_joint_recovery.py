@@ -12,7 +12,7 @@ the FL-304/R-05/R-07 evidence runs:
   and the R-07 stack column; the one whose landing scatter R-07 measured at
   a 833 m max radius against the baseline's 338 m);
 * **e3_02_joint_chance** -- the joint chance constraints of
-  :mod:`orbitopt.flightlab.recovery.chance` (ADR flightlab-0004): fuel
+  :mod:`orbitopt.flightlab.recovery.chance` (ADR flightlab-0005): fuel
   margin as a quantile on the dispersion loss, divert feasibility derived
   from a 90 %-radius scatter requirement, a joint landing-probability
   bound, aggregated as a worst-violation exact penalty.
@@ -59,7 +59,7 @@ FL305_OBJECTIVE = {"landing_divert_budget_m": None, "landing_reserve_margin_kg":
 DECLARED_ACTUATOR = {"landing": {"tvc_rate_limit_deg_s": 20.0}}
 
 #: E3-02 joint chance mode: the DEFAULT JointChanceSpec (defaults documented
-#: in orbitopt.flightlab.recovery.chance / ADR flightlab-0004) on top of the
+#: in orbitopt.flightlab.recovery.chance / ADR flightlab-0005) on top of the
 #: pinned-off R-01 soft terms it replaces.
 E302_CHANCE = {**FL305_OBJECTIVE, "joint_chance": {}}
 

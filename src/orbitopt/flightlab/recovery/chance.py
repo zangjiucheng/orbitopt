@@ -47,7 +47,7 @@ already measures (miss, propellant, landing need):
    *probability* it must deliver, the quantity the Monte Carlo grades.
 
 All calibration numbers are DESIGN ASSUMPTIONs anchored on the recorded
-Monte Carlo evidence (see the defaults' docstrings and ADR flightlab-0004);
+Monte Carlo evidence (see the defaults' docstrings and ADR flightlab-0005);
 every one of them is a field of :class:`JointChanceSpec`, and the bands
 mirror the FL-304 default dispersions the paired benchmark disperses with.
 The module is pure math on the corridor handoff numbers -- it never flies a

@@ -190,7 +190,7 @@ In the recorded 32-sample comparison (seed 1, identical dispersions and
 referee), the baseline landed 14 -- but only by flying an unlimited-bandwidth
 TVC assumption (nominal demand peaking at 193 deg/s), while the stack column
 flies the declared actuator set (20 deg/s slew in series with a 0.2 s lag,
-compensated; see [ADR 0004](adr/flightlab-0004-rate-limited-landing-guidance.md))
+compensated; see [ADR 0006](adr/flightlab-0006-rate-limited-landing-guidance.md))
 and also lands 14, with the nominal touching down 0.03 m from the pad at
 0.009 m/s lateral speed on a 18.8 deg/s peak slew. Position failures rose
 from 4 to 7 and the stack adds 5 terminal `LANDING_LATERAL_SPEED_EXCEEDED`
@@ -208,7 +208,7 @@ landing-probability floor) aggregated as a worst-violation exact penalty.
 In the recorded paired 32-sample comparison the joint arm landed 17 (+4,
 −0 vs the baseline; identical touchdowns on the shared landings) with the
 best landed-conditional scatter. See
-[ADR 0004](adr/flightlab-0004-joint-recovery-chance-constraints.md) and
+[ADR 0005](adr/flightlab-0005-joint-recovery-chance-constraints.md) and
 [the recorded results](benchmarks/e3_02_joint_recovery.json).
 
 ## Robust Monte Carlo qualification (E3-03)

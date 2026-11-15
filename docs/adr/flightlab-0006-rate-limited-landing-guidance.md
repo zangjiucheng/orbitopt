@@ -1,4 +1,4 @@
-# ADR flightlab-0004: Rate-limited landing guidance (declared TVC chain + lag-aware law)
+# ADR flightlab-0006: Rate-limited landing guidance (declared TVC chain + lag-aware law)
 
 - **Status:** Accepted
 - **Date:** 2026-11-14
