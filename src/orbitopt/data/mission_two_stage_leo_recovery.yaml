@@ -1,0 +1,107 @@
+# E2-04 (task #257): the frozen full-mission reference -- BOTH branches.
+#
+# M-07's frozen scenario (mission_two_stage_leo.yaml) is expendable: the
+# stack's booster branch dies as ballistic debris. This scenario is the same
+# mission WITH the E2-01 recovery stage declared, so one call drives and
+# grades the complete dual-branch mission: ascent -> separation fork ->
+# upper stage to a 400 km parking orbit AND booster RTLS back to the pad,
+# with the E2-03 full-mission gate over every phase the mission flies.
+#
+# It is the E2E regression baseline of E2-04: the ascent it replays, the
+# recovery recipe below and the reference results under
+# tests/data/mission/reference/e2-04-frozen-mission/ are frozen, and
+# scripts/e204_reference.py compares a fresh run against them (CI's
+# flightlab-landing job -- the one job whose pinned stack can fly the
+# landing: gfold 0.3.2 per envs/flightlab-landing-ci.txt).
+#
+# The inputs are deliberately astropy-light: every frozen track is ECEF, so
+# the staging boundaries, the separation-fork bookkeeping and the whole
+# recovery branch are graded without a frame bridge, and the astropy frame
+# conversions that remain (the parking-orbit element checks) are invariant
+# to the Earth-orientation table -- the checks that DO read astropy sit in
+# bands (20 km altitude, 0.2 deg inclination) far above any table version's
+# effect. The recovery plan recipe is pinned (initial_guess + max_fevals,
+# the FL-305 acceptance recipe), so the Nelder-Mead search starts and stops
+# identically on every machine.
+#
+# `expected.propagation_result: not_checked` -- the parking-propagation leg
+# needs tudatpy, which the gfold-pinned landing stack cannot carry (gfold
+# needs Python >= 3.11, the tudatpy lock is Python 3.10). It is recorded
+# declared-not-checked (never passed); the M-07 propagation regression keeps
+# ownership of that leg in the Gate B job (tests/test_mission_two_stage_leo.py).
+#
+# Relative paths (ascent.run_dir, target_file) resolve against the repository
+# root by scripts/e204_reference.py and tests/test_e204_reference.py.
+schemaVersion: "1.0"
+mission:
+  id: e2-04-frozen-two-stage-leo-rtls
+  title: Frozen dual-branch reference mission (ascent + parking + booster RTLS)
+  kind: two-stage-leo
+scenario:
+  mission:
+    id: e2-04-frozen-two-stage-leo-rtls
+    title: Frozen dual-branch reference mission (ascent + parking + booster RTLS)
+    kind: two-stage-leo
+  launch:
+    site: cape-canaveral            # catalog site; the flown pad is the target's launch_site
+    vehicle: synthetic_two_stage    # catalog: orbitopt/data/flightlab/vehicles
+    orbit: 400x400@51.6             # the recorded SECO insertion, as an M-04 spec
+    date_utc: "2026-11-10"          # the recorded flight epoch (a past date: finalized IERS)
+    raan_deg: null
+    window_days: 14.0
+  ascent:
+    mode: run_dir                   # replay the frozen ascent fixture, never refly it
+    run_dir: tests/data/mission/reference/e2-04-frozen-mission/ascent
+    target_file: src/orbitopt/data/flightlab/scenarios/leo_two_stage.yaml
+  handoff:
+    # Same M-01 gates as the M-07 packaged scenario; the frozen ascent's
+    # staging boundaries are exact by construction, so the residuals here
+    # are the bookkeeping checks themselves, not headroom for a backend.
+    position_m: 1.0
+    velocity_m_s: 0.01
+    epoch_s: 1.0
+    max_epoch_gap_s: null
+    mass_kg: 0.001
+    staging_velocity_m_s: 0.05
+    elements:
+      semi_major_axis_m: 10.0
+      eccentricity: 1.0e-6
+      inclination_deg: 1.0e-3
+      raan_deg: 1.0e-2
+      apsides_m: 10.0
+  recovery:
+    # The replayed flight is graded against this target's declared RTLS
+    # recovery; the booster model comes from launch.vehicle's catalog yaml.
+    target_file: src/orbitopt/data/flightlab/scenarios/leo_two_stage.yaml
+    plan_options:
+      # FL-305's acceptance recipe: the fixed Nelder-Mead start (the pipeline's
+      # NOMINAL_PLAN_GUESS) and its 18-evaluation budget, pinned as literal
+      # numbers so the plan is frozen independently of the code constant.
+      initial_guess: [18.4, 17.75, 1.0, 4.36, 0.0, 17456.0, 23.0]
+      max_fevals: 18
+  propagation:                      # not run: see the header (declared not_checked)
+    j2: true
+    third_bodies: []
+    drag: null
+    revolutions: 1.0
+    max_step_s: 300.0
+  expected:
+    events: [liftoff, meco, separation, seco]
+    parking_orbit:                # the recorded 400x400@51.6 insertion, as elements
+      semi_major_axis_m: 6778137.0
+      eccentricity: 0.0
+      inclination_deg: 51.6
+      raan_deg: null
+      periapsis_altitude_m: 400000.0
+      apoapsis_altitude_m: 400000.0
+    tolerances:                   # the Gate-B insertion band (identical to M-07's)
+      semi_major_axis_m: 20000.0
+      eccentricity: 0.002951
+      inclination_deg: 0.2
+      raan_deg: 1.0
+      periapsis_altitude_m: 20000.0
+      apoapsis_altitude_m: 20000.0
+    propagation_result: not_checked
+  scene:
+    coast_orbits: 2.0
+    earth_texture: true

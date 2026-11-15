@@ -1,0 +1,24 @@
+{
+  "optimizer_converged": true,
+  "physics_verified": null,
+  "backend_self_check": null,
+  "mission_constraints_passed": true,
+  "checks": [
+    {
+      "id": "max-q-within-limit",
+      "passed": true,
+      "value": 36690.0,
+      "limit": 60000.0,
+      "unit": "Pa",
+      "reason_code": ""
+    },
+    {
+      "id": "max-accel-within-limit",
+      "passed": true,
+      "value": 4.1,
+      "limit": 5.0,
+      "unit": "g",
+      "reason_code": ""
+    }
+  ]
+}
