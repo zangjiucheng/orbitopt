@@ -108,3 +108,46 @@ Expect `compare` to pass; on a genuine platform delta it may come apart
 within the declared tolerances only if the tolerances are too tight --
 that is a `tolerances.json` update, which goes through the same
 update-script + tagged-commit route as the reference itself.
+
+## E2-04: the frozen dual-branch reference mission (task #257)
+
+FL-601 freezes the ascent-only Gate B regression. **E2-04** freezes the
+*complete dual-branch mission* end to end as the E2 closure baseline: the
+same `leo_two_stage` / `synthetic_two_stage` campaign, but an ascent whose
+separation hands the booster 35 t of propellant (frozen run directory,
+pinned constants in `scripts/e204_reference.py`), the upper branch parked at
+400 km @ 51.6 deg, and the booster branch flown back and landed through the
+full recovery chain (FL-302 plan recipe, gfold 0.3.2 landing stack) — the
+E2-03 full-mission verdict (`status: OK`, `mass.separation_fork`, station
+chain, landing gates) as one comparable artifact.
+
+* **Frozen inputs:** the mission is declared in the packaged scenario
+  `src/orbitopt/data/mission_two_stage_leo_recovery.yaml` (recovery plan
+  recipe pinned: the proven-green nominal 7-vector guess, `max_fevals 18`;
+  `expected.propagation_result: not_checked` — the tudatpy leg belongs to
+  M-07, the gfold-pinned stack cannot run it). The ascent input is rebuilt
+  from the literal `ASCENT` constants (pad, epoch `2026-11-10T12:00:00Z`,
+  textbook separation state, masses) — a past epoch plus the no-download
+  IERS pin (above) makes the frame-bridge numbers identical across IERS
+  table versions.
+* **Frozen result + backend versions:** `tests/data/mission/reference/`
+  `e2-04-frozen-mission/` holds the reference report + merged recovery run
+  and `tolerances.json`; `PROVENANCE.json` records the sha256 of every file
+  plus the toolchain fingerprint (gfold pin, numpy/scipy/astropy/
+  astropy-iers-data versions, Python, platform) that produced it.
+* **CI gate:** the `flightlab-landing` job (gfold 0.3.2, Python 3.12) runs
+  `tests/test_e204_reference.py` — fast provenance/pin/tolerance guards
+  (which also run, skipping the numerical test, in every other job) and the
+  slow regression: re-fly the dual-branch mission and compare every
+  trajectory sample, event, check value and verdict within the declared
+  tolerances. Out of band = red. The G5 pair (`verify` + `tag-check`,
+  `[e204-reference-update]`) guards the committed reference the same way.
+
+```bash
+python scripts/e204_reference.py run --out /tmp/e204        # re-fly
+python scripts/e204_reference.py compare /tmp/e204          # vs reference
+python scripts/e204_reference.py update                     # intended change:
+git add tests/data/mission/reference/e2-04-frozen-mission \
+        src/orbitopt/data/mission_two_stage_leo_recovery.yaml
+git commit -m "test(mission): re-record E2-04 frozen reference [e204-reference-update]"
+```

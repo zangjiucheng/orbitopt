@@ -1,0 +1,40 @@
+[
+  {
+    "t_s": 0.0,
+    "kind": "liftoff",
+    "body_id": "stage1",
+    "data": {}
+  },
+  {
+    "t_s": 57.339,
+    "kind": "max_q",
+    "body_id": "stage1",
+    "data": {}
+  },
+  {
+    "t_s": 193.77,
+    "kind": "meco",
+    "body_id": "stage1",
+    "data": {}
+  },
+  {
+    "t_s": 207.0,
+    "kind": "separation",
+    "body_id": "stage2",
+    "data": {
+      "separated_from": "stage1"
+    }
+  },
+  {
+    "t_s": 215.0,
+    "kind": "ignition",
+    "body_id": "stage2",
+    "data": {}
+  },
+  {
+    "t_s": 622.0,
+    "kind": "seco",
+    "body_id": "stage2",
+    "data": {}
+  }
+]
