@@ -86,6 +86,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the E2-04 tag-check diffs the push/PR range: in a
+                           # depth-1 clone the PR merge-base fails the step and
+                           # the push base is "not present", silently skipping it
 
       - uses: actions/setup-python@v5
         with:

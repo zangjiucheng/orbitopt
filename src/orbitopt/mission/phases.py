@@ -14,7 +14,8 @@ E2-03 has to answer for the epic's Full Mission Closure:
   an overall pass: an injected upper stage with a lost booster is an overall
   failure with a green ``orbit_injection`` phase -- the local success is
   visible in the phase verdict, the mission still did not close (task
-  semantics: 入轨成功 + 回收失败 ⇒ overall failed, local injection passed).
+  semantics: injection succeeded + recovery failed => overall failed, local
+  injection passed).
 
 Phase boundaries follow the separation fork (E2-02): at separation the mission
 becomes two trajectories, and from there on each phase is graded by its own
