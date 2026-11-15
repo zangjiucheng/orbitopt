@@ -379,7 +379,8 @@ def to_flight_run(replay: StagingReplay, *, run_id: str = "fl-402-staging-spike"
         vehicle_sha256=mk("spike-stage-split-into-booster-and-upper"),
         git_sha="0" * 40,
         created_utc=epoch_utc,
-        engines={"spike_engine": "vacuum Isp 320 s, 600 kg/s (spike_engine.xml)"},
+        engines={"spike_engine": "vacuum Isp 320 s, choked flow 599.083 kg/s "
+                                 "over a 2 m^2 exit (spike_engine.xml)"},
         backend=BACKEND_JSBSIM,
         assumptions=(
             "E4 feasibility spike: JSBSim 6-DOF, zero aerodynamics, spherical+J2 gravity;"

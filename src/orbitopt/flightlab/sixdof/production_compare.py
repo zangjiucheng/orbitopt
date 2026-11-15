@@ -4,9 +4,11 @@ The acceptance question for the production aero path is not "does JSBSim
 agree with the native rigid-body plant" in the abstract -- the two plants
 keep documented differences that no parity source removes:
 
-  * the native engine integrates ambient back pressure over a physical 2 m^2
-    nozzle exit (``isp_sea_level_s``); the JSBSim spike engine keeps the
-    token ``0.001 ft^2`` exit area and is vacuum-like at any altitude,
+  * both engines debit ambient back pressure over the same physical 2 m^2
+    nozzle exit (E6-01, #273: ``T = thrust_vac - A*p`` with the choked flow
+    ``thrust_vac/(Isp_vac*g0)``), but JSBSim reads the ambient from its own
+    atmosphere model while the native plant reads US76 -- an engine *model*
+    the two now share, implemented twice,
   * JSBSim recomputes mass, CG and inertia from the tank contents every
     frame and its TVC is an actuator (lag, slew rate, travel limit); the
     native plant integrates a constant inertia tensor about the CG with an
@@ -122,13 +124,16 @@ def jsbsim_ascent(*, dt_s: float = SCENARIO_DT_S, duration_s: float = SCENARIO_D
 #: the module docstring) -- they are the bands inside which the disagreement
 #: observed in docs/adr/flightlab-0007 stays the *disclosed* one, and a
 #: regression (a swapped engine, an aero term dropped in the XML) is caught.
-#: The native engine integrates mass flow from the ambient-corrected thrust
-#: and Isp, the JSBSim engine burns the fixed ``propflowmax``: up to half a
-#: percent of the propellant load over the burn (ADR flightlab-0007).
-MASS_PROP_REL_BAND = 0.006
+#: The native and JSBSim engines now book the same choked flow over the same
+#: exit area (E6-01, #273), so the mass traces may only disagree by JSBSim's
+#: one-frame-late drain (measured 12 kg of a 60 t load, against 164 kg before
+#: the engines were aligned) and the two atmosphere models.
+MASS_PROP_REL_BAND = 0.002
 ALT_MECO_REL_BAND = 0.15
 SPEED_MECO_REL_BAND = 0.10
-MAXQ_REL_BAND = 0.20
+#: Measured 0.14 % (ADR flightlab-0009) -- the two plants now find max-Q at
+#: the same instant; what is left is US76 vs JSBSim's atmosphere.
+MAXQ_REL_BAND = 0.05
 PITCH_RATE_ABS_BAND_RAD_S = 0.02
 #: The window of the E1-04 ascent where the aero has authority: pad to just
 #: past max-Q.  Alpha is checked on this window only -- past it the
@@ -140,10 +145,11 @@ ALPHA_WINDOW_BAND_DEG = 3.0
 #: The production vehicle flies a held-vertical ascent on its own aerodynamics:
 #: JSBSim's own alpha stays under a degree for the whole flight.
 JSBSIM_ALPHA_MAX_BAND_DEG = 1.0
-#: JSBSim (nozzle exit area token) runs vacuum-like thrust; the native engine
-#: debits ambient back pressure over 2 m^2. At the pad the ratio must sit at
-#: isp_vacuum/isp_sea_level (282 -> 320 s), to 2%.
-PAD_THRUST_RATIO_REL_BAND = 0.02
+#: Both engines debit ambient back pressure over the same 2 m^2 exit
+#: (E6-01), so the pad thrust ratio must sit at 1.0. Measured 0.999995 -- the
+#: band is for the two atmosphere models disagreeing at the pad and JSBSim's
+#: lb/ft^2 rounding, not for the propulsion law any more.
+PAD_THRUST_RATIO_REL_BAND = 0.005
 
 
 @dataclass(frozen=True)
@@ -218,8 +224,12 @@ def compare_production_paths(*, dt_s: float = SCENARIO_DT_S,
         'mass_propellant_kg': float(vehicle.propellant_mass_kg),
         'pitch_rate_max_abs_rad_s': float(np.max(np.abs(n['q_rad_s'] - j['q_rad_s']))),
         'pad_thrust_ratio': float(j['thrust_n'][1] / max(n['thrust_n'][1], 1e-9)),
-        'pad_thrust_ratio_expected': float(vehicle.engine.isp_vacuum_s
-                                          / vehicle.engine.isp_sea_level_s),
+        # E6-01 (#273): both engines debit ambient pressure over the same
+        # 2 m^2 exit, so the pad thrust ratio is 1.0 by construction.  Before
+        # E6-01 the token nozzle left JSBSim vacuum-like and the ratio sat at
+        # isp_vacuum/isp_sea_level (~1.135); that debit is now shared, so any
+        # drift off 1.0 is an engine parameter, not a disclosed model form.
+        'pad_thrust_ratio_expected': 1.0,
     }
     m['pad_thrust_ratio_rel'] = float(abs(m['pad_thrust_ratio']
                                          - m['pad_thrust_ratio_expected'])
@@ -261,7 +271,7 @@ def compare_production_paths(*, dt_s: float = SCENARIO_DT_S,
               value=m['alpha_jsbsim_max_deg'], limit=JSBSIM_ALPHA_MAX_BAND_DEG, unit='deg',
               reason_code='' if m['alpha_jsbsim_max_deg'] <= JSBSIM_ALPHA_MAX_BAND_DEG else
               'E104_AERO_ATTITUDE_NOT_HELD'),
-        Check(id='e104-pad-thrust-debit-is-the-nozzle-area',
+        Check(id='e104-pad-thrust-debit-shared',
               passed=m['pad_thrust_ratio_rel'] <= PAD_THRUST_RATIO_REL_BAND,
               value=m['pad_thrust_ratio_rel'], limit=PAD_THRUST_RATIO_REL_BAND,
               reason_code='' if m['pad_thrust_ratio_rel'] <= PAD_THRUST_RATIO_REL_BAND
