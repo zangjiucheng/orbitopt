@@ -20,6 +20,18 @@ which is exact in the usual sense (once the scale exceeds the constraint
 multipliers the constrained minimizer and the penalized minimizer coincide)
 and cannot trade one constraint against another.
 
+Naming (E7-01, task #277, explicit by decision): this is **penalized
+optimization**, not a constrained optimizer -- the search is the same
+Nelder-Mead simplex FL-302 always used, steering the exact penalty. What
+the constraint statement buys over R-01's additive weights is that
+violations cannot trade against each other and the penalty is exact; the
+feasibility *verdict* is not the penalty value but the post-hoc check
+``worst_violation <= violation_tolerance`` (:meth:`JointChanceSpec
+.satisfies`). FL-302 enforces it: an accepted handoff whose worst violation
+exceeds the tolerance is never reported as satisfying the chance
+constraints -- it comes back ``feasible=False`` with reason code
+``JOINT_CHANCE_VIOLATED``.
+
 The three constraints, evaluated on the corridor-handoff numbers FL-302
 already measures (miss, propellant, landing need):
 
@@ -62,6 +74,7 @@ from typing import Any
 
 __all__ = [
     "DEFAULT_FUEL_QUANTILE",
+    "DEFAULT_JOINT_VIOLATION_TOLERANCE",
     "DEFAULT_MIN_LANDING_PROBABILITY",
     "DEFAULT_SCATTER_BUDGET_M",
     "DEFAULT_SCATTER_QUANTILE",
@@ -109,6 +122,16 @@ DEFAULT_SCATTER_QUANTILE = 0.9
 #: weights this scale is not a trade-off knob -- exactness says any larger
 #: value leads to the same constrained solution.
 JOINT_PENALTY_SCALE = 25.0
+
+#: Tolerance on the worst normalized joint violation (:attr:
+#: `JointVerdict.worst_violation`) within which the accepted handoff counts
+#: as *satisfying* the joint chance constraints (E7-01 feasibility
+#: semantics: a violation above it is never reported as satisfaction --
+#: reason code ``JOINT_CHANCE_VIOLATED``). DESIGN ASSUMPTION 1e-6: a
+#: numerical floor, not a trade-off knob -- the constraints are stated
+#: exactly and the penalty search may leave a residual down to
+#: double-precision noise; anything above this floor is a real violation.
+DEFAULT_JOINT_VIOLATION_TOLERANCE = 1e-6
 
 #: Uniform half-width -> 1-sigma conversion (rectangular distribution).
 _UNIFORM_SIGMA = 1.0 / math.sqrt(3.0)
@@ -181,6 +204,10 @@ class JointChanceSpec:
     isp_pct: float = 3.0
     density_pct: float = 10.0
     cd_pct: float = 8.0
+    #: E7-01 feasibility semantics: the accepted handoff satisfies the joint
+    #: chance constraints iff its worst normalized violation is within this
+    #: tolerance (:meth:`satisfies`; 0.0 demands exact satisfaction).
+    violation_tolerance: float = DEFAULT_JOINT_VIOLATION_TOLERANCE
 
     def __post_init__(self) -> None:
         if not 0.0 < self.p_fuel_min < 1.0:
@@ -197,6 +224,9 @@ class JointChanceSpec:
         for name in ("thrust_pct", "isp_pct", "density_pct", "cd_pct"):
             if getattr(self, name) < 0.0:
                 raise ValueError(f"{name} must be >= 0")
+        if self.violation_tolerance < 0.0:
+            raise ValueError(f"violation_tolerance must be >= 0, got "
+                             f"{self.violation_tolerance}")
 
     @classmethod
     def from_option(cls, option: "JointChanceSpec | Mapping[str, Any] | None"
@@ -267,6 +297,14 @@ class JointChanceSpec:
             return 1.0
         r = self.scatter_budget_m / s
         return 1.0 - math.exp(-0.5 * r * r)
+
+    def satisfies(self, worst_violation: float) -> bool:
+        """E7-01 feasibility semantics (module docstring): does a joint
+        verdict with this worst normalized violation satisfy the
+        constraints? Satisfaction is ``worst_violation <=
+        violation_tolerance`` -- a violation *above* the tolerance is never
+        satisfaction (FL-302 reports ``JOINT_CHANCE_VIOLATED``)."""
+        return float(worst_violation) <= self.violation_tolerance
 
 
 @dataclass(frozen=True)

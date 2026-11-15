@@ -27,6 +27,7 @@ from orbitopt.flightlab.recovery.boostback import (  # noqa: F401
     INSUFFICIENT_PROPELLANT_BOOSTBACK,
     INSUFFICIENT_PROPELLANT_ENTRY_BURN,
     INSUFFICIENT_PROPELLANT_RESERVE,
+    JOINT_CHANCE_VIOLATED,
     BoostbackPlan,
     CorridorReport,
     EntryBurnPlan,
@@ -40,6 +41,7 @@ from orbitopt.flightlab.recovery.boostback import (  # noqa: F401
 )
 from orbitopt.flightlab.recovery.chance import (  # noqa: F401
     DEFAULT_FUEL_QUANTILE,
+    DEFAULT_JOINT_VIOLATION_TOLERANCE,
     DEFAULT_MIN_LANDING_PROBABILITY,
     DEFAULT_SCATTER_BUDGET_M,
     DEFAULT_SCATTER_QUANTILE,
@@ -185,6 +187,7 @@ __all__ = [
     "DEFAULT_ENTRY_G_MAX",
     "DEFAULT_ENTRY_Q_MAX_PA",
     "DEFAULT_FUEL_QUANTILE",
+    "DEFAULT_JOINT_VIOLATION_TOLERANCE",
     "DEFAULT_LANDING_DIVERT_BUDGET_M",
     "DEFAULT_LANDING_LIMITS",
     "DEFAULT_LANDING_RESERVE_MARGIN_KG",
@@ -202,6 +205,7 @@ __all__ = [
     "INSUFFICIENT_PROPELLANT_RESERVE",
     "ImpactEllipse",
     "ImpactSite",
+    "JOINT_CHANCE_VIOLATED",
     "JOINT_PENALTY_SCALE",
     "JointChanceSpec",
     "JointConstraints",

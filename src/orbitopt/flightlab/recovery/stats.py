@@ -111,6 +111,10 @@ _CODE_CLASS: Mapping[str, str] = {
     "CORRIDOR_NOT_REACHED": FAILURE_CLASS_PLANNING_INFEASIBLE,
     "CORRIDOR_MISSED": FAILURE_CLASS_PLANNING_INFEASIBLE,
     "LANDING_INFEASIBLE": FAILURE_CLASS_PLANNING_INFEASIBLE,
+    # E7-01 (#277): the penalized search found a corridor-crossing handoff
+    # that still busts the joint chance tolerance -- the planner found no
+    # *constraint-satisfying* plan, the same family as a corridor miss.
+    "JOINT_CHANCE_VIOLATED": FAILURE_CLASS_PLANNING_INFEASIBLE,
     # the plan flew, but the flight did not complete
     "SAMPLE_ERROR": FAILURE_CLASS_EXECUTION_FAILURE,
     "RECOVERY_LANDING_NOT_ASSESSED": FAILURE_CLASS_EXECUTION_FAILURE,

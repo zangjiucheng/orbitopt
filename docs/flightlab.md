@@ -220,8 +220,13 @@ position failures rise from 4 to 7. See
 
 `plan_boostback_entry(joint_chance=...)` replaces the R-01 soft objective
 terms with joint fuel, divert/scatter and landing-probability constraints,
-combined through a worst-violation penalty. The recorded 32-sample joint arm
-lands 17; see [ADR 0005](adr/flightlab-0005-joint-recovery-chance-constraints.md)
+solved as a **penalized optimization** (worst-violation exact penalty on the
+Nelder–Mead search — not a constrained solver). Since E7-01 the constraint
+verdict is enforced, not implied by the penalty: a plan whose worst
+normalized violation exceeds `JointChanceSpec.violation_tolerance` comes
+back `feasible=False` with reason code `JOINT_CHANCE_VIOLATED`. The recorded
+32-sample joint arm lands 17; see
+[ADR 0005](adr/flightlab-0005-joint-recovery-chance-constraints.md)
 and [paired results](benchmarks/e3_02_joint_recovery.json) for assumptions.
 Its planning probability is a surrogate, not a guaranteed flight success rate.
 
