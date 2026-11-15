@@ -9,6 +9,11 @@ __pycache__/
 /scenes/
 /out/
 
+# Local experiment, launch and mission-pipeline output
+/runs/
+/launch/
+/*.m07/
+
 # Jekyll docs site build (docs/Gemfile): output, caches, local gems
 docs/_site/
 docs/.jekyll-cache/
