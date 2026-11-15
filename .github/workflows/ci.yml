@@ -86,6 +86,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the E2-04 tag-check diffs the push/PR range: in a
+                           # depth-1 clone the PR merge-base fails the step and
+                           # the push base is "not present", silently skipping it
 
       - uses: actions/setup-python@v5
         with:
@@ -103,6 +107,27 @@ jobs:
       - name: The pinned solver is importable (a missing gfold must fail here, not skip)
         run: python -c "import gfold, cvxpy; from importlib.metadata import version; assert version('gfold') == '0.3.2', version('gfold'); print('gfold', version('gfold'))"
 
+      # E2-04 (task #257): the frozen dual-branch reference mission. The
+      # provenance + input-pin guards are fast tests that also run in every
+      # other job (without gfold the numerical rerun skips); the G5 guards
+      # below mirror the FL-601 pair in the flightlab-gateb job. The real
+      # regression -- re-fly the dual-branch mission and compare within the
+      # declared tolerances -- is the slow test in tests/test_e204_reference.py,
+      # collected here (this job has no "not slow" filter).
+      - name: E2-04 frozen reference matches its provenance (G5 tamper check)
+        run: python scripts/e204_reference.py verify
+
+      - name: E2-04 reference changes require an explicit tagged update (G5)
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            BASE=$(git merge-base "origin/${GITHUB_BASE_REF}" HEAD)
+          elif [ "$GITHUB_EVENT_NAME" = push ]; then
+            BASE="${{ github.event.before }}"
+          else
+            BASE=""
+          fi
+          python scripts/e204_reference.py tag-check --base "$BASE"
+
       - name: Recovery and landing tests with the real solver
         run: >
           pytest -m "not gpu" -rs
@@ -112,6 +137,7 @@ jobs:
           tests/test_flightlab_recovery_handoff_check.py
           tests/test_flightlab_simulate_recovery.py
           tests/test_flightlab_recovery_envelope.py
+          tests/test_e204_reference.py
 
   test-macos:
     # Same locked CPU env on macOS: micromamba picks the osx-arm64 or osx-64

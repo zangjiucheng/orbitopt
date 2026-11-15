@@ -88,6 +88,37 @@ Only the third carries validation-grade evidence. The benchmark suite's
 checks); the other five checks are analytic or numerical and reach only as
 far as their closed-form or their integration error.
 
+## Full mission verification gate (E2-03, task #256)
+
+The two-stage LEO mission report carries, under `inputs.full_mission`, a gate
+that grades the mission as three independent phases — `orbit_injection`
+(station chain, ascent run verdict, staging and parking-orbit handoffs, mass
+bookkeeping, expected-orbit agreement), `parking_propagation` (the M-05
+propagation link) and `recovery_touchdown` (the FL-302/303/304 booster
+return) — each with its own tri-state verdict and failure reason codes,
+followed by one overall verdict. `orbitopt.mission.phases` owns the rule; the
+chain's own `status` (which link broke) is unchanged beside it.
+
+The overall verdict is the conjunction of the **applicable** phases with the
+unified evidence semantics above (absent evidence is never a pass):
+
+| orbit_injection | parking_propagation | recovery_touchdown | full mission |
+|---|---|---|---|
+| any `failed` | — | — | **failed** |
+| otherwise, any applicable `not_checked` | | | **not_checked** |
+| `passed` | `passed` | `passed` or not applicable | **passed** |
+
+A phase is applicable when the mission flies it: orbit injection always,
+propagation unless the scenario declares `expected.propagation_result:
+not_checked`, recovery when a `recovery:` stage is declared. A phase the
+mission declares but that produced no evidence (the ascent never flew, the
+caller skipped propagation) is `not_checked` and caps the overall verdict —
+it never silently passes. This is what makes a partial success readable:
+injection green with a lost booster is overall **failed** with a green
+`orbit_injection` phase, and an expendable mission's `recovery_touchdown` is
+not applicable, not failed. The `orbitopt run` pipeline gate records the
+verdict as `full_mission_verdict` on its verify stage.
+
 ## Benchmarks against public references
 
 `orbitopt benchmarks` checks a Kepler two-body orbit, J2 secular drift and the

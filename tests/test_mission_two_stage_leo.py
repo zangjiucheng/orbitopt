@@ -1,4 +1,6 @@
-"""M-07 (task #225): the frozen two-stage LEO reference mission.
+"""M-07 (task #225): the frozen two-stage LEO reference mission, and E2-01
+(task #254): the optional first-stage recovery stage that turns the same
+config into one combined ascent-and-recovery call.
 
 The fast tests need no compute stack: they grade the **recorded** Gate-B
 two-stage ascent (``tests/data/flightlab/reference/gateb-leo-two-stage``, the
@@ -32,10 +34,10 @@ from orbitopt.mission.propagation import MU_EARTH
 from orbitopt.mission.two_stage_leo import (
     MISSION_KIND, MISSION_REPORT_KIND, REQUIRED_EVENT_CHAIN, STATUS_ASCENT_NOT_CONVERGED,
     STATUS_HANDOFF_FAILED, STATUS_OK, STATUS_PARKING_ORBIT_OUT_OF_TOLERANCE,
-    STATUS_PROPAGATION_FAILED, STATUS_STATION_MISSING,
-    TwoStageLeoScenario, event_chain_checks, reference_scenario, reference_scenario_path,
-    resolve_expected, run_two_stage_leo, scenario_from_config, scenario_warnings,
-    staging_handoffs)
+    STATUS_PROPAGATION_FAILED, STATUS_RECOVERY_FAILED, STATUS_STATION_MISSING,
+    RecoveryPlan, TwoStageLeoScenario, event_chain_checks, reference_scenario,
+    reference_scenario_path, resolve_expected, run_two_stage_leo, scenario_from_config,
+    scenario_warnings, staging_handoffs)
 from orbitopt.mission_config import known_kinds, load_mission_config
 from orbitopt.verify.report import read_report, validate_report
 
@@ -164,6 +166,15 @@ def test_scenario_round_trips_through_its_own_document():
                                                        "orbit": "400x400@51.6",
                                                        "date_utc": "2026-11-10"},
        "ascent": {"mode": "run_dir"}}, "needs ascent.run_dir"),
+    ({"mission": {"id": "x", "title": "y"}, "launch": {"site": "kourou", "vehicle": "v",
+                                                       "orbit": "400x400@51.6",
+                                                       "date_utc": "2026-11-10"},
+       "recovery": {"kind": "rtls"}}, "recovery"),
+    ({"mission": {"id": "x", "title": "y"}, "launch": {"site": "kourou", "vehicle": "v",
+                                                       "orbit": "400x400@51.6",
+                                                       "date_utc": "2026-11-10"},
+       "ascent": {"mode": "run_dir", "run_dir": "/tmp/x"},
+       "recovery": {"spec": {"kind": "rtls"}}}, "recovery.spec"),
 ])
 def test_scenario_loader_rejects_what_the_schema_misses(bad, match):
     with pytest.raises(ValueError, match=match):
@@ -185,11 +196,17 @@ def test_replayed_reference_flight_is_red_where_the_flight_is_off_target(tmp_pat
     # every station of the DoD chain, in order
     assert [s["kind"] for s in mission.stations] == list(REQUIRED_EVENT_CHAIN)
     assert all(s["passed"] for s in mission.stations)
-    # every graded handoff of the chain is green (the recorded flight stages cleanly)
+    # every graded handoff of the chain is green (the recorded flight stages
+    # cleanly -- E2-02 grades both mission branches of the separation fork)
     graded = [d for d in mission.staging if d["graded"]]
-    assert [d["child_body"] for d in graded] == ["stage2"]
+    assert [d["child_body"] for d in graded] == ["stage2", "stage1_debris"]
     assert all(d["passed"] for d in graded)
     assert mission.staging[0]["bridge"]["method"] == "j2_coast"  # epochs compared like-for-like
+    # E2-02: the fork itself -- both branches, and mass conserved across the split
+    assert mission.branches["passed"] is True
+    assert [b["kind"] for b in mission.branches["branches"]] == ["upper-stage", "booster"]
+    assert mission.branches["mass_residual_kg"] == pytest.approx(0.0, abs=1e-3)
+    assert next(c for c in mission.checks if c.id == "mass.separation_fork").passed
     assert mission.parking["passed"] is True
     assert mission.status == STATUS_PARKING_ORBIT_OUT_OF_TOLERANCE
     failed = {c.id for c in mission.checks if not c.passed}
@@ -204,17 +221,26 @@ def test_replayed_reference_flight_is_red_where_the_flight_is_off_target(tmp_pat
     assert report["kind"] == MISSION_REPORT_KIND
     assert report["status"]["result"] == "failed"        # never a defaulted pass
     assert report["status"]["checks"]["parking.mass_conservation"] is True
+    assert report["status"]["checks"]["mass.separation_fork"] is True
+    assert report["inputs"]["handoffs"]["separation_fork"]["branches"]  # the fork itself, in the report
+    assert "(branched after separation: upper stage + first stage)" in report["label"]
     assert report["targets"]["achieved_parking_orbit"]["apoapsis_altitude_m"] < 550000.0
 
 
-def test_debris_and_fairing_boundaries_are_recorded_not_graded(tmp_path):
+def test_booster_branch_is_graded_and_the_fairing_recorded_not_graded(tmp_path):
+    """E2-02: the first stage's branch of the separation fork is a mission
+    trajectory -- its boundary is graded under M-01 like the upper stage's.
+    A fairing jettisoned off a branch stays recorded-but-not-graded."""
     docs = {d["child_body"]: d for d in staging_handoffs(
         read_run(GATEB), reference_scenario().handoff,
         reference_scenario().staging_velocity_m_s)}
     assert docs["stage2"]["graded"] is True
-    for off_lineage in ("stage1_debris", "stage2_fairing"):
-        assert docs[off_lineage]["graded"] is False
-        assert "lineage" in docs[off_lineage]["reason"]
+    assert docs["stage1_debris"]["graded"] is True       # the branch, not a lost handoff
+    assert docs["stage1_debris"]["passed"] is True       # the recorded split honours M-01
+    assert docs["stage1_debris"]["separation_t_s"] is not None
+    assert docs["stage2_fairing"]["graded"] is False
+    assert "fairing" in docs["stage2_fairing"]["reason"]
+    assert "recorded, not graded" in docs["stage2_fairing"]["reason"]
 
 
 def test_event_chain_checks_report_a_broken_chain():
@@ -248,6 +274,9 @@ def test_status_precedence_names_the_earliest_failing_link():
         (run, [ok, HandoffCheck(id="parking.mass_conservation", passed=False,
                                 reason_code="mass_loss_without_staging")],
          STATUS_HANDOFF_FAILED),
+        (run, [ok, HandoffCheck(id="recovery.landed", passed=False,
+                                reason_code="insufficient_propellant")],
+         STATUS_RECOVERY_FAILED),
         (run, [ok, HandoffCheck(id="expected.apoapsis", passed=False,
                                 reason_code="out_of_tolerance")],
          STATUS_PARKING_ORBIT_OUT_OF_TOLERANCE),
@@ -361,6 +390,124 @@ def test_pipeline_config_validation_happens_before_anything_flies(tmp_path):
     config["scenario"]["launch"]["orbit"] = "400x400"     # not an M-04 orbit spec
     with pytest.raises(Exception):
         run_pipeline(config)
+
+
+# --- E2-01 (task #254): combined ascent & recovery ---------------------------
+
+RECOVERY_TARGET = REPO / "src" / "orbitopt" / "data" / "flightlab" / "scenarios" \
+    / "leo_two_stage.yaml"
+
+
+def _stub_fly_recovery(monkeypatch, *, success, reason="INSUFFICIENT_PROPELLANT_BOOSTBACK"):
+    """Stand in for FL-304 ``fly_recovery`` with a recorded outcome over the
+    ascent run it was given -- the fast wiring test for the recovery stage."""
+    from orbitopt.flightlab import checks as gate_checks
+    from orbitopt.flightlab.contract import Check, Verification
+    from orbitopt.flightlab.recovery.pipeline import RecoveryOutcome
+
+    calls = {}
+
+    def fake(ascent_run, target, vehicle_path, **kw):
+        calls.update(target=target, vehicle_path=vehicle_path, kw=kw)
+        extra = [Check(id=gate_checks.RECOVERY_GATE_CHECK_ID, passed=success,
+                       reason_code="" if success else reason),
+                 Check(id="recovery-propellant-reserve", passed=True, value=2500.0,
+                       limit=1000.0, unit="kg")]
+        run = dataclasses.replace(
+            ascent_run, verification=Verification(
+                optimizer_converged=ascent_run.verification.optimizer_converged,
+                physics_verified=ascent_run.verification.physics_verified,
+                mission_constraints_passed=(
+                    success and ascent_run.verification.mission_constraints_passed),
+                checks=tuple(ascent_run.verification.checks) + tuple(extra)))
+        return RecoveryOutcome(run=run, success=success,
+                               reason_codes=() if success else (reason,),
+                               plan=None, landing=None, checks=tuple(extra),
+                               assumptions=(), handoff=None)
+
+    monkeypatch.setattr("orbitopt.flightlab.recovery.pipeline.fly_recovery", fake)
+    return calls
+
+
+def test_recovery_stage_fails_the_mission_and_tells_the_whole_story(tmp_path, monkeypatch):
+    calls = _stub_fly_recovery(monkeypatch, success=False)
+    scenario = _replay(tmp_path, recovery=RecoveryPlan(target_file=str(RECOVERY_TARGET)))
+    mission = run_two_stage_leo(scenario, tmp_path / "m07", propagate=False)
+
+    assert mission.status == STATUS_RECOVERY_FAILED
+    assert "INSUFFICIENT_PROPELLANT_BOOSTBACK" in mission.message
+    failed = {c.id: c for c in mission.checks if not c.passed}
+    assert failed["recovery.landed"].reason_code == "INSUFFICIENT_PROPELLANT_BOOSTBACK"
+    assert "recovery.propellant_reserve" not in failed      # red is the landing, not the reserve
+    # the stage ran over the recorded separation state, against the right target
+    assert calls["target"].recovery.kind == "rtls"
+    assert calls["vehicle_path"].name == "synthetic_two_stage.yaml"
+    # the combined run -- ascent plus whatever the booster stage wrote -- is on disk
+    assert (tmp_path / "m07" / "recovery" / "run" / "manifest.json").is_file()
+    rec = mission.to_dict()["recovery"]
+    assert rec["status"] == "flown" and rec["success"] is False
+    assert rec["target"] == "launch_site"
+    report = read_report(mission.report_path)
+    validate_report(report)
+    assert report["status"]["result"] == "failed"
+    assert report["inputs"]["recovery"]["run_dir"].endswith("recovery/run")
+    assert "booster recovery" in report["label"]
+
+
+def test_green_recovery_leaves_the_ascent_verdict_in_charge(tmp_path, monkeypatch):
+    _stub_fly_recovery(monkeypatch, success=True)
+    scenario = _replay(tmp_path, recovery=RecoveryPlan(target_file=str(RECOVERY_TARGET)))
+    mission = run_two_stage_leo(scenario, tmp_path / "m07", propagate=False)
+
+    # the stub landed the booster, but the recorded insertion is still off-target
+    assert mission.status == STATUS_PARKING_ORBIT_OUT_OF_TOLERANCE
+    passed = {c.id for c in mission.checks if c.passed}
+    assert "recovery.landed" in passed and "recovery.propellant_reserve" in passed
+    assert mission.recovery["success"] is True
+
+
+def test_recovery_scene_export_carries_the_booster(tmp_path, monkeypatch, fake_tudat):
+    from orbitopt.pipeline import run_pipeline
+
+    _stub_fly_recovery(monkeypatch, success=False)
+    config = _config(_replay(tmp_path, recovery=RecoveryPlan(target_file=str(RECOVERY_TARGET))),
+                     tmp_path / "m07")
+    result = run_pipeline(config)
+    assert result.stages[2].convergence["chain_status"] == STATUS_RECOVERY_FAILED
+    import json
+    assert "booster" in json.dumps(result.scene, default=str)   # scene flies the booster
+
+
+def test_combined_recovery_still_warns_and_round_trips():
+    scenario = dataclasses.replace(reference_scenario(),
+                                   recovery=RecoveryPlan(spec={"kind": "downrange",
+                                                                "target": "recovery_ship"}))
+    assert "recovery.landed must be green" in " | ".join(scenario_warnings(scenario))
+    assert TwoStageLeoScenario.from_dict(scenario.to_dict()) == scenario
+
+
+@pytest.mark.slow
+def test_single_call_flies_ascent_and_recovery_for_real(tmp_path):
+    """The acceptance run of the combined mission: replay the recorded GATEB
+    ascent, fly the real FL-304 chain over it, and come back with BOTH verdicts
+    from one call -- the insertion graded red off-target, the booster honestly
+    red for the propellant the recorded flight does not carry."""
+    scenario = _replay(tmp_path, recovery=RecoveryPlan(target_file=str(RECOVERY_TARGET)))
+    mission = run_two_stage_leo(scenario, tmp_path / "m07", propagate=False)
+
+    assert mission.status == STATUS_RECOVERY_FAILED
+    rec = mission.recovery
+    assert rec["status"] == "flown" and rec["kind"] == "rtls"
+    assert rec["success"] is False and rec["plan_feasible"] is False
+    assert "INSUFFICIENT_PROPELLANT_BOOSTBACK" in rec["reason_codes"]
+    # both verdicts in one report: ascent gates graded over the COMBINED run
+    assert all(s["passed"] for s in mission.stations)          # chain survived the merge
+    assert {c.id for c in mission.checks if not c.passed} >= {"recovery.landed"}
+    combined = read_run(Path(rec["run_dir"]))
+    assert "booster" in {t.body_id for t in combined.tracks}
+    report = read_report(mission.report_path)
+    validate_report(report)
+    assert report["status"]["result"] == "failed"
 
 
 # --- the acceptance run (compute stack; Flight Lab Gate B CI) ----------------

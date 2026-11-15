@@ -1,0 +1,128 @@
+{
+  "optimizer_converged": true,
+  "physics_verified": null,
+  "backend_self_check": null,
+  "mission_constraints_passed": true,
+  "checks": [
+    {
+      "id": "max-q-within-limit",
+      "passed": true,
+      "value": 36690.0,
+      "limit": 60000.0,
+      "unit": "Pa",
+      "reason_code": ""
+    },
+    {
+      "id": "max-accel-within-limit",
+      "passed": true,
+      "value": 4.1,
+      "limit": 5.0,
+      "unit": "g",
+      "reason_code": ""
+    },
+    {
+      "id": "recovery-landing",
+      "passed": true,
+      "value": null,
+      "limit": null,
+      "unit": "",
+      "reason_code": ""
+    },
+    {
+      "id": "landing-position",
+      "passed": true,
+      "value": 0.552298530522226,
+      "limit": 25.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "landing-vertical-speed",
+      "passed": true,
+      "value": -1.608746295156212,
+      "limit": 3.0,
+      "unit": "m/s",
+      "reason_code": ""
+    },
+    {
+      "id": "landing-lateral-speed",
+      "passed": true,
+      "value": 0.0426696613891352,
+      "limit": 1.0,
+      "unit": "m/s",
+      "reason_code": ""
+    },
+    {
+      "id": "landing-tilt",
+      "passed": true,
+      "value": 19.314362310614165,
+      "limit": 40.0,
+      "unit": "deg",
+      "reason_code": ""
+    },
+    {
+      "id": "landing-propellant-reserve",
+      "passed": true,
+      "value": 992.4011328587221,
+      "limit": 4200.0,
+      "unit": "kg",
+      "reason_code": ""
+    },
+    {
+      "id": "landing-max-g",
+      "passed": true,
+      "value": 3.5189145423251444,
+      "limit": 5.0,
+      "unit": "g",
+      "reason_code": ""
+    },
+    {
+      "id": "recovery-propellant-reserve",
+      "passed": true,
+      "value": 5192.401132858722,
+      "limit": 1000.0,
+      "unit": "kg",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-above-atmosphere",
+      "passed": true,
+      "value": 400000.0,
+      "limit": 120000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-periapsis-above-minimum",
+      "passed": true,
+      "value": 400000.0,
+      "limit": 380000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-periapsis-within-tolerance",
+      "passed": true,
+      "value": 400000.0,
+      "limit": 400000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-apoapsis-within-tolerance",
+      "passed": true,
+      "value": 400000.0000000037,
+      "limit": 400000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-inclination-within-tolerance",
+      "passed": true,
+      "value": 51.60000000000001,
+      "limit": 51.6,
+      "unit": "deg",
+      "reason_code": ""
+    }
+  ]
+}

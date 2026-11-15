@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0",
+  "run_id": "e2-04-frozen-ascent",
+  "target_sha256": "485896a364fec857cc6c315baaed95427c0ca1eb6fab7d801305c8f96c403f87",
+  "vehicle_sha256": "ff284f2ad6fb9a153f33c4a30eb394e359992cfc0e8ecad80c73b06a56ebffb0",
+  "engines": {
+    "orbitopt-e204-fixture": "1.0",
+    "propagator": "orbitopt.flightlab.recovery.propagator",
+    "cvxpy": "reference",
+    "gfold": "0.3.2"
+  },
+  "git_sha": "70c5531354e08c5c65477485d90f5acdeac42f2c",
+  "created_utc": "2026-11-15T05:03:05+00:00",
+  "assumptions": [
+    "frozen E2-04 ascent input (scripts/e204_reference.py build): pinned separation + insertion states (provenance: illustrative), not a re-fly",
+    "stage-1/upper-stage tracks are two-sample handoff arcs (liftoff->separation, separation->SECO); the mission gates every boundary against the recorded states themselves",
+    "booster/stage-1 tracks ECEF: the separation state the recovery chain consumes is exactly the number recorded here; stage-2 track GCRS: the contract's frame for the insertion state",
+    "FL-304 recovery: FL-302 boostback/entry script + FL-303 landing burn (FL-305 closed-loop guidance unless plan_options select the single G-FOLD plan), integrated through the FL-301 propagator; the booster track replaces the ballistic stage1_debris track",
+    "entry q limit 150000 Pa, entry g limit 8.0 g over the post-boostback descent window (DESIGN ASSUMPTIONs unless overridden)",
+    "R-01 landing-aware objective: corridor miss soft-constrained against a 1000 m landing-divert budget, corridor propellant against landing need + reserve + 1000 kg fuel margin (DESIGN ASSUMPTIONs unless overridden)",
+    "G-FOLD model: constant gravity (local J2 magnitude at insertion), flat ground, no aero, thrust envelope = ambient engine capability at the insertion altitude; verdict from the FL-301 re-integration (drag, J2, rotation, min-throttle clamp), not the solver.",
+    "gfold 0.3.2: Environment.max_angle_deg is accepted but inert (verified); the tilt limit binds the cvxpy reference and the touchdown tilt check.",
+    "FOH discretization (n nodes, h = tof/n, terminal node = engine cutoff state a short distance above the pad; ballistic coast from there); trapezoidal fuel accounting against sea-level Isp (pessimistic end).",
+    "FL-305 closed-loop terminal guidance (docs/adr/flightlab-0002): the insertion SOCP is the feasibility certificate; the burn is re-planned from the propagated state every step (hoverslam vertical profile, ZEM/ZEV divert, tilt limit in the loop, no-hover ballistic cutoff); verdict from the same touchdown checks.",
+    "guidance: design_throttle=0.9 v_td=1.5m/s tilt<=30deg ignition=1.2s cutoff=19.7s after insertion; insertion plan fuel_planned=5753.0kg",
+    "R-05/E3-01 actuator margins (unlimited TVC slew, 30 deg tilt limit, throttle slew unlimited): burn 18.5s; ignition headroom 13.1%, min throttle headroom 13.1%, floor room 24.2%, min tilt margin 10.7 deg, peak slew 193.1 deg/s (limit unlimited), throttle slew unlimited, ceiling riding 0.0s, floor riding 0.0s"
+  ],
+  "toolchain": {
+    "python": "3.13.18",
+    "orbitopt": "unknown (source tree; see git_sha)",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "astropy": "8.0.2",
+    "tudatpy": "absent",
+    "gfold": "0.3.2",
+    "jsbsim": "1.3.3",
+    "cvxpy": "absent",
+    "jsonschema": "4.26.0",
+    "pyyaml": "6.0.3",
+    "opentsiolkovsky": "1.0.0",
+    "opentsiolkovsky_sha256": "binary absent; pinned asset e39da128a084a8782e0159f26e777048dac5c49b9855d50030ba5a2e5dca7e06"
+  },
+  "bodies": [
+    {
+      "body_id": "stage1",
+      "parent_body_id": null,
+      "frame": "ECEF",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 0.0,
+      "t_end_s": 207.0,
+      "provenance": "illustrative"
+    },
+    {
+      "body_id": "stage2",
+      "parent_body_id": "stage1",
+      "frame": "GCRS",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 207.0,
+      "t_end_s": 622.0,
+      "provenance": "illustrative"
+    },
+    {
+      "body_id": "booster",
+      "parent_body_id": "stage1",
+      "frame": "GCRS",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 207.0,
+      "t_end_s": 348.1728361859044,
+      "provenance": "illustrative"
+    }
+  ]
+}

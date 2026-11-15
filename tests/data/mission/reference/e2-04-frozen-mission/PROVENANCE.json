@@ -1,0 +1,85 @@
+{
+  "earth_orientation": "bundled IERS only, astropy-iers-data 0.2026.11.9.0.35.9",
+  "files": {
+    "ascent/events.json": "4e8cb530062eb5973d66329547a8c0b5c14057f7c8fae7321c4b729b64ab3e26",
+    "ascent/manifest.json": "26012dfc6d69a339c82da41516022ea7f8660963b8505b5eadb99e8cf9a93285",
+    "ascent/trajectories/stage1.csv": "c2ee0cad8d23386a97b3b912314e6ef9d5f60d2cfc40364e4262053b65a2c198",
+    "ascent/trajectories/stage1_debris.csv": "d228909ba7d847127e4f7b7c43973fea3fc6ce1cd34e99639b52366443f37a0f",
+    "ascent/trajectories/stage2.csv": "6c45da5b750e5c54dee292f4bdcc661c77a0bf176f38a0fd396c6772ee229bfc",
+    "ascent/verification.json": "c831db778b673669e0318f5bb72e41ea7b2279b1d2b81e7f82667779bca09ce3",
+    "mission/mission.verification.json": "002f0d25243bf619ea74e3c3535fbda9b5e8bcc2d23798022e40173917ea7a0e",
+    "mission/recovery/run/events.json": "3a9f08471bf380e1d114a12f2a03006bf076aef3e82bc4060f5c28a4509c791a",
+    "mission/recovery/run/manifest.json": "5d0ea450cdff93925aed7f9afc846983a11cb1332e73077e22352577ae078ada",
+    "mission/recovery/run/trajectories/booster.csv": "15d301880aeefd81600282c61b4962dc3cf542bea7b77ec8f8a451edd626097c",
+    "mission/recovery/run/trajectories/stage1.csv": "c2ee0cad8d23386a97b3b912314e6ef9d5f60d2cfc40364e4262053b65a2c198",
+    "mission/recovery/run/trajectories/stage2.csv": "6c45da5b750e5c54dee292f4bdcc661c77a0bf176f38a0fd396c6772ee229bfc",
+    "mission/recovery/run/verification.json": "9908b5383c8cf5b63d8d65e6bf76f17fac251e649cdf9155ff980c791b4b0782",
+    "tolerances.json": "42783ac92e9cff1e079182797da7f5329f89109fb1ace79cc211b3dda455f531"
+  },
+  "frozen_inputs": {
+    "ascent_constants": {
+      "booster_dry_kg": 30000.0,
+      "booster_wet_sep_kg": 65000.0,
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "insertion_altitude_m": 400000.0,
+      "insertion_inclination_deg": 51.6,
+      "max_accel_g": 4.1,
+      "max_q_pa": 36690.0,
+      "pad": [
+        28.5619,
+        -80.5772,
+        3.0
+      ],
+      "run_id": "e2-04-frozen-ascent",
+      "sep_altitude_m": 40000.0,
+      "sep_downrange_east_m": 8000.0,
+      "sep_fpa_deg": 2.0,
+      "sep_heading_deg": 90.0,
+      "sep_speed_m_s": 250.0,
+      "stack_liftoff_kg": 435000.0,
+      "stage2_seco_kg": 13282.392560150383,
+      "stage2_wet_sep_kg": 55000.0,
+      "t_ignition2_s": 215.0,
+      "t_liftoff_s": 0.0,
+      "t_max_q_s": 57.339,
+      "t_meco_s": 193.77,
+      "t_seco_s": 622.0,
+      "t_separation_s": 207.0
+    },
+    "recovery_plan_options": {
+      "initial_guess": [
+        18.4,
+        17.75,
+        1.0,
+        4.36,
+        0.0,
+        17456.0,
+        23.0
+      ],
+      "max_fevals": 18
+    },
+    "target_sha256": "485896a364fec857cc6c315baaed95427c0ca1eb6fab7d801305c8f96c403f87",
+    "vehicle_sha256": "ff284f2ad6fb9a153f33c4a30eb394e359992cfc0e8ecad80c73b06a56ebffb0"
+  },
+  "generated_by": "scripts/e204_reference.py update",
+  "git_sha_recording": "70c5531354e08c5c65477485d90f5acdeac42f2c",
+  "reference": "E2-04 frozen dual-branch reference mission (ascent + parking + booster RTLS, E2-03 full-mission gate)",
+  "requires_commit_tag": "[e204-reference-update]",
+  "requires_gfold": "0.3.2",
+  "scenario": "src/orbitopt/data/mission_two_stage_leo_recovery.yaml",
+  "target": "src/orbitopt/data/flightlab/scenarios/leo_two_stage.yaml",
+  "toolchain": {
+    "astropy": "8.0.2",
+    "astropy_iers_data": "0.2026.11.9.0.35.9",
+    "cvxpy": "absent",
+    "gfold": "0.3.2",
+    "numpy": "2.5.4",
+    "opentsiolkovsky": "not used: the ascent input is a frozen run directory",
+    "orbitopt": "absent",
+    "platform": "Linux-7.2.11-x86_64-with-glibc2.41",
+    "python": "3.13.18",
+    "scipy": "1.18.1",
+    "tudatpy": "not used: propagation leg declared not_checked (see scenario header)"
+  },
+  "vehicle": "src/orbitopt/data/flightlab/vehicles/synthetic_two_stage.yaml"
+}

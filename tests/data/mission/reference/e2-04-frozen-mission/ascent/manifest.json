@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0",
+  "run_id": "e2-04-frozen-ascent",
+  "target_sha256": "485896a364fec857cc6c315baaed95427c0ca1eb6fab7d801305c8f96c403f87",
+  "vehicle_sha256": "ff284f2ad6fb9a153f33c4a30eb394e359992cfc0e8ecad80c73b06a56ebffb0",
+  "engines": {
+    "orbitopt-e204-fixture": "1.0"
+  },
+  "git_sha": "70c5531354e08c5c65477485d90f5acdeac42f2c",
+  "created_utc": "2026-11-15T05:03:05+00:00",
+  "assumptions": [
+    "frozen E2-04 ascent input (scripts/e204_reference.py build): pinned separation + insertion states (provenance: illustrative), not a re-fly",
+    "stage-1/upper-stage tracks are two-sample handoff arcs (liftoff->separation, separation->SECO); the mission gates every boundary against the recorded states themselves",
+    "booster/stage-1 tracks ECEF: the separation state the recovery chain consumes is exactly the number recorded here; stage-2 track GCRS: the contract's frame for the insertion state"
+  ],
+  "toolchain": {
+    "python": "3.13.18",
+    "orbitopt": "unknown (source tree; see git_sha)",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "astropy": "8.0.2",
+    "tudatpy": "absent",
+    "gfold": "0.3.2",
+    "jsbsim": "1.3.3",
+    "cvxpy": "absent",
+    "jsonschema": "4.26.0",
+    "pyyaml": "6.0.3",
+    "opentsiolkovsky": "1.0.0",
+    "opentsiolkovsky_sha256": "binary absent; pinned asset e39da128a084a8782e0159f26e777048dac5c49b9855d50030ba5a2e5dca7e06"
+  },
+  "bodies": [
+    {
+      "body_id": "stage1",
+      "parent_body_id": null,
+      "frame": "ECEF",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 0.0,
+      "t_end_s": 207.0,
+      "provenance": "illustrative"
+    },
+    {
+      "body_id": "stage1_debris",
+      "parent_body_id": "stage1",
+      "frame": "ECEF",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 207.0,
+      "t_end_s": 208.0,
+      "provenance": "illustrative"
+    },
+    {
+      "body_id": "stage2",
+      "parent_body_id": "stage1",
+      "frame": "GCRS",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 207.0,
+      "t_end_s": 622.0,
+      "provenance": "illustrative"
+    }
+  ]
+}

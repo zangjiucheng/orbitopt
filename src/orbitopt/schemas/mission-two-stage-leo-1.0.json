@@ -43,7 +43,7 @@
       "type": "object",
       "required": ["mission", "launch"],
       "additionalProperties": false,
-      "description": "The frozen scenario: what to fly (launch), how to fly it (ascent), the handoff gates (handoff), the propagation plan (propagation) and the expected results with their tolerances (expected).",
+      "description": "The frozen scenario: what to fly (launch), how to fly it (ascent), the handoff gates (handoff), the propagation plan (propagation), the expected results with their tolerances (expected), and -- optionally -- the first-stage recovery stage (recovery, E2-01).",
       "properties": {
         "mission": {
           "type": "object",
@@ -160,6 +160,29 @@
           "properties": {
             "coast_orbits": { "type": "number", "minimum": 0, "default": 2.0 },
             "earth_texture": { "type": "boolean", "default": true }
+          }
+        },
+        "recovery": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Optional first-stage recovery stage (E2-01, task #254): the same mission flies the FL-304 recovery chain (FL-302 boostback/entry plan, FL-303/FL-305 landing) from the ascent's separation state and merges the booster track back into the FlightRun before the chain is graded. `spec` is the optimize-mode knob (the flight-target recovery block forwarded to the M-04 target builder); `target_file` is the run_dir-mode knob (the FlightTarget the replayed flight is graded against, default: `ascent.target_file`). `vehicle_file` names the vehicle the booster model is read from (default: `launch.vehicle`); `plan_options` and `landing_sites` pass straight through to `fly_recovery`.",
+          "properties": {
+            "spec": {
+              "type": ["object", "null"],
+              "required": ["kind"],
+              "additionalProperties": false,
+              "properties": {
+                "kind": { "enum": ["downrange", "rtls"] },
+                "target": { "type": "string", "minLength": 1 },
+                "max_touchdown_speed_m_s": { "type": "number", "exclusiveMinimum": 0 },
+                "max_touchdown_lateral_speed_m_s": { "type": "number", "exclusiveMinimum": 0 },
+                "min_propellant_reserve_kg": { "type": "number", "exclusiveMinimum": 0 }
+              }
+            },
+            "target_file": { "type": ["string", "null"], "minLength": 1 },
+            "vehicle_file": { "type": ["string", "null"], "minLength": 1 },
+            "plan_options": { "type": "object" },
+            "landing_sites": { "type": "object" }
           }
         }
       }
