@@ -48,6 +48,21 @@ aero_point_mass``. Altitude, speed and mass use the contract's ECEF states,
 and flight-path angle is the angle between the ECEF velocity and the local
 horizontal (the ``speed_earth``/FPA pair the OT trajectory CSV reports).
 
+The phase split and its constraints (E1-02, task #251)
+------------------------------------------------------
+A whole-run maximum mixes two phases that have nothing to say about each
+other: the ``burn_out_t_s`` of this scenario is 99.85 s while the run flies to
+180 s, so ``att_err_max_deg`` and ``alpha_max_deg`` of the closed-loop rung are
+set long after engine shutdown. The study therefore reports every metric per
+phase (:func:`run_phase_metrics`) and qualifies the ascent on the powered
+phase only, against :data:`F05_PHASE_CONSTRAINTS` (:meth:`F05Study.qualification`
+records the verdicts). The coast phase is *reported* but its gates are only
+that it is unloaded -- past burn-out the tracker trims to neutral, the body is
+unactuated and ``q`` is below a pascal, so a growing attitude error and angle of
+attack there are geometry, not load (that is the 62.8 deg ``alpha_max`` the
+whole-run number used to report as if it were a flight-load finding).
+``tvc.burn_s`` counts control seconds with the engine lit, not the flight span.
+
 The numbers themselves live in ``docs/benchmarks/fl605_gravity_turn_ascent.json``
 (``PYTHONPATH=src python benchmarks/bench_fl605_gravity_turn.py``), the prose
 in ``docs/flightlab.md`` (F-05 section), and the regression thresholds in
@@ -81,25 +96,35 @@ from orbitopt.flightlab.sixdof.rigidbody import (
     SixDofRun,
 )
 from orbitopt.flightlab.sixdof.tvc import (
+    COAST,
+    POWERED,
     ControlledAscent,
     TvcActuator,
     TvcGains,
     WaypointAttitudeProgram,
+    phase_aero_metrics,
     run_closed_loop_ascent,
 )
 
 __all__ = [
     "AscentDiff",
     "F05Study",
+    "F05_PHASE_CONSTRAINTS",
     "GravityTurnScenario",
+    "PhaseConstraint",
     "PointMassRun",
+    "QUALIFIED_RUNG",
     "RUN_COLUMNS_3DOF",
     "RUNG_ORDER",
+    "REFERENCE_RUNG",
     "ascent_channels",
     "compare_ascent",
     "f05_scenario",
+    "phase_qualification",
     "propagate_point_mass",
     "run_f05_study",
+    "run_phase_metrics",
+    "tvc_record",
 ]
 
 #: Sample columns of a :class:`PointMassRun` (the 6-DOF run's set minus the
@@ -526,6 +551,178 @@ def f05_scenario(*, t_end_s: float = 180.0, dt_s: float = 0.05,
 
 
 # --------------------------------------------------------------------------
+# the E1-02 phase split and its pre-declared constraints (task #251)
+# --------------------------------------------------------------------------
+
+#: The rung the ascent is qualified on (the study's closed-loop reference plant).
+QUALIFIED_RUNG = "6dof_full"
+#: The rung its loaded-phase metrics are cross-checked against.
+REFERENCE_RUNG = "3dof_aero"
+
+
+@dataclass(frozen=True)
+class PhaseConstraint:
+    """One pre-declared acceptance line of the phase split: ``phase`` (``
+    powered``/``coast`` of :data:`QUALIFIED_RUNG`, or the derived ``run`` /
+    ``study`` rows below), ``metric`` as it appears in the rung's phase record,
+    ``op`` one of ``<=`` / ``>=`` / ``==``, and the ``rationale`` that says why
+    that line -- the limits are declared from the vehicle and the study's own
+    assumptions, not read off a result."""
+
+    phase: str
+    metric: str
+    op: str
+    limit: float
+    rationale: str
+
+    def check(self, value: float) -> dict[str, Any]:
+        """This constraint against a measured ``value``, as a JSON row."""
+        ok = {"<=": value <= self.limit,
+              ">=": value >= self.limit,
+              "==": abs(value - self.limit) <= 1e-9}[self.op]
+        return {"phase": self.phase, "metric": self.metric, "op": self.op,
+                "limit": self.limit, "value": float(value), "pass": bool(ok),
+                "rationale": self.rationale}
+
+
+#: The constraints the F-05 ascent is qualified against (E1-02, task #251).
+#: Declared *before* measuring, from the vehicle's own envelope: the packaged
+#: aero tables stop at +/-15 deg angle of attack, the gimbal travel is +/-5 deg
+#: with the tracker's own deflection margin, and a coast phase above ~1 Pa of
+#: dynamic pressure carries no load worth a control requirement.
+F05_PHASE_CONSTRAINTS: tuple[PhaseConstraint, ...] = (
+    PhaseConstraint("powered", "att_err_max_deg", "<=", 6.0,
+                    "the tracker must hold the body on the program inside 6 deg while it has"
+                    " thrust; a whole-run maximum is not a control requirement because the"
+                    " coast is unactuated by design (the tracker trims to neutral at MECO)"),
+    PhaseConstraint("powered", "att_err_rms_deg", "<=", 3.5,
+                    "the mean of the same error over the burn, on the same authority argument"),
+    PhaseConstraint("powered", "alpha_max_deg", "<=", 15.0,
+                    "the packaged spike_stage coefficient tables end at +/-15 deg AoA: beyond"
+                    " them the aero model is clamped extrapolation, so the loaded phase must"
+                    " stay inside the envelope the coefficients describe"),
+    PhaseConstraint("powered", "q_alpha_max_pa_deg", "<=", 5.0e5,
+                    "q*alpha is this study's side-load proxy (the bending/side load the"
+                    " airframe sees); the 500 kPa-deg budget is the study-level structural"
+                    " allowance E1-02 declares for the booster"),
+    PhaseConstraint("powered", "pitch_deflection_margin", ">=", 0.90,
+                    "at least 90 % of the +/-5 deg gimbal travel in reserve while the engine"
+                    " is lit: the tracker must be steering, not running out of authority"),
+    PhaseConstraint("powered", "yaw_deflection_margin", ">=", 0.90,
+                    "the same reserve on the yaw axis"),
+    PhaseConstraint("powered", "pitch_saturated_s", "==", 0.0,
+                    "zero seconds of travel saturation in the powered phase: a saturated"
+                    " gimbal means the command exceeded the actuator, i.e. the loop asked"
+                    " for something the vehicle cannot deliver"),
+    PhaseConstraint("powered", "yaw_saturated_s", "==", 0.0, "the same on the yaw axis"),
+    PhaseConstraint("powered", "pitch_slew_limited_s", "==", 0.0,
+                    "zero seconds of rate saturation in the powered phase: the program's"
+                    " pitch-over here is slow enough that the gimbal rate limit is never the"
+                    " binding constraint"),
+    PhaseConstraint("powered", "yaw_slew_limited_s", "==", 0.0, "the same on the yaw axis"),
+    PhaseConstraint("coast", "max_q_pa", "<=", 1.0,
+                    "the coast phase of this scenario is above ~100 km, so it must be an"
+                    " *unloaded* phase: this is what licenses reading the large coast"
+                    " attitude/AoA numbers as geometry rather than as loads"),
+    PhaseConstraint("coast", "q_alpha_max_pa_deg", "<=", 500.0,
+                    "the same argument in load terms: even the worst coast side load must be"
+                    " three orders below the powered budget"),
+    PhaseConstraint("run", "tvc_burn_s_vs_burn_out_rel", "<=", 0.01,
+                    "the reported burn time must be the burn, not the flight span (task #251:"
+                    " the study used to report tvc.burn_s = 180.0 for a 99.85 s burn): within"
+                    " 1 % of the event-detected propellant exhaustion, the gap being tick"
+                    " granularity"),
+    PhaseConstraint("study", "powered_alpha_model_agreement_deg", "<=", 1.0,
+                    "the two backends must agree on the *loaded* phase: the whole-run alpha"
+                    " discrepancy is a coast-phase artifact, so if it ever reappears in the"
+                    " powered window this line fails instead of being hidden by a headline"
+                    " number"),
+    PhaseConstraint("study", "coast_minus_powered_alpha_max_deg", ">=", 0.0,
+                    "the 6-DOF whole-run alpha_max must belong to the coast phase (it is the"
+                    " ballistic attitude drift of an unactuated, un-loaded body): if a future"
+                    " change makes the powered peak the larger one, this line flips and the"
+                    " explanation above has to be rewritten"),
+)
+
+
+def run_phase_metrics(run: Any) -> dict[str, dict[str, float]]:
+    """The phase split of one rung's run, as ``{phase: metrics}`` with the
+    :data:`~orbitopt.flightlab.sixdof.tvc.POWERED` /
+    :data:`~orbitopt.flightlab.sixdof.tvc.COAST` keys (a run that never shuts
+    down its engine has no ``coast`` entry).
+
+    A closed-loop 6-DOF run reports the tracker's own
+    :class:`~orbitopt.flightlab.sixdof.tvc.PhaseMetrics` (attitude error, gimbal
+    margins and aero together); a 3-DOF point-mass run has only the aero half,
+    because it has neither an actuator nor an attitude to be in error about --
+    its body axis *is* the program. The shared keys are exactly the aero ones,
+    so the two are directly comparable (and E1-02's
+    :data:`F05_PHASE_CONSTRAINTS` compare them)."""
+    if isinstance(run, ControlledAscent):
+        return {phase: pm.summary() for phase, pm in run.phases.items()}
+    samples = run.samples
+    t = np.asarray(samples["t_s"], dtype=float).ravel()
+    boundary = float(run.propellant_exhausted_t_s)
+    out = {POWERED: phase_aero_metrics(samples, keep=t <= boundary)}
+    if bool((t > boundary).any()):
+        out[COAST] = phase_aero_metrics(samples, keep=t > boundary)
+    return out
+
+
+def tvc_record(ascent: ControlledAscent) -> dict[str, float]:
+    """The whole-run tracker + attitude record of a closed-loop rung, as one
+    flat plain-dict (the phase-prefixed keys of
+    :meth:`~orbitopt.flightlab.sixdof.tvc.ControlledAscent.summary` are left
+    out: a report that prints ``phases`` alongside must not print them twice).
+    """
+    out: dict[str, float] = {
+        "att_err_max_deg": float(ascent.metrics.att_err_max_deg),
+        "att_err_rms_deg": float(ascent.metrics.att_err_rms_deg),
+        "alpha_max_deg": float(ascent.metrics.alpha_max_deg)}
+    out.update(ascent.diagnostics.summary())
+    return out
+
+
+def phase_qualification(rung_phases: Mapping[str, Mapping[str, Mapping[str, float]]], *,
+                        burn_out_t_s: float, tvc_burn_s: float) -> dict[str, Any]:
+    """Evaluate :data:`F05_PHASE_CONSTRAINTS` against the study's phase records
+    (``rung -> phase -> metrics``, i.e. :meth:`F05Study.phase_metrics`) and
+    return the JSON block: the constraints, each with the value it was checked
+    against and its verdict, plus ``all_passed``.
+
+    The ``run`` and ``study`` rows are derived, not measured: ``burn_s`` is
+    compared with the event-detected burn-out time, and the ``study`` rows
+    compare the qualified rung's phases with each other and with the
+    point-mass reference rung."""
+    qualified = rung_phases[QUALIFIED_RUNG]
+    reference = rung_phases[REFERENCE_RUNG]
+    if POWERED not in qualified or COAST not in qualified:
+        raise ValueError("the phase qualification needs a powered and a coast phase;"
+                         f" {QUALIFIED_RUNG} has {sorted(qualified)}")
+    derived = {
+        "run": {"tvc_burn_s_vs_burn_out_rel":
+                abs(tvc_burn_s - burn_out_t_s) / burn_out_t_s},
+        "study": {
+            "powered_alpha_model_agreement_deg":
+                abs(qualified[POWERED]["alpha_max_deg"] - reference[POWERED]["alpha_max_deg"]),
+            "coast_minus_powered_alpha_max_deg":
+                qualified[COAST]["alpha_max_deg"] - qualified[POWERED]["alpha_max_deg"],
+        },
+    }
+    checks = []
+    for c in F05_PHASE_CONSTRAINTS:
+        source = (qualified[c.phase] if c.phase in (POWERED, COAST)
+                  else derived[c.phase])
+        checks.append(c.check(source[c.metric]))
+    return {"declared_by": "E1-02 (task #251)",
+            "qualified_rung": QUALIFIED_RUNG,
+            "reference_rung": REFERENCE_RUNG,
+            "burn_out_t_s": float(burn_out_t_s),
+            "checks": checks,
+            "all_passed": all(row["pass"] for row in checks)}
+
+
+# --------------------------------------------------------------------------
 # the five-rung study
 # --------------------------------------------------------------------------
 
@@ -543,13 +740,52 @@ class F05Study:
     headline: AscentDiff
     attribution: Mapping[str, AscentDiff]
 
+    def phase_metrics(self) -> dict[str, dict[str, dict[str, float]]]:
+        """Per rung, per phase metrics: ``rung -> phase -> metrics`` (see
+        :func:`run_phase_metrics`). E1-02 (task #251) qualifies the ascent on
+        the powered phase and reports the coast next to it."""
+        return {name: run_phase_metrics(run) for name, run in self.runs.items()}
+
+    def alpha_max_attribution(self) -> dict[str, Any]:
+        """Where the qualified rung's whole-run ``alpha_max_deg`` actually
+        happened, and what it cost (E1-02, task #251): the phase, the time, the
+        altitude, and the phase's own load figures -- which is the written
+        answer to "6-DOF 62.8 deg vs 3-DOF 26.7 deg". The 6-DOF peak is the last
+        coast sample at 365 km and a dynamic pressure of a fifth of a pascal;
+        the loaded phase peaks at 14.3 deg in *both* backends."""
+        phases = self.phase_metrics()
+        qualified = phases[QUALIFIED_RUNG]
+        hot = max(qualified, key=lambda p: qualified[p]["alpha_max_deg"])
+        hot_m = qualified[hot]
+        return {"rung": QUALIFIED_RUNG,
+                "alpha_max_deg": float(self.runs[QUALIFIED_RUNG].run.alpha_max_deg),
+                "phase": hot,
+                "t_s": hot_m["alpha_max_t_s"],
+                "altitude_m": hot_m["alpha_max_altitude_m"],
+                "phase_max_q_pa": hot_m["max_q_pa"],
+                "phase_q_alpha_max_pa_deg": hot_m["q_alpha_max_pa_deg"],
+                "powered_alpha_max_deg": qualified[POWERED]["alpha_max_deg"],
+                "powered_alpha_max_t_s": qualified[POWERED]["alpha_max_t_s"],
+                "reference_powered_alpha_max_deg":
+                    phases[REFERENCE_RUNG][POWERED]["alpha_max_deg"]}
+
+    def qualification(self) -> dict[str, Any]:
+        """:func:`phase_qualification` of this study's phase split."""
+        full = self.runs[QUALIFIED_RUNG]
+        return phase_qualification(
+            self.phase_metrics(),
+            burn_out_t_s=float(full.run.propellant_exhausted_t_s),
+            tvc_burn_s=float(full.diagnostics.burn_s))
+
     def summary(self) -> dict[str, Any]:
         """Plain-dict view: scenario metadata, the headline metrics, the
-        attribution table and the tracker diagnostics of the headline
-        ascent."""
+        attribution table, the tracker diagnostics of the headline
+        ascent and its E1-02 phase split with the constraint verdicts."""
         s = self.scenario
         full = self.runs["6dof_full"]
         aero_ref = self.runs["3dof_aero"]
+        phases = self.phase_metrics()
+        where = self.alpha_max_attribution()
         out: dict[str, Any] = {
             "scenario": {
                 "name": s.name,
@@ -568,11 +804,18 @@ class F05Study:
             "headline_6dof": {
                 "max_q_pa": float(full.run.max_q.q_pa),
                 "alpha_max_deg": float(full.run.alpha_max_deg),
+                "alpha_max_phase": where["phase"],
+                "alpha_max_t_s": where["t_s"],
                 "att_err_max_deg": float(full.metrics.att_err_max_deg),
                 "att_err_rms_deg": float(full.metrics.att_err_rms_deg),
             },
             "attribution": {name: diff.summary() for name, diff in self.attribution.items()},
-            "tvc": {k: v for k, v in full.summary().items() if not isinstance(v, tuple)},
+            "tvc": tvc_record(full),
+            "phases": phases,
+            "alpha_max_attribution": where,
+            "qualification": phase_qualification(
+                phases, burn_out_t_s=float(full.run.propellant_exhausted_t_s),
+                tvc_burn_s=float(full.diagnostics.burn_s)),
         }
         return out
 
