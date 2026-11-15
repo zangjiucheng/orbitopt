@@ -82,12 +82,16 @@ Conventions are the spike driver's (:mod:`orbitopt.flightlab.sixdof.
 jsbsim_driver`): ECEF states (the manifest declares ``ECEF`` -- no frame
 bridge is involved), scalar-first quaternion ``Tec2b``, SI everywhere; the
 driver's extra columns ride along in the trajectory CSVs.
-``physics_verified`` is the conjunction of this backend's own checks
+``backend_self_check`` is the conjunction of this backend's own checks
 (finite states, mass bookkeeping, handoff continuity, tracking bounds --
 the spike's analytic-corroboration claims, evaluated per run); it is never
-the integrator's word, and ``mission_constraints_passed`` stays None here
--- :func:`orbitopt.flightlab.simulate.simulate` settles it against the
-target.
+the integrator's word on its own output. ``physics_verified`` is left ``None``
+here -- this backend does not verify itself. It is the Gate-B pipeline that
+sets it, by independently re-flying the coast state (see
+:func:`orbitopt.flightlab.simulate.simulate` with ``backend="6DOF"``), exactly
+as it does for the 3-DOF lineage; without that independent re-fly it stays
+``None`` ("not assessed"). ``mission_constraints_passed`` stays None here too
+-- :func:`orbitopt.flightlab.simulate.simulate` settles it against the target.
 
 Determinism matches the OpenTsiolkovsky adapter: :func:`run_ascent` is a
 pure function of the config (``created_utc`` = the config epoch, run id and
@@ -730,10 +734,11 @@ def run_ascent(config, out_dir, *, target=None) -> FlightRun:
     simulate`, never here.
 
     One body (hold/pid) or three (staging); frame ``ECEF`` throughout;
-    ``physics_verified`` is the conjunction of this backend's checks
-    (module docstring). Raises :class:`SixDofConfigError` on a malformed
-    config, ``ImportError`` without the jsbsim extra, ``RuntimeError`` when
-    JSBSim itself fails."""
+    ``backend_self_check`` is the conjunction of this backend's own checks
+    (module docstring); ``physics_verified`` is always ``None`` here -- only
+    the Gate-B pipeline's independent re-fly sets it. Raises
+    :class:`SixDofConfigError` on a malformed config, ``ImportError`` without
+    the jsbsim extra, ``RuntimeError`` when JSBSim itself fails."""
     cfg = config if isinstance(config, SixDofConfig) else load_config(config)
 
     events: list[Event] = []
@@ -820,7 +825,7 @@ def run_ascent(config, out_dir, *, target=None) -> FlightRun:
             "sixdof-mass-* / sixdof-cg-* / sixdof-inertia-* checks.",
         )
 
-    physics = all(c.passed for c in checks)
+    self_check = all(c.passed for c in checks)
     assumptions = [
         f"6-DOF backend (jsbsim {JSBSIM_VERSION}): vehicle {vehicle_note!r} from the "
         "config, ECEF states (frame ECEF, no frame bridge), zero-aero spike "
@@ -829,9 +834,10 @@ def run_ascent(config, out_dir, *, target=None) -> FlightRun:
         f"from the scenario document (sha256 {cfg.digest[:16]}), not from code",
         "created_utc is the config epoch: run_ascent is a pure function of the "
         "config, so repeated calls write byte-identical runs",
-        "physics_verified is the conjunction of this backend's checks ("
-        + ", ".join(c.id for c in checks) + "); mission constraints are settled "
-        "by the Gate-B pipeline, never here",
+        "backend_self_check is the conjunction of this backend's own checks ("
+        + ", ".join(c.id for c in checks) + "); physics_verified stays null here "
+        "(this backend does not verify itself -- the Gate-B pipeline's independent "
+        "re-fly sets it) and mission constraints are settled by the pipeline, never here",
     ] + list(assumptions_extra) + [f"config: {a}" for a in cfg.assumptions]
     run = FlightRun(
         run_id=f"jsbsim-6dof-{cfg.digest[:12]}",
@@ -847,7 +853,8 @@ def run_ascent(config, out_dir, *, target=None) -> FlightRun:
         events=tuple(events),
         verification=Verification(
             optimizer_converged=None,
-            physics_verified=physics,
+            physics_verified=None,
+            backend_self_check=self_check,
             mission_constraints_passed=None,
             checks=tuple(checks),
         ),

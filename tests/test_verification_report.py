@@ -340,6 +340,152 @@ def test_auto_checks_are_categorised_by_kind():
     assert roll[vr.CHECK_HISTORICAL] == {"result": "not_checked", "checks_passed": 0, "checks_total": 0}
 
 
+def test_default_evidence_follows_the_category():
+    """Task #263: with no explicit evidence, the type defaults from the
+    category -- so the numerical checks stay numerical, the residual is
+    treated as leaning on an independent model (the strongest reading a
+    category alone supports), and ``independent_validation`` is ``passed``
+    because that default counts the residual as validation-grade."""
+    period = 2 * np.pi * np.sqrt(R_GEO**3 / MU_EARTH)
+    rep = _report(propagate(_geo_state(), [{"type": "coast", "duration": period}]))
+    ev = rep["status"]["check_evidence"]
+    assert ev["coast.step_convergence"] == vr.EVIDENCE_NUMERICAL
+    assert ev["coast.two_body_conservation"] == vr.EVIDENCE_NUMERICAL
+    assert ev["coast.model_conservation"] == vr.EVIDENCE_NUMERICAL
+    assert ev["targeting.converged"] == vr.EVIDENCE_NUMERICAL
+    assert ev["residual.final_vs_initial"] == vr.EVIDENCE_INDEPENDENT_MODEL
+    roll = rep["status"]["evidence"]
+    assert roll[vr.EVIDENCE_NUMERICAL]["result"] == "passed"
+    assert roll[vr.EVIDENCE_INDEPENDENT_MODEL]["result"] == "passed"
+    assert roll[vr.EVIDENCE_DESIGN_INPUT]["result"] == "not_checked"
+    assert roll[vr.EVIDENCE_ANALYTICAL]["result"] == "not_checked"
+    assert roll[vr.EVIDENCE_HISTORICAL]["result"] == "not_checked"
+    assert rep["status"]["independent_validation"]["result"] == "passed"
+
+
+def test_design_input_evidence_is_never_independent_validation():
+    """Task #263: a passing design_input check is a green check -- internal
+    consistency with what the solution aimed at -- but a report built only on
+    design-input and numerical evidence must say so in ``independent_validation``:
+    ``not_checked``, never a spurious ``passed``."""
+    rep = vr.build_report(
+        "t", "aim-point only", propagations=[],
+        residuals=[vr.state_residual("periapsis_vs_target", "the design aim point",
+                                     position=[0, 0, 0], reference_position=[0, 0, 0],
+                                     tolerance={"position_m": 1.0},
+                                     evidence=vr.EVIDENCE_DESIGN_INPUT,
+                                     scope="the design aim point (not a real-world reference)",
+                                     phases=["insertion"])],
+    )
+    vr.validate_report(rep)
+    assert rep["status"]["result"] == "passed"          # the aim point was hit
+    assert rep["status"]["check_evidence"]["residual.periapsis_vs_target"] == vr.EVIDENCE_DESIGN_INPUT
+    assert rep["status"]["evidence"][vr.EVIDENCE_DESIGN_INPUT]["result"] == "passed"
+    assert rep["status"]["evidence"][vr.EVIDENCE_DESIGN_INPUT]["independent"] is False
+    assert rep["status"]["independent_validation"]["result"] == "not_checked"
+    assert rep["residuals"][0]["evidence"]["type"] == vr.EVIDENCE_DESIGN_INPUT
+    assert rep["residuals"][0]["evidence"]["scope"] == "the design aim point (not a real-world reference)"
+    assert rep["residuals"][0]["evidence"]["phases"] == ["insertion"]
+    # And the cannot_prove text names the trap the acceptance is guarding
+    # against -- a design-input match must never be read as historical proof.
+    assert "NOT independent validation" in rep["status"]["evidence"][vr.EVIDENCE_DESIGN_INPUT]["cannot_prove"]
+
+
+def test_independent_validation_honours_analytical_and_numerical_only_reports():
+    """An all-analytic or all-numerical report has no *validation-grade*
+    evidence, so its ``independent_validation`` rollup is ``not_checked`` --
+    an analytic closed form of the same model is not external validation."""
+    rep = vr.build_report(
+        "t", "analytic coast", propagations=[],
+        residuals=[vr.state_residual("parking_coast_vs_analytic", "secular J2 closed form",
+                                     position=[0, 0, 0], reference_position=[0, 0, 0],
+                                     tolerance={"position_m": 1.0},
+                                     evidence=vr.EVIDENCE_ANALYTICAL)],
+    )
+    vr.validate_report(rep)
+    assert rep["status"]["result"] == "passed"
+    assert rep["status"]["evidence"][vr.EVIDENCE_ANALYTICAL]["result"] == "passed"
+    assert rep["status"]["evidence"][vr.EVIDENCE_ANALYTICAL]["independent"] is False
+    assert rep["status"]["independent_validation"]["result"] == "not_checked"
+
+
+def test_historical_and_independent_model_evidence_are_validation_grade():
+    """Both historical telemetry and an independent model count as validation:
+    they reach outside the model under test. Mixed with a passing design-input
+    check, the report's ``independent_validation`` rollup reflects only the
+    validation-grade checks."""
+    rep = vr.build_report(
+        "t", "mixed evidence", propagations=[],
+        residuals=[
+            vr.state_residual("touchdown_vs_telemetry", "published flight telemetry",
+                              position=[0, 0, 0], reference_position=[0, 0, 0],
+                              tolerance={"position_m": 1.0}, category=vr.CHECK_HISTORICAL),
+            vr.state_residual("vs_independent_backend", "an independently written propagator",
+                              position=[0, 0, 0], reference_position=[0, 0, 0],
+                              tolerance={"position_m": 1.0}),
+            vr.state_residual("aim_point_check", "the design aim",
+                              position=[0, 0, 0], reference_position=[0, 0, 0],
+                              tolerance={"position_m": 1.0}, evidence=vr.EVIDENCE_DESIGN_INPUT),
+        ],
+    )
+    vr.validate_report(rep)
+    roll = rep["status"]["evidence"]
+    assert roll[vr.EVIDENCE_HISTORICAL]["result"] == "passed"
+    assert roll[vr.EVIDENCE_INDEPENDENT_MODEL]["result"] == "passed"
+    assert roll[vr.EVIDENCE_DESIGN_INPUT]["result"] == "passed"
+    assert roll[vr.EVIDENCE_HISTORICAL]["independent"] is True
+    assert roll[vr.EVIDENCE_INDEPENDENT_MODEL]["independent"] is True
+    assert roll[vr.EVIDENCE_DESIGN_INPUT]["independent"] is False
+    iv = rep["status"]["independent_validation"]
+    assert iv["result"] == "passed" and iv["checks_passed"] == 2 and iv["checks_total"] == 2
+
+
+def test_independent_validation_fails_when_a_validation_check_fails():
+    """The independent_validation rollup is a rollup, not an existence check:
+    a failing historical-telemetry check flips it to ``failed`` even when
+    every other kind is green."""
+    rep = vr.build_report(
+        "t", "failed re-fly", propagations=[],
+        residuals=[
+            vr.state_residual("vs_flown", "published flight telemetry",
+                              position=[10, 0, 0], reference_position=[0, 0, 0],
+                              tolerance={"position_m": 1.0}, category=vr.CHECK_HISTORICAL),
+            vr.state_residual("aim", "design aim",
+                              position=[0, 0, 0], reference_position=[0, 0, 0],
+                              tolerance={"position_m": 1.0}, evidence=vr.EVIDENCE_DESIGN_INPUT),
+        ],
+    )
+    assert rep["status"]["result"] == "failed"
+    assert rep["status"]["evidence"][vr.EVIDENCE_HISTORICAL]["result"] == "failed"
+    assert rep["status"]["independent_validation"]["result"] == "failed"
+
+
+def test_status_rejects_unknown_evidence_type():
+    with pytest.raises(ValueError):
+        vr.status_from_checks({"a": True}, {"a": vr.CHECK_MODEL},
+                              {"a": "published_internet_forum_post"})
+    with pytest.raises(ValueError):
+        vr.status_from_checks({"a": True}, {"a": vr.CHECK_MODEL},
+                              {"b": vr.EVIDENCE_ANALYTICAL})   # for a check that does not exist
+
+
+def test_evidence_block_qualification_is_complete():
+    """Every evidence type carries label + independence flag + a proof claim
+    + a limitation, so a reader of a raw JSON report sees what the pass covers
+    and what it does not (task #263 acceptance)."""
+    for et in vr.EVIDENCE_TYPES:
+        q = vr.EVIDENCE_QUALIFICATION[et]
+        assert set(q) >= {"label", "independent", "proves", "cannot_prove"}
+        assert q["proves"] and q["cannot_prove"]
+    assert vr.INDEPENDENT_EVIDENCE == (vr.EVIDENCE_HISTORICAL, vr.EVIDENCE_INDEPENDENT_MODEL)
+    for et in vr.INDEPENDENT_EVIDENCE:
+        assert vr.EVIDENCE_QUALIFICATION[et]["independent"] is True
+    for et in (vr.EVIDENCE_ANALYTICAL, vr.EVIDENCE_DESIGN_INPUT, vr.EVIDENCE_NUMERICAL):
+        assert vr.EVIDENCE_QUALIFICATION[et]["independent"] is False
+    # The design_input entry names the trap it guards against explicitly.
+    assert "NOT independent validation" in vr.EVIDENCE_QUALIFICATION[vr.EVIDENCE_DESIGN_INPUT]["cannot_prove"]
+
+
 def test_historical_residuals_carry_their_category_and_bundle_rolls_up():
     period = 2 * np.pi * np.sqrt(R_GEO**3 / MU_EARTH)
     res = propagate(_geo_state(), [{"type": "coast", "duration": period}])
@@ -357,13 +503,45 @@ def test_historical_residuals_carry_their_category_and_bundle_rolls_up():
     roll = flown["status"]["categories"]
     assert roll[vr.CHECK_HISTORICAL] == {"result": "passed", "checks_passed": 1, "checks_total": 1}
     assert roll[vr.CHECK_MODEL] == {"result": "not_checked", "checks_passed": 0, "checks_total": 0}
+    # Task #263: the historical residual is also historical-telemetry evidence,
+    # which makes this report one of the rare ones whose independent_validation
+    # rollup is actually ``passed``.
+    assert flown["status"]["check_evidence"]["residual.touchdown_vs_telemetry"] == vr.EVIDENCE_HISTORICAL
+    assert flown["status"]["evidence"][vr.EVIDENCE_HISTORICAL]["result"] == "passed"
+    assert flown["status"]["independent_validation"]["result"] == "passed"
     b = vr.bundle([flown], "b")
     vr.validate_report(b)
     broll = b["status"]["categories"]
     assert broll[vr.CHECK_HISTORICAL] == {"result": "passed", "checks_passed": 1, "checks_total": 1}
     assert broll[vr.CHECK_NUMERICAL]["result"] == "passed" and broll[vr.CHECK_NUMERICAL]["checks_total"] == 3
     assert broll[vr.CHECK_MODEL]["result"] == "not_checked"
+    # Task #263: the bundle carries the same evidence rollup + independent-
+    # validation rollup as any report; a bundle inherits a sub-report's
+    # validation-grade evidence.
+    assert b["status"]["evidence"][vr.EVIDENCE_HISTORICAL]["result"] == "passed"
+    assert b["status"]["independent_validation"]["result"] == "passed"
     assert vr.status_result(b["status"]) == "passed"
+
+
+def test_bundle_evidence_rollup_and_independent_validation():
+    """A bundle of a design-input-only report plus a numerical-only report is
+    ``passed`` overall but its independent_validation is ``not_checked`` -- the
+    bundle honestly reports having no validation-grade evidence (task #263)."""
+    design = vr.build_report("t", "aim", propagations=[], residuals=[
+        vr.state_residual("r1", "the design aim", position=[0, 0, 0], reference_position=[0, 0, 0],
+                          tolerance={"position_m": 1.0}, evidence=vr.EVIDENCE_DESIGN_INPUT)])
+    numeric = vr.build_report("t", "self", propagations=[], residuals=[
+        vr.state_residual("r2", "same model re-run", position=[0, 0, 0], reference_position=[0, 0, 0],
+                          tolerance={"position_m": 1.0}, category=vr.CHECK_NUMERICAL)])
+    b = vr.bundle([design, numeric], "b")
+    vr.validate_report(b)
+    assert b["status"]["result"] == "passed"
+    er = b["status"]["evidence"]
+    assert er[vr.EVIDENCE_DESIGN_INPUT]["result"] == "passed"
+    assert er[vr.EVIDENCE_NUMERICAL]["result"] == "passed"
+    assert er[vr.EVIDENCE_INDEPENDENT_MODEL]["result"] == "not_checked"
+    assert er[vr.EVIDENCE_HISTORICAL]["result"] == "not_checked"
+    assert b["status"]["independent_validation"]["result"] == "not_checked"
 
 
 def test_report_without_checks_is_not_checked_and_validates():

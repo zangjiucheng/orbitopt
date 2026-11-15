@@ -115,6 +115,28 @@ Recovery stays the 3-DOF Earth-fixed point-mass chain (J2, rotation,
 atmosphere, engines, event detection; Monte Carlo re-plans per dispersed
 sample) regardless of the ascent backend.
 
+## Verification verdicts
+
+A run's `verification.json` reports independent Gate-B booleans, each with one
+meaning on **both** the 3-DOF and 6-DOF backends:
+
+- `physics_verified` — an **independent** re-flight / cross-model check agrees:
+  a *different* propagator (tudatpy) re-integrates the coast/insertion state and
+  the element-drift checks judge it. For 6-DOF the Earth-fixed coast state is
+  first rotated to GCRS by the frame bridge (`backend="6DOF"` →
+  `simulate.orbit_refly_6dof`), so the flag means the same thing as it does for
+  3-DOF. It is **never** the producing backend's own word. `null` = not
+  assessed (re-fly skipped, or tudatpy / the frame bridge unavailable), never a
+  pass.
+- `backend_self_check` — the conjunction of the producing backend's *own*
+  checks (finite states, mass bookkeeping, handoff continuity, tracking bounds).
+  A backend vouching for itself, kept separate so it is never mistaken for
+  independent verification. Optional: older runs read back as `null`.
+- `optimizer_converged`, `mission_constraints_passed` — as before.
+
+See [ADR 0004](adr/flightlab-0004-independent-physics-verification.md) for the
+decision and rationale.
+
 <span id="native-aero-model-and-the-reference-plant-f-02"></span>
 <span id="tvc-actuator-and-attitude-tracking-f-04"></span>
 <span id="6-dof-vs-3-dof-gravity-turn-ascent-f-05"></span>

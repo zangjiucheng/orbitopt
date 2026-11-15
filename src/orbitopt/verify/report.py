@@ -34,6 +34,20 @@ that quantifies how far the result can be trusted, rather than a single
   category and ``status.categories`` rolls the outcome up per category, so a
   reader sees which kind of evidence backs a pass -- and which kind is absent
   (a category with no check is ``not_checked``, never counted as a pass).
+* **evidence qualification** (task #263, E4-03) -- a sharper, orthogonal read
+  of the same checks: what the reference a verdict is graded against is *made
+  of*, and how far a pass there reaches. Five types -- ``analytical`` (a closed
+  form of the same/simplified model), ``independent_model`` (another model,
+  formulated separately), ``historical_telemetry`` (published flown data),
+  ``design_input`` (the reference is the aim point / target / envelope the
+  solution was built to hit -- internal consistency, NOT validation) and
+  ``numerical_consistency`` (integration/self-consistency error) -- each with a
+  recorded scope, tolerance, applicable phases and what it *cannot* prove.
+  ``status.check_evidence`` and ``status.evidence`` carry the per-check type and
+  the per-type rollup; ``status.independent_validation`` says in one rollup
+  whether any *validation-grade* (historical or independent-model) evidence
+  backed the result, so a green ``passed`` on design-input and numerical checks
+  alone is never mistaken for independent validation.
 
 Reproducibility: the document contains no wall-clock time, keys are sorted,
 floats are serialised with full ``repr`` precision, and ``digest`` is the
@@ -103,6 +117,105 @@ CATEGORY_LABELS = {
     CHECK_HISTORICAL: "Historical validation",
 }
 """Human-readable titles for the Verification tab."""
+
+# --------------------------------------------------------------------------
+# Evidence qualification (task #263, E4-03)
+# --------------------------------------------------------------------------
+# The category answers *which question* a check settles. The evidence type
+# answers a sharper one: *what is the reference actually made of*, and how far
+# a pass there reaches. It refines the category, and the two are deliberately
+# not in lockstep -- a model_agreement check can rest on a closed form (weak:
+# it shares the model's assumptions), on a genuinely different simulator
+# (strong), or on the design input itself (no independent force at all).
+#
+# The distinction this task is about: a comparison whose reference is the aim
+# point / target / envelope the solution was *built to hit* is a design-input
+# match -- internal consistency, not validation. Labelled ``design_input`` so a
+# reader never mistakes "the solver landed where we aimed it" for independent
+# (historical) proof.
+EVIDENCE_ANALYTICAL = "analytical"
+EVIDENCE_INDEPENDENT_MODEL = "independent_model"
+EVIDENCE_HISTORICAL = "historical_telemetry"
+EVIDENCE_DESIGN_INPUT = "design_input"
+EVIDENCE_NUMERICAL = "numerical_consistency"
+EVIDENCE_TYPES = (
+    EVIDENCE_ANALYTICAL, EVIDENCE_INDEPENDENT_MODEL, EVIDENCE_HISTORICAL,
+    EVIDENCE_DESIGN_INPUT, EVIDENCE_NUMERICAL,
+)
+# The evidence that reaches outside the model under test -- the only kinds that
+# count as validation. A report that passes on everything else has NOT been
+# independently validated.
+INDEPENDENT_EVIDENCE = (EVIDENCE_HISTORICAL, EVIDENCE_INDEPENDENT_MODEL)
+
+EVIDENCE_QUALIFICATION = {
+    EVIDENCE_ANALYTICAL: {
+        "label": "Analytic solution",
+        "independent": False,
+        "proves": "the numerics reproduce the closed-form solution of the model they integrate "
+                  "(the equations and the integrator, not their agreement with reality).",
+        "cannot_prove": "that the model represents reality -- the closed-form reference shares the "
+                        "model's own assumptions (point mass, impulsive burns, idealised field).",
+    },
+    EVIDENCE_INDEPENDENT_MODEL: {
+        "label": "Independent model",
+        "independent": True,
+        "proves": "two independently formulated models agree, so neither is trivially mis-implemented.",
+        "cannot_prove": "that either model is right in the real world -- an assumption shared by both "
+                        "stays invisible; the phase and force inventory of the comparison bound its reach.",
+    },
+    EVIDENCE_HISTORICAL: {
+        "label": "Historical telemetry",
+        "independent": True,
+        "proves": "the model reproduces a published, observed (flown) value it was not tuned to.",
+        "cannot_prove": "any other vehicle, phase or operating point -- one published event validates "
+                        "that event, not the model as a whole, and the reference's own provenance is only "
+                        "as good as its source.",
+    },
+    EVIDENCE_DESIGN_INPUT: {
+        "label": "Matches design input",
+        "independent": False,
+        "proves": "the solver reached the aim point, or the plan respects the site/vehicle/corridor "
+                  "envelope it was designed against -- internal consistency only.",
+        "cannot_prove": "anything about fidelity to reality: the reference IS the design input, so this "
+                        "is NOT independent validation and must never be read as historical proof.",
+    },
+    EVIDENCE_NUMERICAL: {
+        "label": "Numerical consistency",
+        "independent": False,
+        "proves": "integration error is under tolerance and the model's own invariants / self-consistency "
+                  "hold (step convergence, exact integrals, a same-model re-fly).",
+        "cannot_prove": "agreement with any other model or with reality -- it bounds numerical error only.",
+    },
+}
+"""Per evidence type: how much a pass there reaches. ``independent`` marks the
+kinds that count as validation; ``cannot_prove`` is what the verdict must never
+be taken to establish."""
+
+
+def default_evidence(category: str) -> str:
+    """The evidence type a check carries when its producer states only a
+    category: numerical consistency stays numerical; a model-agreement check
+    is *assumed* to lean on another model (the strongest reading a category
+    alone supports) and a historical check on telemetry. Producers override
+    this -- most importantly to demote a model-agreement comparison whose
+    reference is a closed form (``analytical``) or the design input itself
+    (``design_input``)."""
+    if category == CHECK_HISTORICAL:
+        return EVIDENCE_HISTORICAL
+    if category == CHECK_MODEL:
+        return EVIDENCE_INDEPENDENT_MODEL
+    if category == CHECK_NUMERICAL:
+        return EVIDENCE_NUMERICAL
+    raise ValueError(f"unknown check category {category!r} (must be one of {CHECK_CATEGORIES})")
+
+
+def evidence_qualification(evidence: str) -> dict:
+    """The ``{label, independent, proves, cannot_prove}`` a verdict of this
+    evidence type must be read against."""
+    try:
+        return dict(EVIDENCE_QUALIFICATION[evidence])
+    except KeyError:
+        raise ValueError(f"unknown evidence type {evidence!r} (must be one of {EVIDENCE_TYPES})") from None
 
 
 # --------------------------------------------------------------------------
@@ -470,7 +583,8 @@ def propagation_section(
 
 def state_residual(name: str, reference: str, state=None, reference_state=None,
                    position=None, reference_position=None, tolerance: Optional[Mapping] = None,
-                   category: str = CHECK_MODEL) -> dict:
+                   category: str = CHECK_MODEL, evidence: Optional[str] = None,
+                   scope: Optional[str] = None, phases: Optional[Sequence[str]] = None) -> dict:
     """Position / velocity residual (numerical minus reference). Pass full
     6-vectors (``state``/``reference_state``) or positions only.
 
@@ -479,19 +593,37 @@ def state_residual(name: str, reference: str, state=None, reference_state=None,
     prediction (a reference propagator, the screening orbit, an aim point);
     pass ``numerical_consistency`` when the reference is the same model
     re-run by independent numerics, or ``historical_validation`` when it is
-    published real-world data."""
+    published real-world data.
+
+    ``evidence`` refines that with what the reference is *made of* (task #263,
+    one of :data:`EVIDENCE_TYPES`); it defaults from ``category`` -- so pass it
+    explicitly to say this model-agreement residual rests on an analytic closed
+    form (``analytical``) or on a design aim point (``design_input``, i.e. NOT
+    independent validation). ``scope`` and ``phases`` record the model range and
+    mission phases the comparison covers, so the verdict states what it does and
+    does not speak to; the residual carries an ``evidence`` block spelling out
+    its type, independence, scope, phases and what it cannot prove."""
     if state is not None:
         s = np.asarray(state, dtype=float)
         ref = np.asarray(reference_state, dtype=float)
         dr = s[:3] - ref[:3]
-        dv = s[3:6] - ref[3:6]
+        dv = s[3:] - ref[3:]
     else:
         dr = np.asarray(position, dtype=float) - np.asarray(reference_position, dtype=float)
         dv = None
+    etype = evidence or default_evidence(category)
+    qual = EVIDENCE_QUALIFICATION[etype]
+    block = {"type": etype, "independent": bool(qual["independent"]),
+             "cannot_prove": qual["cannot_prove"]}
+    if scope is not None:
+        block["scope"] = str(scope)
+    if phases is not None:
+        block["phases"] = [str(p) for p in phases]
     out = {
         "name": name,
         "reference": reference,
         "category": category,
+        "evidence": block,
         "position_residual_m": float(np.linalg.norm(dr)),
         "position_residual_vector_m": dr,
         "velocity_residual_m_s": None if dv is None else float(np.linalg.norm(dv)),
@@ -531,8 +663,19 @@ def provenance() -> dict:
     }
 
 
+def _residual_evidence_type(residual: Mapping):
+    """The evidence type a residual carries, accepting either the full
+    qualification block (from :func:`state_residual`) or a bare type string a
+    hand-written residual dict sets next to its ``category``; ``None`` lets the
+    status derive it from the residual's category."""
+    ev = residual.get("evidence")
+    if isinstance(ev, Mapping):
+        return ev.get("type")
+    return ev
+
+
 def _status(propagations, residuals, targets) -> dict:
-    checks, categories = {}, {}
+    checks, categories, evidence = {}, {}, {}
     def add(name: str, ok: bool, category: str) -> None:
         checks[name] = bool(ok)
         categories[name] = category
@@ -556,9 +699,12 @@ def _status(propagations, residuals, targets) -> dict:
                     f"residual {r.get('name')!r} needs a check category (one of {CHECK_CATEGORIES}); "
                     "pass category= to state_residual or set 'category' on the residual dict")
             add(f"residual.{r['name']}", bool(r["within_tolerance"]), category)
+            etype = _residual_evidence_type(r)
+            if etype is not None:
+                evidence[f"residual.{r['name']}"] = etype
     if isinstance(targets, Mapping) and "converged" in targets:
         add("targeting.converged", bool(targets["converged"]), CHECK_NUMERICAL)
-    return status_from_checks(checks, categories)
+    return status_from_checks(checks, categories, evidence)
 
 
 # Tri-state verification outcome (task #162). "No checks ran" is *not* a
@@ -587,17 +733,70 @@ def _category_rollup(checks: Mapping, categories: Mapping) -> dict:
     return out
 
 
-def status_from_checks(checks: Mapping, categories: Optional[Mapping] = None) -> dict:
-    """Status block for a mapping of ``check name -> bool`` and a mapping of
-    ``check name -> category`` (one of :data:`CHECK_CATEGORIES`): ``failed``
-    if any check failed, ``passed`` if there is at least one check and all
-    passed, ``not_checked`` if there are no checks at all.
+def _rollup_by(checks: Mapping, kinds: Mapping, keys: Sequence[str]) -> dict:
+    """Result / checks_passed / checks_total per kind, every kind present, a
+    kind with no check ``not_checked``."""
+    out = {}
+    for kind in keys:
+        names = [n for n, k in kinds.items() if k == kind]
+        n_ok = sum(bool(checks[n]) for n in names)
+        if not names:
+            result = RESULT_NOT_CHECKED
+        elif n_ok == len(names):
+            result = RESULT_PASSED
+        else:
+            result = RESULT_FAILED
+        out[kind] = {"result": result, "checks_passed": int(n_ok), "checks_total": len(names)}
+    return out
 
-    Every check must be categorised (task #243): ``numerical_consistency``,
-    ``model_agreement`` or ``historical_validation``. The status then carries
-    ``check_categories`` (the per-check label) and ``categories`` (the
-    per-category rollup), so the three kinds of evidence stay separate in the
-    report."""
+
+def _evidence_rollup(checks: Mapping, evidence: Mapping) -> dict:
+    """Per-evidence-type rollup (task #263): every evidence type appears, the
+    qualification that bounds how far a pass reaches rides with it, and an
+    ``independent`` flag marks the types that count as validation."""
+    roll = _rollup_by(checks, evidence, EVIDENCE_TYPES)
+    for kind, entry in roll.items():
+        entry.update(EVIDENCE_QUALIFICATION[kind])
+    return roll
+
+
+def _independent_validation(roll: Mapping) -> dict:
+    """The one rollup a reader of a pass must check (task #263): evidence from
+    OUTSIDE the model under test -- historical telemetry or an independent
+    model. ``not_checked`` here means the report is internally consistent but
+    never independently validated, however green its other categories."""
+    passed = sum(roll[k]["checks_passed"] for k in INDEPENDENT_EVIDENCE)
+    total = sum(roll[k]["checks_total"] for k in INDEPENDENT_EVIDENCE)
+    failed = any(roll[k]["result"] == RESULT_FAILED for k in INDEPENDENT_EVIDENCE)
+    if not total:
+        result = RESULT_NOT_CHECKED
+    elif failed:
+        result = RESULT_FAILED
+    elif passed == total:
+        result = RESULT_PASSED
+    else:
+        result = RESULT_FAILED
+    return {"result": result, "checks_passed": int(passed), "checks_total": int(total)}
+
+
+def status_from_checks(checks: Mapping, categories: Optional[Mapping] = None,
+                       evidence: Optional[Mapping] = None) -> dict:
+    """Status block for a mapping of ``check name -> bool``, a mapping of
+    ``check name -> category`` (one of :data:`CHECK_CATEGORIES`) and an
+    optional mapping of ``check name -> evidence type`` (one of
+    :data:`EVIDENCE_TYPES`): ``failed`` if any check failed, ``passed`` if
+    there is at least one check and all passed, ``not_checked`` if there are no
+    checks at all.
+
+    Every check must be categorised (task #243). Its *evidence type* (task
+    #263) defaults from its category (:func:`default_evidence`) when not given
+    -- so pass ``evidence=`` to say a model-agreement check really rests on an
+    analytic closed form (``analytical``) or on the design input itself
+    (``design_input``) rather than an independent model. The status carries
+    ``check_categories`` + ``categories`` (the three kinds), ``check_evidence``
+    + ``evidence`` (the five evidence types, each with its qualification) and
+    ``independent_validation`` (whether any validation-grade evidence backed
+    the result)."""
     checks = {str(k): bool(v) for k, v in checks.items()}
     cats = {str(k): str(v) for k, v in (categories or {}).items()}
     missing = sorted(set(checks) - set(cats))
@@ -610,14 +809,25 @@ def status_from_checks(checks: Mapping, categories: Optional[Mapping] = None) ->
     bad = sorted({c for c in cats.values() if c not in CHECK_CATEGORIES})
     if bad:
         raise ValueError(f"unknown check categories: {bad} (must be one of {CHECK_CATEGORIES})")
+    ev = {str(k): str(v) for k, v in (evidence or {}).items()}
+    unknown_ev = sorted(set(ev) - set(checks))
+    if unknown_ev:
+        raise ValueError(f"evidence types given for unknown checks: {unknown_ev}")
+    bad_ev = sorted({e for e in ev.values() if e not in EVIDENCE_TYPES})
+    if bad_ev:
+        raise ValueError(f"unknown evidence types: {bad_ev} (must be one of {EVIDENCE_TYPES})")
+    ev = {name: ev.get(name) or default_evidence(cats[name]) for name in checks}
     if not checks:
         result = RESULT_NOT_CHECKED
     elif all(checks.values()):
         result = RESULT_PASSED
     else:
         result = RESULT_FAILED
+    roll = _evidence_rollup(checks, ev)
     return {"result": result, "passed": result == RESULT_PASSED, "checks": checks,
-            "check_categories": cats, "categories": _category_rollup(checks, cats)}
+            "check_categories": cats, "categories": _category_rollup(checks, cats),
+            "check_evidence": ev, "evidence": roll,
+            "independent_validation": _independent_validation(roll)}
 
 
 def status_result(status: Mapping) -> str:
@@ -755,18 +965,18 @@ def publish_to_scene(scene: dict, reports: Sequence[Mapping]) -> dict:
     return scene
 
 
-def _merged_category_rollups(reports: Sequence[Mapping]) -> dict:
-    """Combine the sub-reports' per-category rollups (task #243): only a
-    report that ran a check in a category votes in it (failed beats passed),
-    and a category no report checked -- or a report written before checks
-    were categorised -- leaves it ``not_checked``: absent evidence."""
-    out = {cat: {"result": RESULT_NOT_CHECKED, "checks_passed": 0, "checks_total": 0}
-           for cat in CHECK_CATEGORIES}
+def _merged_rollups(reports: Sequence[Mapping], field: str, keys: Sequence[str]) -> dict:
+    """Combine the sub-reports' ``{kind -> {result, checks_passed, checks_total}}``
+    rollups under ``field``: only a report that ran a check in a kind votes in
+    it (failed beats passed), and a kind no report checked -- or a report
+    written before checks were labelled that way -- leaves it ``not_checked``:
+    absent evidence, never a pass."""
+    out = {kind: {"result": RESULT_NOT_CHECKED, "checks_passed": 0, "checks_total": 0} for kind in keys}
     for r in reports:
-        for cat, roll in ((r.get("status") or {}).get("categories") or {}).items():
-            if cat not in out or not roll.get("checks_total"):
+        for kind, roll in ((r.get("status") or {}).get(field) or {}).items():
+            if kind not in out or not roll.get("checks_total"):
                 continue
-            merged = out[cat]
+            merged = out[kind]
             merged["checks_passed"] += int(roll.get("checks_passed") or 0)
             merged["checks_total"] += int(roll["checks_total"])
             if roll.get("result") == RESULT_FAILED:
@@ -774,6 +984,21 @@ def _merged_category_rollups(reports: Sequence[Mapping]) -> dict:
             elif merged["result"] != RESULT_FAILED:
                 merged["result"] = RESULT_PASSED
     return out
+
+
+def _merged_category_rollups(reports: Sequence[Mapping]) -> dict:
+    """Task #243: the per-category rollup over all sub-reports' checks."""
+    return _merged_rollups(reports, "categories", CHECK_CATEGORIES)
+
+
+def _merged_evidence_rollups(reports: Sequence[Mapping]) -> dict:
+    """Task #263: the per-evidence-type rollup over all sub-reports' checks,
+    with each type's qualification re-attached and the independent-validation
+    rollup recomputed over the merged counts."""
+    merged = _merged_rollups(reports, "evidence", EVIDENCE_TYPES)
+    for kind, entry in merged.items():
+        entry.update(EVIDENCE_QUALIFICATION[kind])
+    return merged
 
 
 def bundle(reports: Sequence[Mapping], label: str) -> dict:
@@ -790,14 +1015,17 @@ def bundle(reports: Sequence[Mapping], label: str) -> dict:
         result = RESULT_NOT_CHECKED
     else:
         result = RESULT_PASSED
+    evidence = _merged_evidence_rollups(reports)
     doc = {
         "schemaVersion": SCHEMA_VERSION,
         "kind": "bundle",
         "label": str(label),
         # The bundle's own checks are per-report verdicts, so no per-check
-        # category; the per-category rollup over all sub-reports' checks is.
+        # category; the per-category and per-evidence rollups over all
+        # sub-reports' checks are (tasks #243 and #263).
         "status": {"result": result, "passed": result == RESULT_PASSED, "checks": checks,
-                   "categories": _merged_category_rollups(reports)},
+                   "categories": _merged_category_rollups(reports),
+                   "evidence": evidence, "independent_validation": _independent_validation(evidence)},
         "reports": reports,
         "provenance": provenance(),
     }

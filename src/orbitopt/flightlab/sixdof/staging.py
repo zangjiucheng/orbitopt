@@ -408,7 +408,8 @@ def to_flight_run(replay: StagingReplay, *, run_id: str = "fl-402-staging-spike"
         ),
         verification=Verification(
             optimizer_converged=None,
-            physics_verified=all(c.passed for c in checks),
+            physics_verified=None,
+            backend_self_check=all(c.passed for c in checks),
             mission_constraints_passed=None,
             checks=checks,
         ),
