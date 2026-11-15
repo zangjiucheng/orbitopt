@@ -7,7 +7,7 @@
   "FOH discretization (n nodes, h = tof/n, terminal node = engine cutoff state a short distance above the pad; ballistic coast from there); trapezoidal fuel accounting against sea-level Isp (pessimistic end).",
   "FL-305 closed-loop terminal guidance (docs/adr/flightlab-0002): the insertion SOCP is the feasibility certificate; the burn is re-planned from the propagated state every step (hoverslam vertical profile, ZEM/ZEV divert, tilt limit in the loop, no-hover ballistic cutoff); verdict from the same touchdown checks.",
   "guidance: design_throttle=0.9 v_td=1.5m/s tilt<=30deg ignition=1.2s cutoff=19.7s after insertion; insertion plan fuel_planned=5753.0kg",
-  "R-05 actuator margins (0 deg/s TVC slew limit): burn 18.5s; ignition headroom 13.1%, min throttle headroom 13.1%, floor room 24.2%, min tilt margin 10.7 deg, peak slew 193.1 deg/s (limit unlimited), ceiling riding 0.0s, floor riding 0.0s"
+  "R-05/E3-01 actuator margins (unlimited TVC slew, 30 deg tilt limit, throttle slew unlimited): burn 18.5s; ignition headroom 13.1%, min throttle headroom 13.1%, floor room 24.2%, min tilt margin 10.7 deg, peak slew 193.1 deg/s (limit unlimited), throttle slew unlimited, ceiling riding 0.0s, floor riding 0.0s"
  ],
  "checks": [
   {
@@ -270,7 +270,11 @@
    "throttle_floor_room_min": 0.241747,
    "throttle_headroom_at_ignition": 0.131086,
    "throttle_headroom_min": 0.131086,
+   "throttle_rate_limit_per_s": 0.0,
+   "throttle_slew_max_per_s": 0.0,
    "tilt_margin_deg_min": 10.6856,
+   "tvc_lag_compensation": false,
+   "tvc_lag_tau_s": 0.0,
    "tvc_rate_limit_deg_s": 0.0
   },
   "feasible": true,

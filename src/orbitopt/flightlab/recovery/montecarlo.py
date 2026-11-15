@@ -86,6 +86,7 @@ import numpy as np
 
 from orbitopt.flightlab.contract import FlightRun, FlightTarget, read_run, write_run
 from orbitopt.flightlab.recovery.envelope import capture_track_rows, site_from_target
+from orbitopt.flightlab.recovery.landing import DECLARED_LANDING_ACTUATOR
 from orbitopt.flightlab.recovery.pipeline import (
     NOMINAL_PLAN_GUESS,
     _booster_track,
@@ -102,11 +103,19 @@ from orbitopt.flightlab.recovery.stats import (
 )
 from orbitopt.flightlab.recovery.uncertainty import UncertaintyModel
 
-__all__ = ["Dispersions", "MonteCarloResult", "run_monte_carlo"]#: The MC default plan options: every sample re-plans locally around the
+__all__ = ["Dispersions", "MonteCarloResult", "run_monte_carlo"]
+#: The MC default plan options: every sample re-plans locally around the
 #: accepted nominal script (a guidance computer would refine, not restart a
 #: cold search) -- ``max_fevals`` below 40 keeps FL-302 where it started.
+#: E3-01 (task #258) pins the declared actuator set into the default
+#: landing options: recovery Monte Carlo runs fly the repo's own JSBSim TVC
+#: pins (20 deg/s slew, 0.2 s lag) with the rate-aware divert by default --
+#: no recorded recovery benchmark is flown under an unlimited-bandwidth
+#: actuator any more. Pre-E3-01 before/after benches pin the FL-305-era
+#: (unlimited-slew) landing behaviour explicitly in their baseline columns.
 MC_PLAN_OPTIONS: dict[str, Any] = {"initial_guess": NOMINAL_PLAN_GUESS,
-                                   "max_fevals": 30}
+                                   "max_fevals": 30,
+                                   "landing": dict(DECLARED_LANDING_ACTUATOR)}
 
 
 @dataclass(frozen=True)
@@ -267,6 +276,13 @@ def _run_sample(job: Mapping[str, Any]) -> dict[str, Any]:
                 record["corridor_fuel_margin_kg"] = _num(rep.propellant_available_kg
                                                          - rep.landing_need_kg
                                                          - rep.reserve_kg)
+            # E3-02 joint chance mode: the objective's own probability /
+            # constraint read-out at the handoff (only emitted in that mode,
+            # so FL-305 / R-01 records stay byte-identical)
+            if rep.landing_probability is not None:
+                record["landing_probability"] = _num(rep.landing_probability)
+            if rep.joint_violation is not None:
+                record["joint_violation"] = _num(rep.joint_violation)
         landing = outcome.landing
         if landing is not None:
             record["position_error_m"] = _num(landing.position_error_m)
