@@ -27,6 +27,12 @@ The mission itself is declared in the packaged scenario
 pinned recovery plan recipe, and ``propagation_result: not_checked`` for the
 tudatpy leg the gfold-pinned landing stack cannot run (M-07 owns that leg).
 
+E5-01 (task #268) exception note: the ascent constants below are the ONLY
+preset SECO/injection state that may remain on a mission-reachable code
+path -- this fixture stays a fast dual-branch integration test, while the
+full mission chain's ascent is computed by the pinned OpenTsiolkovsky binary
+(``tests/test_mission_e5_real_ascent.py`` guards that boundary).
+
 Subcommands
     run       --out DIR   replay the frozen mission into DIR (needs the
                           landing stack: gfold 0.3.2, per envs/flightlab-landing-ci.txt)
