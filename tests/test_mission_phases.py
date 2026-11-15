@@ -21,10 +21,13 @@ import pytest
 
 from orbitopt.mission.contract import HandoffCheck
 from orbitopt.mission.phases import (
-    INSERTION_ONLY_VERDICT_ID, MIXED_RUN_VERDICT_ID, OVERALL_RULE, PHASES,
-    PHASE_ORBIT_INJECTION, PHASE_PARKING_PROPAGATION, PHASE_RECOVERY_TOUCHDOWN,
-    PHASE_VERDICTS, VERDICT_FAILED, VERDICT_NOT_CHECKED, VERDICT_PASSED,
-    combine_phase_verdicts, full_mission_gate, phase_of, phase_verdicts)
+    COVERAGE_CHECKED, COVERAGE_DECLARED_OUT_OF_SCOPE, COVERAGE_NOT_CHECKED,
+    COVERAGE_NOT_DECLARED, INSERTION_ONLY_VERDICT_ID, MIXED_RUN_VERDICT_ID,
+    OVERALL_RULE, PHASES, PHASE_ORBIT_INJECTION,
+    PHASE_PARKING_PROPAGATION, PHASE_RECOVERY_TOUCHDOWN, PHASE_VERDICTS,
+    REQUIRED_PHASES, VERDICT_FAILED, VERDICT_NOT_CHECKED, VERDICT_PASSED,
+    combine_phase_verdicts, full_mission_gate, phase_coverage, phase_of,
+    phase_verdicts, qualification)
 from orbitopt.mission.two_stage_leo import (
     RecoveryPlan, STATUS_RECOVERY_FAILED, TwoStageLeoScenario, build_from_config,
     reference_scenario, run_two_stage_leo, scenario_warnings)
@@ -368,3 +371,202 @@ def test_pipeline_verify_stage_records_the_full_mission_verdict(tmp_path):
     verify = recorder[VERIFY]
     assert verify.convergence["full_mission_verdict"] == VERDICT_FAILED   # off-target replay
     assert any("full-mission gate" in n for n in verify.notes)
+
+
+# --- the verification coverage gate (E8-03, task #283) -------------------------
+
+def test_required_physical_phases_are_the_full_mission_phases():
+    assert REQUIRED_PHASES == PHASES
+    gate = full_mission_gate(_mission(
+        SimpleNamespace(recovery=None, expected=SimpleNamespace(propagation_result="passed")),
+        []))
+    assert gate["required_phases"] == list(REQUIRED_PHASES)
+    assert gate["coverage"]["phases_required"] == len(PHASES)
+
+
+def test_full_mission_declaration_refuses_the_out_of_scope_bypass():
+    """The bypass this task exists for: a run declared ``full_mission`` may not
+    take the parking-orbit propagation out of scope and pass on the rest."""
+    scenario = SimpleNamespace(recovery=None, full_mission=True,
+                               expected=SimpleNamespace(propagation_result="not_checked"))
+    gate = full_mission_gate(_mission(
+        scenario, [_ck("expected.apoapsis", True), _ck("ascent.insertion_verified", True)]))
+    phases = {p["phase"]: p for p in gate["phases"]}
+    prop = phases[PHASE_PARKING_PROPAGATION]
+    assert prop["applicable"] is True                       # forced in, not honoured
+    assert prop["verdict"] == VERDICT_NOT_CHECKED
+    assert "refused" in prop["reason"] and "full_mission" in prop["reason"]
+    # ... and it caps the verdict and the claim exactly like any unchecked phase
+    assert gate["verdict"] == VERDICT_NOT_CHECKED
+    assert gate["coverage"]["summary"] == "1/3"
+    assert gate["coverage"]["phases"][PHASE_PARKING_PROPAGATION]["status"] == COVERAGE_NOT_CHECKED
+    assert gate["full_mission_declared"] is True
+    qual = gate["qualification"]
+    assert qual["independently_verified"] is False
+    assert PHASE_PARKING_PROPAGATION in qual["reason"]
+
+
+def test_full_mission_declaration_makes_undeclared_recovery_required():
+    scenario = SimpleNamespace(recovery=None, full_mission=True,
+                               expected=SimpleNamespace(propagation_result="passed"))
+    gate = full_mission_gate(_mission(
+        scenario, [_ck("expected.apoapsis", True), _ck("propagation.ran", True)]))
+    phases = {p["phase"]: p for p in gate["phases"]}
+    rec = phases[PHASE_RECOVERY_TOUCHDOWN]
+    assert rec["applicable"] is True and rec["verdict"] == VERDICT_NOT_CHECKED
+    assert "refused" in rec["reason"]
+    assert gate["verdict"] == VERDICT_NOT_CHECKED
+    assert gate["coverage"]["summary"] == "2/3"
+    assert gate["qualification"]["independently_verified"] is False
+
+
+@pytest.mark.parametrize("independent,verified", [("passed", True), ("failed", False),
+                                                  ("not_checked", False), (None, False)])
+def test_the_independent_verification_claim_needs_independent_evidence(independent, verified):
+    """Complete coverage + a passed verdict is necessary but not sufficient:
+    only passing validation-grade evidence can make the claim (E8-01's whole
+    point, gated here)."""
+    scenario = SimpleNamespace(recovery=SimpleNamespace(), full_mission=True,
+                               expected=SimpleNamespace(propagation_result="passed"))
+    checks = [_ck("expected.apoapsis", True), _ck("propagation.report_passed", True),
+              _ck("recovery.landed", True)]
+    gate = full_mission_gate(_mission(scenario, checks), independent_validation=independent)
+    assert gate["verdict"] == VERDICT_PASSED
+    assert gate["coverage"]["summary"] == "3/3" and gate["coverage"]["complete"] is True
+    assert gate["qualification"]["independently_verified"] is verified
+    if not verified:
+        assert "independent" in gate["qualification"]["reason"]
+    else:
+        assert gate["qualification"]["reason"].startswith("independently verified")
+
+
+def test_a_partial_run_never_qualifies_even_fully_green_and_independent():
+    """An expendable mission flies less than the full mission: it may pass its
+    own gate, but its description is not an independently verified *full*
+    mission -- the coverage summary says exactly how far the run reaches."""
+    scenario = SimpleNamespace(recovery=None, expected=SimpleNamespace(
+        propagation_result="not_checked"))
+    gate = full_mission_gate(_mission(
+        scenario, [_ck("expected.apoapsis", True)]), independent_validation="passed")
+    assert gate["verdict"] == VERDICT_PASSED            # E2-03 rule unchanged...
+    assert gate["full_mission_declared"] is False
+    assert gate["coverage"]["summary"] == "1/3"
+    st = gate["coverage"]["phases"]
+    assert st[PHASE_PARKING_PROPAGATION]["status"] == COVERAGE_DECLARED_OUT_OF_SCOPE
+    assert st[PHASE_RECOVERY_TOUCHDOWN]["status"] == COVERAGE_NOT_DECLARED
+    assert gate["qualification"]["independently_verified"] is False
+    assert "full_mission" in gate["qualification"]["reason"]
+
+
+def test_a_red_required_phase_is_checked_but_never_qualifies():
+    """Coverage measures what was verified, not how it turned out: a graded red
+    phase is still checked -- and its verdict blocks the claim by itself."""
+    scenario = SimpleNamespace(recovery=SimpleNamespace(), full_mission=True,
+                               expected=SimpleNamespace(propagation_result="passed"))
+    gate = full_mission_gate(_mission(
+        scenario, [_ck("expected.apoapsis", False, "out_of_tolerance"),
+                   _ck("propagation.ran", True), _ck("recovery.landed", True)]),
+        independent_validation="passed")
+    assert gate["verdict"] == VERDICT_FAILED
+    assert gate["coverage"]["summary"] == "3/3"
+    assert gate["qualification"]["independently_verified"] is False
+    assert "verdict failed" in gate["qualification"]["reason"]
+
+
+def test_phase_coverage_summary_counts_required_phases_only():
+    docs = phase_verdicts([_ck("expected.apoapsis", True), _ck("recovery.landed", False)],
+                          applicable={PHASE_ORBIT_INJECTION: True,
+                                      PHASE_PARKING_PROPAGATION: {
+                                          "reason": "declared out of scope",
+                                          "kind": COVERAGE_DECLARED_OUT_OF_SCOPE},
+                                      PHASE_RECOVERY_TOUCHDOWN: True})
+    cov = phase_coverage(docs)
+    assert cov["summary"] == "2/3"
+    assert cov["phases"][PHASE_PARKING_PROPAGATION]["status"] == COVERAGE_DECLARED_OUT_OF_SCOPE
+    assert cov["phases"][PHASE_RECOVERY_TOUCHDOWN]["status"] == COVERAGE_CHECKED
+    assert cov["complete"] is False
+
+
+def test_qualification_function_reports_every_blocker():
+    cov = phase_coverage(phase_verdicts(
+        [], applicable={p: True for p in PHASES}))
+    qual = qualification(full_mission_declared=False, verdict=VERDICT_NOT_CHECKED,
+                         coverage=cov, independent_validation=None)
+    assert qual["independently_verified"] is False
+    assert "full_mission" in qual["reason"]
+    assert "not checked" in qual["reason"]
+    assert cov["summary"] == "0/3"
+
+
+def test_full_mission_scenario_round_trips_through_the_config(tmp_path):
+    pytest.importorskip("astropy")  # the scene export at the end of the builder
+    from orbitopt.mission.two_stage_leo import scenario_from_config
+
+    scenario = dataclasses.replace(reference_scenario(), full_mission=True)
+    config = {"schemaVersion": "1.0",
+              "mission": {"id": "m07-two-stage-leo", "title": scenario.title,
+                          "kind": "two-stage-leo"},
+              "scenario": scenario.to_dict(), "out_dir": str(tmp_path / "m07")}
+    assert scenario_from_config(dict(config)).full_mission is True
+    # ... and a scenario WITHOUT the declaration round-trips unchanged (E2-03
+    # semantics for every existing scenario are untouched)
+    plain = reference_scenario().to_dict()
+    assert "full_mission" not in plain
+    assert scenario_from_config({**config, "scenario": plain}).full_mission is False
+
+
+def test_full_mission_declaration_with_out_of_scope_propagation_warns():
+    notes = scenario_warnings(dataclasses.replace(
+        reference_scenario(), full_mission=True,
+        expected=dataclasses.replace(reference_scenario().expected,
+                                     propagation_result="not_checked")))
+    assert any("refused" in n and "parking_propagation" in n for n in notes)
+    assert any("full_mission declared with no recovery stage" in n for n in notes)
+    notes = scenario_warnings(dataclasses.replace(reference_scenario(), full_mission=True))
+    assert not any("refused" in n for n in notes)
+
+
+def test_declared_full_mission_gate_survives_the_reference_chain(tmp_path, monkeypatch):
+    from orbitopt.flightlab.contract import read_run
+    from orbitopt.mission_config import load_mission_config
+    from orbitopt.mission.two_stage_leo import scenario_from_config
+    import orbitopt.mission.two_stage_leo as chain
+
+    run = read_run(REPO / 'tests/data/mission/reference/e2-04-frozen-mission/ascent')
+    monkeypatch.setattr(chain, '_acquire_ascent', lambda *args: (run, None, None))
+    _stub_fly_recovery(monkeypatch, success=True)
+    scenario = scenario_from_config(load_mission_config(
+        REPO / 'src/orbitopt/data/mission_two_stage_leo_recovery.yaml'))
+    scenario = dataclasses.replace(scenario, full_mission=True)
+    reference_script = runpy.run_path(str(REPO / 'scripts/e204_reference.py'))
+    with reference_script['frozen_earth_orientation']():
+        mission = run_two_stage_leo(scenario, tmp_path / 'mission', propagate=False)
+
+    gate = mission.report["inputs"]["full_mission"]
+    # the yaml declares propagation out of scope (E2-04): the declaration is
+    # refused, so the full-mission claim cannot bypass the unpropagated orbit
+    assert gate["verdict"] == VERDICT_NOT_CHECKED
+    assert gate["coverage"]["summary"] == "2/3"
+    assert gate["qualification"]["independently_verified"] is False
+    assert PHASE_PARKING_PROPAGATION in gate["qualification"]["reason"]
+    validate_report(mission.report)
+
+
+def test_pipeline_verify_stage_records_coverage_and_qualification(tmp_path):
+    pytest.importorskip("astropy")  # the scene export at the end of the builder
+    from orbitopt.pipeline import VERIFY, StageRecorder
+
+    scenario = _replay(tmp_path, expected=dataclasses.replace(
+        reference_scenario().expected, propagation_result="not_checked"),
+        full_mission=True)
+    config = {"schemaVersion": "1.0",
+              "mission": {"id": "m07-two-stage-leo", "title": scenario.title,
+                          "kind": "two-stage-leo"},
+              "scenario": scenario.to_dict(), "out_dir": str(tmp_path / "m07")}
+    recorder = StageRecorder()
+    build_from_config(dict(config), recorder=recorder)
+    verify = recorder[VERIFY]
+    # the bypass is refused: injection was graded (red), propagation never ran
+    assert verify.convergence["full_mission_coverage"] == "1/3"
+    assert verify.convergence["independently_verified"] is False
+    assert any("coverage 1/3" in n for n in verify.notes)

@@ -69,15 +69,44 @@ claim that every mission phase was validated.
 | Phase | Checks / applicability |
 |---|---|
 | `orbit_injection` | Ascent verdict, station order, staging, mass and expected orbit; always applicable. |
-| `parking_propagation` | M-05 propagation; out of scope only when `expected.propagation_result: not_checked` is declared. |
-| `recovery_touchdown` | Recovery/handoff/touchdown limits; applicable when `recovery:` is declared. |
+| `parking_propagation` | M-05 propagation; out of scope only when `expected.propagation_result: not_checked` is declared (refused when `full_mission` is declared). |
+| `recovery_touchdown` | Recovery/handoff/touchdown limits; applicable when `recovery:` is declared (always applicable when `full_mission` is declared). |
 
 Among applicable phases, **failed** takes precedence over **not_checked**,
 which takes precedence over **passed**. An applicable phase with no checks
-is `not_checked`. A declared out-of-scope phase does not block the verdict.
-The chain's diagnostic `status` and the pipeline's `full_mission_verdict`
-are separate fields; inspect the phase document when a run is only partially
-successful.
+is `not_checked`. On a run that does not declare `scenario.full_mission`, a
+declared out-of-scope phase does not block the verdict. The chain's
+diagnostic `status` and the pipeline's `full_mission_verdict` are separate
+fields; inspect the phase document when a run is only partially successful.
+
+### Verification coverage gate (E8-03, task #283)
+
+A scenario may declare `scenario.full_mission: true`: the run *is* the
+complete physical mission, so all three phases above become **required
+physical phases** and cannot be taken out of scope by declaration:
+
+- `expected.propagation_result: not_checked` is **refused** — the phase
+  stays applicable, records no evidence and reads `not_checked`;
+- a missing `recovery:` block likewise leaves `recovery_touchdown`
+  `not_checked`;
+- an applicable-but-ungraded required phase caps the gate verdict at
+  `not_checked`, so the out-of-scope route can no longer produce an
+  overall pass for a mission that never propagated to its parking orbit
+  or never brought the booster home.
+
+Every gate document carries the coverage of required phases —
+`inputs.full_mission.coverage` lists a per-phase status
+(`checked`, `failed` counts as checked, `not_checked`,
+`declared_out_of_scope`, `not_declared`) and a `summary` like `2/3`, which
+the pipeline verify stage records (`full_mission_coverage`) and echoes in
+its note — and a
+`inputs.full_mission.qualification` block. The report's overall description
+may claim **independently verified** only when `qualification.independently_verified`
+is `true`: the run declared `full_mission`, the gate verdict is `passed`
+with complete `3/3` coverage, and the run's independent-evidence rollup
+(`independent_validation`) passed. A partial run (e.g. an expendable
+mission) never qualifies, however green its applicable phases — its
+coverage summary says exactly how far the run reaches.
 
 The chain preserves `ascent.physics_verified` as independent-model evidence:
 `true` passes the check; `false` fails orbit injection and the full-mission

@@ -73,6 +73,19 @@ run it additionally records ``ascent.insertion_verified`` -- the Gate-B
 conjunction with the touchdown checks excluded -- so a red touchdown cannot
 red-grade the injection phase.
 
+Verification coverage gate (E8-03, task #283)
+---------------------------------------------
+A scenario can declare ``full_mission: true``: the run *is* the complete
+physical mission, so the gate's three phases are required physical phases --
+an ``expected.propagation_result: not_checked`` or a missing ``recovery:``
+block cannot take one out of scope (the declaration is refused, the phase
+recorded ``not_checked``, the verdict capped). Every gate document carries
+the required-phase coverage (``checked/required``, e.g. ``2/3``) and a
+``qualification`` block: the overall description may claim *independently
+verified* only when the run declares the full mission, the gate verdict is
+``passed`` with complete coverage, and the report's own independent-evidence
+rollup passed. See :mod:`orbitopt.mission.phases`.
+
 Two ascent sources, one grading rule
 ------------------------------------
 ``ascent.mode: optimize`` flies the ascent now (needs the pinned
@@ -449,7 +462,12 @@ class TwoStageLeoScenario:
     the ``run_dir`` mode's inputs. ``handoff`` is the M-01 tolerance set used
     for the staging gates and the SECO-to-parking gate, ``elements`` the M-02
     element-agreement tolerances, ``staging_velocity_m_s`` the base velocity
-    gate across a staging boundary (before separation-impulse headroom)."""
+    gate across a staging boundary (before separation-impulse headroom).
+    ``full_mission`` (E8-03, task #283) declares the run the complete physical
+    mission: every required physical phase is then forced into the
+    full-mission gate, out-of-scope declarations cannot bypass one, and the
+    report may claim independent verification only with complete coverage and
+    passing independent evidence."""
 
     mission_id: str
     title: str
@@ -469,6 +487,7 @@ class TwoStageLeoScenario:
     propagation: PropagationPlan = field(default_factory=PropagationPlan)
     expected: ExpectedResults = field(default_factory=ExpectedResults)
     recovery: RecoveryPlan | None = None
+    full_mission: bool = False
     coast_orbits: float = 2.0
     earth_texture: bool = True
 
@@ -495,6 +514,7 @@ class TwoStageLeoScenario:
             raise ValueError(f"scenario.coast_orbits must be finite and >= 0, got {coast!r}")
         object.__setattr__(self, "coast_orbits", coast)
         object.__setattr__(self, "earth_texture", bool(self.earth_texture))
+        object.__setattr__(self, "full_mission", bool(self.full_mission))
         object.__setattr__(self, "ascent", dict(self.ascent or {}))
         if self.recovery is not None:
             if self.ascent_mode == "optimize" and self.recovery.spec is None:
@@ -546,6 +566,8 @@ class TwoStageLeoScenario:
         }
         if self.recovery is not None:
             doc["recovery"] = self.recovery.to_dict()
+        if self.full_mission:  # written only when declared, like recovery (E8-03)
+            doc["full_mission"] = True
         return doc
 
     @staticmethod
@@ -608,6 +630,7 @@ class TwoStageLeoScenario:
             expected=ExpectedResults.from_dict(doc.get("expected")),
             recovery=None if doc.get("recovery") is None else RecoveryPlan.from_dict(
                 doc["recovery"]),
+            full_mission=bool(doc.get("full_mission", False)),
             coast_orbits=float(scene.get("coast_orbits", 2.0)),
             earth_texture=bool(scene.get("earth_texture", True)))
 
@@ -672,6 +695,16 @@ def scenario_warnings(scenario: TwoStageLeoScenario) -> list[str]:
         notes.append("full-mission gate: no recovery stage declared -- the recovery_touchdown "
                      "phase is not applicable and the full-mission verdict grades only the "
                      "phases this mission flies (E2-03)")
+    if scenario.full_mission:
+        if scenario.expected.propagation_result == "not_checked":
+            notes.append("full_mission declared with expected.propagation_result "
+                         "'not_checked': parking_propagation is a required physical phase -- "
+                         "the out-of-scope declaration is refused and the phase stays "
+                         "not_checked (E8-03, task #283)")
+        if scenario.recovery is None:
+            notes.append("full_mission declared with no recovery stage: recovery_touchdown is "
+                         "a required physical phase -- it stays not_checked, caps the "
+                         "full-mission verdict and blocks independent verification (E8-03)")
     return notes
 
 
@@ -1595,7 +1628,8 @@ def mission_report(mission: TwoStageLeoMission) -> dict:
                          "parking_orbit": mission.parking},
             "propagation": mission.propagation,
             "recovery": mission.recovery,
-            "full_mission": full_mission_gate(mission),
+            "full_mission": full_mission_gate(
+                mission, independent_validation=status["independent_validation"]["result"]),
             "not_assessed": mission.not_assessed,
             "child_reports": child_reports,
         },
@@ -1662,11 +1696,20 @@ def build_from_config(config: dict, recorder=None) -> dict:
         st.convergence.update({"converged": mission.status == STATUS_OK,
                                "mission_status": mission.status,
                                "full_mission_verdict": mission.full_mission.get("verdict"),
+                               "full_mission_coverage": (mission.full_mission.get("coverage")
+                                                         or {}).get("summary"),
+                               "independently_verified": bool((mission.full_mission.get(
+                                   "qualification") or {}).get("independently_verified")),
                                "checks_passed": sum(1 for c in mission.checks if c.passed),
                                "checks_total": len(mission.checks)})
         st.notes.append("full-mission gate: " + mission.full_mission.get("verdict", "not_checked")
                         + " (" + ", ".join(f"{p['phase']}={p['verdict']}"
-                                           for p in mission.full_mission.get("phases", [])) + ")")
+                                           for p in mission.full_mission.get("phases", []))
+                        + "; coverage " + str((mission.full_mission.get("coverage") or {})
+                                             .get("summary", "?"))
+                        + "; independently_verified="
+                        + str(bool((mission.full_mission.get("qualification") or {})
+                                   .get("independently_verified"))) + ")")
         st.notes.extend(f"not assessed: {n['id']} ({n['reason']})" for n in mission.not_assessed)
 
     recorder.skip(SELECT, "one frozen reference mission -- nothing to select")
