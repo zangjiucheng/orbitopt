@@ -108,6 +108,12 @@ __all__ = [
 
 _OMEGA = np.array([0.0, 0.0, OMEGA_EARTH_RAD_S])
 
+#: "same instant" tolerance for the held-command re-read of
+#: :meth:`UpperStageGuidance.dcm_from_state` (E6-04, task #276): the RK4 step
+#: boundary times carry at most round-off of a few ulps at the 1e4 s scale,
+#: far below a physical control interval.
+_GUIDANCE_T_EPS_S = 1e-9
+
 
 # --------------------------------------------------------------------------
 # the target orbit and its tolerance declaration
@@ -375,14 +381,23 @@ class UpperStageGuidance:
         dh = (heading_deg - vel_h + 180.0) % 360.0 - 180.0
         heading_deg = (vel_h + min(max(dh, -self.spec.command_heading_limit_deg),
                                   self.spec.command_heading_limit_deg)) % 360.0
-        if self._cmd_hp is not None and float(t_s) > float(self._cmd_t_s):
-            dt = float(t_s) - float(self._cmd_t_s)
-            max_step = self.spec.command_slew_rate_deg_s * dt
-            last_h, last_p = self._cmd_hp
-            dh = (heading_deg - last_h + 180.0) % 360.0 - 180.0
-            heading_deg = (last_h + math.copysign(min(abs(dh), max_step), dh)) % 360.0
-            pitch_deg = last_p + math.copysign(
-                min(abs(pitch_deg - last_p), max_step), pitch_deg - last_p)
+        if self._cmd_hp is not None:
+            if float(t_s) <= float(self._cmd_t_s) + _GUIDANCE_T_EPS_S:
+                # E6-04 (task #276): the law already answered this instant --
+                # a re-read at a held time (the plant's sampler of the sample
+                # grid, or any caller that evaluates twice at one time) gets
+                # the HELD command back; it must neither advance the slew
+                # limiter by dt=0 nor re-seed it from the raw un-slewed
+                # pointing.
+                heading_deg, pitch_deg = self._cmd_hp
+            else:
+                dt = float(t_s) - float(self._cmd_t_s)
+                max_step = self.spec.command_slew_rate_deg_s * dt
+                last_h, last_p = self._cmd_hp
+                dh = (heading_deg - last_h + 180.0) % 360.0 - 180.0
+                heading_deg = (last_h + math.copysign(min(abs(dh), max_step), dh)) % 360.0
+                pitch_deg = last_p + math.copysign(
+                    min(abs(pitch_deg - last_p), max_step), pitch_deg - last_p)
         self._cmd_hp = (heading_deg, pitch_deg)
         self._cmd_t_s = float(t_s)
         lat_deg, lon_deg, _ = frames.ecef_to_geodetic(r)
