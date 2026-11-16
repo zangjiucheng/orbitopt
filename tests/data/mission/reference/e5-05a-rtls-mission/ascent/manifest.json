@@ -7,7 +7,7 @@
     "opentsiolkovsky-cli": "1.0.0"
   },
   "backend": "opentsiolkovsky",
-  "git_sha": "8d3baf097933f6cbd947e8c4cff4eb376c202caa",
+  "git_sha": "4e1090cfe7800b8d42cab05a33f89d011e71659a",
   "created_utc": "2026-11-10T12:00:00Z",
   "assumptions": [
     "OpenTsiolkovsky 1.0.0 (MIT, external binary -- not vendored; see NOTICE; openTsiolkovsky-v1.0.0-<platform>.tar.gz, pinned per-platform SHA-256 digests live in scripts/fetch_opentsiolkovsky.py)",

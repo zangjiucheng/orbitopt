@@ -1,6 +1,6 @@
 {
   "schema": "e5-05a-rtls-mission-provenance-v1",
-  "generated_utc": "2026-11-16T18:54:35+00:00",
+  "generated_utc": "2026-11-16T20:06:29+00:00",
   "generator": "scripts/e505a_reference.py (OpenTsiolkovsky 1.1.0 via the flightlab adapter)",
   "vehicle": "src/orbitopt/data/flightlab/vehicles/synthetic_two_stage_rtls.yaml",
   "ascent_target": "scenarios/leo_two_stage_rtls.yaml",
@@ -29,5 +29,5 @@
     "mass_kg": 136700.41867219776
   },
   "adr": "docs/adr/flightlab-0008",
-  "note": "Replayed by mission_two_stage_leo_rtls.yaml (ascent mode run_dir). The recovery chain plans from THIS computed separation state -- read out with the pipeline's own separation_state_ecef, not a textbook or illustrative one."
+  "note": "Replayed by mission_two_stage_leo_rtls.yaml (ascent mode run_dir). The recovery chain plans from THIS computed separation state -- read out with the pipeline's own separation_state_ecef, not a textbook or illustrative one. Re-flown after E5-05b (#286) added restart/coast: the reference ascent stays single-burn because a coast gap + re-ignition still misses the band (rp ~-0.4 km vs the single-burn ~-0.7 km floor) -- best computed orbit is the single burn, so the shipped reference is unchanged (ADR-0008 F9)."
 }
