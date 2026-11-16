@@ -401,6 +401,7 @@ def optimize_ascent(target: FlightTarget, vehicle_path: str | Path,
                    generations: int = 60, population: int = 48,
                    workers: int | None = None, local: bool = True,
                    refly: bool = True, timeout_s: float = 300.0,
+                   run_recovery: bool = True,
                    derive_window: bool = True,
                    window_days: float = DEFAULT_WINDOW_DAYS,
                    sensitivity_offsets_s: Sequence[float] | None = (-60.0, 60.0)
@@ -409,7 +410,10 @@ def optimize_ascent(target: FlightTarget, vehicle_path: str | Path,
     plus the ``run`` object. Raises :class:`OptimizeAbort` (never writes a
     run) when no candidate ever produced a valid flight, and whatever
     ``simulate`` raises for pipeline trouble. ``target_path`` is only used to
-    stamp provenance into ``optimization.json``.
+    stamp provenance into ``optimization.json``. ``run_recovery=False`` keeps
+    the winner's re-flight ascent-only even when the target declares a
+    recovery -- the mission chain (``orbitopt.mission.two_stage_leo``) then
+    flies the recovery itself, over this ascent, exactly once.
 
     FL-203 (RAAN-constrained targets): with ``derive_window`` the liftoff
     epoch becomes the first in-plane node pass from
@@ -478,7 +482,7 @@ def optimize_ascent(target: FlightTarget, vehicle_path: str | Path,
         prog, _doc = udp.decode(x_best)
         derived = udp.write_vehicle(x_best, out / "vehicle")
         run = simulate(target, derived, out, attitude_program=prog,
-                       refly=refly, timeout_s=timeout_s)
+                       refly=refly, timeout_s=timeout_s, run_recovery=run_recovery)
         verdict = run.verification
 
         slot_checks = udp.eq_check_ids + _ap._INEQ_CHECKS

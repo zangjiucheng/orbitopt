@@ -1076,6 +1076,12 @@ def _acquire_ascent(scenario: TwoStageLeoScenario, out: Path):
         date_utc=scenario.date_utc, raan_deg=scenario.raan_deg,
         window_days=scenario.window_days, out_dir=out / "launch",
         recovery=None if scenario.recovery is None else dict(scenario.recovery.spec or {}),
+        # E5-05 (task #272): with a recovery declared, the pipeline's own
+        # winner re-flight must stay ascent-only -- the recovery this mission
+        # grades is the one _fly_recovery_stage flies below (with the
+        # scenario's plan options and the E5-02 separation drive), over this
+        # very ascent, exactly once.
+        run_recovery=scenario.recovery is None,
         **dict(scenario.ascent))
     if pipeline.ascent_run_dir is None:
         # No flight at all (infeasible window, optimizer abort): there is no
