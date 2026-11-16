@@ -64,11 +64,12 @@ def main() -> None:
         "note": "Replayed by mission_two_stage_leo_rtls.yaml (ascent mode run_dir). "
                 "The recovery chain plans from THIS computed separation state -- "
                 "read out with the pipeline's own separation_state_ecef, not a "
-                "textbook or illustrative one. Re-flown after E5-05b (#286) added "
-                "restart/coast: the reference ascent stays single-burn because a "
-                "coast gap + re-ignition still misses the band (rp ~-0.4 km vs the "
-                "single-burn ~-0.7 km floor) -- best computed orbit is the single "
-                "burn, so the shipped reference is unchanged (ADR-0008 F9).",
+                "textbook or illustrative one. Re-flown after E5-05d (#288) closed "
+                "F9: the reference ascent is now the redesigned 128 t restartable "
+                "upper stage with a coast gap + re-ignition circularisation, "
+                "inserting at rp 281.8 km / ra 296.1 km inside the 250 km band on "
+                "the same run that carries the 105.4 t stage-1 RTLS reserve "
+                "(ADR-0008 F9 closure).",
     }
     (FIX / "PROVENANCE.json").write_text(json.dumps(prov, indent=2) + "\n",
                                          encoding="utf-8")
