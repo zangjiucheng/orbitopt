@@ -45,12 +45,15 @@ PYGENO = importlib.util.find_spec("pygmo") is not None
 #: The synthetic E2-04 ascent fixture, spelled in pieces so the consumer scan
 #: below matches its CONSUMERS, not this guard.
 _E204_FIXTURE = "e2-04-frozen-" "mission"
-#: Files allowed to consume the frozen synthetic ascent (the E2-04 fast tests
-#: and the builder that produced the fixture -- the exception E5-01 grants).
+#: Files allowed to consume the frozen synthetic ascent (the E2-04 fast tests,
+#: the builder that produced the fixture, and the E5-03 cross-environment
+#: e2e that copies the recorded run into a sealed envelope -- the exceptions
+#: E5-01 grants).
 _E204_EXCEPTION_FILES = {
     "scripts/e204_reference.py",
     "tests/test_e204_reference.py",
     "tests/test_mission_phases.py",
+    "tests/test_crossenv.py",
 }
 
 
