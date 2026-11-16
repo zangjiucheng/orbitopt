@@ -23,7 +23,7 @@
     {
       "id": "max-q-within-limit",
       "passed": true,
-      "value": 39110.812569122776,
+      "value": 38364.241018467124,
       "limit": 60000.0,
       "unit": "Pa",
       "reason_code": ""
@@ -31,7 +31,7 @@
     {
       "id": "max-accel-within-limit",
       "passed": false,
-      "value": 25.639228496633788,
+      "value": 38.92335215377303,
       "limit": 15.0,
       "unit": "g",
       "reason_code": "max_accel_exceeded"
@@ -55,7 +55,7 @@
     {
       "id": "insertion-above-atmosphere",
       "passed": false,
-      "value": -903532.8722817181,
+      "value": 65020.88214975223,
       "limit": 120000.0,
       "unit": "m",
       "reason_code": "PERIAPSIS_IN_ATMOSPHERE"
@@ -63,7 +63,7 @@
     {
       "id": "insertion-periapsis-above-minimum",
       "passed": false,
-      "value": -903532.8722817181,
+      "value": 65020.88214975223,
       "limit": 230000.0,
       "unit": "m",
       "reason_code": "INSERTION_PERIAPSIS_BELOW_MINIMUM"
@@ -71,7 +71,7 @@
     {
       "id": "insertion-periapsis-within-tolerance",
       "passed": false,
-      "value": -903532.8722817181,
+      "value": 65020.88214975223,
       "limit": 250000.0,
       "unit": "m",
       "reason_code": "INSERTION_PERIAPSIS_OUT_OF_TOLERANCE"
@@ -79,7 +79,7 @@
     {
       "id": "insertion-apoapsis-within-tolerance",
       "passed": false,
-      "value": 4658693.940053267,
+      "value": 277724.30616541766,
       "limit": 250000.0,
       "unit": "m",
       "reason_code": "INSERTION_APOAPSIS_OUT_OF_TOLERANCE"
@@ -87,7 +87,7 @@
     {
       "id": "insertion-inclination-within-tolerance",
       "passed": false,
-      "value": 47.96057106395299,
+      "value": 50.96911999441177,
       "limit": 51.6,
       "unit": "deg",
       "reason_code": "INSERTION_INCLINATION_OUT_OF_TOLERANCE"

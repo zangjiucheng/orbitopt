@@ -177,8 +177,30 @@ Findings F1-F10 (driving the decision):
     reserve-carrying separation state needs a vehicle change (more upper-stage
     delta-v / higher thrust-to-weight for turn, or a higher band such as the
     400 km option the same capability now enables), tracked as the real follow-up
-    for #272. The single-burn ascent stays the shipped reference because it is
-    the best computed orbit; the reference re-bake only records this finding.
+     for #272. The single-burn ascent stays the shipped reference because it is
+     the best computed orbit; the reference re-bake only records this finding.
+   - **F9 closure (E5-05d, task #288) — the vehicle redesign landed and the
+     band closed.** The shipped catalog vehicle is redesigned per the F9
+     follow-up: stage 2 becomes a 128 t wet / 8.5 t dry restartable upper stage
+      at Isp 380 s with a 14 MN boost leg shortened to 17 s, a declared main-burn
+      cutoff at 224.5 s, a 155 s ballistic coast and a 9.65 MN / +1.7 deg
+      re-ignition circularisation burn (single final `seco` at 396.2 s, burnout
+      on depletion). The computed ascent now reaches
+      **rp 281.8 km / ra 296.1 km at SECO** — the 250 km insertion band closes on
+     the same computed run that carries the stage-1 reserve, and
+     `test_seco_insertion_band` is promoted from strict-xfail to a hard
+     assertion. The redesign couples back into stage 1: the +43 t stage-2 stack
+     at liftoff sank MECO by ~330 m/s and drained the *landing* propellant
+     reserve to 3 t (below the 10 t gate). The stage-1 engine therefore moves to
+     Isp 330 s at unchanged mass flow (11 -> 11.702 MN, 3615 kg/s, cutoff still
+     134 s — the E5-05a declared-cutoff reserve mechanism is untouched: 484.4 t
+     burned, 135.4 t computed SEP mass = 105.4 t reserve), restoring MECO energy
+     (2.4 km/s) and the touchdown reserve (13.2 t, matching E5-05a). Campaign:
+     19-dim differential-evolution + hand-lattice searches on the restart-schedule
+      knobs (boost-leg length, coast start/duration, re-ignition elevation and
+      burn throttle), corner closed at rp 235.6 / ra 257.1 before the stage-1
+      re-engineering shifted the coast geometry; the schedule was then re-tuned
+      around a re-ignition-elevation ladder to the shipped rp 281.8 / ra 296.1.
 - **F10 — the corridor referee does not accept computed MECOs.** With the
   reserve question answered (the gate passes on every computed state), the
   landing gate's *only* blocker is the FL-301 corridor: engines-on at 3 km

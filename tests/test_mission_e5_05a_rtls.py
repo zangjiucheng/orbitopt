@@ -15,11 +15,12 @@ sealed E2-04 reference files are untouched.
 Slow tests (pinned OpenTsiolkovsky + gfold): the vehicle FLIES LIVE -- MECO
 carries the computed reserve, the RTLS chain plans from THAT separation
 state and grades the reserve gate green, and the packaged mission chain
-replays the recorded flight end to end. Two graded gates stay red and are
-marked xfail with the ADR flightlab-0008 findings they trace to: the
-insertion band (F9, backend turning authority) and the landing corridor
-(F10, corridor referee vs computed-MECO energies) -- both capability limits
-demonstrated across the whole tuned campaign, not budget shortfalls. E2-04
+replays the recorded flight end to end. The insertion band (F9) CLOSED in
+E5-05d (#288): the redesigned stage 2 + coast/re-ignition schedule reaches
+rp 281.8 km / ra 296.1 km at SECO and the gate is now a hard assertion. The
+landing corridor (F10, corridor referee vs computed-MECO energies) stays
+xfail -- a capability limit demonstrated across the whole tuned campaign,
+not a budget shortfall. E2-04
 keeps ownership of the fast synthetic-integration test (E5-01 exception);
 this file is the fully-computed E5-05a reference.
 """
@@ -176,12 +177,13 @@ def _elements_at(run, body: str, epoch_utc):
 #: neither is a vehicle-budget failure -- both are capability limits of the
 #: pinned OT 1.1.0 commanded-attitude backend / the FL-301 corridor referee,
 #: demonstrated across every tuned family (campaign table in the ADR).
-F9 = ("F9: the OT commanded-attitude backend cannot close the insertion band "
-      "from a reserve-carrying separation state; E5-05b added restart/coast "
-      "(a real coast gap + stage-2 re-ignition) but the fixed vehicle still "
-      "misses the band (perigee floor ~-0.7 km single-burn, ~-0.4 km with the "
-      "best coast/restart schedule) -- residual is vehicle turning authority, "
-      "not backend capability (docs/adr/flightlab-0008)")
+F9 = ("F9 (CLOSED, E5-05d #288): the OT commanded-attitude backend cannot "
+      "close the insertion band on the FIXED E5-05a vehicle (perigee floor "
+      "~-0.7 km single-burn, ~-0.4 km with the best coast/restart schedule); "
+      "the E5-05d upper-stage redesign (128 t wet / 8.5 t dry stage-2, Isp "
+      "380 s, 14 MN boost leg + coast + re-ignition circularisation) closes "
+      "the band on the same computed reserve-carrying separation state "
+      "(rp 281.8 km / ra 296.1 km, docs/adr/flightlab-0008)")
 F10 = ("F10: the FL-301 corridor referee (<350 m/s at 3 km) is unreachable "
        "from any computed MECO >= ~1.6 km/s with the FL-302 7-parameter "
        "script, at any reserve (docs/adr/flightlab-0008)")
@@ -211,15 +213,14 @@ def test_live_ascent_computes_reserve(live_flight):
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason=F9)
 @pytest.mark.skipif(not _has_stack(), reason="needs the OpenTsiolkovsky binary + pygmo")
 def test_seco_insertion_band(live_flight):
-    """Insertion closes the 250 km band. strict-xfail (F9): E5-05b added a
-    restart/coast path to the backend and this gate is re-asserted against the
-    single-burn reference; the vehicle's turning authority still floors the
-    perigee ~-0.7 km, so the band stays red. strict=True locks the expected
-    failure -- a future vehicle redesign that closes the band flips this to
-    XPASS and must be promoted to a hard pass (#272 follow-up)."""
+    """Insertion closes the 250 km band -- HARD assertion (F9 closed in
+    E5-05d #288): the redesigned upper stage + restart/coast schedule reaches
+    rp 281.8 km / ra 296.1 km at SECO on the SAME computed run that carries
+    the stage-1 reserve (test_live_ascent_computes_reserve). The strict-xfail
+    of E5-05b/E5-05c is promoted here per the ADR flightlab-0008 F9
+    resolution."""
     target = load_target(SCENARIO)
     elems = _elements_at(live_flight, "stage2", target.mission.epoch_utc)
     assert elems["rp"] > 230_000.0, elems
@@ -269,16 +270,16 @@ def test_recovery_landing_gate_on_the_computed_state(live_flight):
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(strict=False, reason=F9 + " / " + F10)
+@pytest.mark.xfail(strict=False, reason=F10)
 @pytest.mark.skipif(not FIXTURE.is_dir(),
                     reason="recorded-flight fixture baked by scripts/e505a_reference.py")
 @pytest.mark.skipif(not _has_gfold(), reason="needs gfold for the landing leg")
 def test_packaged_mission_chain_replays_the_recorded_flight(tmp_path):
     """The packaged mission (run_dir replay of the recorded OT flight,
-    drive_from_separation) chains the full dual-branch mission; the two
-    graded gates it cannot pass are exactly F9 (insertion band) and F10
-    (landing corridor) -- propagation stays not_checked (E2-04 environment
-    reason)."""
+    drive_from_separation) chains the full dual-branch mission; the insertion
+    band passes since E5-05d (#288) and the only graded gate it still cannot
+    pass is F10 (landing corridor) -- propagation stays not_checked (E2-04
+    environment reason)."""
     from orbitopt.mission.two_stage_leo import (
         STATUS_OK, run_two_stage_leo, scenario_from_config)
 
