@@ -118,6 +118,9 @@ __all__ = [
     "compare_tracks",
     "register_backend",
     "run_cross_model",
+    "six_dof_ascent",
+    "six_dof_track_from_run",
+    "three_dof_ascent",
 ]
 
 G0_M_S2 = 9.80665
@@ -144,7 +147,7 @@ THRESHOLD_METRICS = ("position_m", "velocity_m_s", "mass_kg",
                      "raan_deg", "argument_of_perigee_deg")
 
 #: Defaults, deliberately loose compared to what the models actually agree
-#: to (FL-403 measured 51 m / 2 m/s MECO deviation between JSBSim and the
+#: to (FL-403 measured 52 m / 2 m/s MECO deviation between JSBSim and the
 #: OT reference; point-mass coast pairs agree to centimetres): the gate
 #: catches a *broken* cross-model stack, not the last centimetre of physics.
 #: ``None`` = record the metric, do not gate it.
@@ -169,6 +172,14 @@ DEFAULT_PROGRAM: tuple[AttitudePoint, ...] = (
     AttitudePoint(t_s=105.0, azimuth_deg=90.0, elevation_deg=18.0),
 )
 
+#: The E6-01 (#273) aligned spike engine: 1.880 MN vacuum at Isp 320 s is a
+#: choked flow of ``T/(Isp*g0)`` = 599.083 kg/s. That flow would empty the 60 t
+#: load in 100.153 s; the scenario commands MECO at 100 s on *every* backend
+#: (the 6-DOF adapter cuts the throttle, the 3-DOF RHS stops thrusting), so the
+#: cutoff is a command both sides share rather than a tank-capacity accident.
+_SPIKE_THRUST_VAC_N = 1_880_000.0
+_SPIKE_MDOT_KG_S = _SPIKE_THRUST_VAC_N / (320.0 * G0_M_S2)
+
 
 # ---------------------------------------------------------------------------
 # Scenario
@@ -177,10 +188,16 @@ DEFAULT_PROGRAM: tuple[AttitudePoint, ...] = (
 @dataclass(frozen=True)
 class CrossModelScenario:
     """One spike-stage ascent + coast scenario flown by every backend.
-    Defaults mirror the FL-403 3-DOF/6-DOF comparison fixture: 10 t dry +
-    60 t propellant, Isp 320 s, 600 kg/s, 100 s burn, MECO event at T+105 s,
-    equator launch due east, zero aerodynamics on every side (so the
-    comparison is thrust + gravity only)."""
+     Defaults mirror the FL-403 3-DOF/6-DOF comparison fixture: 10 t dry +
+     60 t propellant, Isp 320 s, the choked 599.083 kg/s of the 1.880 MN spike
+     engine, commanded MECO at T+100 s (which leaves 91.7 kg of the load in
+     the tanks), MECO event at T+105 s, equator launch due east, zero
+     aerodynamics on every side (so the comparison is thrust + gravity only).
+     The 2 m^2 nozzle exit area is the E6-01 (#273) aligned one: the ascent
+     RHS debits ``A_exit * p_ambient`` from the vacuum thrust, exactly as the
+     JSBSim engine/nozzle pair and the native plant do, and the 6-DOF adapter
+     cuts its throttle at ``burn_end_s`` instead of relying on tank depletion,
+     so all sides shut down on the same command."""
 
     name: str = "spike_stage_meco_coast"
     epoch_mjd2000: float = 9497.0  # 2026-01-01T00:00:00Z (the FL-403 target epoch)
@@ -190,7 +207,8 @@ class CrossModelScenario:
     dry_mass_kg: float = 10_000.0
     propellant_mass_kg: float = 60_000.0
     isp_s: float = 320.0
-    mdot_kg_s: float = 600.0
+    mdot_kg_s: float = _SPIKE_MDOT_KG_S
+    nozzle_exit_area_m2: float = 2.0
     burn_start_s: float = 0.0
     burn_end_s: float = 100.0
     meco_t_s: float = 105.0  # MECO *event* (5 s of coast after burnout, FL-403)
@@ -226,6 +244,13 @@ class CrossModelScenario:
         """Vacuum thrust, same definition as the spike stage: mdot * Isp * g0."""
         return self.mdot_kg_s * self.isp_s * G0_M_S2
 
+    def thrust_at(self, ambient_pressure_pa: float) -> float:
+        """Axial thrust at ambient static pressure (E6-01, #273): the choked
+        vacuum thrust debited by ``exit_area * p`` -- the same law the JSBSim
+        engine/nozzle pair and the native rigid-body plant use. Mass flow is
+        choked, so it does not follow the debit."""
+        return self.thrust_n - self.nozzle_exit_area_m2 * max(float(ambient_pressure_pa), 0.0)
+
     def mass_at(self, t: float) -> float:
         """Wet mass at mission time ``t`` (constant mdot during the burn, then dry)."""
         burned = self.mdot_kg_s * (min(max(float(t), self.burn_start_s), self.burn_end_s)
@@ -254,6 +279,8 @@ class CrossModelScenario:
                 "mdot_kg_s": self.mdot_kg_s, "burn_start_s": self.burn_start_s,
                 "burn_end_s": self.burn_end_s, "meco_t_s": self.meco_t_s,
                 "coast_duration_s": self.coast_duration_s, "thrust_n": self.thrust_n,
+                "nozzle_exit_area_m2": self.nozzle_exit_area_m2,
+                "thrust_pad_n": self.thrust_at(101_325.0),
                 "ascent_j2": bool(self.ascent_j2), "coast_j2": bool(self.coast_j2),
                 "program": [{"t_s": p.t_s, "elevation_deg": p.elevation_deg,
                              "azimuth_deg": p.azimuth_deg} for p in self.program]}
@@ -490,10 +517,12 @@ def _to_gcrs_pair(states_ecef: np.ndarray, t: np.ndarray, epoch: datetime):
     return to_gcrs(states_ecef[:, :3], states_ecef[:, 3:], "ECEF", epoch, t)
 
 
-def _produce_three_dof(scenario: CrossModelScenario):
+def _produce_three_dof(scenario: CrossModelScenario, *, thrust_factor: float = 1.0,
+                       rtol: float = 1e-10, atol: float = 1e-5):
     from scipy.integrate import solve_ivp
 
-    from orbitopt.flightlab.frames import geodetic_to_ecef
+    from orbitopt.flightlab.atmosphere import pressure_pa
+    from orbitopt.flightlab.frames import ecef_to_geodetic, geodetic_to_ecef
 
     r0 = np.asarray(geodetic_to_ecef(scenario.latitude_deg, scenario.longitude_deg,
                                      scenario.altitude_m), dtype=float).reshape(3)
@@ -509,7 +538,11 @@ def _produce_three_dof(scenario: CrossModelScenario):
         a = _gravity_point_mass(r, scenario.ascent_j2)
         a = a - 2.0 * np.cross(omega, v) - np.cross(omega, np.cross(omega, r))
         if b0 <= t < b1:
-            a = a + (scenario.thrust_n / scenario.mass_at(t)) * \
+            # E6-01 (#273): the same ambient back-pressure debit the 6-DOF
+            # plant pays -- US76 static pressure at the vehicle's geodetic
+            # height, mass flow choked so only the thrust follows it.
+            thrust = scenario.thrust_at(pressure_pa(float(ecef_to_geodetic(r)[2])))
+            a = a + (thrust * thrust_factor / scenario.mass_at(t)) * \
                 _thrust_direction_ecef(scenario, r, t)
         return np.concatenate([v, a])
 
@@ -517,7 +550,7 @@ def _produce_three_dof(scenario: CrossModelScenario):
     if t_ascent[-1] < meco - 1e-6:
         t_ascent = np.append(t_ascent, meco)
     sol = solve_ivp(rhs_ascent, (0.0, meco), np.concatenate([r0, v0]), t_eval=t_ascent,
-                    method="DOP853", rtol=1e-10, atol=1e-5)
+                    method="DOP853", rtol=rtol, atol=atol)
     if not sol.success:
         raise RuntimeError(f"3-DOF ascent integration failed: {sol.message}")
     t = np.asarray(sol.t, dtype=float)
@@ -565,6 +598,21 @@ def _from_gcrs_pair(r_gcrs, v_gcrs, t: np.ndarray, epoch: datetime):
     return from_gcrs(r_gcrs, v_gcrs, "ECEF", epoch, t)
 
 
+def three_dof_ascent(scenario: CrossModelScenario | None = None, *,
+                     thrust_factor: float = 1.0,
+                     rtol: float = 1e-10, atol: float = 1e-5) -> ModelTrack:
+    """The 3-DOF ascent track alone, under probe overrides -- the E8-02
+    (task #282) discrepancy-budget hook. ``thrust_factor`` scales the axial
+    thrust at every altitude (the mass flow is choked and stays put, as the
+    E6-01 law demands, so this is a pure engine-law perturbation);
+    ``rtol``/``atol`` replace the DOP853 tolerances. Both default to exactly
+    what :func:`run_cross_model` flies, so the unprobed return is the
+    harness's own reference ascent."""
+    ascent, _ = _produce_three_dof(scenario or CrossModelScenario(),
+                                   thrust_factor=thrust_factor, rtol=rtol, atol=atol)
+    return ascent
+
+
 # ---------------------------------------------------------------------------
 # 6-DOF backend (JSBSim spike stage, FL-403 PID tracking of the 3-DOF program)
 # ---------------------------------------------------------------------------
@@ -580,18 +628,46 @@ def _produce_six_dof(scenario: CrossModelScenario, context: dict):
     if three is None or three.ascent is None:
         raise RuntimeError("the six_dof backend flies closed-loop on the 3-DOF program; "
                            "include 'three_dof' in the backend list")
-    reference = _tracking_reference(scenario, three.ascent)
+    return six_dof_ascent(scenario, reference=three.ascent), None
+
+
+def six_dof_ascent(scenario: CrossModelScenario | None = None, *,
+                   reference: ModelTrack | None = None,
+                   sim=None, gains=None) -> ModelTrack:
+    """The 6-DOF ascent track alone, under probe overrides -- the E8-02
+    (task #282) discrepancy-budget hook. ``reference`` is the 3-DOF ascent the
+    loop tracks (default: the unprobed 3-DOF reference, produced here);
+    ``sim`` replaces the JSBSim executor (a different airframe model, e.g.
+    the production ``spike_stage_aero`` coefficients); ``gains`` replaces the
+    FL-403 PID gains. All default to exactly what :func:`run_cross_model`
+    flies, so the unprobed return is the harness's own 6-DOF ascent -- same
+    IC, same reference bridging, same decimation."""
+    scenario = scenario or CrossModelScenario()
+    if reference is None:
+        reference = three_dof_ascent(scenario)
 
     from orbitopt.flightlab.sixdof.jsbsim_driver import InitialConditions
     from orbitopt.flightlab.sixdof.tracking import AttitudeProgram, run_tracking_spike
 
     result = run_tracking_spike(
-        reference, AttitudeProgram.from_points(list(scenario.program)),
-        scenario.meco_t_s, dt_s=0.01,
+        _tracking_reference(scenario, reference),
+        AttitudeProgram.from_points(list(scenario.program)),
+        scenario.meco_t_s, dt_s=0.01, cutoff_t_s=scenario.burn_end_s,
         ic=InitialConditions(lat_geod_deg=scenario.latitude_deg,
                              lon_deg=scenario.longitude_deg,
                              alt_m=scenario.altitude_m,
-                             pitch_deg=90.0, heading_deg=90.0, roll_deg=-90.0))
+                             pitch_deg=90.0, heading_deg=90.0, roll_deg=-90.0),
+        sim=sim, gains=gains)
+    return six_dof_track_from_run(result, scenario)
+
+
+def six_dof_track_from_run(result, scenario: CrossModelScenario,
+                           label: str = "six_dof") -> ModelTrack:
+    """Bridge a ``run_tracking_spike`` result to a GCRS :class:`ModelTrack`
+    (the 6-DOF adapter's conversion, shared by the ``six_dof`` backend and
+    the E8-02 discrepancy-budget probes so probe and baseline are bridged
+    exactly alike): samples up to MECO, decimated to ~10 Hz with the final
+    sample kept, ECEF states bridged at the scenario epoch."""
     up_to_meco = [s for s in result.sim.samples if s["t_s"] <= scenario.meco_t_s + 1e-9]
     if len(up_to_meco) < 2:
         raise RuntimeError("JSBSim produced fewer than two samples up to MECO")
@@ -608,7 +684,7 @@ def _produce_six_dof(scenario: CrossModelScenario, context: dict):
                      for s in rows], dtype=float)
     mass = np.array([s["mass_kg"] for s in rows], dtype=float)
     r_g, v_g = _to_gcrs_pair(ecef, t, scenario.epoch_utc())
-    return ModelTrack("six_dof", t, np.column_stack([r_g, v_g]), mass), None
+    return ModelTrack(label, t, np.column_stack([r_g, v_g]), mass)
 
 
 def _tracking_reference(scenario: CrossModelScenario, ascent: ModelTrack):

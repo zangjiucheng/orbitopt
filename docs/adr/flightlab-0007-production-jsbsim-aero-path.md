@@ -87,7 +87,9 @@ ascent (sea-level pad, held-vertical hold, full throttle to burnout,
 `Check` verdicts. The native side runs `j2=False` so the comparison isolates
 thrust and aero from gravity models (JSBSim carries central gravity).
 Numbers below are the measured run of 2026-11-14 (Python 3.13,
-jsbsim 1.3.3):
+jsbsim 1.3.3) -- the table stands as published, i.e. **before** the E6-01
+engine alignment; ADR flightlab-0009 carries the same table after it
+(pad thrust 0.999995, Max-Q 0.14 %).
 
 | Quantity | native rigid-body | JSBSim production | rel. diff | band | Explanation |
 |---|---|---|---|---|---|
@@ -123,6 +125,10 @@ module and are asserted by
   `propflowmax`. Both are visible as the pad-thrust/burnout-state deltas in
   the table; closing them would change every FL-401/FL-403 result and is
   out of scope for an aero task.
+  *Closed by ADR flightlab-0009 (E6-01, #273)*, which re-baselines the FL-401
+  /FL-403 results and the table above: the pad-thrust row is now 0.999995 and
+  the Max-Q row 0.14 %, and what survives of the burnout-state delta is the
+  trajectory/formulation residual, no longer an engine gap.
 - The 27 deg coast-phase alpha divergence means the production path is *not*
   a guidance-validation plant for the post-MECO coast of an *unguided*
   stage; with the F-04-style tracker closing the loop (E2) the body follows
@@ -136,9 +142,14 @@ module and are asserted by
   it only trades one propellant-load-dependent error for another; the
   `_cg_cancel` correction makes the net couple exact at every load.
 - *Tuning the JSBSim engine to match native burnout states* (bigger nozzle
-  exit area, `thrustsl`): rejected for this task — it breaks the E1-01
-  parity gate's thrust derivation (`isp·g0·ṁ`) and the FL-401/403 results
-  built on it; the delta is disclosed instead.
+   exit area, `thrustsl`): rejected for this task — it breaks the E1-01
+   parity gate's thrust derivation (`isp·g0·ṁ`) and the FL-401/403 results
+   built on it; the delta is disclosed instead.
+   *Superseded by ADR flightlab-0009*, which closes the gap without a tuning
+   knob: the physical 2 m^2 exit plus a choked `propflowmax` derived from
+   `T_vac/(Isp_vac*g0)` leave the `isp·g0·ṁ` derivation exact (with
+   `isp_sea_level_s` derived rather than assumed) and the FL-401/403 baselines
+   re-recorded.
 - *Native rigid-body as "the" production path*: rejected — it has no live
   propellant bookkeeping, no TVC actuator and illustrative coefficients; the
   task is about the JSBSim path's fidelity, and the table above is the

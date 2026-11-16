@@ -16,8 +16,14 @@ Alignment is deliberately narrow and disclosed (see the header of
 
 * masses / propellant / inertias / CG-and-mount geometry / Isp: exact match;
 * stage-1 thrust: JSBSim derives ``isp * g0 * propflowmax``, the native
-  plant states ``thrust_vacuum_n`` -- agreement within the scenario's
-  documented relative band (actual gap ~0.15%);
+  plant states ``thrust_vacuum_n`` -- E6-01 (#273) derived the XML's
+  ``propflowmax`` from the canonical pair, so the agreement band
+  (``thrust_rel_tol``) is now a drift guard, not an accepted gap;
+* engine back pressure (E6-01): the nozzle exit area is shared
+  (``parity-jsbsim-nozzle-area-vs-source``) and both engines are compared at
+  the pad state (``parity-engine-pad-thrust-vs-jsbsim``), so the whole thrust
+  law ``T = thrust_vacuum_n - A*p`` is parity-checked, not just its vacuum
+  end; the flow bookkeeping follows from it on both sides (choked flow);
 * aero: shared geometry and reference quantities; the jsbsim *base* aircraft
   fly ZERO aero by design while the native plant flies the packaged
   coefficient file -- a fidelity boundary, asserted (and disclosed), not
@@ -45,6 +51,10 @@ from orbitopt.flightlab.sixdof.aero import load_packaged_aero
 
 #: avoirdupois pound -> kg (exact); JSBSim propflow tables are in LBS/SEC.
 _LB_TO_KG = 0.45359237
+#: foot -> m (exact); the nozzle thruster declares its exit area in FT2.
+_FT_TO_M = 0.3048
+#: ISA sea-level static pressure [Pa]: the pad state both engines are compared at.
+_PAD_PRESSURE_PA = 101325.0
 
 __all__ = ["ParityScenario", "load_parity_scenario", "native_stage_pair",
            "native_booster", "jsbsim_declared_params", "check_parity",
@@ -205,10 +215,11 @@ def native_booster(scenario: ParityScenario | None = None, *,
 def jsbsim_declared_params(aircraft: str = "spike_stage",
                            engine: str = "spike_engine") -> dict:
     """Read the parameters the packaged JSBSim aircraft/engine XMLs declare:
-    dry mass, propellant contents, inertia, CG and thruster stations, Isp,
-    mass flow, minimum throttle, and whether the model has ANY aerodynamics
-    at all. Pure XML parsing -- runs without the optional ``jsbsim``
-    package, so the parity gate is enforced in every environment."""
+    dry mass, propellant contents, inertia, CG and thruster stations, the
+    nozzle thruster's exit area, Isp, mass flow, minimum throttle, and
+    whether the model has ANY aerodynamics at all. Pure XML parsing -- runs
+    without the optional ``jsbsim`` package, so the parity gate is enforced in
+    every environment."""
     ac_path = _jsbsim_data("aircraft", aircraft, f"{aircraft}.xml")
     en_path = _jsbsim_data("engine", f"{engine}.xml")
     ac, en = ET.parse(ac_path).getroot(), ET.parse(en_path).getroot()
@@ -219,7 +230,18 @@ def jsbsim_declared_params(aircraft: str = "spike_stage",
     if engine not in engine_files:
         raise ValueError(f"{aircraft}.xml: engine {engine!r} not referenced "
                          f"(found {engine_files})")
-    thruster = ac.find("./propulsion/engine/thruster/location")
+    thruster = ac.find("./propulsion/engine/thruster")
+    nozzle_file = thruster.get("file") if thruster is not None else None
+    if not nozzle_file:
+        raise ValueError(f"{aircraft}.xml: the engine declares no nozzle thruster")
+    nozzle = ET.parse(_jsbsim_data("engine", f"{nozzle_file}.xml")).getroot()
+    area_node = nozzle.find("area")
+    if area_node is None or area_node.text is None:
+        raise ValueError(f"{nozzle_file}.xml: no <area> exit-area declaration")
+    area_unit = (area_node.get("unit") or "FT2").upper()
+    area_m2 = (float(area_node.text) * _FT_TO_M ** 2 if "FT" in area_unit
+               else float(area_node.text))
+    thruster = thruster.find("location")
     isp_node = en.find("isp")
     flow_node = en.find("propflowmax")
     flow_unit = (flow_node.get("unit") or "LBS/SEC").upper()
@@ -236,6 +258,8 @@ def jsbsim_declared_params(aircraft: str = "spike_stage",
                                for axis in ("ixx", "iyy", "izz")),
         "cg_x_m": float(_text(ac, './mass_balance/location[@name="CG"]/x')),
         "thruster_x_m": float(thruster.find("x").text),
+        "nozzle_file": nozzle_file,
+        "nozzle_exit_area_m2": area_m2,
         "isp_s": float(isp_node.text),
         "propflowmax_kg_s": flow_kg_s,
         "min_throttle": float(_text(en, "minthrottle")),
@@ -319,6 +343,25 @@ def check_parity(scenario: ParityScenario | None = None) -> tuple[Check, ...]:
     add("parity-jsbsim-flow-vs-source", flow_gap <= 1e-5, value=flow_gap,
         limit=1e-5, unit="",
         note="spike_engine.xml propflowmax moved away from the parity source")
+    # -- nozzle exit area (E6-01): shared, so the pad debit is shared ------
+    area_src = float(p.jsbsim["nozzle_exit_area_m2"])
+    area_gap = _rel(jb["nozzle_exit_area_m2"], area_src)
+    add("parity-jsbsim-nozzle-area-vs-source", area_gap <= 1e-4, value=area_gap,
+        limit=1e-4, unit="",
+        note=f"{jb['nozzle_file']}.xml exit area moved away from the parity "
+             f"source ({area_src} m^2)")
+    native_debit = native_engine.nozzle_exit_area_m2 * _PAD_PRESSURE_PA
+    jsb_debit = jb["nozzle_exit_area_m2"] * _PAD_PRESSURE_PA
+    add("parity-engine-pad-thrust-vs-jsbsim",
+        _close(native_engine.thrust_vacuum_n - native_debit,
+               thrust_derived - jsb_debit, 1e-4),
+        value=_rel(native_engine.thrust_vacuum_n - native_debit,
+                   thrust_derived - jsb_debit),
+        limit=1e-4, unit="",
+        note=f"pad thrust differs: native "
+             f"{native_engine.thrust_vacuum_n - native_debit:.1f} N vs JSBSim "
+             f"{thrust_derived - jsb_debit:.1f} N (exit area * ISA sea-level "
+             f"pressure {_PAD_PRESSURE_PA:g} Pa debited from both vacuums)")
     add("parity-jsbsim-min-throttle-disclosed",
         jb["min_throttle"] <= native_engine.throttle_min,
         value=jb["min_throttle"], limit=native_engine.throttle_min, unit="",

@@ -4,51 +4,51 @@
   "impact": null,
   "maxima": {
     "altitude_m": {
-      "value": 90153.10527089331,
+      "value": 82360.18322733138,
       "time_s": 105.0
     },
     "speed_earth_mps": {
-      "value": 5313.783551937722,
+      "value": 5233.919600288734,
       "time_s": 100.0
     },
     "speed_inertial_mps": {
-      "value": 5759.407854961477,
+      "value": 5681.069388955776,
       "time_s": 100.0
     },
     "mach": {
-      "value": 19.355448604765137,
-      "time_s": 103.0
+      "value": 18.688009457060506,
+      "time_s": 105.0
     },
     "dynamic_pressure_pa": {
-      "value": 98615.77952843528,
-      "time_s": 32.16770261113976
+      "value": 95759.79723961715,
+      "time_s": 36.07026351067527
     },
     "acceleration_g": {
-      "value": 18.113207546145173,
+      "value": 17.931931329340447,
       "time_s": 99.0
     }
   },
   "final_state": {
     "time_s": 105.0,
-    "mass_kg": 10000.0,
-    "altitude_m": 90153.10527089331,
-    "latitude_deg": 8.904104979550694e-17,
-    "longitude_deg": 1.440462018589972,
-    "speed_earth_mps": 5297.815888773624,
-    "speed_inertial_mps": 5744.62572227707,
-    "position_eci_m": [6464811.519215886, 212105.8861959012, 9.985752888184397e-12],
-    "velocity_eci_mps": [1587.187049057161, 5521.010954558284, 3.092513465713208e-13],
+    "mass_kg": 10091.672487546733,
+    "altitude_m": 82360.18322733138,
+    "latitude_deg": 8.76694083901865e-17,
+    "longitude_deg": 1.4186332947055362,
+    "speed_earth_mps": 5218.5485649062675,
+    "speed_inertial_mps": 5666.860344638934,
+    "position_eci_m": [6457103.03092003, 209390.31155152438, 9.820002293985054e-12],
+    "velocity_eci_mps": [1494.5807597272662, 5466.21756960829, 3.059038888819512e-13],
     "orbit": {
-      "semi_major_axis_m": 4416780.947137921,
-      "eccentricity": 0.5384929413367917,
+      "semi_major_axis_m": 4366649.327769788,
+      "eccentricity": 0.5448698641928805,
       "inclination_deg": 0.0,
       "raan_deg": 100.66085853725671,
-      "argument_of_perigee_deg": 198.80409998329168,
-      "true_anomaly_deg": 163.075059873328,
-      "perigee_altitude_m": -4339761.416326679,
-      "apogee_altitude_m": 417049.3106025215,
-      "period_s": 2921.257036830258,
-      "specific_energy_j_kg": -45123410.75668395
+      "argument_of_perigee_deg": 197.47095064894833,
+      "true_anomaly_deg": 164.38638048378695,
+      "perigee_altitude_m": -4390743.298430068,
+      "apogee_altitude_m": 367767.95396964997,
+      "period_s": 2871.6628852754684,
+      "specific_energy_j_kg": -45641453.19216419
     }
   },
   "events": [
@@ -83,55 +83,55 @@
     {
       "kind": "mach1",
       "stage": 1,
-      "time_s": 17.138383866525846,
-      "altitude_m": 2715.3343336302787,
-      "latitude_deg": 6.328671942782423e-20,
-      "longitude_deg": 0.0010066894211543831,
-      "downrange_m": 112.06413822205486,
-      "speed_earth_mps": 329.6793360932361,
-      "speed_inertial_mps": 600.1487909928364,
-      "mach": 0.9999005697264127,
-      "dynamic_pressure_pa": 50876.07665598859,
-      "mass_kg": 59716.96968008449
+      "time_s": 19.638184442754625,
+      "altitude_m": 3032.727130088955,
+      "latitude_deg": 1.1995902281488368e-19,
+      "longitude_deg": 0.001920625499417857,
+      "downrange_m": 213.80302531045686,
+      "speed_earth_mps": 328.38107558882774,
+      "speed_inertial_mps": 614.0063999265997,
+      "mach": 0.9997793051681448,
+      "dynamic_pressure_pa": 48859.49109458995,
+      "mass_kg": 58235.0921465349
     },
     {
       "kind": "max_q",
       "stage": 1,
-      "time_s": 32.16770261113976,
-      "altitude_m": 9934.772224322893,
-      "latitude_deg": 1.234497086077381e-18,
-      "longitude_deg": 0.01988923015802033,
-      "downrange_m": 2214.0589733249376,
-      "speed_earth_mps": 687.8553175619448,
-      "speed_inertial_mps": 976.4150029208164,
-      "mach": 2.2942654096606834,
-      "dynamic_pressure_pa": 98615.77952843528,
-      "mass_kg": 50699.378433316146
+      "time_s": 36.07026351067527,
+      "altitude_m": 10798.668922217563,
+      "latitude_deg": 1.8257954583591916e-18,
+      "longitude_deg": 0.029452880521677115,
+      "downrange_m": 3278.679660490052,
+      "speed_earth_mps": 715.3770610477845,
+      "speed_inertial_mps": 1034.4228079326838,
+      "mach": 2.416486804229686,
+      "dynamic_pressure_pa": 95759.79723961715,
+      "mass_kg": 48390.90840141973
     },
     {
       "kind": "burnout",
       "stage": 1,
       "time_s": 100.0,
-      "altitude_m": 81254.6540304264,
-      "latitude_deg": 7.535616651623118e-17,
-      "longitude_deg": 1.218932141312955,
-      "downrange_m": 135690.90528246603,
-      "speed_earth_mps": 5313.783551937722,
-      "speed_inertial_mps": 5759.407854961477,
-      "mach": 18.92424426908847,
-      "dynamic_pressure_pa": 213.4986826853318,
-      "mass_kg": 10000.0,
+      "altitude_m": 73942.5182903735,
+      "latitude_deg": 7.411007377281303e-17,
+      "longitude_deg": 1.1990971496034029,
+      "downrange_m": 133482.8841055382,
+      "speed_earth_mps": 5233.919600288734,
+      "speed_inertial_mps": 5681.069388955776,
+      "mach": 17.996652512156103,
+      "dynamic_pressure_pa": 640.8120758885839,
+      "mass_kg": 10091.672487546733,
       "orbit": {
-        "semi_major_axis_m": 4416794.085861188,
-        "eccentricity": 0.538494902478912,
+        "semi_major_axis_m": 4366661.533003251,
+        "eccentricity": 0.544871667628121,
         "inclination_deg": 0.0,
         "raan_deg": 100.66085853725671,
-        "argument_of_perigee_deg": 198.80478051994208,
-        "true_anomaly_deg": 162.83195908616113,
-        "perigee_altitude_m": -4339764.0146740675,
-        "apogee_altitude_m": 417078.1863964433,
-        "period_s": 2921.2700717589096,
-        "specific_energy_j_kg": -45123276.52719639
+        "argument_of_perigee_deg": 197.47162377073943,
+        "true_anomaly_deg": 164.1452808436542,
+        "perigee_altitude_m": -4390745.618451797,
+        "apogee_altitude_m": 367794.68445829954,
+        "period_s": 2871.674925173043,
+        "specific_energy_j_kg": -45641325.619970284
       }
     }
   ],

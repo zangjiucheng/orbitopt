@@ -164,6 +164,37 @@ python -m orbitopt.verify.acceptance_matrix --matrix my.yaml \
 A pass on one available pair does not cover the remaining matrix. The current
 acceptance ran the real numerical/analytic pair, not every backend pair.
 
+## Model discrepancy budget (E8-02, task #282)
+
+A gated total says *whether*, not *what*. `orbitopt.verify.discrepancy_budget`
+reuses the acceptance matrix (same harness run, same resolved tolerances) and
+splits every measured pair difference into five source lines — frame/time,
+numerical integration, engine, aero, controller — recording the residual
+between the component sum and the total. The residual is the unattributed
+plant-formulation remainder (rigid-body vs point-mass, FCS/actuator dynamics),
+stated, not zero-padded. Lines carry how they were obtained:
+
+- **frame/time** — one shared bridge at one epoch: 0 applied, with the
+  IERS 0.9 s desync sensitivity recorded as the budget;
+- **numerical integration** — a tolerance-relaxation probe (3-DOF reference
+  at rtol/atol ×1000); the fixed-step side is the published E6-04 bound;
+- **engine** — the live E6-01 parity residual applied as a thrust-scale
+  probe (a failed alignment is refused, not budgeted); the mass channel
+  carries the disclosed `mdot·dt` one-frame bookkeeping bound;
+- **aero** — 0 by declaration (`parity-jsbsim-aero-zero`), with the
+  production-airframe *potential* recorded, not summed;
+- **controller** — a loop-stiffening probe share (2× PID gains).
+
+Pairs that did not fly yield `not_measured` lines with the matrix's own
+cause code — never a fake zero. `--no-probes` records the structure with
+the full totals in the residual. Only matrix rows vote: the report status
+mirrors the matrix verdict.
+
+```bash
+python -m orbitopt.verify.discrepancy_budget            # all installed backends
+python -m orbitopt.verify.discrepancy_budget --no-probes --json
+```
+
 ## Model coverage and declared conventions
 
 Mission results record each phase's model and limitations.

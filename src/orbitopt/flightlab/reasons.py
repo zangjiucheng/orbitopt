@@ -379,9 +379,9 @@ _ENTRIES: tuple[ReasonEntry, ...] = (
        "The production airframe stopped flying the commanded ascent on its own aerodynamics.",
        "Regenerate the production aircraft from the aero document and check its static margin."),
     _e("E104_PAD_THRUST_RATIO_UNEXPLAINED", "physics",
-       "Pad thrust ratio no longer explained",
-       "The JSBSim/native pad thrust ratio is no longer explained by isp_vacuum/isp_sea_level: an engine "
-       "parameter drifted.",
+       "Pad thrust ratio no longer 1.0",
+       "Both backends debit ambient back pressure over the same nozzle exit "
+       "(E6-01), so their pad thrusts should match: an engine parameter drifted.",
        "Compare the engine nozzle area and the vacuum / sea-level Isp of both backends."),
 
     # ----------------------------------------------------------- Monte Carlo (FL-304)

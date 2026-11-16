@@ -99,12 +99,14 @@ entry point; they are not canonical output identities.
 
 The [parity document](../src/orbitopt/data/flightlab/parity/spike_stage_parity.yaml)
 drives native stage construction and checks packaged JSBSim mass, inertia,
-propellant, mounting and aero geometry. Shared parameters do not make the
-engines identical: the JSBSim spike retains a vacuum-like nozzle and fixed
-propellant flow. The generated production airframe adds the aero tables and
-cancels the fixed-AERORP/live-CG force couple. See
-[ADR 0007](adr/flightlab-0007-production-jsbsim-aero-path.md) for measured
-residuals; [ADR 0001](adr/flightlab-0001-jsbsim-6dof.md) covers the base spike.
+propellant, mounting and aero geometry. Since E6-01 the engines share the
+propulsion law too: a choked `T_vac/(Isp_vac*g0)` = 599.083 kg/s flow through
+the same physical 2 m^2 exit, so both sides pay the same ambient back-pressure
+debit and agree on 1.6774 MN of pad thrust. The generated production airframe
+adds the aero tables and cancels the fixed-AERORP/live-CG force couple. See
+[ADR 0009](adr/flightlab-0009-engine-and-mass-flow-parity.md) for the aligned
+residuals, [ADR 0007](adr/flightlab-0007-production-jsbsim-aero-path.md) for
+the aero path, [ADR 0001](adr/flightlab-0001-jsbsim-6dof.md) for the base spike.
 
 Recovery remains a separate Earth-fixed 3-DOF chain with J2, rotation,
 atmosphere and engine/event models. Selecting a 6-DOF ascent does not make
@@ -156,6 +158,16 @@ falls to 1.65 km. This is a disclosed **non-parity variant** (1 t upper dry
 mass, 7 t propellant, 3° gimbal), not the original F-06 vehicle. Shared law
 does not mean identical commands along different states or general accuracy.
 Runs, handoffs, reports, scenes and residual-attribution data are exported.
+
+**E6-04:** the sampled-data TVC loop is audited against the RK4 plant: the
+control law and the stateful guidance are sampled once per integration step
+at the step boundary and held across the four stages, so no mid-stage
+estimate advances controller state. The audit removed a first-order
+integration plateau (1st-order plateau → 2.3e-8 m flat loop output) and a
+guidance slew-limiter corruption; the convergence curves and the
+`dt_s = dt_c_s = 0.02` default justification live in
+[ADR 0008](adr/flightlab-0008-sampled-data-control-and-rk4-plant.md) and
+[the recorded sweep](benchmarks/e604_step_convergence.json).
 
 ## Hard gates
 

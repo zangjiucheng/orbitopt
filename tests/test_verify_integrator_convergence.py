@@ -291,8 +291,8 @@ def test_production_defaults_are_the_audited_settings():
     assert ent["atol"] == float(sig["atol"].default)
     assert ent["max_step_s"] == float(sig["max_step_s"].default)
     asc = SCENARIOS["meco_ascent"].production
-    src = inspect.getsource(
+    sig3 = inspect.signature(
         __import__("orbitopt.verify.cross_model", fromlist=["_produce_three_dof"])
-        ._produce_three_dof)
-    assert asc["rtol"] == 1e-10 and "rtol=1e-10" in src
-    assert "atol=1e-5" in src and asc["atol"] == 1e-5
+        ._produce_three_dof).parameters
+    assert asc["rtol"] == float(sig3["rtol"].default) == 1e-10
+    assert asc["atol"] == float(sig3["atol"].default) == 1e-5
