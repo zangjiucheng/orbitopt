@@ -53,7 +53,28 @@ worst-normalized-violation exact penalty instead of R-01's additive soft
 terms -- so the tail a weighted sum can trade away cannot be traded.
 ``joint_chance`` replaces the two R-01 soft terms, so the R-01 knobs must
 be pinned off alongside it; everything else (physics, checks, reason codes)
-is unchanged.
+is unchanged. E7-01 (task #277) closes the semantic gap this left: the
+search stays what it is -- a **penalized optimization** (exact-penalty
+method, no constrained solver) -- and the constraints are enforced as a
+verdict instead of implied by the penalty: a joint-mode plan whose worst
+normalized violation exceeds ``JointChanceSpec.violation_tolerance`` comes
+back ``feasible=False`` with ``JOINT_CHANCE_VIOLATED``.
+
+E7-04 (task #280) adds a fourth, orthogonal planning knob:
+``corridor_aim_margin_m`` (default 0.0, bit-exact). It tightens only the
+*planning-time* grading of the corridor miss (against
+``corridor.radius_m - margin``), so the optimizer keeps a handoff inside a
+ring inset from the acceptance corridor instead of strolling up to its rim;
+the ``CORRIDOR_MISSED`` verdict is still graded at the true radius. It is
+a response to the E3-03 failure-driven reading (``initial_state`` ranked
+first in every arm, Spearman 0.38--0.47; ``CORRIDOR_MISSED`` /
+``LANDING_LATERAL_SPEED_EXCEEDED`` the dominant regression modes), but the
+E7-04 paired re-fly measured it as a *dial, not the fix*: on the E3-03
+grid a quarter-radius inset trades ``INSUFFICIENT_PROPELLANT_RESERVE``
+down (shorter divert burns less) for lateral-speed failures up (a deeper
+handoff arrives faster), and in joint-chance mode its miss-term reweight
+is dominated by the joint penalty. The E3-03 report's dominant guidance-
+side lever turned out to be E3-01's command-side lag compensation instead.
 
 Feasibility language (acceptance criteria): a plan that cannot make the
 corridor comes back ``feasible=False`` with ``reason_codes[0]`` the governing
@@ -70,6 +91,14 @@ one, drawn from::
                                          proper g above the entry limit
     CORRIDOR_NOT_REACHED                 never crossed h0 after entry ignition
     CORRIDOR_MISSED                      crossed, outside the corridor
+    JOINT_CHANCE_VIOLATED                joint chance mode only (E7-01):
+                                         crossed within the hard limits but
+                                         the accepted handoff's worst
+                                         normalized joint violation exceeds
+                                         the spec's violation_tolerance --
+                                         the plan does not satisfy the
+                                         chance constraints it was planned
+                                         under
 
 The corridor is the *landing-burn initiation* corridor: FL-303 picks the
 plan up at ``ReturnPlan.landing_burn_initial_state`` (an ECEF ``BoosterState``
@@ -130,6 +159,7 @@ __all__ = [
     "INSUFFICIENT_PROPELLANT_BOOSTBACK",
     "INSUFFICIENT_PROPELLANT_ENTRY_BURN",
     "INSUFFICIENT_PROPELLANT_RESERVE",
+    "JOINT_CHANCE_VIOLATED",
     "BoostbackPlan",
     "CorridorReport",
     "EntryBurnPlan",
@@ -153,6 +183,10 @@ ENTRY_Q_LIMIT_EXCEEDED = "ENTRY_Q_LIMIT_EXCEEDED"
 ENTRY_G_LIMIT_EXCEEDED = "ENTRY_G_LIMIT_EXCEEDED"
 CORRIDOR_NOT_REACHED = "CORRIDOR_NOT_REACHED"
 CORRIDOR_MISSED = "CORRIDOR_MISSED"
+#: E7-01 (task #277): joint chance mode only -- the accepted handoff's worst
+#: normalized violation is above the spec's tolerance, so the plan is never
+#: reported as satisfying the chance constraints.
+JOINT_CHANCE_VIOLATED = "JOINT_CHANCE_VIOLATED"
 
 #: Fixed pitch-lead of the entry-burn thrust vector from pure retro-grade
 #: toward vertical-down [rad]: retro-grade brakes, lead verticalizes. An
@@ -580,7 +614,8 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
               divert_budget: float = float("inf"),
               reserve_margin: float = 0.0,
               chance: JointChanceSpec | None = None,
-              sep_prop_kg: float | None = None) -> _Rollout:
+              sep_prop_kg: float | None = None,
+              aim_radius: float | None = None) -> _Rollout:
     """One full-physics flight through the FL-301 propagator plus the
     corridor residual. Penalty is a sum of dimensionless squared violations:
     the corridor/entry/propellant violations in-flight, plus the R-01 soft
@@ -592,7 +627,11 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
     :mod:`orbitopt.flightlab.recovery.chance`, graded on the crossed
     corridor handoff and added as the worst-violation exact penalty;
     ``sep_prop_kg`` (separation propellant) gives the burn exposure the
-    loss scale is computed from."""
+    loss scale is computed from. ``aim_radius`` (E7-04) replaces
+    ``corridor.radius_m`` in the planning-time miss term only: the penalty
+    then pulls the plan toward a handoff inside that smaller ring while the
+    acceptance verdict at ``corridor.radius_m`` stays the referee
+    (``None`` = the full radius, every pre-E7-04 caller)."""
     out = _Rollout()
     h0_name = "fl302_corridor_h0"
     try:
@@ -649,7 +688,8 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
     elif out.exhausted == "entry":
         pen += 10.0
     if out.crossed:
-        pen += (out.miss_m / corridor.radius_m) ** 2
+        pen += (out.miss_m / (corridor.radius_m if aim_radius is None
+                              else float(aim_radius))) ** 2
         # R-01 landing feasibility: the same miss against the divert the
         # landing burn can actually close, not only against the corridor
         # radius (a 1.76 km miss costs ~0.05 against 8 km and ~3.1 here).
@@ -713,7 +753,8 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                          landing_reserve_margin_kg: float =
                              DEFAULT_LANDING_RESERVE_MARGIN_KG,
                          joint_chance: JointChanceSpec | Mapping[str, Any] | None =
-                             None) -> ReturnPlan:
+                             None,
+                         corridor_aim_margin_m: float = 0.0) -> ReturnPlan:
     """Optimize the boostback/entry-burn script so the FL-301-propagated
     booster reaches ``recovery_target.corridor``; returns the corridor
     insertion state, its pad-ENU mirror, and the flown track.
@@ -732,7 +773,12 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     constraints replace the R-01 soft terms -- which must then be pinned off
     alongside it. Every rollout additionally reports the handoff's predicted
     landing probability and worst constraint violation on the corridor
-    report. All trajectories are flown by
+    report. E7-01 feasibility semantics: in joint mode the accepted plan is
+    graded against the spec -- a handoff whose worst normalized violation
+    exceeds ``JointChanceSpec.violation_tolerance`` comes back
+    ``feasible=False`` with reason code ``JOINT_CHANCE_VIOLATED``; the
+    search itself remains a penalized optimization (exact-penalty method on
+    Nelder-Mead), not a constrained solver. All trajectories are flown by
     ``orbitopt.flightlab.recovery.propagator.propagate`` -- the optimizer
     only ever sees full-physics rollouts, and the accepted solution is
     re-integrated at ``dt_final`` before it is reported (no kinematic
@@ -741,6 +787,20 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     point; ``max_fevals`` budgets the search (a restart from a jittered
     point spends at most half of it, and budgets below 40 keep the search
     where it started -- pin a script by passing both).
+    ``corridor_aim_margin_m`` (E7-04, task #280) is a *planning-time* aim
+    margin [m]: the objective grades the corridor miss against
+    ``corridor.radius_m - corridor_aim_margin_m`` instead of the full radius,
+    so the accepted script aims *inside* a ring inset from the acceptance
+    corridor. The acceptance corridor itself -- and the ``CORRIDOR_MISSED``
+    verdict ``_assemble`` gives against the true radius -- are untouched (the
+    referee never moves); only the plan the optimizer keeps aims deeper,
+    buying robustness against the plan/reality mismatch the FL-302 rollout
+    cannot see (the atmospheric dispersion draws, the E3-03 top-ranked
+    ``initial_state`` sensitivity): an aim that already misses 0.5 km has
+    7.5 km of radius to spare, an aim that aimed *at* the rim has none. The
+    tighter radius also pulls the divert handed to FL-303 down, which is the
+    E7-04 attack on the terminal ``LANDING_LATERAL_SPEED_EXCEEDED`` mode.
+    0.0 (default) reproduces the E3-02-era objective bit-for-bit.
     Raises ``RecoveryError`` when the vehicle has fewer than two restarts
     available (boostback and entry burns each need one)."""
     corridor = recovery_target.corridor
@@ -754,6 +814,13 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     if not landing_reserve_margin_kg >= 0.0:
         raise ValueError(f"landing_reserve_margin_kg must be >= 0, "
                          f"got {landing_reserve_margin_kg}")
+    if not corridor_aim_margin_m >= 0.0:
+        raise ValueError(f"corridor_aim_margin_m must be >= 0, "
+                         f"got {corridor_aim_margin_m}")
+    if not corridor_aim_margin_m < corridor.radius_m:
+        raise ValueError(f"corridor_aim_margin_m must stay inside the corridor "
+                         f"radius {corridor.radius_m}, got {corridor_aim_margin_m}")
+    aim_radius = corridor.radius_m - float(corridor_aim_margin_m)
     divert_budget = float("inf") if landing_divert_budget_m is None \
         else float(landing_divert_budget_m)
     reserve_margin = float(landing_reserve_margin_kg)
@@ -805,7 +872,7 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
         return _evaluate(sep_state, to_mission(x), booster, recovery_target, corridor,
                          entry_q_max_pa, entry_g_max, reserve, horizon_s, dt, window,
                          divert_budget=divert_budget, reserve_margin=reserve_margin,
-                         chance=chance, sep_prop_kg=sep_prop)
+                         chance=chance, sep_prop_kg=sep_prop, aim_radius=aim_radius)
 
     # --- analytic floor check (see _propellant_floor_kg)
     sep_prop = sep_mass - dry
@@ -905,6 +972,14 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
             reasons.append(ENTRY_Q_LIMIT_EXCEEDED)
         if final.entry_g > g_lim:
             reasons.append(ENTRY_G_LIMIT_EXCEEDED)
+        # E7-01 (task #277): the joint chance verdict is a feasibility check,
+        # not just a penalty term -- a crossed handoff whose worst normalized
+        # violation exceeds the spec's tolerance does not satisfy the
+        # constraints and is never reported feasible.
+        if (chance is not None and final.crossed
+                and final.joint_violation is not None
+                and not chance.satisfies(final.joint_violation)):
+            reasons.append(JOINT_CHANCE_VIOLATED)
 
     report = CorridorReport(
         reached=final.crossed,
@@ -956,7 +1031,9 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
             f"{chance.p_fuel_min:.2f} quantile of the dispersion loss, touchdown "
             f"{chance.scatter_quantile:.2f}-quantile radius <= "
             f"{chance.scatter_budget_m:.0f} m -> divert bar "
-            f"{chance.divert_budget_m():.0f} m), worst-violation exact penalty; "
+            f"{chance.divert_budget_m():.0f} m), worst-violation exact "
+            f"penalty (penalized optimization; feasibility tolerance "
+            f"{chance.violation_tolerance:g}); "
             "replaces the R-01 soft terms (DESIGN ASSUMPTIONs unless overridden)")
 
     return ReturnPlan(

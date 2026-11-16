@@ -492,3 +492,56 @@ def test_r01_nominal_handoff_meets_r01_targets(r01_nominal_plan, pad_target):
     assert 0.0 <= cr.miss_m <= cr.landing_divert_budget_m
     assert (cr.propellant_available_kg - cr.landing_need_kg - cr.reserve_kg
             >= cr.min_landing_reserve_margin_kg)
+
+
+# ---------------------------------------------------------------------------
+# E7-04 (task #280): corridor aim margin -- planning-time only, referee fixed
+# ---------------------------------------------------------------------------
+
+def test_corridor_aim_margin_scales_only_the_planning_miss_term(vehicle, pad_target):
+    """The E7-04 knob rescales exactly one term: the crossed-branch corridor
+    miss, graded against ``radius - margin`` instead of the full radius.
+    Every measured rollout quantity (crossed, miss, propellant) is
+    untouched -- the acceptance verdict never moves with a planning knob."""
+    st = _sep_state(alt=40_000.0, speed=250.0, fpa_deg=2.0, down_m=8_000.0,
+                    mass=65_000.0)
+    pad_ecef = np.asarray(pad_target.position_ecef_m)
+    radius = pad_target.corridor.radius_m
+
+    def fresh_mission() -> _Mission:
+        return _Mission(st.t_s, BoostbackPlan(*_SEED_PLAN[:5]),
+                        EntryBurnPlan(_SEED_PLAN[5], _SEED_PLAN[6]),
+                        _bearing_of_target(pad_ecef))
+
+    def rollout(**kw):
+        return _evaluate(st, fresh_mission(), vehicle, pad_target,
+                         pad_target.corridor, DEFAULT_ENTRY_Q_MAX_PA,
+                         DEFAULT_ENTRY_G_MAX,
+                         float(vehicle.landing_propellant_reserve_kg), 900.0,
+                         2.0, (st.t_s + _SEED_PLAN[0],
+                               st.t_s + _SEED_PLAN[0] + _SEED_PLAN[1]), **kw)
+
+    base = rollout()
+    assert base.crossed and base.penalty < float("inf")
+    aimed = rollout(aim_radius=radius - 2000.0)
+    want = (base.miss_m / (radius - 2000.0)) ** 2 - (base.miss_m / radius) ** 2
+    assert aimed.penalty - base.penalty == pytest.approx(want, rel=1e-9)
+    assert aimed.crossed == base.crossed and aimed.miss_m == base.miss_m
+    assert aimed.prop_kg == base.prop_kg
+
+
+def test_corridor_aim_margin_validation_and_zero_parity(vehicle, pad_target):
+    st = _sep_state(alt=40_000.0, speed=250.0, fpa_deg=2.0, down_m=8_000.0,
+                    mass=65_000.0)
+    radius = pad_target.corridor.radius_m
+    with pytest.raises(ValueError):
+        plan_boostback_entry(st, vehicle, pad_target, corridor_aim_margin_m=-1.0)
+    with pytest.raises(ValueError):  # the aim ring must stay inside the corridor
+        plan_boostback_entry(st, vehicle, pad_target, corridor_aim_margin_m=radius)
+    zero = plan_boostback_entry(st, vehicle, pad_target, max_fevals=1,
+                                initial_guess=_SEED_PLAN, corridor_aim_margin_m=0.0)
+    plain = plan_boostback_entry(st, vehicle, pad_target, max_fevals=1,
+                                 initial_guess=_SEED_PLAN)
+    assert zero.boostback == plain.boostback and zero.entry_burn == plain.entry_burn
+    assert zero.feasible == plain.feasible and zero.reason_codes == plain.reason_codes
+    assert zero.corridor_report.miss_m == plain.corridor_report.miss_m
