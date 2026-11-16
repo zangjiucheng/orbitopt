@@ -394,12 +394,12 @@ def _meco_ascent() -> ConvergenceScenario:
     t_eval = np.linspace(0.0, sc.meco_t_s, 211)
     run = _adaptive_ivp(rhs, state0, t_eval)
 
-    # the tolerances cross_model's 3-DOF backend actually integrates with
-    src = inspect.getsource(cm._produce_three_dof)
-    rtol_m = src.index("rtol=1e-10")
-    rtol = float(src[rtol_m + 5:src.index(",", rtol_m)].strip())
-    atol_m = src.index("atol=1e-5")
-    atol = float(src[atol_m + 5:src.index(")", atol_m)].strip())
+    # the tolerances cross_model's 3-DOF backend integrates with by default
+    # (the keyword defaults the backend is called through; E8-02 probes may
+    # override them, the production path and this audit read the defaults)
+    sig = inspect.signature(cm._produce_three_dof)
+    rtol = float(sig.parameters["rtol"].default)
+    atol = float(sig.parameters["atol"].default)
 
     return ConvergenceScenario(
         name="meco_ascent",
