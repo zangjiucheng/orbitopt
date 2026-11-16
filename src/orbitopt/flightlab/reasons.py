@@ -387,10 +387,66 @@ _ENTRIES: tuple[ReasonEntry, ...] = (
        "The production airframe stopped flying the commanded ascent on its own aerodynamics.",
        "Regenerate the production aircraft from the aero document and check its static margin."),
     _e("E104_PAD_THRUST_RATIO_UNEXPLAINED", "physics",
-       "Pad thrust ratio no longer explained",
-       "The JSBSim/native pad thrust ratio is no longer explained by isp_vacuum/isp_sea_level: an engine "
-       "parameter drifted.",
+       "Pad thrust ratio no longer 1.0",
+       "Both backends debit ambient back pressure over the same nozzle exit "
+       "(E6-01), so their pad thrusts should match: an engine parameter drifted.",
        "Compare the engine nozzle area and the vacuum / sea-level Isp of both backends."),
+
+    # --------------------------------------------------- Guided ascent E6-02
+    _e("E602_PHASE_METRIC_MISSING", "physics",
+       "E6-02 phase metric missing from the study",
+       "A phase window of the E6-02 study recorded no samples for a metric "
+       "its constraint table names: the phase boundary or the column set "
+       "changed.",
+       "Regenerate the study; check the phase windows in guided_ascent.py."),
+    _e("E602_PHASE_OUT_OF_BAND", "physics",
+       "Guided-ascent phase metric outside its declared constraint",
+       "One phase metric (attitude error, AoA, max-Q, q*alpha or TVC margin) "
+       "of the E6-02 study broke the constraint declared for its phase in "
+       "E602_PHASE_CONSTRAINTS.",
+       "Re-check the program, the pad and the gains against ADR flightlab-0010."),
+    _e("E602_AGREEMENT_OUT_OF_BAND", "physics",
+       "JSBSim-vs-native agreement outside the declared band",
+       "A cross-model agreement quantity (max-Q, pad thrust, separation "
+       "state, flight-path angle, attitude error, TVC margin or mass) of the "
+       "E6-02 study left its band; the comparison channels say which law or "
+       "path moved.",
+       "Read the comparison channel in the study JSON and ADR flightlab-0010."),
+    _e("E602_MASS_NOT_CONSERVED", "physics",
+       "E6-02 staging does not close mass",
+       "The E6-02 split left a mass residual: the stage split fractions or "
+       "the property injection of the children's masses went wrong.",
+       "Check the StageSplit fractions and the tank/emptywt properties set "
+       "at spawn."),
+    _e("E602_MOMENTUM_NOT_CONSERVED", "physics",
+       "E6-02 separation momentum residual over the round-trip band",
+       "The momentum bookkeeping of the E6-02 separation exceeds the declared "
+       "property-round-trip band: the impulse allocation or the velocity "
+       "injection moved, not just the unit conversion.",
+       "Check the impulse sign/axis and the injection order in staging.py."),
+    _e("E602_HANDOFF_POSITION", "physics",
+       "E6-02 handoff position discontinuity",
+       "A child's position after the FL-402 handoff left the parent's "
+       "separation state by more than the handoff tolerance.",
+       "Check position (not just velocity) injection in the staging adapter."),
+    _e("E602_HANDOFF_ATTITUDE", "physics",
+       "E6-02 handoff attitude discontinuity",
+       "A child's attitude after the FL-402 handoff left the parent's "
+       "separation attitude beyond the Euler round-trip band (reprojection "
+       "near pitch 90 is ill-conditioned by construction).",
+       "Check the quaternion -> Euler -> quaternion path and the launch-trim "
+       "reset after run_ic."),
+    _e("E602_HANDOFF_VELOCITY", "physics",
+       "E6-02 handoff velocity discontinuity",
+       "A child's velocity after the FL-402 handoff left the parent's "
+       "separation velocity beyond the scale-aware round-trip band.",
+       "Check the m/s -> ft/s and ECEF -> NED conversions at injection."),
+    _e("E602_IGNITION_NOT_ON_SCHEDULE", "physics",
+       "E6-02 upper-stage ignition off schedule",
+       "The upper child's thrust onset arrived later than 1.5 observation "
+       "periods after the planned ignition time.",
+       "Check the ignition hook / delayed control against the mission clock "
+       "(child sims restart their own clock at zero)."),
 
     # ----------------------------------------------------------- Monte Carlo (FL-304)
     _e("LANDED", "montecarlo",

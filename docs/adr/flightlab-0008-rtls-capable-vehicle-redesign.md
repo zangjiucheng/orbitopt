@@ -125,7 +125,11 @@ Findings F1-F10 (driving the decision):
 - **F5 — coast is inexpressible.** A throttle valley between 5.4 and zero
   interpolates piecewise-linearly and still burns propellant (measured ~2.5x
   nominal flow); no restart key exists in the config schema. Single burn is
-  a backend constraint, not a preference.
+  a backend constraint, not a preference. *E5-05b (#286): the orbitopt adapter
+  now expresses coast as a true zero-thrust segment (a `[tc,0]..[tc+coast,0]`
+  plateau, zero flow) synthesized from a vehicle `restart` block, so coast and
+  re-ignition are expressible at the adapter layer — though F9 shows they do not
+  by themselves close the band.*
 - **F6 — attitude is commanded, flight path lags.** OT integrates the
   commanded attitude exactly; the point-mass flight path follows at an
   angle-of-attack deficit `sin(alpha) ~ m v gamma_dot / T`. At 2 km/s and
@@ -152,10 +156,51 @@ Findings F1-F10 (driving the decision):
   the band from a reserve-carrying separation state needs a ~45 deg swing
   of the flight path, and the commanded-attitude backend (F5: no coast, no
   restart) cannot spend the propellant a second burn would. Six campaign
-  families and two CMA-ES dimensionings plateau at rp = -0.7..-1.3 km; the
-  perigee floor is structural, not a tuning miss. Closing the band needs a
-  backend feature (a restart/coast capability in the OT config schema), not
-  a redesign of this vehicle.
+   families and two CMA-ES dimensionings plateau at rp = -0.7..-1.3 km; the
+   perigee floor is structural, not a tuning miss. Closing the band needs a
+   backend feature (a restart/coast capability in the OT config schema), not
+   a redesign of this vehicle.
+  - **F9 resolution (E5-05b, task #286) — the capability landed; the wall was
+    the vehicle, not the backend.** E5-05b delivered exactly the restart/coast
+    capability F5/F9 called for: an optional vehicle `restart` block the OT
+    adapter folds into a coast-gap thrust curve + restart attitude leg, with the
+    coast-start burnout suppressed so a multi-burn stage maps to a single final
+    `seco` (see the adapter's `_apply_restart` / `_mapped_events`). Re-flying the
+    E5-05a reference with a coast gap (main-burn cut at 224 s, 120 s ballistic
+    coast, 1 MN re-ignition) and sweeping coast/ignition/timing does NOT close
+    the band: the best computed insertion is rp ~= -0.4 km / ra ~= 5.1 Mm
+    (single-burn floor rp ~= -0.7 km). Coast + re-ignition cannot manufacture
+    turning authority the stage never had, nor a shallow enough transfer to
+    circularise from; the perigee floor persists. **Conclusion: F9 was
+    misattributed.** The band is not a backend-capability gap — the restart/coast
+    feature is now present and still misses. Closing the 250 km band from a
+    reserve-carrying separation state needs a vehicle change (more upper-stage
+    delta-v / higher thrust-to-weight for turn, or a higher band such as the
+    400 km option the same capability now enables), tracked as the real follow-up
+     for #272. The single-burn ascent stays the shipped reference because it is
+     the best computed orbit; the reference re-bake only records this finding.
+   - **F9 closure (E5-05d, task #288) — the vehicle redesign landed and the
+     band closed.** The shipped catalog vehicle is redesigned per the F9
+     follow-up: stage 2 becomes a 128 t wet / 8.5 t dry restartable upper stage
+      at Isp 380 s with a 14 MN boost leg shortened to 17 s, a declared main-burn
+      cutoff at 224.5 s, a 155 s ballistic coast and a 9.65 MN / +1.7 deg
+      re-ignition circularisation burn (single final `seco` at 396.2 s, burnout
+      on depletion). The computed ascent now reaches
+      **rp 281.8 km / ra 296.1 km at SECO** — the 250 km insertion band closes on
+     the same computed run that carries the stage-1 reserve, and
+     `test_seco_insertion_band` is promoted from strict-xfail to a hard
+     assertion. The redesign couples back into stage 1: the +43 t stage-2 stack
+     at liftoff sank MECO by ~330 m/s and drained the *landing* propellant
+     reserve to 3 t (below the 10 t gate). The stage-1 engine therefore moves to
+     Isp 330 s at unchanged mass flow (11 -> 11.702 MN, 3615 kg/s, cutoff still
+     134 s — the E5-05a declared-cutoff reserve mechanism is untouched: 484.4 t
+     burned, 135.4 t computed SEP mass = 105.4 t reserve), restoring MECO energy
+     (2.4 km/s) and the touchdown reserve (13.2 t, matching E5-05a). Campaign:
+     19-dim differential-evolution + hand-lattice searches on the restart-schedule
+      knobs (boost-leg length, coast start/duration, re-ignition elevation and
+      burn throttle), corner closed at rp 235.6 / ra 257.1 before the stage-1
+      re-engineering shifted the coast geometry; the schedule was then re-tuned
+      around a re-ignition-elevation ladder to the shipped rp 281.8 / ra 296.1.
 - **F10 — the corridor referee does not accept computed MECOs.** With the
   reserve question answered (the gate passes on every computed state), the
   landing gate's *only* blocker is the FL-301 corridor: engines-on at 3 km
@@ -214,15 +259,20 @@ environments stays on #272, which this task unblocks.
 - Partially unblocks #272: the *recovery-side* provenance this task owed is
   recorded (computed separation state, reserve gate green, replayable run
   dir). The *full* reference-scenario recording still waits on the two
-  backend capabilities F9/F10 expose — a follow-up task each: (1) OT
-  restart/coast support (closes the insertion band), (2) corridor
-  customization or a multi-burn entry script in the recovery planner
-  (closes the landing gate at computed-MECO energies).
+  backend capabilities F9/F10 expose: (1) the OT restart/coast support was
+  DELIVERED in E5-05b (#286) but did **not** close the insertion band (F9
+  resolution above) — so the remaining follow-up is a *vehicle* redesign (more
+  upper-stage delta-v / thrust-to-weight, or the 400 km band the same
+  capability now enables), not a backend feature; (2) corridor customization
+  or a multi-burn entry script in the recovery planner (closes the landing
+  gate at computed-MECO energies).
 - Disclosed boundaries: the reserve is structural (engine-cycle bookkeeping
   at the declared cutoff), not a simulated abort; the entry-heating band is
-  an uncrewed-class design assumption, not a crew-rating; the OT backend
-  cannot express a restart, so any future skip-RTLS needs a different
-  backend (native 6-DOF or JSBSim, both multi-burn).
+  an uncrewed-class design assumption, not a crew-rating; the raw OT config
+  has no native coast/restart key, so the orbitopt adapter synthesises coast
+  as a zero-thrust stage-curve segment from a vehicle `restart` block (E5-05b)
+  — adequate for the mechanism, but a true guidance-law multi-burn entry still
+  wants a native multi-burn backend (JSBSim, both multi-burn).
 
 ## Alternatives considered
 
@@ -233,10 +283,12 @@ environments stays on #272, which this task unblocks.
   CMA-ES campaigns — the burnout-height wall (F4) is structural for a
   single-burn insertion that leaves a real RTLS reserve, and every
   400 km-band solution found so far sits at rp = -0.2..-4 km. The reference
-  mission is re-based to **250 x 250 km x 51.6 deg** (still LEO; the task
-  acceptance is "insertion still reaches LEO"), and the sealed 400 km E2-04
-  regression is untouched. Upgrading this reference to 400 km needs a
-  restart-capable ascent backend, recorded as a follow-up.
+   mission is re-based to **250 x 250 km x 51.6 deg** (still LEO; the task
+   acceptance is "insertion still reaches LEO"), and the sealed 400 km E2-04
+   regression is untouched. E5-05b added the restart/coast backend capability
+   that can now *express* a circularisation burn (and a 400 km band), but F9's
+   resolution shows this vehicle still cannot *reach* either band; reaching
+   400 km now waits on a vehicle redesign, not a backend feature.
 - *Declare a nominal 4.2 t reserve on the old vehicle*: rejected — this is
   #272's core negative result (~10x too small), restated with the sizing
   numbers above.

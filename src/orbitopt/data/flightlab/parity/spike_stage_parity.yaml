@@ -12,9 +12,21 @@
 # either side is a test failure, not a surprise.
 #
 # Deliberate, disclosed non-parity (fidelity boundaries, docs/flightlab.md):
-#   * JSBSim expresses stage-1 thrust through isp * g0 * propflowmax, so its
-#     vacuum thrust is a derived number; `thrust_rel_tol` records the
-#     accepted agreement band between the derived and the canonical figure.
+#   * Engine model form (E6-01, #273): JSBSim expresses stage-1 thrust as
+#     isp * g0 * propflowmax with a choked (altitude-independent) flow and
+#     debits the ambient back pressure at the nozzle exit (FNozzle); the
+#     native plant states thrust_vacuum_n and books the flow as
+#     T(p)/Isp(p).  E6-01 made those two forms the SAME physics instead of
+#     two conventions: `propflowmax` below is derived as
+#     thrust_vacuum_n / (isp_vacuum_s * g0), `nozzle_exit_area_m2` is shared,
+#     and `isp_sea_level_s` is the EFFECTIVE sea-level Isp the choked flow
+#     implies, isp_vacuum_s * (1 - A*p_sl / thrust_vacuum_n) = 285.5064 s
+#     (the pre-E6-01 282 s was inconsistent with its own T(p) = T_vac - A*p:
+#     it bought the same thrust with 1.2% more propellant).  What stays
+#     disclosed is therefore only the *implementation* of the shared law --
+#     JSBSim's MSIS/E-6 atmosphere vs orbitopt's US76, and JSBSim's
+#     one-frame-late mass/CG bookkeeping -- not the engine itself.
+#     `thrust_rel_tol` is kept as a drift guard on the derived figure.
 #   * The E4 jsbsim packaged vehicles (this `jsbsim` airframe and the
 #     staging stand-in) fly with identically ZERO aero; the native plant
 #     flies the packaged `spike_stage` coefficient file. Geometry/reference
@@ -23,9 +35,8 @@
 #   * E1-04 (#253) adds the jsbsim `production_aircraft`: the same airframe with
 #     the SAME coefficient document compiled into its XML. The coefficients
 #     are now shared; what stays disclosed is the promotion residual
-#     (stability-axis tables, bilinear Mach grids, AERORP at the dry CG),
-#     the engine's token nozzle exit area, and JSBSim's actuator dynamics --
-#     quantified in docs/adr/flightlab-0007.
+#     (stability-axis tables, bilinear Mach grids, AERORP at the dry CG) and
+#     JSBSim's actuator dynamics -- quantified in docs/adr/flightlab-0007.
 #   * The JSBSim `spike_upper` model is a FL-402 handoff stand-in (6 t dry,
 #     its own inertias), not this upper stage; no cross-check applies to it.
 #   * OpenTsiolkovsky flies its own synthetic_two_stage vehicle (a 380 t
@@ -61,7 +72,12 @@ separation_impulse_ns: 25000.0
 stage1_engine:
   thrust_vacuum_n: 1880000.0
   isp_vacuum_s: 320.0
-  isp_sea_level_s: 282.0
+  # E6-01 (#273): the EFFECTIVE sea-level Isp of a choked engine with this
+  # thrust, Isp_vac and exit area -- isp_vacuum_s*(1 - A*p_sl/thrust_vacuum_n)
+  # = 285.506383 s, not the round 282 s the E4 spike carried.  The native flow
+  # law T(p)/Isp(p) then reproduces the choked flow T_vac/(Isp_vac*g0) at
+  # every altitude, i.e. exactly the JSBSim/OpenTsiolkovsky model.
+  isp_sea_level_s: 285.506383
   nozzle_exit_area_m2: 2.0
   throttle_min: 0.4        # native TVC policy; JSBSim minthrottle is 0.0 --
                            # a control-law difference, disclosed, not checked
@@ -90,7 +106,13 @@ jsbsim:
   cg_x_m: 20.0
   thruster_x_m: 42.0
   isp_s: 320.0
-  propflowmax_kg_s: 600.0            # 1322.7736 LBS/SEC, the XML's own figure
+  # 1320.7525 LBS/SEC: the XML's own figure, derived from the canonical pair
+  # thrust_vacuum_n / (isp_vacuum_s * g0) = 599.083275 kg/s (E6-01).  The
+  # rounded lb/s figure in the XML leaves a ~5e-8 relative gap.
+  propflowmax_kg_s: 599.083275
+  # E6-01: the physical exit area, shared with stage1_engine (2 m^2 =
+  # 21.527821 FT2), so the back-pressure debit is shared too.
+  nozzle_exit_area_m2: 2.0
   g0_m_s2: 9.80665
   aero_zero: true                    # <aero> is identically zero by design
   # E1-04 (#253): the production airframe -- this one with the `aero_model`
@@ -98,10 +120,10 @@ jsbsim:
   # inherit every parameter above (parity-jsbsim-production-inherited) and
   # carry the aero document's reference geometry.
   production_aircraft: spike_stage_aero
-  # JSBSim vacuum thrust is derived: isp * g0 * propflowmax = 1882876.8 N.
-  # The canonical stage-1 thrust is 1.88 MN; both sides must agree within
-  # this relative band (actual gap ~0.15%).
-  thrust_rel_tol: 2.0e-3
+  # JSBSim vacuum thrust is derived: isp * g0 * propflowmax.  E6-01 derived
+  # propflowmax FROM the canonical 1.88 MN, so the drift guard only has to
+  # cover the lb/s rounding in the XML.
+  thrust_rel_tol: 1.0e-5
 
 # --- aero: shared geometry, disclosed coefficient divergence --------------
 aero_model: spike_stage              # data/flightlab/aero/spike_stage.yaml

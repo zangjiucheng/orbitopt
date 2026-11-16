@@ -15,11 +15,12 @@ sealed E2-04 reference files are untouched.
 Slow tests (pinned OpenTsiolkovsky + gfold): the vehicle FLIES LIVE -- MECO
 carries the computed reserve, the RTLS chain plans from THAT separation
 state and grades the reserve gate green, and the packaged mission chain
-replays the recorded flight end to end. Two graded gates stay red and are
-marked xfail with the ADR flightlab-0008 findings they trace to: the
-insertion band (F9, backend turning authority) and the landing corridor
-(F10, corridor referee vs computed-MECO energies) -- both capability limits
-demonstrated across the whole tuned campaign, not budget shortfalls. E2-04
+replays the recorded flight end to end. The insertion band (F9) CLOSED in
+E5-05d (#288): the redesigned stage 2 + coast/re-ignition schedule reaches
+rp 281.8 km / ra 296.1 km at SECO and the gate is now a hard assertion. The
+landing corridor (F10, corridor referee vs computed-MECO energies) stays
+xfail -- a capability limit demonstrated across the whole tuned campaign,
+not a budget shortfall. E2-04
 keeps ownership of the fast synthetic-integration test (E5-01 exception);
 this file is the fully-computed E5-05a reference.
 """
@@ -156,7 +157,7 @@ def _elements_at(run, body: str, epoch_utc):
 
     t, r, v, frame = _track_array(run, body)
     take = slice(-200, None) if len(t) >= 200 else slice(None)
-    tg, rg, vg = frames.to_gcrs(r[take], v[take], frame, epoch_utc, t[take])
+    rg, vg = frames.to_gcrs(r[take], v[take], frame, epoch_utc, t[take])
     out = {}
     for rr, vv in zip(rg[-50:], vg[-50:]):
         rm, vm = float(np.linalg.norm(rr)), float(np.linalg.norm(vv))
@@ -176,9 +177,13 @@ def _elements_at(run, body: str, epoch_utc):
 #: neither is a vehicle-budget failure -- both are capability limits of the
 #: pinned OT 1.1.0 commanded-attitude backend / the FL-301 corridor referee,
 #: demonstrated across every tuned family (campaign table in the ADR).
-F9 = ("F9: OT 1.1.0 single-burn commanded-attitude backend cannot close the "
-      "insertion band from a reserve-carrying separation state "
-      "(docs/adr/flightlab-0008)")
+F9 = ("F9 (CLOSED, E5-05d #288): the OT commanded-attitude backend cannot "
+      "close the insertion band on the FIXED E5-05a vehicle (perigee floor "
+      "~-0.7 km single-burn, ~-0.4 km with the best coast/restart schedule); "
+      "the E5-05d upper-stage redesign (128 t wet / 8.5 t dry stage-2, Isp "
+      "380 s, 14 MN boost leg + coast + re-ignition circularisation) closes "
+      "the band on the same computed reserve-carrying separation state "
+      "(rp 281.8 km / ra 296.1 km, docs/adr/flightlab-0008)")
 F10 = ("F10: the FL-301 corridor referee (<350 m/s at 3 km) is unreachable "
        "from any computed MECO >= ~1.6 km/s with the FL-302 7-parameter "
        "script, at any reserve (docs/adr/flightlab-0008)")
@@ -208,13 +213,14 @@ def test_live_ascent_computes_reserve(live_flight):
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(strict=False, reason=F9)
 @pytest.mark.skipif(not _has_stack(), reason="needs the OpenTsiolkovsky binary + pygmo")
 def test_seco_insertion_band(live_flight):
-    """Insertion closes the 250 km band. xfail (F9): the pinned backend's
-    turning authority (~35 deg integral) cannot swing the flight path from
-    the reserve-carrying burnout attitude into the band; the campaign table
-    in the ADR shows the perigee floor ~-1 km across every tuned family."""
+    """Insertion closes the 250 km band -- HARD assertion (F9 closed in
+    E5-05d #288): the redesigned upper stage + restart/coast schedule reaches
+    rp 281.8 km / ra 296.1 km at SECO on the SAME computed run that carries
+    the stage-1 reserve (test_live_ascent_computes_reserve). The strict-xfail
+    of E5-05b/E5-05c is promoted here per the ADR flightlab-0008 F9
+    resolution."""
     target = load_target(SCENARIO)
     elems = _elements_at(live_flight, "stage2", target.mission.epoch_utc)
     assert elems["rp"] > 230_000.0, elems
@@ -264,16 +270,16 @@ def test_recovery_landing_gate_on_the_computed_state(live_flight):
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(strict=False, reason=F9 + " / " + F10)
+@pytest.mark.xfail(strict=False, reason=F10)
 @pytest.mark.skipif(not FIXTURE.is_dir(),
                     reason="recorded-flight fixture baked by scripts/e505a_reference.py")
 @pytest.mark.skipif(not _has_gfold(), reason="needs gfold for the landing leg")
 def test_packaged_mission_chain_replays_the_recorded_flight(tmp_path):
     """The packaged mission (run_dir replay of the recorded OT flight,
-    drive_from_separation) chains the full dual-branch mission; the two
-    graded gates it cannot pass are exactly F9 (insertion band) and F10
-    (landing corridor) -- propagation stays not_checked (E2-04 environment
-    reason)."""
+    drive_from_separation) chains the full dual-branch mission; the insertion
+    band passes since E5-05d (#288) and the only graded gate it still cannot
+    pass is F10 (landing corridor) -- propagation stays not_checked (E2-04
+    environment reason)."""
     from orbitopt.mission.two_stage_leo import (
         STATUS_OK, run_two_stage_leo, scenario_from_config)
 
@@ -282,3 +288,82 @@ def test_packaged_mission_chain_replays_the_recorded_flight(tmp_path):
     gate = [c for c in mission.checks if getattr(c, "id", "") == "recovery-landing"]
     assert gate, "recovery-landing gate missing from the mission chain"
     assert mission.status == STATUS_OK, mission.status
+
+
+# --- E5-05b: the restart/coast (multi-burn) backend capability --------------
+
+#: a coast + re-ignition schedule that cuts the stage-2 main burn, coasts
+#: ballistically, and re-ignites at low thrust -- the mechanism E5-05b adds so
+#: stage 2 can circularise (and the enabler for higher bands). Marked
+#: illustrative: it is a capability probe, not the shipped reference schedule.
+RESTART_PROBE = {"stage": 2, "coast_start_s": 224.0, "coast_duration_s": 120.0,
+                 "restart_thrust_n": 1.0e6, "restart_burn_s": 60.0,
+                 "restart_elevation_deg": 0.0, "restart_azimuth_deg": 45.0}
+
+
+def _vehicle_with_restart(tmp_path):
+    import yaml
+
+    doc = yaml.safe_load(VEHICLE.read_text(encoding="utf-8"))
+    doc["restart"] = dict(RESTART_PROBE)
+    doc["data_provenance"]["restart"] = {
+        "provenance": "illustrative",
+        "source": "task #286 restart/coast capability probe",
+        "as_of": "2026-11-16"}
+    path = tmp_path / "veh_restart.yaml"
+    path.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    return path
+
+
+def test_restart_block_is_schema_valid(tmp_path):
+    """The vehicle document now accepts an optional `restart` block whose every
+    number is covered by a single subtree provenance entry (E5-05b)."""
+    from orbitopt.flightlab.vehicle_catalog import load_validated
+
+    doc = load_validated(_vehicle_with_restart(tmp_path))
+    assert doc["restart"]["coast_start_s"] == 224.0
+
+
+def test_restart_synthesizes_a_coast_gap(tmp_path):
+    """build_config folds `restart` into the stage thrust curve: the main burn
+    drops to zero (coast), stays there, then returns for the re-ignition, and
+    the simulation window extends to cover it (E5-05b)."""
+    from orbitopt.flightlab.adapters.opentsiolkovsky import Vehicle, build_config
+
+    path = _vehicle_with_restart(tmp_path)
+    cfg = build_config(load_target(SCENARIO), Vehicle.load(path), None)
+    curve = [[float(t), float(f)] for t, f in cfg["stages"][1]["engine"]["thrust_vac_n"]]
+    zero = [i for i, (_, f) in enumerate(curve) if f == 0.0]
+    assert zero, "coast: thrust must reach zero through the coast window"
+    assert any(f > 0.0 for _, f in curve[zero[-1] + 1:]), \
+        "restart: thrust must return after the coast"
+    assert cfg["stages"][1]["engine"]["burn_end_s"] > curve[zero[-1]][0], \
+        "burn must resume and end after the coast"
+    assert cfg["simulation"]["end_time_s"] > RESTART_PROBE["coast_start_s"] + \
+        RESTART_PROBE["coast_duration_s"], "sim window must cover the restart"
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _has_stack(), reason="needs the OpenTsiolkovsky binary + pygmo")
+def test_restart_reignites_a_single_seco(tmp_path):
+    """A restart/coast run flies through OT and maps to exactly ONE `seco`:
+    the coast-start burnout is suppressed (not insertion), and `seco` is the
+    post-coast re-ignition burnout. The raw stage-2 thrust shows the
+    powered -> coast -> powered signature. This is the capability gate for
+    E5-05b; band closure is a separate (vehicle) question (F9)."""
+    import csv
+
+    from orbitopt.flightlab.adapters.opentsiolkovsky import run_ascent
+
+    run = run_ascent(load_target(SCENARIO), _vehicle_with_restart(tmp_path), None,
+                     tmp_path / "out", timeout_s=900.0)
+    secoes = [e for e in run.events if e.kind == "seco"]
+    assert len(secoes) == 1, f"expected one seco, got {[e.kind for e in run.events]}"
+    assert secoes[0].t_s > RESTART_PROBE["coast_start_s"] + \
+        RESTART_PROBE["coast_duration_s"], secoes[0].t_s
+    traj = tmp_path / "out" / "opentsiolkovsky" / "trajectory.csv"
+    th = [float(r["thrust_n"]) for r in csv.DictReader(traj.open(encoding="utf-8"))
+          if int(float(r["stage"])) == 2]
+    assert min(th) < 1.0, "expected a zero-thrust coast interval"
+    assert any(t > 1e4 for t in th[len(th) // 2:]), \
+        "expected the re-ignition to produce thrust after the coast"
