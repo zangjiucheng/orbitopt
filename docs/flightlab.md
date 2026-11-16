@@ -156,8 +156,34 @@ The [guided comparison](benchmarks/fl607_mission_outputs.json) records
 body, inside the declared ±25 km bands. The former 235 km altitude difference
 falls to 1.65 km. This is a disclosed **non-parity variant** (1 t upper dry
 mass, 7 t propellant, 3° gimbal), not the original F-06 vehicle. Shared law
-does not mean identical commands along different states or general accuracy.
-Runs, handoffs, reports, scenes and residual-attribution data are exported.
+does not mean identical commands along different states or general accuracy --
+E6-03 measures where that accuracy actually reaches. Runs, handoffs, reports,
+scenes and residual-attribution data are exported.
+
+**E6-03:** the generalisation matrix puts a number on that envelope. The
+[guidance-generalisation study](benchmarks/e6_03_guidance_matrix.json) flies
+the same law through the same mission runner over 17 declared scenario points —
+5 target altitudes (180–400 km), 3 inclinations (28.5/45.0/51.6°, realised as
+launch latitude on a due-east heading, since the native plant steers with one
+TVC axis and no bank), 4 upper-stage configs (the disclosed 1 t/7 t variant, a
+0.8 t/7.2 t stretched tank, a 1.5 t/6.5 t heavy stage, and the **original F-06
+2 t/6 t stage with zero gimbal travel**) and 5 actuator sets, both backends in
+every cell. Six cells insert. Inclination costs nothing: 220 km inserts at all
+three angles with periapsis errors of 0.8–5.3 km. The altitude envelope is
+bounded at **both** ends by the cutoff criterion, not the tank — at 180 km the
+law shuts the burn with 478 kg left, periapsis inside the band and apoapsis
++52.8 km outside it (the criterion grades periapsis; apoapsis is whatever
+follows), and from 260 km up periapsis never closes on target, so the stage
+burns itself empty over-shooting by 5 600–7 100 km; 200 kg *more* propellant
+makes a 300 km miss worse (+6 862 → +17 763 km apoapsis), which is what rules
+the tank out. Of the 11 misses, 3 are vehicle capability (the heavy stage's
+terminal orbit stays 23–88 km tighter than the target circle; the unguided
+F-06 stage lands its periapsis 2 718–3 082 km low), 7 are the law's own
+terminal conditions, and 1 is the actuator: a 0.02 rad/s servo leaves the
+actuator-free point-mass twin inserting while the rigid body lands 6 217 km
+under the target orbit. The attribution rule (and why a dry tank is evidence of
+the law rather than of the vehicle) is in
+[ADR 0011](adr/flightlab-0011-guidance-generalisation-envelope.md).
 
 **E6-04:** the sampled-data TVC loop is audited against the RK4 plant: the
 control law and the stateful guidance are sampled once per integration step
