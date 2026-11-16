@@ -85,6 +85,31 @@ gate. `null` remains explicitly unassessed and contributes no independent
 validation. A green design-constraint rollup with a null flag does not prove
 independent verification. See the [acceptance report](acceptance-e1-e4.md).
 
+### Full physical mission gate (E5-04, task #271)
+
+That out-of-scope exemption is exactly what a *computed* mission must not
+hide behind (E2-04 declared the parking propagation out of scope and still
+passed). `inputs.full_mission.physical` re-grades the same chain checks as
+**five required physical checks** — no applicability escape hatch:
+
+| Required check | Evidence (the chain's existing checks) |
+|---|---|
+| `orbit_insertion` | station chain, ascent verdicts, expected-orbit agreement |
+| `parking_propagation` | M-05 propagation (a `not_checked` *declaration* is not evidence) |
+| `landing` | recovery touchdown/reserve/handoff — an unflown first stage caps at `not_checked` |
+| `mass_conservation` | every mass gate wherever it is measured (`mass.*`, boundary `*.mass_conservation`) |
+| `epoch_frame_continuity` | boundary continuity gates (`handoff.*`, `parking.*`: epoch, frame identity, coupled shared source) |
+
+Each check carries its own tri-state verdict and its own reason codes (a
+missing check reports `<check>_not_evidenced` with a reason read from the
+scenario/mission notes). The overall verdict is the same conjunction as the
+phase gate — failed beats not_checked beats passed — so **any required check
+that is `failed` or merely `not_checked` keeps the physical gate from
+passing**; only all-five-passed yields `passed`. The pipeline records it as
+`physical_mission_verdict`; the E2-03 phase verdict is reported alongside and
+unchanged, so a frozen mission like E2-04 still reads `passed` per phase while
+the physical gate honestly says `not_checked`.
+
 ## Benchmarks against public references
 
 ```bash

@@ -675,7 +675,9 @@ def scenario_warnings(scenario: TwoStageLeoScenario) -> list[str]:
                      "in-plane node pass")
     if scenario.expected.propagation_result != "passed":
         notes.append(f"expected.propagation_result is {scenario.expected.propagation_result!r}: "
-                     "a passing M-05 report is not required for the mission to pass")
+                     "a passing M-05 report is not required for the mission to pass, but the "
+                     "E5-04 physical gate keeps parking_propagation required "
+                     "(a declaration is not evidence)")
     if scenario.recovery is not None:
         notes.append("recovery: the first stage flies the FL-302/FL-303(/FL-305) chain after "
                      "separation and is merged into the run; recovery.landed must be green for "
@@ -684,7 +686,9 @@ def scenario_warnings(scenario: TwoStageLeoScenario) -> list[str]:
     else:
         notes.append("full-mission gate: no recovery stage declared -- the recovery_touchdown "
                      "phase is not applicable and the full-mission verdict grades only the "
-                     "phases this mission flies (E2-03)")
+                     "phases this mission flies (E2-03); the E5-04 physical gate does cap at "
+                     "not_checked: a mission that flies no landing is not a full physical "
+                     "mission")
     return notes
 
 
@@ -1732,14 +1736,20 @@ def build_from_config(config: dict, recorder=None) -> dict:
         st.physical_model = {"name": "M-07 chain gate (station chain, M-01 handoffs, "
                                      "M-02 element agreement, M-05 propagation report)",
                              "fidelity": "high-fidelity"}
+        physical = dict(mission.full_mission.get("physical") or {})
         st.convergence.update({"converged": mission.status == STATUS_OK,
                                "mission_status": mission.status,
                                "full_mission_verdict": mission.full_mission.get("verdict"),
+                               "physical_mission_verdict": physical.get("verdict"),
                                "checks_passed": sum(1 for c in mission.checks if c.passed),
                                "checks_total": len(mission.checks)})
         st.notes.append("full-mission gate: " + mission.full_mission.get("verdict", "not_checked")
                         + " (" + ", ".join(f"{p['phase']}={p['verdict']}"
                                            for p in mission.full_mission.get("phases", [])) + ")")
+        st.notes.append("full physical mission gate (E5-04): "
+                        + physical.get("verdict", "not_checked")
+                        + " (" + ", ".join(f"{c['check']}={c['verdict']}"
+                                           for c in physical.get("checks", [])) + ")")
         st.notes.extend(f"not assessed: {n['id']} ({n['reason']})" for n in mission.not_assessed)
 
     recorder.skip(SELECT, "one frozen reference mission -- nothing to select")
