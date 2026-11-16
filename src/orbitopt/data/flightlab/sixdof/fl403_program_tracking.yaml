@@ -6,6 +6,9 @@
 # (tests/fixtures/.../fl403_spike/ot_out/trajectory.csv -- re-generate with
 # scripts/fl403_record_reference.py). The tracking test
 # (tests/test_flightlab_sixdof_tracking_jsbsim.py) asserts the same bounds.
+# E6-01 (#273) re-recorded the reference with the aligned choked engine and
+# physical 2 m^2 nozzle (ADR-0009): the bounds are unchanged, the measured
+# MECO altitude deviation moved 51 -> 52 m.
 name: fl403-program-tracking
 provenance: illustrative
 model: spike_stage

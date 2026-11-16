@@ -14,7 +14,7 @@ Declared GO criteria (ADR docs/adr/flightlab-0001-jsbsim-6dof.md):
 Regression guards added with the quaternion->DCM fix: the whole-burn error
 bound is the same 2 deg (it was 30 deg while a transposed DCM plus a launch
 IC tuned against it produced a ~24 deg early "transient"), and the MECO
-bounds sit ~10x above the measured deviations (51 m / 2 m/s / 0.02 deg).
+bounds sit ~10x above the measured deviations (52 m / 2 m/s / 0.02 deg).
 """
 from __future__ import annotations
 

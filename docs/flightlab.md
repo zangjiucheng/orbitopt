@@ -99,12 +99,14 @@ entry point; they are not canonical output identities.
 
 The [parity document](../src/orbitopt/data/flightlab/parity/spike_stage_parity.yaml)
 drives native stage construction and checks packaged JSBSim mass, inertia,
-propellant, mounting and aero geometry. Shared parameters do not make the
-engines identical: the JSBSim spike retains a vacuum-like nozzle and fixed
-propellant flow. The generated production airframe adds the aero tables and
-cancels the fixed-AERORP/live-CG force couple. See
-[ADR 0007](adr/flightlab-0007-production-jsbsim-aero-path.md) for measured
-residuals; [ADR 0001](adr/flightlab-0001-jsbsim-6dof.md) covers the base spike.
+propellant, mounting and aero geometry. Since E6-01 the engines share the
+propulsion law too: a choked `T_vac/(Isp_vac*g0)` = 599.083 kg/s flow through
+the same physical 2 m^2 exit, so both sides pay the same ambient back-pressure
+debit and agree on 1.6774 MN of pad thrust. The generated production airframe
+adds the aero tables and cancels the fixed-AERORP/live-CG force couple. See
+[ADR 0009](adr/flightlab-0009-engine-and-mass-flow-parity.md) for the aligned
+residuals, [ADR 0007](adr/flightlab-0007-production-jsbsim-aero-path.md) for
+the aero path, [ADR 0001](adr/flightlab-0001-jsbsim-6dof.md) for the base spike.
 
 Recovery remains a separate Earth-fixed 3-DOF chain with J2, rotation,
 atmosphere and engine/event models. Selecting a 6-DOF ascent does not make
@@ -135,12 +137,14 @@ See the [acceptance results](acceptance-e1-e4.md).
 
 **F-05 / E1-02:** grade the powered phase separately from coast. In the
 [recorded gravity-turn study](benchmarks/fl605_gravity_turn_ascent.json),
-burnout occurs at 99.85 s in a 180 s flight. Powered 6-DOF attitude error is
-4.77° peak / 2.78° RMS, alpha 14.34°, max-Q 71.4 kPa and peak
-`q·alpha` 483 kPa·deg. The later 62.8° alpha peak occurs in near-vacuum
-coast (coast max-Q 0.18 Pa), not at peak aerodynamic loading. The study's
-2.13 km altitude, 2.08 m/s speed and 0.47° flight-path-angle differences
-are scenario results.
+burnout occurs at 100.2 s in a 180 s flight. Powered 6-DOF attitude error is
+4.77° peak / 2.80° RMS, alpha 14.42°, max-Q 71.2 kPa and peak
+`q·alpha` 482 kPa·deg. The later 62.6° alpha peak occurs in near-vacuum
+coast (coast max-Q 0.11 Pa), not at peak aerodynamic loading. The study's
+2.14 km altitude, 2.06 m/s speed and 0.47° flight-path-angle differences
+are scenario results. (Re-recorded after E6-01's choked engine and commanded
+MECO and E6-04's per-step control sampling; every powered-phase constraint
+still passes, alpha now 0.58° under the 15° table edge.)
 
 **F-07 / E1-03:** both native backends use the same state-feedback
 upper-stage steering law, command limits and periapsis cutoff:
@@ -150,12 +154,64 @@ orbitopt flight mission --backend BOTH -o runs/f07-mission
 ```
 
 The [guided comparison](benchmarks/fl607_mission_outputs.json) records
-226.1/231.5 km peri/apo for the point mass and 221.5/228.6 km for the rigid
+225.3/228.5 km peri/apo for the point mass and 220.5/226.5 km for the rigid
 body, inside the declared ±25 km bands. The former 235 km altitude difference
-falls to 1.65 km. This is a disclosed **non-parity variant** (1 t upper dry
+falls to 1.43 km (re-recorded after E6-01/E6-04; 1.65 km before). This is a disclosed **non-parity variant** (1 t upper dry
 mass, 7 t propellant, 3° gimbal), not the original F-06 vehicle. Shared law
-does not mean identical commands along different states or general accuracy.
-Runs, handoffs, reports, scenes and residual-attribution data are exported.
+does not mean identical commands along different states or general accuracy --
+E6-03 measures where that accuracy actually reaches. Runs, handoffs, reports,
+scenes and residual-attribution data are exported.
+
+**E6-03:** the generalisation matrix puts a number on that envelope. The
+[guidance-generalisation study](benchmarks/e6_03_guidance_matrix.json) flies
+the same law through the same mission runner over 17 declared scenario points —
+5 target altitudes (180–400 km), 3 inclinations (28.5/45.0/51.6°, realised as
+launch latitude on a due-east heading, since the native plant steers with one
+TVC axis and no bank), 4 upper-stage configs (the disclosed 1 t/7 t variant, a
+0.8 t/7.2 t stretched tank, a 1.5 t/6.5 t heavy stage, and the **original F-06
+2 t/6 t stage with zero gimbal travel**) and 5 actuator sets, both backends in
+every cell. Six cells insert. Inclination costs nothing: 220 km inserts at all
+three angles with periapsis errors of 0.8–5.3 km. The altitude envelope is
+bounded at **both** ends by the cutoff criterion, not the tank — at 180 km the
+law shuts the burn with 478 kg left, periapsis inside the band and apoapsis
++52.8 km outside it (the criterion grades periapsis; apoapsis is whatever
+follows), and from 260 km up periapsis never closes on target, so the stage
+burns itself empty over-shooting by 5 600–7 100 km; 200 kg *more* propellant
+makes a 300 km miss worse (+6 862 → +17 763 km apoapsis), which is what rules
+the tank out. Of the 11 misses, 3 are vehicle capability (the heavy stage's
+terminal orbit stays 23–88 km tighter than the target circle; the unguided
+F-06 stage lands its periapsis 2 718–3 082 km low), 7 are the law's own
+terminal conditions, and 1 is the actuator: a 0.02 rad/s servo leaves the
+actuator-free point-mass twin inserting while the rigid body lands 6 217 km
+under the target orbit. The attribution rule (and why a dry tank is evidence of
+the law rather than of the vehicle) is in
+[ADR 0011](adr/flightlab-0011-guidance-generalisation-envelope.md).
+
+**E6-04:** the sampled-data TVC loop is audited against the RK4 plant: the
+control law and the stateful guidance are sampled once per integration step
+at the step boundary and held across the four stages, so no mid-stage
+estimate advances controller state. The audit removed a first-order
+integration plateau (1st-order plateau → 2.3e-8 m flat loop output) and a
+guidance slew-limiter corruption; the convergence curves and the
+`dt_s = dt_c_s = 0.02` default justification live in
+[ADR 0008](adr/flightlab-0008-sampled-data-control-and-rk4-plant.md) and
+[the recorded sweep](benchmarks/e604_step_convergence.json).
+
+**E6-02:** the closed-loop ascent is flown on the **JSBSim production path**:
+the F-04/F-06 gravity-turn program (steepened to 140 s to keep the tabulated
+airframe inside its ±15° envelope under production servo lag), the FL-403 PID
+gimbal law and the E6-01 engine, then the FL-402 split with commanded MECO at
+t = 95 s and delayed ignition on the upper child. The five phases
+(stack powered, booster coast, upper coast, upper powered, upper coast after
+burn-out) are graded separately against a declared constraint table: stack
+powered 0.44° peak / 0.22° RMS attitude error, alpha 11.7° (inside the table
+envelope), max-Q 71.4 kPa, TVC margin 0.96 with zero saturation, staging
+mass/momentum/continuity inside the declared property-round-trip bands. The
+native twin passes its own constraints with 4.26° peak (tracker lineage, cf.
+FL-605's 4.77°) and agrees on max-Q to 0.25%; the residuals are attributed by
+channel in [ADR 0010](adr/flightlab-0010-guided-jsbsim-ascent.md) and the
+[recorded study](benchmarks/e6_02_guided_ascent.json) — law difference
+(guidance), not model difference.
 
 ## Hard gates
 

@@ -151,11 +151,21 @@ experiment entry point).
 ## Numbers (dt = 0.01 s; full table in the ADR)
 
 Whole-burn attitude error **0.51° max** (the t = 8 s pitch-over kick),
-settled (t ≥ 60 s) **0.061° max / 0.036° RMS**; gimbal saturation **0.0 %**
-of burn, peak deflection 0.42° of ±5° travel (commands also within travel);
-MECO deviation vs 3-DOF: **−51 m alt / −2.0 m/s / +0.016° FPA**; dt-halving
-agreement 30 m / 0.85 m/s / 0.003°; no non-finite states to MECO+5 s at
-Mach 18.9.
+settled (t ≥ 60 s) **0.052° max / 0.032° RMS**; gimbal saturation **0.0 %**
+of burn, peak deflection 0.47° of ±5° travel (commands also within travel);
+MECO deviation vs 3-DOF: **−52 m alt / −2.0 m/s / +0.015° FPA**; dt-halving
+agreement 58 m / 1.7 m/s / 0.034°; no non-finite states to MECO+5 s at
+Mach 18.0.
+
+Figures re-measured after the E6-01 (#273) engine alignment (see ADR-0009):
+the pad thrust fell from JSBSim's near-vacuum 1.883 MN to the 1.677 MN the
+2 m² exit and sea-level back pressure actually give, so TVC authority
+(`thrust * arm`) is ~11 % lower and the loop flies closer to its actuator
+lag. That shows up as a larger dt-sensitivity: −110 m / −52 m / −22 m at
+dt = 0.02 / 0.01 / 0.005 s, a Richardson extrapolation of **≈ +8 m**. The
+MECO deviation is therefore dominated by step-size-limited actuator/loop lag
+(an implementation difference) rather than a formulation disagreement --
+which is what the 500 m acceptance line is sized for.
 
 ## Gotcha found in acceptance: quaternion→DCM direction
 
