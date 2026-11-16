@@ -406,6 +406,10 @@ class ReturnPlan:
     corridor_report: CorridorReport
     ignitions_used: int = 0
     assumptions: tuple[str, ...] = field(default_factory=tuple)
+    #: E5-05c (task #287): the second (braking) entry burn when the script was
+    #: planned with ``entry_burns=2``; ``None`` for the 7-parameter one-burn
+    #: script (every pre-E5-05c plan and caller).
+    entry_burn_2: "EntryBurnPlan | None" = None
 
 
 # --------------------------------------------------------------------------
@@ -488,19 +492,42 @@ def landing_burn_propellant_need_kg(mass_kg: float, speed_m_s: float,
 # --------------------------------------------------------------------------
 
 
+def _retro_lead_direction(v: np.ndarray, up: np.ndarray) -> np.ndarray:
+    """Unit thrust direction of an entry/braking burn: retrograde tilted up
+    by ``ENTRY_BURN_LEAD_RAD`` toward the vertical-up component of the
+    velocity's anti-parallel plane (keeps the plume off the deck and trades
+    forward speed for altitude hold)."""
+    spd = float(np.linalg.norm(v))
+    vv = v / spd
+    dd = -up
+    pd = dd - float(dd @ vv) * vv
+    nrm = float(np.linalg.norm(pd))
+    if nrm < 1e-9:  # velocity already vertical: burn pure retro
+        pd = vv
+    else:
+        pd = pd / nrm
+    return -math.cos(ENTRY_BURN_LEAD_RAD) * vv \
+        + math.sin(ENTRY_BURN_LEAD_RAD) * pd
+
+
 class _Mission:
-    """Scripted two-burn return: coast -> boostback (delay/duration/throttle/
+    """Scripted return: coast -> boostback (delay/duration/throttle/
     pitch/yaw) -> coast (drag, gravity) -> entry burn (trigger altitude /
-    duration, full throttle, retro + lead) -> corridor. Sampled once per
-    propagator step like a flight computer."""
+    duration, full throttle, retro + lead) -> [optional second, lower
+    braking burn (E5-05c, ``eb2``: same trigger/duration law at a lower
+    trigger altitude) ->] corridor. Sampled once per propagator step like a
+    flight computer."""
 
     def __init__(self, t_sep: float, bb: BoostbackPlan, eb: EntryBurnPlan,
-                 bearing_of: Callable[[np.ndarray], float]):
+                 bearing_of: Callable[[np.ndarray], float],
+                 eb2: EntryBurnPlan | None = None):
         self.t_sep = float(t_sep)
         self.bb = bb
         self.eb = eb
+        self.eb2 = eb2
         self.bearing_of = bearing_of
         self.entry_t0: float | None = None
+        self.entry2_t0: float | None = None
 
     def __call__(self, t: float, state: BoosterState) -> ThrustCmd | None:
         t0 = self.t_sep + self.bb.start_delay_s
@@ -526,20 +553,20 @@ class _Mission:
                 self.entry_t0 = float(t)
             return None
         if t < self.entry_t0 + self.eb.duration_s:
-            spd = float(np.linalg.norm(v))
-            if spd < 1e-9:
+            if float(np.linalg.norm(v)) < 1e-9:
                 return None  # nothing to fly against; keep the engines shut
-            vv = v / spd
-            dd = -up
-            pd = dd - float(dd @ vv) * vv
-            nrm = float(np.linalg.norm(pd))
-            if nrm < 1e-9:  # velocity already vertical: burn pure retro
-                pd = vv
-            else:
-                pd = pd / nrm
-            d = (-math.cos(ENTRY_BURN_LEAD_RAD) * vv
-                 + math.sin(ENTRY_BURN_LEAD_RAD) * pd)
-            return ThrustCmd(1.0, d)
+            return ThrustCmd(1.0, _retro_lead_direction(v, up))
+        if self.eb2 is None:
+            return None
+        if self.entry2_t0 is None:
+            _lat, _lon, h = _geodetic_fast(r)
+            if h <= self.eb2.trigger_altitude_m and float(v @ up) < 0.0:
+                self.entry2_t0 = float(t)
+            return None
+        if t < self.entry2_t0 + self.eb2.duration_s:
+            if float(np.linalg.norm(v)) < 1e-9:
+                return None  # nothing to fly against; keep the engines shut
+            return ThrustCmd(1.0, _retro_lead_direction(v, up))
         return None
 
 
@@ -645,6 +672,16 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
 
     burn_starts = [e for e in tr.events if e.kind == "burn_start"]
     entry_t0 = burn_starts[1].t_s if len(burn_starts) > 1 else None
+    gate_t = entry_t0
+    if getattr(mission, "eb2", None) is not None:
+        # E5-05c two-burn entry: the corridor is only a valid landing-handoff
+        # gate once the second (braking) burn has flown and cut off -- an
+        # engine-off insertion state, like the one-burn script's coast.
+        gate_t = None
+        if len(burn_starts) > 2:
+            ends = [e.t_s for e in tr.events
+                    if e.kind == "burn_end" and e.t_s >= burn_starts[2].t_s]
+            gate_t = min(ends) if ends else None
     for e in tr.events:
         if e.kind == "burn_end" and e.data.get("reason") == "PROPELLANT_EXHAUSTED":
             t0, t1 = bb_window
@@ -652,7 +689,7 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
 
     pad = np.asarray(target.position_ecef_m, dtype=np.float64)
     crossings = [e for e in tr.events
-                 if e.kind == h0_name and entry_t0 is not None and e.t_s >= entry_t0]
+                 if e.kind == h0_name and gate_t is not None and e.t_s >= gate_t]
     if crossings:
         ev = crossings[0]
         r = np.asarray(ev.data["position_ecef_m"], dtype=np.float64)
@@ -687,6 +724,28 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
         pen += 50.0
     elif out.exhausted == "entry":
         pen += 10.0
+    two_burn = getattr(mission, "eb2", None) is not None
+    if two_burn:
+        if out.exhausted == "entry":
+            pen += 20.0  # two-burn mode: depletion mid-entry strands burn 2
+        # Pre-crossing propellant discipline (E5-05c): the commanded entry
+        # phase (burn 1 + burn 2 at ambient mdot) may not spend the landing
+        # reserve plus a fixed landing allowance -- the one-burn objective
+        # only checked this AT the crossing, which lets a blind search burn
+        # to a crossing with nothing left to land with.
+        eng = vehicle.engine
+        thrust_sl = eng.count * eng.thrust_vacuum_n \
+            - eng.nozzle_exit_area_m2 * 101_325.0
+        mdot_est = thrust_sl / (eng.isp_sea_level_s * G0_M_S2)
+        m_ign = float(tr.mass_kg[0])
+        if mission.entry_t0 is not None:
+            t_arr = np.asarray(tr.times_s, dtype=np.float64)
+            m_ign = float(np.interp(mission.entry_t0, t_arr,
+                                    np.asarray(tr.mass_kg, dtype=np.float64)))
+        prop_at_ign = max(0.0, m_ign - float(vehicle.dry_mass_kg))
+        short = max(0.0, (float(mission.eb.duration_s) + float(mission.eb2.duration_s))
+                    * mdot_est + reserve + 15_000.0 - prop_at_ign)
+        pen += (short / 1000.0) ** 2
     if out.crossed:
         pen += (out.miss_m / (corridor.radius_m if aim_radius is None
                               else float(aim_radius))) ** 2
@@ -752,9 +811,10 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                              DEFAULT_LANDING_DIVERT_BUDGET_M,
                          landing_reserve_margin_kg: float =
                              DEFAULT_LANDING_RESERVE_MARGIN_KG,
-                         joint_chance: JointChanceSpec | Mapping[str, Any] | None =
-                             None,
-                         corridor_aim_margin_m: float = 0.0) -> ReturnPlan:
+                          joint_chance: JointChanceSpec | Mapping[str, Any] | None =
+                              None,
+                          corridor_aim_margin_m: float = 0.0,
+                          entry_burns: int = 1) -> ReturnPlan:
     """Optimize the boostback/entry-burn script so the FL-301-propagated
     booster reaches ``recovery_target.corridor``; returns the corridor
     insertion state, its pad-ENU mirror, and the flown track.
@@ -782,9 +842,10 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     ``orbitopt.flightlab.recovery.propagator.propagate`` -- the optimizer
     only ever sees full-physics rollouts, and the accepted solution is
     re-integrated at ``dt_final`` before it is reported (no kinematic
-    shortcuts). ``initial_guess`` (delay, duration, throttle, pitch, yaw
-    trim, trigger altitude, entry duration) overrides the default starting
-    point; ``max_fevals`` budgets the search (a restart from a jittered
+     shortcuts). ``initial_guess`` (delay, duration, throttle, pitch, yaw
+     trim, trigger altitude, entry duration -- plus braking-burn trigger
+     altitude and duration when ``entry_burns=2``) overrides the default
+     starting point; ``max_fevals`` budgets the search (a restart from a jittered
     point spends at most half of it, and budgets below 40 keep the search
     where it started -- pin a script by passing both).
     ``corridor_aim_margin_m`` (E7-04, task #280) is a *planning-time* aim
@@ -801,13 +862,29 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     tighter radius also pulls the divert handed to FL-303 down, which is the
     E7-04 attack on the terminal ``LANDING_LATERAL_SPEED_EXCEEDED`` mode.
     0.0 (default) reproduces the E3-02-era objective bit-for-bit.
-    Raises ``RecoveryError`` when the vehicle has fewer than two restarts
-    available (boostback and entry burns each need one)."""
+    ``entry_burns`` (E5-05c, task #287) selects the entry-script length:
+    1 (default) is the FL-302 7-parameter one-burn script, reproduced
+    bit-for-bit; 2 extends it to a 9-parameter multi-burn entry -- a first
+    entry burn (as before) plus a second, lower FULL-throttle *braking*
+    burn flown with the same retro+lead law, igniting on the descent
+    crossing of its own trigger altitude (clamped strictly below the first
+    trigger). The corridor crossing is only counted once the braking burn
+    has cut off, so the landing handoff stays an engine-off state; the
+    second burn gives the script authority to decelerate *through* the
+    terminal-drag asymptote a single coasting burn cannot cross from a
+    computed-MECO separation energy (ADR flightlab-0008 F10). Raises
+    ``RecoveryError`` when the vehicle has fewer than ``1 + entry_burns``
+    restarts available (boostback and each entry burn need one; the landing
+    burn needs its own on top)."""
     corridor = recovery_target.corridor
     eng = booster.engine
-    if eng.restarts_max < 2:
+    if entry_burns not in (1, 2):
+        raise ValueError(f"entry_burns must be 1 or 2, got {entry_burns}")
+    ignitions_needed = 1 + int(entry_burns)
+    if eng.restarts_max < ignitions_needed:
         raise RecoveryError(
-            f"boostback + entry burns need 2 ignitions, vehicle allows {eng.restarts_max}")
+            f"boostback + entry burns need {ignitions_needed} ignitions, vehicle "
+            f"allows {eng.restarts_max}")
     if landing_divert_budget_m is not None and not landing_divert_budget_m > 0.0:
         raise ValueError(f"landing_divert_budget_m must be positive or None, "
                          f"got {landing_divert_budget_m}")
@@ -851,7 +928,9 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
         # x[4] is the boostback yaw trim [deg, +right] around the live
         # bearing to the target (a local-frame direction parameter bounded
         # like a real trim authority); the mission law adds the bearing.
-        delay, dur, thr, pitch, yaw, h_trig, dur_e = x
+        # x[7:9] (entry_burns=2, E5-05c) trigger/duration of the second
+        # braking burn, clamped to ignite strictly below the first trigger.
+        delay, dur, thr, pitch, yaw, h_trig, dur_e = x[:7]
         delay = min(max(float(delay), 0.0), min(horizon_s * 0.4, 150.0))
         dur = min(max(float(dur), 4.0), 60.0)
         thr = min(max(float(thr), eng.throttle_min), eng.throttle_max)
@@ -859,12 +938,19 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
         yaw = min(max(float(yaw), -45.0), 45.0)
         h_trig = min(max(float(h_trig), corridor.h0_m + 2000.0), 35_000.0)
         dur_e = min(max(float(dur_e), 3.0), 45.0)
-        return np.array([delay, dur, thr, pitch, yaw, h_trig, dur_e])
+        out = [delay, dur, thr, pitch, yaw, h_trig, dur_e]
+        if x.size > 7:
+            h2 = min(max(float(x[7]), corridor.h0_m + 300.0),
+                     min(float(h_trig) - 1000.0, 35_000.0))
+            dur2 = min(max(float(x[8]), 3.0), 45.0)
+            out += [h2, dur2]
+        return np.array(out)
 
     def to_mission(x: np.ndarray) -> _Mission:
         bb = BoostbackPlan(float(x[0]), float(x[1]), float(x[2]), float(x[3]), float(x[4]))
         eb = EntryBurnPlan(float(x[5]), float(x[6]))
-        return _Mission(sep_state.t_s, bb, eb, bearing_of)
+        eb2 = EntryBurnPlan(float(x[7]), float(x[8])) if x.size > 7 else None
+        return _Mission(sep_state.t_s, bb, eb, bearing_of, eb2)
 
     def rollout(x: np.ndarray, dt: float) -> _Rollout:
         x = clamp(x)
@@ -883,12 +969,18 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     prop_floor = _propellant_floor_kg(sep_mass, horiz_speed, eng.isp_vacuum_s)
 
     x0 = np.asarray(initial_guess, dtype=np.float64) if initial_guess is not None \
-        else np.array([8.0, 30.0, eng.throttle_max, 5.0, 0.0, 16_000.0, 22.0])
+        else np.array([8.0, 30.0, eng.throttle_max, 5.0, 0.0, 16_000.0, 22.0,
+                       *([7_000.0, 25.0] if entry_burns == 2 else [])])
+    if x0.size != 7 + (2 if entry_burns == 2 else 0):
+        raise ValueError(
+            f"initial_guess has {x0.size} entries; the entry_burns={entry_burns} "
+            f"script has {7 + (2 if entry_burns == 2 else 0)}")
     best_x = clamp(x0)
     best = rollout(best_x, dt_opt)
 
     if sep_prop >= prop_floor:
-        scale = np.array([10.0, 12.0, 0.1, 8.0, 18.0, 4000.0, 10.0])
+        scale = np.array([10.0, 12.0, 0.1, 8.0, 18.0, 4000.0, 10.0,
+                          *([3000.0, 12.0] if entry_burns == 2 else [])])
 
         def obj(x: np.ndarray) -> float:
             r = rollout(x, dt_opt)
@@ -949,6 +1041,7 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
     insertion state + ENU mirror."""
     bb = BoostbackPlan(float(x[0]), float(x[1]), float(x[2]), float(x[3]), float(x[4]))
     eb = EntryBurnPlan(float(x[5]), float(x[6]))
+    eb2 = EntryBurnPlan(float(x[7]), float(x[8])) if x.size > 7 else None
     track = final.track
     assert track is not None  # every _assemble path carries a flown track
 
@@ -1036,13 +1129,20 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
             f"{chance.violation_tolerance:g}); "
             "replaces the R-01 soft terms (DESIGN ASSUMPTIONs unless overridden)")
 
+    if eb2 is not None:
+        assumptions.append(
+            "E5-05c multi-burn entry script (entry_burns=2): boostback + entry "
+            "burn + lower braking burn; the corridor handoff is graded engine-"
+            "off after the braking burn cutoff (DESIGN ASSUMPTION unless "
+            "overridden)")
+
     return ReturnPlan(
         feasible=not reasons, reason_codes=tuple(reasons),
         target=target, corridor=corridor, boostback=bb, entry_burn=eb,
         landing_burn_initial_state=state, landing_burn_initial_state_enu=enu,
         track=track, corridor_report=report,
         ignitions_used=int(track.ignitions_used),
-        assumptions=tuple(assumptions))
+        assumptions=tuple(assumptions), entry_burn_2=eb2)
 
 
 def mission_command(return_plan: ReturnPlan,
@@ -1054,4 +1154,4 @@ def mission_command(return_plan: ReturnPlan,
     re-fly sees the identical script."""
     pad = np.asarray(return_plan.target.position_ecef_m, dtype=np.float64)
     return _Mission(float(sep_state.t_s), return_plan.boostback, return_plan.entry_burn,
-                    _bearing_of_target(pad))
+                    _bearing_of_target(pad), return_plan.entry_burn_2)

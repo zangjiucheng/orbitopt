@@ -189,12 +189,14 @@ booster:
     nozzle_exit_area_m2: 5.0
     throttle_min: 0.1
     throttle_max: 1.0
-    restarts_max: 3
+    restarts_max: 4
   assumptions:
   - Three relightable landing units (subset of the sea-level cluster) with a deep-throttle floor (10%) so hover
     authority holds from the light post-entry mass down to dry mass with the 15 t reserve.
   - 'Unlike the sealed baseline, the OT stage-1 config now stops at a declared cutoff: the recovery reserve below
     is REAL separation propellant, not planning headroom.'
+  - 'E5-05c (#287): restarts_max raised 3->4 for the multi-burn entry script -- the cluster now flies boostback,
+    entry burn, lower braking burn, and the landing burn (four ignitions, one per phase).'
 data_provenance:
   simulation:
     provenance: illustrative
