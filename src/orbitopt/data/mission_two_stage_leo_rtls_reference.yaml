@@ -1,0 +1,141 @@
+# E5-05 (task #272): the reproducible full-physical reference mission.
+#
+# The epic-P0 reference scenario in its complete form: BOTH branches flown
+# and graded from a REAL computed ascent -- the ascent is flown now by the
+# pinned OpenTsiolkovsky v1.0.0 binary (ascent.mode: optimize, the M-07
+# compute recipe), the separation fork drives BOTH the upper-stage branch to
+# the 400 km parking orbit AND the booster branch through the FL-304 RTLS
+# chain, and the E5-02 coupled-branch gate grades the two branches against
+# the one canonical separation state they both descend from
+# (drive_from_separation: true). Nothing in the chain is a preset state:
+# every number the reference records is computed from launch to landing.
+#
+# This is the SCENARIO OF RECORD; its frozen outputs live under
+# tests/data/mission/reference/e5-05-reference-mission/ and the regression
+# path replays them -- scripts/e505_reference.py update re-flies the whole
+# mission and re-records the reference; scripts/e505_reference.py run +
+# compare (and the cross-environment plan
+# src/orbitopt/data/crossenv_e505_plan.yaml, which consumes the replay
+# scenario mission_two_stage_leo_rtls_replay.yaml) is what CI runs.
+#
+# Provenance and tolerances are part of the reference, not folklore: the
+# recording run's code version, dependency matrix, IERS snapshot and
+# environment go to PROVENANCE.json, and every regression band with its
+# source goes to tolerances.json (both under the reference directory, both
+# written and checked by scripts/e505_reference.py).
+#
+# RECORDING STATUS (task #272): NOT YET RECORDED -- blocked on a vehicle
+# decision, not on software. The pinned OT binary burns stage-1 to depletion
+# on every run (debris separates at exactly its dry mass), and RTLS from a
+# real MECO needs tens of tons of stage-1 reserve this demonstrator cannot
+# leave without failing its own insertion (ContextDB record
+# e5-05-rtls-infeasibility-evidence). This file stays the scenario of record
+# for whichever way the decision lands; every consumer of the reference
+# detects the missing directory, prints the reason and passes.
+#
+# Why kourou (the M-07/Gate-B site): the RTLS plan recipe below is FL-305's
+# pinned warm start, accepted for this vehicle at exactly this target's
+# nominal separation geometry flown off this pad by the Gate-B Flight Lab
+# scenario; the reference keeps the recipe that is VERIFIED for the geometry
+# it flies, not a transplanted one. (An E5-05 recording attempt from
+# cape-canaveral confirmed the transplanted geometry is boostback-infeasible
+# for this vehicle: INSUFFICIENT_PROPELLANT_BOOSTBACK.)
+#
+# `expected.propagation_result: not_checked` -- the parking-propagation leg
+# needs tudatpy, which the gfold-pinned landing stack cannot host on one
+# interpreter (gfold needs Python >= 3.11, the tudatpy lock is 3.10). The
+# leg is recorded declared-not-checked (never passed) in the single-stack
+# replay; the cross-environment run EVIDENCES it: the ascent leg's
+# `propagate: true` option flies it in the tudatpy environment
+# (crossenv_e505_plan.yaml), which is what lifts the E5-04 physical gate's
+# parking-propagation check from not_checked to passed.
+schemaVersion: "1.0"
+mission:
+  id: e5-05-reference-two-stage-leo-rtls
+  title: Reproducible full-physical reference mission (computed ascent + parking + booster RTLS)
+  kind: two-stage-leo
+scenario:
+  mission:
+    id: e5-05-reference-two-stage-leo-rtls
+    title: Reproducible full-physical reference mission (computed ascent + parking + booster RTLS)
+    kind: two-stage-leo
+  launch:
+    site: kourou                    # the Gate-B site the recovery recipe is verified at
+    vehicle: synthetic_two_stage    # catalog: orbitopt/data/flightlab/vehicles
+    orbit: 400x400@51.6             # 400 km circular, 51.6 deg (km altitudes, M-04 spec)
+    date_utc: "2026-11-10"          # a past epoch: finalized IERS, no extrapolated EOPs
+    raan_deg: null
+    window_days: 14.0
+  ascent:
+    mode: optimize                  # COMPUTED ascent: the M-07 compute recipe, flown by the
+    objective: payload              # pinned OpenTsiolkovsky v1.0.0 binary -- no preset states
+    payload_kg: 0.0
+    seed: 11                        # the seed the FL-305 convergence test verifies with
+    algorithm: cmaes
+    generations: 40
+    population: 40
+    workers: 4
+    local: true
+    refly: true
+    timeout_s: 300.0
+  handoff:
+    # Same M-01 gates as the M-07 packaged scenario (1 m / 10 mm/s / 1 s /
+    # 1 g, staging headroom 50 mm/s, element band as below): the E5-05
+    # reference is graded with the mission gates, never with looser ones.
+    position_m: 1.0
+    velocity_m_s: 0.01
+    epoch_s: 1.0
+    max_epoch_gap_s: null
+    mass_kg: 0.001
+    staging_velocity_m_s: 0.05
+    elements:
+      semi_major_axis_m: 10.0
+      eccentricity: 1.0e-6
+      inclination_deg: 1.0e-3
+      raan_deg: 1.0e-2
+      apsides_m: 10.0
+  recovery:
+    # RTLS back to the launch site, the flight target's own declared design
+    # assumptions (leo_two_stage.yaml): touchdown <= 3 m/s vertical,
+    # <= 1 m/s lateral, >= 1000 kg reserve.
+    spec:
+      kind: rtls
+      target: launch_site
+      max_touchdown_speed_m_s: 3.0
+      max_touchdown_lateral_speed_m_s: 1.0
+      min_propellant_reserve_kg: 1000
+    # FL-305's accepted plan warm start (delay s, duration s, throttle,
+    # pitch deg, yaw deg, trigger alt m, entry duration s) with the FL-304
+    # local-refinement budget: the recovery plan is re-optimised from the
+    # canonical separation state on every regression run, and this pin is
+    # what makes that re-optimisation deterministic across machines.
+    plan_options:
+      initial_guess: [18.4, 17.75, 1.0, 4.36, 0.0, 17456.0, 23.0]
+      max_fevals: 18
+    drive_from_separation: true     # E5-02: both branches start at the one handoff
+  propagation:                      # M-05 force model and arc (graded in the
+    j2: true                        # cross-environment ascent leg, not_checked
+    third_bodies: []                # in the single-stack replay)
+    drag: null
+    revolutions: 1.0
+    max_step_s: 300.0
+  expected:
+    events: [liftoff, meco, separation, seco]
+    parking_orbit:                  # the 400x400@51.6 target, as elements
+      semi_major_axis_m: 6778137.0
+      eccentricity: 0.0
+      inclination_deg: 51.6
+      raan_deg: null
+      periapsis_altitude_m: 400000.0
+      apoapsis_altitude_m: 400000.0
+    tolerances:                     # the Gate-B insertion band, in element form
+      semi_major_axis_m: 20000.0
+      eccentricity: 0.002951        # = 20 km * (1 + e_t) / a_t at this target's shape
+      inclination_deg: 0.2
+      raan_deg: 1.0
+      periapsis_altitude_m: 20000.0
+      apoapsis_altitude_m: 20000.0
+    propagation_result: not_checked
+  scene:
+    coast_orbits: 2.0
+    earth_texture: true

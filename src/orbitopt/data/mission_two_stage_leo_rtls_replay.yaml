@@ -1,0 +1,92 @@
+# E5-05 (task #272): the replay scenario of the reference mission.
+#
+# The mission of record
+# (mission_two_stage_leo_rtls_reference.yaml) computes its ascent with the
+# pinned OpenTsiolkovsky binary -- the right thing to do ONCE per recording,
+# expensive to do in every CI run. This scenario is the same mission
+# replayed: `ascent.mode: run_dir` over the ascent the recording computed
+# (recorded verbatim, with its raw backend outputs, under
+# tests/data/mission/reference/e5-05-reference-mission/mission-optimized/)
+# and graded against the very FlightTarget the recording built (recovery
+# block included). Everything else -- handoff gates, the RTLS recovery
+# recipe, the drive-from-separation coupling, the expected results -- is
+# byte-for-byte the mission of record's declaration, so a regression here
+# compares like with like.
+#
+# This file is what `python scripts/e505_reference.py run` replays (CI's
+# flightlab-landing job) and what the cross-environment plan
+# crossenv_e505_plan.yaml flies across the tudat/gfold boundary: the ascent
+# leg replays the recorded flight, the recovery leg re-flies FL-304 from the
+# digest-pinned separation handoff, and the ascent leg's `propagate: true`
+# option EVIDENCES the parking-orbit propagation leg in the tudatpy
+# environment -- which is what lifts the physical gate's parking-propagation
+# check from not_checked to passed (E5-04).
+#
+# Relative paths resolve against the repository root (scripts/
+# e505_reference.py and orbitopt.crossenv.plan.resolve_path).
+schemaVersion: "1.0"
+mission:
+  id: e5-05-reference-two-stage-leo-rtls-replay
+  title: Replay of the E5-05 reference mission (recorded computed ascent + parking + booster RTLS)
+  kind: two-stage-leo
+scenario:
+  mission:
+    id: e5-05-reference-two-stage-leo-rtls-replay
+    title: Replay of the E5-05 reference mission (recorded computed ascent + parking + booster RTLS)
+    kind: two-stage-leo
+  launch:
+    site: kourou                    # the mission of record's launch declaration
+    vehicle: synthetic_two_stage
+    orbit: 400x400@51.6
+    date_utc: "2026-11-10"
+    raan_deg: null
+    window_days: 14.0
+  ascent:
+    mode: run_dir                   # replay the recorded COMPUTED ascent, never refly it
+    run_dir: tests/data/mission/reference/e5-05-reference-mission/mission-optimized/launch/ascent
+    target_file: tests/data/mission/reference/e5-05-reference-mission/mission-optimized/launch/target.yaml
+  handoff:
+    position_m: 1.0
+    velocity_m_s: 0.01
+    epoch_s: 1.0
+    max_epoch_gap_s: null
+    mass_kg: 0.001
+    staging_velocity_m_s: 0.05
+    elements:
+      semi_major_axis_m: 10.0
+      eccentricity: 1.0e-6
+      inclination_deg: 1.0e-3
+      raan_deg: 1.0e-2
+      apsides_m: 10.0
+  recovery:
+    target_file: tests/data/mission/reference/e5-05-reference-mission/mission-optimized/launch/target.yaml
+    plan_options:
+      initial_guess: [18.4, 17.75, 1.0, 4.36, 0.0, 17456.0, 23.0]
+      max_fevals: 18
+    drive_from_separation: true
+  propagation:
+    j2: true
+    third_bodies: []
+    drag: null
+    revolutions: 1.0
+    max_step_s: 300.0
+  expected:
+    events: [liftoff, meco, separation, seco]
+    parking_orbit:
+      semi_major_axis_m: 6778137.0
+      eccentricity: 0.0
+      inclination_deg: 51.6
+      raan_deg: null
+      periapsis_altitude_m: 400000.0
+      apoapsis_altitude_m: 400000.0
+    tolerances:
+      semi_major_axis_m: 20000.0
+      eccentricity: 0.002951
+      inclination_deg: 0.2
+      raan_deg: 1.0
+      periapsis_altitude_m: 20000.0
+      apoapsis_altitude_m: 20000.0
+    propagation_result: not_checked
+  scene:
+    coast_orbits: 2.0
+    earth_texture: true

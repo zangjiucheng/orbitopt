@@ -110,6 +110,28 @@ passing**; only all-five-passed yields `passed`. The pipeline records it as
 unchanged, so a frozen mission like E2-04 still reads `passed` per phase while
 the physical gate honestly says `not_checked`.
 
+### The reproducible reference mission (E5-05, task #272)
+
+E5-04 says what a physical mission must show; E5-05 commits one. The mission
+of record (`src/orbitopt/data/mission_two_stage_leo_rtls_reference.yaml`) is
+computed end to end — OpenTsiolkovsky ascent, station chain, staging, M-05
+propagation evidence, and the RTLS recovery driven from the one canonical
+separation state — with full provenance (code SHA, dependency matrix, IERS
+snapshot, backend pins, handoff identity). Regression replay and cross-
+environment replay (both E5-03 environments, with the propagation evidenced
+in the tudatpy leg so the physical gate reads `passed`, not `not_checked`)
+compare within `tests/data/mission/reference/e5-05-reference-mission/
+tolerances.json`, whose every band carries a source; see the
+[regression CI page](flightlab-regression-ci.md#e5-05-the-reproducible-full-physical-reference-mission-task-272).
+E2-04 is kept unchanged as the fast integration test. **Recording status:**
+the sealing run is blocked on a vehicle decision — RTLS from a computed
+OpenTsiolkovsky ascent is physically infeasible for the current catalog
+vehicle (stage-1 separates dry; the demonstrator's insertion margin cannot
+carry the recovery propellant), so the reference is not recorded and every
+consumer of it skips with the reason until a recording lands. See the
+regression CI page's E5-05 status note and ContextDB record
+`e5-05-rtls-infeasibility-evidence`.
+
 ## Benchmarks against public references
 
 ```bash

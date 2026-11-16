@@ -36,6 +36,12 @@ from orbitopt.crossenv.plan import CrossEnvPlan, CrossEnvStage
 STAGE_REPORT_KIND = "orbitopt.crossenv.stage-report"
 STAGE_REPORT_SCHEMA_VERSION = "1.0"
 REPORT_WRAPPER_KIND = "orbitopt.crossenv.report"
+#: E5-05 (task #272): the E5-02 canonical separation handoff as an exchange
+#: payload -- the document :class:`orbitopt.mission.coupled_branches.
+#: SeparationHandoff` writes, wrapped in the versioned report envelope, so a
+#: recovery leg in another environment can DRIVE from the one state both
+#: branches descend from instead of re-reading one branch's track.
+SEPARATION_HANDOFF_KIND = "orbitopt.mission.separation-handoff"
 EXCHANGE_DIRNAME = "exchange"
 
 #: runner name -> callable(plan, stage, out_dir)
@@ -152,6 +158,23 @@ def run_ascent_stage(plan: CrossEnvPlan, stage: CrossEnvStage, out_dir: Path) ->
          "report_kind": REPORT_WRAPPER_KIND, "path": "reports/mission-report.json",
          "digest_kind": "file"},
     ]
+    if stage.options.get("coupled_separation"):
+        # E5-05 (task #272): seal the one canonical separation state both
+        # mission branches descend from, so the landing leg can be DRIVEN
+        # from it across the environment boundary (E5-02 coupled branches).
+        from orbitopt.mission.coupled_branches import separation_handoff
+
+        coupled = separation_handoff(run)
+        if coupled is None:
+            raise CrossEnvError(f"crossenv stage {stage.id!r}: options.coupled_separation "
+                                "requested but the flown run never branched at separation")
+        _write_json(exchange / "states" / "coupled-separation-handoff.json",
+                    {"kind": SEPARATION_HANDOFF_KIND, "schema_version": "1.0",
+                     "handoff": coupled.to_dict()})
+        payloads.append(
+            {"name": "coupled-separation-handoff", "type": "report", "schema_version": "1.0",
+             "report_kind": SEPARATION_HANDOFF_KIND,
+             "path": "states/coupled-separation-handoff.json", "digest_kind": "file"})
     write_envelope(exchange, stage=stage.id, runner=stage.runner, env_label=stage.env,
                    payloads=payloads)
 
@@ -186,6 +209,23 @@ def run_recovery_stage(plan: CrossEnvPlan, stage: CrossEnvStage, out_dir: Path) 
     payloads["seco-handoff"]     # parsed HandoffState: schema-validated by its own reader
     payloads["separation-handoff"]
 
+    separation = None
+    if stage.options.get("drive_from_separation"):
+        # E5-05 (task #272): drive the booster branch from the ascent leg's
+        # canonical separation handoff (E5-02), not from this leg's own
+        # re-read of the debris track. The handoff document arrives inside a
+        # digest-validated envelope; its identity (handoff_id) is then
+        # re-graded below against the digest the recovery block records.
+        from orbitopt.mission.coupled_branches import SeparationHandoff
+
+        coupled = payloads.get("coupled-separation-handoff")
+        if coupled is None:
+            raise CrossEnvError(
+                f"crossenv stage {stage.id!r}: options.drive_from_separation requested but "
+                "the upstream exchange seals no coupled-separation-handoff payload (set "
+                "options.coupled_separation on the ascent stage)")
+        separation = SeparationHandoff.from_dict(coupled["handoff"])
+
     stage_dir = Path(out_dir) / stage.id
     exchange = stage_dir / EXCHANGE_DIRNAME
     exchange.mkdir(parents=True, exist_ok=True)
@@ -193,7 +233,14 @@ def run_recovery_stage(plan: CrossEnvPlan, stage: CrossEnvStage, out_dir: Path) 
     report_file = exchange / "states" / "recovery-handoff-report.json"
 
     _combined, block, recovery_checks, _notes = _fly_recovery_stage(
-        scenario, run, exchange, handoff_report_file=report_file)
+        scenario, run, exchange, handoff_report_file=report_file, separation=separation)
+    if separation is not None:
+        driven = block.get("separation_handoff_id")
+        if driven != separation.handoff_id:
+            raise CrossEnvError(
+                f"crossenv stage {stage.id!r}: the recovery leg reports separation handoff "
+                f"{driven!r}, not the handed-over {separation.handoff_id!r} -- the two "
+                "branches did not start at the one state")
 
     report_doc = json.loads(report_file.read_text(encoding="utf-8"))
     states = report_doc.get("states") or []
@@ -222,7 +269,7 @@ def run_recovery_stage(plan: CrossEnvPlan, stage: CrossEnvStage, out_dir: Path) 
     write_envelope(exchange, stage=stage.id, runner=stage.runner, env_label=stage.env,
                    payloads=payloads_spec)
 
-    return {
+    report = {
         "kind": STAGE_REPORT_KIND, "schema_version": STAGE_REPORT_SCHEMA_VERSION,
         "stage": stage.id, "runner": stage.runner, "env": stage.env,
         "environment": environment_record(stage.env),
@@ -232,6 +279,10 @@ def run_recovery_stage(plan: CrossEnvPlan, stage: CrossEnvStage, out_dir: Path) 
         "failed_checks": [c.id for c in recovery_checks if not c.passed],
         "payloads": [p["name"] for p in payloads_spec],
     }
+    if separation is not None:
+        report["driven_from_separation"] = True
+        report["separation_handoff_id"] = block["separation_handoff_id"]
+    return report
 
 
 def execute_stage(plan: CrossEnvPlan, stage: CrossEnvStage, out_dir) -> int:
