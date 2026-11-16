@@ -251,6 +251,16 @@ all sample rows, failure classes and sensitivities. Statistics were recomputed
 from those rows in the current acceptance review; the 672 flights were not
 re-run.
 
+**The E3-02 row predates E7-01.** It was flown when the joint chance verdict
+was only a penalty, so plans that violated it still flew. Under E7-01's
+enforced feasibility (below) the same 168 samples, re-flown fresh in E7-04
+(`e7_04_joint_base`), land **35** (20.8 %): the 21 recorded landings that
+violated the constraint now end as `JOINT_CHANCE_VIOLATED` before the burn
+(0/21 paired, p ≈ 1e-6). Against the FL-305 baseline that enforced arm is
+11/21 discordant, exact McNemar p = 0.110 — *below* the baseline, not
+significantly so. The p = 0.0192 above is therefore a statement about the
+pre-E7-01 penalty mode, not about the joint chance mode as it now behaves.
+
 ## Probability calibration of p_land (E7-02)
 
 The [calibration report](benchmarks/e7_02_probability_calibration.md) grades
