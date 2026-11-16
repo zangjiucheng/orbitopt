@@ -1,0 +1,234 @@
+# E5-05a (task #285): RTLS-capable redesign of the synthetic two-stage LEO
+# vehicle. Structural copy of the sealed synthetic_two_stage.yaml (same OT
+# config-generator surface + booster section), with the E5-05a redesign:
+#   * stage-1 propellant 590 t (2x) + a declared burn_end_s cutoff -> the
+#     separation state carries a COMPUTED ~193 t propellant reserve (the
+#     sealed baseline burns to depletion: ContextDB record
+#     `e5-05-rtls-infeasibility-evidence`, task #272);
+#   * stage-2 redesigned for the insertion margin at ignition TWR ~2.0;
+#   * booster landing cluster: 3 units + 15 t reserve for a real flight.
+# All numbers are design-derived in this repository (optimization campaign +
+# recovery-budget probes, docs/adr/flightlab-0008); the 'illustrative' tier is
+# the schema's only non-real tier (flight-vehicle-1.0.json).
+schema_version: flight-vehicle-1.0
+name: synthetic-two-stage-rtls
+provenance: illustrative
+as_of: 2026-11
+assumptions:
+- 'E5-05a redesign (task #285): stage-1 propellant load 590 t (2x the sealed 350 t) and a declared burn_end_s cutoff
+  at 134 s (depletion-independent), so MECO/separation carry a COMPUTED 136.7 t separation mass = 106.7 t RTLS propellant
+  reserve instead of burning to depletion; the recovery chain plans from this computed state and the propellant-reserve
+  gate PASSES (13.6 t at touchdown, docs/adr/flightlab-0008).'
+- Stage-1 tube widened to 5.2 m for the 2x propellant load; same Cd(Mach) table and same 30 t dry mass as the sealed
+  baseline; lofted MECO (elevation 44 deg at burn end, burn extended to 134 s) carries separation to ~90 km / 2.3
+  km/s / 120 km downrange - the ~180 t-class separation regime task
+- 'Stage-2 12 t dry (0.935 mass fraction, C/LiAl class), 85 t wet, 6.2->2.8 MN lazy profile: burnout flight-path
+  angle is the binding constraint (F6/F9): the reference flight reaches rp -0.74 km / ra 5696 km at SECO, the best
+  perigee the OpenTsiolkovsky 1.1.0 single-burn backend achieves from a reserve-carrying separation state; closing
+  the 250 km insertion band needs a coast/restart capability the backend does not expose (F9, docs/adr/flightlab-0008).'
+- Landing reserve 15 t (planning margin carried by the booster model); the graded minimum is the flight target's
+  recovery.min_propellant_reserve_kg.
+- 'Derived-not-copied design: campaign + recovery-budget provenance in docs/adr/flightlab-0008.'
+simulation:
+  end_time_s: 950.0
+  output_step_s: 2.0
+  integrator:
+    method: rk45
+attitude_program:
+- t_s: 0.0
+  azimuth_deg: 40.0
+  elevation_deg: 90.0
+- t_s: 15.0
+  azimuth_deg: 40.0
+  elevation_deg: 90.0
+- t_s: 35.0
+  azimuth_deg: 40.0
+  elevation_deg: 78.0
+- t_s: 60.0
+  azimuth_deg: 40.0
+  elevation_deg: 64.0
+- t_s: 85.0
+  azimuth_deg: 40.0
+  elevation_deg: 56.0
+- t_s: 110.0
+  azimuth_deg: 40.0
+  elevation_deg: 44.0
+- t_s: 134.0
+  azimuth_deg: 40.0
+  elevation_deg: 18.0
+- t_s: 148.0
+  azimuth_deg: 40.0
+  elevation_deg: 65.0
+- t_s: 153.0
+  azimuth_deg: 40.0
+  elevation_deg: 65.0
+- t_s: 159.0
+  azimuth_deg: 40.0
+  elevation_deg: 42.0
+- t_s: 183.0
+  azimuth_deg: 40.0
+  elevation_deg: 42.0
+- t_s: 197.0
+  azimuth_deg: 40.0
+  elevation_deg: -2.0
+- t_s: 271.0
+  azimuth_deg: 40.0
+  elevation_deg: -2.0
+- t_s: 950.0
+  azimuth_deg: 40.0
+  elevation_deg: 0.0
+stages:
+- mass_initial_kg: 620000.0
+  mass_dry_kg: 30000.0
+  engine:
+    thrust_vac_n:
+    - - 0.0
+      - 11000000.0
+    - - 134.0
+      - 11000000.0
+    isp_vac_s: 311.0
+    burn_start_s: 0.0
+    burn_end_s: 134.0
+    nozzle_exit_area_m2: 5.0
+  aero:
+    diameter_m: 3.7
+    ca:
+    - - 0
+      - 0.35
+    - - 0.8
+      - 0.38
+    - - 1.1
+      - 0.55
+    - - 1.5
+      - 0.5
+    - - 2.5
+      - 0.4
+    - - 4
+      - 0.32
+    - - 8
+      - 0.26
+    cn_alpha_per_rad: 0.2
+    ballistic_coefficient_kg_m2: 120
+  free_flight: attitude_program
+  separation_time_s: 141.0
+- mass_initial_kg: 85000.0
+  mass_dry_kg: 12000.0
+  engine:
+    thrust_vac_n:
+    - - 0.0
+      - 6200000.0
+    - - 30.0
+      - 2800000.0
+    - - 131.0
+      - 2800000.0
+    isp_vac_s: 350.0
+    burn_start_s: 7.0
+    burn_end_s: 130.0
+    nozzle_exit_area_m2: 1.2
+  aero:
+    diameter_m: 3.7
+    ca:
+    - - 0
+      - 0.35
+    - - 0.8
+      - 0.38
+    - - 1.1
+      - 0.55
+    - - 1.5
+      - 0.5
+    - - 2.5
+      - 0.4
+    - - 4
+      - 0.32
+    - - 8
+      - 0.26
+    cn_alpha_per_rad: 0.2
+    ballistic_coefficient_kg_m2: 120
+  free_flight: attitude_program
+  separation_time_s: 620.0
+  jettisons:
+  - name: fairing
+    time_s: 60.0
+    mass_kg: 1500.0
+    ballistic_coefficient_kg_m2: 40
+booster:
+  provenance: illustrative
+  dry_mass_kg: 30000.0
+  landing_propellant_reserve_kg:
+    value: 15000.0
+    source: 'E5-05a sizing: boostback + entry + landing at 2x hover margin from the computed reserve (design-derived,
+      docs/adr/flightlab-0008)'
+  reference_area_m2:
+    value: 21.6
+    source: pi/4 * 5.24^2, stage-1 redesign tube (illustrative)
+  cd_mach:
+    source: stage-1 OT aero ca table (illustrative)
+    value:
+    - - 0.0
+      - 0.35
+    - - 0.8
+      - 0.38
+    - - 1.1
+      - 0.55
+    - - 1.5
+      - 0.5
+    - - 2.5
+      - 0.4
+    - - 4.0
+      - 0.32
+    - - 8.0
+      - 0.26
+  engines:
+    count: 3
+    usable_for:
+    - boostback
+    - landing
+    thrust_vacuum_n: 1800000.0
+    isp_sea_level_s: 282.0
+    isp_vacuum_s: 311.0
+    nozzle_exit_area_m2: 5.0
+    throttle_min: 0.1
+    throttle_max: 1.0
+    restarts_max: 3
+  assumptions:
+  - Three relightable landing units (subset of the sea-level cluster) with a deep-throttle floor (10%) so hover
+    authority holds from the light post-entry mass down to dry mass with the 15 t reserve.
+  - 'Unlike the sealed baseline, the OT stage-1 config now stops at a declared cutoff: the recovery reserve below
+    is REAL separation propellant, not planning headroom.'
+data_provenance:
+  simulation:
+    provenance: illustrative
+    source: 'E5-05a ascent-design campaign (this repo, 2026-11): OpenTsiolkovsky CMA-ES loft campaigns (docs/adr/flightlab-0008)'
+    as_of: 2026-11
+  attitude_program:
+    provenance: illustrative
+    source: 'E5-05a reference-flight attitude program: lofted stage-1 arc (MECO el 44 deg) + lead-angle stage-2
+      arc (commanded elevation leads the point-mass flight path, F6); campaign 2026-11, docs/adr/flightlab-0008'
+    as_of: 2026-11
+  stages[0]:
+    provenance: illustrative
+    source: 'design-derived (E5-05a): 2x propellant load + declared burn_end so separation carries the computed
+      RTLS reserve; sized against the recovery budget in docs/adr/flightlab-0008'
+    as_of: 2026-11
+    uncertainty_pct: 5.0
+  stages[0].engine.thrust_vac_n:
+    provenance: illustrative
+    source: '11 MN cluster total: TWR 1.46 at 770 t full stack, 3616 kg/s flow at Isp 311 s'
+    as_of: 2026-11
+    uncertainty_pct: 5.0
+  stages[0].engine.burn_end_s:
+    provenance: illustrative
+    source: 'THE E5-05a RESERVE MECHANISM: declared cutoff 134 s leaves 106.7 t computed propellant reserve at MECO
+      (483.3 t of 590 t burned; 136.7 t separation mass incl. 30 t dry)'
+    as_of: 2026-11
+  stages[1]:
+    provenance: illustrative
+    source: 'design-derived (E5-05a): 85 t stage-2, 6.2->2.8 MN lazy throttle profile; burnout flight-path angle
+      is the binding constraint (docs/adr/flightlab-0008 F6/F9)'
+    as_of: 2026-11
+    uncertainty_pct: 5.0
+  booster:
+    provenance: illustrative
+    source: mirrors the redesigned stage-1 (same tube, dry mass and Cd table); 3-unit landing cluster + 15 t reserve
+      sized by the E5-05a recovery-budget probe chain
+    as_of: 2026-11

@@ -1,0 +1,175 @@
+{
+  "bin_edges": [
+    0.0,
+    0.5,
+    0.8,
+    0.9,
+    0.95,
+    1.0
+  ],
+  "brier": {
+    "n": 168,
+    "reference_climatology": 0.22222222222222224,
+    "score": 0.2222092902921767,
+    "skill": 5.8193685204877e-05,
+    "success_rate": 0.3333333333333333
+  },
+  "confidence_level": 0.95,
+  "correctable_bins": [
+    [
+      0.0,
+      0.5
+    ],
+    [
+      0.5,
+      0.8
+    ]
+  ],
+  "ece": 0.3132532368817256,
+  "kind": "e7-02-probability-calibration",
+  "mce": 0.5807033394039115,
+  "n": 168,
+  "provenance": {
+    "arm": "e3_02_joint_chance",
+    "n_pooled_rows": 168,
+    "n_with_prediction": 168,
+    "seeds": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "source": "docs/benchmarks/e3_03_robust_montecarlo.json"
+  },
+  "reliability": [
+    {
+      "bin": [
+        0.0,
+        0.5
+      ],
+      "bin_brier": 0.08774729126830023,
+      "ci": {
+        "confidence_level": 0.95,
+        "lower": 0.0,
+        "method": "wilson_score",
+        "n": 42,
+        "point": 0.0,
+        "standard_error": 0.0,
+        "successes": 0,
+        "upper": 0.08379879086570388
+      },
+      "gap": -0.2682387561044876,
+      "mean_predicted": 0.2682387561044876,
+      "n": 42,
+      "observed_rate": 0.0,
+      "successes": 0,
+      "verdict": "overconfident"
+    },
+    {
+      "bin": [
+        0.5,
+        0.8
+      ],
+      "bin_brier": 0.397446393898959,
+      "ci": {
+        "confidence_level": 0.95,
+        "lower": 0.03279203756296026,
+        "method": "wilson_score",
+        "n": 66,
+        "point": 0.07575757575757576,
+        "standard_error": 0.03257121927940579,
+        "successes": 5,
+        "upper": 0.1653919502061051
+      },
+      "gap": -0.5807033394039115,
+      "mean_predicted": 0.6564609151614873,
+      "n": 66,
+      "observed_rate": 0.07575757575757576,
+      "successes": 5,
+      "verdict": "overconfident"
+    },
+    {
+      "bin": [
+        0.8,
+        0.9
+      ],
+      "bin_brier": 0.17282623500241034,
+      "ci": {
+        "confidence_level": 0.95,
+        "lower": 0.6124500635075647,
+        "method": "wilson_score",
+        "n": 32,
+        "point": 0.78125,
+        "standard_error": 0.07307924583542855,
+        "successes": 25,
+        "upper": 0.8897616374739581
+      },
+      "gap": -0.07323593196791778,
+      "mean_predicted": 0.8544859319679178,
+      "n": 32,
+      "observed_rate": 0.78125,
+      "successes": 25,
+      "verdict": "consistent"
+    },
+    {
+      "bin": [
+        0.9,
+        0.95
+      ],
+      "bin_brier": 0.07857968879293402,
+      "ci": {
+        "confidence_level": 0.95,
+        "lower": 0.6461200888588832,
+        "method": "wilson_score",
+        "n": 12,
+        "point": 0.9166666666666666,
+        "standard_error": 0.07978559231302819,
+        "successes": 11,
+        "upper": 0.9851349055950829
+      },
+      "gap": -0.013857376296800616,
+      "mean_predicted": 0.9305240429634672,
+      "n": 12,
+      "observed_rate": 0.9166666666666666,
+      "successes": 11,
+      "verdict": "consistent"
+    },
+    {
+      "bin": [
+        0.95,
+        1.0
+      ],
+      "bin_brier": 0.05880729705584039,
+      "ci": {
+        "confidence_level": 0.95,
+        "lower": 0.7167126242970108,
+        "method": "wilson_score",
+        "n": 16,
+        "point": 0.9375,
+        "standard_error": 0.06051536478449089,
+        "successes": 15,
+        "upper": 0.9888806552353575
+      },
+      "gap": -0.03276608128426861,
+      "mean_predicted": 0.9702660812842686,
+      "n": 16,
+      "observed_rate": 0.9375,
+      "successes": 15,
+      "verdict": "consistent"
+    }
+  ],
+  "reliable_bins": [
+    [
+      0.8,
+      0.9
+    ],
+    [
+      0.9,
+      0.95
+    ],
+    [
+      0.95,
+      1.0
+    ]
+  ]
+}

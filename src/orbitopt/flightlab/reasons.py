@@ -282,6 +282,14 @@ _ENTRIES: tuple[ReasonEntry, ...] = (
        "Entry corridor not reached",
        "The booster's trajectory never reached the entry corridor altitude window.",
        "Check the separation state and boostback plan; a downrange landing may be the only feasible option."),
+    _e("JOINT_CHANCE_VIOLATED", "recovery",
+       "Joint chance constraint violated",
+       "The plan crossed the corridor within the hard limits, but the accepted handoff's worst normalized "
+       "joint violation (fuel-margin, divert-scatter or landing-probability constraint) is above the "
+       "declared tolerance: the plan was found by a penalized optimization and does not actually satisfy "
+       "the chance constraints it was planned under.",
+       "Give the planner more evaluations or a better warm start, relax the JointChanceSpec levels or its "
+       "violation_tolerance, or treat the plan knowingly as constraint-violating."),
     _e("ENTRY_Q_LIMIT_EXCEEDED", "recovery",
        "Entry dynamic pressure too high",
        "During re-entry the booster sees more dynamic pressure than it is rated for.",

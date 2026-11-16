@@ -1,0 +1,775 @@
+{
+  "arms": {
+    "e3_01_declared_chain": {
+      "association": {
+        "cells": [
+          3,
+          17,
+          43,
+          67
+        ],
+        "ci95_bootstrap": [
+          -0.3063348364833475,
+          -0.03942902366749426
+        ],
+        "ci95_fisher_z": [
+          -0.34322316108237844,
+          -0.009903843607509802
+        ],
+        "copula_rho_per_arm": -0.38721615600585946,
+        "fisher_exact_p": 0.04360587644587292,
+        "joint_failure_rate_independent": 0.05443786982248521,
+        "joint_failure_rate_observed": 0.023076923076923078,
+        "marginal_divert_fail": 0.35384615384615387,
+        "marginal_fuel_fail": 0.15384615384615385,
+        "n_observed": 130,
+        "pearson_margin_vs_miss": {
+          "ci95": [
+            -0.27910519647248505,
+            0.018452471704135293
+          ],
+          "n": 168,
+          "r": -0.13332982631665088
+        },
+        "phi": -0.18177994610192394,
+        "phi_bounds_censored_frechet": [
+          -0.3616496806171262,
+          0.30046985150168065
+        ]
+      },
+      "contingency": {
+        "both": 3,
+        "censored_divert": {
+          "INSUFFICIENT_PROPELLANT_RESERVE": 38
+        },
+        "censored_divert_fuel_fail": 38,
+        "censored_divert_total": 38,
+        "divert_only": 43,
+        "fuel_only": 17,
+        "n_observed": 130,
+        "neither": 67,
+        "not_evaluated": {},
+        "not_evaluated_total": 0
+      }
+    },
+    "e3_02_joint_chance": {
+      "association": {
+        "cells": [
+          2,
+          12,
+          54,
+          88
+        ],
+        "ci95_bootstrap": [
+          -0.24986196487334325,
+          -0.009732619374563063
+        ],
+        "ci95_fisher_z": [
+          -0.29210932396758726,
+          0.016035205056926082
+        ],
+        "copula_rho_per_arm": -0.35843637084960944,
+        "fisher_exact_p": 0.08797218229352936,
+        "joint_failure_rate_independent": 0.032215647600262985,
+        "joint_failure_rate_observed": 0.01282051282051282,
+        "marginal_divert_fail": 0.358974358974359,
+        "marginal_fuel_fail": 0.08974358974358974,
+        "n_observed": 156,
+        "pearson_margin_vs_miss": {
+          "ci95": [
+            -0.5389298382178951,
+            -0.2890049431439657
+          ],
+          "n": 168,
+          "r": -0.4219509292375804
+        },
+        "phi": -0.14146200039858473,
+        "phi_bounds_censored_frechet": [
+          -0.23274703205786385,
+          0.11655409714660207
+        ]
+      },
+      "contingency": {
+        "both": 2,
+        "censored_divert": {
+          "INSUFFICIENT_PROPELLANT_RESERVE": 12
+        },
+        "censored_divert_fuel_fail": 12,
+        "censored_divert_total": 12,
+        "divert_only": 54,
+        "fuel_only": 12,
+        "n_observed": 156,
+        "neither": 88,
+        "not_evaluated": {},
+        "not_evaluated_total": 0
+      }
+    },
+    "fl305_baseline": {
+      "association": {
+        "cells": [
+          3,
+          14,
+          44,
+          69
+        ],
+        "ci95_bootstrap": [
+          -0.2823225492433875,
+          0.003447251266633461
+        ],
+        "ci95_fisher_z": [
+          -0.3135275720381971,
+          0.023380328886940204
+        ],
+        "copula_rho_per_arm": -0.3280712585449219,
+        "fisher_exact_p": 0.10867161683379363,
+        "joint_failure_rate_independent": 0.04727810650887574,
+        "joint_failure_rate_observed": 0.023076923076923078,
+        "marginal_divert_fail": 0.36153846153846153,
+        "marginal_fuel_fail": 0.13076923076923078,
+        "n_observed": 130,
+        "pearson_margin_vs_miss": {
+          "ci95": [
+            -0.27910519647248505,
+            0.018452471704135293
+          ],
+          "n": 168,
+          "r": -0.13332982631665088
+        },
+        "phi": -0.14940724251812254,
+        "phi_bounds_censored_frechet": [
+          -0.3500337329687631,
+          0.3342045347090305
+        ]
+      },
+      "contingency": {
+        "both": 3,
+        "censored_divert": {
+          "INSUFFICIENT_PROPELLANT_RESERVE": 38
+        },
+        "censored_divert_fuel_fail": 38,
+        "censored_divert_total": 38,
+        "divert_only": 44,
+        "fuel_only": 14,
+        "n_observed": 130,
+        "neither": 69,
+        "not_evaluated": {},
+        "not_evaluated_total": 0
+      }
+    },
+    "r01_landing_aware": {
+      "association": {
+        "cells": [
+          5,
+          15,
+          42,
+          87
+        ],
+        "ci95_bootstrap": [
+          -0.19321684393505323,
+          0.10227112953033254
+        ],
+        "ci95_fisher_z": [
+          -0.21433567769065198,
+          0.10630100887620701
+        ],
+        "copula_rho_per_arm": -0.11801541137695312,
+        "fisher_exact_p": 0.6102392733563113,
+        "joint_failure_rate_independent": 0.042340435115535334,
+        "joint_failure_rate_observed": 0.03355704697986577,
+        "marginal_divert_fail": 0.31543624161073824,
+        "marginal_fuel_fail": 0.1342281879194631,
+        "n_observed": 149,
+        "pearson_margin_vs_miss": {
+          "ci95": [
+            -0.5810898223114473,
+            -0.34428053070547626
+          ],
+          "n": 168,
+          "r": -0.47113144318713346
+        },
+        "phi": -0.055446705108877295,
+        "phi_bounds_censored_frechet": [
+          -0.18564381118289053,
+          0.250529176964326
+        ]
+      },
+      "contingency": {
+        "both": 5,
+        "censored_divert": {
+          "INSUFFICIENT_PROPELLANT_RESERVE": 19
+        },
+        "censored_divert_fuel_fail": 19,
+        "censored_divert_total": 19,
+        "divert_only": 42,
+        "fuel_only": 15,
+        "n_observed": 149,
+        "neither": 87,
+        "not_evaluated": {},
+        "not_evaluated_total": 0
+      }
+    }
+  },
+  "calibration_comparison": {
+    "arm": "e3_02_joint_chance",
+    "bins": [
+      0.0,
+      0.5,
+      0.8,
+      0.9,
+      0.95,
+      1.0
+    ],
+    "coupled_in_sample": {
+      "brier": {
+        "n": 168,
+        "reference_climatology": 0.22222222222222224,
+        "score": 0.21116115833138116,
+        "skill": 0.049774787508784835,
+        "success_rate": 0.3333333333333333
+      },
+      "correctable_bins": [
+        [
+          0.0,
+          0.5
+        ],
+        [
+          0.5,
+          0.8
+        ]
+      ],
+      "ece": 0.2973965557008492,
+      "mce": 0.5623668189867179,
+      "n": 168,
+      "reliability": [
+        {
+          "bin": [
+            0.0,
+            0.5
+          ],
+          "bin_brier": 0.08988954988174593,
+          "ci": {
+            "confidence_level": 0.95,
+            "lower": 0.0,
+            "method": "wilson_score",
+            "n": 48,
+            "point": 0.0,
+            "standard_error": 0.0,
+            "successes": 0,
+            "upper": 0.07410012966611745
+          },
+          "gap": -0.26085770019299803,
+          "mean_predicted": 0.26085770019299803,
+          "n": 48,
+          "observed_rate": 0.0,
+          "successes": 0,
+          "verdict": "overconfident"
+        },
+        {
+          "bin": [
+            0.5,
+            0.8
+          ],
+          "bin_brier": 0.39025597848379595,
+          "ci": {
+            "confidence_level": 0.95,
+            "lower": 0.0458645758154705,
+            "method": "wilson_score",
+            "n": 61,
+            "point": 0.09836065573770492,
+            "standard_error": 0.038129597199970874,
+            "successes": 6,
+            "upper": 0.19844607216825944
+          },
+          "gap": -0.5623668189867179,
+          "mean_predicted": 0.6607274747244228,
+          "n": 61,
+          "observed_rate": 0.09836065573770492,
+          "successes": 6,
+          "verdict": "overconfident"
+        },
+        {
+          "bin": [
+            0.8,
+            0.9
+          ],
+          "bin_brier": 0.17651699378751148,
+          "ci": {
+            "confidence_level": 0.95,
+            "lower": 0.6018758161665794,
+            "method": "wilson_score",
+            "n": 31,
+            "point": 0.7741935483870968,
+            "standard_error": 0.07509518648353264,
+            "successes": 24,
+            "upper": 0.886048644387375
+          },
+          "gap": -0.07912777317729991,
+          "mean_predicted": 0.8533213215643967,
+          "n": 31,
+          "observed_rate": 0.7741935483870968,
+          "successes": 24,
+          "verdict": "consistent"
+        },
+        {
+          "bin": [
+            0.9,
+            0.95
+          ],
+          "bin_brier": 0.078528385219353,
+          "ci": {
+            "confidence_level": 0.95,
+            "lower": 0.6461200888588832,
+            "method": "wilson_score",
+            "n": 12,
+            "point": 0.9166666666666666,
+            "standard_error": 0.07978559231302819,
+            "successes": 11,
+            "upper": 0.9851349055950829
+          },
+          "gap": -0.01344546429566007,
+          "mean_predicted": 0.9301121309623267,
+          "n": 12,
+          "observed_rate": 0.9166666666666666,
+          "successes": 11,
+          "verdict": "consistent"
+        },
+        {
+          "bin": [
+            0.95,
+            1.0
+          ],
+          "bin_brier": 0.058774630486973775,
+          "ci": {
+            "confidence_level": 0.95,
+            "lower": 0.7167126242970108,
+            "method": "wilson_score",
+            "n": 16,
+            "point": 0.9375,
+            "standard_error": 0.06051536478449089,
+            "successes": 15,
+            "upper": 0.9888806552353575
+          },
+          "gap": -0.032673078140297074,
+          "mean_predicted": 0.9701730781402971,
+          "n": 16,
+          "observed_rate": 0.9375,
+          "successes": 15,
+          "verdict": "consistent"
+        }
+      ],
+      "reliable_bins": [
+        [
+          0.8,
+          0.9
+        ],
+        [
+          0.9,
+          0.95
+        ],
+        [
+          0.95,
+          1.0
+        ]
+      ]
+    },
+    "coupled_oos": {
+      "brier": {
+        "n": 168,
+        "reference_climatology": 0.22222222222222224,
+        "score": 0.21350866133504517,
+        "skill": 0.03921102399229681,
+        "success_rate": 0.3333333333333333
+      },
+      "correctable_bins": [
+        [
+          0.0,
+          0.5
+        ],
+        [
+          0.5,
+          0.8
+        ]
+      ],
+      "ece": 0.3010007121736118,
+      "mce": 0.5628292716737308,
+      "n": 168,
+      "reliability": [
+        {
+          "bin": [
+            0.0,
+            0.5
+          ],
+          "bin_brier": 0.08752328859794954,
+          "ci": {
+            "confidence_level": 0.95,
+            "lower": 0.0,
+            "method": "wilson_score",
+            "n": 46,
+            "point": 0.0,
+            "standard_error": 0.0,
+            "successes": 0,
+            "upper": 0.07707356308558035
+          },
+          "gap": -0.2599769196683295,
+          "mean_predicted": 0.2599769196683295,
+          "n": 46,
+          "observed_rate": 0.0,
+          "successes": 0,
+          "verdict": "overconfident"
+        },
+        {
+          "bin": [
+            0.5,
+            0.8
+          ],
+          "bin_brier": 0.3886631262271171,
+          "ci": {
+            "confidence_level": 0.95,
+            "lower": 0.04438348427689201,
+            "method": "wilson_score",
+            "n": 63,
+            "point": 0.09523809523809523,
+            "standard_error": 0.036983007778458254,
+            "successes": 6,
+            "upper": 0.19261701062836886
+          },
+          "gap": -0.5628292716737308,
+          "mean_predicted": 0.658067366911826,
+          "n": 63,
+          "observed_rate": 0.09523809523809523,
+          "successes": 6,
+          "verdict": "overconfident"
+        },
+        {
+          "bin": [
+            0.8,
+            0.9
+          ],
+          "bin_brier": 0.1766056475619506,
+          "ci": {
+            "confidence_level": 0.95,
+            "lower": 0.6018758161665794,
+            "method": "wilson_score",
+            "n": 31,
+            "point": 0.7741935483870968,
+            "standard_error": 0.07509518648353264,
+            "successes": 24,
+            "upper": 0.886048644387375
+          },
+          "gap": -0.07955627422742173,
+          "mean_predicted": 0.8537498226145185,
+          "n": 31,
+          "observed_rate": 0.7741935483870968,
+          "successes": 24,
+          "verdict": "consistent"
+        },
+        {
+          "bin": [
+            0.9,
+            0.95
+          ],
+          "bin_brier": 0.07853308163894857,
+          "ci": {
+            "confidence_level": 0.95,
+            "lower": 0.6461200888588832,
+            "method": "wilson_score",
+            "n": 12,
+            "point": 0.9166666666666666,
+            "standard_error": 0.07978559231302819,
+            "successes": 11,
+            "upper": 0.9851349055950829
+          },
+          "gap": -0.013484735351802501,
+          "mean_predicted": 0.9301514020184691,
+          "n": 12,
+          "observed_rate": 0.9166666666666666,
+          "successes": 11,
+          "verdict": "consistent"
+        },
+        {
+          "bin": [
+            0.95,
+            1.0
+          ],
+          "bin_brier": 0.05877717639910522,
+          "ci": {
+            "confidence_level": 0.95,
+            "lower": 0.7167126242970108,
+            "method": "wilson_score",
+            "n": 16,
+            "point": 0.9375,
+            "standard_error": 0.06051536478449089,
+            "successes": 15,
+            "upper": 0.9888806552353575
+          },
+          "gap": -0.03267974373168003,
+          "mean_predicted": 0.97017974373168,
+          "n": 16,
+          "observed_rate": 0.9375,
+          "successes": 15,
+          "verdict": "consistent"
+        }
+      ],
+      "reliable_bins": [
+        [
+          0.8,
+          0.9
+        ],
+        [
+          0.9,
+          0.95
+        ],
+        [
+          0.95,
+          1.0
+        ]
+      ]
+    },
+    "deltas_coupled_oos_minus_product": {
+      "brier": -0.008700628957131529,
+      "brier_skill": 0.039152830307091935,
+      "ece": -0.012252524708113832,
+      "mce": -0.017874067730180743
+    },
+    "product": {
+      "brier": {
+        "n": 168,
+        "reference_climatology": 0.22222222222222224,
+        "score": 0.2222092902921767,
+        "skill": 5.8193685204877e-05,
+        "success_rate": 0.3333333333333333
+      },
+      "correctable_bins": [
+        [
+          0.0,
+          0.5
+        ],
+        [
+          0.5,
+          0.8
+        ]
+      ],
+      "ece": 0.3132532368817256,
+      "mce": 0.5807033394039115,
+      "n": 168,
+      "reliability": [
+        {
+          "bin": [
+            0.0,
+            0.5
+          ],
+          "bin_brier": 0.08774729126830023,
+          "ci": {
+            "confidence_level": 0.95,
+            "lower": 0.0,
+            "method": "wilson_score",
+            "n": 42,
+            "point": 0.0,
+            "standard_error": 0.0,
+            "successes": 0,
+            "upper": 0.08379879086570388
+          },
+          "gap": -0.2682387561044876,
+          "mean_predicted": 0.2682387561044876,
+          "n": 42,
+          "observed_rate": 0.0,
+          "successes": 0,
+          "verdict": "overconfident"
+        },
+        {
+          "bin": [
+            0.5,
+            0.8
+          ],
+          "bin_brier": 0.397446393898959,
+          "ci": {
+            "confidence_level": 0.95,
+            "lower": 0.03279203756296026,
+            "method": "wilson_score",
+            "n": 66,
+            "point": 0.07575757575757576,
+            "standard_error": 0.03257121927940579,
+            "successes": 5,
+            "upper": 0.1653919502061051
+          },
+          "gap": -0.5807033394039115,
+          "mean_predicted": 0.6564609151614873,
+          "n": 66,
+          "observed_rate": 0.07575757575757576,
+          "successes": 5,
+          "verdict": "overconfident"
+        },
+        {
+          "bin": [
+            0.8,
+            0.9
+          ],
+          "bin_brier": 0.17282623500241034,
+          "ci": {
+            "confidence_level": 0.95,
+            "lower": 0.6124500635075647,
+            "method": "wilson_score",
+            "n": 32,
+            "point": 0.78125,
+            "standard_error": 0.07307924583542855,
+            "successes": 25,
+            "upper": 0.8897616374739581
+          },
+          "gap": -0.07323593196791778,
+          "mean_predicted": 0.8544859319679178,
+          "n": 32,
+          "observed_rate": 0.78125,
+          "successes": 25,
+          "verdict": "consistent"
+        },
+        {
+          "bin": [
+            0.9,
+            0.95
+          ],
+          "bin_brier": 0.07857968879293402,
+          "ci": {
+            "confidence_level": 0.95,
+            "lower": 0.6461200888588832,
+            "method": "wilson_score",
+            "n": 12,
+            "point": 0.9166666666666666,
+            "standard_error": 0.07978559231302819,
+            "successes": 11,
+            "upper": 0.9851349055950829
+          },
+          "gap": -0.013857376296800616,
+          "mean_predicted": 0.9305240429634672,
+          "n": 12,
+          "observed_rate": 0.9166666666666666,
+          "successes": 11,
+          "verdict": "consistent"
+        },
+        {
+          "bin": [
+            0.95,
+            1.0
+          ],
+          "bin_brier": 0.05880729705584039,
+          "ci": {
+            "confidence_level": 0.95,
+            "lower": 0.7167126242970108,
+            "method": "wilson_score",
+            "n": 16,
+            "point": 0.9375,
+            "standard_error": 0.06051536478449089,
+            "successes": 15,
+            "upper": 0.9888806552353575
+          },
+          "gap": -0.03276608128426861,
+          "mean_predicted": 0.9702660812842686,
+          "n": 16,
+          "observed_rate": 0.9375,
+          "successes": 15,
+          "verdict": "consistent"
+        }
+      ],
+      "reliable_bins": [
+        [
+          0.8,
+          0.9
+        ],
+        [
+          0.9,
+          0.95
+        ],
+        [
+          0.95,
+          1.0
+        ]
+      ]
+    }
+  },
+  "copula": {
+    "model": "gaussian",
+    "rho_fit_arms": [
+      "e3_01_declared_chain",
+      "fl305_baseline",
+      "r01_landing_aware"
+    ],
+    "rho_in_sample_joint_arm": -0.35843637084960944,
+    "rho_out_of_sample": -0.2727677307128906,
+    "symmetry_note": "the Gaussian copula is radially symmetric: the correlation of the failure indicators equals that of the success indicators, so one rho couples both readings"
+  },
+  "diagnostics": {
+    "implied_loss_sigma_kg": {
+      "declared_model_at_nominal": 1169.1472675986263,
+      "max": 1239.773018071628,
+      "median": 1179.5712147852255,
+      "min": 1112.2352976346199,
+      "n": 154,
+      "nominal_exposure_kg": 29000.0
+    },
+    "speed_failure_note": "LANDING_LATERAL_SPEED_EXCEEDED rows land inside the position tolerance: neither channel failed, landing still did not happen -- a third mode the two-channel model does not carry, counted as no-channel-failure here"
+  },
+  "kind": "e7-03-joint-risk",
+  "pooled_fit_set": {
+    "cells": [
+      11,
+      46,
+      129,
+      223
+    ],
+    "ci95_bootstrap": [
+      -0.20835712454155597,
+      -0.03768697321223215
+    ],
+    "ci95_fisher_z": [
+      -0.220888786250558,
+      -0.030038494476203322
+    ],
+    "fisher_exact_p": 0.010390451127377343,
+    "fit_arms": [
+      "e3_01_declared_chain",
+      "fl305_baseline",
+      "r01_landing_aware"
+    ],
+    "joint_failure_rate_independent": 0.04770416245718283,
+    "joint_failure_rate_observed": 0.02689486552567237,
+    "marginal_divert_fail": 0.3422982885085575,
+    "marginal_fuel_fail": 0.1393643031784841,
+    "n_observed": 409,
+    "note": "arms share the seed/draw grid, so the pooled interval treats the 2x2 as iid rows -- optimistic by an unknown small factor; the per-arm intervals are the conservative reading and agree in sign",
+    "phi": -0.12663539398420431,
+    "phi_bounds_censored_frechet": [
+      -0.3013606275292225,
+      0.3044165109912362
+    ]
+  },
+  "provenance": {
+    "arms": [
+      "e3_01_declared_chain",
+      "e3_02_joint_chance",
+      "fl305_baseline",
+      "r01_landing_aware"
+    ],
+    "censored_divert_reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+    "n_per_arm_rows": {
+      "e3_01_declared_chain": 168,
+      "e3_02_joint_chance": 168,
+      "fl305_baseline": 168,
+      "r01_landing_aware": 168
+    },
+    "position_tol_m": 25.0,
+    "seeds": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "source": "docs/benchmarks/e3_03_robust_montecarlo.json",
+    "spec": "JointChanceSpec defaults (the spec the E3-03 joint arm ran)"
+  },
+  "verdict": {
+    "association_sign": "negative",
+    "chosen_model": "gaussian_copula",
+    "fitted_rho": -0.2727677307128906,
+    "independence_rejected": true,
+    "rationale": "the pooled exact-Fisher p and bootstrap CI reject independence, and the OOS copula improves the E7-02 metrics on the arm the product was never fitted to -- the coupling is adopted (rho carried to JointChanceSpec.landing_dependence_rho by the e7-03 record). The sign (negative: failures compete) says the product OVERSTATES p_land, so coupling is a first, partial correction of exactly the optimism E7-02 measured; the verdict bands below 0.8 remain overconfident after coupling, and the e7-02 rule (never trade low-p samples on the forecast) stands unchanged"
+  }
+}
