@@ -51,6 +51,7 @@ thrust, no LQR -- F-06/F-07 close the guidance loop for real.
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass, field
 from typing import Mapping, Sequence
 
@@ -314,13 +315,20 @@ class AttitudeTvcLaw:
     the wish). The pre-saturation command and every diagnostic flag are
     recorded per tick in :meth:`history` / :attr:`diagnostics`.
 
-    The tick fires at the first evaluation at or after ``next tick``; RK4
-    evaluates the law four times per plant step, and a tick fired at a stage
-    time uses that stage's state estimate -- a ZOH digital controller does
-    not know better, and neither does this one. The throttle is fixed at
-    ``throttle`` (guidance is F-06/F-07); after burnout (mass at dry) the
-    tracker trims to neutral and freezes its integrators, because a shut
-    engine steers nothing.
+    The tick fires at the first evaluation at or after ``next tick``;
+    :func:`~orbitopt.flightlab.sixdof.rigidbody.propagate` samples the law
+    once per integration step at the step-boundary state (E6-04, task #276:
+    a zero-order hold's command is piecewise constant, so the plant holds one
+    sampled command across the four RK4 stages and no stage estimate can
+    advance the tick, the integrators or the actuator state). When
+    ``dt_c_s`` is not a multiple of the plant step the tick snaps to the
+    first step boundary at or after it: the actual tick period lies in
+    ``[dt_c_s, dt_c_s + dt_s)``, and a ``dt_c_s`` *below* the plant step is
+    merged up to it (one tick per step -- a control loop faster than the
+    fixed-step plant cannot be represented; :func:`run_closed_loop_ascent`
+    warns). The throttle is fixed at ``throttle`` (guidance is F-06/F-07);
+    after burnout (mass at dry) the tracker trims to neutral and freezes its
+    integrators, because a shut engine steers nothing.
     """
 
     vehicle: RigidBodyVehicle
@@ -770,7 +778,17 @@ def run_closed_loop_ascent(state: RigidBodyState, vehicle: RigidBodyVehicle,
                            physics=None, epoch_utc=None) -> ControlledAscent:
     """Fly the native plant closed-loop on ``program`` with the F-04 tracker +
     actuator (a thin :func:`~orbitopt.flightlab.sixdof.rigidbody.propagate`
-    wrapper that builds the law, flies it and reads the diagnostics)."""
+    wrapper that builds the law, flies it and reads the diagnostics).
+
+    E6-04 (task #276): the tracker ticks at a step boundary at most once, so
+    a ``dt_c_s`` below ``dt_s`` cannot be resolved -- the tick merges up to
+    the integration grid and the effective control period becomes ``dt_s``;
+    that is a silent decimation of the control rate, so it warns."""
+    if dt_c_s < dt_s:
+        warnings.warn(f"dt_c_s={dt_c_s} is below the integration step dt_s={dt_s}: "
+                      f"the fixed-step plant cannot resolve a faster control tick, "
+                      f"the effective control period is dt_s (E6-04, task #276)",
+                      UserWarning, stacklevel=2)
     law = AttitudeTvcLaw(vehicle=vehicle, program=program,
                          actuator=actuator or TvcActuator(), gains=gains or TvcGains(),
                          throttle=throttle, dt_c_s=dt_c_s)

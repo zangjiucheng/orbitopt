@@ -117,6 +117,8 @@ defaults:
     values: { title: "ADR 0006 · Landing actuator chain", parent: "Flight Lab", nav_order: 8 }
   - scope: { path: "adr/flightlab-0007-production-jsbsim-aero-path.md" }
     values: { title: "ADR 0007 · JSBSim aero path", parent: "Flight Lab", nav_order: 9 }
+  - scope: { path: "adr/flightlab-0009-engine-and-mass-flow-parity.md" }
+    values: { title: "ADR 0009 · Engine & mass-flow parity", parent: "Flight Lab", nav_order: 10 }
 
   # Verification: between Flight Lab and Missions in the sidebar
   - scope: { path: "verification.md" }

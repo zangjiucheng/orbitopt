@@ -63,7 +63,9 @@ SPIKE_STAGE = {
     "dry_mass_kg": 10_000.0,
     "propellant_mass_kg": 60_000.0,
     "isp_s": 320.0,
-    "mdot_max_kg_s": 600.0,
+    # E6-01 (#273): choked flow, thrust_vac / (isp * g0) = 1320.7525 LBS/SEC.
+    "mdot_max_kg_s": 599.083275,
+    "nozzle_exit_area_m2": 2.0,  # E6-01: the physical exit area (21.527821 FT2)
     "mixture_ratio": 2.5,
     "gimbal_lag_tau_s": 0.2,  # actuator <lag> 5 rad/s
     "gimbal_rate_limit_rad_s": 0.35,

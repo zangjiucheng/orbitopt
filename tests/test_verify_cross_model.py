@@ -82,10 +82,19 @@ def fake_pair(tmp_path, monkeypatch):
 
 def test_scenario_defaults_are_the_spike_stage():
     s = CrossModelScenario()
-    assert s.thrust_n == pytest.approx(600.0 * 320.0 * 9.80665)
+    # E6-01 (#273): the aligned engine is choked, so mdot = T_vac/(Isp*g0)
+    # = 599.083 kg/s and the thrust is the vacuum value debited by
+    # exit_area * p_ambient. The commanded 100 s burn therefore leaves 91.7 kg
+    # of the 60 t load (a 600 kg/s flow would have run it dry exactly).
+    mdot = 1_880_000.0 / (320.0 * 9.80665)
+    assert s.mdot_kg_s == pytest.approx(mdot)
+    assert s.burn_end_s == pytest.approx(100.0)
+    assert s.nozzle_exit_area_m2 == pytest.approx(2.0)
+    assert s.thrust_n == pytest.approx(1_880_000.0)
+    assert s.thrust_at(101_325.0) == pytest.approx(1_677_350.0)
     assert s.mass_at(-1.0) == pytest.approx(70_000.0)
-    assert s.mass_at(50.0) == pytest.approx(40_000.0)
-    assert s.mass_at(105.0) == pytest.approx(10_000.0)
+    assert s.mass_at(50.0) == pytest.approx(70_000.0 - mdot * 50.0)
+    assert s.mass_at(105.0) == pytest.approx(70_000.0 - mdot * 100.0)
     el, az = s.attitude_at(4.0)
     assert (math.degrees(el), math.degrees(az)) == pytest.approx((90.0, 90.0))
     el, az = s.attitude_at(29.0)  # mid pitch-over: halfway 90 -> 18
@@ -278,8 +287,14 @@ def test_default_pair_passes_and_matches_the_fl403_reference(three_dof_run):
     p = res.pair_metrics[0]
     assert p["phase"] == "coast" and p["category"] == CHECK_NUMERICAL
     assert "coast.position_m" not in p["recorded_only"]  # point mass = same model -> gated
-    # 3-DOF MECO state vs the FL-403 OT fixture (a=4416780.9 m, e=0.5383,
-    # alt 90153 m, speed 5297 m/s Earth-relative)
+    # 3-DOF MECO state vs the FL-403 OT fixture (a=4366649.3 m, e=0.544870,
+    # alt 82360 m, speed 5218.5 m/s Earth-relative, mass 10091.7 kg). E6-01
+    # (#273) re-pinned this pair: both sides now pay the exit_area *
+    # p_ambient debit (the 3-DOF RHS reads US76, OT its own table) and shut
+    # down on the same 100 s command, which agrees with the fixture to ~410 m
+    # in a where the pre-alignment run (vacuum thrust on the pad, tank dry at
+    # exactly 100 s) sat ~1.3 km away. The residual is the atmosphere table
+    # difference, not the propulsion model.
     from orbitopt.flightlab.checks import orbital_elements
 
     asc = next(o for o in res.backends if o.label == "three_dof").ascent
@@ -288,11 +303,12 @@ def test_default_pair_passes_and_matches_the_fl403_reference(three_dof_run):
 
     meco = asc.states_gcrs[-1]
     el = orbital_elements(meco[:3], meco[3:], 3.986004418e14)  # elements: inertial state
-    assert el["semi_major_axis_m"] == pytest.approx(4_416_780.9, rel=3e-4)
-    assert el["eccentricity"] == pytest.approx(0.5383, abs=5e-4)
+    assert el["semi_major_axis_m"] == pytest.approx(4_367_061.4, rel=3e-4)
+    assert el["eccentricity"] == pytest.approx(0.544891, abs=5e-4)
     r_e, v_e = cm._from_gcrs_pair(meco[None, :3], meco[None, 3:], np.array([asc.t_end]),
                                   res.scenario.epoch_utc())
-    assert float(np.linalg.norm(v_e[0])) == pytest.approx(5297.0, abs=20.0)  # Earth-relative
+    assert float(np.linalg.norm(v_e[0])) == pytest.approx(5219.2, abs=20.0)  # Earth-relative
+    assert asc.mass_kg[-1] == pytest.approx(10_091.7, abs=1.0)  # 91.7 kg commanded-MECO residue
 
 
 @pytest.mark.slow
@@ -327,7 +343,7 @@ def test_six_dof_pair_agrees_with_three_dof():
     assert by["six_dof"].status == STATUS_RAN, by["six_dof"].detail
     p = next(p for p in res.pair_metrics if p["phase"] == "ascent")
     assert p["category"] == CHECK_MODEL
-    # FL-403 measured 51 m / 2 m/s MECO deviation; defaults are far looser
+    # FL-403 measured 52 m / 2 m/s MECO deviation; defaults are far looser
     assert p["metrics"]["max_position_m"] < 500.0
     assert "mass_kg" in p["checks"]
     assert res.result == RESULT_PASSED

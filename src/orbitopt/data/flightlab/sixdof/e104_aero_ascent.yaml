@@ -59,5 +59,6 @@ assumptions:
   - "flow_lag_frames: JSBSim applies a step's drain to inertia/mass-slugs
     one frame late, and the ignition step's trapezoid sees half a frame, so
     the flow integral runs ~1.5 frames ahead of the mass trace; the declared
-    allowance is 2 frames of peak flow (2 * 600 kg/s * 0.02 s = 24 kg) plus a
+    allowance is 2 frames of peak flow (2 * 599.083 kg/s, E6-01 choked
+    flow, * 0.02 s = 24 kg) plus a
     2 kg floor."
