@@ -232,8 +232,13 @@ position failures rise from 4 to 7. See
 
 `plan_boostback_entry(joint_chance=...)` replaces the R-01 soft objective
 terms with joint fuel, divert/scatter and landing-probability constraints,
-combined through a worst-violation penalty. The recorded 32-sample joint arm
-lands 17; see [ADR 0005](adr/flightlab-0005-joint-recovery-chance-constraints.md)
+solved as a **penalized optimization** (worst-violation exact penalty on the
+Nelder–Mead search — not a constrained solver). Since E7-01 the constraint
+verdict is enforced, not implied by the penalty: a plan whose worst
+normalized violation exceeds `JointChanceSpec.violation_tolerance` comes
+back `feasible=False` with reason code `JOINT_CHANCE_VIOLATED`. The recorded
+32-sample joint arm lands 17; see
+[ADR 0005](adr/flightlab-0005-joint-recovery-chance-constraints.md)
 and [paired results](benchmarks/e3_02_joint_recovery.json) for assumptions.
 Its planning probability is a surrogate, not a guaranteed flight success rate.
 
@@ -257,3 +262,66 @@ The [benchmark script](../benchmarks/bench_e3_03_robust_montecarlo.py) records
 all sample rows, failure classes and sensitivities. Statistics were recomputed
 from those rows in the current acceptance review; the 672 flights were not
 re-run.
+
+**The E3-02 row predates E7-01.** It was flown when the joint chance verdict
+was only a penalty, so plans that violated it still flew. Under E7-01's
+enforced feasibility (below) the same 168 samples, re-flown fresh in E7-04
+(`e7_04_joint_base`), land **35** (20.8 %): the 21 recorded landings that
+violated the constraint now end as `JOINT_CHANCE_VIOLATED` before the burn
+(0/21 paired, p ≈ 1e-6). Against the FL-305 baseline that enforced arm is
+11/21 discordant, exact McNemar p = 0.110 — *below* the baseline, not
+significantly so. The p = 0.0192 above is therefore a statement about the
+pre-E7-01 penalty mode, not about the joint chance mode as it now behaves.
+
+## Probability calibration of p_land (E7-02)
+
+The [calibration report](benchmarks/e7_02_probability_calibration.md) grades
+the joint-chance planner's per-sample `p_land` forecast against the E3-03
+pooled 168-sample record (seeds 1–4, no re-flying). Above the 0.8 floor the
+forecast is consistent (mean prediction inside the observed Wilson interval);
+below it, overconfident — the 0.5–0.8 bin predicts 0.656 and lands 0.076, the
+0–0.5 bin predicts 0.268 and lands 0/42 (ECE 0.313, MCE 0.581, Brier skill
+≈ 0 against climatology). Low-`p_land` samples must not be traded on their
+forecast; the constraint comparison at 0.8 is what the surrogate currently
+supports. Reliability diagram and per-bin Wilson intervals in the report;
+reading via `orbitopt.flightlab.recovery.calibration`.
+
+## Joint risk modeling (E7-03)
+
+The [joint-risk report](benchmarks/e7_03_joint_risk.md) tests the hidden
+assumption in `p_land = p_fuel × p_divert` on the same recorded E3-03
+sample. The two failure channels are **not independent**: realized failures
+*compete* (pooled φ = −0.127, exact Fisher p = 0.010; observed joint-failure
+0.027 vs 0.048 expected), so the product **overstates** `p_land` — the same
+direction E7-02 measured. The adopted replacement is a Gaussian copula,
+`p_land = Φ₂(Φ⁻¹(p_fuel), Φ⁻¹(p_divert); ρ)` with ρ = −0.273 fitted
+out-of-sample on the three non-joint arms; marginal-preserving, monotone,
+Fréchet-safe, and exactly the product at ρ = 0. On the joint arm it improves
+every E7-02 metric (Brier 0.222 → 0.214, skill 0.000 → +0.039, ECE 0.313 →
+0.301, MCE 0.581 → 0.563) but does **not** repair the mid-band: below 0.8
+the forecast still overstates, and the E7-02 usage rule stands. The shipped
+spec default is still ρ = 0.0 (exact product); `FITTED_LANDING_DEPENDENCE_RHO`
+and `JointChanceSpec.landing_dependence_rho` carry the coupling for the epic
+to adopt. Module: `orbitopt.flightlab.recovery.joint_risk`.
+
+## Failure-driven optimization (E7-04)
+
+The [paired re-fly report](benchmarks/e7_04_failure_driven.md) attacks the
+categories E3-03 fingered, on the identical dispersion samples, with the
+Holm-corrected per-category McNemar family E3-03's own p = 0.019 lesson
+demanded. The guidance fix — declared TVC chain **with** E3-01's
+command-side lag compensation, plus the new off-by-default lateral cutoff
+gate (`cutoff_lateral_speed_m_s`, 0.8 m/s) — cuts
+`LANDING_LATERAL_SPEED_EXCEEDED` **24 → 18** (7/1 discordants, raw McNemar
+p = 0.070; Holm cannot certify at 6 comparisons) and lifts landings
+45 → 49, with no category rising under correction (raw reserve-low +3,
+p = 0.25). `initial_state` sensitivity moves |ρ| 0.403 → 0.384 but stays
+rank 1 — the dispersion is attenuated, not dethroned. The gate itself
+re-flew baseline verdicts bit-exactly unchanged (failures arrive at the
+3 m window with 2–4 m/s lateral — too fast to null; they are born in the
+divert, which is why compensation carries the fix), and the planning knob
+`corridor_aim_margin_m` measured as a propellant/lateral trade, so it
+ships at 0. The joint-chance arm re-paired **fresh** (the recorded joint
+rows predate E7-01's feasibility semantics) shows compensation inert
+there: the 0.8 floor rejects 99/168 samples before the burn, E7-02's
+usage rule again. Module: `orbitopt.flightlab.recovery.failure_driven`.
