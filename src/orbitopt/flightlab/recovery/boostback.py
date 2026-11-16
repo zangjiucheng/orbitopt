@@ -60,6 +60,22 @@ verdict instead of implied by the penalty: a joint-mode plan whose worst
 normalized violation exceeds ``JointChanceSpec.violation_tolerance`` comes
 back ``feasible=False`` with ``JOINT_CHANCE_VIOLATED``.
 
+E7-04 (task #280) adds a fourth, orthogonal planning knob:
+``corridor_aim_margin_m`` (default 0.0, bit-exact). It tightens only the
+*planning-time* grading of the corridor miss (against
+``corridor.radius_m - margin``), so the optimizer keeps a handoff inside a
+ring inset from the acceptance corridor instead of strolling up to its rim;
+the ``CORRIDOR_MISSED`` verdict is still graded at the true radius. It is
+a response to the E3-03 failure-driven reading (``initial_state`` ranked
+first in every arm, Spearman 0.38--0.47; ``CORRIDOR_MISSED`` /
+``LANDING_LATERAL_SPEED_EXCEEDED`` the dominant regression modes), but the
+E7-04 paired re-fly measured it as a *dial, not the fix*: on the E3-03
+grid a quarter-radius inset trades ``INSUFFICIENT_PROPELLANT_RESERVE``
+down (shorter divert burns less) for lateral-speed failures up (a deeper
+handoff arrives faster), and in joint-chance mode its miss-term reweight
+is dominated by the joint penalty. The E3-03 report's dominant guidance-
+side lever turned out to be E3-01's command-side lag compensation instead.
+
 Feasibility language (acceptance criteria): a plan that cannot make the
 corridor comes back ``feasible=False`` with ``reason_codes[0]`` the governing
 one, drawn from::
@@ -598,7 +614,8 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
               divert_budget: float = float("inf"),
               reserve_margin: float = 0.0,
               chance: JointChanceSpec | None = None,
-              sep_prop_kg: float | None = None) -> _Rollout:
+              sep_prop_kg: float | None = None,
+              aim_radius: float | None = None) -> _Rollout:
     """One full-physics flight through the FL-301 propagator plus the
     corridor residual. Penalty is a sum of dimensionless squared violations:
     the corridor/entry/propellant violations in-flight, plus the R-01 soft
@@ -610,7 +627,11 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
     :mod:`orbitopt.flightlab.recovery.chance`, graded on the crossed
     corridor handoff and added as the worst-violation exact penalty;
     ``sep_prop_kg`` (separation propellant) gives the burn exposure the
-    loss scale is computed from."""
+    loss scale is computed from. ``aim_radius`` (E7-04) replaces
+    ``corridor.radius_m`` in the planning-time miss term only: the penalty
+    then pulls the plan toward a handoff inside that smaller ring while the
+    acceptance verdict at ``corridor.radius_m`` stays the referee
+    (``None`` = the full radius, every pre-E7-04 caller)."""
     out = _Rollout()
     h0_name = "fl302_corridor_h0"
     try:
@@ -667,7 +688,8 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
     elif out.exhausted == "entry":
         pen += 10.0
     if out.crossed:
-        pen += (out.miss_m / corridor.radius_m) ** 2
+        pen += (out.miss_m / (corridor.radius_m if aim_radius is None
+                              else float(aim_radius))) ** 2
         # R-01 landing feasibility: the same miss against the divert the
         # landing burn can actually close, not only against the corridor
         # radius (a 1.76 km miss costs ~0.05 against 8 km and ~3.1 here).
@@ -731,7 +753,8 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                          landing_reserve_margin_kg: float =
                              DEFAULT_LANDING_RESERVE_MARGIN_KG,
                          joint_chance: JointChanceSpec | Mapping[str, Any] | None =
-                             None) -> ReturnPlan:
+                             None,
+                         corridor_aim_margin_m: float = 0.0) -> ReturnPlan:
     """Optimize the boostback/entry-burn script so the FL-301-propagated
     booster reaches ``recovery_target.corridor``; returns the corridor
     insertion state, its pad-ENU mirror, and the flown track.
@@ -764,6 +787,20 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     point; ``max_fevals`` budgets the search (a restart from a jittered
     point spends at most half of it, and budgets below 40 keep the search
     where it started -- pin a script by passing both).
+    ``corridor_aim_margin_m`` (E7-04, task #280) is a *planning-time* aim
+    margin [m]: the objective grades the corridor miss against
+    ``corridor.radius_m - corridor_aim_margin_m`` instead of the full radius,
+    so the accepted script aims *inside* a ring inset from the acceptance
+    corridor. The acceptance corridor itself -- and the ``CORRIDOR_MISSED``
+    verdict ``_assemble`` gives against the true radius -- are untouched (the
+    referee never moves); only the plan the optimizer keeps aims deeper,
+    buying robustness against the plan/reality mismatch the FL-302 rollout
+    cannot see (the atmospheric dispersion draws, the E3-03 top-ranked
+    ``initial_state`` sensitivity): an aim that already misses 0.5 km has
+    7.5 km of radius to spare, an aim that aimed *at* the rim has none. The
+    tighter radius also pulls the divert handed to FL-303 down, which is the
+    E7-04 attack on the terminal ``LANDING_LATERAL_SPEED_EXCEEDED`` mode.
+    0.0 (default) reproduces the E3-02-era objective bit-for-bit.
     Raises ``RecoveryError`` when the vehicle has fewer than two restarts
     available (boostback and entry burns each need one)."""
     corridor = recovery_target.corridor
@@ -777,6 +814,13 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     if not landing_reserve_margin_kg >= 0.0:
         raise ValueError(f"landing_reserve_margin_kg must be >= 0, "
                          f"got {landing_reserve_margin_kg}")
+    if not corridor_aim_margin_m >= 0.0:
+        raise ValueError(f"corridor_aim_margin_m must be >= 0, "
+                         f"got {corridor_aim_margin_m}")
+    if not corridor_aim_margin_m < corridor.radius_m:
+        raise ValueError(f"corridor_aim_margin_m must stay inside the corridor "
+                         f"radius {corridor.radius_m}, got {corridor_aim_margin_m}")
+    aim_radius = corridor.radius_m - float(corridor_aim_margin_m)
     divert_budget = float("inf") if landing_divert_budget_m is None \
         else float(landing_divert_budget_m)
     reserve_margin = float(landing_reserve_margin_kg)
@@ -828,7 +872,7 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
         return _evaluate(sep_state, to_mission(x), booster, recovery_target, corridor,
                          entry_q_max_pa, entry_g_max, reserve, horizon_s, dt, window,
                          divert_budget=divert_budget, reserve_margin=reserve_margin,
-                         chance=chance, sep_prop_kg=sep_prop)
+                         chance=chance, sep_prop_kg=sep_prop, aim_radius=aim_radius)
 
     # --- analytic floor check (see _propellant_floor_kg)
     sep_prop = sep_mass - dry

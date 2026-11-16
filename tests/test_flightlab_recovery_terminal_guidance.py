@@ -121,6 +121,7 @@ def _tilt_deg(cmd) -> float:
     {"tvc_rate_limit_deg_s": -1.0}, {"tvc_lag_tau_s": -1.0},
     {"throttle_rate_limit_per_s": -1.0}, {"tvc_lag_compensation": True},
     {"tvc_lag_tau_s": 0.2, "tvc_lag_compensation_cap_deg": 0.0},
+    {"cutoff_lateral_speed_m_s": -1.0},
 ])
 def test_guidance_policy_rejects_nonsense(kwargs):
     with pytest.raises(ValueError):
@@ -475,3 +476,42 @@ def test_recovery_monte_carlo_flies_the_declared_actuator_by_default():
     # the MC plan default carries the E3-01 set verbatim
     from orbitopt.flightlab.recovery.montecarlo import MC_PLAN_OPTIONS
     assert dict(MC_PLAN_OPTIONS["landing"]) == dict(DECLARED_LANDING_ACTUATOR)
+
+
+# ---------------------------------------------------------------------------
+# E7-04 (task #280): lateral-speed gate on the final cutoff
+# ---------------------------------------------------------------------------
+
+def test_cutoff_lateral_gate_holds_the_engine_until_the_hop_is_soft():
+    # Same no-hover state the plain cutoff test uses (arrival ~2.09 m/s,
+    # under the 2.2 m/s gate) -- but carrying a lateral drift the referee
+    # will grade against the 1.0 m/s limit. The gate keeps the engine lit
+    # (PD law still in charge) while the hop is ballistic-hot, and lets the
+    # final cutoff happen only once the lateral speed is under the gate.
+    m = 35_000.0
+    g8 = TerminalGuidance(cutoff_lateral_speed_m_s=0.8)
+    hot = _cmd((0.0, 0.0, 0.15), (1.5, 0.0, -1.2), m, guidance=g8)
+    assert hot.phase == "burn" and hot.thrust_n > 0.0
+    cold = _cmd((0.0, 0.0, 0.15), (0.5, 0.0, -1.2), m, guidance=g8)
+    assert cold.phase == "cutoff" and cold.thrust_n == 0.0
+    # gate exactly on the boundary is inside (<=): hypot(0.8, 0) == 0.8
+    edge = _cmd((0.0, 0.0, 0.15), (0.8, 0.0, -1.2), m, guidance=g8)
+    assert edge.phase == "cutoff"
+
+
+def test_cutoff_lateral_gate_off_is_bit_exact_fl305():
+    # The default (0.0) never gates: a soft vertical arrival cuts the
+    # engine even with a fat lateral drift -- FL-305/E3-01 behavior, the
+    # gate may only ever make the engine burn LONGER, never cut earlier.
+    m = 35_000.0
+    fat = _cmd((0.0, 0.0, 0.15), (6.0, -3.0, -1.2), m)
+    assert fat.phase == "cutoff" and fat.thrust_n == 0.0
+    # and with the gate off the command is *identical* to the preset for
+    # every state in a small sweep
+    sweep = [((0.0, 0.0, 0.15), (6.0, -3.0, -1.2), 35_000.0),
+             ((0.0, 0.0, 1.0), (0.5, 0.0, -1.2), 35_000.0),
+             ((1500.0, -400.0, 900.0), (40.0, -10.0, -150.0), 40_000.0)]
+    for pos, vel, mass in sweep:
+        a = _cmd(pos, vel, mass)
+        b = _cmd(pos, vel, mass, guidance=TerminalGuidance())
+        assert a.phase == b.phase and a.thrust_n == b.thrust_n

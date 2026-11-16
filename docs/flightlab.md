@@ -281,3 +281,25 @@ the forecast still overstates, and the E7-02 usage rule stands. The shipped
 spec default is still ρ = 0.0 (exact product); `FITTED_LANDING_DEPENDENCE_RHO`
 and `JointChanceSpec.landing_dependence_rho` carry the coupling for the epic
 to adopt. Module: `orbitopt.flightlab.recovery.joint_risk`.
+
+## Failure-driven optimization (E7-04)
+
+The [paired re-fly report](benchmarks/e7_04_failure_driven.md) attacks the
+categories E3-03 fingered, on the identical dispersion samples, with the
+Holm-corrected per-category McNemar family E3-03's own p = 0.019 lesson
+demanded. The guidance fix — declared TVC chain **with** E3-01's
+command-side lag compensation, plus the new off-by-default lateral cutoff
+gate (`cutoff_lateral_speed_m_s`, 0.8 m/s) — cuts
+`LANDING_LATERAL_SPEED_EXCEEDED` **24 → 18** (7/1 discordants, raw McNemar
+p = 0.070; Holm cannot certify at 6 comparisons) and lifts landings
+45 → 49, with no category rising under correction (raw reserve-low +3,
+p = 0.25). `initial_state` sensitivity moves |ρ| 0.403 → 0.384 but stays
+rank 1 — the dispersion is attenuated, not dethroned. The gate itself
+re-flew baseline verdicts bit-exactly unchanged (failures arrive at the
+3 m window with 2–4 m/s lateral — too fast to null; they are born in the
+divert, which is why compensation carries the fix), and the planning knob
+`corridor_aim_margin_m` measured as a propellant/lateral trade, so it
+ships at 0. The joint-chance arm re-paired **fresh** (the recorded joint
+rows predate E7-01's feasibility semantics) shows compensation inert
+there: the 0.8 floor rejects 99/168 samples before the burn, E7-02's
+usage rule again. Module: `orbitopt.flightlab.recovery.failure_driven`.

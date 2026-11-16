@@ -34,6 +34,7 @@ from orbitopt.flightlab.recovery.stats import (
     classify_failure,
     failure_breakdown,
     failure_class_title,
+    holm_adjust,
     mcnemar_test,
     required_sample_size,
     sign_test,
@@ -506,3 +507,40 @@ def test_sign_test_is_the_exact_paired_median_test():
     one, other = sign_test(d), sign_test([-x for x in d])
     assert one["p_value"] == other["p_value"]
     assert one["median_difference"] == -other["median_difference"]
+
+
+# ---------------------------------------------------------------------------
+# E7-04 (task #280): Holm-Bonferroni step-down over comparison families
+# ---------------------------------------------------------------------------
+
+def test_holm_adjust_is_the_step_down_the_e3_03_story_demands():
+    # The E3-03 lesson, made executable: a six-category family where one
+    # raw p = 0.019 (the real E3-02-vs-FL-305 landed comparison) must not
+    # survive the correction -- at rank 2 the step-down bar is 0.05/5 =
+    # 0.01. The one p below its bar does, and adjusted p-values are
+    # monotone in the sorted order.
+    ps = [0.019, 0.001, 0.2, 0.6, 0.9, 0.04]
+    rows = holm_adjust(ps)
+    by_code = {i: r for i, r in enumerate(rows)}
+    assert by_code[1]["reject"] and by_code[1]["adjusted_p"] == pytest.approx(0.006)
+    assert not by_code[0]["reject"] and by_code[0]["rank"] == 2
+    assert by_code[0]["threshold"] == pytest.approx(0.05 / 5)
+    adjusted_sorted = [r["adjusted_p"] for r in sorted(rows, key=lambda r: r["rank"])]
+    assert all(b >= a - 1e-12 for a, b in zip(adjusted_sorted, adjusted_sorted[1:]))
+    assert all(r["reject"] for r in rows if r["adjusted_p"] <= 0.05)
+    assert all(not r["reject"] for r in rows if r["adjusted_p"] > 0.05 + 1e-12)
+
+
+def test_holm_adjust_edge_cases_and_validation():
+    assert holm_adjust([]) == []
+    single = holm_adjust([0.03])
+    assert single[0]["reject"] and single[0]["adjusted_p"] == pytest.approx(0.03)
+    # Holm dominates Bonferroni: everything under alpha/n rejects
+    rows = holm_adjust([0.004, 0.9])
+    assert rows[0]["reject"] and not rows[1]["reject"]
+    # step-down: a prefix failure condemns the rest even if individually small
+    rows = holm_adjust([0.03, 0.031])
+    assert not rows[0]["reject"] and not rows[1]["reject"]
+    for bad in (-0.01, 1.5):
+        with pytest.raises(ValueError):
+            holm_adjust([bad])
