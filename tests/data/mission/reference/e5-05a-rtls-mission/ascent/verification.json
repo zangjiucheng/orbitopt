@@ -1,0 +1,96 @@
+{
+  "optimizer_converged": null,
+  "physics_verified": null,
+  "backend_self_check": true,
+  "mission_constraints_passed": false,
+  "checks": [
+    {
+      "id": "mass-non-negative",
+      "passed": true,
+      "value": 1500.0,
+      "limit": 0.0,
+      "unit": "kg",
+      "reason_code": ""
+    },
+    {
+      "id": "mass-continuity-stage2",
+      "passed": true,
+      "value": 0.0,
+      "limit": 0.02,
+      "unit": "fraction",
+      "reason_code": ""
+    },
+    {
+      "id": "max-q-within-limit",
+      "passed": true,
+      "value": 39110.812569122776,
+      "limit": 60000.0,
+      "unit": "Pa",
+      "reason_code": ""
+    },
+    {
+      "id": "max-accel-within-limit",
+      "passed": false,
+      "value": 25.639228496633788,
+      "limit": 15.0,
+      "unit": "g",
+      "reason_code": "max_accel_exceeded"
+    },
+    {
+      "id": "recovery-propellant-reserve",
+      "passed": false,
+      "value": null,
+      "limit": 10000.0,
+      "unit": "kg",
+      "reason_code": "RECOVERY_PROPELLANT_RESERVE_DATA_MISSING"
+    },
+    {
+      "id": "recovery-landing",
+      "passed": false,
+      "value": null,
+      "limit": null,
+      "unit": "",
+      "reason_code": "RECOVERY_LANDING_NOT_ASSESSED"
+    },
+    {
+      "id": "insertion-above-atmosphere",
+      "passed": false,
+      "value": -903532.8722817181,
+      "limit": 120000.0,
+      "unit": "m",
+      "reason_code": "PERIAPSIS_IN_ATMOSPHERE"
+    },
+    {
+      "id": "insertion-periapsis-above-minimum",
+      "passed": false,
+      "value": -903532.8722817181,
+      "limit": 230000.0,
+      "unit": "m",
+      "reason_code": "INSERTION_PERIAPSIS_BELOW_MINIMUM"
+    },
+    {
+      "id": "insertion-periapsis-within-tolerance",
+      "passed": false,
+      "value": -903532.8722817181,
+      "limit": 250000.0,
+      "unit": "m",
+      "reason_code": "INSERTION_PERIAPSIS_OUT_OF_TOLERANCE"
+    },
+    {
+      "id": "insertion-apoapsis-within-tolerance",
+      "passed": false,
+      "value": 4658693.940053267,
+      "limit": 250000.0,
+      "unit": "m",
+      "reason_code": "INSERTION_APOAPSIS_OUT_OF_TOLERANCE"
+    },
+    {
+      "id": "insertion-inclination-within-tolerance",
+      "passed": false,
+      "value": 47.96057106395299,
+      "limit": 51.6,
+      "unit": "deg",
+      "reason_code": "INSERTION_INCLINATION_OUT_OF_TOLERANCE"
+    }
+  ]
+}

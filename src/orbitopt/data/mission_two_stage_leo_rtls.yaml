@@ -1,0 +1,112 @@
+# E5-05a (task #285): RTLS-capable two-stage LEO reference mission.
+#
+# The E5-05 blocker made this mission necessary: with the sealed
+# synthetic_two_stage vehicle the ascent burns stage 1 to depletion
+# (separation mass == dry mass), so the recovery chain has nothing to plan
+# from and RTLS is infeasible by construction (ContextDB record
+# `e5-05-rtls-infeasibility-evidence`). This mission flies the redesigned
+# catalog vehicle `synthetic_two_stage_rtls` -- the same dual-branch chain as
+# the frozen E2-04 reference -- but every recovery state is COMPUTED from the
+# ascent: the booster plans and flies from the actual separation mass with its
+# computed stage-1 propellant reserve (burn-off mass minus declared cutoff
+# mass, an OpenTsiolkovsky-computed event state, never an injected one), and
+# insertion still reaches the 250 km reference LEO (see docs/adr/flightlab-0008 for the orbit re-base).
+#
+#   orbitopt run src/orbitopt/data/mission_two_stage_leo_rtls.yaml -o /tmp/e505a.scene.json
+#
+# Like the sealed reference, `mode: run_dir` replays a FLOWN FlightResult
+# directory -- here a recorded OpenTsiolkovsky v1.0.0 flight of the E5-05a
+# vehicle (engines recorded in its manifest), not a synthetic two-sample
+# handoff (E5-01 guard: tests/test_mission_e5_real_ascent.py; the recorded
+# flight carries solver-determined events, cf. the Gate B guard's contract).
+# The same vehicle/ascent is FLOWN LIVE (no fixture) by the fast E5-05a test
+# and by the design campaign documented in docs/adr/flightlab-0008; this
+# fixture keeps the mission chain itself CI-cheap. E2-04 stays the fast
+# frozen integration test of the expendable-style baseline.
+#
+# `expected.propagation_result: not_checked` for the same environment reason
+# as E2-04 (the gfold-pinned landing stack cannot carry tudatpy): the
+# propagation leg stays owned by the Gate B job; the recovery and insertion
+# legs are graded for real here.
+#
+# Relative paths (ascent.run_dir, target_file) resolve against the repository
+# root, exactly as in mission_two_stage_leo_recovery.yaml.
+schemaVersion: "1.0"
+mission:
+  id: e5-05a-rtls-two-stage-leo
+  title: RTLS-capable two-stage LEO reference mission (computed stage-1 reserve)
+  kind: two-stage-leo
+scenario:
+  mission:
+    id: e5-05a-rtls-two-stage-leo
+    title: RTLS-capable two-stage LEO reference mission (computed stage-1 reserve)
+    kind: two-stage-leo
+  launch:
+    site: kourou                            # E5 reference-site binding decision (epic #264)
+    vehicle: synthetic_two_stage_rtls       # E5-05a catalog redesign (booster model source)
+    orbit: 400x400@51.6                     # same parking orbit as the sealed reference
+    date_utc: "2026-11-10"                  # demonstration epoch, as the packaged Flight Lab scenario
+    raan_deg: null                          # unconstrained: liftoff is the configured date, not a node pass
+    window_days: 14.0
+  ascent:
+    mode: run_dir                           # replay the recorded OT flight fixture
+    run_dir: tests/data/mission/reference/e5-05a-rtls-mission/ascent
+    target_file: src/orbitopt/data/flightlab/scenarios/leo_two_stage_rtls.yaml
+  handoff:
+    # M-01 continuity gates, identical to the sealed references: the OT
+    # replay crosses no frame transform, so these grade the bookkeeping.
+    position_m: 1.0
+    velocity_m_s: 0.01
+    epoch_s: 1.0
+    max_epoch_gap_s: null
+    mass_kg: 0.001
+    staging_velocity_m_s: 0.05
+    elements:
+      semi_major_axis_m: 10.0
+      eccentricity: 1.0e-6
+      inclination_deg: 1.0e-3
+      raan_deg: 1.0e-2
+      apsides_m: 10.0
+  recovery:
+    # The replayed flight is graded against this target's declared RTLS
+    # recovery; the booster model comes from launch.vehicle's catalog yaml.
+    target_file: src/orbitopt/data/flightlab/scenarios/leo_two_stage_rtls.yaml
+    drive_from_separation: true             # E5-02 shared handoff: plan from the COMPUTED separation state
+    plan_options:
+      # E5-05a plan recipe (docs/adr/flightlab-0008): the FROZEN E2-04/FL-305
+      # start (the pipeline's nominal guess, same seven numbers) still
+      # converges here, but the heavier booster needs a longer Nelder-Mead
+      # budget (140 evaluations: 60 stalls short of the corridor), and the
+      # grid-fin drag deck (reference_area 21.6 m2) flies a hotter entry than
+      # the sealed baseline's, so the entry-q ceiling is raised 150->250 kPa
+      # (DESIGN ASSUMPTION, uncrewed; the entry-g ceiling keeps the default
+      # 8 g -- the flown plan never approaches it).
+      initial_guess: [18.4, 17.75, 1.0, 4.36, 0.0, 17456.0, 23.0]
+      max_fevals: 140
+      entry_q_max_pa: 250000                # DESIGN ASSUMPTION: entry heating/qs ceiling, see ADR
+  propagation:
+    j2: true
+    third_bodies: []
+    drag: null
+    revolutions: 1.0
+    max_step_s: 300.0
+  expected:
+    events: [liftoff, meco, separation, seco]
+    parking_orbit:
+      semi_major_axis_m: 6628137.0
+      eccentricity: 0.0
+      inclination_deg: 51.6
+      raan_deg: null
+      periapsis_altitude_m: 250000.0
+      apoapsis_altitude_m: 250000.0
+    tolerances:                   # insertion band: 250 km +/- 20 km (230 km periapsis floor per scenario)
+      semi_major_axis_m: 20000.0
+      eccentricity: 0.002951
+      inclination_deg: 0.2
+      raan_deg: 1.0
+      periapsis_altitude_m: 20000.0
+      apoapsis_altitude_m: 20000.0
+    propagation_result: not_checked   # environment reason, as in E2-04 (see header)
+  scene:
+    coast_orbits: 2.0
+    earth_texture: true
