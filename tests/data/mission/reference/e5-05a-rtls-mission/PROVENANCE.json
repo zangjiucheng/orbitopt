@@ -1,0 +1,33 @@
+{
+  "schema": "e5-05a-rtls-mission-provenance-v1",
+  "generated_utc": "2026-11-16T18:54:35+00:00",
+  "generator": "scripts/e505a_reference.py (OpenTsiolkovsky 1.1.0 via the flightlab adapter)",
+  "vehicle": "src/orbitopt/data/flightlab/vehicles/synthetic_two_stage_rtls.yaml",
+  "ascent_target": "scenarios/leo_two_stage_rtls.yaml",
+  "events_s": {
+    "ignition": 148.0,
+    "liftoff": 0.0,
+    "max_q": 56.641003113947036,
+    "meco": 134.0,
+    "separation": 201.0,
+    "seco": 226.77972863605044,
+    "impact": 1763.0682118307648
+  },
+  "separation_state": {
+    "t_s": 141.0,
+    "frame": "ECEF",
+    "position_m": [
+      3932500.589784849,
+      -5094311.096615315,
+      645238.2163442891
+    ],
+    "velocity_m_s": [
+      1655.2210571221076,
+      -206.41218880284578,
+      1549.3498768234858
+    ],
+    "mass_kg": 136700.41867219776
+  },
+  "adr": "docs/adr/flightlab-0008",
+  "note": "Replayed by mission_two_stage_leo_rtls.yaml (ascent mode run_dir). The recovery chain plans from THIS computed separation state -- read out with the pipeline's own separation_state_ecef, not a textbook or illustrative one."
+}
