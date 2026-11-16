@@ -140,6 +140,7 @@ from orbitopt.flightlab.recovery.stats import (  # noqa: F401
     classify_failure,
     failure_breakdown,
     failure_class_title,
+    holm_adjust,
     solo_models,
     source_sensitivity,
     statistics_summary,
@@ -160,6 +161,13 @@ from orbitopt.flightlab.recovery.joint_risk import (  # noqa: F401
     failure_channels,
     fit_gaussian_copula_rho,
     phi_report,
+)
+from orbitopt.flightlab.recovery.failure_driven import (  # noqa: F401
+    category_pair_table,
+    holm_family,
+    index_paired_rows,
+    sensitivity_shift,
+    verdict_summary,
 )
 from orbitopt.flightlab.recovery.uncertainty import (  # noqa: F401
     ComponentScale,

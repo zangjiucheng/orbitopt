@@ -1061,7 +1061,12 @@ class TerminalGuidance:
       below the floor's net deceleration: below ``cutoff_height_m`` the
       engine shuts down for good as soon as the ballistic arrival speed
       ``sqrt(v_z^2 + 2 g h)`` is under ``cutoff_speed_m_s``. One ignition,
-      one cutoff -- no restarts spent.
+      one cutoff -- no restarts spent. E7-04 (task #280) adds the optional
+      lateral term ``cutoff_lateral_speed_m_s``: the shutdown also waits for
+      the horizontal speed to come under that gate, because the horizontal
+      velocity is ballistic across the sub-second cutoff hop and the
+      referee grades the *lateral* touchdown speed the plain gate lets
+      through unchecked (0 = off, the FL-305/E3-01 flow bit-exact).
     * **TVC slew rate (R-05).** With ``tvc_rate_limit_deg_s > 0`` the
       commanded thrust *direction* cannot turn faster than that rate: the
       law slews the new direction toward its previous command, so a large
@@ -1134,6 +1139,21 @@ class TerminalGuidance:
     #: tilt cone by default: the compensator may never pull the command
     #: further off the demand than the law's own authority allows).
     tvc_lag_compensation_cap_deg: float = 10.0
+    #: E7-04 (task #280): lateral-speed gate [m/s] on the final cutoff
+    #: (0 = off, the FL-305/E3-01 flow). The FL-305 cutoff gate checks only
+    #: the *ballistic arrival* vertical speed (``cutoff_speed_m_s``) while
+    #: the referee grades the *lateral* touchdown speed -- the E3-03
+    #: Monte Carlo's dominant terminal failure is
+    #: ``LANDING_LATERAL_SPEED_EXCEEDED`` (32/168 on the joint arm,
+    #: docs/benchmarks/e7_04_failure_driven.md). Over the sub-second cutoff
+    #: hop at cutoff height the horizontal speed is ballistic (drag at a
+    #: few m/s near the ground is negligible), so the lateral speed at
+    #: cutoff is the lateral speed that gets graded. With this gate the
+    #: engine stays lit (throttle floor, PD lateral law still in charge)
+    #: until ``hypot(v_e, v_n)`` is under the gate: the divert that did not
+    #: null before cutoff height is nulled before shutdown instead of being
+    #: ridden into the pad ballistically.
+    cutoff_lateral_speed_m_s: float = 0.0
 
     def __post_init__(self) -> None:
         if not 0.0 < self.design_throttle <= 1.0:
@@ -1149,6 +1169,8 @@ class TerminalGuidance:
             raise ValueError("settle/gain/cutoff-height terms cannot be negative")
         if self.cutoff_speed_m_s <= 0.0 or self.min_time_to_go_s <= 0.0:
             raise ValueError("cutoff_speed_m_s and min_time_to_go_s must be positive")
+        if self.cutoff_lateral_speed_m_s < 0.0:
+            raise ValueError("cutoff_lateral_speed_m_s cannot be negative")
         if self.tvc_rate_limit_deg_s < 0.0:
             raise ValueError("tvc_rate_limit_deg_s cannot be negative")
         if self.tvc_lag_tau_s < 0.0:
@@ -1489,7 +1511,9 @@ def terminal_guidance_command(position_enu_m: Sequence[float],
     a_floor = float(thrust_min_n) / m - gravity_m_s2
     if (a_req < a_floor and h < g.cutoff_height_m
             and math.sqrt(vz * vz + 2.0 * gravity_m_s2 * max(h, 0.0))
-            <= g.cutoff_speed_m_s):
+            <= g.cutoff_speed_m_s
+            and (g.cutoff_lateral_speed_m_s <= 0.0
+                 or float(np.hypot(v[0], v[1])) <= g.cutoff_lateral_speed_m_s)):
         return TerminalCommand("cutoff", zero, a_req)
 
     a_up = a_req + gravity_m_s2

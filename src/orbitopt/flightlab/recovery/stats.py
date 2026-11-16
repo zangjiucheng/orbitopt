@@ -40,6 +40,12 @@ so no distribution tables, no normal-approximation caveats at small
 discordant counts, and the chi-squared-with-continuity-correction companion
 is reported alongside for readers who want the classical number.
 
+E7-04 (task #280) adds :func:`holm_adjust`: a failure-driven task asks one
+question *per failure category* (six McNemar families per arm pair is the
+norm), and E3-03's own reading showed a raw p = 0.019 dying under
+Bonferroni -- families need a step-down correction, and Holm dominates
+Bonferroni without independence assumptions.
+
 Determinism: everything is a pure function of the record list and the
 declared model, computed with fixed numpy/stdlib arithmetic -- no RNG use.
 
@@ -70,6 +76,7 @@ __all__ = [
     "failure_class_title",
     "solo_models",
     "mcnemar_test",
+    "holm_adjust",
     "required_sample_size",
     "sign_test",
     "source_sensitivity",
@@ -512,3 +519,36 @@ def sign_test(differences: Sequence[float]) -> dict[str, Any]:
         out["median_difference"] = (float(srt[mid]) if len(srt) % 2
                                     else (srt[mid - 1] + srt[mid]) / 2.0)
     return out
+
+
+def holm_adjust(p_values: Sequence[float], alpha: float = 0.05
+                ) -> list[dict[str, Any]]:
+    """Holm-Bonferroni step-down adjustment of a family of p-values (E7-04,
+    task #280). The E3-03 reading showed why single-comparison p-values are
+    not enough once a task hunts *per failure category*: six raw McNemar
+    tests at alpha = 0.05 put the E3-02-vs-FL-305 p = 0.019 over the
+    Bonferroni-corrected bar. Holm dominates Bonferroni (every rejection
+    Bonferroni makes, Holm makes) and needs no independence assumption:
+    sort the raw p-values ascending, compare the i-th smallest against
+    alpha / (n - i) stepping up, and once one fails all larger fail too
+    (the monotone running maximum makes adjusted p-values nondecreasing).
+    Returns one row per input, in input order, with the rank, the step-down
+    threshold that governed it, the monotone ``adjusted_p``, and the verdict
+    at ``alpha``. Empty input is a family of nothing: an empty list."""
+    ps = [float(p) for p in p_values]
+    if any(p < 0.0 or p > 1.0 for p in ps):
+        raise ValueError("p-values must lie in [0, 1]")
+    n = len(ps)
+    order = sorted(range(n), key=lambda i: ps[i])
+    rows: list[dict[str, Any]] = [{}] * n
+    running = 0.0
+    broken = False
+    for i, idx in enumerate(order):
+        threshold = alpha / (n - i)
+        running = max(running, min(ps[idx] * (n - i), 1.0))
+        if broken or ps[idx] > threshold:
+            broken = True           # step-down: nothing larger can reject
+        rows[idx] = {"rank": i + 1, "raw_p": ps[idx],
+                     "threshold": threshold, "adjusted_p": running,
+                     "reject": not broken}
+    return rows
