@@ -27,6 +27,7 @@ from orbitopt.flightlab.recovery.boostback import (  # noqa: F401
     INSUFFICIENT_PROPELLANT_BOOSTBACK,
     INSUFFICIENT_PROPELLANT_ENTRY_BURN,
     INSUFFICIENT_PROPELLANT_RESERVE,
+    JOINT_CHANCE_VIOLATED,
     BoostbackPlan,
     CorridorReport,
     EntryBurnPlan,
@@ -40,6 +41,7 @@ from orbitopt.flightlab.recovery.boostback import (  # noqa: F401
 )
 from orbitopt.flightlab.recovery.chance import (  # noqa: F401
     DEFAULT_FUEL_QUANTILE,
+    DEFAULT_JOINT_VIOLATION_TOLERANCE,
     DEFAULT_MIN_LANDING_PROBABILITY,
     DEFAULT_SCATTER_BUDGET_M,
     DEFAULT_SCATTER_QUANTILE,
@@ -138,10 +140,34 @@ from orbitopt.flightlab.recovery.stats import (  # noqa: F401
     classify_failure,
     failure_breakdown,
     failure_class_title,
+    holm_adjust,
     solo_models,
     source_sensitivity,
     statistics_summary,
     success_rate_interval,
+)
+from orbitopt.flightlab.recovery.calibration import (  # noqa: F401
+    DEFAULT_CALIBRATION_BINS,
+    brier_score,
+    calibration_report,
+    pairs_from_records,
+    reliability_table,
+)
+from orbitopt.flightlab.recovery.joint_risk import (  # noqa: F401
+    FITTED_LANDING_DEPENDENCE_RHO,
+    back_out_component_probabilities,
+    contingency_table,
+    coupled_pairs_from_records,
+    failure_channels,
+    fit_gaussian_copula_rho,
+    phi_report,
+)
+from orbitopt.flightlab.recovery.failure_driven import (  # noqa: F401
+    category_pair_table,
+    holm_family,
+    index_paired_rows,
+    sensitivity_shift,
+    verdict_summary,
 )
 from orbitopt.flightlab.recovery.uncertainty import (  # noqa: F401
     ComponentScale,
@@ -185,6 +211,7 @@ __all__ = [
     "DEFAULT_ENTRY_G_MAX",
     "DEFAULT_ENTRY_Q_MAX_PA",
     "DEFAULT_FUEL_QUANTILE",
+    "DEFAULT_JOINT_VIOLATION_TOLERANCE",
     "DEFAULT_LANDING_DIVERT_BUDGET_M",
     "DEFAULT_LANDING_LIMITS",
     "DEFAULT_LANDING_RESERVE_MARGIN_KG",
@@ -202,6 +229,7 @@ __all__ = [
     "INSUFFICIENT_PROPELLANT_RESERVE",
     "ImpactEllipse",
     "ImpactSite",
+    "JOINT_CHANCE_VIOLATED",
     "JOINT_PENALTY_SCALE",
     "JointChanceSpec",
     "JointConstraints",

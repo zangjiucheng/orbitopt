@@ -27,6 +27,7 @@ import pytest
 from orbitopt.flightlab.recovery import BoosterModel, RecoveryTarget
 from orbitopt.flightlab.recovery.boostback import plan_boostback_entry
 from orbitopt.flightlab.recovery.chance import (
+    DEFAULT_JOINT_VIOLATION_TOLERANCE,
     DEFAULT_MIN_LANDING_PROBABILITY,
     DEFAULT_SCATTER_BUDGET_M,
     DEFAULT_SCATTER_QUANTILE,
@@ -284,3 +285,85 @@ def test_penalty_additive_identity_when_satisfied():
     spec = JointChanceSpec()
     v = evaluate_joint_chance(spec, miss_m=0.0, margin_kg=5e4, exposure_kg=10_000.0)
     assert joint_penalty(v) == 0.0 and v.worst_violation == 0.0
+
+
+# ---------------------------------------------------------------------------
+# E7-01 (#277) feasibility semantics: violation > tolerance is never a
+# satisfaction, from the pure verdict up to the FL-302 reason code
+# ---------------------------------------------------------------------------
+
+
+def test_violation_tolerance_boundary_is_inclusive():
+    """Satisfaction is ``worst_violation <= violation_tolerance``: exactly at
+    the tolerance satisfies, a hair below the required margin does not."""
+    spec = JointChanceSpec()
+    assert spec.violation_tolerance == DEFAULT_JOINT_VIOLATION_TOLERANCE
+    ok = evaluate_joint_chance(spec, miss_m=351.0, margin_kg=1662.0, exposure_kg=20_000.0)
+    assert ok.worst_violation == 0.0 and spec.satisfies(ok.worst_violation)
+    bad = evaluate_joint_chance(spec, miss_m=1760.0, margin_kg=0.0, exposure_kg=20_000.0)
+    assert bad.worst_violation > spec.violation_tolerance
+    assert not spec.satisfies(bad.worst_violation)
+    # boundary: tolerance set exactly to the violation -> satisfied (<=)
+    w = bad.worst_violation
+    assert JointChanceSpec(violation_tolerance=w).satisfies(w)
+    assert not JointChanceSpec(violation_tolerance=w * (1.0 - 1e-9)).satisfies(w)
+    # 0.0 tolerance is legal: demands exact satisfaction
+    assert JointChanceSpec(violation_tolerance=0.0).satisfies(0.0)
+    with pytest.raises(ValueError):
+        JointChanceSpec(violation_tolerance=-1.0)
+
+
+def test_chance_mode_violating_handoff_is_infeasible(vehicle, pad_target):
+    """E7-01 acceptance: a joint-mode plan whose handoff violates the
+    constraints above the tolerance is NOT reported as satisfying them --
+    ``feasible=False`` with ``JOINT_CHANCE_VIOLATED`` in the reason codes."""
+    from orbitopt.flightlab.recovery.boostback import JOINT_CHANCE_VIOLATED
+    st = _sep_state(**SEP)
+    plan = plan_boostback_entry(
+        st, vehicle, pad_target, initial_guess=_SEED_PLAN, max_fevals=1,
+        landing_divert_budget_m=None, landing_reserve_margin_kg=0.0,
+        joint_chance=JointChanceSpec())
+    rep = plan.corridor_report
+    assert rep.reached and rep.joint_violation > 0.0  # 1.8 km tail handoff
+    assert not plan.feasible
+    assert JOINT_CHANCE_VIOLATED in plan.reason_codes
+
+
+def test_chance_mode_satisfied_handoff_carries_no_joint_reason(vehicle, pad_target):
+    """The satisfied side of the regression: a spec that cannot bind yields
+    a zero violation and no ``JOINT_CHANCE_VIOLATED`` anywhere in the plan."""
+    from orbitopt.flightlab.recovery.boostback import JOINT_CHANCE_VIOLATED
+    st = _sep_state(**SEP)
+    relaxed = JointChanceSpec(p_fuel_min=1e-6, min_landing_probability=1e-6,
+                              scatter_budget_m=1e12, scatter_quantile=0.99,
+                              sigma_floor_m=1e9)
+    plan = plan_boostback_entry(
+        st, vehicle, pad_target, initial_guess=_SEED_PLAN, max_fevals=1,
+        landing_divert_budget_m=None, landing_reserve_margin_kg=0.0,
+        joint_chance=relaxed)
+    assert plan.corridor_report.joint_violation == 0.0
+    assert JOINT_CHANCE_VIOLATED not in plan.reason_codes
+
+
+def test_chance_mode_tolerance_boundary_not_flagged(vehicle, pad_target):
+    """Boundary through the planner: raising the tolerance to exactly the
+    handoff's violation removes the verdict (<=  satisfies); a hair tighter
+    flags it again. Tolerance is not an objective term -- the violation the
+    pinned script produces is identical in both runs."""
+    from orbitopt.flightlab.recovery.boostback import JOINT_CHANCE_VIOLATED
+    st = _sep_state(**SEP)
+    kwargs = dict(initial_guess=_SEED_PLAN, max_fevals=1,
+                  landing_divert_budget_m=None, landing_reserve_margin_kg=0.0)
+    base = plan_boostback_entry(st, vehicle, pad_target,
+                                joint_chance=JointChanceSpec(), **kwargs)
+    w = base.corridor_report.joint_violation
+    assert w > 0.0 and JOINT_CHANCE_VIOLATED in base.reason_codes
+    boundary = plan_boostback_entry(st, vehicle, pad_target,
+                                    joint_chance=JointChanceSpec(violation_tolerance=w),
+                                    **kwargs)
+    assert boundary.corridor_report.joint_violation == w
+    assert JOINT_CHANCE_VIOLATED not in boundary.reason_codes
+    tight = plan_boostback_entry(st, vehicle, pad_target,
+                                 joint_chance=JointChanceSpec(violation_tolerance=w * 0.5),
+                                 **kwargs)
+    assert JOINT_CHANCE_VIOLATED in tight.reason_codes
