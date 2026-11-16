@@ -137,12 +137,14 @@ See the [acceptance results](acceptance-e1-e4.md).
 
 **F-05 / E1-02:** grade the powered phase separately from coast. In the
 [recorded gravity-turn study](benchmarks/fl605_gravity_turn_ascent.json),
-burnout occurs at 99.85 s in a 180 s flight. Powered 6-DOF attitude error is
-4.77° peak / 2.78° RMS, alpha 14.34°, max-Q 71.4 kPa and peak
-`q·alpha` 483 kPa·deg. The later 62.8° alpha peak occurs in near-vacuum
-coast (coast max-Q 0.18 Pa), not at peak aerodynamic loading. The study's
-2.13 km altitude, 2.08 m/s speed and 0.47° flight-path-angle differences
-are scenario results.
+burnout occurs at 100.2 s in a 180 s flight. Powered 6-DOF attitude error is
+4.77° peak / 2.80° RMS, alpha 14.42°, max-Q 71.2 kPa and peak
+`q·alpha` 482 kPa·deg. The later 62.6° alpha peak occurs in near-vacuum
+coast (coast max-Q 0.11 Pa), not at peak aerodynamic loading. The study's
+2.14 km altitude, 2.06 m/s speed and 0.47° flight-path-angle differences
+are scenario results. (Re-recorded after E6-01's choked engine and commanded
+MECO and E6-04's per-step control sampling; every powered-phase constraint
+still passes, alpha now 0.58° under the 15° table edge.)
 
 **F-07 / E1-03:** both native backends use the same state-feedback
 upper-stage steering law, command limits and periapsis cutoff:
@@ -152,9 +154,9 @@ orbitopt flight mission --backend BOTH -o runs/f07-mission
 ```
 
 The [guided comparison](benchmarks/fl607_mission_outputs.json) records
-226.1/231.5 km peri/apo for the point mass and 221.5/228.6 km for the rigid
+225.3/228.5 km peri/apo for the point mass and 220.5/226.5 km for the rigid
 body, inside the declared ±25 km bands. The former 235 km altitude difference
-falls to 1.65 km. This is a disclosed **non-parity variant** (1 t upper dry
+falls to 1.43 km (re-recorded after E6-01/E6-04; 1.65 km before). This is a disclosed **non-parity variant** (1 t upper dry
 mass, 7 t propellant, 3° gimbal), not the original F-06 vehicle. Shared law
 does not mean identical commands along different states or general accuracy --
 E6-03 measures where that accuracy actually reaches. Runs, handoffs, reports,
