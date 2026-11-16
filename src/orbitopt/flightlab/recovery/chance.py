@@ -54,9 +54,18 @@ already measures (miss, propellant, landing need):
    sigma) -- the divert budget is *derived* from a scatter requirement
    instead of being asserted, and ``P(divert closes)`` is read off the same
    model as the Rayleigh CDF at the budget.
-3. **Landing probability.** The joint event: ``p_land = p_fuel * p_divert``
-   must meet ``min_landing_probability`` -- the planner is told the success
-   *probability* it must deliver, the quantity the Monte Carlo grades.
+ 3. **Landing probability.** The joint event: ``p_land = p_fuel * p_divert``
+    must meet ``min_landing_probability`` -- the planner is told the success
+    *probability* it must deliver, the quantity the Monte Carlo grades. The
+    product states independence of the two channels; E7-03 (task #279)
+    measured that assumption on the E3-03 pooled Monte Carlo and found the
+    realized failures *dependent* (pooled phi = -0.13, exact Fisher
+    p = 0.01 -- see :mod:`orbitopt.flightlab.recovery.joint_risk` and the
+    e7-03 report). :attr:`JointChanceSpec.landing_dependence_rho`
+    (default 0.0 = the product) couples the two channels through a Gaussian
+    copula (:func:`bivariate_normal_cdf`) so a fitted dependence is one
+    spec field away of the constraint; the fitted value and the written
+    case for using it live in the e7-03 evidence, not here.
 
 All calibration numbers are DESIGN ASSUMPTIONs anchored on the recorded
 Monte Carlo evidence (see the defaults' docstrings and ADR flightlab-0005);
@@ -75,12 +84,15 @@ from typing import Any
 __all__ = [
     "DEFAULT_FUEL_QUANTILE",
     "DEFAULT_JOINT_VIOLATION_TOLERANCE",
+    "DEFAULT_LANDING_DEPENDENCE_RHO",
     "DEFAULT_MIN_LANDING_PROBABILITY",
     "DEFAULT_SCATTER_BUDGET_M",
     "DEFAULT_SCATTER_QUANTILE",
     "JOINT_PENALTY_SCALE",
     "JointChanceSpec",
     "JointVerdict",
+    "bivariate_normal_cdf",
+    "coupled_joint_probability",
     "evaluate_joint_chance",
     "joint_penalty",
     "phi",
@@ -88,6 +100,15 @@ __all__ = [
     "propellant_loss_sigma_kg",
     "rayleigh_quantile_factor",
 ]
+
+#: E7-03 (task #279) default dependence between the fuel and divert
+#: channels of the joint landing event. DESIGN ASSUMPTION 0.0 = the
+#: independence product the constraint shipped with through E7-02: E7-03
+#: *measured* the dependence on the E3-03 Monte Carlo (negative -- realized
+#: failures compete) and supplies a fitted copula correlation, but the
+#: default flips only with the written decision the e7-03 report records,
+#: not silently inside the constraint module.
+DEFAULT_LANDING_DEPENDENCE_RHO = 0.0
 
 #: Chance level of the fuel-margin constraint: the corridor margin must
 #: cover the ``p_fuel_min`` quantile of the dispersion loss. DESIGN
@@ -174,6 +195,65 @@ def rayleigh_quantile_factor(q: float) -> float:
     return math.sqrt(-2.0 * math.log(1.0 - q))
 
 
+#: Simpson panels for :func:`bivariate_normal_cdf` (even; the integrand is
+#: C-infinity on |rho| <= 0.995, so 200 panels is ~1e-9 absolute there --
+#: far below the probability floor the copula itself is quoted to).
+_BVN_PANELS = 200
+
+
+def _bvn_density(h: float, k: float, r: float) -> float:
+    """Bivariate standard-normal density ``phi_2(h, k; r)`` -- which is also
+    d/drho of the CDF (Plackett identity), the integrand below."""
+    one_m = max(1.0 - r * r, 1e-15)
+    q = (h * h - 2.0 * r * h * k + k * k) / one_m
+    return math.exp(-0.5 * q) / (2.0 * math.pi * math.sqrt(one_m))
+
+
+def bivariate_normal_cdf(h: float, k: float, rho: float) -> float:
+    """Standard bivariate normal CDF ``Phi_2(h, k; rho)`` for |rho| < 1.
+    ``Phi_2(h, k; 0) = phi(h) phi(k)`` holds exactly; otherwise the CDF is
+    integrated from 0 to ``rho`` against Plackett's identity
+    ``d Phi_2 / d rho = phi_2(h, k; rho)`` with composite Simpson
+    (:data:`_BVN_PANELS` panels) -- deterministic, no scipy, and exact on
+    the corner identity ``Phi_2(h, h; rho) = 1/4 + asin(rho)/(2 pi)``
+    (tests)."""
+    if not -1.0 < rho < 1.0:
+        raise ValueError(f"rho must be in (-1, 1), got {rho}")
+    h, k, rho = float(h), float(k), float(rho)
+    if rho == 0.0:
+        return phi(h) * phi(k)
+    n = _BVN_PANELS
+    step = rho / n
+    total = _bvn_density(h, k, 0.0) + _bvn_density(h, k, rho)
+    for i in range(1, n):
+        total += (4.0 if i % 2 else 2.0) * _bvn_density(h, k, i * step)
+    result = phi(h) * phi(k) + total * step / 3.0
+    # Fréchet hygiene: Phi_2(h,k;rho) is a joint CDF of marginals phi(h),
+    # phi(k) -- keep it inside their bounds against integration error.
+    ph, pk = phi(h), phi(k)
+    return min(max(result, max(0.0, ph + pk - 1.0)), min(ph, pk))
+
+
+def coupled_joint_probability(p1: float, p2: float, rho: float) -> float:
+    """Joint probability of two events with marginal probabilities
+    ``p1``, ``p2`` under a Gaussian copula with correlation ``rho`` (E7-03,
+    module docstring): ``Phi_2(phi_inv(p1), phi_inv(p2); rho)``, clipped to
+    the Frechet bounds ``[max(0, p1+p2-1), min(p1, p2)]`` -- a numerical
+    floor, since copula probabilities are inside them by construction. At
+    ``rho = 0`` this is exactly the product ``p1 * p2`` (the copula reduces
+    to independence; the fast path keeps that exact in floating point).
+    Probabilities at 0 or 1 are evaluated at the 1e-15 double floor."""
+    if not 0.0 <= p1 <= 1.0 or not 0.0 <= p2 <= 1.0:
+        raise ValueError(f"marginal probabilities needed in [0, 1], got {p1}, {p2}")
+    if rho == 0.0:
+        return p1 * p2
+    eps = 1e-15
+    h = phi_inv(min(max(p1, eps), 1.0 - eps))
+    k = phi_inv(min(max(p2, eps), 1.0 - eps))
+    joint = bivariate_normal_cdf(h, k, rho)
+    return min(max(joint, max(0.0, p1 + p2 - 1.0)), min(p1, p2))
+
+
 @dataclass(frozen=True)
 class JointChanceSpec:
     """One joint chance-constraint specification for FL-302 (module
@@ -208,6 +288,14 @@ class JointChanceSpec:
     #: chance constraints iff its worst normalized violation is within this
     #: tolerance (:meth:`satisfies`; 0.0 demands exact satisfaction).
     violation_tolerance: float = DEFAULT_JOINT_VIOLATION_TOLERANCE
+    #: E7-03 (task #279): Gaussian-copula correlation coupling the fuel and
+    #: divert channels of the landing-probability constraint. 0.0 is the
+    #: product (the independence assumption as shipped through E7-02);
+    #: nonzero replaces ``p_fuel * p_divert`` with
+    #: :func:`coupled_joint_probability`. The fitted value and the written
+    #: case live in the e7-03 evidence
+    #: (``orbitopt.flightlab.recovery.joint_risk`` cites it).
+    landing_dependence_rho: float = DEFAULT_LANDING_DEPENDENCE_RHO
 
     def __post_init__(self) -> None:
         if not 0.0 < self.p_fuel_min < 1.0:
@@ -227,6 +315,9 @@ class JointChanceSpec:
         if self.violation_tolerance < 0.0:
             raise ValueError(f"violation_tolerance must be >= 0, got "
                              f"{self.violation_tolerance}")
+        if not -1.0 < self.landing_dependence_rho < 1.0:
+            raise ValueError(f"landing_dependence_rho must be in (-1, 1), got "
+                             f"{self.landing_dependence_rho}")
 
     @classmethod
     def from_option(cls, option: "JointChanceSpec | Mapping[str, Any] | None"
@@ -346,7 +437,9 @@ def evaluate_joint_chance(spec: JointChanceSpec, *, miss_m: float,
     p_fuel = phi(margin_kg / sigma) if sigma > 0.0 else (
         1.0 if margin_kg > 0.0 else (0.5 if margin_kg == 0.0 else 0.0))
     p_div = spec.p_divert(miss_m)
-    p_land = p_fuel * p_div
+    # E7-03: with landing_dependence_rho = 0 this is exactly the product
+    # the module shipped with; nonzero couples the channels (see docstring).
+    p_land = coupled_joint_probability(p_fuel, p_div, spec.landing_dependence_rho)
     z = phi_inv(spec.p_fuel_min)
     req = z * sigma
     budget = spec.divert_budget_m()

@@ -263,3 +263,21 @@ below it, overconfident — the 0.5–0.8 bin predicts 0.656 and lands 0.076, th
 forecast; the constraint comparison at 0.8 is what the surrogate currently
 supports. Reliability diagram and per-bin Wilson intervals in the report;
 reading via `orbitopt.flightlab.recovery.calibration`.
+
+## Joint risk modeling (E7-03)
+
+The [joint-risk report](benchmarks/e7_03_joint_risk.md) tests the hidden
+assumption in `p_land = p_fuel × p_divert` on the same recorded E3-03
+sample. The two failure channels are **not independent**: realized failures
+*compete* (pooled φ = −0.127, exact Fisher p = 0.010; observed joint-failure
+0.027 vs 0.048 expected), so the product **overstates** `p_land` — the same
+direction E7-02 measured. The adopted replacement is a Gaussian copula,
+`p_land = Φ₂(Φ⁻¹(p_fuel), Φ⁻¹(p_divert); ρ)` with ρ = −0.273 fitted
+out-of-sample on the three non-joint arms; marginal-preserving, monotone,
+Fréchet-safe, and exactly the product at ρ = 0. On the joint arm it improves
+every E7-02 metric (Brier 0.222 → 0.214, skill 0.000 → +0.039, ECE 0.313 →
+0.301, MCE 0.581 → 0.563) but does **not** repair the mid-band: below 0.8
+the forecast still overstates, and the E7-02 usage rule stands. The shipped
+spec default is still ρ = 0.0 (exact product); `FITTED_LANDING_DEPENDENCE_RHO`
+and `JointChanceSpec.landing_dependence_rho` carry the coupling for the epic
+to adopt. Module: `orbitopt.flightlab.recovery.joint_risk`.
