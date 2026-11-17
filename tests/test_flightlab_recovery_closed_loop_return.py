@@ -100,7 +100,7 @@ def _plan(booster, rt, sep, *, thrust=1.0, **kw):
     return plan_boostback_entry(sep, b, rt, entry_burns=1, entry_throttle=True,
                                 initial_guess=x, entry_q_max_pa=250_000.0,
                                 entry_g_max=12.0, horizon_s=900.0, dt_opt=0.25,
-                                dt_final=0.25, search=lambda obj, v: v,
+                                dt_final=0.25, search=kw.pop("search", lambda obj, v: v),
                                 landing_need_model="closed_loop", **kw)
 
 
@@ -155,3 +155,60 @@ def test_landing_reserve_option_selects_the_graded_reserve(inputs):
     for bad in ("nope", -1.0):
         with pytest.raises(ValueError, match="landing_reserve"):
             landing_reserve_booster(booster, target, bad)
+
+
+@pytest.mark.slow
+def test_speed_cut_below_h0_is_an_engine_on_handoff(inputs):
+    """A speed-cut entry burn still lit at h0 does not hand over: the handoff
+    is gated at the cutoff, so a cut below the corridor height is graded
+    CORRIDOR_MISSED (it used to be accepted as an engine-on handoff), and a
+    cut above it is not. The cutoff height is on the corridor report."""
+    booster, rt, sep = inputs
+    h0 = rt.corridor.h0_m
+    for thrust in (0.95, 1.0):          # cold / nominal: this script cuts below h0
+        plan = _plan(booster, rt, sep, thrust=thrust, boostback_cutoff="iip",
+                     entry_cutoff="speed")
+        assert plan.corridor_report.entry_cutoff_altitude_m < h0, thrust
+        assert "CORRIDOR_MISSED" in plan.reason_codes, thrust
+    hot = _plan(booster, rt, sep, thrust=1.05, boostback_cutoff="iip", entry_cutoff="speed")
+    assert hot.corridor_report.entry_cutoff_altitude_m > h0
+    assert "CORRIDOR_MISSED" not in hot.reason_codes
+    timed = _plan(booster, rt, sep, boostback_cutoff="iip")
+    assert timed.corridor_report.entry_cutoff_altitude_m is None    # speed mode only
+
+
+@pytest.mark.slow
+def test_search_keep_flies_the_initial_script(inputs):
+    """search='keep' (the form a mission document pins a validated script in)
+    is the identity search: the plan is the initial script, flown as is."""
+    booster, rt, sep = inputs
+    kept = _plan(booster, rt, sep, boostback_cutoff="iip", search="keep")
+    ident = _plan(booster, rt, sep, boostback_cutoff="iip")
+    assert kept.entry_burn == ident.entry_burn and kept.boostback == ident.boostback
+    assert kept.corridor_report == ident.corridor_report
+
+
+def test_search_and_throttle_layout_validate(inputs):
+    booster, rt, sep = inputs
+    with pytest.raises(ValueError, match="search"):
+        plan_boostback_entry(sep, booster, rt, search="nope")
+    with pytest.raises(ValueError, match="initial_guess"):
+        plan_boostback_entry(sep, booster, rt, search="keep")
+    with pytest.raises(ValueError, match="entry_throttle"):   # 7 values, throttled layout has 8
+        plan_boostback_entry(sep, booster, rt, entry_throttle=True,
+                             initial_guess=SEED[:7], search="keep")
+
+
+def test_unpack_script_layouts():
+    from orbitopt.flightlab.recovery.boostback import _unpack_script
+
+    x7 = np.array(SEED[:7])
+    bb, eb, eb2 = _unpack_script(x7)
+    assert eb.throttle == 1.0 and eb2 is None and bb.duration_s == SEED[1]
+    _bb, eb, _ = _unpack_script(np.array(SEED[:7] + [0.6]), 1, True)
+    assert eb.throttle == 0.6
+    x2 = np.array(SEED[:7] + [6000.0, 12.0, 0.9, 0.3])
+    _bb, eb, eb2 = _unpack_script(x2, 2, True)
+    assert (eb.throttle, eb2.trigger_altitude_m, eb2.duration_s, eb2.throttle) == (0.9, 6000.0, 12.0, 0.3)
+    _bb, eb, eb2 = _unpack_script(x2[:9], 2, False)
+    assert eb.throttle == 1.0 and eb2.throttle == 1.0

@@ -1068,7 +1068,7 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                           entry_burns: int = 1,
                           entry_throttle: bool = False,
                           search: Callable[[Callable[[np.ndarray], float], np.ndarray],
-                                           np.ndarray] | None = None,
+                                           np.ndarray] | str | None = None,
                           landing_need_model: str = "momentum",
                           landing_limits: Any = None,
                           landing_guidance: Any = None,
@@ -1148,7 +1148,9 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     accept if it beats the start. The verdict path (re-integration at
     ``dt_final``, ``_assemble``) is unchanged -- offline global searches
     (``scripts/e505c_recovery_search.py``) plug in here; ``None`` (default)
-    is the stock search, bit-for-bit.
+    is the stock search, bit-for-bit. ``"keep"`` flies ``initial_guess`` as
+    is (no search): the form a mission document pins a validated script in
+    (the E5-05c reference recipe, Monte Carlo-verified as a fixed script).
     ``landing_need_model`` (E5-05c): ``"momentum"`` (default, bit-for-bit)
     prices the landing burn as a full-thrust vertical burn lit at the
     handoff and caps the handoff at ``corridor.v_max_m_s``;
@@ -1203,6 +1205,12 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
 
         landing_limits = DEFAULT_LANDING_LIMITS
     pred_limits = landing_limits if landing_need_model == "closed_loop" else None
+    if isinstance(search, str):
+        if search != "keep":
+            raise ValueError(f"search must be a callable, 'keep' or None, got {search!r}")
+        if initial_guess is None:
+            raise ValueError("search='keep' flies initial_guess as is: pass one")
+        search = _keep_start
     if entry_burns not in (1, 2):
         raise ValueError(f"entry_burns must be 1 or 2, got {entry_burns}")
     ignitions_needed = 1 + int(entry_burns)
@@ -1404,6 +1412,11 @@ ENTRY_CUTOFF_CAP_S = 45.0
 #: cutoff should keep (objective term; dispersions must not push the cut
 #: below h0, where the handoff would be engine-on and rejected).
 ENTRY_CUTOFF_MIN_CLEARANCE_M = 1500.0
+
+
+def _keep_start(objective: Callable[[np.ndarray], float], x_start: np.ndarray) -> np.ndarray:
+    """``search="keep"``: accept the (clamped) start, no evaluation."""
+    return x_start
 
 
 def _unpack_script(x: np.ndarray, entry_burns: int = 1, entry_throttle: bool = False

@@ -2,13 +2,19 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-16
-- **Deciders:** E5 Physically Continuous Mission (Epic #264), E5-05a (#285)
+- **Deciders:** E5 Physically Continuous Mission (Epic #264), E5-05a (#285);
+  amended by E5-05b (#286), E5-05d (#288) and E5-05c (#287, F10 resolution)
 - **Code:** `src/orbitopt/data/flightlab/vehicles/synthetic_two_stage_rtls.yaml`
   (new catalog vehicle), `src/orbitopt/data/flightlab/scenarios/leo_two_stage_rtls.yaml`
   (flight target), `src/orbitopt/data/mission_two_stage_leo_rtls.yaml`
   (mission document, ascent mode `run_dir`),
-  `tests/data/mission/reference/e5-05a-rtls-mission/` (replayed ascent + PROVENANCE.json)
-- **Evidence:** `tests/test_mission_e5_05a_rtls.py`; campaign log
+  `tests/data/mission/reference/e5-05a-rtls-mission/` (replayed ascent + PROVENANCE.json);
+  E5-05c: `src/orbitopt/flightlab/recovery/boostback.py` (closed-loop return
+  options), `.../recovery/landing.py` (landing forecast incl. peak load),
+  `scripts/e505c_recovery_search.py`, `scripts/e505c_recovery_montecarlo.py`
+- **Evidence:** `tests/test_mission_e5_05a_rtls.py`,
+  `tests/test_flightlab_recovery_closed_loop_return.py`,
+  `tests/test_flightlab_recovery_landing_forecast.py`; campaign log
   `context-forge/implementation/result.json`; ContextDB
   `e5-05-rtls-infeasibility-evidence` (#272, predecessor)
 
@@ -101,6 +107,11 @@ Parametric families (CMA-ES, pygmo, OT-in-the-loop,
 | objective fix + loft9-14 | corrected fitness scaling (F8), warm start from loft8; 13- then 8- then 10-/11-dim families as the wall emerged; pitch-down nodes moved ahead of depletion, lazy terminal elevation, terminal pitch-up node | PLATEAU rp -0.7..-1.3 km / ra >= 1.4 Mm across every family and dimension — F9: the band is unreachable in this backend, and the campaigns confirm it, they do not fail to try |
 | lazy1 (BAKED REFERENCE) | conserving turn authority: max elevation 42 deg, gentle terminal flatten, T2 2.8 MN lazy burn | best closure of the whole campaign: sep 89.9 km / 2.277 km/s / 117.6 km / SEP 136.7 t, SECO rp -0.74 km / ra 5696 km / inc 48.0 deg — the baked vehicle program |
 | corridor grid (b108/116/124 x 5 plan recipes + guess sweep) | `fly_recovery` on the computed states, R-01 knobs, entry-g 12, horizon 1200, entry duration 35-60 s | CORRIDOR_MISSED everywhere — F10; closest handoffs: miss 1.5-2.4 km inside the 8 km radius at handoff speed >= ~600 m/s vs the 350 m/s ceiling; the reserve gate PASSES on every computed state |
+| E5-05c probe (E5-05d state, 135.4 t SEP) | timed 7-parameter script; two-burn entry (`entry_burns=2`); throttled entry | the corridor GEOMETRY already closes (247 m/s, 4.8 km) — the blockers are propellant (11.8 t at h0 vs 18.9 t needed) and entry load (12.7 g vs 8 g); a second braking burn spends exactly the propellant that is short, so `entry_burns=2` does not help (kept as an option) |
+| E5-05c step-size audit | same +30 t script re-flown at dt 2 / 0.5 / 0.25 / 0.1 s | handoff 805 / 386 / 331 / 276 m/s: the FL-301 fixed-step verdict is not step-converged at the planner defaults (triggers/cutoffs sampled once per step); the search runs at 0.25 s, the verdict at 0.1 s |
+| E5-05c reserve sizing (proxy: +dm on the E5-05d separation state) | closed-loop return (IIP boostback, speed-cut throttled entry, closed-loop landing forecast), DE + n=64 Monte Carlo | +30 t: 0/64 (touchdown p05 5.8 t; spread 0.99-correlated with the Isp draw, an inherited 5 % band); +48 t: 35-37/64 corridor misses until the IIP burn's 60 s cap was replaced by a propellant floor; then +48 t 64/64, +50 t 63/64 (one engine-on handoff, cut at 2.9 km) |
+| E5-05c stage-1 resize | thrust + mass flow x k at the 134 s cutoff, k 1.14-1.22 (live OT) | +48 t as dead load sinks stage-1 dv ~340 m/s (rp -546 km); k 1.165-1.185 closes the band, k = 1.175 centres it: rp 272.6 / ra 285.1 km, SEP 183.4 t at 2129 m/s / 93.4 km (E5-05d: 2135 m/s / 93.2 km) |
+| E5-05c computed-state Monte Carlo (n=64, seed 1, Isp 3 %) | the pinned recipe, fixed script, no dm | landing law at 4.0 g: 59/64 (5 hot-engine samples at 5.1 g peak load); at 3.6 g: **64/64** (Wilson 95 % lower bound 0.943), touchdown propellant min 12.0 / p05 12.6 / median 14.2 t vs the 10 t gate |
 
 Findings F1-F10 (driving the decision):
 
@@ -214,27 +225,78 @@ Findings F1-F10 (driving the decision):
   limitation the corridor's design assumption encodes, not a propellant
   shortfall — exactly the gap the task brief predicted ("verified against
   the textbook state, not a computed OT one").
+  - **F10 resolution (E5-05c, task #287) — closed-loop return guidance and a
+    sized stage-1 reserve; the landing closes on the computed state.** The
+    diagnosis moved twice. On the E5-05d state (135.4 t SEP) the timed script
+    already met the corridor *geometry* (247 m/s, 4.8 km); what failed was
+    propellant (11.8 t left at h0 against 18.9 t landing need + reserve) and
+    the entry load (a full-throttle three-engine burn exceeds 8 g by itself
+    below ~69 t). And every earlier corridor verdict was read off a
+    propagator that is not step-converged at the planner's 2 s / 0.5 s steps
+    (one script: 805 m/s at 2 s, 276 m/s at 0.1 s). A multi-burn entry was
+    tried and does not help — a second braking burn spends the propellant
+    that is short — so the resolution is closed-loop guidance plus reserve:
+    - *planner options* (all default-off, bit-for-bit): `boostback_cutoff=
+      "iip"` (the boostback ends on its vacuum-IIP aim or at a dry + reserve
+      propellant floor, and steers on the IIP — a timed burn moved the impact
+      ~10 km per 0.5 s); `entry_cutoff="speed"` + `entry_throttle` (the entry
+      burn ends at a cutoff speed, throttled; the handoff is only valid once
+      it has cut off — engine-on crossings are rejected — with 1.5 km of
+      planned clearance above h0); `landing_need_model="closed_loop"` (the
+      handoff is graded by a forecast of the FL-305 landing it will fly,
+      touchdown state and *peak proper load* included, instead of the
+      350 m/s cap); `landing_reserve="target"` (one graded reserve, the
+      scenario's 10 t, for planner and landing check) with a 2.5 t planning
+      margin; `search` (offline global search hook, `"keep"` pins a script);
+      `verdict_physics` (density/wind on the corridor leg in Monte Carlo);
+    - *reserve sizing*: an n=64 Monte Carlo of the fixed script on the
+      separation state + dm put the reserve at **+48 t** (Isp band 3 %,
+      stated for Isp itself — it used to inherit the stage's 5 %, which
+      alone drove the touchdown spread);
+    - *vehicle*: stage 1 scaled x1.175 in thrust and mass flow at the
+      unchanged 134 s cutoff (11.70 -> 13.75 MN, 620 -> 752.77 t loaded,
+      569.2 t burned) carries the +48 t to separation (183.4 t SEP, 153.4 t
+      reserve) at the E5-05d liftoff T/W and MECO state, so F9 stays closed
+      (rp 272.6 / ra 285.1 km); the fixture is re-baked;
+    - *landing law*: peak load = law cap + ~1.1 g of drag at ignition; the
+      4.0 g cap flew 5.1 g (> the 5 g landing-max-g limit) on hot-engine
+      samples, 3.6 g holds it at <= 4.7 g;
+    - *result*: the pinned recipe lands from the live computed separation
+      state (`test_recovery_landing_gate_on_the_computed_state`, hard
+      assertion), and 64/64 dispersed flights of the same fixed script land
+      (touchdown propellant min 12.0 / p05 12.6 / median 14.2 t vs 10 t;
+      cutoff >= 5.3 km; corridor miss p95 532 m; entry load <= 10.2 g;
+      landing load <= 4.7 g). DESIGN ASSUMPTIONS carried by the recipe:
+      entry 12 g / 250 kPa (uncrewed metallic booster), landing law 3.6 g,
+      FL-301 steps 0.25 s (search) / 0.1 s (verdict). The +50 t population's
+      single failure (an engine-on handoff, cutoff 2.9 km) marks where the
+      cutoff clearance runs out under dispersion.
 
 ### Recovery chain on the computed state
 
 The recovery pipeline (`fly_recovery`) runs from the OT separation state at
-136.7 t. Pinned recipe (`plan_options` in the mission document), each item
-with a reason:
+183.4 t (E5-05c). Pinned recipe (`plan_options` in the mission document),
+each item with a reason:
 
-- `initial_guess`: the canonical E2-04/FL-305 guess
-  `[18.4, 17.75, 1.0, 4.36, 0.0, 17456.0, 23.0]` — the heavier computed
-  state needs the real FL-305 start, not a fresh default;
-- `max_fevals: 140`: the planner stalls at 60 on the heavier state,
-  converges by 140 (measured);
-- `entry_q_max_pa: 250_000`: the default 150 kPa corridor misses at this
-  separation energy; 250 kPa is a stainless-steel-class uncrewed entry heat
-  constraint (DESIGN ASSUMPTION — the booster is uncrewed and metallic,
-  like the FL-305 reference it inherits);
-- entry-g ceiling stays at the default 8.0 g — it was never binding.
+- `initial_guess` (8 values: delay, IIP aim km, boostback throttle, pitch,
+  yaw trim, entry trigger, entry cutoff speed, entry throttle) with
+  `search: keep`: the script is flown exactly as the Monte Carlo verified
+  it (found by `scripts/e505c_recovery_search.py` with these options);
+- `boostback_cutoff: iip`, `entry_cutoff: speed`, `entry_throttle: true`,
+  `landing_need_model: closed_loop`: the closed-loop return (F10
+  resolution) — these are what absorb thrust/Isp/density/separation
+  dispersion;
+- `corridor_aim_margin_m: 7000`: plan to a 1 km aim inside the 8 km referee;
+- `landing_reserve: target` + `landing_reserve_margin_kg: 2500`: the graded
+  10 t reserve, plus the Monte Carlo nominal-to-p01 touchdown spread;
+- `entry_q_max_pa: 250_000`, `entry_g_max: 12`: uncrewed metallic booster
+  entry limits (DESIGN ASSUMPTIONS; the full-throttle cluster alone exceeds
+  8 g at RTLS entry masses);
+- `dt_opt: 0.25`, `dt_final: 0.1`: the step-converged FL-301 verdict;
+- `landing.max_thrust_accel_g: 3.6` with the declared TVC actuator set.
 
-Landing burn closes with 40-70 t of the 171.6 t reserve remaining (recovery runs on the 201.6 t computed state burn 100-130 t), so the
-chain self-verifies the reserve is *real*: the computed post-landing mass
-sits far above dry mass.
+The flown chain lands with 14.2 t (Monte Carlo median) of the 153.4 t
+separation reserve, above the 10 t gate on every dispersed sample.
 
 ### Mission document: `run_dir` replay, not re-simulation
 
@@ -248,6 +310,20 @@ states in the scenario document; a replay of a genuine OT flight is the
 sanctioned pattern (gateb precedent). Re-simulating live in both E5-03
 environments stays on #272, which this task unblocks.
 
+**Mission chain (E5-05c finding, left to #272).** With F9 and F10 closed
+on the computed state, the packaged mission *chain* still fails gates that
+are not F10 — present on the pre-E5-05c fixture too, masked until now by
+the chain test's `xfail(F10)` (now `strict=True` on the true reasons):
+(1) the E5-02 shared handoff hands the booster the t = 140 s GCRS sample
+while the pipeline plans from the t = 141 s separation state, and the
+booster handoff continuity checks fail — the fixed script misses 7.4 km
+from it; (2) the document's expected parking orbit (250 x 250 km at
+51.6 deg, +/-20 km / 0.2 deg) is not the band the scenario and vehicle fly
+(rp 272.6 / ra 285.1 km at 51.0 deg), and the chain reads the parking
+elements before the stage-2 re-ignition; (3) the OT ascent's own
+max-accel verification. These belong to the reference-scenario recording
+(#272).
+
 ## Consequences
 
 - `synthetic_two_stage_rtls` is the catalogue vehicle for all RTLS missions
@@ -256,16 +332,16 @@ environments stays on #272, which this task unblocks.
 - The recovery chain's input is now a computed separation state on the
   nominal E5 mission; FL-305's textbook-state verification remains as the
   cheap regression.
-- Partially unblocks #272: the *recovery-side* provenance this task owed is
-  recorded (computed separation state, reserve gate green, replayable run
-  dir). The *full* reference-scenario recording still waits on the two
-  backend capabilities F9/F10 expose: (1) the OT restart/coast support was
-  DELIVERED in E5-05b (#286) but did **not** close the insertion band (F9
-  resolution above) — so the remaining follow-up is a *vehicle* redesign (more
-  upper-stage delta-v / thrust-to-weight, or the 400 km band the same
-  capability now enables), not a backend feature; (2) corridor customization
-  or a multi-burn entry script in the recovery planner (closes the landing
-  gate at computed-MECO energies).
+- Unblocks #272: both walls are closed on the computed state — F9 by the
+  E5-05d upper-stage redesign, F10 by the E5-05c closed-loop return and
+  stage-1 resize (insertion in band, landing green, 64/64 Monte Carlo). What
+  #272 inherits is the mission-chain list above (E5-02 booster handoff
+  state, expected-orbit/parking-element read-out, OT max-accel), not a
+  physics wall.
+- The FL-301 corridor verdict is step-size sensitive at the planner defaults
+  (2 s / 0.5 s). The E5-05c recipe pins 0.25 s / 0.1 s; the default-path
+  references (FL-305, E2-04) keep their recorded steps. An event-located
+  trigger/cutoff in the propagator would remove the sensitivity (follow-up).
 - Disclosed boundaries: the reserve is structural (engine-cycle bookkeeping
   at the declared cutoff), not a simulated abort; the entry-heating band is
   an uncrewed-class design assumption, not a crew-rating; the raw OT config

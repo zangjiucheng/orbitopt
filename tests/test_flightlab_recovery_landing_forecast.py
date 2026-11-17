@@ -64,6 +64,21 @@ def test_forecast_reports_an_unstoppable_handoff(booster):
     assert not pred.feasible and pred.touchdown_vertical_m_s > 50.0
 
 
+def test_forecast_reports_the_peak_proper_load(booster):
+    """max_proper_g is |thrust + drag| / m g0 over the handoff-to-touchdown
+    leg -- what landing-max-g grades on the flown track. The law's thrust cap
+    alone does not bound it while drag is large (E5-05c: 4 g cap, 5.1 g)."""
+    from orbitopt.flightlab.recovery.landing import TerminalGuidance
+
+    m = booster.dry_mass_kg + 20_000.0
+    capped = TerminalGuidance(max_thrust_accel_g=3.6)
+    pred = predict_closed_loop_landing((0.0, 0.0, 3000.0), (0.0, 0.0, -330.0), m, booster,
+                                       guidance=capped)
+    assert pred.feasible
+    assert pred.max_proper_g > capped.max_thrust_accel_g     # the cap plus drag
+    assert pred.max_proper_g < capped.max_thrust_accel_g + 2.0
+
+
 def test_forecast_sees_the_divert(booster):
     m = booster.dry_mass_kg + 20_000.0
     straight = predict_closed_loop_landing((0.0, 0.0, 3000.0), (0.0, 0.0, -300.0), m, booster)
@@ -122,3 +137,6 @@ def test_forecast_matches_the_flown_closed_loop_landing(booster, handoff_inputs)
     used = state.mass_kg - float(flown.track.mass_kg[-1])
     predicted = plan.corridor_report.landing_need_kg
     assert predicted == pytest.approx(used, rel=0.02)
+    pred = predict_closed_loop_landing(enu.position_enu_m, enu.velocity_enu_m,
+                                       enu.mass_kg, booster)
+    assert pred.max_proper_g == pytest.approx(flown.max_proper_g, abs=0.1)
