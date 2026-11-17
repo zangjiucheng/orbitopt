@@ -78,8 +78,9 @@ GATE_ATTRIBUTION_MIN = {
 }
 
 #: E1-02 (task #251) gates on the committed phase split of ``6dof_full``, with
-#: margin over the committed run (powered att err 4.77 deg, AoA 14.34 deg,
-#: q*alpha 483 kPa-deg, coast AoA 62.77 deg at 366 km and a fifth of a pascal).
+#: margin over the committed run (powered att err 4.77 deg, AoA 14.42 deg,
+#: q*alpha 482 kPa-deg, coast AoA 62.61 deg and about a tenth of a pascal;
+#: re-recorded after E6-01/E6-04).
 #: The powered lines are the acceptance's; the coast lines are the *load*
 #: statement that licenses reading the big coast angles as geometry -- and the
 #: coast AoA ceiling documents the magnitude of the artifact the task asks to
@@ -91,7 +92,10 @@ GATE_PHASES = {
     "powered_q_alpha_max_pa_deg": ("<=", 520_000.0),
     "powered_max_q_pa": ("<=", 75_000.0),
     "powered_pitch_deflection_margin": (">=", 0.95),
-    "powered_engine_s": ("<=", 100.0),              # burn_s, not the 180 s span
+    # burn_s, not the 180 s span: the burn is m_prop / mdot = 60 t at
+    # T_vac / (Isp g0) = 599.1 kg/s = 100.15 s since E6-01's choked flow
+    # (99.85 s before); the gate separates it from the span, not the 0.3 s.
+    "powered_engine_s": ("<=", 101.0),
     "coast_engine_s": ("==", 0.0),
     "coast_alpha_max_deg": ("<=", 65.0),
     "coast_q_alpha_max_pa_deg": ("<=", 10.0),

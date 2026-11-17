@@ -64,7 +64,12 @@ def main() -> None:
         "note": "Replayed by mission_two_stage_leo_rtls.yaml (ascent mode run_dir). "
                 "The recovery chain plans from THIS computed separation state -- "
                 "read out with the pipeline's own separation_state_ecef, not a "
-                "textbook or illustrative one.",
+                "textbook or illustrative one. Re-flown after E5-05c (#287) resized "
+                "stage 1 for the F10 landing (thrust/mass flow x1.175 at the 134 s "
+                "cutoff, +48 t reserve): the E5-05d restartable upper stage still "
+                "inserts inside the 250 km band (rp 272.6 / ra 285.1 km) on the same "
+                "run that carries the 153.4 t stage-1 RTLS reserve the recovery "
+                "Monte Carlo sized (ADR-0008 F9/F10).",
     }
     (FIX / "PROVENANCE.json").write_text(json.dumps(prov, indent=2) + "\n",
                                          encoding="utf-8")

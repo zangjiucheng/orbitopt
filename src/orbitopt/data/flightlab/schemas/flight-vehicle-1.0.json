@@ -41,6 +41,21 @@
       }
     },
     "stages": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Stage"}},
+    "restart": {
+      "type": "object",
+      "description": "Optional multi-burn (coast + re-ignition) schedule for one stage, E5-05b: the OT adapter synthesises a thrust-curve coast gap and a restart attitude leg from this block so stage 2 can coast ballistically and re-ignite (also the enabler for higher circularisation altitudes). Times are seconds after liftoff, matching attitude_program.",
+      "required": ["coast_start_s", "coast_duration_s", "restart_thrust_n", "restart_burn_s", "restart_elevation_deg"],
+      "additionalProperties": false,
+      "properties": {
+        "stage": {"type": "integer", "minimum": 1, "description": "1-based index of the restarting stage; defaults to the last stage."},
+        "coast_start_s": {"type": "number", "exclusiveMinimum": 0, "description": "Absolute time (s after liftoff) to cut the main burn and begin the ballistic coast."},
+        "coast_duration_s": {"type": "number", "exclusiveMinimum": 0, "description": "Ballistic coast length (s) before re-ignition."},
+        "restart_thrust_n": {"type": "number", "exclusiveMinimum": 0, "description": "Constant vacuum thrust (N) through the restart burn."},
+        "restart_burn_s": {"type": "number", "exclusiveMinimum": 0, "description": "Restart burn duration (s)."},
+        "restart_azimuth_deg": {"type": "number", "description": "Azimuth (deg) commanded during the restart leg."},
+        "restart_elevation_deg": {"type": "number", "description": "Elevation (deg) commanded during the restart leg."}
+      }
+    },
     "booster": {"$ref": "#/$defs/Booster"},
     "data_provenance": {
       "type": "object",
