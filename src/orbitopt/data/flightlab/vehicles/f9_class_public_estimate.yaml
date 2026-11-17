@@ -135,6 +135,14 @@ booster:
     - Single-engine landing burn per Block 5 practice; entry-burn delta-v
       comes from propellant retained beyond this reserve, which the E3
       scenario budget carries separately.
+# Outer dimensions for the read-only Vehicle view only; no propagator or adapter
+# reads them. Fairing diameter is left out: it is not confirmed in the sources
+# used, and the view then draws the fairing at the stage diameter.
+geometry:
+  stages:
+    - {length_m: 42.6}
+    - {length_m: 12.6}
+  fairing: {length_m: 13.2}
 data_provenance:
   simulation:
     provenance: illustrative
@@ -222,3 +230,9 @@ data_provenance:
     source: SpaceX, Falcon 9 User Guide (2020) for the Merlin 1D thrust/Isp figures; nozzle exit area and throttle minimum are secondary estimates (exit area ~1.2 m2 class, deep throttle ~70%)
     as_of: "2026-11"
     uncertainty_pct: 2.0
+  geometry:
+    provenance: public_estimate
+    source: Secondary tabulation of Falcon 9 Full Thrust dimensions (Wikipedia specifications table - stage 1 42.6 m, stage 2 12.6 m, fairing 13.2 m); SpaceX publishes only the ~70 m overall height. Sources disagree on the stage-1 length by about 1 m (41.2 vs 42.6 m), so these are drawing dimensions, never SpaceX figures.
+    as_of: "2026-11"
+    accuracy: "+/-5% (secondary tabulations disagree by ~3%)"
+    uncertainty_pct: 5.0

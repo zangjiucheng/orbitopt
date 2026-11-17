@@ -192,3 +192,14 @@ def test_sidebar_mode_switch_is_never_squeezed(qapp):
         assert button.minimumHeight() >= button.fontMetrics().height() + 8
         assert button.height() >= button.minimumHeight()
     bar.close()
+
+
+def test_key_events_table_is_themed_dark(qapp):
+    """The Key events table fell back to the system's white cells (light text
+    on white, unreadable) because only the summary and detail tabs carried the
+    Flight Lab panel stylesheet."""
+    from orbitopt.flightlab.ui.flight_panel import FlightRunPanel
+    from orbitopt.flightlab.ui.recovery_panel import FLIGHTLAB_PANEL_QSS
+
+    panel = FlightRunPanel()
+    assert panel.event_table.styleSheet() == FLIGHTLAB_PANEL_QSS

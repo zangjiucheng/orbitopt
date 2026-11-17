@@ -57,6 +57,32 @@
       }
     },
     "booster": {"$ref": "#/$defs/Booster"},
+    "geometry": {
+      "type": "object",
+      "description": "Optional outer dimensions for the read-only Vehicle view (Flight Lab sidebar). Not flown: no propagator or adapter reads it. Without it the view draws a schematic from the stage diameters and masses and says so. Every number needs a data_provenance entry (`geometry` covers the subtree).",
+      "additionalProperties": false,
+      "properties": {
+        "stages": {
+          "type": "array", "minItems": 1,
+          "description": "Stage lengths bottom-up, in the order of `stages`.",
+          "items": {
+            "type": "object", "required": ["length_m"], "additionalProperties": false,
+            "properties": {
+              "length_m": {"type": "number", "exclusiveMinimum": 0},
+              "diameter_m": {"type": "number", "exclusiveMinimum": 0,
+                             "description": "Overrides the stage's aero.diameter_m for the drawing only."}
+            }
+          }
+        },
+        "fairing": {
+          "type": "object", "required": ["length_m"], "additionalProperties": false,
+          "properties": {
+            "length_m": {"type": "number", "exclusiveMinimum": 0},
+            "diameter_m": {"type": "number", "exclusiveMinimum": 0}
+          }
+        }
+      }
+    },
     "data_provenance": {
       "type": "object",
       "minProperties": 1,

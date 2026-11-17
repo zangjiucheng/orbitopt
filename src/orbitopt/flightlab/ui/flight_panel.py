@@ -126,6 +126,7 @@ class FlightRunPanel(QWidget):
         ev_layout.addWidget(header)
         self.event_table = QTableWidget(0, 4)
         self.event_table.setObjectName("flightEventTable")
+        self.event_table.setStyleSheet(FLIGHTLAB_PANEL_QSS)   # dark cells; the system style is white
         self.event_table.setHorizontalHeaderLabels(("T+", "Event", "Alt km", "km/s"))
         self.event_table.verticalHeader().setVisible(False)
         self.event_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)

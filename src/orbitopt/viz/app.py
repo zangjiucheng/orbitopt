@@ -366,12 +366,19 @@ class MissionControlWindow(QMainWindow):
         from orbitopt.flightlab.ui.compare_page import FlightLabComparePage
         from orbitopt.flightlab.ui.flight_panel import FlightRunPanel, TelemetryPanel
         from orbitopt.flightlab.ui.nav import FlightLabNav
+        from orbitopt.flightlab.ui.vehicle_page import VehiclePage
 
         self.flightlab_nav = FlightLabNav()
         self.flightlab_nav.run_activated.connect(self._on_flight_run_activated)
         self.flightlab_nav.compare_clicked.connect(self._show_flight_compare)
+        self.flightlab_nav.vehicle_activated.connect(self._show_vehicle)
+        self.flightlab_nav.page_changed.connect(self._on_flight_nav_page)
         self.flightlab_compare = FlightLabComparePage()
         self._flightlab_index = self.center_stack.addWidget(self.flightlab_compare)
+        # the read-only Vehicle page: the other Flight Lab view that is not the 3D scene
+        self.vehicle_page = VehiclePage()
+        self._vehicle_index = self.center_stack.addWidget(self.vehicle_page)
+        self._flight_page_index = self._flightlab_index   # which of the two is up
         self.sidebar.set_flightlab_panel(self.flightlab_nav)
         self.sidebar.mode_changed.connect(self._on_sidebar_mode)
         self.flight_panel = FlightRunPanel()
@@ -1190,6 +1197,10 @@ class MissionControlWindow(QMainWindow):
         if self.sidebar.mode != self.sidebar.FLIGHTLAB:
             self.sidebar.set_mode(self.sidebar.FLIGHTLAB)
         self.statusBar().showMessage(FLIGHTLAB_SIDEBAR_LABEL)
+        vehicle = self.flightlab_nav.current_vehicle()
+        if self.flightlab_nav.page == self.flightlab_nav.VEHICLES and vehicle is not None:
+            self._show_vehicle(vehicle)
+            return
         key, label = self._flight_active
         if key is not None:
             self._on_mission_activated(key, label)
@@ -1295,18 +1306,66 @@ class MissionControlWindow(QMainWindow):
             other = next(p for p in paths if p != first)
             compare.set_runs(first, other)
         self._compare_shown = True
+        self._flight_page_index = self._flightlab_index
         self.center_stack.setCurrentIndex(self._flightlab_index)
         self.chart_panel.hide()
         self.timeline_bar.hide()
         self.scene_title_label.setText("Compare runs")
         self.scene_subtitle_label.setText(FLIGHTLAB_COMPARE_SUBTITLE)
 
+    def _on_flight_nav_page(self, page: str) -> None:
+        """The Runs / Vehicles switch of the Flight Lab list."""
+        if page == self.flightlab_nav.RUNS:
+            self._show_view()
+            return
+        name = self.flightlab_nav.current_vehicle()
+        if name is not None:
+            self._show_vehicle(name)
+        elif self.flightlab_nav.vehicle_list.count():
+            self.flightlab_nav.vehicle_list.setCurrentRow(0)   # emits vehicle_activated
+
+    def _show_vehicle(self, name: str) -> None:
+        """The read-only Vehicle page for a catalog vehicle. With a run
+        selected in Runs, its declared timings and masses are set beside what
+        that run flew."""
+        if self._loading:
+            return
+        from orbitopt.flightlab.contract import read_run
+        from orbitopt.flightlab.vehicle_view import file_sha256, flown_overlay, load_vehicle_view
+
+        self._set_playing(False)
+        try:
+            view = load_vehicle_view(name)
+        except Exception as exc:  # noqa: BLE001 -- a bad vehicle file must not take the window down
+            self.statusBar().showMessage(f"Cannot read vehicle {name}: {exc}")
+            return
+        overlay, label, match = [], None, None
+        run_dir = self.flightlab_nav.current_path()
+        if run_dir is not None:
+            try:
+                run = read_run(run_dir)
+                overlay = flown_overlay(view, run)
+                item = self.flightlab_nav.run_list.currentItem()
+                label = item.text() if item is not None else run_dir.name
+                match = bool(view.source_path) and run.vehicle_sha256 == file_sha256(view.source_path)
+            except Exception as exc:  # noqa: BLE001
+                overlay, label, match = [], None, None
+                self.statusBar().showMessage(f"Declared values only: cannot read run {run_dir.name}: {exc}")
+        self.vehicle_page.set_vehicle(view, overlay, label, match)
+        self._compare_shown = True
+        self._flight_page_index = self._vehicle_index
+        self.center_stack.setCurrentIndex(self._vehicle_index)
+        self.chart_panel.hide()
+        self.timeline_bar.hide()
+        self.scene_title_label.setText(f"Vehicle · {view.name}")
+        self.scene_subtitle_label.setText("Read-only: what the vehicle file declares")
+
     def _show_view(self):
-        """Leave the comparison page for the 3D view (no-op when already there)."""
+        """Leave the comparison / vehicle page for the 3D view (no-op when already there)."""
         if not self._compare_shown:
             return
         self._compare_shown = False
-        if self.center_stack.currentWidget() is self.flightlab_compare:
+        if self.center_stack.currentWidget() in (self.flightlab_compare, self.vehicle_page):
             self.center_stack.setCurrentIndex(0)
         self.chart_panel.setVisible(self.chart_panel.count() > 0)
         self.timeline_bar.setVisible((self.state.scene or {}).get("timeline") is not None)
@@ -1345,7 +1404,7 @@ class MissionControlWindow(QMainWindow):
     def _hide_loading(self):
         self._spinner.stop()
         if self._compare_shown:
-            self.center_stack.setCurrentIndex(self._flightlab_index)
+            self.center_stack.setCurrentIndex(self._flight_page_index)
             return
         self.center_stack.setCurrentIndex(0)
         # The scene was built while the view was hidden, so SceneRenderer.load's
