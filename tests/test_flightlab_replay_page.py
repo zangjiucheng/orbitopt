@@ -208,7 +208,12 @@ def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypat
     runs = tmp_path / "runs"
     shutil.copytree(RUN_FIXTURE, runs / "demo-run")
     monkeypatch.setenv("ORBITOPT_FLIGHT_RUNS", str(runs))
-    QSettings("orbitopt", "Mission Control").remove("flightlab/run_roots")
+    (tmp_path / "cwd").mkdir()
+    monkeypatch.chdir(tmp_path / "cwd")  # a ./runs of the checkout is not ours
+    # the nav's saved folders: a scratch file, never the user's real settings
+    import orbitopt.flightlab.ui.nav as nav_mod
+    ini = str(tmp_path / "settings.ini")
+    monkeypatch.setattr(nav_mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.IniFormat))
 
     def pump(cond, timeout=60.0):
         end = _time.monotonic() + timeout

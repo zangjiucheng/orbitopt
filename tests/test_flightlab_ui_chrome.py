@@ -80,7 +80,10 @@ def test_flight_lab_is_a_sidebar_mode_that_renders_runs_like_missions(qapp, tmp_
     monkeypatch.setenv("ORBITOPT_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("ORBITOPT_FLIGHT_RUNS", str(tmp_path / "none"))
     monkeypatch.chdir(tmp_path)  # no ./runs
-    QSettings("orbitopt", "Mission Control").remove("flightlab/run_roots")
+    # no saved folders: a scratch settings file, never the user's real settings
+    import orbitopt.flightlab.ui.nav as nav_mod
+    ini = str(tmp_path / "settings.ini")
+    monkeypatch.setattr(nav_mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.IniFormat))
     window = MissionControlWindow()
     window.resize(1500, 900)
     window.show()

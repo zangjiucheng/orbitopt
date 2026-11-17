@@ -861,7 +861,10 @@ def cmd_tag_check(base: str | None) -> int:
     except subprocess.CalledProcessError:
         print(f"tag-check skipped: base {base} not present in this clone")
         return 0
-    touched = [p for p in changed if p.startswith("tests/data/mission/reference/")]
+    # only this reference's own directory: the shared reference/ tree also
+    # holds other guarded references and plain test fixtures
+    prefix = REF_ROOT.relative_to(REPO).as_posix() + "/"
+    touched = [p for p in changed if p.startswith(prefix)]
     if not touched:
         print("reference files untouched by this change")
         return 0
