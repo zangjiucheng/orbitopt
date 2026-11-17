@@ -1,0 +1,112 @@
+{
+  "earth_orientation": "recorded IERS-A snapshot (earth_orientation.json), astropy-iers-data 0.2026.11.9.0.35.9",
+  "files": {
+    "earth_orientation.json": "eb63834a036a90440f680004351711c11f2e079920dbef35476e383b04f6c00a",
+    "mission-optimized/launch/ascent/events.json": "854688f4a021f8a50fe5edd82b51725adb64187852bf1942a2c091fd0143d7f0",
+    "mission-optimized/launch/ascent/manifest.json": "dbdb337e0e60c1242f1fcb96b3a60c63041ed9f32be168d5d1d4eb411529ef10",
+    "mission-optimized/launch/ascent/opentsiolkovsky/bodies/stage1.csv": "033df77b656694f6dc15f5f8655899c3ddbc5c752ac5de31596305ac61a52def",
+    "mission-optimized/launch/ascent/opentsiolkovsky/bodies/stage2_fairing.csv": "3846946ae63eb36558a8a31369bc032a9e6230f72c0d295e96d33e04adc6ddbc",
+    "mission-optimized/launch/ascent/opentsiolkovsky/summary.json": "55e493f978ac6f317ae69b1187d0aae77538426dc22458fc85f579178033eece",
+    "mission-optimized/launch/ascent/opentsiolkovsky/trajectory.csv": "098b11afd06fd86d428026b23b470101095fc806c882deeda59c60bbe7941f8b",
+    "mission-optimized/launch/ascent/trajectories/stage1.csv": "2a196e487bb1a2f72ef3365aaf85733db668ef8abbea1bef104f3821055cab88",
+    "mission-optimized/launch/ascent/trajectories/stage1_debris.csv": "6465f55d5cda24977014433ceb6d4172b9f89a4d72ed0d8fbad120bc63b95a19",
+    "mission-optimized/launch/ascent/trajectories/stage2.csv": "05ae3f7a9ca8dee4625fa6d796a84ff7ea45545426cedad6767db9582ab03af1",
+    "mission-optimized/launch/ascent/trajectories/stage2_fairing.csv": "e15503703b67509d2f6ec48bb9c925e8d98ad15dceefec7adead17e1439b7c94",
+    "mission-optimized/launch/ascent/verification.json": "eb9414e5ebde9db58c62f7cc96a3aad71a8a2b954a07755e75e4cdb6a76c62fd",
+    "mission-optimized/launch/target.yaml": "8be1a6048db41f35e005288f3c07074087c15564899ec819ebaa1fddfc3aca88",
+    "mission-optimized/mission.verification.json": "ce00549b06b800bdff39cb1bc6722ab4cb9d44cea2ffa84d01088dafd3b77e04",
+    "mission-optimized/recovery/run/events.json": "c483213af60ca47bb5c4c9e023cd9d524c6281986d601cae7b4f2ff3ae3ab830",
+    "mission-optimized/recovery/run/manifest.json": "c40ce70c598e92f328423d67df1539b937264662d8c90da0946d4fc6b4747487",
+    "mission-optimized/recovery/run/trajectories/booster.csv": "ed8a486f49c9aee269ba229bad5ea74ec0a5b433dcbd5c5154269eb659da7721",
+    "mission-optimized/recovery/run/trajectories/stage1.csv": "2a196e487bb1a2f72ef3365aaf85733db668ef8abbea1bef104f3821055cab88",
+    "mission-optimized/recovery/run/trajectories/stage2.csv": "05ae3f7a9ca8dee4625fa6d796a84ff7ea45545426cedad6767db9582ab03af1",
+    "mission-optimized/recovery/run/trajectories/stage2_fairing.csv": "e15503703b67509d2f6ec48bb9c925e8d98ad15dceefec7adead17e1439b7c94",
+    "mission-optimized/recovery/run/verification.json": "b72a24493fe1b8b99a779a779512aceeca2d6660e13621629c5969b954559a3a",
+    "mission/mission.verification.json": "9d52dbbf89c5da6ee86abd6ca68b74435a1acf2152344bac2dd8ea4665774705",
+    "mission/recovery/run/events.json": "c483213af60ca47bb5c4c9e023cd9d524c6281986d601cae7b4f2ff3ae3ab830",
+    "mission/recovery/run/manifest.json": "c40ce70c598e92f328423d67df1539b937264662d8c90da0946d4fc6b4747487",
+    "mission/recovery/run/trajectories/booster.csv": "ed8a486f49c9aee269ba229bad5ea74ec0a5b433dcbd5c5154269eb659da7721",
+    "mission/recovery/run/trajectories/stage1.csv": "2a196e487bb1a2f72ef3365aaf85733db668ef8abbea1bef104f3821055cab88",
+    "mission/recovery/run/trajectories/stage2.csv": "05ae3f7a9ca8dee4625fa6d796a84ff7ea45545426cedad6767db9582ab03af1",
+    "mission/recovery/run/trajectories/stage2_fairing.csv": "e15503703b67509d2f6ec48bb9c925e8d98ad15dceefec7adead17e1439b7c94",
+    "mission/recovery/run/verification.json": "b72a24493fe1b8b99a779a779512aceeca2d6660e13621629c5969b954559a3a",
+    "tolerances.json": "ae6adcc965ddc590a19e84061e16aa7bb6eeb69d0e663050ea18c9b1a7426b07"
+  },
+  "frozen_inputs": {
+    "plan_options_source": "E5-05c Monte-Carlo-verified fixed script (search: keep; n=64 dispersed flights 64/64 landed, touchdown reserve min 12.0 t vs the 10 t gate), pinned in all three scenario documents (docs/adr/flightlab-0008)",
+    "recovery_gates": {
+      "kind": "rtls",
+      "max_touchdown_lateral_speed_m_s": 1.0,
+      "max_touchdown_speed_m_s": 3.0,
+      "min_propellant_reserve_kg": 10000,
+      "target": "launch_site"
+    },
+    "recovery_plan_options": {
+      "boostback_cutoff": "iip",
+      "corridor_aim_margin_m": 7000.0,
+      "dt_final": 0.1,
+      "dt_opt": 0.25,
+      "entry_burns": 1,
+      "entry_cutoff": "speed",
+      "entry_g_max": 12.0,
+      "entry_q_max_pa": 250000,
+      "entry_throttle": true,
+      "horizon_s": 900.0,
+      "initial_guess": [
+        6.361355012944131,
+        4.325366437693795,
+        0.8329880778438892,
+        2.933641190367238,
+        -7.397550060236878,
+        29645.36476563118,
+        293.09976456950864,
+        0.9574166766757264
+      ],
+      "landing": {
+        "max_thrust_accel_g": 3.6,
+        "tvc_lag_compensation": true,
+        "tvc_lag_tau_s": 0.2,
+        "tvc_rate_limit_deg_s": 20.0
+      },
+      "landing_need_model": "closed_loop",
+      "landing_reserve": "target",
+      "landing_reserve_margin_kg": 2500.0,
+      "search": "keep"
+    },
+    "replay_scenario_sha256": "5fbb83bfee4acccbccc06f464aa0e1089d6f645d56d73ea10e4dbc181d1c8f85",
+    "scenario_sha256": "b768e55e8579b79c4dc0716bfb950d5be1e2a87dc18416021dfa58896b535268",
+    "vehicle_sha256": "9eac5b99b772583fed847490944bfcd6cf7fb8ac5e9342357e86639f5ed5f287"
+  },
+  "generated_by": "scripts/e505_reference.py update",
+  "git_sha_recording": "74f30c81dce46232c6de0e9515152b710f6b26f5",
+  "recording": {
+    "ascent_engines": {
+      "opentsiolkovsky-cli": "1.0.0"
+    },
+    "ascent_run_id": "ot-b8782596-5cb541cc",
+    "mode": "computed ascent (fixed-program OpenTsiolkovsky v1.0.0 flight of the E5-05 design campaign: leo_two_stage_rtls.yaml target, synthetic_two_stage_rtls vehicle, solver-determined events) -> recorded run_dir replay",
+    "physical_gate_verdict": "not_checked",
+    "separation_handoff_id": "0886f5d45615cad1e29fd985f8979da653be4cd34fa2f56a6eb0a3a65c4a5e40"
+  },
+  "reference": "E5-05 reproducible full-physical reference mission (computed ascent + parking + booster RTLS, coupled branches, E5-04 physical gate)",
+  "replay_scenario": "src/orbitopt/data/mission_two_stage_leo_rtls_replay.yaml",
+  "requires_commit_tag": "[e505-reference-update]",
+  "requires_gfold": "0.3.2",
+  "requires_opentsiolkovsky": "1.0.0",
+  "scenario": "src/orbitopt/data/mission_two_stage_leo_rtls_reference.yaml",
+  "toolchain": {
+    "astropy": "8.0.2",
+    "astropy_iers_data": "0.2026.11.9.0.35.9",
+    "cvxpy": "absent",
+    "gfold": "0.3.2",
+    "numpy": "2.5.4",
+    "opentsiolkovsky": "1.0.0",
+    "orbitopt": "74f30c81dce46232c6de0e9515152b710f6b26f5",
+    "platform": "Linux-7.2.11-x86_64-with-glibc2.41",
+    "pygmo": "2.20.0",
+    "python": "3.13.18",
+    "scipy": "1.18.1",
+    "tudatpy": "recorded absent; cross-environment replay evidences the propagation leg in the tudatpy environment (crossenv_e505_plan.yaml)"
+  },
+  "vehicle": "src/orbitopt/data/flightlab/vehicles/synthetic_two_stage_rtls.yaml"
+}

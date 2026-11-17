@@ -1,0 +1,28 @@
+{
+  "t_s_abs": 1e-06,
+  "mass_kg_abs": 1e-06,
+  "position_m_abs": 0.01,
+  "velocity_m_s_abs": 0.0001,
+  "extra_abs": {
+    "altitude_m": 0.01,
+    "latitude_deg": 1e-08,
+    "longitude_deg": 1e-08,
+    "downrange_m": 0.01,
+    "dynamic_pressure_pa": 0.1,
+    "mach": 1e-06,
+    "accel_g": 1e-06,
+    "q_bar_pa": 0.1,
+    "density_kg_m3": 1e-09
+  },
+  "extra_abs_default": 0.001,
+  "check_value_abs": 0.0001,
+  "check_value_rel": 1e-09,
+  "event_data_abs": 1e-06,
+  "event_data_rel": 1e-09,
+  "landing_plan_diagnostic_abs": {
+    "fuel_planned_kg": 0.001,
+    "tof_flying_s": 0.01
+  },
+  "report_value_abs": 0.0001,
+  "report_value_rel": 1e-09
+}

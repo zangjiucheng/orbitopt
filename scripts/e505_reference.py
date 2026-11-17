@@ -8,9 +8,9 @@ branches flown from a COMPUTED ascent, nothing preset:
 * ``mission-optimized/`` -- the RECORDED mission of record
   (``src/orbitopt/data/mission_two_stage_leo_rtls_reference.yaml``): the
   ascent computed by the pinned OpenTsiolkovsky v1.0.0 binary
-  (``launch/ascent``, raw backend outputs included), the M-04 launch-pipeline
-  report and the FlightTarget it built (``launch/target.yaml``, recovery
-  block included), the booster flown RTLS driven from the canonical
+  (``launch/ascent``, raw backend outputs included), the FlightTarget it was
+  flown against (``launch/target.yaml``, recovery block included), the booster
+  flown RTLS driven from the canonical
   separation handoff, and the unified ``mission.verification.json``. This
   directory is the provenance anchor: every regression artifact descends
   from it.
@@ -18,8 +18,9 @@ branches flown from a COMPUTED ascent, nothing preset:
   recorded ascent in ``run_dir`` mode (the packaged
   ``src/orbitopt/data/mission_two_stage_leo_rtls_replay.yaml``), recovery
   re-flown on the pinned recipe from the same handoff. THIS is what CI
-  re-flies and ``compare`` grades -- the optimize half is recorded once and
-  owned by the Gate-B M-07 ascent regression, not re-optimised per push.
+  re-flies and ``compare`` grades -- the computed ascent is recorded once by
+  ``update`` and owned by the E5-05a live-ascent regression, never re-optimised
+  per push.
 * ``earth_orientation.json`` -- the IERS EOP snapshot the recording used
   (finalized IERS-A rows bracketing the mission epoch); ``run``/``compare``
   bind it via ``frozen_earth_orientation`` so the frame bridge is the
@@ -60,7 +61,7 @@ Subcommands
                           separation handoff, run numerics within tolerance
     verify                provenance check: committed files unmodified
     update                re-fly the WHOLE mission (OpenTsiolkovsky binary +
-                          pygmo + gfold; ~30 min) and re-record the reference
+                          gfold; minutes) and re-record the reference
       --tolerances-only   update policy/EOP metadata; preserve flight outputs
     tag-check --base SHA  enforce the [e505-reference-update] commit tag
 
@@ -98,11 +99,12 @@ NOT_RECORDED = (
     "re-base onto the RTLS-capable `synthetic_two_stage_rtls` vehicle "
     "(docs/adr/flightlab-0008); make the recording with "
     "`python scripts/e505_reference.py update` (OpenTsiolkovsky binary + "
-    "pygmo + gfold, ~30 min). Every consumer of the reference skips, and "
+    "gfold, minutes). Every consumer of the reference skips, and "
     "arms itself, on the directory's existence.")
 SCENARIO_YAML = REPO / "src" / "orbitopt" / "data" / "mission_two_stage_leo_rtls_reference.yaml"
 REPLAY_YAML = REPO / "src" / "orbitopt" / "data" / "mission_two_stage_leo_rtls_replay.yaml"
 VEHICLE = REPO / "src" / "orbitopt" / "data" / "flightlab" / "vehicles" / "synthetic_two_stage_rtls.yaml"
+ASCENT_TARGET = REPO / "src" / "orbitopt" / "data" / "flightlab" / "scenarios" / "leo_two_stage_rtls.yaml"
 COMMIT_TAG = "[e505-reference-update]"
 GOLDEN_GFOLD = "0.3.2"
 GOLDEN_OT = "1.0.0"
@@ -176,16 +178,18 @@ def _pin_earth_orientation() -> str:
 
 
 @contextmanager
-def frozen_earth_orientation():
+def frozen_earth_orientation(snapshot: Path | None = None):
     """Bind the reference's EOP snapshot for the duration of a run, restoring
     the caller's table afterwards (same discipline as scripts/
     e204_reference.py: a host shipping a newer table must not move the
-    frame bridge under a regression run)."""
+    frame bridge under a regression run). ``snapshot`` overrides the committed
+    file -- ``update`` builds a first-recording snapshot into a scratch path
+    so a failing recording leaves no half-made reference directory."""
     from astropy.utils import iers
     import astropy.units as u
     import numpy as np
 
-    snapshot = json.loads(EOP_SNAPSHOT.read_text())
+    snapshot = json.loads(Path(snapshot or EOP_SNAPSHOT).read_text())
     units = {"MJD": u.day, "UT1_UTC": u.s, "PM_x": u.arcsec, "PM_y": u.arcsec}
     table = iers.IERS({name: np.array([row[name] for row in snapshot["rows"]]) * unit
                        for name, unit in units.items()})
@@ -193,11 +197,11 @@ def frozen_earth_orientation():
         yield
 
 
-def _write_earth_orientation_snapshot() -> None:
+def _write_earth_orientation_snapshot(path: Path = EOP_SNAPSHOT) -> None:
     """Record the finalized EOP rows bracketing the mission epoch from the
     installed table. Kept verbatim afterwards: an existing snapshot is never
     overwritten outside a full ``update``."""
-    if EOP_SNAPSHOT.exists():
+    if Path(path).exists():
         return
     from astropy.time import Time
     from astropy.utils import iers
@@ -210,7 +214,7 @@ def _write_earth_orientation_snapshot() -> None:
     if len(rows) != 4:
         raise RuntimeError("installed table does not bracket the mission epoch "
                            f"({MISSION_EPOCH}): {len(rows)} rows")
-    EOP_SNAPSHOT.write_text(json.dumps({
+    Path(path).write_text(json.dumps({
         "source": "IERS-A finals2000A.all",
         "source_version": str(astropy_iers_data.__version__),
         "epoch_utc": MISSION_EPOCH,
@@ -285,12 +289,24 @@ def load_replay_scenario(ascent_dir: Path | None = None, target_file: Path | Non
     return TwoStageLeoScenario.from_dict(doc)
 
 
-def load_full_scenario():
-    """The mission of record (optimize mode -- needs the compute stack)."""
+def load_full_scenario(ascent_dir: Path | None = None, target_file: Path | None = None):
+    """The mission of record: the reference document (run_dir mode over the
+    ascent recorded at record time -- needs the compute stack).
+    ``ascent_dir``/``target_file`` override where the computed ascent is read
+    from -- used only by ``update`` while recording."""
     _load_repo_package()
-    from orbitopt.mission.two_stage_leo import load_scenario as _load
+    import yaml
 
-    return _load(SCENARIO_YAML)
+    from orbitopt.mission.two_stage_leo import TwoStageLeoScenario
+
+    doc = yaml.safe_load(SCENARIO_YAML.read_text(encoding="utf-8"))["scenario"]
+    doc = _absolutise_doc_paths(doc)
+    if ascent_dir is not None:
+        doc["ascent"]["run_dir"] = str(ascent_dir)
+    if target_file is not None:
+        doc["ascent"]["target_file"] = str(target_file)
+        doc["recovery"]["target_file"] = str(target_file)
+    return TwoStageLeoScenario.from_dict(doc)
 
 
 # ---------------------------------------------------------------- run
@@ -686,10 +702,10 @@ def cmd_verify() -> int:
 
 
 def cmd_update(*, tolerances_only: bool = False) -> int:
-    """Re-fly the WHOLE mission (optimize ascent on the pinned OpenTsiolkovsky
-    + pygmo, then the run_dir replay) and re-record the reference, or amend
-    the comparison policy alone. The ONLY sanctioned way to change the
-    reference; the commit must additionally carry COMMIT_TAG."""
+    """Re-fly the WHOLE mission (fixed-program ascent on the pinned
+    OpenTsiolkovsky, then the run_dir mission and replay) and re-record the
+    reference, or amend the comparison policy alone. The ONLY sanctioned way
+    to change the reference; the commit must additionally carry COMMIT_TAG."""
     if tolerances_only:
         if cmd_verify() != 0:
             return 1
@@ -715,18 +731,39 @@ def cmd_update(*, tolerances_only: bool = False) -> int:
 
     _load_repo_package()
     _pin_earth_orientation()
-    _write_earth_orientation_snapshot()
-    snapshot_bytes = EOP_SNAPSHOT.read_bytes()
     with tempfile.TemporaryDirectory(prefix="e505-ref-") as tmp:
         tmp_root = Path(tmp)
+        # A first recording builds the EOP snapshot in scratch (a failed
+        # recording then leaves no half-made reference directory); an existing
+        # recording's snapshot is kept verbatim.
+        eop_tmp = tmp_root / "earth_orientation.json"
+        if EOP_SNAPSHOT.exists():
+            shutil.copyfile(EOP_SNAPSHOT, eop_tmp)
+        else:
+            _write_earth_orientation_snapshot(eop_tmp)
         optimized_dir = tmp_root / "mission-optimized"
         replay_dir = tmp_root / "mission"
         from orbitopt.mission.two_stage_leo import run_two_stage_leo
 
-        with frozen_earth_orientation():
-            print("recording: flying the mission of record (computed ascent, "
-                  "optimize mode -- this takes tens of minutes)")
-            full = run_two_stage_leo(load_full_scenario(), optimized_dir)
+        with frozen_earth_orientation(eop_tmp):
+            print("recording: computing the ascent (pinned OpenTsiolkovsky "
+                  "fixed-program flight of the E5-05 design campaign)")
+            from orbitopt.flightlab.adapters.opentsiolkovsky import run_ascent
+            from orbitopt.flightlab.contract import load_target
+            from orbitopt.flightlab.target_export import save_target
+
+            ascent_target = load_target(ASCENT_TARGET)
+            asc_dir = optimized_dir / "launch" / "ascent"
+            tgt_file = optimized_dir / "launch" / "target.yaml"
+            run_ascent(ascent_target, VEHICLE, None, asc_dir, timeout_s=900.0)
+            # the recorded target the run_dir-mode mission, the recovery stage
+            # and the replay baseline all grade against: the flown flight
+            # target, recovery block round-tripped verbatim (flight-target-1.0).
+            save_target(ascent_target, tgt_file)
+            print("recording: flying the full mission over the computed ascent")
+            full = run_two_stage_leo(load_full_scenario(ascent_dir=asc_dir,
+                                                        target_file=tgt_file),
+                                     optimized_dir)
             if full.status != "OK":
                 print(f"refusing to record a red reference mission (status {full.status!r}); "
                       "fix the mission before updating the reference", file=sys.stderr)
@@ -743,7 +780,7 @@ def cmd_update(*, tolerances_only: bool = False) -> int:
         if REF_ROOT.exists():
             shutil.rmtree(REF_ROOT)
         REF_ROOT.mkdir(parents=True)
-        EOP_SNAPSHOT.write_bytes(snapshot_bytes)
+        shutil.copyfile(eop_tmp, EOP_SNAPSHOT)
         shutil.copytree(optimized_dir, OPTIMIZED_DIR)
         shutil.copytree(replay_dir, MISSION_DIR)
 
@@ -768,8 +805,10 @@ def cmd_update(*, tolerances_only: bool = False) -> int:
         "replay_scenario": str(REPLAY_YAML.relative_to(REPO)),
         "vehicle": str(VEHICLE.relative_to(REPO)),
         "recording": {
-            "mode": "computed ascent (ascent.mode: optimize, M-07 compute recipe: cmaes "
-                    "40x40, seed 11, 4 workers, refly) -> recorded run_dir replay",
+            "mode": "computed ascent (fixed-program OpenTsiolkovsky v1.0.0 flight of the "
+                    "E5-05 design campaign: leo_two_stage_rtls.yaml target, "
+                    "synthetic_two_stage_rtls vehicle, solver-determined events) "
+                    "-> recorded run_dir replay",
             "ascent_engines": dict(ascent.engines),
             "ascent_run_id": ascent.run_id,
             "physical_gate_verdict": (replay_report.get("inputs", {}).get("full_mission", {})
@@ -779,7 +818,9 @@ def cmd_update(*, tolerances_only: bool = False) -> int:
         },
         "frozen_inputs": {
             "recovery_plan_options": ref_doc["recovery"]["plan_options"],
-            "recovery_spec": ref_doc["recovery"]["spec"],
+            "recovery_gates": yaml.safe_load(
+                (OPTIMIZED_DIR / "launch" / "target.yaml").read_text(encoding="utf-8")
+            )["recovery"],
             "plan_options_source": "E5-05c Monte-Carlo-verified fixed script "
                                    "(search: keep; n=64 dispersed flights 64/64 landed, "
                                    "touchdown reserve min 12.0 t vs the 10 t gate), pinned "

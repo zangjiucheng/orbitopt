@@ -1,0 +1,96 @@
+{
+  "optimizer_converged": null,
+  "physics_verified": null,
+  "backend_self_check": true,
+  "mission_constraints_passed": false,
+  "checks": [
+    {
+      "id": "mass-non-negative",
+      "passed": true,
+      "value": 1500.0,
+      "limit": 0.0,
+      "unit": "kg",
+      "reason_code": ""
+    },
+    {
+      "id": "mass-continuity-stage2",
+      "passed": true,
+      "value": 0.0,
+      "limit": 0.02,
+      "unit": "fraction",
+      "reason_code": ""
+    },
+    {
+      "id": "max-q-within-limit",
+      "passed": true,
+      "value": 38414.215267666914,
+      "limit": 60000.0,
+      "unit": "Pa",
+      "reason_code": ""
+    },
+    {
+      "id": "max-accel-within-limit",
+      "passed": true,
+      "value": 38.9233458770378,
+      "limit": 45.0,
+      "unit": "g",
+      "reason_code": ""
+    },
+    {
+      "id": "recovery-propellant-reserve",
+      "passed": false,
+      "value": null,
+      "limit": 10000.0,
+      "unit": "kg",
+      "reason_code": "RECOVERY_PROPELLANT_RESERVE_DATA_MISSING"
+    },
+    {
+      "id": "recovery-landing",
+      "passed": false,
+      "value": null,
+      "limit": null,
+      "unit": "",
+      "reason_code": "RECOVERY_LANDING_NOT_ASSESSED"
+    },
+    {
+      "id": "insertion-above-atmosphere",
+      "passed": true,
+      "value": 265510.1711643273,
+      "limit": 120000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-periapsis-above-minimum",
+      "passed": true,
+      "value": 265510.1711643273,
+      "limit": 230000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-periapsis-within-tolerance",
+      "passed": true,
+      "value": 265510.1711643273,
+      "limit": 250000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-apoapsis-within-tolerance",
+      "passed": true,
+      "value": 278071.6820059186,
+      "limit": 250000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-inclination-within-tolerance",
+      "passed": true,
+      "value": 51.00078357428533,
+      "limit": 51.6,
+      "unit": "deg",
+      "reason_code": ""
+    }
+  ]
+}

@@ -109,7 +109,8 @@ class TestRecordedAscentIsComputed:
 
         run = read_run(REF_ROOT / "mission-optimized" / "launch" / "ascent")
         assert dict(run.engines) == {"opentsiolkovsky-cli": "1.0.0"}
-        assert run.verification.optimizer_converged is True
+        assert run.verification.optimizer_converged is None, \
+            "fixed-program recording: no optimizer in the loop (task #272 re-base)"
         assert run.backend is not None, "a computed flight records its backend"
         assert any(len(t.t_s) > 100 for t in run.tracks), (
             "dense backend tracks: the E5-01 rule (no preset two-sample "
@@ -124,11 +125,15 @@ class TestScenarioPair:
     def test_mission_of_record_computes_and_couples(self):
         s = _yaml(SCENARIO)
         r = _yaml(REPLAY)
-        assert s["ascent"]["mode"] == "optimize"
-        assert (s["ascent"]["algorithm"], s["ascent"]["seed"]) == ("cmaes", 11)
+        assert s["ascent"]["mode"] == "run_dir", \
+            "the recording flies a fixed-program computed ascent, not a pygmo search " \
+            "(task #272 re-base: the FL-201 cutoff window degenerates on the restart " \
+            "vehicle's peak-thrust burnout; docs/adr/flightlab-0008)"
+        assert s["ascent"]["run_dir"] == r["ascent"]["run_dir"], \
+            "the replay consumes exactly what the recording flew"
         assert s["recovery"]["drive_from_separation"] is True
-        assert s["recovery"]["spec"]["kind"] == "rtls"
-        assert s["recovery"]["spec"]["target"] == "launch_site"
+        assert str(s["recovery"].get("target_file") or ""), \
+            "the recovery gates are graded against a recorded flight target"
         assert s["expected"]["propagation_result"] == "not_checked"
         assert s["launch"]["vehicle"] == r["launch"]["vehicle"] == "synthetic_two_stage_rtls", \
             "the pair flies the RTLS-capable redesign (task #272 re-base)"

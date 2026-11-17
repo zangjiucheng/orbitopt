@@ -1,10 +1,11 @@
 # E5-05 (task #272): the reproducible full-physical reference mission.
 #
 # The epic-P0 reference scenario in its complete form: BOTH branches flown
-# and graded from a REAL computed ascent -- the ascent is flown now by the
-# pinned OpenTsiolkovsky v1.0.0 binary (ascent.mode: optimize, the M-07
-# compute recipe), the separation fork drives BOTH the upper-stage branch to
-# the 250 km-band parking orbit the restartable stage actually delivers
+# and graded from a REAL computed ascent -- the ascent is flown at record
+# time by the pinned OpenTsiolkovsky v1.0.0 binary (the fixed-program flight of
+# the E5-05a-d design campaign, see the ascent block below), the
+# separation fork drives BOTH the upper-stage branch to the 250 km-band
+# parking orbit the restartable stage actually delivers
 # (rp 265.5 / ra 278.1 km @ 51.0 deg) AND the booster branch through the
 # FL-304/FL-305 RTLS chain, and the E5-02 coupled-branch gate grades the two
 # branches against the one canonical separation state they both descend from
@@ -33,7 +34,14 @@
 # docs/adr/flightlab-0008). The recording is made by
 # `python scripts/e505_reference.py update`; until it has run, every consumer
 # of the reference detects the missing directory, prints the reason and
-# passes, and the guards arm themselves on the directory's existence.
+# passes, and the guards arm themselves on the directory's existence. The
+# recorded ascent is the design campaign's fixed-program OpenTsiolkovsky
+# flight, NOT a pygmo search: the M-07 optimize recipe drives the FL-201
+# single-burn parametric guidance, whose cutoff window degenerates on this
+# vehicle's restart sizing (peak-thrust burnout 31.8 s) and whose stage-2
+# timing the E5-05b restart schedule would override anyway. The ascent is no
+# less COMPUTED for it -- one converged OT flight of the MC-verified design --
+# and the recovery half was never a search either (E5-05c `search: keep`).
 #
 # Why kourou (the M-07/Gate-B site): the RTLS recipe below is the E5-05c
 # Monte-Carlo-verified fixed script, pinned for this vehicle at the separation
@@ -73,17 +81,15 @@ scenario:
     raan_deg: null
     window_days: 14.0
   ascent:
-    mode: optimize                  # COMPUTED ascent: the M-07 compute recipe, flown by the
-    objective: payload              # pinned OpenTsiolkovsky v1.0.0 binary -- no preset states
-    payload_kg: 0.0
-    seed: 11                        # the seed the FL-305 convergence test verifies with
-    algorithm: cmaes
-    generations: 40
-    population: 40
-    workers: 4
-    local: true
-    refly: true
-    timeout_s: 300.0
+    # The recorded computed ascent: one converged OpenTsiolkovsky v1.0.0
+    # flight of `synthetic_two_stage_rtls` against leo_two_stage_rtls.yaml
+    # (the design campaign's fixed program -- MECO/separation/SECO all solver-
+    # determined events), written here by `scripts/e505_reference.py update`,
+    # which re-flies it before grading the mission. `update` grades the FLIGHT
+    # IT JUST FLEW (its own temporary paths), not this committed directory.
+    mode: run_dir
+    run_dir: tests/data/mission/reference/e5-05-reference-mission/mission-optimized/launch/ascent
+    target_file: tests/data/mission/reference/e5-05-reference-mission/mission-optimized/launch/target.yaml
   handoff:
     # Same M-01 gates as the M-07 packaged scenario (1 m / 10 mm/s / 1 s /
     # 1 g, staging headroom 50 mm/s, element band as below): the E5-05
@@ -101,15 +107,12 @@ scenario:
       raan_deg: 1.0e-2
       apsides_m: 10.0
   recovery:
-    # RTLS back to the launch site, the flight target's declared recovery
-    # gates (leo_two_stage_rtls.yaml): touchdown <= 3 m/s vertical,
-    # <= 1 m/s lateral, >= 10 t reserve (MC p05 12.6 t, ADR-0008).
-    spec:
-      kind: rtls
-      target: launch_site
-      max_touchdown_speed_m_s: 3.0
-      max_touchdown_lateral_speed_m_s: 1.0
-      min_propellant_reserve_kg: 10000
+    # RTLS back to the launch site, graded against the recorded target: the
+    # run_dir-mode knob is target_file (the flight target carries the declared
+    # recovery gates -- leo_two_stage_rtls.yaml's block, round-tripped into
+    # launch/target.yaml by `update`: touchdown <= 3 m/s vertical, <= 1 m/s
+    # lateral, >= 10 t reserve; MC p05 12.6 t, ADR-0008).
+    target_file: tests/data/mission/reference/e5-05-reference-mission/mission-optimized/launch/target.yaml
     # E5-05c's Monte-Carlo-verified FIXED script (search: keep) -- identical
     # to the packaged mission's recipe (mission_two_stage_leo_rtls.yaml /
     # leo_two_stage_rtls.yaml, docs/adr/flightlab-0008 F10): closed-loop IIP
