@@ -1,0 +1,49 @@
+schema_version: '1.0'
+mission:
+  id: leo-two-stage-rtls-e5-05a
+  title: Synthetic two-stage LEO + RTLS from a computed stage-1 reserve (E5-05a)
+  epoch_utc: '2026-11-10T12:00:00Z'
+launch_site:
+  name: kourou
+  latitude_deg: 5.2392
+  longitude_deg: -52.7685
+  altitude_wgs84_m: 15.0
+target_orbit:
+  central_body: Earth
+  periapsis_altitude_m: 250000
+  apoapsis_altitude_m: 250000
+  inclination_deg: 51.6
+  raan_deg: null
+vehicle:
+  source: scenarios/vehicles/synthetic_two_stage_rtls.yaml
+  provenance: illustrative
+constraints:
+  max_dynamic_pressure_pa: 60000
+  max_specific_acceleration_g: 45.0
+  minimum_insertion_periapsis_m: 230000
+  orbit_altitude_tolerance_m: 60000
+  inclination_tolerance_deg: 1.0
+recovery:
+  kind: rtls
+  target: launch_site
+  max_touchdown_speed_m_s: 3.0
+  max_touchdown_lateral_speed_m_s: 1.0
+  min_propellant_reserve_kg: 10000
+simulation:
+  ascent_backend: opentsiolkovsky
+  atmosphere_6dof_backend: jsbsim
+  orbit_verify_backend: tudatpy
+  enabled_phases:
+  - ascent_3dof
+  - orbit_verify
+assumptions:
+- 'E5-05a redesign target: the ascent must reach MECO with a computed (not depleted)
+  stage-1 propellant reserve and still insert at the 250 km reference orbit; the RTLS
+  recovery chain plans from that computed separation state.'
+- Max-acceleration ceiling relaxed to 45 g (uncrewed cargo; holds the computed 38.9
+  g restart-burn peak with margin, ADR-0008 F10); max-q kept at the sealed 60 kPa
+  value. The insertion band is the F9 closure band (periapsis floor 230 km, |apoapsis
+  - 250 km| < 60 km, plane 1 deg) -- see constraints, task
+- Recovery plan overrides (entry_q_max_pa 250 kPa, max_fevals 140 on the frozen FL-305
+  start) are per-plan options carried by the mission file's recovery.plan_options,
+  not target constraints; the entry-g ceiling stays at the default 8 g. See docs/adr/flightlab-0008.

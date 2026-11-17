@@ -21,6 +21,7 @@ REPO = "https://github.com/zangjiucheng/orbitopt/blob/main/"
 GROUPS = {
     "root": "Core interfaces",
     "core": "Compute backend",
+    "crossenv": "Cross-environment orchestration",
     "dynamics": "Dynamics",
     "flightlab": "Flight Lab",
     "lambert": "Lambert solvers",

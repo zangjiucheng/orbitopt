@@ -1,10 +1,10 @@
 {
   "artefacts": {
-    "comparison": "/tmp/fl607-s491n5ck/flightlab-comparison-f07-two-stage-guided-native-rigidbody-vs-native-pointmass.verification.json",
+    "comparison": "/tmp/fl607-zi02_quf/flightlab-comparison-f07-two-stage-guided-native-rigidbody-vs-native-pointmass.verification.json",
     "kept": false,
     "run_dirs": [
-      "/tmp/fl607-s491n5ck/native-pointmass",
-      "/tmp/fl607-s491n5ck/native-rigidbody"
+      "/tmp/fl607-zi02_quf/native-pointmass",
+      "/tmp/fl607-zi02_quf/native-rigidbody"
     ]
   },
   "backends": {
@@ -19,22 +19,22 @@
       "handoff": {
         "dry_mass_kg": 10000.0,
         "frame": "ECEF",
-        "mass_kg": 12872.076710801928,
+        "mass_kg": 13087.088864461926,
         "t_s": 95.0
       },
       "runs": {
         "booster": {
-          "mass_end_kg": 12872.076710801928,
+          "mass_end_kg": 13087.088864461926,
           "t_end_s": 260.0,
           "terminal": "t_end"
         },
         "stack": {
-          "mass_end_kg": 20872.076710801928,
+          "mass_end_kg": 21087.088864461926,
           "t_end_s": 95.0,
           "terminal": "t_end"
         },
         "upper": {
-          "mass_end_kg": 1472.2166872880941,
+          "mass_end_kg": 1471.1169937987108,
           "t_end_s": 260.0,
           "terminal": "t_end"
         }
@@ -49,17 +49,17 @@
       },
       "separation": {
         "attitude_continuity_err_rad": 0.0,
-        "booster_propellant_remaining_kg": 2872.076710801928,
-        "dv_booster_m_s": 1.9421885498103517,
+        "booster_propellant_remaining_kg": 3087.0888644619263,
+        "dv_booster_m_s": 1.9102796854912218,
         "dv_upper_m_s": 3.125,
-        "mass_after_kg": 20872.076710801928,
+        "mass_after_kg": 21087.088864461926,
         "mass_residual_kg": 0.0,
-        "momentum_residual_kg_m_s": 8.33000234328132e-09,
+        "momentum_residual_kg_m_s": 3.725290298461914e-09,
         "position_continuity_err_m": 0.0,
         "separation_impulse_ns": 25000.0,
-        "stack_mass_separation_kg": 20872.076710801928,
+        "stack_mass_separation_kg": 21087.088864461926,
         "stack_mass_t0_kg": 78000.0,
-        "stage1_propellant_burned_kg": 57127.92328919807,
+        "stage1_propellant_burned_kg": 56912.911135538074,
         "upper_propellant_kg": 7000.0
       }
     },
@@ -74,22 +74,22 @@
       "handoff": {
         "dry_mass_kg": 10000.0,
         "frame": "ECEF",
-        "mass_kg": 12871.996293615426,
+        "mass_kg": 13087.088864462421,
         "t_s": 95.0
       },
       "runs": {
         "booster": {
-          "mass_end_kg": 12871.996293615426,
+          "mass_end_kg": 13087.088864462421,
           "t_end_s": 260.0,
           "terminal": "t_end"
         },
         "stack": {
-          "mass_end_kg": 20871.996293615426,
+          "mass_end_kg": 21087.088864462417,
           "t_end_s": 95.0,
           "terminal": "t_end"
         },
         "upper": {
-          "mass_end_kg": 1477.7151575171868,
+          "mass_end_kg": 1477.7151580221732,
           "t_end_s": 260.0,
           "terminal": "t_end"
         }
@@ -104,18 +104,18 @@
       },
       "separation": {
         "attitude_continuity_err_rad": 0.0,
-        "booster_propellant_remaining_kg": 2871.996293615426,
-        "dv_booster_m_s": 1.9422006835412253,
-        "dv_upper_m_s": 3.125,
-        "mass_after_kg": 20871.996293615426,
+        "booster_propellant_remaining_kg": 3087.088864462421,
+        "dv_booster_m_s": 1.9102796854911497,
+        "dv_upper_m_s": 3.1250000000000013,
+        "mass_after_kg": 21087.088864462417,
         "mass_residual_kg": 0.0,
-        "momentum_residual_kg_m_s": 3.725290298461914e-09,
+        "momentum_residual_kg_m_s": 0.0,
         "position_continuity_err_m": 0.0,
         "separation_impulse_ns": 25000.0,
-        "stack_mass_separation_kg": 20871.996293615426,
+        "stack_mass_separation_kg": 21087.088864462417,
         "stack_mass_t0_kg": 78000.0,
-        "stage1_propellant_burned_kg": 57128.003706384574,
-        "upper_propellant_kg": 7000.0
+        "stage1_propellant_burned_kg": 56912.91113553758,
+        "upper_propellant_kg": 6999.999999999996
       }
     }
   },
@@ -124,26 +124,26 @@
     "bodies": {
       "booster": {
         "metrics": {
-          "d_altitude_m_max_abs_m": 2526.882650175132,
-          "d_altitude_m_rms_m": 1579.292946338165,
-          "d_altitude_m_terminal_m": -2526.882650175132,
-          "d_fpa_deg_max_abs_deg": 0.4801386086749737,
-          "d_fpa_deg_rms_deg": 0.45838937404823643,
-          "d_fpa_deg_terminal_deg": -0.47228815496859866,
-          "d_mass_kg_max_abs_kg": 0.08041718650201801,
-          "d_mass_kg_rms_kg": 0.08041718650201801,
-          "d_mass_kg_terminal_kg": -0.08041718650201801,
-          "d_speed_m_s_max_abs_m_s": 10.935953347826853,
-          "d_speed_m_s_rms_m_s": 6.446048128982862,
-          "d_speed_m_s_terminal_m_s": 10.935953347826853,
+          "d_altitude_m_max_abs_m": 2511.8563208887354,
+          "d_altitude_m_rms_m": 1569.8913506885583,
+          "d_altitude_m_terminal_m": -2511.8563208887354,
+          "d_fpa_deg_max_abs_deg": 0.48037587923236913,
+          "d_fpa_deg_rms_deg": 0.45876363711682205,
+          "d_fpa_deg_terminal_deg": -0.47173234502120565,
+          "d_mass_kg_max_abs_kg": 4.94765117764473e-10,
+          "d_mass_kg_rms_kg": 4.94765117764473e-10,
+          "d_mass_kg_terminal_kg": 4.94765117764473e-10,
+          "d_speed_m_s_max_abs_m_s": 10.96892272361356,
+          "d_speed_m_s_rms_m_s": 6.463486725566455,
+          "d_speed_m_s_terminal_m_s": 10.96892272361356,
           "t_span_s": 165.0
         },
         "run_3dof": {
-          "mass_kg": 12872.076710801928,
+          "mass_kg": 13087.088864461926,
           "terminal": "t_end"
         },
         "run_6dof": {
-          "mass_kg": 12871.996293615426,
+          "mass_kg": 13087.088864462421,
           "terminal": "t_end"
         },
         "t_span_s": [
@@ -153,26 +153,26 @@
       },
       "stack": {
         "metrics": {
-          "d_altitude_m_max_abs_m": 327.3353377757594,
-          "d_altitude_m_rms_m": 114.71045374562483,
-          "d_altitude_m_terminal_m": -327.3353377757594,
-          "d_fpa_deg_max_abs_deg": 0.4183897586011014,
-          "d_fpa_deg_rms_deg": 0.33744240695319777,
-          "d_fpa_deg_terminal_deg": -0.41010171553361374,
-          "d_mass_kg_max_abs_kg": 0.08041718650201801,
-          "d_mass_kg_rms_kg": 0.05401803451258475,
-          "d_mass_kg_terminal_kg": -0.08041718650201801,
-          "d_speed_m_s_max_abs_m_s": 1.2170714795274762,
-          "d_speed_m_s_rms_m_s": 0.3855804408281841,
-          "d_speed_m_s_terminal_m_s": 1.2170714795274762,
+          "d_altitude_m_max_abs_m": 325.77064734045416,
+          "d_altitude_m_rms_m": 114.23204423802255,
+          "d_altitude_m_terminal_m": -325.77064733952284,
+          "d_fpa_deg_max_abs_deg": 0.41869043624728874,
+          "d_fpa_deg_rms_deg": 0.3378747366089689,
+          "d_fpa_deg_terminal_deg": -0.4103695561130394,
+          "d_mass_kg_max_abs_kg": 4.911271389573812e-10,
+          "d_mass_kg_rms_kg": 3.3476028882966717e-10,
+          "d_mass_kg_terminal_kg": 4.911271389573812e-10,
+          "d_speed_m_s_max_abs_m_s": 1.2179621322970888,
+          "d_speed_m_s_rms_m_s": 0.38653704104381226,
+          "d_speed_m_s_terminal_m_s": 1.2179621322970888,
           "t_span_s": 95.0
         },
         "run_3dof": {
-          "mass_kg": 20872.076710801928,
+          "mass_kg": 21087.088864461926,
           "terminal": "t_end"
         },
         "run_6dof": {
-          "mass_kg": 20871.996293615426,
+          "mass_kg": 21087.088864462417,
           "terminal": "t_end"
         },
         "t_span_s": [
@@ -182,26 +182,26 @@
       },
       "upper": {
         "metrics": {
-          "d_altitude_m_max_abs_m": 1648.116568225436,
-          "d_altitude_m_rms_m": 1140.860249648547,
-          "d_altitude_m_terminal_m": -1648.116568225436,
-          "d_fpa_deg_max_abs_deg": 0.41608109573929397,
-          "d_fpa_deg_rms_deg": 0.1760170008459117,
-          "d_fpa_deg_terminal_deg": -0.04214751095211511,
-          "d_mass_kg_max_abs_kg": 5.498470229092618,
-          "d_mass_kg_rms_kg": 3.2780369132356286,
-          "d_mass_kg_terminal_kg": 5.498470229092618,
-          "d_speed_m_s_max_abs_m_s": 12.533374917737092,
-          "d_speed_m_s_rms_m_s": 5.808963802089647,
-          "d_speed_m_s_terminal_m_s": -0.04967153730831342,
+          "d_altitude_m_max_abs_m": 1425.267663131468,
+          "d_altitude_m_rms_m": 1121.3607065039184,
+          "d_altitude_m_terminal_m": -1425.267663131468,
+          "d_fpa_deg_max_abs_deg": 0.4164048706994805,
+          "d_fpa_deg_rms_deg": 0.1796620848410095,
+          "d_fpa_deg_terminal_deg": -0.001166185665156633,
+          "d_mass_kg_max_abs_kg": 6.5981642234623905,
+          "d_mass_kg_rms_kg": 3.9336442652104178,
+          "d_mass_kg_terminal_kg": 6.5981642234623905,
+          "d_speed_m_s_max_abs_m_s": 12.411609181620406,
+          "d_speed_m_s_rms_m_s": 5.535819924669193,
+          "d_speed_m_s_terminal_m_s": -0.16105782690192427,
           "t_span_s": 165.0
         },
         "run_3dof": {
-          "mass_kg": 1472.2166872880941,
+          "mass_kg": 1471.1169937987108,
           "terminal": "t_end"
         },
         "run_6dof": {
-          "mass_kg": 1477.7151575171868,
+          "mass_kg": 1477.7151580221732,
           "terminal": "t_end"
         },
         "t_span_s": [
@@ -231,36 +231,36 @@
       "cutoff_periapsis_margin_m": 0.0,
       "law": "shared PEG-class guidance (orbitopt.flightlab.guidance.upper_stage) -- both backends fly one law",
       "native-pointmass": {
-        "apoapsis_altitude_m": 231472.63130081538,
+        "apoapsis_altitude_m": 228470.87350099068,
         "apoapsis_tolerance_m": 25000.0,
         "apoapsis_within_tolerance": true,
         "cutoff_t_s": 202.00000000001495,
-        "d_apoapsis_m": 11472.631300815381,
+        "d_apoapsis_m": 8470.873500990681,
         "d_inclination_deg": 0.0,
-        "d_periapsis_m": 6063.036919110455,
-        "eccentricity": 0.00040938945826621097,
-        "inclination_deg": 28.339824145691253,
+        "d_periapsis_m": 5294.325171108358,
+        "eccentricity": 0.00024046471642576994,
+        "inclination_deg": 28.339921793851204,
         "inclination_within_tolerance": true,
         "inserted": true,
-        "periapsis_altitude_m": 226063.03691911045,
+        "periapsis_altitude_m": 225294.32517110836,
         "periapsis_tolerance_m": 25000.0,
         "periapsis_within_tolerance": true,
         "target_altitude_m": 220000.0,
         "target_radius_m": 6598137.0
       },
       "native-rigidbody": {
-        "apoapsis_altitude_m": 228625.84794489108,
+        "apoapsis_altitude_m": 226541.03428058885,
         "apoapsis_tolerance_m": 25000.0,
         "apoapsis_within_tolerance": true,
         "cutoff_t_s": 202.00000000001495,
-        "d_apoapsis_m": 8625.84794489108,
+        "d_apoapsis_m": 6541.03428058885,
         "d_inclination_deg": 0.0,
-        "d_periapsis_m": 1458.7092621326447,
-        "eccentricity": 0.0005427036265683964,
-        "inclination_deg": 28.370552263419174,
+        "d_periapsis_m": 452.48205223865807,
+        "eccentricity": 0.00046113980655301844,
+        "inclination_deg": 28.362149381271198,
         "inclination_within_tolerance": true,
         "inserted": true,
-        "periapsis_altitude_m": 221458.70926213264,
+        "periapsis_altitude_m": 220452.48205223866,
         "periapsis_tolerance_m": 25000.0,
         "periapsis_within_tolerance": true,
         "target_altitude_m": 220000.0,
@@ -271,21 +271,21 @@
       "target_altitude_m": 220000.0
     }
   },
-  "generated_utc": "2026-11-15T00:25:03+00:00",
+  "generated_utc": "2026-11-16T19:55:41+00:00",
   "residual_attribution": {
-    "actuator_d_altitude_m": 149.9221071768552,
+    "actuator_d_altitude_m": 107.15528071671724,
     "actuator_ideal": {
       "limit_rad": 0.05235987755982989,
       "max_slew_rate_rad_s": 1.0,
       "tau_s": 0.005
     },
-    "dynamics_model_remainder_d_altitude_m": -1758.2043994581327,
+    "dynamics_model_remainder_d_altitude_m": -1587.368080693297,
     "guidance_d_altitude_m": 0.0,
-    "integration_d_altitude_m": -39.834275944158435,
+    "integration_d_altitude_m": 54.94513684511185,
     "integration_dt_ref_s": 0.025,
     "method": "additive first-order decomposition of the upper-stage terminal altitude difference (6dof - 3dof)",
     "signs": "integration = 3dof@dt - 3dof@dt/2; actuator = 6dof@standard - 6dof@ideal; total = 6dof - 3dof; remainder is by subtraction",
-    "total_d_altitude_m": -1648.116568225436
+    "total_d_altitude_m": -1425.267663131468
   },
   "schema": "orbitopt-fl607-1",
   "task": "#232 (F-07, epic #216); E1-03 upper-stage guidance #252 (epic #246)",
@@ -300,5 +300,5 @@
     "periapsis_tolerance_m": 25000.0,
     "target_altitude_m": 220000.0
   },
-  "wall_clock_s": 362.6
+  "wall_clock_s": 95.9
 }

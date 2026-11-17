@@ -207,8 +207,10 @@ def pinned_config_schema() -> dict:
 class Vehicle:
     """Parsed flightlab vehicle file: everything the adapter needs beyond
     the target (mission/site/epoch) to write an OT config -- the OT
-    ``stages`` array passed through, the simulation window, and a default
-    attitude program the caller may override."""
+    ``stages`` array passed through, the simulation window, a default
+    attitude program the caller may override, and an optional ``restart``
+    (coast + re-ignition) schedule the adapter folds into the stage thrust
+    curve and attitude legs (E5-05b)."""
 
     name: str
     provenance: str
@@ -218,6 +220,7 @@ class Vehicle:
     stages: tuple[dict, ...]
     attitude_program: tuple[AttitudePoint, ...] | None
     assumptions: tuple[str, ...]
+    restart: dict | None = None
 
     @staticmethod
     def load(path) -> "Vehicle":
@@ -250,6 +253,7 @@ class Vehicle:
             stages=tuple(stages),
             attitude_program=points,
             assumptions=tuple(str(a) for a in (doc.get("assumptions") or ())),
+            restart=(dict(doc["restart"]) if isinstance(doc.get("restart"), Mapping) else None),
         )
 
 
@@ -306,8 +310,75 @@ def build_config(target: FlightTarget, vehicle: Vehicle,
         "attitude": {"azimuth_deg": az, "elevation_deg": el},
         "stages": [json.loads(json.dumps(s)) for s in vehicle.stages],
     }
+    if vehicle.restart:
+        _apply_restart(config, vehicle.restart)
     jsonschema.validate(instance=config, schema=pinned_config_schema())
     return config
+
+
+def _apply_restart(config: dict, restart: Mapping[str, Any]) -> dict:
+    """Fold a vehicle ``restart`` (coast + re-ignition) schedule into a freshly
+    built OT config (E5-05b): cut the chosen stage's thrust curve at the coast
+    start, hold it at zero through a ballistic coast, then a constant-thrust
+    restart leg, and splice the commanded attitude so the vehicle holds during
+    the coast and flies ``restart_elevation_deg`` on re-ignition. ``seco`` is
+    emitted only at the final burnout (see :func:`_mapped_events`). Times in the
+    restart block are absolute (s after liftoff), matching ``attitude_program``;
+    the stage's engine curve is keyed to stage ignition, so the coast start is
+    converted through the previous stage's separation time + this stage's
+    ``burn_start_s``."""
+    idx = int(restart.get("stage", len(config["stages"]))) - 1
+    if not 0 <= idx < len(config["stages"]) or idx == 0:
+        raise ValueError("restart.stage must select a stage after the first")
+    stage = config["stages"][idx]
+    eng = stage["engine"]
+    offset = float(config["stages"][idx - 1].get("separation_time_s", 0.0)) + float(eng["burn_start_s"])
+    tc = float(restart["coast_start_s"]) - offset
+    curve = [[float(t), float(f)] for t, f in eng["thrust_vac_n"]]
+    end_rel = float(eng["burn_end_s"])
+    if not 0.0 < tc < end_rel:
+        raise ValueError("restart.coast_start_s falls outside the stage burn")
+    head = [p for p in curve if p[0] <= tc]
+    main_thrust = curve[-1][1] if not head else _interp_thrust(curve, tc)
+    coast = float(restart["coast_duration_s"])
+    rs = tc + coast
+    re_ = rs + float(restart["restart_burn_s"])
+    rthr = float(restart["restart_thrust_n"])
+    head.append([round(tc, 6), main_thrust])
+    head.append([round(tc, 6), 0.0])
+    head.append([round(rs - 1e-3, 6), 0.0])
+    head.append([round(rs, 6), rthr])
+    head.append([round(re_, 6), rthr])
+    eng["thrust_vac_n"] = head
+    eng["burn_end_s"] = round(re_, 6)
+    coast_s = float(restart["coast_start_s"])
+    rs_abs = coast_s + coast
+    re_abs = re_ + offset
+    raz = float(restart.get("restart_azimuth_deg", 40.0))
+    rel = float(restart["restart_elevation_deg"])
+    for axis, value in (("azimuth_deg", raz), ("elevation_deg", rel)):
+        pts = [p for p in config["attitude"][axis] if float(p[0]) < coast_s]
+        keep = pts[-1][1] if pts else 0.0
+        pts.append([coast_s, keep])
+        pts.append([rs_abs, value])
+        pts.append([re_abs, value])
+        pts.append([re_abs + 5.0, value])
+        config["attitude"][axis] = pts
+    config["simulation"]["end_time_s"] = round(re_abs + 5.0, 6)
+    return config
+
+
+def _interp_thrust(curve: list[list[float]], t: float) -> float:
+    """Linear interpolation of an OT thrust curve ``[[t, thrust], ...]`` at ``t``
+    (piecewise linear, clamped at the ends) -- the main-burn thrust held at the
+    coast-start cut before it drops to zero."""
+    if t <= curve[0][0]:
+        return curve[0][1]
+    for (t0, f0), (t1, f1) in zip(curve, curve[1:]):
+        if t0 <= t <= t1:
+            span = (t1 - t0) or 1.0
+            return f0 + (f1 - f0) * (t - t0) / span
+    return curve[-1][1]
 
 
 # --------------------------------------------------------------------------
@@ -425,15 +496,30 @@ _STACK_RE = re.compile(r"stage[0-9]+")
 
 def _mapped_events(summary: Mapping[str, Any], n_stages: int) -> list[Event]:
     """OT summary events -> contract events (see the module docstring for the
-    table). Unmapped OT kinds are dropped here but survive in the raw copy."""
+    table). Unmapped OT kinds are dropped here but survive in the raw copy.
+    A multi-burn (coast + re-ignition) stage emits one ``burnout`` per burn
+    (E5-05b): only the LAST upper-stage burnout becomes ``seco`` -- the coast
+    start is an intermediate cutoff, not insertion, and must not be the state
+    the insertion band / gate reads (``insertion_state`` takes the first
+    ``seco``)."""
     events: list[Event] = []
-    for e in summary.get("events") or []:
+    evs = summary.get("events") or []
+    final_upper_burnout = max(
+        (float(e["time_s"]) for e in evs
+         if e.get("kind") == "burnout" and int(e.get("stage", 1)) >= 2),
+        default=None)
+    for e in evs:
         kind, stage, t = e.get("kind"), int(e.get("stage", 1)), float(e.get("time_s", 0.0))
         data: dict[str, Any] = {"ot_event": kind, "stage": stage}
         if kind in ("mach1", "rail_exit", "apogee"):
             continue
         if kind == "burnout":
-            mapped, body = ("meco" if stage == 1 else "seco"), f"stage{stage}"
+            if stage == 1:
+                mapped, body = "meco", f"stage{stage}"
+            elif final_upper_burnout is not None and t == final_upper_burnout:
+                mapped, body = "seco", f"stage{stage}"
+            else:
+                continue
         elif kind == "separation":
             mapped, body = "separation", (f"stage{stage + 1}" if stage < n_stages else f"stage{stage}")
             data["separated_from"] = f"stage{stage}_debris"

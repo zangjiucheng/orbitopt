@@ -1,4 +1,5 @@
-"""E2-03 (task #256): the full-mission verification gate.
+"""E2-03 (task #256): the full-mission verification gate; E5-04 (task #271)
+adds the physical gate over the same checks.
 
 The two-stage LEO chain (:mod:`orbitopt.mission.two_stage_leo`) grades one
 frozen mission and diagnoses the *earliest failing link* of its station chain
@@ -108,6 +109,15 @@ __all__ = [
     "PHASE_PARKING_PROPAGATION",
     "PHASE_RECOVERY_TOUCHDOWN",
     "PHASE_VERDICTS",
+    "PHYSICAL_CHECKS",
+    "PHYSICAL_CHECK_EPOCH_FRAME_CONTINUITY",
+    "PHYSICAL_CHECK_LANDING",
+    "PHYSICAL_CHECK_MASS_CONSERVATION",
+    "PHYSICAL_CHECK_ORBIT_INSERTION",
+    "PHYSICAL_CHECK_PARKING_PROPAGATION",
+    "PHYSICAL_LABELS",
+    "PHYSICAL_NOT_EVIDENCED_CODE",
+    "PHYSICAL_RULE",
     "REQUIRED_PHASES",
     "VERDICT_FAILED",
     "VERDICT_NOT_CHECKED",
@@ -117,6 +127,8 @@ __all__ = [
     "phase_coverage",
     "phase_of",
     "phase_verdicts",
+    "physical_check_of",
+    "physical_mission_gate",
     "qualification",
 ]
 
@@ -403,7 +415,13 @@ def full_mission_gate(mission: Any, *,
     ``qualification`` block; ``independent_validation`` is the caller's
     ``status.independent_validation.result``, so the qualification reads the
     report's own evidence rollup.
-    """
+
+    The document also carries the E5-04 physical gate (:func:`physical_mission_gate`)
+    under ``physical``: the same checks re-graded as five *required* checks,
+    with no out-of-scope escape hatch -- a phase the E2-03 phase gate excuses
+    (declared out of scope, or not flown) caps the physical gate at
+    ``not_checked``, and the physical verdict is the verdict a computed
+    mission must show to count as a full physical mission."""
     scenario = mission.scenario
     full_mission_declared = bool(getattr(scenario, "full_mission", False))
     recovery_declared = getattr(scenario, "recovery", None) is not None
@@ -454,4 +472,184 @@ def full_mission_gate(mission: Any, *,
             "coverage": coverage,
             "qualification": qualification(
                 full_mission_declared=full_mission_declared, verdict=verdict,
-                coverage=coverage, independent_validation=independent_validation)}
+                coverage=coverage, independent_validation=independent_validation),
+            "physical": physical_mission_gate(mission)}
+
+
+# ---------------------------------------------------------------------------
+# E5-04 (task #271): the full physical mission gate
+# ---------------------------------------------------------------------------
+
+#: The five required checks of the physical gate, in mission order. Unlike
+#: the E2-03 phases these are never conditionally applicable: a *computed*
+#: mission (one whose trajectory was actually flown, not prescribed) must
+#: show orbit insertion, parking-orbit propagation, a landing, mass
+#: conservation across every split, and epoch/frame continuity across every
+#: boundary. The E2-04 lesson (``docs/verification.md``): a phase declared
+#: out of scope does not block the phase gate's verdict -- and that is
+#: exactly why a declared-out-of-scope parking propagation cannot pass the
+#: *physical* gate. Absent evidence is never a pass here either; a
+#: declaration is not evidence.
+PHYSICAL_CHECK_ORBIT_INSERTION = "orbit_insertion"
+PHYSICAL_CHECK_PARKING_PROPAGATION = "parking_propagation"
+PHYSICAL_CHECK_LANDING = "landing"
+PHYSICAL_CHECK_MASS_CONSERVATION = "mass_conservation"
+PHYSICAL_CHECK_EPOCH_FRAME_CONTINUITY = "epoch_frame_continuity"
+PHYSICAL_CHECKS = (PHYSICAL_CHECK_ORBIT_INSERTION, PHYSICAL_CHECK_PARKING_PROPAGATION,
+                   PHYSICAL_CHECK_LANDING, PHYSICAL_CHECK_MASS_CONSERVATION,
+                   PHYSICAL_CHECK_EPOCH_FRAME_CONTINUITY)
+
+#: Display labels (English-only UI, like the phase labels).
+PHYSICAL_LABELS = {
+    PHYSICAL_CHECK_ORBIT_INSERTION: "Orbit insertion",
+    PHYSICAL_CHECK_PARKING_PROPAGATION: "Parking-orbit propagation",
+    PHYSICAL_CHECK_LANDING: "Landing",
+    PHYSICAL_CHECK_MASS_CONSERVATION: "Mass conservation",
+    PHYSICAL_CHECK_EPOCH_FRAME_CONTINUITY: "Epoch/frame continuity",
+}
+
+#: The physical-gate rule, quoted verbatim into the report document. The
+#: conjunction itself is :func:`combine_phase_verdicts` -- the same tri-state
+#: rule as the phase gate -- but with every check required: no applicability
+#: escape hatch, and an out-of-scope declaration (E2-03) never waives a
+#: required check.
+PHYSICAL_RULE = (
+    "all five physical checks are required for a computed mission: failed if "
+    "any check failed; else not_checked if any check carries no evidence "
+    "(absent evidence is never a pass, and an out-of-scope declaration does "
+    "not waive a required check); passed only when every check passed"
+)
+
+#: Reason code of a required check the run produced no evidence for -- each
+#: check has its own, so "not checked" always names what is missing.
+PHYSICAL_NOT_EVIDENCED_CODE = {name: f"{name}_not_evidenced" for name in PHYSICAL_CHECKS}
+
+
+def physical_check_of(check_id: str) -> str | None:
+    """The physical-gate check that grades the check with this id, or ``None``
+    when the id is outside the physical vocabulary (recorded, never
+    attributed). Attribution is by the law the check measures, not the phase
+    it happened to run in:
+
+    =====================  ====================================================
+    physical check         checks (first matching rule wins)
+    =====================  ====================================================
+    ``mass_conservation``  ``mass.*`` and every boundary mass gate (any id
+                           ending ``.mass_conservation``: staging, parking,
+                           coupled, propagation, recovery handoff -- the law
+                           is graded wherever it is measured)
+    ``parking_propagation`` ``propagation.*`` (what is left after the mass law)
+    ``landing``            ``recovery.*`` (touchdown, reserve, recovery handoff)
+    ``epoch_frame_continuity`` ``handoff.*`` and ``parking.*`` -- the M-01
+                           boundary gates (epoch monotonic, frame-identity
+                           under every continuity gate, separation event,
+                           coupled shared source)
+    ``orbit_insertion``    ``station.*``, ``ascent.*``, ``expected.*``
+    =====================  ====================================================
+
+    The mixed run-level conjunction (:data:`MIXED_RUN_VERDICT_ID`) follows the
+    E2-03 rule: attributed to insertion only while no recovery checks are
+    present (handled by :func:`physical_mission_gate`)."""
+    cid = str(check_id)
+    if cid.startswith("mass.") or cid.endswith(".mass_conservation"):
+        return PHYSICAL_CHECK_MASS_CONSERVATION
+    if cid.startswith("propagation."):
+        return PHYSICAL_CHECK_PARKING_PROPAGATION
+    if cid.startswith("recovery."):
+        return PHYSICAL_CHECK_LANDING
+    if cid.startswith(("handoff.", "parking.")):
+        return PHYSICAL_CHECK_EPOCH_FRAME_CONTINUITY
+    if cid.startswith(("station.", "ascent.", "expected.")):
+        return PHYSICAL_CHECK_ORBIT_INSERTION
+    return None
+
+
+def _physical_absent_reason(name: str, mission: Any) -> str:
+    """Why a required check carries no evidence -- read from the scenario and
+    the mission's own recorded notes, never invented."""
+    scenario = mission.scenario
+    if name == PHYSICAL_CHECK_PARKING_PROPAGATION:
+        declared_out = str(getattr(scenario.expected, "propagation_result",
+                                   "passed")) == VERDICT_NOT_CHECKED
+        propagation = dict(getattr(mission, "propagation", None) or {})
+        reason = str(propagation.get("reason") or "propagation did not run")
+        if declared_out:
+            reason += ("; the scenario declares propagation out of scope, but an "
+                       "out-of-scope declaration never waives a required physical "
+                       "check (E5-04: E2-04's declared-out-of-scope parking "
+                       "propagation is exactly what this gate must not pass)")
+        return reason
+    if name == PHYSICAL_CHECK_LANDING:
+        if getattr(scenario, "recovery", None) is not None:
+            return next((str(n.get("reason", "")) for n in mission.not_assessed
+                         if n.get("id") == "recovery"),
+                        "recovery stage declared but never ran (the ascent "
+                        "produced no flown run)")
+        return ("no recovery stage declared: a computed physical mission must fly "
+                "its first stage home -- an unflown landing is absent evidence, "
+                "never a pass (an expendable mission is not a full physical mission)")
+    if name == PHYSICAL_CHECK_ORBIT_INSERTION:
+        return "no station, ascent or expected-orbit evidence: the ascent never flew"
+    if name == PHYSICAL_CHECK_MASS_CONSERVATION:
+        return "no mass bookkeeping or boundary mass gate was graded"
+    return ("no boundary continuity gate was graded: the chain never crossed "
+            "a staging, parking-orbit or coupled-separation handoff")
+
+
+def physical_mission_gate(mission: Any) -> dict:
+    """The full physical mission gate (E5-04, task #271) of a
+    ``TwoStageLeoMission`` (same duck-typing as :func:`full_mission_gate`).
+    Five required checks -- orbit insertion, parking propagation, landing,
+    mass conservation, epoch/frame continuity -- each graded independently
+    with its own tri-state verdict and its own reason codes over the checks
+    the chain already produced (no new evidence, no new system), and one
+    overall verdict: any check not ``passed`` (failed *or* merely
+    ``not_checked``) keeps the whole gate from passing. Built into the
+    full-mission gate document under ``physical`` by :func:`full_mission_gate`.
+    """
+    grouped = _physical_grouped(mission.checks)
+    docs: list[dict] = []
+    for name in PHYSICAL_CHECKS:
+        mine = grouped[name]
+        fail = [c for c in mine if not _flag(c)]
+        verdict = (VERDICT_FAILED if fail
+                   else VERDICT_PASSED if mine
+                   else VERDICT_NOT_CHECKED)
+        docs.append({
+            "check": name,
+            "label": PHYSICAL_LABELS[name],
+            "required": True,
+            "verdict": verdict,
+            "checks_passed": sum(1 for c in mine if _flag(c)),
+            "checks_total": len(mine),
+            "reason_codes": (sorted({_reason_code(c) for c in fail}) if fail
+                             else [PHYSICAL_NOT_EVIDENCED_CODE[name]]
+                             if verdict == VERDICT_NOT_CHECKED else []),
+            "checks": {_check_id(c): _flag(c) for c in mine},
+            "reason": ("" if verdict != VERDICT_NOT_CHECKED
+                       else _physical_absent_reason(name, mission)),
+        })
+    verdict = combine_phase_verdicts(docs)
+    reason_codes = sorted({code for d in docs if d["verdict"] != VERDICT_PASSED
+                           for code in d["reason_codes"]})
+    return {"rule": PHYSICAL_RULE, "verdict": verdict, "reason_codes": reason_codes,
+            "checks": docs}
+
+
+def _physical_grouped(checks: Sequence[Any]) -> dict[str, list[Any]]:
+    """Group mission-chain checks into the five physical checks
+    (:func:`physical_check_of`). The mixed run-level conjunction follows the
+    E2-03 rule: once recovery checks are present it mixes touchdown into the
+    whole-flight conjunction, so it is recorded but not attributed (its
+    halves are :data:`INSERTION_ONLY_VERDICT_ID` and the ``recovery.*``
+    checks)."""
+    has_recovery = any(_check_id(c).startswith("recovery.") for c in checks)
+    grouped: dict[str, list[Any]] = {name: [] for name in PHYSICAL_CHECKS}
+    for check in checks:
+        check_id = _check_id(check)
+        if check_id == MIXED_RUN_VERDICT_ID and has_recovery:
+            continue
+        name = physical_check_of(check_id)
+        if name is not None:
+            grouped[name].append(check)
+    return grouped

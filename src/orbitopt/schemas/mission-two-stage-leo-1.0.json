@@ -182,7 +182,8 @@
             "target_file": { "type": ["string", "null"], "minLength": 1 },
             "vehicle_file": { "type": ["string", "null"], "minLength": 1 },
             "plan_options": { "type": "object" },
-            "landing_sites": { "type": "object" }
+            "landing_sites": { "type": "object" },
+            "drive_from_separation": { "type": "boolean", "default": false }
           }
         },
         "full_mission": {

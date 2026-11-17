@@ -80,7 +80,7 @@ from orbitopt.flightlab.recovery.propagator import (
 )
 
 __all__ = ["RecoveryOutcome", "fly_recovery", "RECOVERY_GATE_CHECK_ID",
-           "RECOVERY_NOT_ASSESSED", "dispersed_separation_state",
+           "RECOVERY_NOT_ASSESSED", "dispersed_separation_state", "landing_reserve_booster",
            "separation_state_ecef"]
 
 #: Verification check id of the recovery gate: pass = the booster was flown
@@ -314,12 +314,25 @@ def fly_recovery(ascent_run: FlightRun, target: FlightTarget, vehicle_path, *,
         sep_state = separation_state_from_run(ascent_run)
 
     opts = dict(plan_options) if plan_options else {}
-    fly_landing = _landing_flight(opts.pop("landing", None))
+    booster = landing_reserve_booster(booster, target, opts.pop("landing_reserve", "vehicle"))
+    landing_opts = opts.pop("landing", None)
+    fly_landing = _landing_flight(landing_opts)
     # R-02: merge the handoff / joint-constraint checks into the run only on
     # request -- Gate B reference runs compare verification byte-for-byte,
     # so the extra checks are opt-in and the report object is the default
     # surface (outcome.handoff).
     handoff_in_run = bool(opts.pop("handoff_check", False))
+    if opts.get("landing_need_model") == "closed_loop" and "landing_limits" not in opts:
+        # the planner forecasts the landing against the limits it will be graded on
+        opts["landing_limits"] = limits if limits is not None \
+            else _landing_limits_for_target(target)
+    if (opts.get("landing_need_model") == "closed_loop" and "landing_guidance" not in opts
+            and fly_landing is not fly_landing_burn):
+        # ... and flies the law the landing burn will fly (plan_options
+        # "landing" guidance fields, e.g. a lower max_thrust_accel_g)
+        g_opts = {k: v for k, v in dict(landing_opts or {}).items()
+                  if k not in ("mode", "mismatch")}
+        opts["landing_guidance"] = TerminalGuidance(**g_opts)
     plan = plan_boostback_entry(sep_state, booster, recovery_target, **opts)
     landing: LandingResult | None = None
     if plan.feasible:
@@ -426,6 +439,36 @@ def _landing_flight(landing_options: Mapping[str, Any] | None):
     return fly
 
 
+def landing_reserve_booster(booster: BoosterModel, target: FlightTarget,
+                            option: str | float | None = "vehicle") -> BoosterModel:
+    """The booster with the landing reserve ``plan_options["landing_reserve"]``
+    selects (E5-05c). ``"vehicle"`` (default) keeps the vehicle file's
+    ``landing_propellant_reserve_kg``; ``"target"`` uses the scenario's
+    ``recovery.min_propellant_reserve_kg`` -- the gate the mission is graded
+    on -- so the planner's reserve and the landing's
+    ``LANDING_PROPELLANT_RESERVE_LOW`` check stop holding a stricter number
+    than the mission does; a number [kg] sets it directly. Both the planner
+    and the landing grade read the returned model. A planning margin above
+    it belongs in ``landing_reserve_margin_kg``, sized from the Monte Carlo
+    spread, not folded into the graded reserve."""
+    if option is None or option == "vehicle":
+        return booster
+    if option == "target":
+        kg = target.recovery.min_propellant_reserve_kg
+        if kg is None:
+            raise ValueError("landing_reserve='target' but the target declares no "
+                             "recovery.min_propellant_reserve_kg")
+    else:
+        try:
+            kg = float(option)
+        except (TypeError, ValueError):
+            raise ValueError(f"landing_reserve must be 'vehicle', 'target' or kg, "
+                             f"got {option!r}") from None
+        if not kg >= 0.0:
+            raise ValueError(f"landing_reserve must be >= 0 kg, got {kg}")
+    return replace(booster, landing_propellant_reserve_kg=float(kg))
+
+
 def separation_state_ecef(ascent_run: FlightRun) -> BoosterState:
     """The run's separation state in ECEF, whatever frame the debris track
     recorded it in (same conversion FL-302 applies internally). The Monte
@@ -462,12 +505,20 @@ def dispersed_separation_state(sep_state: BoosterState, *,
         raise ValueError("dispersed_separation_state needs a horizontal velocity")
     hdg = horiz / hn
     right = np.cross(hdg, u)
+    r_new = r + u * altitude_m + hdg * downrange_m + right * crossrange_m
+    v_up = float(np.dot(v, u))
     if heading_deg:
         a = math.radians(heading_deg)
         hdg = math.cos(a) * hdg + math.sin(a) * right
-    r_new = r + u * altitude_m + hdg * downrange_m + right * crossrange_m
-    spd = float(np.linalg.norm(v)) + speed_m_s
-    v_new = hdg * spd
+    # E5-05c fix: keep the vertical velocity. The FL-304 form rebuilt the
+    # velocity as ``hdg * |v|`` -- purely horizontal at the full speed --
+    # which only a near-level separation (the textbook FPA +2 deg state)
+    # survives; a lofted RTLS separation (~40 deg) flew level and missed by
+    # 125-167 km whatever the draw.
+    v_new = hdg * hn + u * v_up
+    speed = float(np.linalg.norm(v))
+    if speed_m_s:
+        v_new = v_new * ((speed + speed_m_s) / speed)
     return BoosterState(t_s=sep_state.t_s, epoch_utc=sep_state.epoch_utc,
                         frame="ECEF",
                         position_m=tuple(float(c) for c in r_new),

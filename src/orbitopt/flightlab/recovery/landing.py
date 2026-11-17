@@ -140,6 +140,7 @@ import numpy as np
 
 from orbitopt.entry import (G0_M_S2, OMEGA_EARTH_RAD_S, density_kg_m3,
                             height_m)
+from orbitopt.flightlab.atmosphere import speed_of_sound_m_s
 from orbitopt.flightlab.contract import Check, Event, FlightRun, Verification
 from orbitopt.flightlab.frames import geodetic_to_ecef
 from orbitopt.flightlab.recovery.boostback import (
@@ -1504,7 +1505,14 @@ def terminal_guidance_command(position_enu_m: Sequence[float],
     a_req = (vz * vz - v_td * v_td) / (2.0 * h_eff) if vz < -v_td else 0.0
     zero = (0.0, 0.0, 0.0)
     if not ignited:
-        a_design = g.design_throttle * float(thrust_max_n) / m - gravity_m_s2
+        # E5-05c: the design deceleration may not exceed what the law is
+        # allowed to command (``max_thrust_accel_g``). Judged on throttle
+        # alone, a light booster (sea-level T/W ~10) waited for ~8 g of
+        # required deceleration, then could command 4.5 g and hit the pad at
+        # ~180 m/s from a vertical handoff; the divert rule only masked it
+        # whenever there was lateral speed to null.
+        a_design = min(g.design_throttle * float(thrust_max_n) / m,
+                       g.max_thrust_accel_g * G0_M_S2) - gravity_m_s2
         if a_req < a_design and not _divert_needs_ignition(
                 r, v, a_design, gravity_m_s2, g):
             return TerminalCommand("coast", zero, a_req)
@@ -1551,6 +1559,103 @@ def terminal_guidance_command(position_enu_m: Sequence[float],
     thrust = d * (m * a_cmd)
     return TerminalCommand("burn", tuple(float(c) for c in thrust), a_req,
                            rate_clipped=clipped)
+
+
+@dataclass(frozen=True)
+class LandingPrediction:
+    """:func:`predict_closed_loop_landing`: whether the FL-305 law brings
+    the vehicle down inside ``touchdown_speed_limit_m_s``, the propellant it
+    spends from the handoff to touchdown, where it lights, and the
+    touchdown state it reaches (pad-relative, m and m/s)."""
+
+    feasible: bool
+    need_kg: float
+    ignition_altitude_m: float | None
+    touchdown_vertical_m_s: float
+    touchdown_lateral_m_s: float
+    touchdown_miss_m: float
+    #: peak proper acceleration [g] (|thrust + drag| / m g0) over the burn --
+    #: what the landing-max-g check grades on the flown track (E5-05c: the
+    #: thrust cap alone does not bound it while drag is still large)
+    max_proper_g: float = 0.0
+
+
+def predict_closed_loop_landing(position_enu_m: Sequence[float],
+                                velocity_enu_m_s: Sequence[float], mass_kg: float,
+                                vehicle: BoosterModel, *, pad_altitude_m: float = 0.0,
+                                guidance: TerminalGuidance = TERMINAL_GUIDANCE_DEFAULT,
+                                gravity_m_s2: float = G0_M_S2, dt_s: float = 0.05,
+                                touchdown_speed_limit_m_s: float = 3.0,
+                                ) -> LandingPrediction:
+    """A fast forecast of the FL-305 closed-loop landing burn for the
+    planner (E5-05c): :func:`terminal_guidance_command` -- the same law,
+    ignition rule, divert and cutoff -- flown from a pad-ENU handoff in a
+    flat, non-rotating pad frame with drag, the ambient thrust envelope and
+    the propagator's mass-flow rule, at ``dt_s``. The TVC lag/slew chain is
+    not modelled (the FL-305 default has none).
+
+    It replaces a momentum estimate that assumed a full-thrust vertical burn
+    lit *at* the handoff: on the reference RTLS fixture that estimate read
+    5.2 t where the flown landing burn spent 7.9 t (the law coasts and
+    accelerates below the handoff, lights at ``design_throttle``, and pays
+    for the divert). The verdict stays the re-flown landing's; this only
+    tells the planner what that landing will cost and whether it can
+    stop."""
+    eng = vehicle.engine
+    dry = float(vehicle.dry_mass_kg)
+    r = np.asarray(position_enu_m, dtype=np.float64).copy()
+    v = np.asarray(velocity_enu_m_s, dtype=np.float64).copy()
+    m0 = m = float(mass_kg)
+    t_max_pad, _ = _ambient_thrust_envelope(vehicle, pad_altitude_m)
+    ignited, cut, ign_h = False, False, None
+    max_g = 0.0
+    for _ in range(int(400.0 / dt_s)):
+        alt = float(r[2]) + float(pad_altitude_m)
+        t_max, t_min = _ambient_thrust_envelope(vehicle, alt)
+        thrust = np.zeros(3)
+        if not cut:
+            cmd = terminal_guidance_command(
+                r, v, m, gravity_m_s2=gravity_m_s2,
+                thrust_max_n=min(t_max, t_max_pad), thrust_min_n=t_min,
+                ignited=ignited, guidance=guidance)
+            if cmd.phase == "cutoff":
+                cut = True
+            elif cmd.phase == "burn":
+                if not ignited:
+                    ignited, ign_h = True, float(r[2])
+                f = np.asarray(cmd.thrust_enu_n, dtype=np.float64)
+                f_mag = float(np.linalg.norm(f))
+                throttle = min(max(f_mag / t_max, eng.throttle_min), eng.throttle_max)
+                p_pa = pressure_pa(max(alt, 0.0))
+                force = eng.count * throttle * (eng.thrust_vacuum_n
+                                                - eng.nozzle_exit_area_m2 * p_pa)
+                if force > 0.0:
+                    thrust = force * f / f_mag
+                    isp = eng.isp_sea_level_s + (eng.isp_vacuum_s - eng.isp_sea_level_s) * (
+                        1.0 - min(p_pa, 101_325.0) / 101_325.0)
+                    m -= force / (isp * G0_M_S2) * dt_s
+        if m <= dry:
+            return LandingPrediction(False, m0 - dry, ign_h, float(-v[2]),
+                                     float(np.hypot(v[0], v[1])), float(np.hypot(r[0], r[1])),
+                                     max_g)
+        speed = float(np.linalg.norm(v))
+        drag = np.zeros(3)
+        if speed > 0.0:
+            h = max(alt, 0.0)
+            mach = speed / max(speed_of_sound_m_s(h), 1.0)
+            q = 0.5 * density_kg_m3(h) * speed * speed
+            drag = -(q * vehicle.cd(mach) * vehicle.reference_area_m2 / speed) * v
+        # graded like the flown track's max_proper_g: the whole handoff-to-
+        # touchdown leg (coast drag included)
+        max_g = max(max_g, float(np.linalg.norm(thrust + drag)) / (m * G0_M_S2))
+        a = (thrust + drag) / m + np.array([0.0, 0.0, -gravity_m_s2])
+        v = v + a * dt_s
+        r = r + v * dt_s
+        if r[2] <= 0.0:
+            break
+    vz, vl = float(-v[2]), float(np.hypot(v[0], v[1]))
+    return LandingPrediction(vz <= touchdown_speed_limit_m_s, m0 - m, ign_h, vz, vl,
+                             float(np.hypot(r[0], r[1])), max_g)
 
 
 class _ClosedLoopLanding:
