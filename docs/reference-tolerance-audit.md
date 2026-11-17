@@ -71,6 +71,7 @@ line for a platform).
 | 2026-10-28 `e97e147` | Gate B `t_s_abs` 1e-9 -> 1e-6 s | same cross-machine floor for the logged time column |
 | 2026-11-12 `3051848` | E2-04 add `ascent_build_{position,velocity}_m_abs` 1e-6 and `landing_plan_diagnostic_abs` {fuel_planned_kg 1e-3, tof_flying_s 1e-2} | physics verdicts preserved across platforms; diagnostics rebuilt per-run need their own bands |
 | 2026-11-15 (this task) | Gate B add `cross_platform` {position_m_abs 1e-4, velocity_m_s_abs 1e-6} | E8-04 cross-platform re-derivation exercises the same pinned frame bridge as the flight bands, so the band equals them; full audit entry in `PROVENANCE.json` |
+| 2026-11-17 (this task) | E8-01 full-chain bands added (`FULL_CHAIN_TOLERANCES`, table below) | E8-01 grades the recorded E5-05 chain against the raw OpenTsiolkovsky recording and closed-form mechanics; bands derive from recorder grid, element-convention and environment-model budgets, not post-hoc tuning |
 
 ## Current enforced tolerances
 
@@ -137,3 +138,35 @@ in parsed form (enforced by `tests/test_e804_reference_data.py`).
   "report_value_rel": 1e-09
 }
 ```
+
+## Full-chain reference bands (E8-01, task #281)
+
+`src/orbitopt/verify/full_chain.py` grades the recorded E5-05 chain against
+its committed references; the bands below are the single source of truth
+(`FULL_CHAIN_TOLERANCES`, embedded verbatim in every report) and are NOT
+in a `tolerances.json` file — they are graded against committed files, not
+a replay, so the replay-tolerance mechanism of E8-04 does not apply. None
+of the bands was tuned after seeing the residuals; each derives from the
+recorder's own discretisation, a model-class difference budget, or the
+physics of the comparison, and the value observed at recording is listed.
+
+| check | unit | band | observed | basis (summary) |
+|---|---|---|---|---|
+| `ascent.event.meco` / `.fairing_jettison` | s | 2.0 | 0.0 / 0.0 | one OpenTsiolkovsky output-grid interval; events re-extracted from raw thrust/mass columns |
+| `ascent.event.separation` / `.seco` | s | 2.0 | 1.0 / 1.83 | same; SECO sits on an appended event sample, so the nearest grid sample is one step away |
+| `ascent.separation_window_position` | m | 5000 | 4.7 | gfold vs raw-OT debris over the shared unpowered window: environment-model budget |
+| `ascent.separation_window_velocity` | m/s | 5.0 | 0.002 | same window, velocity |
+| `insertion.semi_major_axis` | m | 250 | −67 | osculating (external) vs J2-mean (chain) elements at 300 km / ~12 min |
+| `insertion.eccentricity` | − | 5e-6 | 1.2e-6 | same element-convention difference |
+| `insertion.inclination` / `.raan` | deg | 0.05 / 0.05 | −0.0002 / −7.7e-5 | mean-vs-osculating drift allowance, ~100× margin |
+| `ascent.seco_state_position` / `_velocity` | m / m/s | 1 / 0.01 | 5.8e-11 / 9.4e-13 | sealed-record round trip through the pinned frame bridge; float64 text serialisation |
+| `analytic.seco_orbit_energy` (Δa) | m | 1.0 | 0.005 | vis-viva identity on one state; double-rounding scale |
+| `analytic.seco_orbit_eccentricity` | − | 1e-8 | −6.6e-10 | same |
+| `analytic.seco_orbit_period` | s | 0.5 | 8e-6 | same |
+| `analytic.seco_orbit_inclination` | deg | 0.05 | 0.018 | covers the external element-convention spread seen at recording |
+| `ascent.stage2_dv_ledger` | − | 0.15 | 0.122 | Tsiolkovsky ideal-Δv bound; gravity+drag loss budget for a lofted vacuum ascent |
+| `recovery.coast_arc_position` | m | 1000 | 575 | exact two-body vs J2+gravity-gradient propagation over the ~207 s coast |
+| `recovery.coast_arc_velocity` | m/s | 10.0 | 3.77 | same arc, velocity |
+| `recovery.event.landing_burn_ignition` | s | 2.0 | 0.5 | recorder grid again: first powered booster sample after the event |
+| `recovery.event.touchdown` | s | 1.0 | 0.0 | sealed records must agree exactly; 1 s of float round-trip headroom |
+| `recovery.touchdown_gates` | − | 1.0 | 0.70 | design-input gates (target.yaml limits), composite utilisation ≤ 1 |
