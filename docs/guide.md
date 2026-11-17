@@ -36,6 +36,9 @@ single-scene viewer.
 Panels share the selected body and mission time. Collapse them with their
 header chevrons; `I` toggles the right panel.
 
+For vehicle profiles, thrust schedules and declared-versus-flown comparisons,
+open **Flight Lab → Vehicles**. See [Vehicle view](flightlab.md#vehicle-view).
+
 ## Moving around in 3D
 
 | Control | Action |

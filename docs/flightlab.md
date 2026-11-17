@@ -39,6 +39,27 @@ lists all options.
 Targets and vehicles are edited in YAML or through the Python designer API;
 the desktop mode renders runs rather than configuring or flying them.
 
+## Vehicle view
+
+Open **Flight Lab → Vehicles** and select a catalog vehicle. This read-only
+page shows its stage profile, masses, thrust, ideal Δv, recovery reserves
+and declared thrust/staging schedule. Profiles use declared geometry when
+available; otherwise they are labelled **schematic, not to scale**. Hover
+source labels for provenance, dates and stated uncertainty.
+
+[![Vehicle view showing the illustrative RTLS stack, declared thrust schedule and recorded E5-05a flight comparison](assets/flightlab-vehicle.png)](assets/flightlab-vehicle.png)
+
+To compare a definition with a flight, select a saved run in **Runs**, then
+return to **Vehicles**. The schedule adds flown event markers; **Declared vs
+flown** lists timing and mass differences. The header states whether the run
+used the exact vehicle file or its digest differs. Missing values appear as
+`—`; differences alone are not verification verdicts.
+
+The screenshot uses the illustrative `synthetic_two_stage_rtls` vehicle and
+the recorded [E5-05a ascent](computed-mission.md). Ideal Δv excludes gravity,
+drag and steering losses. Edit vehicle YAML to change the design; return to
+**Runs** for the 3D flight view and telemetry.
+
 ## Mission pipeline
 
 `flight-lab` runs an ascent through the unified pipeline. `two-stage-leo`
