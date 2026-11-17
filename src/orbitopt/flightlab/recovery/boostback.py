@@ -120,7 +120,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Sequence
 
 import numpy as np
@@ -383,6 +383,13 @@ class CorridorReport:
     #: (both None when the joint mode is off).
     landing_probability: float | None = None
     joint_violation: float | None = None
+    #: E5-05c ``landing_need_model="closed_loop"``: the FL-305 landing burn
+    #: forecast from this handoff (None under the momentum model) -- where
+    #: it lights [m above the pad] and the touchdown it reaches.
+    landing_ignition_altitude_m: float | None = None
+    landing_touchdown_vertical_m_s: float | None = None
+    landing_touchdown_lateral_m_s: float | None = None
+    landing_touchdown_miss_m: float | None = None
 
 
 @dataclass(frozen=True)
@@ -512,17 +519,93 @@ def _retro_lead_direction(v: np.ndarray, up: np.ndarray) -> np.ndarray:
         + math.sin(ENTRY_BURN_LEAD_RAD) * pd
 
 
+_OMEGA_EARTH = 7.2921159e-5
+_MU_EARTH = 3.986004418e14
+
+
+def vacuum_iip_ecef(r_ecef: np.ndarray, v_ecef: np.ndarray, surface_radius_m: float
+                    ) -> np.ndarray | None:
+    """Vacuum instantaneous impact point (ECEF) of an Earth-relative ECEF
+    state: the Kepler ellipse of the inertial velocity (``v + omega x r``)
+    intersected with the sphere ``surface_radius_m`` on the descending
+    branch, rotated back by the Earth's turn over the flight time. ``None``
+    when the conic never comes down to that radius (escape, or already
+    below it). Drag-free and two-body: a guidance *prediction* (what a
+    boostback cutoff targets), not a trajectory."""
+    r = np.asarray(r_ecef, dtype=np.float64)
+    v_i = np.asarray(v_ecef, dtype=np.float64) + np.cross([0.0, 0.0, _OMEGA_EARTH], r)
+    rn = float(np.linalg.norm(r))
+    if rn <= surface_radius_m:
+        return None
+    h_vec = np.cross(r, v_i)
+    h = float(np.linalg.norm(h_vec))
+    energy = 0.5 * float(v_i @ v_i) - _MU_EARTH / rn
+    if h <= 0.0 or energy >= 0.0:
+        return None
+    e_vec = np.cross(v_i, h_vec) / _MU_EARTH - r / rn
+    e = float(np.linalg.norm(e_vec))
+    p = h * h / _MU_EARTH
+    if e < 1e-9:
+        return None
+    cos_fi = (p / surface_radius_m - 1.0) / e
+    if cos_fi > 1.0:
+        return None  # periapsis above the surface: it never comes down
+    cos_fi = max(-1.0, cos_fi)
+    p_hat = e_vec / e
+    q_hat = np.cross(h_vec / h, p_hat)
+    f0 = math.atan2(float(r @ q_hat), float(r @ p_hat))
+    f1 = -math.acos(cos_fi)  # descending crossing (true anomaly in (-pi, 0])
+    while f1 <= f0:
+        f1 += 2.0 * math.pi
+
+    def mean_anomaly(f: float) -> float:
+        ea = 2.0 * math.atan2(math.sqrt(1.0 - e) * math.sin(f / 2.0),
+                              math.sqrt(1.0 + e) * math.cos(f / 2.0))
+        return ea - e * math.sin(ea)
+
+    a = p / (1.0 - e * e)
+    n = math.sqrt(_MU_EARTH / a ** 3)
+    dm = mean_anomaly(f1) - mean_anomaly(f0)
+    while dm < 0.0:
+        dm += 2.0 * math.pi
+    tof = dm / n
+    imp = surface_radius_m * (math.cos(f1) * p_hat + math.sin(f1) * q_hat)
+    th = -_OMEGA_EARTH * tof  # the Earth turned under the coast
+    c, s_ = math.cos(th), math.sin(th)
+    return np.array([c * imp[0] - s_ * imp[1], s_ * imp[0] + c * imp[1], imp[2]])
+
+
 class _Mission:
     """Scripted return: coast -> boostback (delay/duration/throttle/
     pitch/yaw) -> coast (drag, gravity) -> entry burn (trigger altitude /
     duration, full throttle, retro + lead) -> [optional second, lower
     braking burn (E5-05c, ``eb2``: same trigger/duration law at a lower
     trigger altitude) ->] corridor. Sampled once per propagator step like a
-    flight computer."""
+    flight computer.
+
+    ``iip_aim_m`` (E5-05c, ``boostback_cutoff="iip"``) closes the boostback
+    loop: the burn ends when the vacuum IIP has moved ``iip_aim_m`` past the
+    pad along the return direction (``return_dir``, unit vector from the
+    downrange side toward the pad), ``bb.duration_s`` then being only the
+    cap -- the cutoff absorbs thrust, Isp and separation-state dispersions
+    that move a fixed-duration burn's impact by kilometres per 0.1 s. The
+    burn is also *steered* by the IIP: its horizontal thrust points from the
+    current IIP to the aim point (plus the yaw trim), which nulls the
+    cross-track error a pad-bearing burn leaves.
+    ``entry_cut_speed_m_s`` (``entry_cutoff="speed"``) ends the entry burn
+    at that Earth-relative speed instead of after ``eb.duration_s`` (then
+    only the cap), so thrust / Isp / density dispersions do not turn into a
+    handoff-speed spread.
+    Within :data:`IIP_VERNIER_M` of the aim the burn throttles down to
+    ``vernier_throttle`` (the engine floor) so the once-per-step cutoff
+    lands within a few hundred metres instead of a few kilometres."""
 
     def __init__(self, t_sep: float, bb: BoostbackPlan, eb: EntryBurnPlan,
                  bearing_of: Callable[[np.ndarray], float],
-                 eb2: EntryBurnPlan | None = None):
+                 eb2: EntryBurnPlan | None = None, *,
+                 iip_aim_m: float | None = None, pad_ecef: np.ndarray | None = None,
+                 return_dir: np.ndarray | None = None, vernier_throttle: float = 0.0,
+                 entry_cut_speed_m_s: float | None = None):
         self.t_sep = float(t_sep)
         self.bb = bb
         self.eb = eb
@@ -530,6 +613,30 @@ class _Mission:
         self.bearing_of = bearing_of
         self.entry_t0: float | None = None
         self.entry2_t0: float | None = None
+        self.iip_aim_m = iip_aim_m
+        self.pad_ecef = pad_ecef
+        self.return_dir = return_dir
+        self.surface_r = float(np.linalg.norm(pad_ecef)) if pad_ecef is not None else 0.0
+        self.bb_cut_t: float | None = None
+        self.vernier_throttle = float(vernier_throttle)
+        self.aim_point = (pad_ecef + float(iip_aim_m) * return_dir
+                          if iip_aim_m is not None and pad_ecef is not None else None)
+        self.entry_cut_speed = entry_cut_speed_m_s
+        self.entry_end_t: float | None = None
+
+    def entry_end(self) -> float:
+        """Entry-burn end on the mission clock: the speed cutoff once it
+        fired, else the scheduled (or capped) end. Only valid once lit."""
+        if self.entry_end_t is not None:
+            return self.entry_end_t
+        return float(self.entry_t0) + self.eb.duration_s
+
+    def bb_end(self) -> float:
+        """Boostback end on the mission clock: the IIP cutoff once it fired,
+        else the scheduled (or capped) end."""
+        if self.bb_cut_t is not None:
+            return self.bb_cut_t
+        return self.t_sep + self.bb.start_delay_s + self.bb.duration_s
 
     def __call__(self, t: float, state: BoosterState) -> ThrustCmd | None:
         t0 = self.t_sep + self.bb.start_delay_s
@@ -537,25 +644,45 @@ class _Mission:
             return None
         r = np.asarray(state.position_m, dtype=np.float64)
         v = np.asarray(state.velocity_m_s, dtype=np.float64)
-        if t < t0 + self.bb.duration_s:
+        if t < self.bb_end():
+            throttle = self.bb.throttle
+            iip = None
+            if self.iip_aim_m is not None:
+                iip = vacuum_iip_ecef(r, v, self.surface_r)
+                if iip is not None:
+                    to_go = self.iip_aim_m - float((iip - self.pad_ecef) @ self.return_dir)
+                    if to_go <= 0.0:
+                        self.bb_cut_t = float(t)
+                        return None
+                    if to_go < IIP_VERNIER_M:
+                        throttle = max(self.vernier_throttle, 1e-3)
             lat, lon, _h = _geodetic_fast(r)
             e, n, u = _enu_basis(lat, lon)
             p = math.radians(self.bb.pitch_deg)
             y = self.bearing_of(r) + math.radians(self.bb.yaw_deg)
+            if self.aim_point is not None and iip is not None:
+                miss = self.aim_point - iip
+                me, mn = float(miss @ np.array(e)), float(miss @ np.array(n))
+                if math.hypot(me, mn) > 200.0:  # steer the IIP onto the aim point
+                    y = math.atan2(me, mn) + math.radians(self.bb.yaw_deg)
             d = (math.cos(p) * math.sin(y) * np.array(e)
                  + math.cos(p) * math.cos(y) * np.array(n)
                  + math.sin(p) * np.array(u))
-            return ThrustCmd(self.bb.throttle, d)
+            return ThrustCmd(throttle, d)
         up = r / float(np.linalg.norm(r))
         if self.entry_t0 is None:
-            if t < t0 + self.bb.duration_s:
+            if t < self.bb_end():
                 return None  # entry ignition only after boostback cutoff
             _lat, _lon, h = _geodetic_fast(r)
             if h <= self.eb.trigger_altitude_m and float(v @ up) < 0.0:
                 self.entry_t0 = float(t)
             return None
-        if t < self.entry_t0 + self.eb.duration_s:
-            if float(np.linalg.norm(v)) < 1e-9:
+        if t < self.entry_end():
+            speed = float(np.linalg.norm(v))
+            if self.entry_cut_speed is not None and speed <= self.entry_cut_speed:
+                self.entry_end_t = float(t)
+                return None
+            if speed < 1e-9:
                 return None  # nothing to fly against; keep the engines shut
             return ThrustCmd(self.eb.throttle, _retro_lead_direction(v, up))
         if self.eb2 is None:
@@ -609,6 +736,10 @@ class _Rollout:
     #: E5-05c two-burn mode: scheduled engine-on time [s] still owed after
     #: the corridor crossing (0 = an engine-off handoff, the only valid one)
     handoff_burn_overlap_s: float = 0.0
+    #: E5-05c closed-loop landing forecast at the handoff (None = momentum model)
+    landing_pred: Any = None
+    #: ... and whether it lands inside the landing limits
+    landing_ok: bool | None = None
 
 
 def _entry_window_loads(track: BoosterTrack, vehicle: BoosterModel,
@@ -647,7 +778,8 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
               reserve_margin: float = 0.0,
               chance: JointChanceSpec | None = None,
               sep_prop_kg: float | None = None,
-              aim_radius: float | None = None) -> _Rollout:
+              aim_radius: float | None = None,
+              landing_limits: Any = None) -> _Rollout:
     """One full-physics flight through the FL-301 propagator plus the
     corridor residual. Penalty is a sum of dimensionless squared violations:
     the corridor/entry/propellant violations in-flight, plus the R-01 soft
@@ -663,7 +795,12 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
     ``corridor.radius_m`` in the planning-time miss term only: the penalty
     then pulls the plan toward a handoff inside that smaller ring while the
     acceptance verdict at ``corridor.radius_m`` stays the referee
-    (``None`` = the full radius, every pre-E7-04 caller)."""
+    (``None`` = the full radius, every pre-E7-04 caller).
+    ``landing_limits`` (E5-05c) switches the landing need to the closed-loop
+    forecast (:func:`orbitopt.flightlab.recovery.landing.
+    predict_closed_loop_landing`) and grades the handoff by the touchdown it
+    predicts against those limits instead of the corridor speed cap
+    (``None`` = the momentum need and ``v_max_m_s``, bit-for-bit)."""
     out = _Rollout()
     h0_name = "fl302_corridor_h0"
     try:
@@ -727,13 +864,31 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
         out.tilt_deg = math.degrees(math.acos(
             max(-1.0, min(1.0, -float(v @ up) / max(spd, 1e-9)))))
         out.prop_kg = float(ev.data["mass_kg"]) - float(vehicle.dry_mass_kg)
-        out.landing_need_kg = landing_burn_propellant_need_kg(
-            float(ev.data["mass_kg"]), spd, corridor.h0_m, vehicle)
+        if landing_limits is None:
+            out.landing_need_kg = landing_burn_propellant_need_kg(
+                float(ev.data["mass_kg"]), spd, corridor.h0_m, vehicle)
+        else:
+            from orbitopt.flightlab.recovery.landing import predict_closed_loop_landing
+
+            p_lat, p_lon, p_h = _geodetic_fast(pad)
+            pe, pn, pu = (np.array(b) for b in _enu_basis(p_lat, p_lon))
+            dr = r - pad
+            pred = predict_closed_loop_landing(
+                (float(dr @ pe), float(dr @ pn), float(dr @ pu)),
+                (float(v @ pe), float(v @ pn), float(v @ pu)),
+                float(ev.data["mass_kg"]), vehicle, pad_altitude_m=float(p_h))
+            out.landing_pred = pred
+            out.landing_need_kg = pred.need_kg
+            out.landing_ok = bool(
+                pred.feasible
+                and pred.touchdown_vertical_m_s <= landing_limits.vertical_speed_max_m_s
+                and pred.touchdown_lateral_m_s <= landing_limits.lateral_speed_max_m_s
+                and pred.touchdown_miss_m <= landing_limits.position_tol_m)
         out.crossed = True
         out.event = ev
 
     t_q = burn_starts[1].t_s if len(burn_starts) > 1 else (
-        burn_starts[0].t_s + mission.bb.duration_s if burn_starts else tr.times_s[0])
+        mission.bb_end() if burn_starts else tr.times_s[0])
     t_q_end = float(ev.t_s) if out.crossed else float(tr.times_s[-1])
     out.entry_q_pa, out.entry_g = _entry_window_loads(tr, vehicle, t_q, t_q_end)
 
@@ -788,7 +943,17 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
         # radius (a 1.76 km miss costs ~0.05 against 8 km and ~3.1 here).
         pen += (out.miss_m / divert_budget) ** 2
         pen += (max(0.0, out.tilt_deg - corridor.max_tilt_deg) / 10.0) ** 2
-        pen += (max(0.0, out.speed_m_s - corridor.v_max_m_s) / 50.0) ** 2
+        if out.landing_pred is None:
+            pen += (max(0.0, out.speed_m_s - corridor.v_max_m_s) / 50.0) ** 2
+        else:
+            # E5-05c: no speed cap -- the forecast touchdown is what counts
+            lp = out.landing_pred
+            pen += (max(0.0, lp.touchdown_vertical_m_s
+                        - landing_limits.vertical_speed_max_m_s) / 10.0) ** 2
+            pen += (max(0.0, lp.touchdown_lateral_m_s
+                        - landing_limits.lateral_speed_max_m_s) / 10.0) ** 2
+            pen += (max(0.0, lp.touchdown_miss_m - landing_limits.position_tol_m)
+                    / 250.0) ** 2
         # R-01 fuel reserve: landing need + vehicle reserve + margin, so the
         # plan keeps headroom for the dispersions the momentum-balance need
         # cannot see (margin 0 = the FL-305 violation-only term).
@@ -851,7 +1016,11 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                           entry_burns: int = 1,
                           entry_throttle: bool = False,
                           search: Callable[[Callable[[np.ndarray], float], np.ndarray],
-                                           np.ndarray] | None = None) -> ReturnPlan:
+                                           np.ndarray] | None = None,
+                          landing_need_model: str = "momentum",
+                          landing_limits: Any = None,
+                          boostback_cutoff: str = "duration",
+                          entry_cutoff: str = "duration") -> ReturnPlan:
     """Optimize the boostback/entry-burn script so the FL-301-propagated
     booster reaches ``recovery_target.corridor``; returns the corridor
     insertion state, its pad-ENU mirror, and the flown track.
@@ -925,9 +1094,51 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     accept if it beats the start. The verdict path (re-integration at
     ``dt_final``, ``_assemble``) is unchanged -- offline global searches
     (``scripts/e505c_recovery_search.py``) plug in here; ``None`` (default)
-    is the stock search, bit-for-bit."""
+    is the stock search, bit-for-bit.
+    ``landing_need_model`` (E5-05c): ``"momentum"`` (default, bit-for-bit)
+    prices the landing burn as a full-thrust vertical burn lit at the
+    handoff and caps the handoff at ``corridor.v_max_m_s``;
+    ``"closed_loop"`` forecasts the FL-305 landing burn itself
+    (:func:`orbitopt.flightlab.recovery.landing.predict_closed_loop_landing`:
+    it coasts and lights late, and pays for the divert -- on the reference
+    RTLS fixture 7.9 t where the momentum estimate read 5.2 t) and grades the
+    handoff by the predicted touchdown against ``landing_limits`` (a
+    :class:`~orbitopt.flightlab.recovery.landing.LandingLimits`; the
+    defaults when None) instead of the speed cap.
+    ``boostback_cutoff`` (E5-05c): ``"duration"`` (default, bit-for-bit)
+    burns the boostback for ``x[1]`` seconds; ``"iip"`` closes the loop the
+    way an operational boostback does -- ``x[1]`` is then the aim distance
+    [km] past the pad, along the return direction, that the vacuum
+    instantaneous impact point (:func:`vacuum_iip_ecef`) must reach before
+    cutoff (drag pulls the real impact back short of it), with
+    :data:`IIP_BOOSTBACK_CAP_S` as the burn-time cap. A fixed-duration burn
+    moves the impact by ~10 km per 0.5 s on the reference RTLS fixture, so
+    any thrust / Isp / separation dispersion throws it tens of km off; the
+    IIP cutoff absorbs them; the IIP also steers the burn (cross-track).
+    ``entry_cutoff`` (E5-05c, one entry burn): ``"duration"`` (default,
+    bit-for-bit) burns ``x[6]`` seconds; ``"speed"`` ends the burn when the
+    Earth-relative speed falls to ``x[6]`` [m/s] (:data:`ENTRY_CUTOFF_CAP_S`
+    the cap), so the handoff speed no longer follows every thrust / Isp /
+    density dispersion."""
     corridor = recovery_target.corridor
     eng = booster.engine
+    if boostback_cutoff not in ("duration", "iip"):
+        raise ValueError(f"boostback_cutoff must be 'duration' or 'iip', "
+                         f"got {boostback_cutoff!r}")
+    iip_mode = boostback_cutoff == "iip"
+    if entry_cutoff not in ("duration", "speed"):
+        raise ValueError(f"entry_cutoff must be 'duration' or 'speed', got {entry_cutoff!r}")
+    speed_mode = entry_cutoff == "speed"
+    if speed_mode and entry_burns != 1:
+        raise ValueError("entry_cutoff='speed' supports the one-burn entry script only")
+    if landing_need_model not in ("momentum", "closed_loop"):
+        raise ValueError(f"landing_need_model must be 'momentum' or 'closed_loop', "
+                         f"got {landing_need_model!r}")
+    if landing_need_model == "closed_loop" and landing_limits is None:
+        from orbitopt.flightlab.recovery.landing import DEFAULT_LANDING_LIMITS
+
+        landing_limits = DEFAULT_LANDING_LIMITS
+    pred_limits = landing_limits if landing_need_model == "closed_loop" else None
     if entry_burns not in (1, 2):
         raise ValueError(f"entry_burns must be 1 or 2, got {entry_burns}")
     ignitions_needed = 1 + int(entry_burns)
@@ -973,6 +1184,13 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     sep_r = np.asarray(sep_state.position_m, dtype=np.float64)
     pad_ecef = np.asarray(recovery_target.position_ecef_m, dtype=np.float64)
     bearing_of = _bearing_of_target(pad_ecef)
+    # E5-05c IIP cutoff: the return direction, a horizontal unit vector at the
+    # pad pointing from the separation ground point toward the pad
+    p_lat, p_lon, _p_h = _geodetic_fast(pad_ecef)
+    pe, pn, _pu = (np.array(b) for b in _enu_basis(p_lat, p_lon))
+    d_sep = sep_r - pad_ecef
+    horiz = float(d_sep @ pe) * pe + float(d_sep @ pn) * pn
+    return_dir = -horiz / max(float(np.linalg.norm(horiz)), 1e-9)
 
     n_base = 7 + (2 if entry_burns == 2 else 0)
     n_x = n_base + (int(entry_burns) if entry_throttle else 0)
@@ -985,12 +1203,14 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
         # braking burn, clamped to ignite strictly below the first trigger.
         delay, dur, thr, pitch, yaw, h_trig, dur_e = x[:7]
         delay = min(max(float(delay), 0.0), min(horizon_s * 0.4, 150.0))
-        dur = min(max(float(dur), 4.0), 60.0)
+        dur = (min(max(float(dur), -20.0), 80.0) if iip_mode  # aim [km] past the pad
+               else min(max(float(dur), 4.0), 60.0))
         thr = min(max(float(thr), eng.throttle_min), eng.throttle_max)
         pitch = min(max(float(pitch), 0.0), 30.0)
         yaw = min(max(float(yaw), -45.0), 45.0)
         h_trig = min(max(float(h_trig), corridor.h0_m + 2000.0), 35_000.0)
-        dur_e = min(max(float(dur_e), 3.0), 45.0)
+        dur_e = (min(max(float(dur_e), 60.0), 1500.0) if speed_mode  # cutoff speed [m/s]
+                 else min(max(float(dur_e), 3.0), 45.0))
         out = [delay, dur, thr, pitch, yaw, h_trig, dur_e]
         if entry_burns == 2:
             h2 = min(max(float(x[7]), corridor.h0_m + 300.0),
@@ -1003,15 +1223,27 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
 
     def to_mission(x: np.ndarray) -> _Mission:
         bb, eb, eb2 = _unpack_script(x, entry_burns, entry_throttle)
-        return _Mission(sep_state.t_s, bb, eb, bearing_of, eb2)
+        if not iip_mode and not speed_mode:
+            return _Mission(sep_state.t_s, bb, eb, bearing_of, eb2)
+        kw: dict[str, Any] = {}
+        if iip_mode:
+            bb = replace(bb, duration_s=IIP_BOOSTBACK_CAP_S)
+            kw.update(iip_aim_m=1000.0 * float(x[1]), pad_ecef=pad_ecef,
+                      return_dir=return_dir, vernier_throttle=eng.throttle_min)
+        if speed_mode:
+            kw["entry_cut_speed_m_s"] = float(x[6])
+            eb = replace(eb, duration_s=ENTRY_CUTOFF_CAP_S)
+        return _Mission(sep_state.t_s, bb, eb, bearing_of, eb2, **kw)
 
     def rollout(x: np.ndarray, dt: float) -> _Rollout:
         x = clamp(x)
-        window = (sep_state.t_s + float(x[0]), sep_state.t_s + float(x[0]) + float(x[1]))
+        window = (sep_state.t_s + float(x[0]), sep_state.t_s + float(x[0])
+                  + (IIP_BOOSTBACK_CAP_S if iip_mode else float(x[1])))
         return _evaluate(sep_state, to_mission(x), booster, recovery_target, corridor,
                          entry_q_max_pa, entry_g_max, reserve, horizon_s, dt, window,
                          divert_budget=divert_budget, reserve_margin=reserve_margin,
-                         chance=chance, sep_prop_kg=sep_prop, aim_radius=aim_radius)
+                         chance=chance, sep_prop_kg=sep_prop, aim_radius=aim_radius,
+                         landing_limits=pred_limits)
 
     # --- analytic floor check (see _propellant_floor_kg)
     sep_prop = sep_mass - dry
@@ -1090,6 +1322,16 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                      chance=chance, layout=(entry_burns, entry_throttle))
 
 
+#: E5-05c ``boostback_cutoff="iip"``: burn-time cap [s] of the IIP-targeted
+#: boostback (the cutoff, not this, ends a nominal burn).
+IIP_BOOSTBACK_CAP_S = 60.0
+#: ... and the distance to the aim [m] inside which it throttles down to the
+#: engine floor (the vernier phase that makes the cutoff precise).
+IIP_VERNIER_M = 3000.0
+#: E5-05c ``entry_cutoff="speed"``: burn-time cap [s] of the speed-cut entry burn.
+ENTRY_CUTOFF_CAP_S = 45.0
+
+
 def _unpack_script(x: np.ndarray, entry_burns: int = 1, entry_throttle: bool = False
                    ) -> tuple[BoostbackPlan, EntryBurnPlan, EntryBurnPlan | None]:
     """Parameter vector -> (boostback, entry burn, braking burn | None).
@@ -1131,8 +1373,10 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
         if not final.crossed:
             reasons.append(CORRIDOR_NOT_REACHED)
         else:
+            speed_bad = (final.speed_m_s > corridor.v_max_m_s
+                         if final.landing_ok is None else not final.landing_ok)
             if (final.miss_m > corridor.radius_m or final.tilt_deg > corridor.max_tilt_deg
-                    or final.speed_m_s > corridor.v_max_m_s):
+                    or speed_bad):
                 reasons.append(CORRIDOR_MISSED)
             elif final.handoff_burn_overlap_s > 0.0:
                 # E5-05c: an engine-on handoff (braking burn still owed) is
@@ -1165,6 +1409,11 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
         min_landing_reserve_margin_kg=reserve_margin if reserve_margin > 0.0 else None,
         landing_probability=final.p_land,
         joint_violation=final.joint_violation,
+        **({} if final.landing_pred is None else dict(
+            landing_ignition_altitude_m=final.landing_pred.ignition_altitude_m,
+            landing_touchdown_vertical_m_s=final.landing_pred.touchdown_vertical_m_s,
+            landing_touchdown_lateral_m_s=final.landing_pred.touchdown_lateral_m_s,
+            landing_touchdown_miss_m=final.landing_pred.touchdown_miss_m)),
     )
 
     state: BoosterState | None = None

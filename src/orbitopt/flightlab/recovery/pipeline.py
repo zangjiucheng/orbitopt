@@ -320,6 +320,10 @@ def fly_recovery(ascent_run: FlightRun, target: FlightTarget, vehicle_path, *,
     # so the extra checks are opt-in and the report object is the default
     # surface (outcome.handoff).
     handoff_in_run = bool(opts.pop("handoff_check", False))
+    if opts.get("landing_need_model") == "closed_loop" and "landing_limits" not in opts:
+        # the planner forecasts the landing against the limits it will be graded on
+        opts["landing_limits"] = limits if limits is not None \
+            else _landing_limits_for_target(target)
     plan = plan_boostback_entry(sep_state, booster, recovery_target, **opts)
     landing: LandingResult | None = None
     if plan.feasible:
@@ -462,12 +466,20 @@ def dispersed_separation_state(sep_state: BoosterState, *,
         raise ValueError("dispersed_separation_state needs a horizontal velocity")
     hdg = horiz / hn
     right = np.cross(hdg, u)
+    r_new = r + u * altitude_m + hdg * downrange_m + right * crossrange_m
+    v_up = float(np.dot(v, u))
     if heading_deg:
         a = math.radians(heading_deg)
         hdg = math.cos(a) * hdg + math.sin(a) * right
-    r_new = r + u * altitude_m + hdg * downrange_m + right * crossrange_m
-    spd = float(np.linalg.norm(v)) + speed_m_s
-    v_new = hdg * spd
+    # E5-05c fix: keep the vertical velocity. The FL-304 form rebuilt the
+    # velocity as ``hdg * |v|`` -- purely horizontal at the full speed --
+    # which only a near-level separation (the textbook FPA +2 deg state)
+    # survives; a lofted RTLS separation (~40 deg) flew level and missed by
+    # 125-167 km whatever the draw.
+    v_new = hdg * hn + u * v_up
+    speed = float(np.linalg.norm(v))
+    if speed_m_s:
+        v_new = v_new * ((speed + speed_m_s) / speed)
     return BoosterState(t_s=sep_state.t_s, epoch_utc=sep_state.epoch_utc,
                         frame="ECEF",
                         position_m=tuple(float(c) for c in r_new),
