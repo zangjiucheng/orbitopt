@@ -1384,7 +1384,7 @@ ENTRY_CUTOFF_CAP_S = 45.0
 #: ... and the planning clearance [m] above the corridor height h0 that its
 #: cutoff should keep (objective term; dispersions must not push the cut
 #: below h0, where the handoff would be engine-on and rejected).
-ENTRY_CUTOFF_MIN_CLEARANCE_M = 500.0
+ENTRY_CUTOFF_MIN_CLEARANCE_M = 1500.0
 
 
 def _unpack_script(x: np.ndarray, entry_burns: int = 1, entry_throttle: bool = False

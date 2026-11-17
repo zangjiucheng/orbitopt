@@ -17,7 +17,7 @@ Default recipe (every knob a CLI flag, recorded in the output):
 
 * closed-loop return: IIP boostback cutoff (``x[1]`` = aim km past the
   pad), speed-cut entry burn (``x[6]`` = cutoff speed m/s; the planner
-  rejects an engine-on handoff and asks for 500 m of cutoff clearance above
+  rejects an engine-on handoff and asks for 1500 m of cutoff clearance above
   h0), throttled entry burn, closed-loop landing forecast;
 * landing law at ``--landing-max-accel-g`` 4.0 g (FL-305 default 4.5 g plus
   the drag at ignition broke the 5 g landing-max-g limit) with the declared
