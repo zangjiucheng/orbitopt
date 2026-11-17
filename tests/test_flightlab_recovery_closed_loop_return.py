@@ -133,3 +133,19 @@ def test_closed_loop_options_validate(inputs):
     with pytest.raises(ValueError, match="one-burn"):
         plan_boostback_entry(sep, booster, rt, entry_burns=2, entry_cutoff="speed",
                              search=lambda obj, v: v)
+
+
+def test_landing_reserve_option_selects_the_graded_reserve(inputs):
+    from orbitopt.flightlab.recovery.pipeline import landing_reserve_booster
+
+    booster = inputs[0]
+    target = load_target(SCENARIO)
+    assert landing_reserve_booster(booster, target) is booster          # default: vehicle
+    assert landing_reserve_booster(booster, target, "vehicle") is booster
+    graded = landing_reserve_booster(booster, target, "target")
+    assert graded.landing_propellant_reserve_kg == target.recovery.min_propellant_reserve_kg
+    assert graded.landing_propellant_reserve_kg < booster.landing_propellant_reserve_kg
+    assert landing_reserve_booster(booster, target, 12_000).landing_propellant_reserve_kg == 12_000.0
+    for bad in ("nope", -1.0):
+        with pytest.raises(ValueError, match="landing_reserve"):
+            landing_reserve_booster(booster, target, bad)

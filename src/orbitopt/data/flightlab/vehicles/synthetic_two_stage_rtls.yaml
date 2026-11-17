@@ -220,6 +220,14 @@ data_provenance:
       SEP mass = 105.6 t reserve, docs/adr/flightlab-0008)'
     as_of: 2026-11
     uncertainty_pct: 5.0
+  stages[0].engine.isp_vac_s:
+    provenance: illustrative
+    source: 'E5-05d (#288): stage-1 engine Isp 311->330 s at constant mass flow (docs/adr/flightlab-0008).
+      Isp band 3 % (E5-05c #287): stated for Isp itself, matching the sealed sister vehicle
+      (synthetic_two_stage.yaml); it used to inherit the whole stage''s 5 %, which drove the Monte
+      Carlo reserve sizing. Public Falcon 9-class estimates are tighter (~1 %).'
+    as_of: 2026-11
+    uncertainty_pct: 3.0
   stages[0].engine.burn_end_s:
     provenance: illustrative
     source: 'E5-05d (#288): stage-1 engine Isp 311->330 s at constant mass flow (11->11.702 MN,

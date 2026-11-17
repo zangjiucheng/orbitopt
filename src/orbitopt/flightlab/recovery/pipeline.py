@@ -80,7 +80,7 @@ from orbitopt.flightlab.recovery.propagator import (
 )
 
 __all__ = ["RecoveryOutcome", "fly_recovery", "RECOVERY_GATE_CHECK_ID",
-           "RECOVERY_NOT_ASSESSED", "dispersed_separation_state",
+           "RECOVERY_NOT_ASSESSED", "dispersed_separation_state", "landing_reserve_booster",
            "separation_state_ecef"]
 
 #: Verification check id of the recovery gate: pass = the booster was flown
@@ -314,6 +314,7 @@ def fly_recovery(ascent_run: FlightRun, target: FlightTarget, vehicle_path, *,
         sep_state = separation_state_from_run(ascent_run)
 
     opts = dict(plan_options) if plan_options else {}
+    booster = landing_reserve_booster(booster, target, opts.pop("landing_reserve", "vehicle"))
     landing_opts = opts.pop("landing", None)
     fly_landing = _landing_flight(landing_opts)
     # R-02: merge the handoff / joint-constraint checks into the run only on
@@ -436,6 +437,36 @@ def _landing_flight(landing_options: Mapping[str, Any] | None):
         return fly_landing_burn_closed_loop(*args, guidance=guidance,
                                             mismatch=mismatch, **kwargs)
     return fly
+
+
+def landing_reserve_booster(booster: BoosterModel, target: FlightTarget,
+                            option: str | float | None = "vehicle") -> BoosterModel:
+    """The booster with the landing reserve ``plan_options["landing_reserve"]``
+    selects (E5-05c). ``"vehicle"`` (default) keeps the vehicle file's
+    ``landing_propellant_reserve_kg``; ``"target"`` uses the scenario's
+    ``recovery.min_propellant_reserve_kg`` -- the gate the mission is graded
+    on -- so the planner's reserve and the landing's
+    ``LANDING_PROPELLANT_RESERVE_LOW`` check stop holding a stricter number
+    than the mission does; a number [kg] sets it directly. Both the planner
+    and the landing grade read the returned model. A planning margin above
+    it belongs in ``landing_reserve_margin_kg``, sized from the Monte Carlo
+    spread, not folded into the graded reserve."""
+    if option is None or option == "vehicle":
+        return booster
+    if option == "target":
+        kg = target.recovery.min_propellant_reserve_kg
+        if kg is None:
+            raise ValueError("landing_reserve='target' but the target declares no "
+                             "recovery.min_propellant_reserve_kg")
+    else:
+        try:
+            kg = float(option)
+        except (TypeError, ValueError):
+            raise ValueError(f"landing_reserve must be 'vehicle', 'target' or kg, "
+                             f"got {option!r}") from None
+        if not kg >= 0.0:
+            raise ValueError(f"landing_reserve must be >= 0 kg, got {kg}")
+    return replace(booster, landing_propellant_reserve_kg=float(kg))
 
 
 def separation_state_ecef(ascent_run: FlightRun) -> BoosterState:

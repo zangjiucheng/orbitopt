@@ -608,10 +608,15 @@ class _Mission:
                  eb2: EntryBurnPlan | None = None, *,
                  iip_aim_m: float | None = None, pad_ecef: np.ndarray | None = None,
                  return_dir: np.ndarray | None = None, vernier_throttle: float = 0.0,
-                 entry_cut_speed_m_s: float | None = None):
+                 entry_cut_speed_m_s: float | None = None,
+                 bb_floor_mass_kg: float | None = None):
         self.t_sep = float(t_sep)
         self.bb = bb
         self.eb = eb
+        #: IIP boostback: the burn also ends when the stage is down to this
+        #: mass (dry + the planner's reserve) -- a burn that cannot reach its
+        #: aim stops where no landing would be possible anyway
+        self.bb_floor_mass_kg = bb_floor_mass_kg
         self.eb2 = eb2
         self.bearing_of = bearing_of
         self.entry_t0: float | None = None
@@ -652,6 +657,10 @@ class _Mission:
             throttle = self.bb.throttle
             iip = None
             if self.iip_aim_m is not None:
+                if (self.bb_floor_mass_kg is not None
+                        and float(state.mass_kg) <= self.bb_floor_mass_kg):
+                    self.bb_cut_t = float(t)
+                    return None
                 iip = vacuum_iip_ecef(r, v, self.surface_r)
                 if iip is not None:
                     to_go = self.iip_aim_m - float((iip - self.pad_ecef) @ self.return_dir)
@@ -853,6 +862,8 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
     for e in tr.events:
         if e.kind == "burn_end" and e.data.get("reason") == "PROPELLANT_EXHAUSTED":
             t0, t1 = bb_window
+            if getattr(mission, "bb_cut_t", None) is not None:
+                t1 = mission.bb_cut_t  # IIP boostback: its actual end, not the cap
             out.exhausted = "boostback" if t0 - 1e-6 <= e.t_s <= t1 + 1.5 * dt else "entry"
 
     pad = np.asarray(target.position_ecef_m, dtype=np.float64)
@@ -1161,7 +1172,8 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     [km] past the pad, along the return direction, that the vacuum
     instantaneous impact point (:func:`vacuum_iip_ecef`) must reach before
     cutoff (drag pulls the real impact back short of it), with
-    :data:`IIP_BOOSTBACK_CAP_S` as the burn-time cap. A fixed-duration burn
+    a propellant floor (dry + reserve) and :data:`IIP_BOOSTBACK_CAP_S` as the
+    burn-time safety cap. A fixed-duration burn
     moves the impact by ~10 km per 0.5 s on the reference RTLS fixture, so
     any thrust / Isp / separation dispersion throws it tens of km off; the
     IIP cutoff absorbs them; the IIP also steers the burn (cross-track).
@@ -1279,7 +1291,8 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
         if iip_mode:
             bb = replace(bb, duration_s=IIP_BOOSTBACK_CAP_S)
             kw.update(iip_aim_m=1000.0 * float(x[1]), pad_ecef=pad_ecef,
-                      return_dir=return_dir, vernier_throttle=eng.throttle_min)
+                      return_dir=return_dir, vernier_throttle=eng.throttle_min,
+                      bb_floor_mass_kg=dry + reserve)
         if speed_mode:
             kw["entry_cut_speed_m_s"] = float(x[6])
             eb = replace(eb, duration_s=ENTRY_CUTOFF_CAP_S)
@@ -1373,9 +1386,13 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                      chance=chance, layout=(entry_burns, entry_throttle))
 
 
-#: E5-05c ``boostback_cutoff="iip"``: burn-time cap [s] of the IIP-targeted
-#: boostback (the cutoff, not this, ends a nominal burn).
-IIP_BOOSTBACK_CAP_S = 60.0
+#: E5-05c ``boostback_cutoff="iip"``: burn-time safety cap [s] of the
+#: IIP-targeted boostback. The burn ends at its IIP aim, or when the stage is
+#: down to dry mass + the planner's reserve; this cap is never meant to bind.
+#: It was 60 s, which bound before the aim for a heavier or thrust-low stage
+#: and turned the dispersion back into miss (+48 t Monte Carlo: 35-37/64
+#: samples off the corridor).
+IIP_BOOSTBACK_CAP_S = 300.0
 #: ... and the distance to the aim [m] inside which it throttles down to the
 #: engine floor (the vernier phase that makes the cutoff precise).
 IIP_VERNIER_M = 3000.0

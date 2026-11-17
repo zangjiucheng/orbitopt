@@ -77,6 +77,7 @@ from orbitopt.flightlab.recovery.boostback import (  # noqa: E402
     INSUFFICIENT_PROPELLANT_RESERVE, RecoveryTarget)
 from orbitopt.flightlab.recovery.pipeline import (  # noqa: E402
     _landing_flight, _landing_limits_for_target, dispersed_separation_state,
+    landing_reserve_booster,
     fly_recovery, separation_state_ecef)
 from orbitopt.flightlab.recovery.propagator import (  # noqa: E402
     BoosterModel, BoosterPhysics)
@@ -134,7 +135,8 @@ def run_sample(job: dict[str, Any]) -> dict[str, Any]:
                 and p.landing_burn_initial_state is not None):
             land = _landing_flight(opts.get("landing"))(
                 p.landing_burn_initial_state_enu, p.landing_burn_initial_state,
-                RecoveryTarget.from_scenario(target.to_dict()), vehicle,
+                RecoveryTarget.from_scenario(target.to_dict()),
+                landing_reserve_booster(vehicle, target, opts.get("landing_reserve")),
                 limits=_landing_limits_for_target(target), physics=physics)
             td = touchdown_readout(dataclasses.replace(out, landing=land))
             rec["probe"] = True

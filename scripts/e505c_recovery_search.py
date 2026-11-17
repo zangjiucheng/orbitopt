@@ -106,6 +106,14 @@ def add_recipe_args(ap: argparse.ArgumentParser) -> None:
                     help="closed-loop landing law thrust ceiling [g] (FL-305 default 4.5)")
     ap.add_argument("--no-actuator", action="store_true",
                     help="fly the landing without the declared TVC actuator set")
+    ap.add_argument("--landing-reserve", default="target",
+                    help="graded landing reserve: 'target' (the scenario's "
+                         "min_propellant_reserve_kg, 10 t), 'vehicle' (the vehicle "
+                         "file's 15 t planning number) or kg")
+    ap.add_argument("--reserve-margin-kg", type=float, default=2500.0,
+                    help="planning margin above the graded reserve "
+                         "(landing_reserve_margin_kg; 2500 = the +48 t Monte Carlo nominal-to-p01 "
+                         "touchdown spread, Isp 3 %%)")
     ap.add_argument("--aim-margin", type=float, default=7000.0,
                     help="corridor_aim_margin_m: planning aim radius = 8 km - this "
                          "(default 7000 -> 1 km; the 8 km referee is unchanged)")
@@ -132,7 +140,10 @@ def build_recipe(args) -> dict[str, Any]:
         corridor_aim_margin_m=float(args.aim_margin),
         entry_q_max_pa=float(args.q_max), entry_g_max=float(args.g_max),
         horizon_s=float(args.horizon), dt_opt=float(args.dt_opt),
-        dt_final=float(args.dt_final), landing=landing)
+        dt_final=float(args.dt_final), landing=landing,
+        landing_reserve=(args.landing_reserve if args.landing_reserve in ("target", "vehicle")
+                         else float(args.landing_reserve)),
+        landing_reserve_margin_kg=float(args.reserve_margin_kg))
 
 
 def seed_for(recipe: dict[str, Any]) -> list[float]:
