@@ -18,7 +18,7 @@
     }
   },
   {
-    "t_s": 56.49891909457256,
+    "t_s": 56.1548679805054,
     "kind": "max_q",
     "body_id": "stage1",
     "data": {
@@ -73,25 +73,25 @@
     }
   },
   {
-    "t_s": 481.4680030846935,
+    "t_s": 480.93226636786517,
     "kind": "impact",
     "body_id": "stage1_debris",
     "data": {
       "ot_event": "impact",
-      "latitude_deg": 9.732983462113907,
-      "longitude_deg": -48.99531064365144,
-      "speed_mps": 2133.197945242857
+      "latitude_deg": 9.71502373429738,
+      "longitude_deg": -49.01087020501756,
+      "speed_mps": 2220.5039691585207
     }
   },
   {
-    "t_s": 1163.2862134702816,
+    "t_s": 1162.6413037368786,
     "kind": "impact",
     "body_id": "stage2_fairing",
     "data": {
       "ot_event": "impact",
-      "latitude_deg": 13.751310924251808,
-      "longitude_deg": -45.80229556623345,
-      "speed_mps": 25.31629163209427
+      "latitude_deg": 13.722979638375358,
+      "longitude_deg": -45.827405446205816,
+      "speed_mps": 25.31627626765641
     }
   }
 ]

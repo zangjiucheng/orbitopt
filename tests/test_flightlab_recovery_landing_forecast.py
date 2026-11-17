@@ -35,6 +35,10 @@ SCENARIO = DATA / "scenarios" / "leo_two_stage_rtls.yaml"
 ASCENT = REPO / "tests" / "data" / "mission" / "reference" / "e5-05a-rtls-mission" / "ascent"
 #: the +30 t one-burn script of scripts/e505c_recovery_search.py (SEEDS[1])
 SEED = [22.37, 49.76, 1.0, 0.0, -0.127, 20492.6, 18.54, 1.0]
+#: the E5-05d separation mass + 30 t these scripts were tuned on, pinned
+#: absolute: the re-baked fixture (E5-05c stage-1 resize) already carries
+#: the +48 t reserve, at the same separation kinematics
+SEP_MASS_KG = 165_433.8
 
 
 @pytest.fixture(scope="module")
@@ -72,7 +76,7 @@ def handoff_inputs(booster):
     run = read_run(ASCENT)
     target = load_target(SCENARIO)
     sep = separation_state_ecef(run)
-    sep = dataclasses.replace(sep, mass_kg=sep.mass_kg + 30_000.0)
+    sep = dataclasses.replace(sep, mass_kg=SEP_MASS_KG)
     return sep, RecoveryTarget.from_scenario(target.to_dict()), target
 
 

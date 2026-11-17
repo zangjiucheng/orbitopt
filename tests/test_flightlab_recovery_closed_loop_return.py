@@ -33,6 +33,10 @@ SCENARIO = DATA / "scenarios" / "leo_two_stage_rtls.yaml"
 ASCENT = REPO / "tests" / "data" / "mission" / "reference" / "e5-05a-rtls-mission" / "ascent"
 #: the +30 t one-burn script (scripts/e505c_recovery_search.py SEEDS[1])
 SEED = [22.37, 49.76, 1.0, 0.0, -0.127, 20492.6, 18.54, 1.0]
+#: the E5-05d separation mass + 30 t these scripts were tuned on, pinned
+#: absolute: the re-baked fixture (E5-05c stage-1 resize) already carries
+#: the +48 t reserve, at the same separation kinematics
+SEP_MASS_KG = 165_433.8
 MU = 3.986004418e14
 OMEGA = 7.2921159e-5
 
@@ -81,7 +85,7 @@ def inputs():
     run = read_run(ASCENT)
     rt = RecoveryTarget.from_scenario(load_target(SCENARIO).to_dict())
     sep = separation_state_ecef(run)
-    return booster, rt, dataclasses.replace(sep, mass_kg=sep.mass_kg + 30_000.0)
+    return booster, rt, dataclasses.replace(sep, mass_kg=SEP_MASS_KG)
 
 
 def _plan(booster, rt, sep, *, thrust=1.0, **kw):
@@ -116,7 +120,9 @@ def test_speed_cut_entry_burn_does_not_over_brake(inputs):
     fixed = _plan(booster, rt, sep, thrust=1.05, boostback_cutoff="iip").corridor_report
     cut = _plan(booster, rt, sep, thrust=1.05, boostback_cutoff="iip",
                 entry_cutoff="speed").corridor_report
-    assert fixed.speed_m_s < 100.0                     # 5 % hot: brakes to ~90 m/s
+    # 5 % hot: brakes to ~90-102 m/s (E5-05d / E5-05c-resized fixture kinematics),
+    # well under the 162 m/s cut the speed-cut burn stops at
+    assert fixed.speed_m_s < 110.0
     assert cut.speed_m_s > 140.0                       # stops at the cut speed instead
     # what over-braking costs is what is left once the landing burn has flown
     left_fixed = fixed.propellant_available_kg - fixed.landing_need_kg

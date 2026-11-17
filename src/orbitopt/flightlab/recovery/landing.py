@@ -1574,6 +1574,10 @@ class LandingPrediction:
     touchdown_vertical_m_s: float
     touchdown_lateral_m_s: float
     touchdown_miss_m: float
+    #: peak proper acceleration [g] (|thrust + drag| / m g0) over the burn --
+    #: what the landing-max-g check grades on the flown track (E5-05c: the
+    #: thrust cap alone does not bound it while drag is still large)
+    max_proper_g: float = 0.0
 
 
 def predict_closed_loop_landing(position_enu_m: Sequence[float],
@@ -1604,6 +1608,7 @@ def predict_closed_loop_landing(position_enu_m: Sequence[float],
     m0 = m = float(mass_kg)
     t_max_pad, _ = _ambient_thrust_envelope(vehicle, pad_altitude_m)
     ignited, cut, ign_h = False, False, None
+    max_g = 0.0
     for _ in range(int(400.0 / dt_s)):
         alt = float(r[2]) + float(pad_altitude_m)
         t_max, t_min = _ambient_thrust_envelope(vehicle, alt)
@@ -1631,7 +1636,8 @@ def predict_closed_loop_landing(position_enu_m: Sequence[float],
                     m -= force / (isp * G0_M_S2) * dt_s
         if m <= dry:
             return LandingPrediction(False, m0 - dry, ign_h, float(-v[2]),
-                                     float(np.hypot(v[0], v[1])), float(np.hypot(r[0], r[1])))
+                                     float(np.hypot(v[0], v[1])), float(np.hypot(r[0], r[1])),
+                                     max_g)
         speed = float(np.linalg.norm(v))
         drag = np.zeros(3)
         if speed > 0.0:
@@ -1639,6 +1645,9 @@ def predict_closed_loop_landing(position_enu_m: Sequence[float],
             mach = speed / max(speed_of_sound_m_s(h), 1.0)
             q = 0.5 * density_kg_m3(h) * speed * speed
             drag = -(q * vehicle.cd(mach) * vehicle.reference_area_m2 / speed) * v
+        # graded like the flown track's max_proper_g: the whole handoff-to-
+        # touchdown leg (coast drag included)
+        max_g = max(max_g, float(np.linalg.norm(thrust + drag)) / (m * G0_M_S2))
         a = (thrust + drag) / m + np.array([0.0, 0.0, -gravity_m_s2])
         v = v + a * dt_s
         r = r + v * dt_s
@@ -1646,7 +1655,7 @@ def predict_closed_loop_landing(position_enu_m: Sequence[float],
             break
     vz, vl = float(-v[2]), float(np.hypot(v[0], v[1]))
     return LandingPrediction(vz <= touchdown_speed_limit_m_s, m0 - m, ign_h, vz, vl,
-                             float(np.hypot(r[0], r[1])))
+                             float(np.hypot(r[0], r[1])), max_g)
 
 
 class _ClosedLoopLanding:

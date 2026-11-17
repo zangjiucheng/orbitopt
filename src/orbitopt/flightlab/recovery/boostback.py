@@ -927,7 +927,8 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
                 pred.feasible
                 and pred.touchdown_vertical_m_s <= landing_limits.vertical_speed_max_m_s
                 and pred.touchdown_lateral_m_s <= landing_limits.lateral_speed_max_m_s
-                and pred.touchdown_miss_m <= landing_limits.position_tol_m)
+                and pred.touchdown_miss_m <= landing_limits.position_tol_m
+                and pred.max_proper_g <= landing_limits.max_proper_g)
         out.crossed = True
         out.event = ev
 
@@ -1004,6 +1005,7 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
                         - landing_limits.lateral_speed_max_m_s) / 10.0) ** 2
             pen += (max(0.0, lp.touchdown_miss_m - landing_limits.position_tol_m)
                     / 250.0) ** 2
+            pen += (max(0.0, lp.max_proper_g - landing_limits.max_proper_g) / 0.5) ** 2
         # R-01 fuel reserve: landing need + vehicle reserve + margin, so the
         # plan keeps headroom for the dispersions the momentum-balance need
         # cannot see (margin 0 = the FL-305 violation-only term).
