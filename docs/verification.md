@@ -161,6 +161,48 @@ consumer of it skips with the reason until a recording lands. See the
 regression CI page's E5-05 status note and ContextDB record
 `e5-05-rtls-infeasibility-evidence`.
 
+## Full-chain reference validation (E8-01, task #281)
+
+E5-05 commits the full-physical reference mission; E8-01 grades that
+*recorded chain* — MECO, separation, fairing jettison, SECO/insertion, the
+RTLS boostback/entry coast and the landing — against the independent
+references committed with it, in one `full-chain-reference` report
+(`python -m orbitopt.verify.full_chain`, gated by
+`tests/test_e801_full_chain.py`). Every band and its derivation are listed
+in the [reference tolerance audit](reference-tolerance-audit.md#full-chain-reference-bands-e8-01-task-281);
+the PROVENANCE digest check re-runs on every build, so the report can never
+be graded off edited data. No simulation runs: all compared numbers are the
+committed reference files.
+
+The E4-03 evidence split is honest about what is what:
+
+* `independent_model` — the raw OpenTsiolkovsky v1.0.0 recording
+  (externally developed binary, pinned digest): the chain's MECO,
+  separation, jettison and SECO event times re-extracted from the raw
+  state history (thrust-off / staging-mass transitions, not the event
+  records the adapter copied), the achieved parking orbit against the
+  frame-bridged raw SECO state, and the gfold recovery leg against the raw
+  OT stage-1 debris track over the shared unpowered window between
+  separation and boostback ignition.
+* `analytical` — vis-viva/Kepler identities of the recorded SECO state,
+  the Tsiolkovsky ideal-Δv bound on the stage-2 burn, and exact two-body
+  propagation of the boostback coast to the entry interface.
+* `numerical_consistency` — SECO-state serialisation/bridge round-trip,
+  landing-ignition and touchdown events against the sealed booster state
+  history.
+* `design_input` — the touchdown gates, graded against the flight target's
+  own limits. The landing of a synthetic vehicle has no independent or
+  telemetry reference, and no check claims one
+  (`historical_telemetry: not_checked`).
+
+Because the ascent was computed *by* OpenTsiolkovsky, the event checks
+validate the chain's extraction, framing and reporting of the external
+recording rather than two independent ascent simulators; the recovery leg
+is where two independently formulated models (gfold 6-DOF vs the pinned
+external binary) genuinely cross. The report's
+`inputs.honesty_notes` repeat this so a reader of the JSON alone cannot
+miss it.
+
 ## Benchmarks against public references
 
 ```bash
