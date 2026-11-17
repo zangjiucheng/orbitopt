@@ -235,14 +235,18 @@ def test_full_chain_ascent_is_computed_by_opentsiolkovsky(tmp_path):
     assert 0.0 < meco.t_s < stage1.t_s[-1], "MECO must fall inside the flown stage-1 arc"
 
     # -- SECO state: the chain's parking-orbit handoff IS the computed track
-    # sample at the engine's seco event (identity frame bridge for GCRS)
+    # first sample at or after SECO (identity frame bridge for GCRS). The
+    # nearest point on the output grid can still be inside the final burn.
     seco = next(e for e in run.events if e.kind == "seco")
     ins = gate_checks.insertion_state(run)
     stage2 = _track(run, "stage2")
     assert ins["body_id"] == "stage2"
-    assert abs(ins["t_s"] - seco.t_s) <= 1.0
-    nearest = min(range(len(stage2.t_s)), key=lambda i: abs(stage2.t_s[i] - seco.t_s))
-    assert ins["t_s"] == stage2.t_s[nearest]
+    insertion_idx = next(i for i, t in enumerate(stage2.t_s) if t >= seco.t_s)
+    assert ins["t_s"] == stage2.t_s[insertion_idx]
+    assert ins["event_t_s"] == seco.t_s
+    assert ins["position_m"] == stage2.position_m[insertion_idx]
+    assert ins["velocity_m_s"] == stage2.velocity_m_s[insertion_idx]
+    assert ins["mass_kg"] == stage2.mass_kg[insertion_idx]
     parked = mission.parking["state"]
     assert all(abs(a - b) <= 1e-6 for a, b in zip(parked["position_m"], ins["position_m"]))
     assert all(abs(a - b) <= 1e-6 for a, b in zip(parked["velocity_m_s"], ins["velocity_m_s"]))
