@@ -1,13 +1,13 @@
 {
   "schema_version": "1.0",
-  "run_id": "ot-4d2ae2db-5cb541cc",
-  "target_sha256": "4d2ae2db9d050946d62510b3b4cd1073e388697f320d29f5e0c33c61c498b1e9",
+  "run_id": "ot-b8782596-5cb541cc",
+  "target_sha256": "b87825969f82efca9db1781ec15eca86e2ff7fdd586911eb5b983e829e1c84fc",
   "vehicle_sha256": "9eac5b99b772583fed847490944bfcd6cf7fb8ac5e9342357e86639f5ed5f287",
   "engines": {
     "opentsiolkovsky-cli": "1.0.0"
   },
   "backend": "opentsiolkovsky",
-  "git_sha": "db7890fa2e581bda6336059f3da88b8fc83d4d48",
+  "git_sha": "04c8804ccbf4969909a4c2dd2638552dbab8a41c",
   "created_utc": "2026-11-10T12:00:00Z",
   "assumptions": [
     "OpenTsiolkovsky 1.0.0 (MIT, external binary -- not vendored; see NOTICE; openTsiolkovsky-v1.0.0-<platform>.tar.gz, pinned per-platform SHA-256 digests live in scripts/fetch_opentsiolkovsky.py)",
@@ -21,12 +21,12 @@
     "vehicle: Landing reserve 15 t (planning margin carried by the booster model); the graded minimum is the flight target's recovery.min_propellant_reserve_kg.",
     "vehicle: Derived-not-copied design: campaign + recovery-budget provenance in docs/adr/flightlab-0008.",
     "target: E5-05a redesign target: the ascent must reach MECO with a computed (not depleted) stage-1 propellant reserve and still insert at the 250 km reference orbit; the RTLS recovery chain plans from that computed separation state.",
-    "target: Max-acceleration ceiling relaxed to 15 g (uncrewed cargo design assumption); max-q kept at the sealed 60 kPa value.",
+    "target: Max-acceleration ceiling relaxed to 45 g (uncrewed cargo; holds the computed 38.9 g restart-burn peak with margin, ADR-0008 F10); max-q kept at the sealed 60 kPa value. The insertion band is the F9 closure band (periapsis floor 230 km, |apoapsis - 250 km| < 60 km, plane 1 deg) -- see constraints, task",
     "target: Recovery plan overrides (entry_q_max_pa 250 kPa, max_fevals 140 on the frozen FL-305 start) are per-plan options carried by the mission file's recovery.plan_options, not target constraints; the entry-g ceiling stays at the default 8 g. See docs/adr/flightlab-0008."
   ],
   "toolchain": {
     "python": "3.13.18",
-    "orbitopt": "0.1.0",
+    "orbitopt": "unknown (source tree; see git_sha)",
     "numpy": "2.5.4",
     "scipy": "1.18.1",
     "astropy": "8.0.2",

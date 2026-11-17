@@ -36,13 +36,14 @@ because the replay re-flies the RECOVERY chain on a possibly different
 build of the same pinned stack: the ascent itself is replayed byte-for-byte
 from ``mission-optimized/launch/ascent`` (no tolerance applies -- digest
 identity, enforced by ``verify``), and the recovery plan restarts from the
-identical separation state on FL-305's pinned warm start
-(``initial_guess`` + ``max_fevals: 18``, the FL-305 acceptance recipe), so
-the only legitimate source of difference is cross-build floating-point
-drift. 1 cm / 0.1 mm/s flight-state bands (as E2-04 established on the same
-chain) leave the pinned-solver results far more room than gfold's own solver
-tolerances need while still failing any physics change that matters; the
-1e-6 transform/constants bands carry the platform-dependent frame-bridge
+identical separation state on the pinned E5-05c fixed script
+(``search: keep`` + the MC-verified ``initial_guess``, the recipe
+``docs/adr/flightlab-0008`` closes F10 with), so the only legitimate source
+of difference is cross-build floating-point drift. 1 cm / 0.1 mm/s
+flight-state bands (as E2-04 established on the same chain) leave the
+pinned-solver results far more room than gfold's own solver tolerances need
+while still failing any physics change that matters; the 1e-6
+transform/constants bands carry the platform-dependent frame-bridge
 roundoff (~1.4e-7 on the reviewed Linux/macOS builds); the landing-plan
 diagnostic band (1 g fuel / 10 ms TOF) is 50x inside plan_scp's own 0.05 kg
 stopping budget and 1/10 of the closed-loop landing integrator's 0.1 s step.
@@ -93,16 +94,15 @@ PROVENANCE = REF_ROOT / "PROVENANCE.json"
 EOP_SNAPSHOT = REF_ROOT / "earth_orientation.json"
 NOT_RECORDED = (
     "E5-05 reference NOT recorded yet: no E5-05 recording exists under "
-    f"{REF_ROOT}. RTLS from a computed OpenTsiolkovsky ascent is physically "
-    "infeasible for the current catalog vehicle (stage-1 separates dry, and "
-    "no stage-2 slack can carry the recovery propellant RTLS needs -- see the "
-    "ContextDB record e5-05-rtls-infeasibility-evidence). The recording "
-    "awaits an epic-owner decision (vehicle/ascent redesign or acceptance "
-    "revision); every consumer of the reference skips, and arms itself, on "
-    "the directory's existence.")
+    f"{REF_ROOT}. The scenario of record is executable since the E5-05a..d "
+    "re-base onto the RTLS-capable `synthetic_two_stage_rtls` vehicle "
+    "(docs/adr/flightlab-0008); make the recording with "
+    "`python scripts/e505_reference.py update` (OpenTsiolkovsky binary + "
+    "pygmo + gfold, ~30 min). Every consumer of the reference skips, and "
+    "arms itself, on the directory's existence.")
 SCENARIO_YAML = REPO / "src" / "orbitopt" / "data" / "mission_two_stage_leo_rtls_reference.yaml"
 REPLAY_YAML = REPO / "src" / "orbitopt" / "data" / "mission_two_stage_leo_rtls_replay.yaml"
-VEHICLE = REPO / "src" / "orbitopt" / "data" / "flightlab" / "vehicles" / "synthetic_two_stage.yaml"
+VEHICLE = REPO / "src" / "orbitopt" / "data" / "flightlab" / "vehicles" / "synthetic_two_stage_rtls.yaml"
 COMMIT_TAG = "[e505-reference-update]"
 GOLDEN_GFOLD = "0.3.2"
 GOLDEN_OT = "1.0.0"
@@ -751,8 +751,11 @@ def cmd_update(*, tolerances_only: bool = False) -> int:
         TOLERANCES.write_text(json.dumps(DEFAULT_TOLERANCES, indent=2) + "\n",
                               encoding="utf-8")
         print(f"wrote default {TOLERANCES}")
+    import yaml
+
     from orbitopt.flightlab.contract import read_run
 
+    ref_doc = yaml.safe_load(SCENARIO_YAML.read_text(encoding="utf-8"))["scenario"]
     ascent = read_run(OPTIMIZED_DIR / "launch" / "ascent")
     replay_report = json.loads((MISSION_DIR / "mission.verification.json")
                                .read_text(encoding="utf-8"))
@@ -775,11 +778,12 @@ def cmd_update(*, tolerances_only: bool = False) -> int:
                                       .get("coupled_branches", {}) or {}).get("handoff_id"),
         },
         "frozen_inputs": {
-            "recovery_plan_options": {"initial_guess": [18.4, 17.75, 1.0, 4.36, 0.0,
-                                                        17456.0, 23.0], "max_fevals": 18},
-            "plan_options_source": "FL-305 acceptance recipe (NOMINAL_PLAN_GUESS warm "
-                                   "start + FL-304 local-refinement budget), pinned in "
-                                   "both scenario documents",
+            "recovery_plan_options": ref_doc["recovery"]["plan_options"],
+            "recovery_spec": ref_doc["recovery"]["spec"],
+            "plan_options_source": "E5-05c Monte-Carlo-verified fixed script "
+                                   "(search: keep; n=64 dispersed flights 64/64 landed, "
+                                   "touchdown reserve min 12.0 t vs the 10 t gate), pinned "
+                                   "in all three scenario documents (docs/adr/flightlab-0008)",
             "vehicle_sha256": _digest(VEHICLE),
             "scenario_sha256": _digest(SCENARIO_YAML),
             "replay_scenario_sha256": _digest(REPLAY_YAML),

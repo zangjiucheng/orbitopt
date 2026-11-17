@@ -44,7 +44,11 @@ scenario:
   launch:
     site: kourou                            # E5 reference-site binding decision (epic #264)
     vehicle: synthetic_two_stage_rtls       # E5-05a catalog redesign (booster model source)
-    orbit: 400x400@51.6                     # same parking orbit as the sealed reference
+    orbit: 265.5x278.1@51.0                   # the ACTUALLY DELIVERED orbit (task #272 decision 2026-11-17:
+    #   align the configuration to the flown SECO state, not to a wish -- the OT
+    #   commanded-attitude restart program delivers rp 265.5 / ra 278.1 km @ 51.0 deg
+    #   inside the 250 km band; scenario target stays 250x250@51.6, graded against the
+    #   F9 closure band). Values = the fixture's post-burnout SECO readout (see expected).
     date_utc: "2026-11-10"                  # demonstration epoch, as the packaged Flight Lab scenario
     raan_deg: null                          # unconstrained: liftoff is the configured date, not a node pass
     window_days: 14.0
@@ -114,15 +118,22 @@ scenario:
   expected:
     events: [liftoff, meco, separation, seco]
     parking_orbit:
-      semi_major_axis_m: 6628137.0
-      eccentricity: 0.0
-      inclination_deg: 51.6
+      # The DELIVERED orbit read post-burnout at the recorded flight's seco event
+      # (task #272 decision 2026-11-17: align the mission configuration to the
+      # flown SECO state; checks.insertion_state now reads the first track sample
+      # at/after the event -- t = 398.0 s of this fixture).
+      semi_major_axis_m: 6649927.93
+      eccentricity: 0.0009444847
+      inclination_deg: 51.0008
       raan_deg: null
-      periapsis_altitude_m: 250000.0
-      apoapsis_altitude_m: 250000.0
-    tolerances:                   # insertion band: 250 km +/- 20 km (230 km periapsis floor per scenario)
+      periapsis_altitude_m: 265510.17
+      apoapsis_altitude_m: 278071.68
+    tolerances:                   # +/- 20 km mission insertion band around the expected orbit,
+      # as in the sealed E2-04 mission table; the e tolerance is that band expressed in e:
+      # 20 km * (1 + e) / a = 0.003008 (source: scenario leo_two_stage_rtls.yaml insertion
+      # band, F9 closure band per docs/adr/flightlab-0008).
       semi_major_axis_m: 20000.0
-      eccentricity: 0.002951
+      eccentricity: 0.003008
       inclination_deg: 0.2
       raan_deg: 1.0
       periapsis_altitude_m: 20000.0

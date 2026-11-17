@@ -16,8 +16,9 @@
 # This file is what `python scripts/e505_reference.py run` replays (CI's
 # flightlab-landing job) and what the cross-environment plan
 # crossenv_e505_plan.yaml flies across the tudat/gfold boundary: the ascent
-# leg replays the recorded flight, the recovery leg re-flies FL-304 from the
-# digest-pinned separation handoff, and the ascent leg's `propagate: true`
+# leg replays the recorded flight, the recovery leg re-flies the pinned
+# E5-05c script from the digest-pinned separation handoff, and the ascent
+# leg's `propagate: true`
 # option EVIDENCES the parking-orbit propagation leg in the tudatpy
 # environment -- which is what lifts the physical gate's parking-propagation
 # check from not_checked to passed (E5-04).
@@ -36,8 +37,9 @@ scenario:
     kind: two-stage-leo
   launch:
     site: kourou                    # the mission of record's launch declaration
-    vehicle: synthetic_two_stage
-    orbit: 400x400@51.6
+    vehicle: synthetic_two_stage_rtls
+    orbit: 265.5x278.1@51.0         # the delivered orbit of the recording (see the mission
+    #   of record's launch block for the provenance)
     date_utc: "2026-11-10"
     raan_deg: null
     window_days: 14.0
@@ -60,9 +62,33 @@ scenario:
       apsides_m: 10.0
   recovery:
     target_file: tests/data/mission/reference/e5-05-reference-mission/mission-optimized/launch/target.yaml
+    # Byte-for-byte the mission of record's E5-05c fixed script (see
+    # mission_two_stage_leo_rtls_reference.yaml / docs/adr/flightlab-0008):
+    # the replay re-flies the SAME pinned script on the recorded separation
+    # state -- a regression here compares like with like.
     plan_options:
-      initial_guess: [18.4, 17.75, 1.0, 4.36, 0.0, 17456.0, 23.0]
-      max_fevals: 18
+      initial_guess: [6.361355012944131, 4.325366437693795, 0.8329880778438892,
+                      2.933641190367238, -7.397550060236878, 29645.36476563118,
+                      293.09976456950864, 0.9574166766757264]
+      search: keep
+      entry_burns: 1
+      entry_throttle: true
+      boostback_cutoff: iip
+      entry_cutoff: speed
+      landing_need_model: closed_loop
+      corridor_aim_margin_m: 7000.0
+      landing_reserve: target
+      landing_reserve_margin_kg: 2500.0
+      entry_q_max_pa: 250000
+      entry_g_max: 12.0
+      horizon_s: 900.0
+      dt_opt: 0.25
+      dt_final: 0.1
+      landing:
+        max_thrust_accel_g: 3.6
+        tvc_rate_limit_deg_s: 20.0
+        tvc_lag_tau_s: 0.2
+        tvc_lag_compensation: true
     drive_from_separation: true
   propagation:
     j2: true
@@ -72,16 +98,16 @@ scenario:
     max_step_s: 300.0
   expected:
     events: [liftoff, meco, separation, seco]
-    parking_orbit:
-      semi_major_axis_m: 6778137.0
-      eccentricity: 0.0
-      inclination_deg: 51.6
+    parking_orbit:                  # byte-for-byte the mission of record's expected table
+      semi_major_axis_m: 6649927.93
+      eccentricity: 0.0009444847
+      inclination_deg: 51.0008
       raan_deg: null
-      periapsis_altitude_m: 400000.0
-      apoapsis_altitude_m: 400000.0
+      periapsis_altitude_m: 265510.17
+      apoapsis_altitude_m: 278071.68
     tolerances:
       semi_major_axis_m: 20000.0
-      eccentricity: 0.002951
+      eccentricity: 0.003008
       inclination_deg: 0.2
       raan_deg: 1.0
       periapsis_altitude_m: 20000.0

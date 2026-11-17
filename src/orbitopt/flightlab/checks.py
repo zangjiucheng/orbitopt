@@ -196,11 +196,16 @@ def angle_diff_deg(a_deg: float, b_deg: float) -> float:
 
 def insertion_state(run: FlightRun) -> dict:
     """The upper stage's insertion (SECO) state as written in the run: the
-    sample of the ``seco`` event's body track nearest the event time, or the
-    last sample of the last-ending track when the run declares no SECO (e.g.
-    a hand-built test run). Returned dict: ``body_id``, ``t_s``,
-    ``position_m``, ``velocity_m_s``, ``mass_kg``. The track's frame is the
-    manifest's (contract: GCRS after the frame bridge)."""
+    FIRST sample of the ``seco`` event's body track at or after the event
+    time -- the orbit is only achieved once the final burn is over, and on a
+    restarting upper stage the sample NEAREST the event can still sit inside
+    the burn (E5-05, task #272: the 2 s output grid put the nearest sample
+    0.17 s into the restart, where the track still carried the coast orbit).
+    The nearest sample is the fallback when the track ends before the event
+    time, and the last sample of the last-ending track when the run declares
+    no SECO at all (e.g. a hand-built test run). Returned dict: ``body_id``,
+    ``t_s``, ``position_m``, ``velocity_m_s``, ``mass_kg``. The track's frame
+    is the manifest's (contract: GCRS after the frame bridge)."""
     if not run.tracks:
         raise ValueError(f"run {run.run_id!r} has no body tracks -- nothing to verify")
     event = next((e for e in run.events if e.kind == "seco"), None)
@@ -211,7 +216,9 @@ def insertion_state(run: FlightRun) -> dict:
         track = max(run.tracks, key=lambda t: t.t_end_s)
         idx = len(track.t_s) - 1
     else:
-        idx = min(range(len(track.t_s)), key=lambda i: abs(track.t_s[i] - event.t_s))
+        after = [i for i, t in enumerate(track.t_s) if t >= event.t_s]
+        idx = after[0] if after else min(
+            range(len(track.t_s)), key=lambda i: abs(track.t_s[i] - event.t_s))
     return {
         "body_id": track.body_id,
         "t_s": track.t_s[idx],

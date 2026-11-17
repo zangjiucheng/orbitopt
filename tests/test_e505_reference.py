@@ -13,7 +13,8 @@ Fast guards (every CI job, no compute stack needed):
   M-07 sibling;
 * the scenario pair (mission of record / replay) declares the full physical
   mission: computed ascent, RTLS from the launch site, coupled branches, the
-  pinned FL-305 plan recipe, and the honest ``not_checked`` propagation;
+  pinned E5-05c fixed-script recovery recipe, and the honest ``not_checked``
+  propagation;
 * the tolerance file exists and the script documents where every band comes
   from;
 * E2-04 is still here: its scenario, script, test and frozen reference files
@@ -44,16 +45,14 @@ SCENARIO = REPO / "src" / "orbitopt" / "data" / "mission_two_stage_leo_rtls_refe
 REPLAY = REPO / "src" / "orbitopt" / "data" / "mission_two_stage_leo_rtls_replay.yaml"
 PLAN = REPO / "src" / "orbitopt" / "data" / "crossenv_e505_plan.yaml"
 
-# The reference recording is pending an epic-owner decision: RTLS from a
-# computed OpenTsiolkovsky ascent is physically infeasible for the current
-# catalog vehicle (stage-1 separates dry; ContextDB record
-# e5-05-rtls-infeasibility-evidence). Every guard below consumes the
-# recorded reference, so it arms itself on the directory's existence --
-# a fresh `scripts/e505_reference.py update` recording turns them green
-# without touching this file.
+# The recording is made by `python scripts/e505_reference.py update` on the
+# E5-05a..d re-base onto the RTLS-capable `synthetic_two_stage_rtls` vehicle
+# (docs/adr/flightlab-0008); until it has run, every guard below consumes the
+# recorded reference, so it arms itself on the directory's existence -- a
+# fresh recording turns them green without touching this file.
 NOT_RECORDED = pytest.mark.skipif(
     not REF_ROOT.is_dir(),
-    reason="E5-05 reference not recorded yet (vehicle decision pending)")
+    reason="E5-05 reference not recorded yet (scripts/e505_reference.py update)")
 
 
 def _script():
@@ -124,12 +123,19 @@ class TestRecordedAscentIsComputed:
 class TestScenarioPair:
     def test_mission_of_record_computes_and_couples(self):
         s = _yaml(SCENARIO)
+        r = _yaml(REPLAY)
         assert s["ascent"]["mode"] == "optimize"
         assert (s["ascent"]["algorithm"], s["ascent"]["seed"]) == ("cmaes", 11)
         assert s["recovery"]["drive_from_separation"] is True
         assert s["recovery"]["spec"]["kind"] == "rtls"
         assert s["recovery"]["spec"]["target"] == "launch_site"
         assert s["expected"]["propagation_result"] == "not_checked"
+        assert s["launch"]["vehicle"] == r["launch"]["vehicle"] == "synthetic_two_stage_rtls", \
+            "the pair flies the RTLS-capable redesign (task #272 re-base)"
+        assert s["recovery"]["plan_options"] == r["recovery"]["plan_options"], \
+            "the replay pins the same recovery recipe the recording flew"
+        assert s["expected"]["parking_orbit"] == r["expected"]["parking_orbit"]
+        assert s["expected"]["tolerances"] == r["expected"]["tolerances"]
 
     @NOT_RECORDED
     def test_replay_replays_the_recorded_computed_ascent(self):
@@ -140,7 +146,7 @@ class TestScenarioPair:
         assert str(REF_ROOT) in str(run_dir.resolve()), "replay consumes the reference"
         assert (run_dir / "manifest.json").is_file() and target.is_file()
         assert s["recovery"]["drive_from_separation"] is True
-        for key in ("initial_guess", "max_fevals"):
+        for key in ("initial_guess", "search"):
             assert key in s["recovery"]["plan_options"]
             assert key in _yaml(SCENARIO)["recovery"]["plan_options"], (
                 "the replay pins the same recovery recipe the recording flew")
@@ -216,7 +222,7 @@ class TestCrossEnvSingleInterpreter:
         for stage in report["stages"]:
             assert stage["status"] == "completed" and stage["exit_code"] == 0
         assert "coupled-separation-handoff" in report["stages"][0]["payloads"]
-        stage_report = json.loads((out / "recovery" / "stage-report.json")
+        stage_report = json.loads((tmp_path / "cx" / "recovery" / "stage-report.json")
                                   .read_text(encoding="utf-8"))
         assert stage_report.get("driven_from_separation") is True
         prov = json.loads((REF_ROOT / "PROVENANCE.json").read_text(encoding="utf-8"))
