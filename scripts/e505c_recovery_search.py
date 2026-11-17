@@ -19,9 +19,12 @@ Default recipe (every knob a CLI flag, recorded in the output):
   pad), speed-cut entry burn (``x[6]`` = cutoff speed m/s; the planner
   rejects an engine-on handoff and asks for 1500 m of cutoff clearance above
   h0), throttled entry burn, closed-loop landing forecast;
-* landing law at ``--landing-max-accel-g`` 4.0 g (FL-305 default 4.5 g plus
-  the drag at ignition broke the 5 g landing-max-g limit) with the declared
-  TVC actuator set, and the planner forecasts the same law;
+* landing law at ``--landing-max-accel-g`` 3.6 g with the declared TVC
+  actuator set, and the planner forecasts the same law (and its peak
+  proper load). FL-305's 4.5 g plus the drag at ignition broke the 5 g
+  landing-max-g limit; 4.0 g still flew 5.1 g on hot-engine Monte Carlo
+  samples (the cap is a nominal-thrust command, a +5 % engine and the
+  ignition drag ride on top), 3.6 g leaves that margin;
 * planning aim radius 1 km (``corridor_aim_margin_m`` 7000 on the 8 km
   referee, which stays the acceptance radius);
 * entry limits 12 g / 250 kPa (DESIGN ASSUMPTIONs, #287);
@@ -102,8 +105,8 @@ def add_recipe_args(ap: argparse.ArgumentParser) -> None:
                     help="speed cutoff applies to the one-burn script only")
     ap.add_argument("--landing-need-model", choices=("momentum", "closed_loop"),
                     default="closed_loop")
-    ap.add_argument("--landing-max-accel-g", type=float, default=4.0,
-                    help="closed-loop landing law thrust ceiling [g] (FL-305 default 4.5)")
+    ap.add_argument("--landing-max-accel-g", type=float, default=3.6,
+                    help="closed-loop landing law thrust ceiling [g] (FL-305 default 4.5; see docstring)")
     ap.add_argument("--no-actuator", action="store_true",
                     help="fly the landing without the declared TVC actuator set")
     ap.add_argument("--landing-reserve", default="target",
