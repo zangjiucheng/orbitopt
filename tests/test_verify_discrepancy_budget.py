@@ -181,6 +181,7 @@ def test_cli_exit_zero_on_pass_and_one_on_a_gated_failure(tmp_path):
 
 @pytest.mark.slow
 def test_ascent_budget_decomposition_with_probes():
+    pytest.importorskip("jsbsim", reason="the decomposition probes require the optional JSBSim backend")
     res = run_discrepancy_budget(backends=["three_dof", "six_dof"])
     assert res.result == RESULT_PASSED
     pos = _budget(res, "six_dof_vs_three_dof", "ascent", "position_m")

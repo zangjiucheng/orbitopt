@@ -43,6 +43,7 @@ stages:
     runner: ascent
     env: tudat
     options:
+      earth_orientation_snapshot: tests/data/mission/reference/e5-05-reference-mission/earth_orientation.json
       propagate: true               # evidence the parking-orbit leg here
       coupled_separation: true      # seal the E5-02 canonical handoff
 
@@ -56,4 +57,5 @@ stages:
     env: gfold
     consumes: [ascent]
     options:
+      earth_orientation_snapshot: tests/data/mission/reference/e5-05-reference-mission/earth_orientation.json
       drive_from_separation: true

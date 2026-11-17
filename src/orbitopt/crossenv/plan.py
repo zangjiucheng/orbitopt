@@ -98,7 +98,12 @@ def expand_env_vars(text: str) -> str:
 class CrossEnvStage:
     """One planned leg: ``runner`` decides what runs, ``env`` names the
     interpreter that runs it, ``consumes`` lists the stage ids whose sealed
-    exchanges must validate before this stage starts."""
+    exchanges must validate before this stage starts.
+
+    ``options.earth_orientation_snapshot`` optionally names a recorded IERS
+    snapshot to activate for this stage only; :func:`load_plan` resolves it
+    to an absolute path before subprocess launch.
+    """
 
     id: str
     runner: str
@@ -184,10 +189,16 @@ def load_plan(path, *, env_overrides: Mapping[str, str] | None = None) -> CrossE
     stages: list[CrossEnvStage] = []
     seen: set[str] = set()
     for raw in doc["stages"]:
+        options = dict(raw.get("options", {}))
+        if "earth_orientation_snapshot" in options:
+            snapshot = resolve_path(expand_env_vars(options["earth_orientation_snapshot"])).resolve()
+            if not snapshot.is_file():
+                raise PlanError(f"stage {raw['id']!r}: Earth-orientation snapshot {snapshot} does not exist")
+            options["earth_orientation_snapshot"] = str(snapshot)
         stage = CrossEnvStage(
             id=str(raw["id"]), runner=str(raw["runner"]), env=str(raw["env"]),
             consumes=tuple(str(c) for c in raw.get("consumes", ())),
-            options=dict(raw.get("options", {})))
+            options=options)
         if stage.id in seen:
             raise PlanError(f"plan {str(src)!r}: duplicate stage id {stage.id!r}")
         if stage.runner not in KNOWN_RUNNERS:

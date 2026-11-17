@@ -66,6 +66,8 @@ python scripts/e505_reference.py crossenv-check runs/crossenv-e505
 Each stage seals its artifacts in a versioned exchange with SHA-256 digests
 and interpreter/toolchain provenance. The consumer verifies it before use;
 the recovery stage must report the same separation handoff identity. The
+reference plan also selects the recorded Earth-orientation snapshot in both
+interpreters; stage reports record its digest, which `crossenv-check` verifies. The
 joined report must actually pass propagation, landing, insertion, mass and
 continuity checks; configuring this plan alone is not evidence of a pass.
 

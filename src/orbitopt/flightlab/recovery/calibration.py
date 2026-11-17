@@ -38,6 +38,7 @@ reproduces the report byte-for-byte.
 """
 from __future__ import annotations
 
+from math import fsum
 from typing import Any, Iterable, Mapping, Sequence
 
 from orbitopt.flightlab.recovery.stats import success_rate_interval
@@ -103,8 +104,9 @@ def brier_score(pairs: Iterable[Sequence[float]]) -> dict[str, Any]:
     *worse* than ignoring them and quoting the population rate once."""
     ps = _check_pairs(pairs)
     n = len(ps)
-    score = sum((p - y) ** 2 for p, y in ps) / n
-    rate = sum(y for _, y in ps) / n
+    # Keep scores and derived skill independent of sample ordering.
+    score = fsum((p - y) ** 2 for p, y in ps) / n
+    rate = fsum(y for _, y in ps) / n
     reference = rate * (1.0 - rate)
     return {"n": n, "score": score,
             "reference_climatology": reference,
@@ -144,7 +146,7 @@ def reliability_table(pairs: Iterable[Sequence[float]],
             continue
         k = int(sum(y for _, y in sel))
         obs = k / n
-        pred = sum(p for p, _ in sel) / n
+        pred = fsum(p for p, _ in sel) / n
         ci = success_rate_interval(k, n, level)
         gap = obs - pred
         if n < min_bin_n:
@@ -157,7 +159,7 @@ def reliability_table(pairs: Iterable[Sequence[float]],
             verdict = VERDICT_CONSISTENT
         row.update({"successes": k, "observed_rate": obs,
                     "mean_predicted": pred, "gap": gap,
-                    "bin_brier": sum((p - y) ** 2 for p, y in sel) / n,
+                    "bin_brier": fsum((p - y) ** 2 for p, y in sel) / n,
                     "ci": ci, "verdict": verdict})
         table.append(row)
     return table
@@ -177,7 +179,7 @@ def calibration_report(pairs: Iterable[Sequence[float]],
     table = reliability_table(ps, bin_edges, level, min_bin_n)
     n = len(ps)
     graded = [r for r in table if r["n"] >= 1]
-    ece = sum(r["n"] * abs(r["gap"]) for r in graded if r["gap"] is not None) / n
+    ece = fsum(r["n"] * abs(r["gap"]) for r in graded if r["gap"] is not None) / n
     mce = max((abs(r["gap"]) for r in graded if r["gap"] is not None),
               default=0.0)
     briers = brier_score(ps)

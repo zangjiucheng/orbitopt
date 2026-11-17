@@ -23,6 +23,13 @@ on:
       - 'docs/benchmarks/**/*.json'
   workflow_dispatch:
 
+# Retry transient channel HTTP 503s without changing package pins or TLS checks.
+env:
+  MAMBA_REMOTE_MAX_RETRIES: '5'
+  MAMBA_REMOTE_BACKOFF_FACTOR: '3'
+  MAMBA_REMOTE_CONNECT_TIMEOUT_SECS: '30'
+  MAMBA_DOWNLOAD_THREADS: '3'
+
 jobs:
   test:
     name: test (CPU, linux-64, locked env)

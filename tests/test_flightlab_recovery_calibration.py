@@ -173,6 +173,16 @@ class TestCalibrationReport:
         rep = calibration_report(pairs)
         assert rep["brier"] == brier_score(pairs)
 
+    def test_small_errors_survive_mixed_magnitudes_and_reordering(self):
+        from math import fsum
+
+        pairs = [(1.0, 0.0)] + [(1e-9, 0.0)] * 1000
+        report = calibration_report(pairs)
+        expected = fsum((p - y) ** 2 for p, y in pairs) / len(pairs)
+        assert report["brier"]["score"] == expected
+        for reordered in (list(reversed(pairs)), pairs[1:] + pairs[:1]):
+            assert calibration_report(reordered) == report
+
     def test_report_is_a_pure_function_of_the_pairs(self):
         pairs = ([(0.3, 1)] * 4 + [(0.55, 0)] * 60 + [(0.85, 1)] * 20
                  + [(0.97, 1)] * 40)

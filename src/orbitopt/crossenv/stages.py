@@ -25,6 +25,7 @@ import json
 import shutil
 import sys
 import traceback
+from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -300,7 +301,23 @@ def execute_stage(plan: CrossEnvPlan, stage: CrossEnvStage, out_dir) -> int:
               file=sys.stderr)
         return 2
     try:
-        report = runner(plan, stage, out)
+        snapshot_path = stage.options.get("earth_orientation_snapshot")
+        snapshot = None
+        scope = nullcontext()
+        if snapshot_path:
+            from orbitopt.reference_eop import freeze_reference, load_snapshot
+
+            snapshot = load_snapshot(Path(snapshot_path))
+            scope = freeze_reference(snapshot)
+        with scope:
+            report = runner(plan, stage, out)
+        if snapshot is not None:
+            from orbitopt.crossenv.envelope import file_digest
+
+            report["earth_orientation"] = {
+                "snapshot_sha256": file_digest(snapshot_path),
+                "source_version": snapshot["source_version"], "mode": snapshot["mode"],
+            }
         _write_json(stage_dir / "stage-report.json", report)
         return 0
     except Exception as exc:  # noqa: BLE001 -- report, then fail the stage, never traceback-free

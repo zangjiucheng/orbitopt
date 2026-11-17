@@ -174,6 +174,18 @@ class TestPlan:
         assert plan.stages[1].consumes == ("ascent",)
         assert plan.scenario.is_file() and plan.scenario.is_absolute()
 
+    def test_reference_snapshot_paths_resolve_for_both_environments(self):
+        plan = load_plan(REPO / "src/orbitopt/data/crossenv_e505_plan.yaml")
+        paths = [Path(s.options["earth_orientation_snapshot"]) for s in plan.stages]
+        assert paths[0] == paths[1]
+        assert all(p.is_absolute() and p.is_file() for p in paths)
+
+    def test_missing_snapshot_is_rejected_before_launch(self, tmp_path):
+        doc = self._plan_doc()
+        doc["stages"][0]["options"] = {"earth_orientation_snapshot": str(tmp_path / "missing.json")}
+        with pytest.raises(PlanError, match="Earth-orientation snapshot.*does not exist"):
+            load_plan(self._write(tmp_path, doc))
+
     def test_env_default_and_override(self, tmp_path, monkeypatch):
         monkeypatch.delenv("ORBITOPT_CX_TEST_PY", raising=False)
         doc = self._plan_doc(environments={"a": "${ORBITOPT_CX_TEST_PY:-fallback}"})
@@ -290,3 +302,38 @@ class TestCrossEnvironmentEndToEnd:
         assert report["overall"]["exchanges_verified"] is True
         assert report["overall"]["mission_ok"] is True, \
             f"mission verdict: {report['stages']}"
+
+
+@pytest.mark.parametrize("runner_fails", [False, True])
+def test_stage_uses_reference_eop_and_restores_the_host_table(tmp_path, monkeypatch, runner_fails):
+    from astropy.time import Time
+    from astropy.utils import iers
+    from orbitopt.crossenv import stages
+
+    plan = load_plan(REPO / "src/orbitopt/data/crossenv_e505_plan.yaml")
+    stage = plan.stages[0]
+    snapshot_path = Path(stage.options["earth_orientation_snapshot"])
+    snapshot = json.loads(snapshot_path.read_text())
+    called = []
+
+    def probe(plan, stage, out):
+        table = iers.earth_orientation_table.get()
+        assert len(table) == len(snapshot["rows"])
+        row = snapshot["rows"][1]
+        assert table.ut1_utc(Time(row["MJD"], format="mjd")).value == pytest.approx(row["UT1_UTC"], abs=1e-12)
+        called.append(True)
+        if runner_fails:
+            raise RuntimeError("injected stage failure")
+        return {"status": "completed", "mission_ok": True}
+
+    monkeypatch.setitem(stages.STAGE_RUNNERS, "ascent", probe)
+    with iers.conf.set_temp("auto_download", False):
+        host = iers.IERS_B.open()
+        with iers.earth_orientation_table.set(host):
+            assert stages.execute_stage(plan, stage, tmp_path) == (2 if runner_fails else 0)
+            assert iers.earth_orientation_table.get() is host
+    assert called == [True]
+    report = json.loads((tmp_path / stage.id / "stage-report.json").read_text())
+    if not runner_fails:
+        assert report["earth_orientation"]["snapshot_sha256"] == file_digest(snapshot_path)
+        assert report["earth_orientation"]["mode"] == "override"

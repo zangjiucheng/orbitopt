@@ -272,3 +272,15 @@ class TestCrossEnvironmentE505:
         assert report["overall"]["exchanges_verified"] is True
         assert report["overall"]["mission_ok"] is True, f"verdict: {report['stages']}"
         assert _script().cmd_crossenv_check(out) == 0
+        # A green joined mission must still prove the same EOP was used by
+        # both interpreters; missing or foreign snapshots cannot be blessed.
+        for name in ("ascent", "recovery"):
+            stage_report = out / name / "stage-report.json"
+            original = stage_report.read_bytes()
+            changed = json.loads(original)
+            changed["earth_orientation"]["snapshot_sha256"] = "sha256:" + "0" * 64
+            try:
+                stage_report.write_text(json.dumps(changed))
+                assert _script().cmd_crossenv_check(out) == 1
+            finally:
+                stage_report.write_bytes(original)

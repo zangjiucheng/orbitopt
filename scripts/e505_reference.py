@@ -635,6 +635,12 @@ def cmd_crossenv_check(out_dir: Path) -> int:
             fails.append(f"stage {name}: {st.get('status')} exit {st.get('exit_code')}")
         if st.get("mission_ok") is not True:
             fails.append(f"stage {name}: mission_ok is not true")
+        stage_report_path = out / name / "stage-report.json"
+        stage_report = (json.loads(stage_report_path.read_text(encoding="utf-8"))
+                        if stage_report_path.is_file() else {})
+        eop_digest = stage_report.get("earth_orientation", {}).get("snapshot_sha256")
+        if eop_digest != "sha256:" + _digest(EOP_SNAPSHOT):
+            fails.append(f"stage {name}: Earth-orientation snapshot is not the reference's")
         exchange = out / name / "exchange"
         try:
             read_envelope(exchange)  # validates the manifest schema + every payload digest

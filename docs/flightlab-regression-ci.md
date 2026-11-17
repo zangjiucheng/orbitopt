@@ -272,7 +272,10 @@ reference policy.
 
 `crossenv_e505_plan.yaml` replays the computed ascent and **runs parking
 propagation** in the locked TudatPy environment. A separate Python 3.12
-environment re-flies gfold recovery from the sealed handoff. The
+environment re-flies gfold recovery from the sealed handoff. Both stages
+set `options.earth_orientation_snapshot` to the reference snapshot so their
+GCRS/ECEF conversions use the recording table, rather than interpreter-specific
+IERS defaults; each stage report records the snapshot digest. The
 [one-command example](computed-mission.md#add-parking-propagation-across-environments)
 supplies both interpreters; then run:
 
