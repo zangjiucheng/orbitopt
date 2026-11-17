@@ -849,7 +849,9 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                               None,
                           corridor_aim_margin_m: float = 0.0,
                           entry_burns: int = 1,
-                          entry_throttle: bool = False) -> ReturnPlan:
+                          entry_throttle: bool = False,
+                          search: Callable[[Callable[[np.ndarray], float], np.ndarray],
+                                           np.ndarray] | None = None) -> ReturnPlan:
     """Optimize the boostback/entry-burn script so the FL-301-propagated
     booster reaches ``recovery_target.corridor``; returns the corridor
     insertion state, its pad-ENU mirror, and the flown track.
@@ -915,7 +917,15 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     parameters, bounded by the engine's throttle range): the default
     full-throttle burn of the 3-engine group exceeds the 8 g entry ceiling
     on its own below ~69 t, which an RTLS booster always is by entry; off
-    (default) keeps every burn at full throttle, bit-for-bit."""
+    (default) keeps every burn at full throttle, bit-for-bit.
+    ``search`` (E5-05c) replaces the Nelder-Mead search and its restart:
+    called as ``search(objective, x_start)`` with the planner's own
+    penalized objective (clamps its input, full-physics rollout at
+    ``dt_opt``) and the clamped start, it returns the parameter vector to
+    accept if it beats the start. The verdict path (re-integration at
+    ``dt_final``, ``_assemble``) is unchanged -- offline global searches
+    (``scripts/e505c_recovery_search.py``) plug in here; ``None`` (default)
+    is the stock search, bit-for-bit."""
     corridor = recovery_target.corridor
     eng = booster.engine
     if entry_burns not in (1, 2):
@@ -1031,15 +1041,21 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
             r = rollout(x, dt_opt)
             return r.penalty if math.isfinite(r.penalty) else 1e6
 
-        simplex = np.vstack([best_x] + [best_x + v for v in np.diag(scale)])
-        res = minimize(obj, best_x, method="Nelder-Mead",
-                       options=dict(maxfev=max_fevals, xatol=0.5, fatol=1e-4,
-                                    adaptive=True, initial_simplex=simplex))
-        cand_x = clamp(np.asarray(res.x))
-        cand = rollout(cand_x, dt_opt)
-        if cand.penalty < best.penalty:
-            best_x, best = cand_x, cand
-        if best.penalty > 0.0 and max_fevals >= 40:  # restart once, half budget
+        if search is not None:
+            cand_x = clamp(np.asarray(search(obj, best_x.copy()), dtype=np.float64))
+            cand = rollout(cand_x, dt_opt)
+            if cand.penalty < best.penalty:
+                best_x, best = cand_x, cand
+        else:
+            simplex = np.vstack([best_x] + [best_x + v for v in np.diag(scale)])
+            res = minimize(obj, best_x, method="Nelder-Mead",
+                           options=dict(maxfev=max_fevals, xatol=0.5, fatol=1e-4,
+                                        adaptive=True, initial_simplex=simplex))
+            cand_x = clamp(np.asarray(res.x))
+            cand = rollout(cand_x, dt_opt)
+            if cand.penalty < best.penalty:
+                best_x, best = cand_x, cand
+        if search is None and best.penalty > 0.0 and max_fevals >= 40:  # restart once, half budget
             res2 = minimize(obj, clamp(best_x + 0.7 * scale * np.sign(best_x - x0 + 1e-9)),
                             method="Nelder-Mead",
                             options=dict(maxfev=max_fevals // 2, xatol=0.5,
