@@ -85,6 +85,53 @@ gate. `null` remains explicitly unassessed and contributes no independent
 validation. A green design-constraint rollup with a null flag does not prove
 independent verification. See the [acceptance report](acceptance-e1-e4.md).
 
+### Full physical mission gate (E5-04, task #271)
+
+That out-of-scope exemption is exactly what a *computed* mission must not
+hide behind (E2-04 declared the parking propagation out of scope and still
+passed). `inputs.full_mission.physical` re-grades the same chain checks as
+**five required physical checks** — no applicability escape hatch:
+
+| Required check | Evidence (the chain's existing checks) |
+|---|---|
+| `orbit_insertion` | station chain, ascent verdicts, expected-orbit agreement |
+| `parking_propagation` | M-05 propagation (a `not_checked` *declaration* is not evidence) |
+| `landing` | recovery touchdown/reserve/handoff — an unflown first stage caps at `not_checked` |
+| `mass_conservation` | every mass gate wherever it is measured (`mass.*`, boundary `*.mass_conservation`) |
+| `epoch_frame_continuity` | boundary continuity gates (`handoff.*`, `parking.*`: epoch, frame identity, coupled shared source) |
+
+Each check carries its own tri-state verdict and its own reason codes (a
+missing check reports `<check>_not_evidenced` with a reason read from the
+scenario/mission notes). The overall verdict is the same conjunction as the
+phase gate — failed beats not_checked beats passed — so **any required check
+that is `failed` or merely `not_checked` keeps the physical gate from
+passing**; only all-five-passed yields `passed`. The pipeline records it as
+`physical_mission_verdict`; the E2-03 phase verdict is reported alongside and
+unchanged, so a frozen mission like E2-04 still reads `passed` per phase while
+the physical gate honestly says `not_checked`.
+
+### The reproducible reference mission (E5-05, task #272)
+
+E5-04 says what a physical mission must show; E5-05 commits one. The mission
+of record (`src/orbitopt/data/mission_two_stage_leo_rtls_reference.yaml`) is
+computed end to end — OpenTsiolkovsky ascent, station chain, staging, M-05
+propagation evidence, and the RTLS recovery driven from the one canonical
+separation state — with full provenance (code SHA, dependency matrix, IERS
+snapshot, backend pins, handoff identity). Regression replay and cross-
+environment replay (both E5-03 environments, with the propagation evidenced
+in the tudatpy leg so the physical gate reads `passed`, not `not_checked`)
+compare within `tests/data/mission/reference/e5-05-reference-mission/
+tolerances.json`, whose every band carries a source; see the
+[regression CI page](flightlab-regression-ci.md#e5-05-the-reproducible-full-physical-reference-mission-task-272).
+E2-04 is kept unchanged as the fast integration test. **Recording status:**
+the sealing run is blocked on a vehicle decision — RTLS from a computed
+OpenTsiolkovsky ascent is physically infeasible for the current catalog
+vehicle (stage-1 separates dry; the demonstrator's insertion margin cannot
+carry the recovery propellant), so the reference is not recorded and every
+consumer of it skips with the reason until a recording lands. See the
+regression CI page's E5-05 status note and ContextDB record
+`e5-05-rtls-infeasibility-evidence`.
+
 ## Benchmarks against public references
 
 ```bash

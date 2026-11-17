@@ -1,0 +1,178 @@
+# E5-05 (task #272): the reproducible full-physical reference mission.
+#
+# The epic-P0 reference scenario in its complete form: BOTH branches flown
+# and graded from a REAL computed ascent -- the ascent is flown at record
+# time by the pinned OpenTsiolkovsky v1.0.0 binary (the fixed-program flight of
+# the E5-05a-d design campaign, see the ascent block below), the
+# separation fork drives BOTH the upper-stage branch to the 250 km-band
+# parking orbit the restartable stage actually delivers
+# (rp 265.5 / ra 278.1 km @ 51.0 deg) AND the booster branch through the
+# FL-304/FL-305 RTLS chain, and the E5-02 coupled-branch gate grades the two
+# branches against the one canonical separation state they both descend from
+# (drive_from_separation: true). Nothing in the chain is a preset state:
+# every number the reference records is computed from launch to landing.
+#
+# This is the SCENARIO OF RECORD; its frozen outputs live under
+# tests/data/mission/reference/e5-05-reference-mission/ and the regression
+# path replays them -- scripts/e505_reference.py update re-flies the whole
+# mission and re-records the reference; scripts/e505_reference.py run +
+# compare (and the cross-environment plan
+# src/orbitopt/data/crossenv_e505_plan.yaml, which consumes the replay
+# scenario mission_two_stage_leo_rtls_replay.yaml) is what CI runs.
+#
+# Provenance and tolerances are part of the reference, not folklore: the
+# recording run's code version, dependency matrix, IERS snapshot and
+# environment go to PROVENANCE.json, and every regression band with its
+# source goes to tolerances.json (both under the reference directory, both
+# written and checked by scripts/e505_reference.py).
+#
+# RECORDING STATUS (task #272): the vehicle decision this once waited on is
+# TAKEN -- E5-05a..d rebuilt the catalog vehicle into `synthetic_two_stage_rtls`
+# (stage-1 shuts down at its declared cutoff with a computed reserve, the
+# upper stage restarts into the 250 km band, and the E5-05c closed-loop
+# recovery script lands the booster on that computed separation state,
+# docs/adr/flightlab-0008). The recording is made by
+# `python scripts/e505_reference.py update`; until it has run, every consumer
+# of the reference detects the missing directory, prints the reason and
+# passes, and the guards arm themselves on the directory's existence. The
+# recorded ascent is the design campaign's fixed-program OpenTsiolkovsky
+# flight, NOT a pygmo search: the M-07 optimize recipe drives the FL-201
+# single-burn parametric guidance, whose cutoff window degenerates on this
+# vehicle's restart sizing (peak-thrust burnout 31.8 s) and whose stage-2
+# timing the E5-05b restart schedule would override anyway. The ascent is no
+# less COMPUTED for it -- one converged OT flight of the MC-verified design --
+# and the recovery half was never a search either (E5-05c `search: keep`).
+#
+# Why kourou (the M-07/Gate-B site): the RTLS recipe below is the E5-05c
+# Monte-Carlo-verified fixed script, pinned for this vehicle at the separation
+# geometry flown off this pad (n=64 dispersed flights, 64/64 landed, touchdown
+# reserve min 12.0 t; docs/adr/flightlab-0008) -- the reference keeps the
+# recipe that is VERIFIED for the geometry it flies, not a transplanted one.
+# (An early E5-05 recording attempt from cape-canaveral confirmed the
+# transplanted geometry is boostback-infeasible for this vehicle:
+# INSUFFICIENT_PROPELLANT_BOOSTBACK.)
+#
+# `expected.propagation_result: not_checked` -- the parking-propagation leg
+# needs tudatpy, which the gfold-pinned landing stack cannot host on one
+# interpreter (gfold needs Python >= 3.11, the tudatpy lock is 3.10). The
+# leg is recorded declared-not-checked (never passed) in the single-stack
+# replay; the cross-environment run EVIDENCES it: the ascent leg's
+# `propagate: true` option flies it in the tudatpy environment
+# (crossenv_e505_plan.yaml), which is what lifts the E5-04 physical gate's
+# parking-propagation check from not_checked to passed.
+schemaVersion: "1.0"
+mission:
+  id: e5-05-reference-two-stage-leo-rtls
+  title: Reproducible full-physical reference mission (computed ascent + parking + booster RTLS)
+  kind: two-stage-leo
+scenario:
+  mission:
+    id: e5-05-reference-two-stage-leo-rtls
+    title: Reproducible full-physical reference mission (computed ascent + parking + booster RTLS)
+    kind: two-stage-leo
+  launch:
+    site: kourou                    # the Gate-B site the recovery recipe is verified at
+    vehicle: synthetic_two_stage_rtls   # E5-05a catalog redesign (task #272 re-base)
+    orbit: 265.5x278.1@51.0         # the DELIVERED orbit (task #272 decision: the reference
+    #   targets what the restartable stage actually flies -- the E5-05a fixture's post-
+    #   burnout SECO readout; the commanded 250 km band and its grading live in the
+    #   ascent scenario leo_two_stage_rtls.yaml)
+    date_utc: "2026-11-10"          # a past epoch: finalized IERS, no extrapolated EOPs
+    raan_deg: null
+    window_days: 14.0
+  ascent:
+    # The recorded computed ascent: one converged OpenTsiolkovsky v1.0.0
+    # flight of `synthetic_two_stage_rtls` against leo_two_stage_rtls.yaml
+    # (the design campaign's fixed program -- MECO/separation/SECO all solver-
+    # determined events), written here by `scripts/e505_reference.py update`,
+    # which re-flies it before grading the mission. `update` grades the FLIGHT
+    # IT JUST FLEW (its own temporary paths), not this committed directory.
+    mode: run_dir
+    run_dir: tests/data/mission/reference/e5-05-reference-mission/mission-optimized/launch/ascent
+    target_file: tests/data/mission/reference/e5-05-reference-mission/mission-optimized/launch/target.yaml
+  handoff:
+    # Same M-01 gates as the M-07 packaged scenario (1 m / 10 mm/s / 1 s /
+    # 1 g, staging headroom 50 mm/s, element band as below): the E5-05
+    # reference is graded with the mission gates, never with looser ones.
+    position_m: 1.0
+    velocity_m_s: 0.01
+    epoch_s: 1.0
+    max_epoch_gap_s: null
+    mass_kg: 0.001
+    staging_velocity_m_s: 0.05
+    elements:
+      semi_major_axis_m: 10.0
+      eccentricity: 1.0e-6
+      inclination_deg: 1.0e-3
+      raan_deg: 1.0e-2
+      apsides_m: 10.0
+  recovery:
+    # RTLS back to the launch site, graded against the recorded target: the
+    # run_dir-mode knob is target_file (the flight target carries the declared
+    # recovery gates -- leo_two_stage_rtls.yaml's block, round-tripped into
+    # launch/target.yaml by `update`: touchdown <= 3 m/s vertical, <= 1 m/s
+    # lateral, >= 10 t reserve; MC p05 12.6 t, ADR-0008).
+    target_file: tests/data/mission/reference/e5-05-reference-mission/mission-optimized/launch/target.yaml
+    # E5-05c's Monte-Carlo-verified FIXED script (search: keep) -- identical
+    # to the packaged mission's recipe (mission_two_stage_leo_rtls.yaml /
+    # leo_two_stage_rtls.yaml, docs/adr/flightlab-0008 F10): closed-loop IIP
+    # boostback cutoff, speed-cutoff throttled entry, closed-loop landing
+    # forecast, fine integration steps (FL-301 corridor verdict is not
+    # step-converged at the 2 s / 0.5 s defaults).
+    plan_options:
+      #   x = [delay s, IIP aim km past the pad, boostback throttle, pitch deg,
+      #        yaw trim deg, entry trigger m, entry cutoff speed m/s,
+      #        entry throttle]
+      initial_guess: [6.361355012944131, 4.325366437693795, 0.8329880778438892,
+                      2.933641190367238, -7.397550060236878, 29645.36476563118,
+                      293.09976456950864, 0.9574166766757264]
+      search: keep
+      entry_burns: 1
+      entry_throttle: true
+      boostback_cutoff: iip                 # closed loop on the vacuum IIP (+ propellant floor)
+      entry_cutoff: speed                   # entry burn ends at the cutoff speed; engine-off handoff
+      landing_need_model: closed_loop       # forecast the FL-305 landing (incl. peak load) at the handoff
+      corridor_aim_margin_m: 7000.0         # plan to a 1 km aim inside the 8 km referee
+      landing_reserve: target               # one graded reserve: the scenario's 10 t
+      landing_reserve_margin_kg: 2500.0     # planning margin (MC nominal-to-p01 touchdown spread)
+      entry_q_max_pa: 250000                # DESIGN ASSUMPTION: uncrewed entry heating/q ceiling, see ADR
+      entry_g_max: 12.0                     # DESIGN ASSUMPTION: uncrewed metallic booster, see ADR
+      horizon_s: 900.0
+      dt_opt: 0.25                          # FL-301 fixed-step verdict is not step-converged at
+      dt_final: 0.1                         #   the 2 s / 0.5 s defaults (ADR-0008, F10)
+      landing:
+        max_thrust_accel_g: 3.6             # peak load = cap + ~1.1 g drag; 4.0 flew 5.1 g on hot engines
+        tvc_rate_limit_deg_s: 20.0          # declared TVC actuator set (E3-01)
+        tvc_lag_tau_s: 0.2
+        tvc_lag_compensation: true
+    drive_from_separation: true     # E5-02: both branches start at the one handoff
+  propagation:                      # M-05 force model and arc (graded in the
+    j2: true                        # cross-environment ascent leg, not_checked
+    third_bodies: []                # in the single-stack replay)
+    drag: null
+    revolutions: 1.0
+    max_step_s: 300.0
+  expected:
+    events: [liftoff, meco, separation, seco]
+    parking_orbit:                  # the delivered orbit (E5-05a fixture SECO readout), as
+      # elements -- the optimize-mode recording is graded against this table,
+      # inside the +/-20 km band below (task #272 decision 2026-11-17).
+      semi_major_axis_m: 6649927.93
+      eccentricity: 0.0009444847
+      inclination_deg: 51.0008
+      raan_deg: null
+      periapsis_altitude_m: 265510.17
+      apoapsis_altitude_m: 278071.68
+    tolerances:                     # +/- 20 km mission insertion band (source: scenario
+      # leo_two_stage_rtls.yaml insertion band, F9 closure band per
+      # docs/adr/flightlab-0008), in element form
+      semi_major_axis_m: 20000.0
+      eccentricity: 0.003008        # = 20 km * (1 + e_t) / a_t at this target's shape
+      inclination_deg: 0.2
+      raan_deg: 1.0
+      periapsis_altitude_m: 20000.0
+      apoapsis_altitude_m: 20000.0
+    propagation_result: not_checked
+  scene:
+    coast_orbits: 2.0
+    earth_texture: true

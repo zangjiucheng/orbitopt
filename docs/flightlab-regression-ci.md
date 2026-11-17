@@ -117,7 +117,8 @@ is not their oracle. The production RAAN tolerance remains unchanged.
 ## E2-04: the frozen dual-branch reference mission (task #257)
 
 E2-04 tests mission integration using an **illustrative ascent fixture** and
-an actual simulated booster return. `scripts/e204_reference.py` constructs
+an actual simulated booster return (kept by E5-01 as a fast-test exception --
+see the E5-01 section below). `scripts/e204_reference.py` constructs
 its two-sample ascent arcs from constants: separation has 35 t of booster
 propellant, and insertion is prescribed at 400 km / 51.6°. Neither ascent
 optimization nor continuous ascent propagation runs in this regression.
@@ -163,3 +164,145 @@ For an independently justified reference change, use
 `python scripts/e204_reference.py update`, review the resulting provenance and
 numeric diff, and commit with `[e204-reference-update]`. CI's `verify` and
 `tag-check` guards remain required.
+
+## E5-01: the full mission chain flies a computed ascent (task #268)
+
+E5-01 closes the E2-04 evidence gap for the ascent leg: the packaged M-07
+scenario (`src/orbitopt/data/mission_two_stage_leo.yaml`, `ascent.mode:
+optimize`) is flown now, and `tests/test_mission_e5_real_ascent.py` grades
+WHERE the chain's evidence came from -- station times equal the engine's
+event log (including solver-determined `max_q`/`impact` times the chain never
+asks for), the parking handoff equals the computed track sample at the
+engine's `seco` event, staging states equal flown track samples, and the raw
+OpenTsiolkovsky outputs sit beside the run directory. Run it like the M-07
+step (same `flightlab-gateb` job, same stack):
+
+```bash
+python scripts/fetch_opentsiolkovsky.py
+pytest tests/test_mission_e5_real_ascent.py -m slow -v
+```
+
+Without tudatpy the M-05 propagation leg is recorded `not_checked` (never
+passed), exactly as the E2-04 scenario declares it; the fast guards run
+anywhere and the recorded-flight contract check needs no compute stack.
+
+The E5-01 exception, kept deliberately: the E2-04 frozen mission retains its
+synthetic two-sample ascent with preset separation/SECO constants as a FAST
+integration test. The exception is annotated in the scenario, the builder,
+its test module and `PROVENANCE.json` (`opentsiolkovsky: not used ...`), and
+`tests/test_mission_e5_real_ascent.py` trips if any other consumer appears or
+if the scenario surface grows a knob for injecting an ascent/SECO state.
+
+## E5-05: the reproducible full-physical reference mission (task #272)
+
+E5-01 proved the chain *can* fly a computed ascent; E5-05 freezes the result
+as the mission of record: a two-stage LEO mission with a booster RTLS,
+recorded end to end from a **computed** ascent -- no preset states anywhere.
+`src/orbitopt/data/mission_two_stage_leo_rtls_reference.yaml` (Kourou,
+2026-11-10, 400 km / 51.6° parking, RTLS recovery) is optimized-and-flown
+once and sealed under
+`tests/data/mission/reference/e5-05-reference-mission/`:
+
+> **Recording status (task #272):** the recording is blocked on a vehicle
+> decision, and every consumer above (script subcommands, the
+> `tests/test_e505_reference.py` guards, the CI steps) detects the missing
+> reference directory, prints the reason and passes -- so CI stays green and
+> everything arms itself the moment a recording lands. The blocker is
+> physical, not software: the pinned OpenTsiolkovsky binary burns stage-1 to
+> depletion on every run (debris separates at exactly its 30 t dry mass --
+> verified on the recorded Gate-B run too), the recovery chain plans from
+> that actual mass, and RTLS from a real MECO (~150 km downrange, ~3.5 km/s
+> suborbital) would need tens of tons of stage-1 reserve the demonstrator
+> vehicle cannot leave without failing its own insertion (upper-stage slack
+> buys ~400 m/s; `downrange` landing needs the same propellant). FL-305's
+> accepted landing was flown off the textbook separation state, whose
+> provenance is `illustrative` -- which is why E2-04 stays a fast integration
+> test rather than computed-landing evidence. A recording needs either an
+> RTLS-capable vehicle/ascent redesign or a revised acceptance (ContextDB
+> record `e5-05-rtls-infeasibility-evidence`).
+
+```
+tests/data/mission/reference/e5-05-reference-mission/
+├── mission-optimized/   the recording: full optimize run (computed ascent,
+│                        raw OpenTsiolkovsky outputs, RTLS recovery, joined
+│                        mission.verification.json)
+├── mission/             the replay regression baseline (run_dir mode of the
+│                        recorded ascent + re-flown recovery)
+├── earth_orientation.json  the four-row IERS-A snapshot the run was scoped to
+├── tolerances.json      the declared comparison budgets (below)
+└── PROVENANCE.json      file digests, git SHA, full toolchain matrix,
+                         EOP snapshot id, separation-handoff identity
+```
+
+`PROVENANCE.json` records the code version (`git_sha_recording`), the
+dependency matrix (`toolchain`: python, platform, gfold, pygmo, numpy,
+scipy, astropy, astropy-iers-data, opentsiolkovsky), the IERS-A snapshot
+(the same table the reference epoch falls inside of -- finalized values, no
+predictions), and the **separation-handoff identity**: the recording's
+recovery leg is *driven* from the ascent's canonical coupled-branch separation
+state (`drive_from_separation: true`), and its `handoff_id` is recorded so
+every later replay -- including across the environment boundary -- can prove
+it branched from that one state.
+
+Unlike the E2-04 builder, nothing here is constructed from constants: the
+ascent is the M-07 recipe (CMA-ES 40x40, seed 11, `refly=True`) optimizing the
+pinned target with the real OpenTsiolkovsky v1.0.0 binary, and the recovery
+is the FL-304/FL-305 plan flown by gfold 0.3.2 from the computed separation
+state. The recovery warm start (`initial_guess`, `max_fevals: 18`) is the
+pinned FL-305 acceptance recipe for this launch geometry, recorded in the
+scenario, the script's `frozen_inputs` and the provenance.
+
+### Replaying it
+
+`src/orbitopt/data/mission_two_stage_leo_rtls_replay.yaml` consumes the
+recorded ascent in `run_dir` mode (the same digests, re-graded) and re-flies
+the recovery from the canonical handoff. The regression pair mirrors E2-04
+and FL-601:
+
+```bash
+python scripts/e505_reference.py verify            # digests vs PROVENANCE.json (fast, every job)
+python scripts/e505_reference.py run --out /tmp/e505   # replay (needs the landing stack)
+python scripts/e505_reference.py compare /tmp/e505     # vs reference within tolerances.json
+python scripts/e505_reference.py tag-check --base "$BASE"   # G5: reference diffs need the tag
+python scripts/e505_reference.py update            # intended reference change (re-record)
+```
+
+`update` refuses a red run, regenerates the EOP snapshot from the pinned
+`astropy-iers-data` table, and records the *current* toolchain; the
+`[e505-reference-update]` commit tag is required (same G5 rule as FL-601 and
+E2-04). The slow replay is the `flightlab-landing` job; the fast guards run
+everywhere (`tests/test_e505_reference.py`).
+
+### Tolerance provenance
+
+The replay consumes the recorded ascent by digest, so no tolerance applies to
+the ascent itself -- only to the re-flown recovery numerics and the report
+fields. Bands: `1e-6` (clock/mass bookkeeping), `1e-2 m` / `1e-4 m/s` for
+flown states (unchanged from E2-04 -- cross-build drift of the same pinned
+gfold/OT stack, observed 1.4e-7 m at most on reviewed builds),
+`1e-4` on check values and report values, and advisory SOCP-plan fields at
+50x inside the solver's own stopping budget. Every band's source is restated
+in `scripts/e505_reference.py`'s docstring and in `tolerances.json`
+provenance; physical check verdicts and check identities are compared
+exactly, never within a band.
+
+### Two environments (cross-env job)
+
+`src/orbitopt/data/crossenv_e505_plan.yaml` flies the same reference mission
+across the tudatpy-3.10 / gfold-3.12 boundary: the ascent leg replays the
+recorded ascent and *evidences* the M-05 propagation in the tudatpy
+environment (`options.propagate: true` -- the propagation the single-
+interpreter stack cannot run), seals the canonical separation handoff
+(`options.coupled_separation: true`), and the recovery leg is driven from the
+reconstructed handoff across the boundary (`options.drive_from_separation:
+true`). `python scripts/e505_reference.py crossenv-check <out>` then grades
+the joined run: both envelopes re-verify by digest, the recovery leg's
+reported handoff id equals the recorded one, and the sealed recovery run
+matches the reference within `tolerances.json`. This is the E5-05 acceptance
+that the reference is replayable in the E5-03 environments, and the E5-04
+physical gate's one missing piece -- propagation -- is evidenced there, so a
+cross-env run reads `physical: passed` on all five required checks.
+
+E2-04 remains in place as the fast dual-branch integration test: E5-05
+supplements it, and `tests/test_e505_reference.py` guards that its scenario,
+script, test and frozen reference files stay present.

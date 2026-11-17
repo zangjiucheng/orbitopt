@@ -1,0 +1,65 @@
+# E5-05a flight-target scenario: RTLS-capable two-stage LEO from Kourou.
+# Companion to vehicles/synthetic_two_stage_rtls.yaml (task #285).
+#
+# Same mission shape as the sealed leo_two_stage.yaml (two-stage to LEO +
+# RTLS to the launch site) but against the redesigned vehicle, and from the
+# orbit re-based to 250 km circular: 400 km is unreachable in the single-burn
+# OpenTsiolkovsky backend while stage 1 keeps a real RTLS reserve
+# (docs/adr/flightlab-0008); 250 km is still the LEO the mission requires.
+# E5-05 launch-site binding decision: Kourou (the epic's E5 reference-site
+# decision; the ascent's computed stage-1 separation state ~45-60 km downrange
+# is what the RTLS chain below must recover from).
+#
+# Constraint relaxations vs the sealed fixture are DESIGN ASSUMPTIONS for an
+# uncrewed synthetic cargo vehicle, documented in docs/adr/flightlab-0008:
+# the 5 g crew-class acceleration ceiling cannot be held by a vehicle sized
+# ~2x on stage-1 propellant; the final number below is the computed peak of
+# the E5-05d restart burn plus margin (see constraints).
+schema_version: '1.0'
+mission:
+  id: leo-two-stage-rtls-e5-05a
+  title: Synthetic two-stage LEO + RTLS from a computed stage-1 reserve (E5-05a)
+  epoch_utc: '2026-11-10T12:00:00Z'
+launch_site:
+  name: kourou
+  latitude_deg: 5.2392
+  longitude_deg: -52.7685
+  altitude_wgs84_m: 15.0
+target_orbit:
+  central_body: Earth
+  periapsis_altitude_m: 250000
+  apoapsis_altitude_m: 250000
+  inclination_deg: 51.6
+  raan_deg: null  # null means unconstrained; may constrain when mission requires it
+constraints:
+  max_dynamic_pressure_pa: 60000  # kept from the sealed fixture; the lofted short stage-1 boost stays below it
+  max_specific_acceleration_g: 45.0  # DESIGN ASSUMPTION: uncrewed cargo; source = the E5-05d restart
+  #   burn's computed peak of 38.9 g (fixture verification.json, ADR-0008 F10: fixed
+  #   thrust into a shrinking mass is a property of the shipped vehicle, and the n=64
+  #   Monte Carlo carries thrust +5 % => ~41 g) with structural margin. See docs/adr/flightlab-0008.
+  minimum_insertion_periapsis_m: 230000
+  orbit_altitude_tolerance_m: 60000  # the F9 closure band (ADR-0008): periapsis floor above is
+  #   230 km and |apoapsis - 250 km| < 60 km; the flown E5-05d insertion (rp 265-273,
+  #   ra 278-285 km over the campaign + fixture) closes inside it, the sealed +/-20 km
+  #   band cannot hold the restartable stage's delivery.
+  inclination_tolerance_deg: 1.0  # the OT commanded-attitude backend delivers 51.0 deg for this
+  #   restart program, 0.63 deg under the commanded plane (ADR-0008 F9); the sealed 0.2 deg
+  #   band is unreachable without changing the vehicle (out of scope, task #272 decision).
+recovery:
+  kind: rtls
+  target: launch_site
+  max_touchdown_speed_m_s: 3.0  # DESIGN ASSUMPTION
+  max_touchdown_lateral_speed_m_s: 1.0  # DESIGN ASSUMPTION
+  min_propellant_reserve_kg: 10000  # DESIGN ASSUMPTION: >= the 15 t landing reserve carried in the vehicle model, graded on the flown booster track
+vehicle:
+  source: scenarios/vehicles/synthetic_two_stage_rtls.yaml
+  provenance: illustrative
+simulation:
+  ascent_backend: opentsiolkovsky
+  atmosphere_6dof_backend: jsbsim
+  orbit_verify_backend: tudatpy
+  enabled_phases: [ascent_3dof, orbit_verify]
+assumptions:
+  - "E5-05a redesign target: the ascent must reach MECO with a computed (not depleted) stage-1 propellant reserve and still insert at the 250 km reference orbit; the RTLS recovery chain plans from that computed separation state."
+  - Max-acceleration ceiling relaxed to 45 g (uncrewed cargo; holds the computed 38.9 g restart-burn peak with margin, ADR-0008 F10); max-q kept at the sealed 60 kPa value. The insertion band is the F9 closure band (periapsis floor 230 km, |apoapsis - 250 km| < 60 km, plane 1 deg) -- see constraints, task #272.
+  - "Recovery plan overrides (entry_q_max_pa 250 kPa, max_fevals 140 on the frozen FL-305 start) are per-plan options carried by the mission file's recovery.plan_options, not target constraints; the entry-g ceiling stays at the default 8 g. See docs/adr/flightlab-0008."

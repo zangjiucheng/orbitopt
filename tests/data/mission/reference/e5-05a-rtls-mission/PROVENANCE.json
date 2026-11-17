@@ -1,0 +1,33 @@
+{
+  "schema": "e5-05a-rtls-mission-provenance-v1",
+  "generated_utc": "2026-11-17T13:15:08+00:00",
+  "generator": "scripts/e505a_reference.py (OpenTsiolkovsky 1.1.0 via the flightlab adapter)",
+  "vehicle": "src/orbitopt/data/flightlab/vehicles/synthetic_two_stage_rtls.yaml",
+  "ascent_target": "scenarios/leo_two_stage_rtls.yaml",
+  "events_s": {
+    "ignition": 148.0,
+    "liftoff": 0.0,
+    "max_q": 56.1548679805054,
+    "meco": 134.0,
+    "separation": 201.0,
+    "seco": 396.170559,
+    "impact": 1162.6413037368786
+  },
+  "separation_state": {
+    "t_s": 141.0,
+    "frame": "ECEF",
+    "position_m": [
+      3928967.918974835,
+      -5093073.463995283,
+      642468.9981283462
+    ],
+    "velocity_m_s": [
+      1545.3193297521211,
+      -183.92826023045927,
+      1452.5706170252524
+    ],
+    "mass_kg": 183404.6886134303
+  },
+  "adr": "docs/adr/flightlab-0008",
+  "note": "Replayed by mission_two_stage_leo_rtls.yaml (ascent mode run_dir). The recovery chain plans from THIS computed separation state -- read out with the pipeline's own separation_state_ecef, not a textbook or illustrative one. Re-flown after E5-05c (#287) resized stage 1 for the F10 landing (thrust/mass flow x1.175 at the 134 s cutoff, +48 t reserve): the E5-05d restartable upper stage still inserts inside the 250 km band (rp 272.6 / ra 285.1 km) on the same run that carries the 153.4 t stage-1 RTLS reserve the recovery Monte Carlo sized (ADR-0008 F9/F10)."
+}

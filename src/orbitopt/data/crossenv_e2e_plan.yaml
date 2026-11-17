@@ -1,0 +1,46 @@
+# Cross-environment mission plan (task #270, E5-03) -- orbitopt.crossenv.plan v1.
+#
+# One command flies the whole continuous two-stage LEO mission (the E2-04
+# scenario) across the two Python environments that the physics stack forces
+# apart: tudatpy exists only in the conda-locked 3.10 environment, while the
+# gfold landing solver needs 3.11+. The ascent leg runs in `tudat`, the
+# recovery leg in `gfold`, and the only thing that crosses the boundary is the
+# sealed, digest-pinned, schema-versioned exchange each stage writes
+# (orbitopt/schemas/crossenv-exchange-1.0.json).
+#
+# Interpreters default to `python` on PATH (fine for a single-environment
+# smoke run); CI and cross machines override them:
+#   orbitopt crossenv run --plan src/orbitopt/data/crossenv_e2e_plan.yaml \
+#     --env tudat=/path/to/conda/envs/orbitopt/bin/python \
+#     --env gfold=/path/to/venv-3.12/bin/python
+kind: orbitopt.crossenv.plan
+schema_version: "1.0"
+
+mission:
+  id: e5-03-cross-env-two-stage-leo-rtls
+
+scenario: src/orbitopt/data/mission_two_stage_leo_recovery.yaml
+
+out: runs/crossenv-e5-03
+
+environments:
+  tudat: ${ORBITOPT_TUDAT_PYTHON:-python}
+  gfold: ${ORBITOPT_GFOLD_PYTHON:-python}
+
+stages:
+  # Ascent/mission leg in the tudatpy environment: replay of the frozen
+  # ascent, station chain, staging handoffs, SECO-to-parking gate -- the
+  # recovery block stripped. Seals the flown FlightRun and both handoff
+  # states for the landing leg.
+  - id: ascent
+    runner: ascent
+    env: tudat
+
+  # Recovery leg in the gfold environment: re-validates the ascent exchange
+  # (schema + every digest) before reading it, then flies FL-304 over the
+  # handed-over run and seals the combined run, the recovery handoff report
+  # and the final boundary state.
+  - id: recovery
+    runner: recovery
+    env: gfold
+    consumes: [ascent]

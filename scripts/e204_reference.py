@@ -27,6 +27,12 @@ The mission itself is declared in the packaged scenario
 pinned recovery plan recipe, and ``propagation_result: not_checked`` for the
 tudatpy leg the gfold-pinned landing stack cannot run (M-07 owns that leg).
 
+E5-01 (task #268) exception note: the ascent constants below are the ONLY
+preset SECO/injection state that may remain on a mission-reachable code
+path -- this fixture stays a fast dual-branch integration test, while the
+full mission chain's ascent is computed by the pinned OpenTsiolkovsky binary
+(``tests/test_mission_e5_real_ascent.py`` guards that boundary).
+
 Subcommands
     run       --out DIR   replay the frozen mission into DIR (needs the
                           landing stack: gfold 0.3.2, per envs/flightlab-landing-ci.txt)
@@ -756,7 +762,10 @@ def cmd_tag_check(base: str | None) -> int:
     except subprocess.CalledProcessError:
         print(f"tag-check skipped: base {base} not present in this clone")
         return 0
-    touched = [p for p in changed if p.startswith("tests/data/mission/reference/")]
+    # only this reference's own directory: the shared reference/ tree also
+    # holds other guarded references and plain test fixtures
+    prefix = REF_ROOT.relative_to(REPO).as_posix() + "/"
+    touched = [p for p in changed if p.startswith(prefix)]
     if not touched:
         print("reference files untouched by this change")
         return 0
