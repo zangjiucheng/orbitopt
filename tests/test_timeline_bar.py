@@ -273,3 +273,81 @@ def test_a_branched_scene_draws_the_fork_and_its_lanes():
     assert track.phase_at(track.x_of(50.0), "booster") is None  # pre-fork: no lane yet
     assert not bar.grab().isNull()
     bar.close()
+
+
+@pytest.mark.parametrize("layout", ["events-only", "phases", "branched"])
+def test_hover_and_clicks_resolve_phase_lanes_and_the_event_row(layout):
+    """Phase spans carry lane metadata; hover must still reach every row."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtWidgets import QApplication
+
+    from orbitopt.viz.state import MissionState
+    from orbitopt.viz.timeline_bar import TimelineBar
+
+    app = QApplication.instance() or QApplication([])
+    scene = _scene()
+    timeline = scene["timeline"]
+    timeline.update(min=0.0, max=400.0, unitLabel="seconds",
+                    events=[{"time": 300.0, "label": "Touchdown"}])
+    if layout != "events-only":
+        timeline["phases"] = [
+            {"start": 0.0, "end": 100.0, "label": "Boost"},
+            {"start": 100.0, "end": 400.0, "label": "Upper-stage burn"},
+        ]
+    if layout == "branched":
+        timeline["phases"][1]["lane"] = "upper-stage"
+        timeline["phases"].append(
+            {"start": 100.0, "end": 300.0, "label": "Return burn", "lane": "booster"})
+        timeline["branches"] = {"forkT": 100.0, "lanes": [
+            {"id": "upper-stage", "label": "Upper stage"},
+            {"id": "booster", "label": "First stage"},
+        ]}
+
+    state = MissionState()
+    bar = TimelineBar(state)
+    bar.resize(1000, 200)
+    bar.show()
+    try:
+        state.set_scene(scene)
+        app.processEvents()
+        track = bar.track
+        rows = track._rows()
+        for lane, top, bottom in rows.get("phases", []):
+            track.fit()
+            t = 50.0 if lane == "" and layout == "branched" else 200.0
+            x, y = track.x_of(t), (top + bottom) / 2
+            track.mouseMoveEvent(_mouse(QMouseEvent.Type.MouseMove, x, y,
+                                       Qt.NoButton, Qt.NoModifier))
+            expected = "Return burn" if lane == "booster" else (
+                "Boost" if t == 50.0 else "Upper-stage burn")
+            assert expected in track.toolTip()
+            if lane == "booster":
+                assert "First stage" in track.toolTip()
+                assert "Upper-stage burn" not in track.toolTip()
+            state.set_time(250.0)
+            phase = track.phase_at(x, lane)
+            track.mousePressEvent(_mouse(QMouseEvent.Type.MouseButtonPress, x, y,
+                                        Qt.LeftButton, Qt.NoModifier))
+            assert state.time == phase["start"]
+            track.mouseDoubleClickEvent(_mouse(QMouseEvent.Type.MouseButtonDblClick, x, y,
+                                              Qt.LeftButton, Qt.NoModifier))
+            assert track.window.start <= phase["start"]
+            assert track.window.end >= phase["end"]
+            assert track.window.span < track.window.full_span
+
+        track.fit()
+        x, y = track.x_of(300.0), sum(rows["events"]) / 2
+        track.mouseMoveEvent(_mouse(QMouseEvent.Type.MouseMove, x, y,
+                                   Qt.NoButton, Qt.NoModifier))
+        assert "Touchdown" in track.toolTip()
+        state.set_time(0.0)
+        track.mousePressEvent(_mouse(QMouseEvent.Type.MouseButtonPress, x, y,
+                                    Qt.LeftButton, Qt.NoModifier))
+        assert state.time == 300.0
+        track.mouseDoubleClickEvent(_mouse(QMouseEvent.Type.MouseButtonDblClick, x, y,
+                                          Qt.LeftButton, Qt.NoModifier))
+        assert track.window.start <= 300.0 <= track.window.end
+        assert track.window.span < track.window.full_span
+    finally:
+        bar.close()

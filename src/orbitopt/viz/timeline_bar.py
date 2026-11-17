@@ -207,7 +207,8 @@ class TimelineTrack(QWidget):
 
     def _row_at(self, y: float) -> str | None:
         for name, bounds in self._rows().items():
-            spans = bounds if name == "phases" else [bounds]
+            spans = ([(top, bottom) for _lane, top, bottom in bounds]
+                     if name == "phases" else [bounds])
             for top, bottom in spans:
                 if top - 1 <= y <= bottom + 1:
                     return name
