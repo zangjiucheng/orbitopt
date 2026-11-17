@@ -117,8 +117,16 @@ defaults:
     values: { title: "ADR 0006 · Landing actuator chain", parent: "Flight Lab", nav_order: 8 }
   - scope: { path: "adr/flightlab-0007-production-jsbsim-aero-path.md" }
     values: { title: "ADR 0007 · JSBSim aero path", parent: "Flight Lab", nav_order: 9 }
+  - scope: { path: "adr/flightlab-0008-rtls-capable-vehicle-redesign.md" }
+    values: { title: "ADR 0008 · RTLS vehicle", parent: "Flight Lab", nav_order: 10 }
+  - scope: { path: "adr/flightlab-0008-sampled-data-control-and-rk4-plant.md" }
+    values: { title: "ADR 0008 · Sampled control", parent: "Flight Lab", nav_order: 11 }
   - scope: { path: "adr/flightlab-0009-engine-and-mass-flow-parity.md" }
-    values: { title: "ADR 0009 · Engine & mass-flow parity", parent: "Flight Lab", nav_order: 10 }
+    values: { title: "ADR 0009 · Engine & mass-flow parity", parent: "Flight Lab", nav_order: 12 }
+  - scope: { path: "adr/flightlab-0010-guided-jsbsim-ascent.md" }
+    values: { title: "ADR 0010 · Guided JSBSim ascent", parent: "Flight Lab", nav_order: 13 }
+  - scope: { path: "adr/flightlab-0011-guidance-generalisation-envelope.md" }
+    values: { title: "ADR 0011 · Guidance envelope", parent: "Flight Lab", nav_order: 14 }
 
   # Verification: between Flight Lab and Missions in the sidebar
   - scope: { path: "verification.md" }
@@ -143,3 +151,12 @@ defaults:
     values: { title: "Fused CUDA kernel benchmark", parent: "Engineering", nav_order: 3 }
   - scope: { path: "gpu-regression/README.md" }
     values: { title: "GPU regression testing", parent: "Engineering", nav_order: 4 }
+
+  - scope: { path: "reference-tolerance-audit.md" }
+    values: { title: "Reference tolerance audit", parent: "Engineering", nav_order: 6 }
+  - scope: { path: "benchmarks/e7_02_probability_calibration.md" }
+    values: { title: "Probability calibration study", parent: "Engineering", nav_order: 7 }
+  - scope: { path: "benchmarks/e7_03_joint_risk.md" }
+    values: { title: "Joint risk study", parent: "Engineering", nav_order: 8 }
+  - scope: { path: "benchmarks/e7_04_failure_driven.md" }
+    values: { title: "Paired recovery failure study", parent: "Engineering", nav_order: 9 }

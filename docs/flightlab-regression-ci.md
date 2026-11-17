@@ -48,6 +48,10 @@ live in [reference-tolerance-audit.md](reference-tolerance-audit.md).
 
 ## CI layout (.github/workflows/ci.yml)
 
+Documentation-only changes skip compute CI; benchmark JSON used as test input
+remains gated. The job split is:
+
+
 * **`test` (linux-64, locked env)** — Flight Lab unit tests run on the
   recorded fixtures only: the OT adapter tests replay recorded v1.0.0
   outputs through a stub CLI, so no OT binary is needed (nor present) here.
@@ -64,8 +68,13 @@ live in [reference-tolerance-audit.md](reference-tolerance-audit.md).
   G5 guards: `verify` (reference files match their provenance digests) and
   `tag-check` (any diff touching `tests/data/flightlab/reference/` needs
   `[fl601-reference-update]` in a commit message of the push/PR range).
-* **`test-macos`** — the full suite on the locked env, arm64 + x86_64 (no
-  Gate B job on macOS in CI; see the manual run below).
+* **`flightlab-landing`** — Python 3.12 with gfold 0.3.2: recovery tests,
+  E2-04 and E5-05 replay/provenance guards.
+* **`cross-env`** — locked TudatPy Python 3.10 plus a Python 3.12 landing
+  environment; verifies sealed exchanges and the E5-05 joined mission.
+* **`test-macos`** — compute tests on the locked arm64/x86_64 environments.
+  Flight Lab navigation tests use scratch folders/settings rather than the
+  checkout runs or user preferences. No Gate B flight runs on macOS CI.
 
 ## The reference dataset
 
@@ -203,114 +212,75 @@ if the scenario surface grows a knob for injecting an ascent/SECO state.
 
 ## E5-05: the reproducible full-physical reference mission (task #272)
 
-E5-01 proved the chain *can* fly a computed ascent; E5-05 freezes the result
-as the mission of record: a two-stage LEO mission with a booster RTLS,
-recorded end to end from a **computed** ascent -- no preset states anywhere.
-`src/orbitopt/data/mission_two_stage_leo_rtls_reference.yaml` (Kourou,
-2026-11-10, 400 km / 51.6° parking, RTLS recovery) is optimized-and-flown
-once and sealed under
-`tests/data/mission/reference/e5-05-reference-mission/`:
+**Recorded:** commit `64f64a6`, from code `74f30c8`, seals the computed-ascent
+RTLS mission under `tests/data/mission/reference/e5-05-reference-mission/`.
+The vehicle decision is resolved: `synthetic_two_stage_rtls` preserves
+stage-1 propellant and restarts its upper stage. The committed trajectory
+reaches **265.5 × 278.1 km at 51.0°** from Kourou. It supersedes the blocked
+400 km/CMA-ES proposal; recording now flies a fixed OT program, not a new
+pygmo search. See the [vehicle decision](adr/flightlab-0008-rtls-capable-vehicle-redesign.md).
 
-> **Recording status (task #272):** the recording is blocked on a vehicle
-> decision, and every consumer above (script subcommands, the
-> `tests/test_e505_reference.py` guards, the CI steps) detects the missing
-> reference directory, prints the reason and passes -- so CI stays green and
-> everything arms itself the moment a recording lands. The blocker is
-> physical, not software: the pinned OpenTsiolkovsky binary burns stage-1 to
-> depletion on every run (debris separates at exactly its 30 t dry mass --
-> verified on the recorded Gate-B run too), the recovery chain plans from
-> that actual mass, and RTLS from a real MECO (~150 km downrange, ~3.5 km/s
-> suborbital) would need tens of tons of stage-1 reserve the demonstrator
-> vehicle cannot leave without failing its own insertion (upper-stage slack
-> buys ~400 m/s; `downrange` landing needs the same propellant). FL-305's
-> accepted landing was flown off the textbook separation state, whose
-> provenance is `illustrative` -- which is why E2-04 stays a fast integration
-> test rather than computed-landing evidence. A recording needs either an
-> RTLS-capable vehicle/ascent redesign or a revised acceptance (ContextDB
-> record `e5-05-rtls-infeasibility-evidence`).
+| Reference artifact | Meaning |
+|---|---|
+| `mission-optimized/` | Historical directory name for the recording: computed OT ascent, raw backend output, target, recovery and joined report. It is not evidence that this recording ran an optimizer. |
+| `mission/` | Replay baseline: the recorded ascent plus freshly simulated recovery. |
+| `earth_orientation.json` | Four IERS-A rows from the recording data package, scoped during frame conversion. |
+| `PROVENANCE.json` | 30 file hashes, recording code/toolchain, scenario/vehicle digests and canonical separation handoff identity. |
+| `tolerances.json` | Comparison budgets; changing them is an audited reference update. |
 
-```
-tests/data/mission/reference/e5-05-reference-mission/
-├── mission-optimized/   the recording: full optimize run (computed ascent,
-│                        raw OpenTsiolkovsky outputs, RTLS recovery, joined
-│                        mission.verification.json)
-├── mission/             the replay regression baseline (run_dir mode of the
-│                        recorded ascent + re-flown recovery)
-├── earth_orientation.json  the four-row IERS-A snapshot the run was scoped to
-├── tolerances.json      the declared comparison budgets (below)
-└── PROVENANCE.json      file digests, git SHA, full toolchain matrix,
-                         EOP snapshot id, separation-handoff identity
-```
-
-`PROVENANCE.json` records the code version (`git_sha_recording`), the
-dependency matrix (`toolchain`: python, platform, gfold, pygmo, numpy,
-scipy, astropy, astropy-iers-data, opentsiolkovsky), the IERS-A snapshot
-(the same table the reference epoch falls inside of -- finalized values, no
-predictions), and the **separation-handoff identity**: the recording's
-recovery leg is *driven* from the ascent's canonical coupled-branch separation
-state (`drive_from_separation: true`), and its `handoff_id` is recorded so
-every later replay -- including across the environment boundary -- can prove
-it branched from that one state.
-
-Unlike the E2-04 builder, nothing here is constructed from constants: the
-ascent is the M-07 recipe (CMA-ES 40x40, seed 11, `refly=True`) optimizing the
-pinned target with the real OpenTsiolkovsky v1.0.0 binary, and the recovery
-is the FL-304/FL-305 plan flown by gfold 0.3.2 from the computed separation
-state. The recovery warm start (`initial_guess`, `max_fevals: 18`) is the
-pinned FL-305 acceptance recipe for this launch geometry, recorded in the
-scenario, the script's `frozen_inputs` and the provenance.
+The recovery uses the E5-05c fixed recipe (`search: keep`): IIP boostback
+cutoff, throttled speed-cutoff entry, closed-loop landing forecast, 0.1 s
+final integration and a 3.6 g landing-law cap. Touchdown is graded against
+its 10 t reserve and speed limits. The committed single-environment report
+passes applicable phases but its **physical gate remains `not_checked`**:
+parking propagation was not run. No missing propagation is counted as a pass.
 
 ### Replaying it
 
-`src/orbitopt/data/mission_two_stage_leo_rtls_replay.yaml` consumes the
-recorded ascent in `run_dir` mode (the same digests, re-graded) and re-flies
-the recovery from the canonical handoff. The regression pair mirrors E2-04
-and FL-601:
+Use the landing stack with gfold 0.3.2; no OT executable or pygmo is needed
+for this replay:
 
 ```bash
-python scripts/e505_reference.py verify            # digests vs PROVENANCE.json (fast, every job)
-python scripts/e505_reference.py run --out /tmp/e505   # replay (needs the landing stack)
-python scripts/e505_reference.py compare /tmp/e505     # vs reference within tolerances.json
-python scripts/e505_reference.py tag-check --base "$BASE"   # G5: reference diffs need the tag
-python scripts/e505_reference.py update            # intended reference change (re-record)
+python scripts/e505_reference.py verify
+python scripts/e505_reference.py run --out runs/e505
+python scripts/e505_reference.py compare runs/e505
 ```
 
-`update` refuses a red run, regenerates the EOP snapshot from the pinned
-`astropy-iers-data` table, and records the *current* toolchain; the
-`[e505-reference-update]` commit tag is required (same G5 rule as FL-601 and
-E2-04). The slow replay is the `flightlab-landing` job; the fast guards run
-everywhere (`tests/test_e505_reference.py`).
+`verify` checks the committed hashes. `run` consumes the recorded ascent by
+digest and re-flies recovery from its canonical separation state; `compare`
+grades that output. The [computed mission guide](computed-mission.md) adds
+scene export and local viewing.
+
+For an intended recording change, `python scripts/e505_reference.py update`
+re-flies the fixed-program ascent with OT v1.0.0 and the pinned recovery
+recipe, refuses a red mission and writes fresh provenance. Use
+`[e505-reference-update]` in the commit message. `tag-check --base SHA`
+only guards this reference directory; the Gate B and E2-04 references have
+their own tags. Do not regenerate results to conceal unexplained drift.
 
 ### Tolerance provenance
 
-The replay consumes the recorded ascent by digest, so no tolerance applies to
-the ascent itself -- only to the re-flown recovery numerics and the report
-fields. Bands: `1e-6` (clock/mass bookkeeping), `1e-2 m` / `1e-4 m/s` for
-flown states (unchanged from E2-04 -- cross-build drift of the same pinned
-gfold/OT stack, observed 1.4e-7 m at most on reviewed builds),
-`1e-4` on check values and report values, and advisory SOCP-plan fields at
-50x inside the solver's own stopping budget. Every band's source is restated
-in `scripts/e505_reference.py`'s docstring and in `tolerances.json`
-provenance; physical check verdicts and check identities are compared
-exactly, never within a band.
+Ascent replay is digest-identical. Recovery bands are `0.01 m` / `1e-4 m/s`
+for flown states and `1e-6` for clock/mass bookkeeping. Advisory landing-start
+fuel/time diagnostics use `0.001 kg` / `0.01 s`, justified against solver
+convergence and integrator resolution. Check identities and verdicts remain
+exact. The script and reference tolerance file document each comparison
+budget; the [tolerance audit](reference-tolerance-audit.md) covers the wider
+reference policy.
 
 ### Two environments (cross-env job)
 
-`src/orbitopt/data/crossenv_e505_plan.yaml` flies the same reference mission
-across the tudatpy-3.10 / gfold-3.12 boundary: the ascent leg replays the
-recorded ascent and *evidences* the M-05 propagation in the tudatpy
-environment (`options.propagate: true` -- the propagation the single-
-interpreter stack cannot run), seals the canonical separation handoff
-(`options.coupled_separation: true`), and the recovery leg is driven from the
-reconstructed handoff across the boundary (`options.drive_from_separation:
-true`). `python scripts/e505_reference.py crossenv-check <out>` then grades
-the joined run: both envelopes re-verify by digest, the recovery leg's
-reported handoff id equals the recorded one, and the sealed recovery run
-matches the reference within `tolerances.json`. This is the E5-05 acceptance
-that the reference is replayable in the E5-03 environments, and the E5-04
-physical gate's one missing piece -- propagation -- is evidenced there, so a
-cross-env run reads `physical: passed` on all five required checks.
+`crossenv_e505_plan.yaml` replays the computed ascent and **runs parking
+propagation** in the locked TudatPy environment. A separate Python 3.12
+environment re-flies gfold recovery from the sealed handoff. The
+[one-command example](computed-mission.md#add-parking-propagation-across-environments)
+supplies both interpreters; then run:
 
-E2-04 remains in place as the fast dual-branch integration test: E5-05
-supplements it, and `tests/test_e505_reference.py` guards that its scenario,
-script, test and frozen reference files stay present.
+```bash
+python scripts/e505_reference.py crossenv-check runs/crossenv-e505
+```
+
+The checker verifies both exchange envelopes, handoff identity, joined
+physical-gate evidence and recovery numerics against the reference. All five
+physical checks must pass; the existence of a plan or a green single-stack
+recording is insufficient. E2-04 remains the fast synthetic fixture.

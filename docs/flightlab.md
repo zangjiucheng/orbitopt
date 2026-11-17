@@ -62,7 +62,11 @@ separation. Its recovery is simulated, but ascent is not re-flown and parking
 propagation is explicitly out of scope. It is not evidence of one physically
 propagated launch-to-orbit-and-return trajectory. See
 [regression procedure](flightlab-regression-ci.md#e2-04-the-frozen-dual-branch-reference-mission-task-257)
-and the [acceptance results](acceptance-e1-e4.md).
+and the [acceptance results](acceptance-e1-e4.md). For the
+recorded **computed-ascent RTLS mission**, use the
+[E5-05 workflow](computed-mission.md): it has a fixed-program OT ascent,
+one shared separation handoff and optional cross-environment parking
+propagation.
 
 <span id="fidelity-levels"></span>
 
@@ -135,83 +139,34 @@ See the [acceptance results](acceptance-e1-e4.md).
 
 ## 6-DOF studies
 
-**F-05 / E1-02:** grade the powered phase separately from coast. In the
-[recorded gravity-turn study](benchmarks/fl605_gravity_turn_ascent.json),
-burnout occurs at 100.2 s in a 180 s flight. Powered 6-DOF attitude error is
-4.77° peak / 2.80° RMS, alpha 14.42°, max-Q 71.2 kPa and peak
-`q·alpha` 482 kPa·deg. The later 62.6° alpha peak occurs in near-vacuum
-coast (coast max-Q 0.11 Pa), not at peak aerodynamic loading. The study's
-2.14 km altitude, 2.06 m/s speed and 0.47° flight-path-angle differences
-are scenario results. (Re-recorded after E6-01's choked engine and commanded
-MECO and E6-04's per-step control sampling; every powered-phase constraint
-still passes, alpha now 0.58° under the 15° table edge.)
+The current records include E6-01 engine/mass-flow alignment and E6-04
+control sampling. These are declared study vehicles and controllers, not a
+single qualified production vehicle:
 
-**F-07 / E1-03:** both native backends use the same state-feedback
-upper-stage steering law, command limits and periapsis cutoff:
+| Study | Recorded result | Scope / source |
+|---|---|---|
+| F-05 / E1-02 | Powered attitude error 4.77° peak, alpha 14.42°, max-Q 71.2 kPa. | Powered and coast gates differ; the later 62.6° alpha peak is in near-vacuum coast. [Record](benchmarks/fl605_gravity_turn_ascent.json). |
+| F-07 / E1-03 | Native point mass: 225.3/228.5 km peri/apo; rigid body: 220.5/226.5 km, within ±25 km. | Shared feedback law on a disclosed 1 t dry / 7 t propellant upper stage with 3° gimbal; not original F-06 parity. [Record](benchmarks/fl607_mission_outputs.json). |
+| E6-02 | Guided production JSBSim ascent with TVC, MECO, staging and delayed ignition; powered error 0.44° peak, alpha 11.7°. | Its 70 t stack and spike-engine children are illustrative; native and JSBSim controller differences are attributed, not assumed away. [ADR 0010](adr/flightlab-0010-guided-jsbsim-ascent.md), [record](benchmarks/e6_02_guided_ascent.json). |
+| E6-03 | Six of 17 declared scenario points insert on both native backends. | Sweeps altitude, inclination, vehicle and actuator sets; misses distinguish vehicle, terminal-law and actuator limits. [ADR 0011](adr/flightlab-0011-guidance-generalisation-envelope.md), [matrix](benchmarks/e6_03_guidance_matrix.json). |
+| E6-04 | Stateful guidance/control sampled once per step and held across RK4 stages. | The study justifies `dt_s = dt_c_s = 0.02`; this is not a universal backend step. [Sampled-control ADR](adr/flightlab-0008-sampled-data-control-and-rk4-plant.md), [sweep](benchmarks/e604_step_convergence.json). |
+
+Run the native two-backend mission and open its saved outputs:
 
 ```bash
 orbitopt flight mission --backend BOTH -o runs/f07-mission
+orbitopt
 ```
 
-The [guided comparison](benchmarks/fl607_mission_outputs.json) records
-225.3/228.5 km peri/apo for the point mass and 220.5/226.5 km for the rigid
-body, inside the declared ±25 km bands. The former 235 km altitude difference
-falls to 1.43 km (re-recorded after E6-01/E6-04; 1.65 km before). This is a disclosed **non-parity variant** (1 t upper dry
-mass, 7 t propellant, 3° gimbal), not the original F-06 vehicle. Shared law
-does not mean identical commands along different states or general accuracy --
-E6-03 measures where that accuracy actually reaches. Runs, handoffs, reports,
-scenes and residual-attribution data are exported.
+For the guided JSBSim study (requires the six-DOF dependency):
 
-**E6-03:** the generalisation matrix puts a number on that envelope. The
-[guidance-generalisation study](benchmarks/e6_03_guidance_matrix.json) flies
-the same law through the same mission runner over 17 declared scenario points —
-5 target altitudes (180–400 km), 3 inclinations (28.5/45.0/51.6°, realised as
-launch latitude on a due-east heading, since the native plant steers with one
-TVC axis and no bank), 4 upper-stage configs (the disclosed 1 t/7 t variant, a
-0.8 t/7.2 t stretched tank, a 1.5 t/6.5 t heavy stage, and the **original F-06
-2 t/6 t stage with zero gimbal travel**) and 5 actuator sets, both backends in
-every cell. Six cells insert. Inclination costs nothing: 220 km inserts at all
-three angles with periapsis errors of 0.8–5.3 km. The altitude envelope is
-bounded at **both** ends by the cutoff criterion, not the tank — at 180 km the
-law shuts the burn with 478 kg left, periapsis inside the band and apoapsis
-+52.8 km outside it (the criterion grades periapsis; apoapsis is whatever
-follows), and from 260 km up periapsis never closes on target, so the stage
-burns itself empty over-shooting by 5 600–7 100 km; 200 kg *more* propellant
-makes a 300 km miss worse (+6 862 → +17 763 km apoapsis), which is what rules
-the tank out. Of the 11 misses, 3 are vehicle capability (the heavy stage's
-terminal orbit stays 23–88 km tighter than the target circle; the unguided
-F-06 stage lands its periapsis 2 718–3 082 km low), 7 are the law's own
-terminal conditions, and 1 is the actuator: a 0.02 rad/s servo leaves the
-actuator-free point-mass twin inserting while the rigid body lands 6 217 km
-under the target orbit. The attribution rule (and why a dry tank is evidence of
-the law rather than of the vehicle) is in
-[ADR 0011](adr/flightlab-0011-guidance-generalisation-envelope.md).
+```bash
+PYTHONPATH=src python benchmarks/bench_e6_02_guided_ascent.py -o runs/e602.json
+```
 
-**E6-04:** the sampled-data TVC loop is audited against the RK4 plant: the
-control law and the stateful guidance are sampled once per integration step
-at the step boundary and held across the four stages, so no mid-stage
-estimate advances controller state. The audit removed a first-order
-integration plateau (1st-order plateau → 2.3e-8 m flat loop output) and a
-guidance slew-limiter corruption; the convergence curves and the
-`dt_s = dt_c_s = 0.02` default justification live in
-[ADR 0008](adr/flightlab-0008-sampled-data-control-and-rk4-plant.md) and
-[the recorded sweep](benchmarks/e604_step_convergence.json).
-
-**E6-02:** the closed-loop ascent is flown on the **JSBSim production path**:
-the F-04/F-06 gravity-turn program (steepened to 140 s to keep the tabulated
-airframe inside its ±15° envelope under production servo lag), the FL-403 PID
-gimbal law and the E6-01 engine, then the FL-402 split with commanded MECO at
-t = 95 s and delayed ignition on the upper child. The five phases
-(stack powered, booster coast, upper coast, upper powered, upper coast after
-burn-out) are graded separately against a declared constraint table: stack
-powered 0.44° peak / 0.22° RMS attitude error, alpha 11.7° (inside the table
-envelope), max-Q 71.4 kPa, TVC margin 0.96 with zero saturation, staging
-mass/momentum/continuity inside the declared property-round-trip bands. The
-native twin passes its own constraints with 4.26° peak (tracker lineage, cf.
-FL-605's 4.77°) and agrees on max-Q to 0.25%; the residuals are attributed by
-channel in [ADR 0010](adr/flightlab-0010-guided-jsbsim-ascent.md) and the
-[recorded study](benchmarks/e6_02_guided_ascent.json) — law difference
-(guidance), not model difference.
+The study writes measurement JSON rather than a Flight Lab run directory.
+The [API reference](api.md#mission-and-qualification-interfaces) covers its
+scenario, runner and comparison functions.
 
 ## Hard gates
 
@@ -307,65 +262,36 @@ all sample rows, failure classes and sensitivities. Statistics were recomputed
 from those rows in the current acceptance review; the 672 flights were not
 re-run.
 
-**The E3-02 row predates E7-01.** It was flown when the joint chance verdict
-was only a penalty, so plans that violated it still flew. Under E7-01's
-enforced feasibility (below) the same 168 samples, re-flown fresh in E7-04
-(`e7_04_joint_base`), land **35** (20.8 %): the 21 recorded landings that
-violated the constraint now end as `JOINT_CHANCE_VIOLATED` before the burn
-(0/21 paired, p ≈ 1e-6). Against the FL-305 baseline that enforced arm is
-11/21 discordant, exact McNemar p = 0.110 — *below* the baseline, not
-significantly so. The p = 0.0192 above is therefore a statement about the
-pre-E7-01 penalty mode, not about the joint chance mode as it now behaves.
+**The E3-02 row predates E7-01.** It measures the old penalty-only mode.
+With feasibility enforced, E7-04 re-flies the same draws and lands **35/168**;
+99 plans are rejected as `JOINT_CHANCE_VIOLATED`. The baseline comparison has
+McNemar p = 0.110. The old p = 0.0192 does not describe today's enforced mode.
 
 ## Probability calibration of p_land (E7-02)
 
-The [calibration report](benchmarks/e7_02_probability_calibration.md) grades
-the joint-chance planner's per-sample `p_land` forecast against the E3-03
-pooled 168-sample record (seeds 1–4, no re-flying). Above the 0.8 floor the
-forecast is consistent (mean prediction inside the observed Wilson interval);
-below it, overconfident — the 0.5–0.8 bin predicts 0.656 and lands 0.076, the
-0–0.5 bin predicts 0.268 and lands 0/42 (ECE 0.313, MCE 0.581, Brier skill
-≈ 0 against climatology). Low-`p_land` samples must not be traded on their
-forecast; the constraint comparison at 0.8 is what the surrogate currently
-supports. Reliability diagram and per-bin Wilson intervals in the report;
-reading via `orbitopt.flightlab.recovery.calibration`.
+The [calibration report](benchmarks/e7_02_probability_calibration.md)
+reuses 168 recorded paired samples. The 0.5–0.8 bin predicts 0.656 but lands
+0.076; the 0–0.5 bin lands 0/42. Above 0.8, mean predictions fall within the
+observed Wilson intervals, whose small high-bin samples leave wide uncertainty.
+This supports only that recorded scenario/dispersion set, not a guaranteed
+success probability. API: `orbitopt.flightlab.recovery.calibration`.
 
 ## Joint risk modeling (E7-03)
 
-The [joint-risk report](benchmarks/e7_03_joint_risk.md) tests the hidden
-assumption in `p_land = p_fuel × p_divert` on the same recorded E3-03
-sample. The two failure channels are **not independent**: realized failures
-*compete* (pooled φ = −0.127, exact Fisher p = 0.010; observed joint-failure
-0.027 vs 0.048 expected), so the product **overstates** `p_land` — the same
-direction E7-02 measured. The adopted replacement is a Gaussian copula,
-`p_land = Φ₂(Φ⁻¹(p_fuel), Φ⁻¹(p_divert); ρ)` with ρ = −0.273 fitted
-out-of-sample on the three non-joint arms; marginal-preserving, monotone,
-Fréchet-safe, and exactly the product at ρ = 0. On the joint arm it improves
-every E7-02 metric (Brier 0.222 → 0.214, skill 0.000 → +0.039, ECE 0.313 →
-0.301, MCE 0.581 → 0.563) but does **not** repair the mid-band: below 0.8
-the forecast still overstates, and the E7-02 usage rule stands. The shipped
-spec default is still ρ = 0.0 (exact product); `FITTED_LANDING_DEPENDENCE_RHO`
-and `JointChanceSpec.landing_dependence_rho` carry the coupling for the epic
-to adopt. Module: `orbitopt.flightlab.recovery.joint_risk`.
+The [joint-risk report](benchmarks/e7_03_joint_risk.md) rejects independent
+fuel/divert failure channels (Fisher p = 0.010). A Gaussian copula fitted on
+three other arms uses ρ = −0.273; on the held-out joint arm, Brier score
+improves 0.222 → 0.214. The mid-band remains overconfident. The shipped
+`JointChanceSpec.landing_dependence_rho` default is **0.0** (the product);
+the fitted constant is opt-in. API: `orbitopt.flightlab.recovery.joint_risk`.
 
 ## Failure-driven optimization (E7-04)
 
-The [paired re-fly report](benchmarks/e7_04_failure_driven.md) attacks the
-categories E3-03 fingered, on the identical dispersion samples, with the
-Holm-corrected per-category McNemar family E3-03's own p = 0.019 lesson
-demanded. The guidance fix — declared TVC chain **with** E3-01's
-command-side lag compensation, plus the new off-by-default lateral cutoff
-gate (`cutoff_lateral_speed_m_s`, 0.8 m/s) — cuts
-`LANDING_LATERAL_SPEED_EXCEEDED` **24 → 18** (7/1 discordants, raw McNemar
-p = 0.070; Holm cannot certify at 6 comparisons) and lifts landings
-45 → 49, with no category rising under correction (raw reserve-low +3,
-p = 0.25). `initial_state` sensitivity moves |ρ| 0.403 → 0.384 but stays
-rank 1 — the dispersion is attenuated, not dethroned. The gate itself
-re-flew baseline verdicts bit-exactly unchanged (failures arrive at the
-3 m window with 2–4 m/s lateral — too fast to null; they are born in the
-divert, which is why compensation carries the fix), and the planning knob
-`corridor_aim_margin_m` measured as a propellant/lateral trade, so it
-ships at 0. The joint-chance arm re-paired **fresh** (the recorded joint
-rows predate E7-01's feasibility semantics) shows compensation inert
-there: the 0.8 floor rejects 99/168 samples before the burn, E7-02's
-usage rule again. Module: `orbitopt.flightlab.recovery.failure_driven`.
+The [paired re-fly report](benchmarks/e7_04_failure_driven.md) compares the
+same 168 dispersion draws with TVC lag compensation and an optional lateral
+cutoff gate. Lateral-speed failures fall 24 → 18 and landings rise 45 → 49;
+this is **not significant after Holm correction** (raw category p = 0.0703,
+adjusted 0.3516). The gate alone reproduces baseline verdicts; compensation
+carries the measured change. The enforced joint arm stays 35/168 with or
+without the fix. Default cutoff and corridor-aim knobs remain off; see
+`orbitopt.flightlab.recovery.failure_driven` for the paired analysis.

@@ -15,10 +15,10 @@ drift from the enforced `tolerances.json`.
 Astropy's offline IERS default changed between major versions (astropy 6
 flies IERS-B offline; astropy 8 prefers IERS-A when downloads are on), and
 that alone moves the frame bridge by metres. So no reference regression
-may rely on whatever the installed astropy happens to default to. All of
-them freeze Earth orientation through `orbitopt.reference_eop` (one
-snapshot format, one `pin_no_download`, one `freeze_reference`), with two
-modes chosen by *how the reference was recorded*:
+may rely on whatever the installed astropy happens to default to. Gate B
+and E2-04 freeze Earth orientation through `orbitopt.reference_eop`
+(`pin_no_download` and `freeze_reference`), with two modes chosen by how the
+reference was recorded:
 
 - **`pinned-bundled`** (Gate B, `tests/data/flightlab/reference/`): the
   tracks were flown on the *default offline table of the recording stack*
@@ -32,12 +32,16 @@ modes chosen by *how the reference was recorded*:
   the reference was flown against specific IERS-A rows, so the snapshot's
   four rows *become* the active table at regression time, on any stack.
 
-Regenerating or re-recording a reference uses the same entry point:
-`scripts/fl601_reference.py update [--tolerances-only] --reason "..."`
-writes the old→new diff into `PROVENANCE.json` (`tolerance_audit`)
-alongside the new `tolerances.json` digest; a change without `--reason`
-is refused. `verify` then checks all 13 reference files against the
-recorded digests.
+E5-05 currently uses the scoped snapshot context in `scripts/e505_reference.py`:
+its own recording-package IERS-A rows override the host table. This is not
+the Gate B bundled-stack policy, and a stored snapshot does not imply every
+row was a finalized measurement.
+
+`scripts/fl601_reference.py update` re-flies the Gate B reference and
+records fresh digests. For a comparison-policy-only change, use
+`update --tolerances-only --reason "..."`: it preserves flight output,
+requires the reason, and appends the old→new tolerance/hash audit to
+`PROVENANCE.json`. `verify` checks all 13 files against the recorded digests.
 
 ## RAAN / Earth-orientation benchmarks
 
@@ -61,7 +65,9 @@ identical locked stack on linux-x86_64 (`test` job), macOS ARM
 (`test-macos`, osx-arm64) and macOS Intel (`test-macos`, osx-64);
 observations per platform are ledgered in
 `tests/data/e804/cross-platform.json` (`cross-platform-record` prints the
-line for a platform).
+line for a platform). The committed ledger currently contains a Linux
+observation; both macOS entries are `null` (not recorded). A configured CI
+matrix is not a stored cross-platform result.
 
 ## History
 
@@ -69,7 +75,7 @@ line for a platform).
 |---|---|---|
 | 2026-10-28 `286ebe2` | Gate B position/altitude/downrange 1e-6 -> 1e-4 m, velocity 1e-8 -> 1e-6 m/s | cross-machine floor: the reference OT binary itself differs at this level between build hosts; the band only needs to prove no regression beyond the recording platform's own reproducibility |
 | 2026-10-28 `e97e147` | Gate B `t_s_abs` 1e-9 -> 1e-6 s | same cross-machine floor for the logged time column |
-| 2026-11-12 `3051848` | E2-04 add `ascent_build_{position,velocity}_m_abs` 1e-6 and `landing_plan_diagnostic_abs` {fuel_planned_kg 1e-3, tof_flying_s 1e-2} | physics verdicts preserved across platforms; diagnostics rebuilt per-run need their own bands |
+| 2026-11-15 `3051848` | E2-04 add `ascent_build_{position,velocity}_m_abs` 1e-6 and `landing_plan_diagnostic_abs` {fuel_planned_kg 1e-3, tof_flying_s 1e-2} | physics verdicts preserved across platforms; diagnostics rebuilt per-run need their own bands |
 | 2026-11-15 (this task) | Gate B add `cross_platform` {position_m_abs 1e-4, velocity_m_s_abs 1e-6} | E8-04 cross-platform re-derivation exercises the same pinned frame bridge as the flight bands, so the band equals them; full audit entry in `PROVENANCE.json` |
 | 2026-11-17 (this task) | E8-01 full-chain bands added (`FULL_CHAIN_TOLERANCES`, table below) | E8-01 grades the recorded E5-05 chain against the raw OpenTsiolkovsky recording and closed-form mechanics; bands derive from recorder grid, element-convention and environment-model budgets, not post-hoc tuning |
 

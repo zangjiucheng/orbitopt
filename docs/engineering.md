@@ -11,6 +11,7 @@ description: Implementation notes, numerical benchmarks and regression tests.
 - [Compute worker lifecycle](mission-control-worker-lifecycle.md): process guarantees and tests.
 - [CUDA kernel benchmark](benchmarks/fused_kernel_evaluation.md): measurements and backend decisions.
 - [GPU regression testing](gpu-regression/README.md): procedure and recorded runs.
+- [Reference tolerance audit](reference-tolerance-audit.md): EOP pinning, comparison budgets and provenance.
 - [E1–E4 acceptance review](acceptance-e1-e4.md): tested revision, resolved findings and evidence limits.
 
 ## Workflow triggers

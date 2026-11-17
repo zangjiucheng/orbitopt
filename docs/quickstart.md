@@ -99,19 +99,22 @@ orbitopt run src/orbitopt/data/mission_two_stage_leo.yaml
 See [Flight Lab](flightlab.md#mission-pipeline) for the segments and their
 handoff gates.
 
-For the frozen dual-branch recovery fixture (requires the
+For the computed-ascent RTLS reference (requires the
 [landing environment](../envs/README.md)):
 
 ```bash
-python scripts/e204_reference.py run --out runs/e204
-python scripts/e204_reference.py compare runs/e204
+python scripts/e505_reference.py verify
+python scripts/e505_reference.py run --out runs/e505
+python scripts/e505_reference.py compare runs/e505
 ```
 
-The reference entrypoint applies its frozen Earth-orientation data. It replays illustrative ascent endpoints and simulates booster recovery;
-parking propagation is declared out of scope. It is an integration fixture,
-not a freshly optimized full-flight solution. See the
-[regression procedure](flightlab-regression-ci.md#e2-04-the-frozen-dual-branch-reference-mission-task-257)
-and [acceptance results](acceptance-e1-e4.md).
+This replays the recorded computed ascent and re-flies booster recovery.
+The reference reaches 265.5 × 278.1 km at 51.0°; parking propagation remains
+`not_checked` in this single-environment run. The
+[computed mission workflow](computed-mission.md) adds local viewing and the
+cross-environment propagation command. E2-04 remains a
+[synthetic integration fixture](flightlab-regression-ci.md#e2-04-the-frozen-dual-branch-reference-mission-task-257),
+not the computed reference.
 
 ## Verification
 

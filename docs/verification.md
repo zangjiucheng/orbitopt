@@ -94,7 +94,7 @@ physical phases** and cannot be taken out of scope by declaration:
   overall pass for a mission that never propagated to its parking orbit
   or never brought the booster home.
 
-Every gate document carries the coverage of required phases —
+Newly generated gate documents carry the coverage of required phases —
 `inputs.full_mission.coverage` lists a per-phase status
 (`checked`, `failed` counts as checked, `not_checked`,
 `declared_out_of_scope`, `not_declared`) and a `summary` like `2/3`, which
@@ -141,25 +141,21 @@ the physical gate honestly says `not_checked`.
 
 ### The reproducible reference mission (E5-05, task #272)
 
-E5-04 says what a physical mission must show; E5-05 commits one. The mission
-of record (`src/orbitopt/data/mission_two_stage_leo_rtls_reference.yaml`) is
-computed end to end — OpenTsiolkovsky ascent, station chain, staging, M-05
-propagation evidence, and the RTLS recovery driven from the one canonical
-separation state — with full provenance (code SHA, dependency matrix, IERS
-snapshot, backend pins, handoff identity). Regression replay and cross-
-environment replay (both E5-03 environments, with the propagation evidenced
-in the tudatpy leg so the physical gate reads `passed`, not `not_checked`)
-compare within `tests/data/mission/reference/e5-05-reference-mission/
-tolerances.json`, whose every band carries a source; see the
-[regression CI page](flightlab-regression-ci.md#e5-05-the-reproducible-full-physical-reference-mission-task-272).
-E2-04 is kept unchanged as the fast integration test. **Recording status:**
-the sealing run is blocked on a vehicle decision — RTLS from a computed
-OpenTsiolkovsky ascent is physically infeasible for the current catalog
-vehicle (stage-1 separates dry; the demonstrator's insertion margin cannot
-carry the recovery propellant), so the reference is not recorded and every
-consumer of it skips with the reason until a recording lands. See the
-regression CI page's E5-05 status note and ContextDB record
-`e5-05-rtls-infeasibility-evidence`.
+The reference is now committed under
+`tests/data/mission/reference/e5-05-reference-mission/` (recording commit
+`64f64a6`). It uses the RTLS vehicle redesign, a fixed-program computed OT
+ascent and recovery driven from the canonical separation handoff. The
+recorded orbit is **265.5 × 278.1 km at 51.0°**; the earlier blocked 400 km
+recording proposal is superseded.
+
+The sealed single-environment report passes its applicable phase checks but
+has **physical verdict `not_checked`**, with parking propagation not
+assessed. It predates the E8-03 coverage/qualification fields. A current
+cross-environment run must supply the missing TudatPy propagation evidence
+and satisfy the physical gate; a stored green report alone does not do so.
+See [running and viewing the reference](computed-mission.md) and the
+[regression procedure](flightlab-regression-ci.md#e5-05-the-reproducible-full-physical-reference-mission-task-272).
+E2-04 remains the synthetic integration fixture.
 
 ## Full-chain reference validation (E8-01, task #281)
 
@@ -198,7 +194,7 @@ The E4-03 evidence split is honest about what is what:
 Because the ascent was computed *by* OpenTsiolkovsky, the event checks
 validate the chain's extraction, framing and reporting of the external
 recording rather than two independent ascent simulators; the recovery leg
-is where two independently formulated models (gfold 6-DOF vs the pinned
+is where two independently formulated models (the 3-DOF recovery model vs the pinned
 external binary) genuinely cross. The report's
 `inputs.honesty_notes` repeat this so a reader of the JSON alone cannot
 miss it.
