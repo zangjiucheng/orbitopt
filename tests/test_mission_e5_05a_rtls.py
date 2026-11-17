@@ -192,18 +192,8 @@ F10 = ("F10 (CLOSED, E5-05c #287): the FL-302 timed 7-parameter script could "
        "not reach the FL-301 corridor from a computed MECO; the IIP-cut "
        "boostback, speed-cut throttled entry burn and closed-loop landing "
        "forecast, with a +48 t stage-1 reserve, land it (n=64 Monte Carlo "
-       "64/64, docs/adr/flightlab-0008)")
-#: the packaged mission CHAIN (run_dir replay -> E5-02 shared handoff ->
-#: dual-branch merge) still fails on gates that are NOT F10 -- present on the
-#: pre-E5-05c fixture too, masked by the old xfail(F10) (ADR flightlab-0008,
-#: "Mission chain"): left to #272 (reproducible reference scenario).
-CHAIN = ("mission-chain gates outside F10 (ADR flightlab-0008): E5-02 booster "
-         "handoff continuity (the shared handoff hands the booster the t=140 s "
-         "GCRS sample, the pipeline plans from the t=141 s separation state; "
-         "the fixed script misses 7.4 km from it); expected parking orbit "
-         "250x250 km @51.6 deg +/-20 km/0.2 deg vs the scenario band the vehicle "
-         "flies (rp 272.6 / ra 285.1 km @51.0 deg) and parking elements read "
-         "before the stage-2 re-ignition; OT ascent max-accel verification")
+        "64/64, docs/adr/flightlab-0008)")
+
 
 
 @pytest.mark.slow
@@ -287,24 +277,25 @@ def test_recovery_landing_gate_on_the_computed_state(live_flight):
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason=CHAIN)
 @pytest.mark.skipif(not FIXTURE.is_dir(),
                     reason="recorded-flight fixture baked by scripts/e505a_reference.py")
 @pytest.mark.skipif(not _has_gfold(), reason="needs gfold for the landing leg")
 def test_packaged_mission_chain_replays_the_recorded_flight(tmp_path):
     """The packaged mission (run_dir replay of the recorded OT flight,
-    drive_from_separation) chains the full dual-branch mission. strict
-    xfail on the non-F10 chain gates (CHAIN; #272): F10 itself is asserted
-    hard on the computed separation state by
-    test_recovery_landing_gate_on_the_computed_state. Propagation stays
-    not_checked (E2-04 environment reason)."""
+    drive_from_separation) chains the full dual-branch mission to OK. The
+    chain gates that kept this xfail(strict) through E5-05b/c are closed by
+    #272: the booster handoff hands over the separation-epoch state, the
+    expected parking orbit is the delivered SECO state read AFTER the restart
+    burn (checks.insertion_state), and the scenario bands hold the computed
+    flight (docs/adr/flightlab-0008 "Mission chain" closure). Propagation
+    stays not_checked (E2-04 environment reason)."""
     from orbitopt.mission.two_stage_leo import (
         STATUS_OK, run_two_stage_leo, scenario_from_config)
 
     scenario = scenario_from_config(load_mission_config(MISSION))
     mission = run_two_stage_leo(scenario, tmp_path / "e5-05a")
-    gate = [c for c in mission.checks if getattr(c, "id", "") == "recovery-landing"]
-    assert gate, "recovery-landing gate missing from the mission chain"
+    gate = [c for c in mission.checks if getattr(c, "id", "") == "recovery.landed"]
+    assert gate, "recovery landing gate missing from the mission chain"
     assert mission.status == STATUS_OK, mission.status
 
 

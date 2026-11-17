@@ -1,6 +1,6 @@
 {
   "schema": "e5-05a-rtls-mission-provenance-v1",
-  "generated_utc": "2026-11-17T04:23:15+00:00",
+  "generated_utc": "2026-11-17T13:15:08+00:00",
   "generator": "scripts/e505a_reference.py (OpenTsiolkovsky 1.1.0 via the flightlab adapter)",
   "vehicle": "src/orbitopt/data/flightlab/vehicles/synthetic_two_stage_rtls.yaml",
   "ascent_target": "scenarios/leo_two_stage_rtls.yaml",

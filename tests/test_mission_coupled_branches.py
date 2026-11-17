@@ -14,6 +14,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -171,7 +172,10 @@ def test_the_booster_branch_is_flown_from_the_shared_state(gateb):
     booster = booster_state_from_run(gateb, h)
     debris = next(t for t in gateb.tracks if t.body_id == "stage1_debris")
     assert booster.frame == "GCRS" and booster.t_s == h.t_s
-    assert booster.epoch_utc == h.epoch_utc.replace(tzinfo=None)  # the handoff's epoch
+    # the propagator's mission clock: t_s seconds after the run's reference
+    # epoch, landing on the handoff's absolute instant (E5-05 convention fix)
+    assert (booster.epoch_utc + timedelta(seconds=booster.t_s)
+            == h.epoch_utc.replace(tzinfo=None))
     assert booster.mass_kg == pytest.approx(debris.mass_kg[0])  # its own separation mass
     assert booster.position_m == tuple(h.state.r_m)
     assert booster.velocity_m_s == tuple(h.state.v_m_s)

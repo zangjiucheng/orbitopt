@@ -1076,6 +1076,12 @@ def _acquire_ascent(scenario: TwoStageLeoScenario, out: Path):
         date_utc=scenario.date_utc, raan_deg=scenario.raan_deg,
         window_days=scenario.window_days, out_dir=out / "launch",
         recovery=None if scenario.recovery is None else dict(scenario.recovery.spec or {}),
+        # E5-05 (task #272): with a recovery declared, the pipeline's own
+        # winner re-flight must stay ascent-only -- the recovery this mission
+        # grades is the one _fly_recovery_stage flies below (with the
+        # scenario's plan options and the E5-02 separation drive), over this
+        # very ascent, exactly once.
+        run_recovery=scenario.recovery is None,
         **dict(scenario.ascent))
     if pipeline.ascent_run_dir is None:
         # No flight at all (infeasible window, optimizer abort): there is no
@@ -1346,6 +1352,21 @@ def run_two_stage_leo(scenario: TwoStageLeoScenario, out_dir, *,
             recovery_run_dir = Path(recovery_block["run_dir"])
             checks.extend(recovery_checks)
             not_assessed.extend(recovery_notes)
+        elif scenario.ascent_mode == "run_dir" and scenario.ascent_target_file:
+            # E5-05 (task #272): a replayed flight carries the Gate-B verdict
+            # recorded against its flown target -- which for the RTLS design
+            # campaign declares the recovery gates the landing branch grades.
+            # A mission without a recovery leg (including the cross-env ascent
+            # stage, where the landing leg runs in another environment) cannot
+            # assess those gates, so re-evaluate the replayed run against the
+            # target with the recovery declaration stripped.
+            from orbitopt.flightlab import checks as gate_checks
+            from orbitopt.flightlab.contract import Recovery, load_target
+
+            flown_target = load_target(scenario.ascent_target_file)
+            if flown_target.recovery.kind != "none":
+                run = replace(run, verification=gate_checks.evaluate(
+                    run, replace(flown_target, recovery=Recovery())))
         checks.append(_check("ascent.flight_verified",
                              bool(run.verification.mission_constraints_passed),
                              reason_code="mission_constraints_failed"))

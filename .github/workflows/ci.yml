@@ -99,7 +99,7 @@ jobs:
     # pin) and runs the recovery suite there, slow tests included (~1 min).
     name: flightlab landing (gfold 0.3.2, Python 3.12)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -144,6 +144,26 @@ jobs:
           fi
           python scripts/e204_reference.py tag-check --base "$BASE"
 
+      # E5-05 (task #272): the reproducible full-physical reference mission
+      # (computed ascent -> parking + RTLS, coupled branches). Same G5 pair
+      # as E2-04; the numerical regression -- replay the recorded ascent,
+      # re-fly the recovery from the canonical separation handoff, compare
+      # within the declared tolerances -- is the slow test in
+      # tests/test_e505_reference.py, collected here.
+      - name: E5-05 reference mission matches its provenance (G5 tamper check)
+        run: python scripts/e505_reference.py verify
+
+      - name: E5-05 reference changes require an explicit tagged update (G5)
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            BASE=$(git merge-base "origin/${GITHUB_BASE_REF}" HEAD)
+          elif [ "$GITHUB_EVENT_NAME" = push ]; then
+            BASE="${{ github.event.before }}"
+          else
+            BASE=""
+          fi
+          python scripts/e505_reference.py tag-check --base "$BASE"
+
       - name: Recovery and landing tests with the real solver
         run: >
           pytest -m "not gpu" -rs
@@ -154,6 +174,7 @@ jobs:
           tests/test_flightlab_simulate_recovery.py
           tests/test_flightlab_recovery_envelope.py
           tests/test_e204_reference.py
+          tests/test_e505_reference.py
 
   # E5-03 (task #270): cross-environment end to end. tudatpy lives only in
   # the conda-locked Python 3.10 env; gfold 0.3.2 only has >=3.11 wheels --
@@ -165,7 +186,7 @@ jobs:
   cross-env:
     name: cross-env e2e (tudatpy 3.10 + gfold 3.12)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash -l {0}
@@ -200,7 +221,7 @@ jobs:
         run: |
           export ORBITOPT_TUDAT_PYTHON="${MAMBA_ROOT_PREFIX:?}/envs/orbitopt/bin/python"
           test -x "$ORBITOPT_TUDAT_PYTHON" && test -x "$ORBITOPT_GFOLD_PYTHON"
-          pytest tests/test_crossenv.py -m cross_env -v
+          pytest tests/test_crossenv.py tests/test_e505_reference.py -m cross_env -v
 
       - name: The standalone one-command CLI runs the same plan
         env:
@@ -211,6 +232,22 @@ jobs:
             -o runs/crossenv-ci
           python -m orbitopt crossenv verify runs/crossenv-ci/ascent/exchange
           python -m orbitopt crossenv verify runs/crossenv-ci/recovery/exchange
+
+      # E5-05 (task #272): the reference mission across the boundary. The
+      # ascent leg replays the recorded computed ascent and evidences the
+      # propagation in the tudatpy env; the recovery leg is DRIVEN from the
+      # ascent leg's canonical separation handoff (E5-02 over E5-03).
+      # crossenv-check grades the sealed recovery against the committed
+      # reference, handoff identity included -- the proof that the two
+      # environments branched from the one recorded state.
+      - name: E5-05 reference mission replays across the boundary
+        env:
+          ORBITOPT_GFOLD_PYTHON: ${{ github.workspace }}/.venv-landing/bin/python
+        run: |
+          export ORBITOPT_TUDAT_PYTHON="${MAMBA_ROOT_PREFIX:?}/envs/orbitopt/bin/python"
+          python -m orbitopt crossenv run --plan src/orbitopt/data/crossenv_e505_plan.yaml \
+            -o runs/crossenv-e5-05
+          python scripts/e505_reference.py crossenv-check runs/crossenv-e5-05
 
   test-macos:
     # Same locked CPU env on macOS: micromamba picks the osx-arm64 or osx-64

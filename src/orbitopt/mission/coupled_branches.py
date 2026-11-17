@@ -59,6 +59,7 @@ from orbitopt.mission.contract import (
     HandoffTolerances,
     check_handoff,
     state_digest,
+    state_from_dict,
     state_to_dict,
 )
 
@@ -95,6 +96,27 @@ class SeparationHandoff:
                 "parent_mass_kg": float(self.parent_mass_kg),
                 "separation_event_t_s": float(self.separation_event_t_s),
                 "branch_bodies": dict(self.branch_bodies)}
+
+    @classmethod
+    def from_dict(cls, doc: Mapping[str, Any]) -> "SeparationHandoff":
+        """Rebuild the handoff from its ``to_dict`` document (E5-05, task #272:
+        the recovery leg of a cross-environment run drives from the ascent
+        leg's canonical handoff, so the document must round-trip across the
+        environment boundary). ``handoff_id`` is taken from the document, not
+        recomputed: it identifies the sealed state, and a reader that
+        re-hashed the state could not tell tampering from a rebuild -- the
+        caller's envelope digest validation does that, before this runs."""
+        from datetime import datetime
+
+        return cls(handoff_id=str(doc["handoff_id"]),
+                   state=state_from_dict(doc["separation_state"]),
+                   t_s=float(doc["t_s"]),
+                   epoch_utc=datetime.fromisoformat(str(doc["epoch_utc"])),
+                   parent_body=str(doc["parent_body"]),
+                   parent_mass_kg=float(doc["parent_mass_kg"]),
+                   separation_event_t_s=float(doc["separation_event_t_s"]),
+                   branch_bodies={str(k): str(v)
+                                  for k, v in (doc.get("branch_bodies") or {}).items()})
 
 
 def separation_handoff(run) -> SeparationHandoff | None:
@@ -140,16 +162,26 @@ def branch_initial_mass(run, body_id: str) -> float:
     return float(track.mass_kg[0])
 
 
-def booster_state(handoff: SeparationHandoff, *, mass_kg: float):
+def booster_state(handoff: SeparationHandoff, *, mass_kg: float,
+                  epoch_utc: datetime | None = None):
     """The canonical separation state as the ``BoosterState`` FL-304 flies
     (E5-02: the booster branch starts *at* the handoff, not at a separately
-    read-out debris sample). The state stays in the handoff's frame (GCRS)
-    and on the handoff's epoch; the propagator's own FL-002 bridge puts it
-    in ECEF, so no conversion happens here."""
+    read-out debris sample). The state stays in the handoff's frame (GCRS);
+    ``epoch_utc`` is the mission-clock origin the propagator needs -- the
+    run's reference epoch, not the handoff's absolute instant: FL-304's
+    mission clock reads ``t_s`` seconds after ``epoch_utc`` (E5-05, task
+    #272: driving with the separation instant itself double-counted the
+    offset, sealing the booster track ~sep-time into the future and
+    bridging continuity checks across the ghost gap)."""
+    from datetime import timedelta
+
     from orbitopt.flightlab.recovery.propagator import BoosterState
 
+    if epoch_utc is None:
+        epoch_utc = handoff.epoch_utc.replace(tzinfo=None) - timedelta(
+            seconds=float(handoff.t_s))
     return BoosterState(t_s=float(handoff.t_s),
-                        epoch_utc=handoff.epoch_utc.replace(tzinfo=None),
+                        epoch_utc=epoch_utc,
                         frame=handoff.state.frame,
                         position_m=tuple(handoff.state.r_m),
                         velocity_m_s=tuple(handoff.state.v_m_s),
@@ -158,14 +190,18 @@ def booster_state(handoff: SeparationHandoff, *, mass_kg: float):
 
 def booster_state_from_run(run, handoff: SeparationHandoff):
     """:func:`booster_state` with the booster branch's own separation mass
-    (the debris track's first sample -- the bookkeeping half of the split;
-    the r/v/epoch all come from the canonical state)."""
+    (the debris track's first sample -- the bookkeeping half of the split)
+    and the ascent run's own reference epoch for the propagator's mission
+    clock (the handoff's absolute instant lands at t_s = ``handoff.t_s``)."""
     from orbitopt.mission.branches import BRANCH_BOOSTER
 
     body_id = handoff.branch_bodies.get(BRANCH_BOOSTER)
     if body_id is None:
         raise ValueError("the separation fork carries no booster branch to drive")
-    return booster_state(handoff, mass_kg=branch_initial_mass(run, body_id))
+    parent = next(t for t in run.tracks if t.body_id == handoff.parent_body)
+    epoch = datetime.fromisoformat(parent.epoch_utc.replace("Z", "+00:00"))
+    return booster_state(handoff, mass_kg=branch_initial_mass(run, body_id),
+                         epoch_utc=epoch.replace(tzinfo=None))
 
 
 def _residual(a: Mapping[str, Any], b: Mapping[str, Any]) -> dict:

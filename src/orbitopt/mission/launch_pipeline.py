@@ -380,6 +380,7 @@ def run_launch_pipeline(*, site: str, orbit: str | Sequence[float], vehicle: str
                         generations: int = 60, population: int = 48,
                         workers: int | None = None, local: bool = True,
                         refly: bool = True, timeout_s: float = 300.0,
+                        run_recovery: bool = True,
                         sensitivity_offsets_s: Sequence[float] | None = None,
                         ) -> LaunchPipelineResult:
     """Run launch window selection -> ascent optimization -> injection
@@ -394,7 +395,10 @@ def run_launch_pipeline(*, site: str, orbit: str | Sequence[float], vehicle: str
     FlightResult run + ``optimization.json``) and ``launch.verification.json``.
     ``sensitivity_offsets_s`` defaults to ``None`` (no extra epoch-offset
     re-flights); the standalone ``flight optimize`` command keeps its own
-    default of +/-60 s. Raises KeyError/FileNotFoundError/ValueError/RuntimeError
+    default of +/-60 s. ``run_recovery=False`` keeps the winner's re-flight
+    ascent-only even when ``recovery`` is declared on the target: the
+    mission chain (``orbitopt.mission.two_stage_leo``) then flies the
+    recovery itself, once, over this ascent. Raises KeyError/FileNotFoundError/ValueError/RuntimeError
     on input trouble (unknown site, vehicle file, orbit spec, missing pygmo);
     mission-level failures come back in the result."""
     from orbitopt.flightlab.target_export import (build_target, parse_orbit_spec,
@@ -448,6 +452,7 @@ def run_launch_pipeline(*, site: str, orbit: str | Sequence[float], vehicle: str
                               algorithm=algorithm, generations=generations,
                               population=population, workers=workers,
                               local=local, refly=refly, timeout_s=timeout_s,
+                              run_recovery=run_recovery,
                               derive_window=raan_deg is not None,
                               window_days=window_days,
                               sensitivity_offsets_s=sensitivity_offsets_s)
