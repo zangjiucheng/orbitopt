@@ -61,10 +61,14 @@ RE_EARTH = 6371000.0
 
 
 def _has_stack() -> bool:
-    from orbitopt.flightlab.adapters.opentsiolkovsky import find_binary
+    from orbitopt.flightlab.adapters.opentsiolkovsky import OTBinaryMissingError, find_binary
 
-    return (importlib.util.find_spec("pygmo") is not None
-            and find_binary() is not None)
+    if importlib.util.find_spec("pygmo") is None:
+        return False
+    try:  # evaluated at collection: a missing binary must skip, not error the module
+        return find_binary() is not None
+    except OTBinaryMissingError:
+        return False
 
 
 def _has_gfold() -> bool:

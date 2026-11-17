@@ -15,5 +15,9 @@
   "check_value_abs": 1e-09,
   "check_value_rel": 1e-09,
   "event_data_abs": 1e-09,
-  "event_data_rel": 1e-09
+  "event_data_rel": 1e-09,
+  "cross_platform": {
+    "position_m_abs": 0.0001,
+    "velocity_m_s_abs": 1e-06
+  }
 }

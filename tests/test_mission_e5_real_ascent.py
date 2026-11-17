@@ -54,13 +54,21 @@ _E204_EXCEPTION_FILES = {
     "tests/test_e204_reference.py",
     "tests/test_mission_phases.py",
     "tests/test_crossenv.py",
+    # E8-04: reads only the fixture's earth_orientation.json / tolerances.json
+    # (the unified EOP pin and the tolerance ledger), never its ascent state
+    "tests/test_e804_reference_data.py",
 }
 
 
 def _has_stack() -> bool:
-    from orbitopt.flightlab.adapters.opentsiolkovsky import find_binary
+    from orbitopt.flightlab.adapters.opentsiolkovsky import OTBinaryMissingError, find_binary
 
-    return PYGENO and find_binary() is not None
+    if not PYGENO:
+        return False
+    try:  # evaluated at collection: a missing binary must skip, not error the module
+        return find_binary() is not None
+    except OTBinaryMissingError:
+        return False
 
 
 def _has_tudat() -> bool:

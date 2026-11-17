@@ -11,7 +11,7 @@ This page is the operational summary; the licenses are in
 |---|---|---|
 | python / conda stack | python 3.10, tudatpy 1.0, numpy 1.26.4, … | `envs/{cpu,gpu}.yml` + `envs/*.conda-lock.yml` (CI job `lockfile-drift` fails spec/lock skew) |
 | astropy (frame bridge) | `astropy=6.1.7`, exact | `envs/{cpu,gpu}.yml` |
-| IERS Earth-orientation data | `astropy-iers-data` from the lockfile, **no download** in the Gate B regression | `scripts/fl601_reference.py` (`_pin_earth_orientation`) |
+| IERS Earth-orientation data | `astropy-iers-data` from the lockfile (E8-04 snapshot-pinned), **no download** in any reference regression | `orbitopt.reference_eop` via `scripts/{fl601,e204}_reference.py` (`_pin_earth_orientation`) |
 | gfold (FL-303 landing solver) | `gfold==0.3.2`, exact (wheels need Python >= 3.11) | `envs/flightlab-landing.txt`; CI job `flightlab-landing` runs it on Python 3.12 via `envs/flightlab-landing-ci.txt` |
 | jsbsim (E4 6-DOF spike) | `jsbsim==1.3.3`, hash-locked | `envs/sixdof-requirements.txt` |
 | OpenTsiolkovsky (external binary) | v1.0.0, per-platform SHA-256 | `scripts/fetch_opentsiolkovsky.py` (fetch refuses any other bytes; `--check` verifies what is installed) |
@@ -31,12 +31,20 @@ every day as predictions become measurements: the same flight's GCRS
 positions moved by tenths of a metre between days, far beyond the
 micrometre tolerances (the regression's first CI run failed on 7,670
 samples). `fl601_reference.py run` / `update` therefore use only the table
-bundled with the pinned `astropy-iers-data`. It ends before the reference
-epoch, so astropy takes UT1 = UTC and zero polar motion there: a frame a few
-tens of metres off the true one, but the same on every run with the same
-lockfile. Bumping `astropy-iers-data` in the lockfile changes the reference;
-re-record it with `update` and the `[fl601-reference-update]` tag. Record
-it in the locked environment (CI's), not a local one.
+bundled with the pinned `astropy-iers-data`. E8-04 hardened this into the
+shared mechanism in `orbitopt.reference_eop`: the reference directory
+carries `earth_orientation.json` (mode `pinned-bundled`), which records
+the recording stack's exact versions, the default offline table it used
+(IERS-B) and the effective UT1-UTC / polar motion at the reference epoch;
+every run verifies the installed stack reproduces all of it and refuses
+with `ToolchainMismatch` instead of silently flying a different Earth
+orientation (astropy 6 vs 8 disagree offline by ~28 m of track). E2-04
+keeps its four-row snapshot in `override` mode -- one mechanism, per-mode
+policy. Bumping `astropy-iers-data` in the lockfile invalidates the
+snapshot; re-record with `update` (audited) and the
+`[fl601-reference-update]` tag. Record it in the locked environment
+(CI's), not a local one. Tolerance policy, bands and the change history
+live in [reference-tolerance-audit.md](reference-tolerance-audit.md).
 
 ## CI layout (.github/workflows/ci.yml)
 

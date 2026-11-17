@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "purpose": "E8-04 cross-platform reference-consistency ledger: the Gate B frame bridge, run through the unified pinned-EOP mechanism (tests/data/flightlab/reference/earth_orientation.json, pinned-bundled mode, no download), must re-derive the committed GCRS tracks from the raw recorded OpenTsiolkovsky outputs within one declared band on every supported CI platform.",
+  "band_source": "tests/data/flightlab/reference/tolerances.json#/cross_platform",
+  "record_command": "python scripts/fl601_reference.py cross-platform-record",
+  "platforms": ["linux-x86_64", "darwin-x86_64", "darwin-arm64"],
+  "observations": {
+    "linux-x86_64": {
+      "observed_utc": "2026-11-15T21:32:20Z",
+      "astropy": "6.1.7",
+      "astropy_iers_data": "0.2026.8.31.0.57.9",
+      "max_position_m": 9.313225746154785e-10,
+      "max_velocity_m_s": 9.094947017729282e-13
+    },
+    "darwin-x86_64": null,
+    "darwin-arm64": null
+  },
+  "notes": [
+    "The CI matrix (test job linux-64 + test-macos osx-64/osx-arm64, all from envs/cpu.conda-lock.yml) runs tests/test_e804_cross_platform.py on all three platforms with the identical locked astropy 6.1.7 / astropy-iers-data 0.2026.8.31.0.57.9 stack; the test computes the observation live and asserts it inside the band.",
+    "linux-x86_64 was recorded locally on the recording stack (see observed_utc); the observation is bit-deterministic across runs.",
+    "null means no ledger observation has been recorded yet for that platform; a null entry makes the test verify the band live on that platform instead of comparing to a stored value."
+  ]
+}

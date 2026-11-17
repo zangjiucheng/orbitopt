@@ -57,6 +57,30 @@ mission declares but that produced no verdict evidence (the ascent never flew,
 propagation skipped by the caller) is ``not_checked``, which caps the overall
 verdict at ``not_checked`` -- it never silently passes.
 
+Verification coverage gate (E8-03, task #283)
+---------------------------------------------
+The out-of-scope declarations above let a *partial* run grade honestly on the
+phases it flies. They must not let a run that *claims to be the full mission*
+qualify on a subset. Every phase is a *required physical phase*
+(:data:`REQUIRED_PHASES`): a scenario that declares ``full_mission: true``
+forces all of them applicable -- an out-of-scope declaration of a required
+phase is refused, not honoured -- and the gate document carries
+
+* ``coverage`` -- required-phase accounting shown in every gate document: the
+  per-phase coverage status (``checked`` / ``not_checked`` /
+  ``declared_out_of_scope`` / ``not_declared``) and the ``checked/required``
+  summary (e.g. ``2/3``) the report summary displays;
+* ``qualification.independently_verified`` -- whether the overall description
+  may say *independently verified*. It is true only for a run that declares
+  ``full_mission``, whose gate verdict is ``passed`` with complete required
+  coverage, and whose report carries passing validation-grade independent
+  evidence (the caller passes ``independent_validation`` from the status
+  rollup). An undeclared or unchecked required phase, or missing independent
+  evidence, makes the claim false with a recorded reason -- never a silent
+  pass.
+
+Typical use::
+
     from orbitopt.mission.phases import full_mission_gate
 
     gate = full_mission_gate(mission)
@@ -71,6 +95,11 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 __all__ = [
+    "COVERAGE_CHECKED",
+    "COVERAGE_DECLARED_OUT_OF_SCOPE",
+    "COVERAGE_NOT_CHECKED",
+    "COVERAGE_NOT_DECLARED",
+    "COVERAGE_STATUSES",
     "INSERTION_ONLY_VERDICT_ID",
     "MIXED_RUN_VERDICT_ID",
     "OVERALL_RULE",
@@ -89,15 +118,18 @@ __all__ = [
     "PHYSICAL_LABELS",
     "PHYSICAL_NOT_EVIDENCED_CODE",
     "PHYSICAL_RULE",
+    "REQUIRED_PHASES",
     "VERDICT_FAILED",
     "VERDICT_NOT_CHECKED",
     "VERDICT_PASSED",
     "combine_phase_verdicts",
     "full_mission_gate",
+    "phase_coverage",
     "phase_of",
     "phase_verdicts",
     "physical_check_of",
     "physical_mission_gate",
+    "qualification",
 ]
 
 #: The three phases of the full mission, in chain order (the order the mission
@@ -122,6 +154,26 @@ VERDICT_PASSED = "passed"
 VERDICT_FAILED = "failed"
 VERDICT_NOT_CHECKED = "not_checked"
 PHASE_VERDICTS = (VERDICT_PASSED, VERDICT_FAILED, VERDICT_NOT_CHECKED)
+
+#: The required physical phases of a full mission (E8-03, task #283): every
+#: phase of the chain. A run that declares itself the full mission
+#: (``full_mission: true``) cannot take any of them out of scope -- the
+#: out-of-scope declarations of the E2-03 rule are how a *partial* run grades
+#: honestly, not how a complete claim skips its evidence.
+REQUIRED_PHASES = PHASES
+
+#: Required-phase coverage states (E8-03): how much of the required physical
+#: inventory a run actually checked. ``checked`` graded the phase (the verdict
+#: may still be red -- red evidence was still checked); ``not_checked`` leaves
+#: it with no verdict evidence; ``declared_out_of_scope`` and ``not_declared``
+#: distinguish an explicit out-of-scope declaration from a phase the scenario
+#: simply never mentions.
+COVERAGE_CHECKED = "checked"
+COVERAGE_NOT_CHECKED = "not_checked"
+COVERAGE_DECLARED_OUT_OF_SCOPE = "declared_out_of_scope"
+COVERAGE_NOT_DECLARED = "not_declared"
+COVERAGE_STATUSES = (COVERAGE_CHECKED, COVERAGE_NOT_CHECKED,
+                     COVERAGE_DECLARED_OUT_OF_SCOPE, COVERAGE_NOT_DECLARED)
 
 #: The overall rule, quoted verbatim into the report document so a consumer
 #: reads the rule with the verdict it explains (the matrix of every
@@ -204,11 +256,15 @@ def phase_verdicts(checks: Sequence[Any], *,
 
     ``applicable`` maps each phase to ``True``, or to a string reason when the
     mission does not fly that phase (a false-like value uses the default
-    reason). ``reasons`` optionally explains an applicable phase that produced
-    no verdict evidence. The verdict of a phase with checks: ``failed`` if any
-    failed, else ``passed``; with no checks: ``not_checked``. Failed checks
-    contribute their reason codes (a failed check without its own code falls
-    back to its check id -- never silence).
+    reason), or to a mapping ``{"reason": ..., "kind": ...}`` naming the kind
+    of inapplicability (``declared_out_of_scope`` for an explicit out-of-scope
+    declaration, ``not_declared`` for a phase the scenario never mentions --
+    the kinds E8-03 reports as required-phase coverage). ``reasons`` optionally
+    explains an applicable phase that produced no verdict evidence. The verdict
+    of a phase with checks: ``failed`` if any failed, else ``passed``; with no
+    checks: ``not_checked``. Failed checks contribute their reason codes (a
+    failed check without its own code falls back to its check id -- never
+    silence).
     """
     grouped = _attributed(checks)
     out: dict[str, dict] = {}
@@ -220,14 +276,18 @@ def phase_verdicts(checks: Sequence[Any], *,
                    else VERDICT_NOT_CHECKED)
         applic = applicable.get(phase, True)
         if isinstance(applic, str):
-            applic, why_not_applicable = False, applic
+            applic, why_not_applicable, how = False, applic, COVERAGE_NOT_DECLARED
+        elif isinstance(applic, Mapping):
+            how = str(applic.get("kind") or COVERAGE_NOT_DECLARED)
+            applic, why_not_applicable = False, str(applic.get("reason") or "")
         else:
             applic = bool(applic)
-            why_not_applicable = ""
+            why_not_applicable, how = "", "applicable"
         doc: dict[str, Any] = {
             "phase": phase,
             "label": PHASE_LABELS[phase],
             "applicable": applic,
+            "applicability": "applicable" if applic else how,
             "verdict": verdict,
             "checks_passed": sum(1 for c in mine if _flag(c)),
             "checks_total": len(mine),
@@ -256,7 +316,84 @@ def combine_phase_verdicts(docs: Sequence[Mapping[str, Any]]) -> str:
     return VERDICT_PASSED if graded else VERDICT_NOT_CHECKED
 
 
-def full_mission_gate(mission: Any) -> dict:
+def phase_coverage(docs: Mapping[str, Mapping[str, Any]],
+                   required: Sequence[str] = REQUIRED_PHASES) -> dict:
+    """Required-phase coverage (E8-03, task #283) over per-phase verdict
+    documents: per required phase the coverage status
+    (:data:`COVERAGE_STATUSES`) with its recorded reason, and the
+    ``checked/required`` summary the report displays. A phase graded and found
+    red is still **checked** -- coverage measures what was verified, the
+    verdict says how it turned out; an unchecked required phase is never
+    counted as covered."""
+    per_phase: dict[str, dict] = {}
+    checked = 0
+    for phase in required:
+        doc = docs[phase]
+        if not doc.get("applicable", True):
+            kind = str(doc.get("applicability") or COVERAGE_NOT_DECLARED)
+            status = (COVERAGE_DECLARED_OUT_OF_SCOPE
+                      if kind == COVERAGE_DECLARED_OUT_OF_SCOPE else COVERAGE_NOT_DECLARED)
+            reason = str(doc.get("reason") or "")
+        elif doc.get("verdict") == VERDICT_NOT_CHECKED:
+            status, reason = COVERAGE_NOT_CHECKED, str(doc.get("reason") or "")
+        else:
+            status, reason = COVERAGE_CHECKED, ""
+            checked += 1
+        per_phase[phase] = {"required": True, "status": status, "reason": reason}
+    total = len(tuple(required))
+    return {"required_phases": list(required), "phases_checked": checked,
+            "phases_required": total, "summary": f"{checked}/{total}",
+            "complete": checked == total, "phases": per_phase}
+
+
+def qualification(*, full_mission_declared: bool, verdict: str,
+                  coverage: Mapping[str, Any],
+                  independent_validation: str | None = None) -> dict:
+    """Whether the overall description may claim the mission *independently
+    verified* (E8-03, task #283). True only when every blocker is absent:
+
+    * the run declares itself the full mission (``full_mission: true``) -- a
+      partial run describes the phases it flies, never a verified whole;
+    * the full-mission verdict is ``passed`` -- an unchecked required phase
+      caps it at ``not_checked`` and a red one fails it outright;
+    * required-phase coverage is complete -- an out-of-scope or undeclared
+      required phase never bypasses the claim;
+    * the report's independent-evidence rollup is ``passed`` (the caller
+      passes ``independent_validation`` from ``status.independent_validation``)
+      -- internal consistency, however green, is not independent validation.
+
+    Every blocker is recorded; the claim is false with a reason, never silent.
+    """
+    blockers: list[str] = []
+    if not full_mission_declared:
+        blockers.append("run does not declare full_mission: the verdict describes the phases "
+                        "this mission flies, not an independently verified full mission")
+    if verdict == VERDICT_FAILED:
+        blockers.append("full-mission verdict failed")
+    elif verdict != VERDICT_PASSED:
+        ungraded = [p for p, entry in (coverage.get("phases") or {}).items()
+                    if entry.get("status") != COVERAGE_CHECKED]
+        blockers.append("required phase(s) not checked: "
+                        + (", ".join(ungraded) or str(verdict))
+                        + " (absent evidence is never a pass)")
+    if not coverage.get("complete"):
+        missed = [p for p, entry in (coverage.get("phases") or {}).items()
+                  if entry.get("status") != COVERAGE_CHECKED]
+        if missed:
+            blockers.append("required-phase coverage incomplete ("
+                            + str(coverage.get("summary", "?")) + "): " + ", ".join(missed))
+    if independent_validation != VERDICT_PASSED:
+        blockers.append("no passing validation-grade independent evidence "
+                        f"(status.independent_validation: {independent_validation or 'absent'})")
+    return {"independently_verified": not blockers,
+            "independent_validation": independent_validation,
+            "reason": "independently verified: full mission declared, every required physical "
+                      "phase checked and passed, independent evidence passed" if not blockers
+                      else "; ".join(blockers)}
+
+
+def full_mission_gate(mission: Any, *,
+                      independent_validation: str | None = None) -> dict:
     """The full-mission gate document of a ``TwoStageLeoMission`` (duck-typed:
     ``scenario``, ``checks``, ``not_assessed``, ``propagation``). Built into
     the unified task report under ``inputs.full_mission`` by
@@ -270,6 +407,15 @@ def full_mission_gate(mission: Any) -> dict:
     propagation -- is reported ``not_checked`` with the mission's own recorded
     reason.
 
+    A scenario declaring ``full_mission: true`` claims the complete physical
+    mission, so every :data:`REQUIRED_PHASES` phase is forced applicable: an
+    out-of-scope declaration of a required phase is refused (recorded in the
+    phase reason, coverage shows it unchecked) instead of honoured. The
+    document always carries the required-phase ``coverage`` (E8-03) and the
+    ``qualification`` block; ``independent_validation`` is the caller's
+    ``status.independent_validation.result``, so the qualification reads the
+    report's own evidence rollup.
+
     The document also carries the E5-04 physical gate (:func:`physical_mission_gate`)
     under ``physical``: the same checks re-graded as five *required* checks,
     with no out-of-scope escape hatch -- a phase the E2-03 phase gate excuses
@@ -277,20 +423,31 @@ def full_mission_gate(mission: Any) -> dict:
     ``not_checked``, and the physical verdict is the verdict a computed
     mission must show to count as a full physical mission."""
     scenario = mission.scenario
+    full_mission_declared = bool(getattr(scenario, "full_mission", False))
     recovery_declared = getattr(scenario, "recovery", None) is not None
     propagation_required = str(getattr(scenario.expected, "propagation_result",
                                        "passed")) != VERDICT_NOT_CHECKED
     applicable: dict[str, Any] = {
         PHASE_ORBIT_INJECTION: True,
-        PHASE_PARKING_PROPAGATION: propagation_required or (
-            "propagation declared out of scope (expected.propagation_result: "
-            "not_checked): the parking orbit is not required to be propagated"),
-        PHASE_RECOVERY_TOUCHDOWN: recovery_declared or (
-            "no recovery stage declared: this mission flies no first-stage return, "
-            "touchdown is out of scope (an expendable mission is a smaller mission, "
-            "not a failed one)"),
+        PHASE_PARKING_PROPAGATION: propagation_required or {
+            "kind": COVERAGE_DECLARED_OUT_OF_SCOPE,
+            "reason": "propagation declared out of scope (expected.propagation_result: "
+                      "not_checked): the parking orbit is not required to be propagated"},
+        PHASE_RECOVERY_TOUCHDOWN: recovery_declared or {
+            "kind": COVERAGE_NOT_DECLARED,
+            "reason": "no recovery stage declared: this mission flies no first-stage return, "
+                      "touchdown is out of scope (an expendable mission is a smaller mission, "
+                      "not a failed one)"},
     }
-    reasons: dict[str, str] = {}
+    refused: dict[str, str] = {}
+    if full_mission_declared:
+        for phase, entry in applicable.items():
+            if isinstance(entry, Mapping):
+                applicable[phase] = True
+                refused[phase] = (
+                    f"out-of-scope declaration refused: {phase} is a required physical phase "
+                    f"of a run declared full_mission (declared: {entry.get('reason')})")
+    reasons: dict[str, str] = dict(refused)
     ids = [_check_id(c) for c in mission.checks]
     if recovery_declared and not any(i.startswith("recovery.") for i in ids):
         reasons[PHASE_RECOVERY_TOUCHDOWN] = next(
@@ -307,8 +464,16 @@ def full_mission_gate(mission: Any) -> dict:
     reason_codes = sorted({code for d in phase_docs
                            if d.get("verdict") == VERDICT_FAILED
                            for code in d["reason_codes"]})
+    coverage = phase_coverage(docs, REQUIRED_PHASES)
     return {"rule": OVERALL_RULE, "verdict": verdict, "reason_codes": reason_codes,
-            "phases": phase_docs, "physical": physical_mission_gate(mission)}
+            "phases": phase_docs,
+            "required_phases": list(REQUIRED_PHASES),
+            "full_mission_declared": full_mission_declared,
+            "coverage": coverage,
+            "qualification": qualification(
+                full_mission_declared=full_mission_declared, verdict=verdict,
+                coverage=coverage, independent_validation=independent_validation),
+            "physical": physical_mission_gate(mission)}
 
 
 # ---------------------------------------------------------------------------

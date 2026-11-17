@@ -169,19 +169,14 @@ def _digest(path: Path) -> str:
 
 
 def _pin_earth_orientation() -> str:
-    """Disable daily IERS downloads and identify the installed data package.
-    The reference frame bridge itself uses :func:`frozen_earth_orientation`.
+    """Disable IERS downloads and identify the installed data package.
+    The reference frame bridge itself uses :func:`frozen_earth_orientation`
+    (shared E8-04 mechanism, orbitopt.reference_eop).
     """
-    from astropy.utils import iers
+    _load_repo_package()
+    from orbitopt import reference_eop
 
-    iers.conf.auto_download = False
-    iers.conf.iers_degraded_accuracy = "ignore"
-    try:
-        import astropy_iers_data
-
-        return str(astropy_iers_data.__version__)
-    except ImportError:
-        return "astropy bundled"
+    return reference_eop.pin_no_download()
 
 
 @contextmanager
@@ -191,40 +186,22 @@ def frozen_earth_orientation():
     Astropy 6 selects IERS-B offline while later versions can select IERS-A;
     disabling downloads alone does not freeze the reference's frame bridge.
     """
-    from astropy.utils import iers
-    import astropy.units as u
-    import numpy as np
+    _load_repo_package()
+    from orbitopt import reference_eop
 
-    snapshot = json.loads((REF_ROOT / "earth_orientation.json").read_text())
-    units = {"MJD": u.day, "UT1_UTC": u.s, "PM_x": u.arcsec, "PM_y": u.arcsec}
-    table = iers.IERS({name: np.array([row[name] for row in snapshot["rows"]]) * unit
-                        for name, unit in units.items()})
-    with iers.earth_orientation_table.set(table):
+    with reference_eop.freeze_reference(
+            reference_eop.load_snapshot(REF_ROOT / "earth_orientation.json")):
         yield
 
 
 def _write_earth_orientation_snapshot() -> None:
     """Bootstrap from the original recording data, never a newer prediction."""
-    path = REF_ROOT / "earth_orientation.json"
-    if path.exists():
-        return
-    from astropy.time import Time
-    from astropy.utils import iers
-    import astropy_iers_data
+    _load_repo_package()
+    from orbitopt import reference_eop
 
-    recorded = json.loads(PROVENANCE.read_text())["toolchain"]["astropy_iers_data"]
-    if astropy_iers_data.__version__ != recorded:
-        raise RuntimeError(f"snapshot creation needs recorded astropy-iers-data {recorded}")
-    table = iers.IERS_A.open(iers.IERS_A_FILE)
-    day = math.floor(Time(ASCENT["epoch_utc"].removesuffix("Z")).mjd)
-    rows = [{name: float(row[name].value) for name in ("MJD", "UT1_UTC", "PM_x", "PM_y")}
-            for row in table if day - 1 <= float(row["MJD"].value) <= day + 2]
-    if len(rows) != 4:
-        raise RuntimeError("recording table does not bracket the frozen mission epoch")
-    path.write_text(json.dumps({"source": "IERS-A finals2000A.all",
-                               "source_version": recorded,
-                               "units": {"MJD": "day", "UT1_UTC": "s", "PM_x": "arcsec", "PM_y": "arcsec"},
-                               "rows": rows}, indent=2, sort_keys=True) + "\n")
+    reference_eop.write_override_snapshot(
+        REF_ROOT / "earth_orientation.json", ASCENT["epoch_utc"],
+        json.loads(PROVENANCE.read_text())["toolchain"]["astropy_iers_data"])
 
 
 def _toolchain() -> dict:
@@ -653,21 +630,38 @@ def cmd_verify() -> int:
     return 0
 
 
-def cmd_update(*, tolerances_only: bool = False) -> int:
+def cmd_update(*, tolerances_only: bool = False, reason: str = "") -> int:
     """Regenerate the frozen ascent AND the mission reference from the pinned
     inputs, and rewrite the provenance digests + toolchain fingerprint. The
     ONLY sanctioned way to change the reference; the commit carrying the
     change must additionally carry COMMIT_TAG (CI's tag-check enforces that,
-    and CI's verify fails any change this script did not write)."""
+    and CI's verify fails any change this script did not write).
+
+    ``--tolerances-only`` requires ``--reason`` (E8-04 audit,
+    orbitopt.reference_audit): the change is recorded with old -> new values
+    and file hashes inside PROVENANCE.json."""
     if tolerances_only:
+        if not reason.strip():
+            print("update --tolerances-only requires --reason (audited change)",
+                  file=sys.stderr)
+            return 2
         # Amend the comparison policy without re-recording flight output or
         # changing the original recording toolchain. Verify the old hashes
         # first so this cannot bless an unrelated edited reference file.
         if cmd_verify() != 0:
             return 1
+        _load_repo_package()
+        from orbitopt import reference_audit
+
+        try:
+            old_tol, old_sha = reference_audit.committed_file(
+                REPO, str(TOLERANCES.relative_to(REPO)))
+        except ValueError:
+            old_tol = json.loads(TOLERANCES.read_text(encoding="utf-8"))
+            old_sha = _digest(TOLERANCES)
         prov = json.loads(PROVENANCE.read_text(encoding="utf-8"))
         previous = prov.get("comparison_policy_update", {}).get(
-            "previous_tolerances_sha256", _digest(TOLERANCES))
+            "previous_tolerances_sha256", old_sha or _digest(TOLERANCES))
         _write_earth_orientation_snapshot()
         TOLERANCES.write_text(json.dumps(DEFAULT_TOLERANCES, indent=2) + "\n", encoding="utf-8")
         key = str(TOLERANCES.relative_to(REF_ROOT))
@@ -678,8 +672,15 @@ def cmd_update(*, tolerances_only: bool = False) -> int:
             "previous_tolerances_sha256": previous,
             "toolchain": _toolchain(),
         }
+        entry = reference_audit.make_entry(
+            reason=reason,
+            changes=reference_audit.diff_tolerances(old_tol, DEFAULT_TOLERANCES),
+            previous_tolerances_sha256=old_sha or previous,
+            tolerances_sha256=_digest(TOLERANCES))
+        reference_audit.append_audit(prov, entry)
         PROVENANCE.write_text(json.dumps(prov, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        print("Updated comparison policy, EOP snapshot and provenance; frozen flight output unchanged")
+        print(f"Updated comparison policy ({len(entry['changes'])} audited tolerance "
+              "change(s)), EOP snapshot and provenance; frozen flight output unchanged")
         return 0
 
     import shutil
@@ -793,6 +794,8 @@ def main(argv: list[str]) -> int:
     update_p = sub.add_parser("update", help=f"regenerate the reference (commit the result with {COMMIT_TAG})")
     update_p.add_argument("--tolerances-only", action="store_true",
                           help="update comparison policy/EOP metadata without re-recording flight output")
+    update_p.add_argument("--reason", default="",
+                          help="required with --tolerances-only; the audit entry's rationale")
     tag_p = sub.add_parser("tag-check", help="CI: reference diffs need the commit tag")
     tag_p.add_argument("--base", default=None)
     args = parser.parse_args(argv)
@@ -805,7 +808,7 @@ def main(argv: list[str]) -> int:
     if args.cmd == "build":
         return cmd_build(args.out)
     if args.cmd == "update":
-        return cmd_update(tolerances_only=args.tolerances_only)
+        return cmd_update(tolerances_only=args.tolerances_only, reason=args.reason)
     if args.cmd == "tag-check":
         return cmd_tag_check(args.base)
     raise AssertionError(args.cmd)

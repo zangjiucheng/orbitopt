@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import subprocess
 import sys
@@ -75,6 +74,14 @@ DEFAULT_TOLERANCES = {
     "check_value_rel": 1e-9,
     "event_data_abs": 1e-9,
     "event_data_rel": 1e-9,
+    # E8-04: band for re-deriving the committed GCRS tracks from the raw
+    # recorded OT outputs under the pinned Earth orientation, on any lock-
+    # stack platform (linux-x86_64, darwin-x86_64, darwin-arm64). It equals
+    # the flight tolerances above because it exercises the same frame bridge;
+    # keeping it separate lets cross-platform consistency be tightened (or
+    # audited) without touching the flight comparison. Measured margin on
+    # the recording stack: ~1e-9 m.
+    "cross_platform": {"position_m_abs": 1e-4, "velocity_m_s_abs": 1e-6},
 }
 
 
@@ -94,28 +101,61 @@ def _digest(path: Path) -> str:
 
 
 def _pin_earth_orientation() -> str:
-    """Freeze the frame bridge's Earth orientation to the IERS data the
-    locked env ships (astropy-iers-data) and return its version.
+    """Disable IERS downloads and identify the installed data package.
 
-    astropy otherwise downloads the latest IERS-A table, which changes daily
-    as predictions turn into measurements: the GCRS positions of the same
-    flight then move by tenths of a metre between recordings -- far past the
-    micrometre tolerances, so the first CI run failed on 7,670 samples. On
-    the bundled table alone (which ends before the reference epoch) astropy
-    falls back to UT1 = UTC and zero polar motion: a sub-second, few-metre
-    approximation of the true frame, but the same one on every run with the
-    same lockfile. Updating astropy-iers-data in the lockfile changes it;
-    re-record then (``update`` + the commit tag)."""
-    from astropy.utils import iers
+    Thin delegation to the shared E8-04 mechanism (orbitopt.reference_eop) --
+    the frame bridge itself is frozen per the reference snapshot, see
+    :func:`frozen_reference`."""
+    _load_repo_package()
+    from orbitopt import reference_eop
 
-    iers.conf.auto_download = False
-    iers.conf.iers_degraded_accuracy = "ignore"
-    try:
-        import astropy_iers_data
+    return reference_eop.pin_no_download()
 
-        return str(astropy_iers_data.__version__)
-    except ImportError:
-        return "astropy bundled"
+
+#: The stack the committed Gate B frames were recorded on (git history,
+#: commit ef59934); the EOP snapshot next to the reference pins the Earth
+#: orientation those frames imply.
+RECORDED_IERS_VERSION = "0.2026.8.31.0.57.9"
+RECORDED_ASTROPY_SERIES = "6.1"
+GATEB_EPOCH_UTC = "2026-11-10T12:00:00"
+EOP_SNAPSHOT = REF_ROOT / "earth_orientation.json"
+EOP_SNAPSHOT_NOTE = (
+    "Gate B GCRS reference frames are defined by the DEFAULT table path of "
+    "astropy 6.1.x with downloads off: the active table is IERS_B from "
+    "astropy-iers-data 0.2026.8.31 (effective UT1-UTC +0.0097405 s at the "
+    "epoch). The snapshot pins that table by version + effective values, NOT "
+    "by an override built from the finals2000A (IERS-A) rows -- those rows "
+    "carry a different UT1-UTC (-0.0613499 s; delta 0.071 s = 1.07 arcsec ~ "
+    "28 m at orbital radius), so an override table is a different Earth "
+    "orientation, not the recorded one. See docs/reference-tolerance-audit.md.")
+
+
+def _ensure_earth_orientation_snapshot(force: bool = False) -> None:
+    """Create the EOP snapshot on the recording stack (idempotent; ``force``
+    re-records it from the currently installed stack, for a full re-record)."""
+    _load_repo_package()
+    from orbitopt import reference_eop
+
+    if force and EOP_SNAPSHOT.exists():
+        EOP_SNAPSHOT.unlink()
+    reference_eop.write_pinned_bundled_snapshot(
+        EOP_SNAPSHOT, GATEB_EPOCH_UTC, reference_eop.pin_no_download(),
+        _installed_astropy_series(), EOP_SNAPSHOT_NOTE)
+
+
+def _installed_astropy_series() -> str:
+    import astropy
+
+    return ".".join(str(astropy.__version__).split(".")[:2])
+
+
+def frozen_reference():
+    """Context manager freezing the frame bridge to the recorded reference
+    Earth orientation, per the snapshot's mode (E8-04 shared mechanism)."""
+    _load_repo_package()
+    from orbitopt import reference_eop
+
+    return reference_eop.freeze_reference(reference_eop.load_snapshot(EOP_SNAPSHOT))
 
 
 def cmd_run(out_dir: Path) -> int:
@@ -127,8 +167,9 @@ def cmd_run(out_dir: Path) -> int:
     print(f"Earth orientation: bundled IERS data only (astropy-iers-data {iers_data}), no download")
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    run = simulate(load_target(TARGET), VEHICLE, out_dir, refly=False,
-                   run_recovery=False, timeout_s=300.0)
+    with frozen_reference():
+        run = simulate(load_target(TARGET), VEHICLE, out_dir, refly=False,
+                       run_recovery=False, timeout_s=300.0)
     print(f"flew {run.run_id} from {TARGET.name} + {VEHICLE.name} -> {out_dir}")
     print("  (ascent-only reference: refly=False, run_recovery=False -- the "
           "regression covers the OT adapter + checks pipeline, not the "
@@ -247,7 +288,8 @@ def cmd_compare(candidate_dir: Path) -> int:
     if not TOLERANCES.is_file():
         print(f"{TOLERANCES}: missing", file=sys.stderr)
         return 2
-    fails = compare_runs(candidate_dir, json.loads(TOLERANCES.read_text(encoding="utf-8")))
+    with frozen_reference():
+        fails = compare_runs(candidate_dir, json.loads(TOLERANCES.read_text(encoding="utf-8")))
     if fails:
         print(f"GATE B REGRESSION: {len(fails)} difference(s) vs "
               f"{REF_RUN_DIR} (tolerances: {TOLERANCES})", file=sys.stderr)
@@ -296,12 +338,20 @@ def cmd_verify() -> int:
     return 0
 
 
-def cmd_update() -> int:
+def cmd_update(*, tolerances_only: bool = False, reason: str = "") -> int:
     """Regenerate the reference from a real OT flight and rewrite the
     provenance digests. This is the ONLY sanctioned way to change the
     reference; the commit carrying the change must additionally carry
     COMMIT_TAG in its message (CI's tag-check enforces that, and CI's
-    verify fails any change this script did not write)."""
+    verify fails any change this script did not write).
+
+    ``--tolerances-only`` amends the comparison policy (DEFAULT_TOLERANCES ->
+    tolerances.json) plus the EOP snapshot and provenance digests WITHOUT
+    re-flying; the frozen flight output and recording toolchain stay
+    untouched. It requires ``--reason`` and appends an audit entry to
+    PROVENANCE.json (E8-04, orbitopt.reference_audit)."""
+    if tolerances_only:
+        return cmd_update_tolerances_only(reason)
     import shutil
     import tempfile
 
@@ -312,6 +362,7 @@ def cmd_update() -> int:
         if REF_RUN_DIR.exists():
             shutil.rmtree(REF_RUN_DIR)
         shutil.copytree(run_dir, REF_RUN_DIR)
+    _ensure_earth_orientation_snapshot(force=True)
     if not TOLERANCES.is_file():
         TOLERANCES.parent.mkdir(parents=True, exist_ok=True)
         TOLERANCES.write_text(json.dumps(DEFAULT_TOLERANCES, indent=2) + "\n",
@@ -324,8 +375,10 @@ def cmd_update() -> int:
         "target": str(TARGET.relative_to(REPO)),
         "vehicle": str(VEHICLE.relative_to(REPO)),
         "simulate_options": {"refly": False, "run_recovery": False},
-        "earth_orientation": f"bundled IERS only, astropy-iers-data {_pin_earth_orientation()}",
+        "earth_orientation": _earth_orientation_provenance(),
         "requires_commit_tag": COMMIT_TAG,
+        "tolerance_audit": json.loads(PROVENANCE.read_text(encoding="utf-8")).get(
+            "tolerance_audit", []),
         "git_sha_recording": subprocess.run(
             ["git", "-C", str(REPO), "rev-parse", "HEAD"],
             capture_output=True, text=True).stdout.strip(),
@@ -333,6 +386,119 @@ def cmd_update() -> int:
     }
     PROVENANCE.write_text(json.dumps(prov, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"reference updated: {len(files)} files under {REF_ROOT}")
+    return 0
+
+
+def _earth_orientation_provenance() -> str:
+    _load_repo_package()
+    from orbitopt import reference_eop
+
+    return ("bundled IERS only, pinned snapshot earth_orientation.json "
+            "(mode pinned-bundled, no download), astropy-iers-data "
+            f"{reference_eop.pin_no_download()}")
+
+
+def cmd_update_tolerances_only(reason: str) -> int:
+    """E8-04: amend the comparison policy without re-flying. The committed
+    hashes are verified first so this cannot bless an unrelated edited
+    reference file, and the change is audited (reason, old -> new, hashes)."""
+    if not reason.strip():
+        print("update --tolerances-only requires --reason (audited change)",
+              file=sys.stderr)
+        return 2
+    if cmd_verify() != 0:
+        return 1
+    _load_repo_package()
+    from orbitopt import reference_audit
+
+    try:
+        old_tol, old_sha = reference_audit.committed_file(
+            REPO, str(TOLERANCES.relative_to(REPO)))
+    except ValueError:
+        old_tol = json.loads(TOLERANCES.read_text(encoding="utf-8"))
+        old_sha = _digest(TOLERANCES)
+    _ensure_earth_orientation_snapshot()
+    TOLERANCES.write_text(json.dumps(DEFAULT_TOLERANCES, indent=2) + "\n", encoding="utf-8")
+    prov = json.loads(PROVENANCE.read_text(encoding="utf-8"))
+    prov["earth_orientation"] = _earth_orientation_provenance()
+    for name in ("tolerances.json", "earth_orientation.json"):
+        if (REF_ROOT / name).is_file():
+            prov["files"][name] = _digest(REF_ROOT / name)
+    entry = reference_audit.make_entry(
+        reason=reason,
+        changes=reference_audit.diff_tolerances(old_tol, DEFAULT_TOLERANCES),
+        previous_tolerances_sha256=old_sha,
+        tolerances_sha256=_digest(TOLERANCES))
+    reference_audit.append_audit(prov, entry)
+    PROVENANCE.write_text(json.dumps(prov, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"comparison policy updated ({len(entry['changes'])} tolerance change(s), "
+          "audited); frozen flight output unchanged")
+    return 0
+
+
+# ------------------------------------------------- cross-platform consistency
+
+
+def cross_platform_observation() -> dict:
+    """Re-derive the committed GCRS tracks from the raw recorded OT outputs
+    under the pinned Earth orientation and measure the difference against
+    the recorded reference (E8-04 cross-platform consistency).
+
+    Runs the *production* adapter conversion (opentsiolkovsky adapter on
+    ``opentsiolkovsky/``) on the current platform, so a platform difference
+    in the frame bridge shows up as a track difference. No OT binary
+    needed -- the raw outputs are committed. Returns the observation dict
+    for ``tests/data/e804/cross-platform.json``."""
+    _load_repo_package()
+    import platform as _platform
+    import re
+
+    from orbitopt.flightlab.adapters.opentsiolkovsky import Vehicle, parse_ot_outputs
+    from orbitopt.flightlab.contract import load_target, read_run
+
+    manifest = json.loads((REF_RUN_DIR / "manifest.json").read_text(encoding="utf-8"))
+    (config_sha,) = re.findall(r"run-config sha256 ([0-9a-f]{64})",
+                               "\n".join(manifest["assumptions"]))
+    with frozen_reference():
+        cand = parse_ot_outputs(
+            REF_RUN_DIR / "opentsiolkovsky", load_target(TARGET), Vehicle.load(VEHICLE),
+            manifest["run_id"], manifest["git_sha"], config_sha,
+            manifest["vehicle_sha256"])
+    ref = read_run(REF_RUN_DIR)
+    cand_tracks = {t.body_id: t for t in cand.tracks}
+    ref_tracks = {t.body_id: t for t in ref.tracks}
+    pos = vel = 0.0
+    for body in sorted(set(cand_tracks) & set(ref_tracks)):
+        ct, rt = cand_tracks[body], ref_tracks[body]
+        for i in range(min(len(ct.position_m), len(rt.position_m))):
+            pos = max(pos, max(abs(a - b) for a, b in zip(ct.position_m[i], rt.position_m[i])))
+            vel = max(vel, max(abs(a - b) for a, b in
+                               zip(ct.velocity_m_s[i], rt.velocity_m_s[i])))
+    return {"id": f"{_platform.system().lower()}-{_platform.machine()}",
+            "astropy": _installed_astropy_series_full(),
+            "astropy_iers_data": _pin_earth_orientation(),
+            "max_position_m": pos, "max_velocity_m_s": vel}
+
+
+def _installed_astropy_series_full() -> str:
+    import astropy
+
+    return str(astropy.__version__)
+
+
+def cmd_cross_platform_record() -> int:
+    """Print the JSON ledger line for this platform (paste into
+    tests/data/e804/cross-platform.json when reviewing the audit)."""
+    import sys as _sys
+
+    tol = json.loads(TOLERANCES.read_text(encoding="utf-8")).get("cross_platform")
+    obs = cross_platform_observation()
+    ok = (obs["max_position_m"] <= tol["position_m_abs"]
+          and obs["max_velocity_m_s"] <= tol["velocity_m_s_abs"])
+    print(json.dumps(obs, sort_keys=True))
+    if not ok:
+        print(f"OUTSIDE the cross-platform band {tol}", file=_sys.stderr)
+        return 1
     return 0
 
 
@@ -378,7 +544,14 @@ def main(argv: list[str]) -> int:
     cmp_p = sub.add_parser("compare", help="compare a fresh run dir against the reference")
     cmp_p.add_argument("dir", type=Path)
     sub.add_parser("verify", help="check committed reference files against PROVENANCE.json")
-    sub.add_parser("update", help=f"regenerate the reference (commit the result with {COMMIT_TAG})")
+    upd_p = sub.add_parser("update", help=f"regenerate the reference (commit the result with {COMMIT_TAG})")
+    upd_p.add_argument("--tolerances-only", action="store_true",
+                       help="rewrite tolerances.json/EOP snapshot + audit, without re-flying")
+    upd_p.add_argument("--reason", default="",
+                       help="required with --tolerances-only; the audit entry's rationale")
+    sub.add_parser("cross-platform-record",
+                   help="measure this platform's re-derivation diff vs the reference "
+                        "(E8-04; prints a JSON ledger line)")
     tag_p = sub.add_parser("tag-check", help="CI: reference diffs need the commit tag")
     tag_p.add_argument("--base", default=None)
     args = parser.parse_args(argv)
@@ -389,7 +562,9 @@ def main(argv: list[str]) -> int:
     if args.cmd == "verify":
         return cmd_verify()
     if args.cmd == "update":
-        return cmd_update()
+        return cmd_update(tolerances_only=args.tolerances_only, reason=args.reason)
+    if args.cmd == "cross-platform-record":
+        return cmd_cross_platform_record()
     if args.cmd == "tag-check":
         return cmd_tag_check(args.base)
     raise AssertionError(args.cmd)
