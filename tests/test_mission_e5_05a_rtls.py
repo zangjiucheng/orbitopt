@@ -16,12 +16,12 @@ Slow tests (pinned OpenTsiolkovsky + gfold): the vehicle FLIES LIVE -- MECO
 carries the computed reserve, the RTLS chain plans from THAT separation
 state and grades the reserve gate green, and the packaged mission chain
 replays the recorded flight end to end. The insertion band (F9) CLOSED in
-E5-05d (#288): the redesigned stage 2 + coast/re-ignition schedule reaches
-rp 281.8 km / ra 296.1 km at SECO and the gate is now a hard assertion. The
-landing corridor (F10, corridor referee vs computed-MECO energies) stays
-xfail -- a capability limit demonstrated across the whole tuned campaign,
-not a budget shortfall. E2-04
-keeps ownership of the fast synthetic-integration test (E5-01 exception);
+E5-05d (#288): the redesigned stage 2 + coast/re-ignition schedule inserts
+inside the band at SECO and the gate is a hard assertion. The landing (F10)
+CLOSED in E5-05c (#287): closed-loop return guidance plus a +48 t stage-1
+reserve (resized stage 1, still inside the F9 band) land the booster from
+the computed separation state, and both landing tests are hard assertions.
+E2-04 keeps ownership of the fast synthetic-integration test (E5-01 exception);
 this file is the fully-computed E5-05a reference.
 """
 from __future__ import annotations
@@ -89,11 +89,16 @@ def test_packaged_documents_validate():
     assert scenario.ascent_run_dir.endswith("e5-05a-rtls-mission/ascent")
     assert scenario.recovery.drive_from_separation is True
     opts = scenario.recovery.plan_options
-    # ADR flightlab-0008: the frozen FL-305 start with the E5-05a budget and
-    # entry-q ceiling that converge on the computed separation state.
-    assert opts["initial_guess"] == [18.4, 17.75, 1.0, 4.36, 0.0, 17456.0, 23.0]
-    assert opts["max_fevals"] == 140
-    assert opts["entry_q_max_pa"] == 250000.0
+    # ADR flightlab-0008 (F10, E5-05c #287): the Monte Carlo-verified fixed
+    # script with the closed-loop return options it was verified under.
+    assert len(opts["initial_guess"]) == 8 and opts["search"] == "keep"
+    assert (opts["boostback_cutoff"], opts["entry_cutoff"],
+            opts["landing_need_model"]) == ("iip", "speed", "closed_loop")
+    assert opts["entry_throttle"] is True and opts["entry_burns"] == 1
+    assert opts["entry_q_max_pa"] == 250000.0 and opts["entry_g_max"] == 12.0
+    assert (opts["dt_opt"], opts["dt_final"]) == (0.25, 0.1)
+    assert opts["landing_reserve"] == "target"
+    assert opts["landing"]["max_thrust_accel_g"] == 3.6
 
 
 def test_stage_one_reserve_is_a_computed_structural_property():
@@ -173,10 +178,9 @@ def _elements_at(run, body: str, epoch_utc):
     return out
 
 
-#: the two backend walls ADR flightlab-0008 documents (findings F9/F10):
-#: neither is a vehicle-budget failure -- both are capability limits of the
-#: pinned OT 1.1.0 commanded-attitude backend / the FL-301 corridor referee,
-#: demonstrated across every tuned family (campaign table in the ADR).
+#: the two walls ADR flightlab-0008 documents (findings F9/F10), both closed:
+#: F9 by the E5-05d upper-stage redesign, F10 by the E5-05c closed-loop
+#: return + stage-1 reserve resize (campaign and Monte Carlo in the ADR).
 F9 = ("F9 (CLOSED, E5-05d #288): the OT commanded-attitude backend cannot "
       "close the insertion band on the FIXED E5-05a vehicle (perigee floor "
       "~-0.7 km single-burn, ~-0.4 km with the best coast/restart schedule); "
@@ -184,9 +188,22 @@ F9 = ("F9 (CLOSED, E5-05d #288): the OT commanded-attitude backend cannot "
       "380 s, 14 MN boost leg + coast + re-ignition circularisation) closes "
       "the band on the same computed reserve-carrying separation state "
       "(rp 281.8 km / ra 296.1 km, docs/adr/flightlab-0008)")
-F10 = ("F10: the FL-301 corridor referee (<350 m/s at 3 km) is unreachable "
-       "from any computed MECO >= ~1.6 km/s with the FL-302 7-parameter "
-       "script, at any reserve (docs/adr/flightlab-0008)")
+F10 = ("F10 (CLOSED, E5-05c #287): the FL-302 timed 7-parameter script could "
+       "not reach the FL-301 corridor from a computed MECO; the IIP-cut "
+       "boostback, speed-cut throttled entry burn and closed-loop landing "
+       "forecast, with a +48 t stage-1 reserve, land it (n=64 Monte Carlo "
+       "64/64, docs/adr/flightlab-0008)")
+#: the packaged mission CHAIN (run_dir replay -> E5-02 shared handoff ->
+#: dual-branch merge) still fails on gates that are NOT F10 -- present on the
+#: pre-E5-05c fixture too, masked by the old xfail(F10) (ADR flightlab-0008,
+#: "Mission chain"): left to #272 (reproducible reference scenario).
+CHAIN = ("mission-chain gates outside F10 (ADR flightlab-0008): E5-02 booster "
+         "handoff continuity (the shared handoff hands the booster the t=140 s "
+         "GCRS sample, the pipeline plans from the t=141 s separation state; "
+         "the fixed script misses 7.4 km from it); expected parking orbit "
+         "250x250 km @51.6 deg +/-20 km/0.2 deg vs the scenario band the vehicle "
+         "flies (rp 272.6 / ra 285.1 km @51.0 deg) and parking elements read "
+         "before the stage-2 re-ignition; OT ascent max-accel verification")
 
 
 @pytest.mark.slow
@@ -250,14 +267,12 @@ def test_recovery_plans_from_the_computed_separation_state(live_flight):
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(strict=False, reason=F10)
 @pytest.mark.skipif(not (_has_stack() and _has_gfold()),
                     reason="needs the OpenTsiolkovsky binary and gfold")
 def test_recovery_landing_gate_on_the_computed_state(live_flight):
-    """The landing gate closes on the computed separation state. xfail
-    (F10): the corridor verdict is the only remaining blocker at every
-    explored state (misses down to 1.5 km vs the 8 km radius, handoff speed
-    >= ~600 m/s vs the 350 m/s ceiling)."""
+    """The landing gate closes on the LIVE computed separation state -- HARD
+    assertion (F10 closed in E5-05c #287) with the mission's pinned recipe:
+    every landing check and the 10 t reserve gate pass."""
     from orbitopt.flightlab.recovery.pipeline import fly_recovery
     from orbitopt.mission.two_stage_leo import scenario_from_config
 
@@ -266,20 +281,23 @@ def test_recovery_landing_gate_on_the_computed_state(live_flight):
                            plan_options=dict(scenario.recovery.plan_options))
     gate = {c.id: c.passed for c in outcome.checks}
     assert gate.get("recovery-landing") is True, outcome.reason_codes
+    assert gate.get("recovery-propellant-reserve") is True, outcome.reason_codes
     assert outcome.landing is not None and outcome.landing.landed
+    assert outcome.landing.max_proper_g <= 5.0
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(strict=False, reason=F10)
+@pytest.mark.xfail(strict=True, reason=CHAIN)
 @pytest.mark.skipif(not FIXTURE.is_dir(),
                     reason="recorded-flight fixture baked by scripts/e505a_reference.py")
 @pytest.mark.skipif(not _has_gfold(), reason="needs gfold for the landing leg")
 def test_packaged_mission_chain_replays_the_recorded_flight(tmp_path):
     """The packaged mission (run_dir replay of the recorded OT flight,
-    drive_from_separation) chains the full dual-branch mission; the insertion
-    band passes since E5-05d (#288) and the only graded gate it still cannot
-    pass is F10 (landing corridor) -- propagation stays not_checked (E2-04
-    environment reason)."""
+    drive_from_separation) chains the full dual-branch mission. strict
+    xfail on the non-F10 chain gates (CHAIN; #272): F10 itself is asserted
+    hard on the computed separation state by
+    test_recovery_landing_gate_on_the_computed_state. Propagation stays
+    not_checked (E2-04 environment reason)."""
     from orbitopt.mission.two_stage_leo import (
         STATUS_OK, run_two_stage_leo, scenario_from_config)
 

@@ -181,6 +181,33 @@ def test_dispersed_separation_state_moves_along_enu_axes():
     assert float(np.dot(hv, e)) == pytest.approx(250.0, abs=0.01)  # right of north
 
 
+def test_dispersed_separation_state_keeps_a_climbing_velocity():
+    """A lofted separation (FPA ~40 deg, the RTLS fixture's regime) keeps its
+    vertical velocity under every draw, and a zero draw is the identity: the
+    FL-304 form rebuilt the velocity horizontal at full speed and every
+    dispersed RTLS sample missed by over 100 km."""
+    from orbitopt.flightlab.recovery import BoosterState, dispersed_separation_state
+    from orbitopt.flightlab.recovery.boostback import _enu_basis
+
+    e, n, u = (np.array(c) for c in _enu_basis(PAD[0], PAD[1]))
+    r0 = np.array(geodetic_to_ecef(*PAD)) + 60_000.0 * u + 50_000.0 * n
+    v0 = 1600.0 * n + 1350.0 * u
+    st = BoosterState(t_s=SEP_T_S, epoch_utc=datetime(2026, 11, 10, 12, 0, 0),
+                      frame="ECEF", position_m=tuple(r0), velocity_m_s=tuple(v0),
+                      mass_kg=135_000.0)
+    same = dispersed_separation_state(st)
+    assert np.allclose(same.velocity_m_s, v0, atol=1e-9)
+    assert np.allclose(same.position_m, r0, atol=1e-9)
+    for kw in (dict(altitude_m=400.0), dict(downrange_m=800.0), dict(heading_deg=0.15),
+               dict(speed_m_s=4.0)):
+        d = np.array(dispersed_separation_state(st, **kw).velocity_m_s)
+        up_ratio = float(np.dot(d, u)) / float(np.dot(v0, u))
+        assert up_ratio == pytest.approx(
+            1.0 + kw.get("speed_m_s", 0.0) / float(np.linalg.norm(v0)), rel=1e-3), kw
+    d = np.array(dispersed_separation_state(st, speed_m_s=4.0).velocity_m_s)
+    assert float(np.linalg.norm(d)) == pytest.approx(float(np.linalg.norm(v0)) + 4.0, abs=1e-6)
+
+
 # ---------------------------------------------------------------------------
 # the hand-built ascent whose separation IS recoverable
 # ---------------------------------------------------------------------------
@@ -488,8 +515,10 @@ def test_slow_wiring_only_monte_carlo_green_source_yields_rate_percentiles_and_e
     target = load_target(TARGET)
     disp = Dispersions(thrust_pct=4.0, density_pct=8.0, sep_altitude_m=500.0,
                        sep_downrange_m=1_000.0, sep_speed_m_s=6.0)
+    # seed 1: a population that all lands (wiring only); the E5-05c
+    # dispersion fix (vertical velocity kept) re-drew which seeds do
     res = run_monte_carlo(target, VEHICLE, _ascent_with_textbook_separation(),
-                          dispersions=disp, seed=9, n=3, workers=1,
+                          dispersions=disp, seed=1, n=3, workers=1,
                           plan_options={"initial_guess": NOMINAL_PLAN_GUESS,
                                         "max_fevals": 18,
                                         "landing": {"mode": "single"},

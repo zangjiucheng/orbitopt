@@ -73,17 +73,38 @@ scenario:
     target_file: src/orbitopt/data/flightlab/scenarios/leo_two_stage_rtls.yaml
     drive_from_separation: true             # E5-02 shared handoff: plan from the COMPUTED separation state
     plan_options:
-      # E5-05a plan recipe (docs/adr/flightlab-0008): the FROZEN E2-04/FL-305
-      # start (the pipeline's nominal guess, same seven numbers) still
-      # converges here, but the heavier booster needs a longer Nelder-Mead
-      # budget (140 evaluations: 60 stalls short of the corridor), and the
-      # grid-fin drag deck (reference_area 21.6 m2) flies a hotter entry than
-      # the sealed baseline's, so the entry-q ceiling is raised 150->250 kPa
-      # (DESIGN ASSUMPTION, uncrewed; the entry-g ceiling keeps the default
-      # 8 g -- the flown plan never approaches it).
-      initial_guess: [18.4, 17.75, 1.0, 4.36, 0.0, 17456.0, 23.0]
-      max_fevals: 140
-      entry_q_max_pa: 250000                # DESIGN ASSUMPTION: entry heating/qs ceiling, see ADR
+      # E5-05c (task #287) recipe -- closes F10 on the computed separation
+      # state (docs/adr/flightlab-0008). A Monte Carlo-verified FIXED script
+      # (search: keep): n=64 dispersed flights of exactly this script (Isp 3 %,
+      # thrust/Cd 5 %, density 10 %, separation state) all landed, touchdown
+      # propellant min 12.0 / p05 12.6 t against the 10 t gate
+      # (scripts/e505c_recovery_montecarlo.py, seed 1). Script found by
+      # scripts/e505c_recovery_search.py with these same options.
+      #   x = [delay s, IIP aim km past the pad, boostback throttle, pitch deg,
+      #        yaw trim deg, entry trigger m, entry cutoff speed m/s,
+      #        entry throttle]
+      initial_guess: [6.361355012944131, 4.325366437693795, 0.8329880778438892,
+                      2.933641190367238, -7.397550060236878, 29645.36476563118,
+                      293.09976456950864, 0.9574166766757264]
+      search: keep
+      entry_burns: 1
+      entry_throttle: true
+      boostback_cutoff: iip                 # closed loop on the vacuum IIP (+ propellant floor)
+      entry_cutoff: speed                   # entry burn ends at the cutoff speed; engine-off handoff
+      landing_need_model: closed_loop       # forecast the FL-305 landing (incl. peak load) at the handoff
+      corridor_aim_margin_m: 7000.0         # plan to a 1 km aim inside the 8 km referee
+      landing_reserve: target               # one graded reserve: the scenario's 10 t
+      landing_reserve_margin_kg: 2500.0     # planning margin (MC nominal-to-p01 touchdown spread)
+      entry_q_max_pa: 250000                # DESIGN ASSUMPTION: uncrewed entry heating/q ceiling, see ADR
+      entry_g_max: 12.0                     # DESIGN ASSUMPTION: uncrewed metallic booster, see ADR
+      horizon_s: 900.0
+      dt_opt: 0.25                          # FL-301 fixed-step verdict is not step-converged at
+      dt_final: 0.1                         #   the 2 s / 0.5 s defaults (ADR-0008, F10)
+      landing:
+        max_thrust_accel_g: 3.6             # peak load = cap + ~1.1 g drag; 4.0 flew 5.1 g on hot engines
+        tvc_rate_limit_deg_s: 20.0          # declared TVC actuator set (E3-01)
+        tvc_lag_tau_s: 0.2
+        tvc_lag_compensation: true
   propagation:
     j2: true
     third_bodies: []

@@ -338,7 +338,8 @@ def recovery_handoff_states(sep_state: BoosterState, plan: ReturnPlan,
         out.append(HandoffState.of(
             plan.landing_burn_initial_state, from_phase=PHASE_ENTRY, to_phase=PHASE_LANDING,
             dry_mass_kg=dry,
-            ignitions_used=2 if (starts and len(starts) > 1) else int(plan.ignitions_used)))
+            ignitions_used=int(len(starts)) if len(starts) > 1
+            else int(plan.ignitions_used)))
     final_track = landing.track if (landing is not None and landing.track is not None) \
         else plan.track
     ground = _final_ground_state(final_track)

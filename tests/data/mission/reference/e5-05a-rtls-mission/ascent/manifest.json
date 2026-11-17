@@ -1,22 +1,23 @@
 {
   "schema_version": "1.0",
-  "run_id": "ot-4d2ae2db-9bebe967",
+  "run_id": "ot-4d2ae2db-5cb541cc",
   "target_sha256": "4d2ae2db9d050946d62510b3b4cd1073e388697f320d29f5e0c33c61c498b1e9",
-  "vehicle_sha256": "6f746f4f563fd310de5a97890f4571d31ec802edc360a136e8bda1702bcc6cf4",
+  "vehicle_sha256": "9eac5b99b772583fed847490944bfcd6cf7fb8ac5e9342357e86639f5ed5f287",
   "engines": {
     "opentsiolkovsky-cli": "1.0.0"
   },
   "backend": "opentsiolkovsky",
-  "git_sha": "16660f95f0a9cd780ecdd30f30ed68545e623229",
+  "git_sha": "db7890fa2e581bda6336059f3da88b8fc83d4d48",
   "created_utc": "2026-11-10T12:00:00Z",
   "assumptions": [
     "OpenTsiolkovsky 1.0.0 (MIT, external binary -- not vendored; see NOTICE; openTsiolkovsky-v1.0.0-<platform>.tar.gz, pinned per-platform SHA-256 digests live in scripts/fetch_opentsiolkovsky.py)",
-    "opentsiolkovsky run-config sha256 9bebe9677db982736c89ac7ca4afb48d88cdecc9db0a69eb371765af1a0c0258",
+    "opentsiolkovsky run-config sha256 5cb541cce2f3167a6120d428498ee3b6d1ecda5bfa0bd06946b11b19835487a4",
     "OT pos_eci_*/vel_eci_* read as LAUNCH_ECI (axes = ECEF at the launch epoch, held inertial) and converted to GCRS by orbitopt.flightlab.frames.to_gcrs at the epoch",
     "created_utc is the mission epoch: this adapter is a pure function of (target, vehicle, attitude program), so repeated calls write byte-identical runs",
     "vehicle: E5-05a redesign (task #285): stage-1 propellant load 590 t (2x the sealed 350 t) and a declared burn_end_s cutoff at 134 s (depletion-independent), so MECO/separation carry a COMPUTED 135.6 t separation mass = 105.6 t RTLS propellant reserve instead of burning to depletion; the recovery chain plans from this computed state and the propellant-reserve gate PASSES (13.2 t at touchdown, docs/adr/flightlab-0008).",
     "vehicle: E5-05d (#288) upper-stage redesign: 128 t wet / 8.5 t dry stage-2 at Isp 380 s with a 14 MN boost leg, a declared cutoff into a coast + re-ignition circularisation burn (E5-05b restart block); all numbers from the OpenTsiolkovsky insertion-band campaign closing F9 -- the computed ascent reaches rp 281.8 km / ra 296.1 km at SECO from the computed reserve-carrying separation state (docs/adr/flightlab-0008)",
     "vehicle: Stage-1 tube widened to 5.2 m for the 2x propellant load; same Cd(Mach) table and same 30 t dry mass as the sealed baseline; lofted MECO (elevation 44 deg at burn end, burn extended to 134 s) carries separation to ~90 km / 2.3 km/s / 120 km downrange - the ~180 t-class separation regime task",
+    "vehicle: E5-05c (#287) stage-1 resize for the F10 landing: +48 t RTLS reserve (Monte Carlo sized, docs/adr/flightlab-0008) with thrust and mass flow scaled x1.175 at the unchanged 134 s cutoff (11.70 -> 13.75 MN, 620 -> 752.77 t loaded, 569.2 t burned): liftoff T/W and the MECO acceleration stay at the E5-05d values, so the ascent shape and the F9 insertion band hold (rp 272.6 / ra 285.1 km) while separation carries 183.4 t (153.4 t reserve) at 2129 m/s / 93.4 km, the state the +48 t recovery Monte Carlo was flown from.",
     "vehicle: Landing reserve 15 t (planning margin carried by the booster model); the graded minimum is the flight target's recovery.min_propellant_reserve_kg.",
     "vehicle: Derived-not-copied design: campaign + recovery-budget provenance in docs/adr/flightlab-0008.",
     "target: E5-05a redesign target: the ascent must reach MECO with a computed (not depleted) stage-1 propellant reserve and still insert at the 250 km reference orbit; the RTLS recovery chain plans from that computed separation state.",
@@ -25,7 +26,7 @@
   ],
   "toolchain": {
     "python": "3.13.18",
-    "orbitopt": "unknown (source tree; see git_sha)",
+    "orbitopt": "0.1.0",
     "numpy": "2.5.4",
     "scipy": "1.18.1",
     "astropy": "8.0.2",
@@ -63,7 +64,7 @@
       "frame": "GCRS",
       "epoch_utc": "2026-11-10T12:00:00Z",
       "t_start_s": 141.0,
-      "t_end_s": 481.4680030846935,
+      "t_end_s": 480.93226636786517,
       "provenance": "illustrative"
     },
     {
@@ -72,7 +73,7 @@
       "frame": "GCRS",
       "epoch_utc": "2026-11-10T12:00:00Z",
       "t_start_s": 201.0,
-      "t_end_s": 1163.2862134702816,
+      "t_end_s": 1162.6413037368786,
       "provenance": "illustrative"
     }
   ]
