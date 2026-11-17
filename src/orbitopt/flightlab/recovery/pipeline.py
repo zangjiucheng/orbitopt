@@ -314,7 +314,8 @@ def fly_recovery(ascent_run: FlightRun, target: FlightTarget, vehicle_path, *,
         sep_state = separation_state_from_run(ascent_run)
 
     opts = dict(plan_options) if plan_options else {}
-    fly_landing = _landing_flight(opts.pop("landing", None))
+    landing_opts = opts.pop("landing", None)
+    fly_landing = _landing_flight(landing_opts)
     # R-02: merge the handoff / joint-constraint checks into the run only on
     # request -- Gate B reference runs compare verification byte-for-byte,
     # so the extra checks are opt-in and the report object is the default
@@ -324,6 +325,13 @@ def fly_recovery(ascent_run: FlightRun, target: FlightTarget, vehicle_path, *,
         # the planner forecasts the landing against the limits it will be graded on
         opts["landing_limits"] = limits if limits is not None \
             else _landing_limits_for_target(target)
+    if (opts.get("landing_need_model") == "closed_loop" and "landing_guidance" not in opts
+            and fly_landing is not fly_landing_burn):
+        # ... and flies the law the landing burn will fly (plan_options
+        # "landing" guidance fields, e.g. a lower max_thrust_accel_g)
+        g_opts = {k: v for k, v in dict(landing_opts or {}).items()
+                  if k not in ("mode", "mismatch")}
+        opts["landing_guidance"] = TerminalGuidance(**g_opts)
     plan = plan_boostback_entry(sep_state, booster, recovery_target, **opts)
     landing: LandingResult | None = None
     if plan.feasible:

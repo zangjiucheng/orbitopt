@@ -383,6 +383,9 @@ class CorridorReport:
     #: (both None when the joint mode is off).
     landing_probability: float | None = None
     joint_violation: float | None = None
+    #: E5-05c ``entry_cutoff="speed"``: height [m] where the entry burn ended
+    #: (None in the other modes)
+    entry_cutoff_altitude_m: float | None = None
     #: E5-05c ``landing_need_model="closed_loop"``: the FL-305 landing burn
     #: forecast from this handoff (None under the momentum model) -- where
     #: it lights [m above the pad] and the touchdown it reaches.
@@ -623,6 +626,7 @@ class _Mission:
                           if iip_aim_m is not None and pad_ecef is not None else None)
         self.entry_cut_speed = entry_cut_speed_m_s
         self.entry_end_t: float | None = None
+        self.entry_cut_h: float | None = None  # height [m] where the speed cut fired
 
     def entry_end(self) -> float:
         """Entry-burn end on the mission clock: the speed cutoff once it
@@ -681,6 +685,7 @@ class _Mission:
             speed = float(np.linalg.norm(v))
             if self.entry_cut_speed is not None and speed <= self.entry_cut_speed:
                 self.entry_end_t = float(t)
+                self.entry_cut_h = _geodetic_fast(r)[2]
                 return None
             if speed < 1e-9:
                 return None  # nothing to fly against; keep the engines shut
@@ -736,6 +741,9 @@ class _Rollout:
     #: E5-05c two-burn mode: scheduled engine-on time [s] still owed after
     #: the corridor crossing (0 = an engine-off handoff, the only valid one)
     handoff_burn_overlap_s: float = 0.0
+    #: E5-05c ``entry_cutoff="speed"``: geodetic height [m] at entry-burn end
+    #: (None outside speed mode or when the burn never lit)
+    entry_cut_alt_m: float | None = None
     #: E5-05c closed-loop landing forecast at the handoff (None = momentum model)
     landing_pred: Any = None
     #: ... and whether it lands inside the landing limits
@@ -779,7 +787,9 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
               chance: JointChanceSpec | None = None,
               sep_prop_kg: float | None = None,
               aim_radius: float | None = None,
-              landing_limits: Any = None) -> _Rollout:
+              landing_limits: Any = None,
+              landing_guidance: Any = None,
+              physics: Any = None) -> _Rollout:
     """One full-physics flight through the FL-301 propagator plus the
     corridor residual. Penalty is a sum of dimensionless squared violations:
     the corridor/entry/propellant violations in-flight, plus the R-01 soft
@@ -806,7 +816,8 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
     try:
         tr = propagate(sep_state, vehicle, mission, sep_state.t_s + horizon_s,
                        events=("burn", "ground", AltitudeThreshold(corridor.h0_m, h0_name, "down")),
-                       dt_s=dt, sample_s=max(2.0 * dt, 2.0))
+                       dt_s=dt, sample_s=max(2.0 * dt, 2.0),
+                       **({} if physics is None else {"physics": physics}))
     except RecoveryError:
         out.penalty = 60.0
         return out
@@ -815,6 +826,21 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
     burn_starts = [e for e in tr.events if e.kind == "burn_start"]
     entry_t0 = burn_starts[1].t_s if len(burn_starts) > 1 else None
     gate_t = entry_t0
+    speed_cut = (getattr(mission, "entry_cut_speed", None) is not None
+                 and getattr(mission, "eb2", None) is None)
+    if speed_cut and entry_t0 is not None and mission.entry_t0 is not None:
+        # E5-05c speed-cut entry: the handoff is only valid once the entry
+        # burn has cut off (engine-off, like the timed script's coast). A
+        # burn still lit at h0 used to be graded as the handoff, so the
+        # speed cut never decided the handoff state; that crossing is now
+        # graded with the engine-on overlap penalty and rejected.
+        gate_t = float(mission.entry_end())
+        t_arr = np.asarray(tr.times_s, dtype=np.float64)
+        if mission.entry_cut_h is not None:
+            out.entry_cut_alt_m = float(mission.entry_cut_h)
+        elif t_arr[0] <= gate_t <= t_arr[-1]:
+            out.entry_cut_alt_m = float(np.interp(
+                gate_t, t_arr, np.asarray(tr.height_m_arr, dtype=np.float64)))
     if getattr(mission, "eb2", None) is not None:
         # E5-05c two-burn entry: the corridor is only a valid landing-handoff
         # gate once the second (braking) burn has flown and cut off -- an
@@ -832,6 +858,12 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
     pad = np.asarray(target.position_ecef_m, dtype=np.float64)
     crossings = [e for e in tr.events
                  if e.kind == h0_name and gate_t is not None and e.t_s >= gate_t]
+    if not crossings and speed_cut and entry_t0 is not None:
+        crossings = [e for e in tr.events
+                     if e.kind == h0_name and e.t_s >= entry_t0]
+        if crossings:
+            out.handoff_burn_overlap_s = max(
+                float(mission.entry_end()) - float(crossings[0].t_s), 1e-3)
     if (not crossings and getattr(mission, "eb2", None) is not None
             and entry_t0 is not None):
         # E5-05c: the braking burn was still scheduled when the booster fell
@@ -876,7 +908,8 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
             pred = predict_closed_loop_landing(
                 (float(dr @ pe), float(dr @ pn), float(dr @ pu)),
                 (float(v @ pe), float(v @ pn), float(v @ pu)),
-                float(ev.data["mass_kg"]), vehicle, pad_altitude_m=float(p_h))
+                float(ev.data["mass_kg"]), vehicle, pad_altitude_m=float(p_h),
+                **({} if landing_guidance is None else {"guidance": landing_guidance}))
             out.landing_pred = pred
             out.landing_need_kg = pred.need_kg
             out.landing_ok = bool(
@@ -936,6 +969,12 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
     if out.crossed:
         if out.handoff_burn_overlap_s > 0.0:
             pen += 4.0 + (out.handoff_burn_overlap_s / 5.0) ** 2
+        if out.entry_cut_alt_m is not None:
+            # planning clearance: the speed cut should fire well above h0 so
+            # dispersed flights still hand over engine-off (objective only;
+            # the verdict rejects only an engine-on handoff)
+            low = corridor.h0_m + ENTRY_CUTOFF_MIN_CLEARANCE_M - out.entry_cut_alt_m
+            pen += (max(0.0, low) / 250.0) ** 2
         pen += (out.miss_m / (corridor.radius_m if aim_radius is None
                               else float(aim_radius))) ** 2
         # R-01 landing feasibility: the same miss against the divert the
@@ -1019,6 +1058,8 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                                            np.ndarray] | None = None,
                           landing_need_model: str = "momentum",
                           landing_limits: Any = None,
+                          landing_guidance: Any = None,
+                          verdict_physics: Any = None,
                           boostback_cutoff: str = "duration",
                           entry_cutoff: str = "duration") -> ReturnPlan:
     """Optimize the boostback/entry-burn script so the FL-301-propagated
@@ -1104,7 +1145,16 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     RTLS fixture 7.9 t where the momentum estimate read 5.2 t) and grades the
     handoff by the predicted touchdown against ``landing_limits`` (a
     :class:`~orbitopt.flightlab.recovery.landing.LandingLimits`; the
-    defaults when None) instead of the speed cap.
+    defaults when None) instead of the speed cap. ``landing_guidance`` (a
+    :class:`~orbitopt.flightlab.recovery.landing.TerminalGuidance`; the
+    FL-305 default when None) is the law that forecast flies -- pass the one
+    the landing burn will actually fly (``fly_recovery`` does).
+    ``verdict_physics`` (a :class:`~orbitopt.flightlab.recovery.propagator.
+    BoosterPhysics`, E5-05c) flies only the final re-integration of the
+    accepted script in that perturbed atmosphere (density scale, wind); the
+    search keeps the nominal model -- the plan/reality mismatch a Monte
+    Carlo of the closed-loop cutoffs must expose. None (default) is the
+    nominal verdict, bit-for-bit.
     ``boostback_cutoff`` (E5-05c): ``"duration"`` (default, bit-for-bit)
     burns the boostback for ``x[1]`` seconds; ``"iip"`` closes the loop the
     way an operational boostback does -- ``x[1]`` is then the aim distance
@@ -1235,7 +1285,7 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
             eb = replace(eb, duration_s=ENTRY_CUTOFF_CAP_S)
         return _Mission(sep_state.t_s, bb, eb, bearing_of, eb2, **kw)
 
-    def rollout(x: np.ndarray, dt: float) -> _Rollout:
+    def rollout(x: np.ndarray, dt: float, physics: Any = None) -> _Rollout:
         x = clamp(x)
         window = (sep_state.t_s + float(x[0]), sep_state.t_s + float(x[0])
                   + (IIP_BOOSTBACK_CAP_S if iip_mode else float(x[1])))
@@ -1243,7 +1293,8 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                          entry_q_max_pa, entry_g_max, reserve, horizon_s, dt, window,
                          divert_budget=divert_budget, reserve_margin=reserve_margin,
                          chance=chance, sep_prop_kg=sep_prop, aim_radius=aim_radius,
-                         landing_limits=pred_limits)
+                         landing_limits=pred_limits, landing_guidance=landing_guidance,
+                         physics=physics)
 
     # --- analytic floor check (see _propellant_floor_kg)
     sep_prop = sep_mass - dry
@@ -1315,7 +1366,7 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                          divert_budget=divert_budget, reserve_margin=reserve_margin,
                          chance=chance, layout=(entry_burns, entry_throttle))
 
-    final = rollout(best_x, dt_final)
+    final = rollout(best_x, dt_final, physics=verdict_physics)
     return _assemble(final, best_x, sep_state, booster, recovery_target, corridor,
                      None, q_lim=entry_q_max_pa, g_lim=entry_g_max, reserve=reserve,
                      divert_budget=divert_budget, reserve_margin=reserve_margin,
@@ -1330,6 +1381,10 @@ IIP_BOOSTBACK_CAP_S = 60.0
 IIP_VERNIER_M = 3000.0
 #: E5-05c ``entry_cutoff="speed"``: burn-time cap [s] of the speed-cut entry burn.
 ENTRY_CUTOFF_CAP_S = 45.0
+#: ... and the planning clearance [m] above the corridor height h0 that its
+#: cutoff should keep (objective term; dispersions must not push the cut
+#: below h0, where the handoff would be engine-on and rejected).
+ENTRY_CUTOFF_MIN_CLEARANCE_M = 500.0
 
 
 def _unpack_script(x: np.ndarray, entry_burns: int = 1, entry_throttle: bool = False
@@ -1409,6 +1464,7 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
         min_landing_reserve_margin_kg=reserve_margin if reserve_margin > 0.0 else None,
         landing_probability=final.p_land,
         joint_violation=final.joint_violation,
+        entry_cutoff_altitude_m=final.entry_cut_alt_m,
         **({} if final.landing_pred is None else dict(
             landing_ignition_altitude_m=final.landing_pred.ignition_altitude_m,
             landing_touchdown_vertical_m_s=final.landing_pred.touchdown_vertical_m_s,
