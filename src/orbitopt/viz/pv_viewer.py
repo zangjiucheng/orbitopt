@@ -39,10 +39,10 @@ import pyvista as pv
 from orbitopt.scene_format import read_scene
 from orbitopt.viz.scene_renderer import SceneRenderer
 
-BACKGROUND = "#06050c"
-INK_PRIMARY = "#f4f2ea"
-INK_SECONDARY = "#a9a6bb"
-ACCENT = "#e8a23e"
+BACKGROUND = "#000000"
+INK_PRIMARY = "#ffffff"
+INK_SECONDARY = "#b3b3b3"
+ACCENT = "#ffffff"
 
 
 def load_scene(path) -> dict:

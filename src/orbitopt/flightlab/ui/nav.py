@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from orbitopt.flightlab.run_index import RunEntry, default_run_roots, discover_flight_runs
+from orbitopt.flightlab.run_index import RunEntry, default_run_roots, discover_flight_runs, label_hint
 from orbitopt.viz import icons
 from orbitopt.viz.theme import DANGER, INK_MUTED, SUCCESS, WARNING
 
@@ -197,11 +197,15 @@ class FlightLabNav(QWidget):
         labels = [e.label for e in self.entries]
         for entry in self.entries:
             text = entry.label
-            if labels.count(text) > 1:  # same folder name in two places: say where
-                text += f" · {entry.path.parent.parent.name if entry.path.name == 'ascent' else entry.path.parent.name}"
+            if labels.count(text) > 1:  # same label for different runs: say where from
+                hint = label_hint(entry.path)
+                text += f" · {hint}" if hint else ""
             item = QListWidgetItem(icons.mission_marker_icon(_verdict_color(entry.verdict)), text)
             item.setData(Qt.UserRole, str(entry.path))
-            item.setToolTip(f"{entry.detail}\n{entry.path}\n{_verdict_word(entry.verdict)}")
+            tip = f"{entry.detail}\n{entry.path}\n{_verdict_word(entry.verdict)}"
+            if entry.copies:
+                tip += "\nolder copies of this run (folded in):\n" + "\n".join(f"  {c}" for c in entry.copies)
+            item.setToolTip(tip)
             self.run_list.addItem(item)
         self.run_list.blockSignals(False)
         if current is not None:

@@ -68,11 +68,11 @@ def _actor_orientation_from_matrix(rotation: np.ndarray) -> tuple[float, float, 
     transform.SetMatrix(matrix)
     return transform.GetOrientation()
 
-MANEUVER_COLOR = "#ff5a3c"  # burn / delta-v arrows (distinct from amber trails)
+MANEUVER_COLOR = "#ff4d3d"  # burn / delta-v arrows (the one warm tone against white trails)
 # Optimizer candidates' screening arcs: the picked one in the app's "active"
 # cyan, the rest a quiet neutral so they read as context, not as flights.
-CANDIDATE_SELECTED_COLOR = "#5ec8ff"
-CANDIDATE_COLOR = "#a9a6bb"
+CANDIDATE_SELECTED_COLOR = "#a6c8ff"
+CANDIDATE_COLOR = "#b3b3b3"
 
 
 def _default_view_direction(scene: dict) -> np.ndarray | None:
@@ -1188,7 +1188,7 @@ class SceneRenderer:
         self.plotter.camera.focal_point = tuple(pos)
         self.plotter.render()
 
-    def measure_line(self, id_a: str, id_b: str, t: float, color: str = "#5ec8ff", render: bool = True) -> float:
+    def measure_line(self, id_a: str, id_b: str, t: float, color: str = "#a6c8ff", render: bool = True) -> float:
         """Draw (or redraw) a straight line between two bodies at time ``t`` and
         return the distance between them. Reuses a single named actor so it
         follows the bodies as the timeline advances, the same update-in-place

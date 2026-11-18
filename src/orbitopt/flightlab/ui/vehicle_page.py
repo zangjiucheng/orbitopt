@@ -44,6 +44,7 @@ from orbitopt.viz.theme import (
     INK_PRIMARY,
     INK_SECONDARY,
     PANEL,
+    SURFACE_HOVER,
     SUCCESS,
     WARNING,
 )
@@ -56,9 +57,9 @@ PROVENANCE_COLORS = {"official": SUCCESS, "public_estimate": WARNING, "illustrat
 OVERLAY_TIME_TOL_S = 2.0
 OVERLAY_MASS_TOL = 0.005
 
-_STAGE_FILLS = (QColor("#2a2540"), QColor("#25364a"), QColor("#2c4136"))
-_BURNED = QColor(ACCENT).darker(260)     # propellant the declared schedule burns
-_LEFT = QColor(INFO).darker(300)         # propellant left at cutoff
+_STAGE_FILLS = (QColor("#262626"), QColor("#363636"), QColor("#454545"))
+_BURNED = QColor("#555555")               # propellant the declared schedule burns
+_LEFT = QColor("#d6d6d6")                 # propellant left at cutoff
 
 
 def _t(seconds: float) -> str:
@@ -116,13 +117,14 @@ class VehicleProfile(QWidget):
 
         for i, stage in enumerate(view.stages):
             h, d = heights[i] * scale, geo.stage_diameter[i] * scale
-            rect = QRectF(cx - d / 2, y - h, d, h)
+            nose_h = (geo.nose_length or 0.0) * scale if i == len(view.stages) - 1 else 0.0
+            rect = QRectF(cx - d / 2, y - h + nose_h, d, h - nose_h)
             # first-stage nozzle exit, to scale in width, under the stage
             if i == 0 and stage.nozzle_exit_area_m2:
                 exit_d = math.sqrt(4.0 * stage.nozzle_exit_area_m2 / math.pi) * scale
                 drop = min(exit_d * 0.7, pad_bottom - 8)
                 p.setPen(QPen(QColor(INK_MUTED), 1))
-                p.setBrush(QBrush(QColor("#1b1729")))
+                p.setBrush(QBrush(QColor(SURFACE_HOVER)))
                 p.drawPolygon(QPolygonF([QPointF(cx - exit_d * 0.28, y), QPointF(cx + exit_d * 0.28, y),
                                          QPointF(cx + exit_d / 2, y + drop),
                                          QPointF(cx - exit_d / 2, y + drop)]))
@@ -141,11 +143,14 @@ class VehicleProfile(QWidget):
                     p.setBrush(QBrush(_LEFT))
                     p.drawRect(QRectF(tank.left(), tank.top(), tank.width(),
                                       tank.height() * (1.0 - burned)))
+            if nose_h > 0.0:
+                self._nose(p, view, cx, rect.top(), scale)
             lines = [f"Stage {stage.index}", f"{_kg(stage.mass_initial_kg)} wet"]
             if geo.declared:
                 self._bracket(p, rect, cx + widest * scale / 2 + 8)
                 lines.append(f"{heights[i]:.1f} m")
-            self._label(p, label_x, rect, lines)
+            label_rect = QRectF(rect.left(), rect.top() - nose_h, rect.width(), rect.height() + nose_h)
+            self._label(p, label_x, label_rect, lines)
             y -= h
 
         if geo.fairing_length:
@@ -153,7 +158,7 @@ class VehicleProfile(QWidget):
             fd = (geo.fairing_diameter or geo.stage_diameter[-1]) * scale
             body = fh * 0.62
             p.setPen(QPen(QColor(INK_SECONDARY), 1.4, Qt.DashLine))
-            p.setBrush(QBrush(QColor("#1b1729")))
+            p.setBrush(QBrush(QColor(SURFACE_HOVER)))
             p.drawPolygon(QPolygonF([QPointF(cx - fd / 2, y), QPointF(cx + fd / 2, y),
                                      QPointF(cx + fd / 2, y - body),
                                      QPointF(cx + fd * 0.12, y - fh), QPointF(cx - fd * 0.12, y - fh),
@@ -164,6 +169,21 @@ class VehicleProfile(QWidget):
         p.setPen(QPen(QColor(HAIRLINE), 1))
         p.drawLine(int(pad_x), int(self.height() - pad_bottom), int(self.width() - pad_x),
                    int(self.height() - pad_bottom))
+
+    @staticmethod
+    def _nose(p: QPainter, view: VehicleView, cx: float, base_y: float, scale: float) -> None:
+        """The declared nose, from its base (``base_y``) up, to scale."""
+        from orbitopt.flightlab.nose_aero import NoseSpec
+
+        geo = view.geometry
+        diameter = geo.stage_diameter[-1]
+        nose = NoseSpec(str(geo.nose_shape), float(geo.nose_length), diameter)
+        x, r = nose.profile(60)
+        left = [QPointF(cx - ri * scale, base_y - (nose.length_m - xi) * scale) for xi, ri in zip(x, r)]
+        right = [QPointF(cx + ri * scale, base_y - (nose.length_m - xi) * scale) for xi, ri in zip(x, r)]
+        p.setPen(QPen(QColor(INK_SECONDARY), 1.4))
+        p.setBrush(QBrush(_STAGE_FILLS[(len(view.stages) - 1) % len(_STAGE_FILLS)]))
+        p.drawPolygon(QPolygonF(left + right[::-1]))
 
     @staticmethod
     def _legend(p: QPainter, x: float, y: float) -> None:
@@ -544,6 +564,15 @@ class VehiclePage(QWidget):
             add("  throttle", f"{b.throttle_min:.0%} – {(b.throttle_max or 1.0):.0%}"
                 + (f" · {b.restarts_max} relights" if b.restarts_max is not None else ""),
                 "booster.engines.throttle_min")
+        geo = view.geometry
+        if geo.nose_shape and geo.nose_length:
+            diameter = geo.stage_diameter[-1]
+            add("Nose", f"{geo.nose_shape.replace('_', ' ')} · {geo.nose_length:g} m · "
+                f"L/D {geo.nose_length / diameter:.2f}", "geometry.nose")
+            ca = _ca_at(view, (0.8, 1.5, 4.0))
+            if ca:
+                add("  axial Ca, power on (M 0.8 / 1.5 / 4)", " / ".join(f"{c:.2f}" for c in ca),
+                    "stages[0].aero")
         if view.geometry.declared:
             add("Geometry", " + ".join(f"{x:g} m" for x in view.geometry.stage_length)
                 + (f" + fairing {view.geometry.fairing_length:g} m" if view.geometry.fairing_length else ""),
@@ -607,3 +636,15 @@ def _esc(text: str) -> str:
     import html
 
     return html.escape(text)
+
+
+def _ca_at(view: VehicleView, machs) -> list[float]:
+    """Stage 1's declared power-on axial-force coefficient at ``machs`` (the
+    stack's drag while it flies the atmosphere); empty when it is a scalar."""
+    import numpy as np
+
+    table = ((view.document.get("stages") or [{}])[0].get("aero") or {}).get("ca")
+    if not isinstance(table, list):
+        return []
+    arr = np.asarray(table, dtype=float)
+    return [float(np.interp(m, arr[:, 0], arr[:, 1])) for m in machs]

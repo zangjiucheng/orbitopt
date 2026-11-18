@@ -30,7 +30,7 @@ from orbitopt.viz.theme import ACCENT, BG_VOID, HAIRLINE, INK_MUTED, INK_PRIMARY
 # Reference sequential blue ramp, steps 100..700 (dataviz palette.md).
 SEQUENTIAL_BLUE = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5",
                    "#2a78d6", "#256abf", "#1c5cab", "#184f95", "#104281", "#0d366b"]
-CANDIDATE_SELECTED = "#5ec8ff"  # same as the selected arc in 3D (scene_renderer)
+CANDIDATE_SELECTED = "#a6c8ff"  # same as the selected arc in 3D (scene_renderer)
 _HIT_PX = 12
 # Bodies the distance chart measures the spacecraft against: natural bodies,
 # plus ground sites (e.g. a landing site riding on the rotating Earth).
@@ -81,7 +81,12 @@ def format_km(km: float) -> str:
 
 
 def _font(size: float, bold: bool = False) -> QFont:
+    from orbitopt.viz.theme import resolve_family
+
     font = QFont()
+    family = resolve_family()
+    if family:
+        font.setFamily(family)
     font.setPointSizeF(size)
     font.setBold(bold)
     return font

@@ -1,0 +1,229 @@
+# Flight Lab vehicle: Starship-class two-stage (Super Heavy + Ship), PUBLIC-ESTIMATE
+# reconstruction. NOT official SpaceX performance data and never to be presented
+# as such. Masses, thrust and dimensions are secondary public figures for the
+# first-generation (Block 1) stack, tagged one by one in 'data_provenance:'
+# (flight-vehicle-1.0, orbitopt.flightlab.vehicle_catalog); the burn windows,
+# throttle, attitude program and Cd tables are scenario choices (illustrative).
+#
+# What distinguishes it from the Falcon 9-class file:
+#  * one 9 m stack with NO fairing: the ship's own nose is exposed through the
+#    ascent, so the aero tables of both stages are GENERATED from the declared
+#    nose by orbitopt.flightlab.nose_aero (python -m orbitopt.flightlab.nose_aero
+#    starship_class_public_estimate) and a test holds them equal;
+#  * the booster relights twice (boostback, landing) -- no entry burn: entry
+#    deceleration is aerodynamic (grid fins), not propulsive;
+#  * the ship flies ONE continuous burn: no coast, no restart.
+schema_version: flight-vehicle-1.0
+name: starship-class-public-estimate
+provenance: public_estimate
+as_of: "2026-11"
+disclaimer: >
+  Public-estimate reconstruction of a Starship-class stack (Super Heavy booster
+  and Ship, first generation) from secondary public sources. Not official
+  SpaceX performance data; mass, thrust, Isp and dimension figures carry the
+  stated uncertainty bands, the nose length is an assumption (no public value),
+  and none of it may be presented as SpaceX numbers.
+assumptions:
+  - Block 1 figures throughout (booster 71 m / 275 t dry / 3,250 t propellant; ship
+    50.3 m / ~100 t dry / ~1,200 t propellant) so the stack is one consistent
+    generation; later blocks differ.
+  - Raptor 2 is taken at 2.256 MN sea-level thrust and 327 s sea-level Isp
+    (published) with a vacuum Isp of 350 s; sources disagree on the Raptor 2
+    vacuum figure (350 vs 363 s) and the Raptor Vacuum is 380 s. The ship's
+    3 sea-level + 3 vacuum engines are carried as one engine at the thrust-weighted
+    effective vacuum Isp (365 s); its 14.76 MN total matches the published ~14.7 MN.
+  - The booster flies at 95 % throttle and cuts off at 135 s; the unburned
+    propellant at cutoff is the boostback and landing budget.
+  - Hot staging is modelled as ship ignition at the separation instant; the real
+    ship lights its engines before the stages part.
+  - The booster section models its 13 relightable engines as one set with a 40 %
+    throttle floor; the real vehicle shuts down to 3 engines for the last seconds
+    of the landing burn, which one engine set cannot express.
+  - "Nose length is not published, so the tangent ogive is declared 1.5 diameters long
+    (illustrative, +-30 %). Blunting of the real tip, the flaps and the grid fins
+    are not in the generated aero."
+simulation:
+  end_time_s: 700.0
+  output_step_s: 2.0
+  integrator: {method: rk45}
+attitude_program:
+  - {t_s: 0.0, azimuth_deg: 90.0, elevation_deg: 90.0}
+  - {t_s: 12.0, azimuth_deg: 90.0, elevation_deg: 90.0}
+  - {t_s: 40.0, azimuth_deg: 90.0, elevation_deg: 80.0}
+  - {t_s: 80.0, azimuth_deg: 90.0, elevation_deg: 62.0}
+  - {t_s: 120.0, azimuth_deg: 90.0, elevation_deg: 45.0}
+  - {t_s: 140.0, azimuth_deg: 90.0, elevation_deg: 38.0}
+  - {t_s: 190.0, azimuth_deg: 90.0, elevation_deg: 28.0}
+  - {t_s: 250.0, azimuth_deg: 90.0, elevation_deg: 16.0}
+  - {t_s: 320.0, azimuth_deg: 90.0, elevation_deg: 6.0}
+  - {t_s: 700.0, azimuth_deg: 90.0, elevation_deg: 0.0}
+stages:
+  - mass_initial_kg: 3525000.0
+    mass_dry_kg: 275000.0
+    engine:
+      thrust_vac_n: [[0.0, 74926500.0], [135, 74926500.0]]
+      isp_vac_s: 350.0
+      burn_start_s: 0.0
+      burn_end_s: 135
+      nozzle_exit_area_m2: 43.89
+    aero:
+      diameter_m: 9.0
+      ca: [[0, 0.0956], [0.5, 0.0934], [0.8, 0.0903], [1, 0.1373], [1.2, 0.353], [1.5, 0.4546], [2, 0.4163], [3, 0.3588], [4, 0.3319], [6, 0.3054], [8, 0.2927], [12, 0.2812]]
+      ca_power_off: [[0, 0.2156], [0.5, 0.2459], [0.8, 0.2935], [1, 0.3873], [1.2, 0.5613], [1.5, 0.6213], [2, 0.5413], [3, 0.4422], [4, 0.3944], [6, 0.347], [8, 0.324], [12, 0.302]]
+      cn_alpha_per_rad: 2
+      ballistic_coefficient_kg_m2: 3600
+    free_flight: attitude_program
+    separation_time_s: 138.0
+  - mass_initial_kg: 1300000.0
+    mass_dry_kg: 100000.0
+    engine:
+      thrust_vac_n: 14760000.0
+      isp_vac_s: 365
+      burn_start_s: 0.0
+      burn_end_s: 270
+      nozzle_exit_area_m2: 16.44
+    aero:
+      diameter_m: 9.0
+      ca: [[0, 0.0378], [0.5, 0.0369], [0.8, 0.0357], [1, 0.0843], [1.2, 0.3018], [1.5, 0.4065], [2, 0.3732], [3, 0.3251], [4, 0.3053], [6, 0.2877], [8, 0.28], [12, 0.2734]]
+      ca_power_off: [[0, 0.1578], [0.5, 0.1894], [0.8, 0.2389], [1, 0.3343], [1.2, 0.5101], [1.5, 0.5731], [2, 0.4982], [3, 0.4085], [4, 0.3678], [6, 0.3293], [8, 0.3112], [12, 0.2942]]
+      cn_alpha_per_rad: 2
+      ballistic_coefficient_kg_m2: 1600
+    free_flight: attitude_program
+booster:
+  provenance: public_estimate
+  dry_mass_kg:
+    value: 275000.0
+    provenance: public_estimate
+    source: Wikipedia, SpaceX Super Heavy (empty mass 275 t); older revisions list 200 t, so the spread across sources is large
+    as_of: "2026-11"
+    uncertainty_pct: 10.0
+  landing_propellant_reserve_kg:
+    value: 150000.0
+    provenance: illustrative
+    source: planning margin for boostback and landing carried by the booster model (about half the dry mass); the graded reserve belongs to the flight target
+    as_of: "2026-11"
+  reference_area_m2:
+    value: 63.617
+    provenance: public_estimate
+    source: pi/4 * 9^2 with the published 9 m body diameter
+    as_of: "2026-11"
+    uncertainty_pct: 2.0
+  cd_mach:
+    value: [[0.0, 0.8], [0.8, 0.9], [1.1, 1.3], [2.0, 1.25], [4.0, 1.2], [8.0, 1.15]]
+    provenance: illustrative
+    source: blunt-cylinder-class table for the booster falling engines-first with grid fins stowed; not derived from the declared nose, which the booster does not carry
+    as_of: "2026-11"
+    accuracy: "+/-30% (generic aero, attitude-dependent)"
+    uncertainty_pct: 30.0
+  engines:
+    count: 13
+    usable_for: [boostback, landing]
+    thrust_vacuum_n: 2390000.0
+    isp_sea_level_s: 327.0
+    isp_vacuum_s: 350.0
+    nozzle_exit_area_m2: 1.33
+    throttle_min: 0.4
+    throttle_max: 1.0
+    restarts_max: 2
+  assumptions:
+    - Two ignitions after separation, one per phase (boostback, landing); the entry is
+      not a powered phase for this vehicle.
+geometry:
+  stages:
+    - {length_m: 71.0}
+    - {length_m: 50.3}
+  nose: {shape: tangent_ogive, length_m: 13.5}
+data_provenance:
+  simulation:
+    provenance: illustrative
+    source: simulation window chosen to cover the ascent and a short coast; a scenario choice
+    as_of: "2026-11"
+  attitude_program:
+    provenance: illustrative
+    source: authored gravity-turn-style profile for the declared burn windows (not a flown profile)
+    as_of: "2026-11"
+  stages[0]:
+    provenance: illustrative
+    source: burn window, throttle, separation timing and ballistic coefficient are scenario choices for the Block 1 booster (Wikipedia, SpaceX Super Heavy, for the stage masses and engine count)
+    as_of: "2026-11"
+  stages[0].mass_initial_kg:
+    provenance: public_estimate
+    source: Wikipedia, SpaceX Super Heavy -- Block 1 empty mass 275 t plus 3,250 t propellant
+    as_of: "2026-11"
+    uncertainty_pct: 5.0
+  stages[0].mass_dry_kg:
+    provenance: public_estimate
+    source: Wikipedia, SpaceX Super Heavy -- empty mass 275 t (older revisions 200 t)
+    as_of: "2026-11"
+    uncertainty_pct: 10.0
+  stages[0].engine.thrust_vac_n:
+    provenance: public_estimate
+    source: 33 Raptor 2 at 95 % throttle; per-engine vacuum thrust derived from the published 2.256 MN sea-level thrust (Wikipedia, SpaceX Raptor) and the nozzle exit area
+    as_of: "2026-11"
+    uncertainty_pct: 5.0
+  stages[0].engine.isp_vac_s:
+    provenance: public_estimate
+    source: Wikipedia, SpaceX Raptor -- Raptor 2 vacuum Isp is quoted as 350 s in some sources and 363 s in others
+    as_of: "2026-11"
+    uncertainty_pct: 3.0
+  stages[0].engine.nozzle_exit_area_m2:
+    provenance: illustrative
+    source: 33 x 1.33 m2, chosen so that vacuum minus sea-level thrust at 327/350 s Isp is consistent with the published figures
+    as_of: "2026-11"
+  stages[0].aero:
+    provenance: illustrative
+    source: ca, ca_power_off and cn_alpha_per_rad generated from geometry.nose by orbitopt.flightlab.nose_aero (tangent-cone wave drag, flat-plate skin friction, DATCOM base drag; about +-30 %); ballistic coefficient from the dry mass over a blunt-cylinder drag area
+    as_of: "2026-11"
+    uncertainty_pct: 30.0
+  stages[1]:
+    provenance: illustrative
+    source: burn window and ballistic coefficient are scenario choices for the Block 1 ship (Wikipedia, SpaceX Starship, for masses and engine layout)
+    as_of: "2026-11"
+  stages[1].mass_initial_kg:
+    provenance: public_estimate
+    source: Wikipedia, SpaceX Starship -- Block 1 empty mass about 100 t plus about 1,200 t propellant
+    as_of: "2026-11"
+    uncertainty_pct: 5.0
+  stages[1].mass_dry_kg:
+    provenance: public_estimate
+    source: Wikipedia, SpaceX Starship -- Block 1 empty mass about 100 t (Block 2 is listed at 85 t)
+    as_of: "2026-11"
+    uncertainty_pct: 10.0
+  stages[1].engine.thrust_vac_n:
+    provenance: public_estimate
+    source: 3 Raptor 2 (2.39 MN vacuum each, derived) + 3 Raptor Vacuum (2.53 MN, 258 tf, Wikipedia SpaceX Raptor) = 14.76 MN, in line with the published ~14.7 MN for the ship engine set
+    as_of: "2026-11"
+    uncertainty_pct: 5.0
+  stages[1].engine.isp_vac_s:
+    provenance: public_estimate
+    source: thrust-weighted effective vacuum Isp of 3 Raptor 2 (350 s) and 3 Raptor Vacuum (380 s)
+    as_of: "2026-11"
+    uncertainty_pct: 3.0
+  stages[1].engine.nozzle_exit_area_m2:
+    provenance: illustrative
+    source: 3 x 1.33 m2 + 3 x 4.15 m2 (Raptor Vacuum bell), matters only at low altitude
+    as_of: "2026-11"
+  stages[1].engine.burn_end_s:
+    provenance: illustrative
+    source: cutoff chosen so the ship burns about 1,110 t and keeps about 90 t for the rest of its mission
+    as_of: "2026-11"
+  stages[1].aero:
+    provenance: illustrative
+    source: ca, ca_power_off and cn_alpha_per_rad generated from geometry.nose by orbitopt.flightlab.nose_aero (about +-30 %); ballistic coefficient is a scenario choice
+    as_of: "2026-11"
+    uncertainty_pct: 30.0
+  booster:
+    provenance: public_estimate
+    source: Wikipedia, SpaceX Super Heavy and SpaceX Raptor; the 13-engine relight set and the 40 % throttle floor are assumptions
+    as_of: "2026-11"
+  booster.engines:
+    provenance: public_estimate
+    source: Raptor 2 per Wikipedia, SpaceX Raptor (2.256 MN sea-level thrust, 327 s sea-level Isp); vacuum Isp 350 s and the exit area per the stage-1 entry; throttle floor and relight count are assumptions
+    as_of: "2026-11"
+    uncertainty_pct: 3.0
+  geometry:
+    provenance: public_estimate
+    source: Wikipedia, SpaceX Super Heavy (71 m) and SpaceX Starship (Block 1 ship 50.3 m, 9 m diameter); the 13.5 m tangent-ogive nose is an assumption -- no public value was found
+    as_of: "2026-11"
+    accuracy: "+/-30% on the nose length, +/-5% on the stage lengths"
+    uncertainty_pct: 30.0

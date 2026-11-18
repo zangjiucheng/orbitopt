@@ -40,7 +40,9 @@ from orbitopt.viz.theme import (
     INK_MUTED,
     INK_SECONDARY,
     PANEL,
+    PANEL_RAISED,
     SUCCESS,
+    SURFACE_HOVER,
     WARNING,
 )
 
@@ -52,10 +54,10 @@ __all__ = ["FLIGHTLAB_PANEL_QSS", "DispersionPlot", "ReasonPanel", "RecoveryPane
 FLIGHTLAB_PANEL_QSS = f"""
 QTextBrowser, QTableWidget, QComboBox, QComboBox QAbstractItemView {{
     background: {PANEL}; color: {INK_SECONDARY}; border: 1px solid {HAIRLINE};
-    selection-background-color: #1b1729; selection-color: {ACCENT};
+    selection-background-color: {SURFACE_HOVER}; selection-color: {ACCENT};
 }}
 QHeaderView::section {{
-    background: #13101e; color: {INK_MUTED}; border: none;
+    background: {PANEL_RAISED}; color: {INK_MUTED}; border: none;
     border-bottom: 1px solid {HAIRLINE}; padding: 3px 6px;
 }}
 QTableWidget {{ gridline-color: {HAIRLINE}; }}

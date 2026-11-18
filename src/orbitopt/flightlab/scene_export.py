@@ -83,7 +83,7 @@ EARTH_RADIUS_DISPLAY = 4.6
 CRAFT_RADIUS_DISPLAY = 3.0
 
 #: Trail colours cycled per track, in contract (manifest) body order.
-TRAIL_PALETTE = ("#e8a23e", "#2fa97a", "#d64550", "#b58cf0", "#4cc9f0", "#f25f5c")
+TRAIL_PALETTE = ("#ffffff", "#35c48b", "#d64550", "#b58cf0", "#4cc9f0", "#f25f5c")
 
 #: Frames a track may be rendered in, after conversion if needed. Every
 #: non-GCRS frame goes through the FL-002 frame bridge -- see this module's

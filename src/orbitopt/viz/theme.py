@@ -1,46 +1,85 @@
-"""Qt stylesheet for the Mission Control app: a dark "tracking station"
-chrome around the 3D view (mission rail, inspector, time-warp strip).
+"""Qt stylesheet for the Mission Control app: a black-and-white "launch
+control" chrome around the 3D view (mission rail, inspector, time-warp strip).
 
-The palette is the project's shared one -- the same tokens as the project
-site (docs/index.html :root): void/panel/hairline/ink, amber accent, and
-scene.py's verify/burn/body colors. The July "pixel mission control" reskin
-swapped it for a cyan palette; this restores the shared palette (and the
-site's type pairing: a sans for prose, a monospace for readouts) while
-keeping that reskin's layout, hard edges and status badges. The 3D view
-itself is styled by scene_renderer.py, not here.
+The palette follows SpaceX's own web and webcast graphics: pure black
+surfaces, white type, neutral greys and thin hairlines, no tint and no
+accent colour -- white *is* the accent (selected row, active tab, focus).
+Colour is kept only where it carries meaning: the status colours below
+(verified / caution / failed / running) and the body and trail colours of
+the 3D scene. The shared tokens mirror docs/index.html's :root. Layout, hard
+edges and status badges are unchanged; the type pairing stays a sans for
+prose and a monospace for readouts. The 3D view itself is styled by
+scene_renderer.py, not here.
 """
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
 # Design tokens -- keep in sync with docs/index.html's :root.
 # ---------------------------------------------------------------------------
-BG_VOID = "#050409"        # --void
-PANEL = "#0b0916"          # --panel
-PANEL_RAISED = "#13101e"   # --panel-raised
-SURFACE_HOVER = "#1b1729"
-HAIRLINE = "#262239"       # --hairline
-BORDER_SOFT = "#1a1728"    # --hairline-soft
-INK_PRIMARY = "#f4f2ea"    # --ink
-INK_SECONDARY = "#a9a6bb"  # --ink-2
-INK_MUTED = "#6f6c85"      # --ink-muted
-ACCENT = "#e8a23e"         # --accent
-ACCENT_DIM = "#3a2e17"     # --accent-dim
-ACCENT_MID = "#8a6125"     # accent on a dark wash (selected-item contexts)
+BG_VOID = "#000000"        # --void: pure black
+PANEL = "#0a0a0a"          # --panel
+PANEL_RAISED = "#141414"   # --panel-raised
+SURFACE_HOVER = "#1f1f1f"
+HAIRLINE = "#2e2e2e"       # --hairline
+BORDER_SOFT = "#1a1a1a"    # --hairline-soft
+INK_PRIMARY = "#ffffff"    # --ink
+INK_SECONDARY = "#b3b3b3"  # --ink-2
+INK_MUTED = "#7a7a7a"      # --ink-muted
+ACCENT = "#ffffff"         # white is the accent: selection, active tab, focus
+ACCENT_DIM = "#262626"     # selected-row wash
+ACCENT_MID = "#5c5c5c"     # accent on a dark wash (selected-item contexts)
 
 # Semantic status colors -- every state badge, mission-list status dot and
 # body/maneuver highlight maps to exactly one of these.
-SUCCESS = "#2fa97a"   # verified / loaded            (--saturn)
-WARNING = "#f0c05a"   # partial / caution
-DANGER = "#ff5a3c"    # failed                       (--burn)
-INFO = "#5ec8ff"      # running / neutral-active     (--verify)
+SUCCESS = "#35c48b"   # verified / loaded            (--saturn)
+WARNING = "#f2c14e"   # partial / caution
+DANGER = "#ff4d3d"    # failed                       (--burn)
+INFO = "#a6c8ff"      # running / neutral-active     (--verify)
 
-MEASURE = INFO          # distance-measurement line + readout (cool, against the amber)
-MEASURE_DIM = "#142833"  # --verify-dim
+MEASURE = INFO          # distance-measurement line + readout (the one cool tone)
+MEASURE_DIM = "#161c24"  # --verify-dim
 
-# Type: the site's pairing. Neither family is bundled; each stack falls back
-# to the platform's own UI / monospace faces.
-FONT_SANS = '"IBM Plex Sans", -apple-system, "SF Pro Text", "Segoe UI", sans-serif'
-FONT_MONO = '"IBM Plex Mono", "SF Mono", "Cascadia Code", "Consolas", monospace'
+# Type: SpaceX sets its interface in D-DIN, a DIN-style grotesque. D-DIN is
+# open (SIL OFL) but not bundled; the stack takes it if installed (or dropped in
+# viz/assets/fonts, see load_bundled_fonts), then the closest faces that ship
+# with the OS: "DIN Alternate" on macOS, "Bahnschrift" on Windows 10+, then
+# Barlow / Inter and the platform UI face. Readouts use a monospace.
+FONT_SANS = ('"D-DIN", "DIN Alternate", "Bahnschrift", "Barlow", "Inter", '
+             '"Helvetica Neue", -apple-system, "Segoe UI", sans-serif')
+FONT_MONO = ('"JetBrains Mono", "SF Mono", "IBM Plex Mono", "Cascadia Code", '
+             '"Menlo", "Consolas", monospace')
+
+
+def load_bundled_fonts() -> list[str]:
+    """Register every font file in ``viz/assets/fonts`` with Qt (needs a
+    QGuiApplication); returns the families added. Drop D-DIN (OFL) there to
+    get the SpaceX face on every platform."""
+    from pathlib import Path
+
+    from PySide6.QtGui import QFontDatabase
+
+    families: list[str] = []
+    folder = Path(__file__).parent / "assets" / "fonts"
+    for path in sorted(folder.glob("*")) if folder.is_dir() else []:
+        if path.suffix.lower() in (".ttf", ".otf"):
+            font_id = QFontDatabase.addApplicationFont(str(path))
+            if font_id >= 0:
+                families += QFontDatabase.applicationFontFamilies(font_id)
+    return families
+
+
+def resolve_family(stack: str = FONT_SANS) -> str:
+    """The first family of a CSS-style ``stack`` that Qt has installed (a
+    QPainter font takes one family, not a list); the platform default when
+    none is."""
+    from PySide6.QtGui import QFontDatabase
+
+    have = set(QFontDatabase.families())
+    for name in (part.strip().strip('"') for part in stack.split(",")):
+        if name in have:
+            return name
+    return ""
+
 
 STYLESHEET = f"""
 * {{
@@ -235,6 +274,49 @@ QPushButton#playButton {{
     font-size: 13px;
     padding: 0;
 }}
+
+/* Top workspace bar: black, type only, a white rule under the current workspace. */
+QWidget#workspaceBar {{
+    background: {BG_VOID};
+    border-bottom: 1px solid {HAIRLINE};
+}}
+QLabel#workspaceMark {{
+    font-family: {FONT_MONO};
+    font-size: 12px; font-weight: 700; letter-spacing: 3px; color: {INK_PRIMARY};
+}}
+QPushButton#workspaceTab {{
+    background: transparent; border: none; border-bottom: 2px solid transparent;
+    color: {INK_MUTED}; padding: 0 16px; min-height: 38px;
+    font-size: 11px; font-weight: 600;
+}}
+QPushButton#workspaceTab:hover {{ color: {INK_PRIMARY}; }}
+QPushButton#workspaceTab:checked {{ color: {INK_PRIMARY}; border-bottom: 2px solid {INK_PRIMARY}; }}
+QPushButton#panelToggle {{
+    background: transparent; border: none; min-width: 30px; max-width: 30px;
+    min-height: 30px; max-height: 30px; padding: 0;
+}}
+QPushButton#panelToggle:hover {{ background: {SURFACE_HOVER}; }}
+QPushButton#panelToggle:disabled {{ background: transparent; }}
+QLabel#workspaceLogo {{ background: transparent; }}
+QPushButton#workspaceSearch {{
+    background: transparent; border: 1px solid {HAIRLINE}; color: {INK_MUTED};
+    padding: 4px 12px; font-family: {FONT_MONO}; font-size: 11px;
+}}
+QPushButton#workspaceSearch:hover {{ color: {INK_PRIMARY}; border-color: {INK_MUTED}; }}
+QLabel#breadcrumb {{
+    font-family: {FONT_MONO}; font-size: 10px; color: {INK_MUTED}; letter-spacing: 1px;
+}}
+QDialog#commandPalette {{ background: {PANEL}; border: 1px solid {INK_MUTED}; }}
+QLineEdit#paletteQuery {{
+    background: {BG_VOID}; border: none; border-bottom: 1px solid {HAIRLINE};
+    padding: 12px 14px; font-size: 14px; color: {INK_PRIMARY};
+}}
+QListWidget#paletteResults {{
+    background: {PANEL}; border: none; font-family: {FONT_MONO}; font-size: 12px;
+    color: {INK_SECONDARY};
+}}
+QListWidget#paletteResults::item {{ padding: 7px 14px; }}
+QListWidget#paletteResults::item:selected {{ background: {ACCENT_DIM}; color: {INK_PRIMARY}; }}
 
 QPushButton#modeSwitch {{
     background: {PANEL};

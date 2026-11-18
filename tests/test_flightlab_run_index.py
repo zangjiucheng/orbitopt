@@ -27,6 +27,7 @@ def test_discovery_finds_runs_at_any_depth_once_newest_first(tmp_path):
     root = tmp_path / "out"
     shutil.copytree(RUN_FIXTURE, root / "launch-iss" / "ascent")
     shutil.copytree(RUN_FIXTURE, root / "a" / "b" / "plain")
+    _rename_run(root / "launch-iss" / "ascent", "other-run-id")   # distinct runs, not copies
     busy = root / "busy"
     shutil.copytree(RUN_FIXTURE, busy)
     (busy / "_designer-in-progress").write_text("1")
@@ -88,3 +89,50 @@ def test_key_events_carry_altitude_and_speed():
     flown = [e for e in events if e.altitude_km is not None]
     assert flown and all(e.speed_km_s is not None for e in flown)
     assert json.dumps([e.title for e in events])  # plain strings
+
+
+def _rename_run(path, run_id):
+    import json
+
+    manifest = path / "manifest.json"
+    doc = json.loads(manifest.read_text())
+    doc["run_id"] = run_id
+    manifest.write_text(json.dumps(doc))
+
+
+def test_copies_and_reflights_of_one_run_id_are_listed_once(tmp_path):
+    """The same run_id is the same run: a copy pulled from a server and the
+    run flown again both fold into the newest one, whose entry records the
+    others. Runs with different ids stay separate."""
+    import json
+    import os
+    import shutil
+
+    from orbitopt.flightlab.run_index import discover_flight_runs
+
+    def make(path, run_id, created, mtime):
+        path.mkdir(parents=True)
+        (path / "manifest.json").write_text(json.dumps(
+            {"schema_version": "1.0", "run_id": run_id, "created_utc": created, "bodies": []}))
+        os.utime(path / "manifest.json", (mtime, mtime))
+
+    local, remote = tmp_path / "local", tmp_path / "remote" / "pulled"
+    make(local / "ascent", "ot-1", "2026-11-14T00:00:00Z", 1_000)
+    shutil.copytree(local / "ascent", remote / "deep" / "ascent")           # a copy
+    make(local / "reflown", "ot-1", "2026-11-16T00:00:00Z", 2_000)            # the same run, flown again
+    make(local / "other", "ot-2", "2026-11-14T00:00:00Z", 500)
+    entries = discover_flight_runs([local, tmp_path / "remote"])
+    assert sorted(e.path.name for e in entries) == ["other", "reflown"]
+    newest = next(e for e in entries if e.path.name == "reflown")
+    assert set(newest.copies) == {local / "ascent", remote / "deep" / "ascent"}
+    assert next(e for e in entries if e.path.name == "other").copies == ()
+
+
+def test_label_hint_tells_same_named_runs_apart(tmp_path):
+    from orbitopt.flightlab.run_index import label_hint, run_label
+
+    a = tmp_path / "e505-44e8" / "recovery" / "run"
+    b = tmp_path / "remote" / "e204" / "recovery" / "run"
+    assert run_label(a) == run_label(b) == "recovery"
+    assert label_hint(a) == "e505-44e8" and label_hint(b) == "e204"
+    assert label_hint(tmp_path / "iss" / "ascent") == tmp_path.name       # the label is "iss" already
