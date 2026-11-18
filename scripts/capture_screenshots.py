@@ -24,6 +24,8 @@ import sys
 import time
 from pathlib import Path
 
+_RECOVERY_RUN = None
+_RTLS_RUN = None  # set in main(): the scratch copy of the committed E5-05 ascent-and-recovery run
 WINDOW_SIZE = (1600, 900)  # logical px; a 2x display doubles it
 
 
@@ -49,6 +51,8 @@ def _composite(window):
     from PySide6.QtGui import QImage, QPainter
 
     image = window.grab().toImage()  # keeps the device pixel ratio...
+    if not window.plotter.isVisible():  # a page (vehicle, compare) covers the 3D view: nothing to paste
+        return image
     pixels = np.ascontiguousarray(window.plotter.screenshot(return_img=True)[..., :3])
     h, w = pixels.shape[:2]
     view = QImage(pixels.data, w, h, 3 * w, QImage.Format_RGB888).copy()
@@ -66,6 +70,12 @@ def _open_mission(app, window, title_prefix):
     sidebar.select_row(row)
     _settle(app, 0.2)
     _pump(app, lambda: not window._loading)
+    if window._active_key in window._stale_keys:
+        # The shipped scene predates the code (a "Precomputed by older code"
+        # badge, often a failed verification): never screenshot that.
+        window._reload_mission()
+        _settle(app, 0.5)
+        _pump(app, lambda: not window._loading)
     _settle(app, 1.5)
 
 
@@ -200,6 +210,37 @@ def shot_starship_landing(app, w):
     _wait_for_imagery(app, w)
 
 
+def _flight_workspace(app, w, key):
+    w.workspace_bar.buttons[key].click()
+    _settle(app, 0.3)
+    _pump(app, lambda: not w._loading)
+    _settle(app, 1.0)
+
+
+def shot_flightlab_replay(app, w):
+    """Flight Lab, Runs workspace: the E5-05 ascent-and-recovery run replayed, with
+    its telemetry, key events and checks."""
+    _flight_workspace(app, w, "runs")
+    w.flightlab_nav.select_path(_RECOVERY_RUN)
+    _pump(app, lambda: not w._loading and w.flight_panel.bundle is not None)
+    _settle(app, 1.0)
+    w.plotter.reset_camera()
+    w.plotter.render()
+    _settle(app, 1.0)
+
+
+def shot_flightlab_vehicle(app, w):
+    """Flight Lab, Vehicles workspace: the RTLS stack's declared schedule
+    beside what the selected run flew."""
+    _flight_workspace(app, w, "runs")
+    w.flightlab_nav.select_path(_RTLS_RUN)
+    _pump(app, lambda: not w._loading and w.flight_panel.bundle is not None)
+    w.workspace_bar.buttons["vehicles"].click()
+    _settle(app, 0.3)
+    w.flightlab_nav.select_vehicle("synthetic_two_stage_rtls")
+    _settle(app, 1.5)
+
+
 def shot_shortcuts(app, w):
     """The keyboard-shortcut panel (F1), on its own."""
     w._show_shortcuts_dialog()
@@ -217,6 +258,8 @@ SHOTS = {
     "mission-control-starship-ascent.png": shot_starship_ascent,
     "mission-control-starship-landing.png": shot_starship_landing,
     "mission-control-shortcuts.png": shot_shortcuts,
+    "flightlab-replay.png": shot_flightlab_replay,
+    "flightlab-vehicle.png": shot_flightlab_vehicle,
 }
 
 
@@ -229,6 +272,22 @@ def main(argv=None) -> int:
 
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
+
+    # Flight Lab shots read the committed E5-05 ascent-and-recovery reference run, from a
+    # scratch folder so no local ./runs/ leaks into the picture.
+    import os
+    import shutil
+    import tempfile
+
+    runs = Path(tempfile.mkdtemp(prefix="orbitopt-shots-"))
+    ref = Path(__file__).resolve().parents[1] / "tests/data/mission/reference"
+    shutil.copytree(ref / "e5-05-reference-mission/mission/recovery/run", runs / "recovery-e505")
+    os.environ["ORBITOPT_FLIGHT_RUNS"] = str(runs)
+    global _RTLS_RUN, _RECOVERY_RUN
+    _RECOVERY_RUN = _RTLS_RUN = runs / "recovery-e505"  # one run: the list folds copies of a run_id
+    out = args.out.resolve()
+    os.chdir(runs)  # no ./runs/ of the checkout in the Flight Lab list
+    args.out = out
 
     from orbitopt.viz.app import MissionControlWindow
 

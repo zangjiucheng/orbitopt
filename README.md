@@ -1,10 +1,18 @@
-# orbitopt
+<p align="center">
+  <img src="docs/assets/orbitopt-icon.png" alt="orbitopt icon: a tilted orbit with a spacecraft leaving a gap in it, around a central body" width="112" height="112">
+</p>
+
+<h1 align="center">orbitopt</h1>
+
+<div align="center">
 
 [![CI](https://github.com/zangjiucheng/orbitopt/actions/workflows/ci.yml/badge.svg)](https://github.com/zangjiucheng/orbitopt/actions/workflows/ci.yml)
 [![Pages](https://github.com/zangjiucheng/orbitopt/actions/workflows/pages.yml/badge.svg)](https://github.com/zangjiucheng/orbitopt/actions/workflows/pages.yml)
-[![Docs](https://img.shields.io/badge/docs-orbitopt-e8a23e)](https://zangjiucheng.github.io/orbitopt/docs/)
+[![Docs](https://img.shields.io/badge/docs-orbitopt-111111)](https://zangjiucheng.github.io/orbitopt/docs/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)](pyproject.toml)
 [![License: GPL v3+](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
+
+</div>
 
 orbitopt optimizes trajectories with pykep and pygmo, verifies candidates
 with TudatPy, and explores results in **Mission Control**. **Flight Lab**
@@ -12,7 +20,7 @@ simulates launch and booster recovery, compares saved runs, and displays
 vehicle profiles with declared-versus-flown data. CuPy accelerates batched
 screening.
 
-![Mission Control showing an Earth-to-Mars trajectory](docs/assets/mission-control-mars.png)
+![Mission Control replaying a Starship Flight 15 launch: Super Heavy on its boostback and the ship climbing, each with its flight-data label](docs/assets/mission-control-starship-ascent.png)
 
 ## Quick start
 
