@@ -54,6 +54,9 @@ _E204_EXCEPTION_FILES = {
     "tests/test_e204_reference.py",
     "tests/test_mission_phases.py",
     "tests/test_crossenv.py",
+    # E5-06 (task #290): copies the recorded run into a synthetic sealed
+    # envelope to grade the joint full-mission gate -- same grant as above.
+    "tests/test_crossenv_qualification.py",
     # E8-04: reads only the fixture's earth_orientation.json / tolerances.json
     # (the unified EOP pin and the tolerance ledger), never its ascent state
     "tests/test_e804_reference_data.py",

@@ -222,13 +222,21 @@ jobs:
           .venv-landing/bin/python -m pip install -r envs/flightlab-landing-ci.txt
           .venv-landing/bin/python -m pip install -e . --no-deps
 
+      # E5-06 (task #290): the joint full-mission gate over the two legs'
+      # sealed evidence, without needing the second environment: the five
+      # physical checks, the per-check evidence sources, and the negative
+      # tests (deleted propagation evidence / broken shared separation
+      # state / fabricated landing failure must never grade green).
+      - name: Joint full-mission qualification (fast, negative tests)
+        run: pytest tests/test_crossenv_qualification.py -v -m "not cross_env"
+
       - name: One command orchestrates both environments; provenance proves the split
         env:
           ORBITOPT_GFOLD_PYTHON: ${{ github.workspace }}/.venv-landing/bin/python
         run: |
           export ORBITOPT_TUDAT_PYTHON="${MAMBA_ROOT_PREFIX:?}/envs/orbitopt/bin/python"
           test -x "$ORBITOPT_TUDAT_PYTHON" && test -x "$ORBITOPT_GFOLD_PYTHON"
-          pytest tests/test_crossenv.py tests/test_e505_reference.py -m cross_env -v
+          pytest tests/test_crossenv.py tests/test_e505_reference.py tests/test_crossenv_qualification.py -m cross_env -v
 
       - name: The standalone one-command CLI runs the same plan
         env:
