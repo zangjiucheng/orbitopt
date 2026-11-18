@@ -284,6 +284,12 @@ python scripts/e505_reference.py crossenv-check runs/crossenv-e505
 ```
 
 The checker verifies both exchange envelopes, handoff identity, joined
-physical-gate evidence and recovery numerics against the reference. All five
-physical checks must pass; the existence of a plan or a green single-stack
-recording is insufficient. E2-04 remains the fast synthetic fixture.
+physical-gate evidence and recovery numerics against the reference. Since
+E5-06 it re-grades the joint full-mission gate itself from the sealed
+envelopes: all five physical checks must pass, each pinned to the envelope
+digest of the environment that measured it, and the joint job also runs the
+negative tests (`tests/test_crossenv_qualification.py`: deleted propagation
+evidence, a broken shared separation state and a fabricated landing failure
+must each grade `failed` or `not_checked`). The existence of a plan or a green
+single-stack recording is insufficient. E2-04 remains the fast synthetic
+fixture.
