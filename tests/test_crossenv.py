@@ -78,6 +78,13 @@ class TestEnvelope:
         assert env["python_executable"] == sys.executable
         for tool in ("numpy", "scipy", "astropy", "tudatpy", "gfold"):
             assert tool in env["toolchain"]
+        # a key is not a record: an importable tool must not be sealed as "absent"
+        # (the CI envelope of the tudatpy environment once said tudatpy: absent)
+        import importlib.util
+
+        for tool in ("tudatpy", "gfold"):
+            if importlib.util.find_spec(tool) is not None:
+                assert env["toolchain"][tool] != "absent", tool
 
     def test_tampered_run_csv_is_rejected(self, tmp_path):
         ex = _seal_sample(tmp_path)

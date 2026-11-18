@@ -12,9 +12,13 @@ is present and complete. Values are plain strings; a tool that is not
 installed is recorded as ``"absent"``, never omitted -- "absent" is itself
 part of the environment fingerprint.
 
-The lookup uses ``importlib.metadata`` only (no imports of the tools
-themselves), so recording is cheap and cannot drag a heavy or broken
-dependency into the write path.
+The lookup never imports the tools themselves, so recording is cheap and
+cannot drag a heavy or broken dependency into the write path. It asks
+``importlib.metadata`` first; a conda-installed package may ship no dist-info
+(tudatpy does not), so the environment's own ``conda-meta`` record is the
+second source, and a package that is importable but unrecorded is reported as
+``"installed (version unknown)"`` -- never as ``"absent"``, which would
+misdescribe an environment the run actually used.
 """
 from __future__ import annotations
 
@@ -22,6 +26,7 @@ import hashlib
 import importlib.metadata
 import importlib.util
 import platform
+import re
 import sys
 from pathlib import Path
 
@@ -46,11 +51,36 @@ TOOL_DISTRIBUTIONS: tuple[str, ...] = (
 )
 
 
+#: ``distribution name -> import name`` of the tools that can be installed
+#: without dist-info metadata (conda builds of tudatpy)
+_IMPORT_NAMES = {"tudatpy": "tudatpy"}
+UNKNOWN_VERSION = "installed (version unknown)"
+
+
+def _conda_version(name: str) -> str | None:
+    """The version conda recorded for ``name`` in this environment
+    (``<prefix>/conda-meta/<name>-<version>-<build>.json``), or ``None``."""
+    meta = Path(sys.prefix) / "conda-meta"
+    pattern = re.compile(rf"^{re.escape(name)}-(\d[^-]*)-[^-]+\.json$")
+    try:
+        for path in sorted(meta.glob(f"{name}-*.json")):
+            found = pattern.match(path.name)
+            if found:
+                return found.group(1)
+    except OSError:
+        pass
+    return None
+
+
 def _dist_version(name: str) -> str:
     try:
         return importlib.metadata.version(name)
     except importlib.metadata.PackageNotFoundError:
-        return ABSENT
+        pass
+    module = _IMPORT_NAMES.get(name)
+    if module is not None and importlib.util.find_spec(module) is not None:
+        return _conda_version(name) or UNKNOWN_VERSION
+    return ABSENT
 
 
 def _orbitopt_version() -> str:
