@@ -374,6 +374,16 @@ def _fit_height(table: QTableWidget) -> None:
     table.setFixedHeight(height + 2)
 
 
+def _display_path(path: str) -> str:
+    """A catalog file as ``orbitopt/data/flightlab/vehicles/x.yaml`` (the full
+    path, with the user's home folder in it, stays in the tooltip)."""
+    parts = path.replace("\\", "/").split("/")
+    if "data" not in parts:
+        return path
+    pkg = [i for i, part in enumerate(parts[:-1]) if part == "orbitopt"]
+    return "/".join(parts[pkg[-1]:]) if pkg else path
+
+
 class VehiclePage(QWidget):
     """The page: header, profile + numbers, schedule, declared-vs-flown, notes."""
 
@@ -479,7 +489,8 @@ class VehiclePage(QWidget):
             f'{" · restart" if view.restart else ""}</span>')
         self.disclaimer_label.setText(view.disclaimer)
         self.disclaimer_label.setVisible(bool(view.disclaimer))
-        self.source_label.setText(view.source_path)
+        self.source_label.setToolTip(view.source_path)
+        self.source_label.setText(_display_path(view.source_path))
         self.profile.set_vehicle(view)
         self.timeline.set_vehicle(view, self.overlay)
         self._fill_numbers(view)
