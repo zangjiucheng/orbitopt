@@ -36,7 +36,7 @@ COLOR = {
     "neptune": "#8c7fe0",
     "pluto": "#8c8496",
     "moon": "#928da3",
-    "spacecraft": "#e8a23e",
+    "spacecraft": "#ffffff",
 }
 
 RADIUS_DISPLAY = {

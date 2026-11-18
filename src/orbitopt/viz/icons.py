@@ -13,7 +13,7 @@ app_icon() needs, since a toolbar icon is only ever shown at one fixed size.
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 
 from orbitopt.viz.theme import ACCENT, INK_MUTED, INK_SECONDARY
 
@@ -194,4 +194,29 @@ def mission_marker_icon(color: str = ACCENT, size: int = 12) -> QIcon:
     diamond.lineTo(cx - r, cy)
     diamond.closeSubpath()
     p.drawPath(diamond)
+    return _icon(px, p)
+
+
+def panel_toggle_icon(side: str, open_: bool, color: str = INK_SECONDARY, size: int = 18) -> QIcon:
+    """A window-with-a-side-pane glyph for the panel toggles of the top bar:
+    ``side`` is ``"left"`` or ``"right"``, the pane is filled while it is open
+    and an empty outline once it is collapsed."""
+    px, p = _new_painter(size)
+    s = float(size)
+    pen = QPen(QColor(color), max(1.3, s * 0.08))
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    m = s * 0.14
+    frame = QRectF(m, m + s * 0.04, s - 2 * m, s - 2 * m - s * 0.08)
+    p.drawRoundedRect(frame, s * 0.1, s * 0.1)
+    pane_w = frame.width() * 0.36
+    x = frame.left() + pane_w if side == "left" else frame.right() - pane_w
+    p.drawLine(QPointF(x, frame.top()), QPointF(x, frame.bottom()))
+    if open_:
+        fill = QColor(color)
+        fill.setAlpha(110)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(fill))
+        left = frame.left() if side == "left" else x
+        p.drawRect(QRectF(left + 0.8, frame.top() + 0.8, pane_w - 0.8, frame.height() - 1.6))
     return _icon(px, p)

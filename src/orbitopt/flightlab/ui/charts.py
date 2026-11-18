@@ -19,7 +19,12 @@ __all__ = ["TelemetryChart", "fmt_clock", "fmt_number", "nice_ticks", "qfont"]
 
 
 def _font(size: float, bold: bool = False) -> QFont:
+    from orbitopt.viz.theme import resolve_family
+
     font = QFont()
+    family = resolve_family()
+    if family:
+        font.setFamily(family)
     font.setPointSizeF(size)
     font.setBold(bold)
     return font

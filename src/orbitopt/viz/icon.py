@@ -155,3 +155,26 @@ def export_png(path: str, size: int = 1024) -> str:
     QGuiApplication (QPixmap needs one)."""
     render_app_icon(size).save(path, "PNG")
     return path
+
+
+def render_logo_mark(size: int, color: str = INK_PRIMARY) -> QPixmap:
+    """The flat, single-colour logo mark for the top bar: a tilted orbit, the
+    body it circles and the spacecraft on it -- the app icon's motif with no
+    tile, gradient or glow, so it reads as type next to the wordmark."""
+    s = float(size)
+    px = QPixmap(size, size)
+    px.fill(Qt.transparent)
+    p = QPainter(px)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    ink = QColor(color)
+    p.translate(s / 2, s / 2)
+    p.rotate(-28)
+    p.setPen(QPen(ink, max(1.2, s * 0.075)))
+    p.setBrush(Qt.NoBrush)
+    p.drawEllipse(QRectF(-s * 0.46, -s * 0.2, s * 0.92, s * 0.4))
+    p.setPen(Qt.NoPen)
+    p.setBrush(QBrush(ink))
+    p.drawEllipse(QPointF(0, 0), s * 0.13, s * 0.13)                       # the body
+    p.drawEllipse(QPointF(s * 0.34, s * 0.1 * 0.5), s * 0.07, s * 0.07)    # the spacecraft
+    p.end()
+    return px
