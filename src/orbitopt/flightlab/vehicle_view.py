@@ -133,6 +133,8 @@ class GeometryView:
     stage_diameter: tuple[float, ...]
     fairing_length: float | None
     fairing_diameter: float | None
+    nose_shape: str | None = None          # the top stage's nose (part of its length)
+    nose_length: float | None = None
 
 
 @dataclass(frozen=True)
@@ -305,11 +307,14 @@ def _geometry(doc: Mapping[str, Any], stages: Sequence[Mapping[str, Any]]) -> Ge
             lengths.append(float(g["length_m"]) if "length_m" in g else 0.0)
             diameters.append(float(g.get("diameter_m") or diam[i] or 0.0))
         fair = geo.get("fairing") or {}
+        nose = geo.get("nose") or {}
         top_d = diameters[-1] if diameters else 0.0
         return GeometryView(
             declared=True, stage_length=tuple(lengths), stage_diameter=tuple(diameters),
             fairing_length=float(fair["length_m"]) if "length_m" in fair else None,
-            fairing_diameter=float(fair.get("diameter_m") or top_d) if fair else None)
+            fairing_diameter=float(fair.get("diameter_m") or top_d) if fair else None,
+            nose_shape=str(nose["shape"]) if nose else None,
+            nose_length=float(nose["length_m"]) if nose else None)
     # schematic: equal-density tanks -> length ~ mass / d^2, bounded
     known = [d for d in diam if d]
     default_d = known[0] if known else 1.0
