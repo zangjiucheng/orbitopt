@@ -73,6 +73,15 @@ from orbitopt.viz.inspector import InspectorPanel
 from orbitopt.viz.pv_viewer import load_scene
 from orbitopt.viz.scene_renderer import SceneRenderer
 from orbitopt.viz.sidebar import MissionSidebar
+from orbitopt.viz.workspace_nav import (
+    COMPARE,
+    MISSIONS,
+    RUNS,
+    VEHICLES,
+    CommandPalette,
+    PaletteItem,
+    WorkspaceBar,
+)
 from orbitopt.viz.state import (
     MissionState,
     adjacent_event,
@@ -309,9 +318,19 @@ class MissionControlWindow(QMainWindow):
         central = QWidget()
         central.setObjectName("centralWidget")
         self.setCentralWidget(central)
-        root = QHBoxLayout(central)
+        root = QVBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
+        # Layer 1 of the navigation: what kind of thing you are looking at.
+        # Layer 2 is the left list (only this workspace's), layer 3 the
+        # inspector on the right; Ctrl/Cmd+K jumps anywhere. See workspace_nav.
+        self.workspace_bar = WorkspaceBar()
+        self.workspace_bar.workspace_changed.connect(self._on_workspace)
+        self.workspace_bar.palette_requested.connect(self._open_palette)
+        self.workspace_bar.sidebar_toggle_requested.connect(self._toggle_sidebar)
+        self.workspace_bar.inspector_toggle_requested.connect(self._toggle_info_panel)
+        root.addWidget(self.workspace_bar)
+        self.palette = CommandPalette(self)
 
         # A splitter (not a fixed HBox) makes both side panels drag-resizable.
         # Each side is a QStackedWidget that flips between the full panel and a
@@ -330,6 +349,8 @@ class MissionControlWindow(QMainWindow):
         self.candidate_panel = CandidatePanel(self.state)
         self.candidate_panel.show_all_box.toggled.connect(lambda _on: self._apply_candidate_highlight())
         self.sidebar.add_section(self.candidate_panel)
+        for label in self.sidebar.findChildren(QLabel, "appTitle"):
+            label.hide()   # the workspace bar carries the product mark
         self.left_rail = self._build_rail(icons.chevron_right_icon, self._toggle_sidebar, "Show the sidebar")
         self.left_stack = QStackedWidget()
         self.left_stack.addWidget(self.sidebar)
@@ -381,6 +402,12 @@ class MissionControlWindow(QMainWindow):
         self._flight_page_index = self._flightlab_index   # which of the two is up
         self.sidebar.set_flightlab_panel(self.flightlab_nav)
         self.sidebar.mode_changed.connect(self._on_sidebar_mode)
+        self.sidebar.mode_changed.connect(lambda _m: self._sync_workspace())
+        self.flightlab_nav.page_changed.connect(lambda _p: self._sync_workspace())
+        # the workspace bar replaces these switches; they remain as the code-level API
+        for button in (*self.sidebar.mode_buttons.values(), *self.flightlab_nav.page_buttons.values(),
+                       self.flightlab_nav.compare_button):
+            button.hide()
         self.flight_panel = FlightRunPanel()
         self.flight_panel.time_requested.connect(self._seek_flight_time)
         self.telemetry_panel = TelemetryPanel()
@@ -451,8 +478,23 @@ class MissionControlWindow(QMainWindow):
         self._left_w = 220
         self._right_w = 260
 
-        root.addWidget(self.splitter)
+        root.addWidget(self.splitter, 1)
+        # The two panel toggles live in the top bar now; the in-panel chevrons
+        # and the collapsed rails' expand buttons would only duplicate them.
+        self.sidebar.collapse_btn.hide()
+        collapse.hide()
+        for rail in (self.left_rail, self.right_rail):
+            for button in rail.findChildren(QPushButton):
+                button.hide()
         self._build_menu()
+        from PySide6.QtGui import QKeySequence, QShortcut
+
+        QShortcut(QKeySequence("Ctrl+K"), self, activated=self._open_palette)   # Cmd+K on macOS
+        QShortcut(QKeySequence("Ctrl+B"), self, activated=self._toggle_sidebar)
+        QShortcut(QKeySequence("Ctrl+Shift+B"), self, activated=self._toggle_info_panel)
+        for n, key in enumerate((MISSIONS, RUNS, VEHICLES, COMPARE), start=1):
+            QShortcut(QKeySequence(f"Ctrl+{n}"), self,
+                      activated=lambda k=key: self.workspace_bar.buttons[k].click())
         self.statusBar().showMessage("Ready")
 
     def _build_rail(self, icon_fn, handler, tip: str) -> QWidget:
@@ -484,6 +526,9 @@ class MissionControlWindow(QMainWindow):
 
         title_col = QVBoxLayout()
         title_col.setSpacing(2)
+        self.breadcrumb_label = QLabel("")
+        self.breadcrumb_label.setObjectName("breadcrumb")
+        title_col.addWidget(self.breadcrumb_label)
         self.scene_title_label = QLabel("Select a mission")
         self.scene_title_label.setObjectName("sceneTitle")
         self.scene_subtitle_label = QLabel("")
@@ -901,6 +946,10 @@ class MissionControlWindow(QMainWindow):
     def _toggle_info_panel(self):
         self._toggle_side(self.right_stack, "_right_w", 2, self._RIGHT_MIN)
 
+    def _sync_panel_toggles(self) -> None:
+        self.workspace_bar.set_panel_open("left", self.left_stack.currentIndex() == 0)
+        self.workspace_bar.set_panel_open("right", self.right_stack.currentIndex() == 0)
+
     def _toggle_side(self, stack: QStackedWidget, width_attr: str, index: int, min_w: int):
         """Collapse a splitter side to its rail, or expand it back. Collapsing
         remembers the current drag width; expanding restores it and takes the
@@ -924,6 +973,7 @@ class MissionControlWindow(QMainWindow):
             sizes[1] = max(200, sizes[1] - (target - sizes[index]))
             sizes[index] = target
             self.splitter.setSizes(sizes)
+        self._sync_panel_toggles()
 
     def _view_top(self):
         self._apply_axis_view("xy")
@@ -1166,6 +1216,7 @@ class MissionControlWindow(QMainWindow):
             self._flight_active = (key, label)
         else:
             self._mission_active = (key, label)
+        self._sync_workspace()
         self._active_key, self._active_label = key, label
         self._update_reload_button()
 
@@ -1307,11 +1358,104 @@ class MissionControlWindow(QMainWindow):
             compare.set_runs(first, other)
         self._compare_shown = True
         self._flight_page_index = self._flightlab_index
+        self._set_scene_chrome(False)
         self.center_stack.setCurrentIndex(self._flightlab_index)
         self.chart_panel.hide()
         self.timeline_bar.hide()
         self.scene_title_label.setText("Compare runs")
         self.scene_subtitle_label.setText(FLIGHTLAB_COMPARE_SUBTITLE)
+        self._sync_workspace()
+
+    # ------------------------------------------------------- workspaces
+    def _current_workspace(self) -> str:
+        if self.sidebar.mode != self.sidebar.FLIGHTLAB:
+            return MISSIONS
+        if self._compare_shown and self.center_stack.currentWidget() is self.flightlab_compare:
+            return COMPARE
+        return VEHICLES if self.flightlab_nav.page == self.flightlab_nav.VEHICLES else RUNS
+
+    def _sync_workspace(self) -> None:
+        """Mirror the window's real state in the workspace bar and the
+        breadcrumb (called wherever that state changes)."""
+        ws = self._current_workspace()
+        self.workspace_bar.set_workspace(ws)
+        trail = {MISSIONS: "Missions", RUNS: "Runs", VEHICLES: "Vehicles", COMPARE: "Compare"}[ws]
+        leaf = ""
+        if ws == MISSIONS:
+            leaf = self._mission_active[1] or ""
+        elif ws == RUNS:
+            leaf = (self._flight_active[1] or "").removesuffix(" (Flight Lab run)")
+        elif ws == VEHICLES:
+            leaf = self.flightlab_nav.current_vehicle() or ""
+        self.breadcrumb_label.setText(f"{trail}  ›  {leaf}".upper() if leaf else trail.upper())
+
+    def _on_workspace(self, ws: str) -> None:
+        """A workspace tab was clicked: drive the sidebar mode, the list page
+        and the centre view to match."""
+        if self._loading:
+            self._sync_workspace()
+            return
+        nav = self.flightlab_nav
+        if ws == MISSIONS:
+            self.sidebar.set_mode(self.sidebar.MISSIONS)
+        elif ws == COMPARE:
+            if self.sidebar.mode != self.sidebar.FLIGHTLAB:
+                self.sidebar.set_mode(self.sidebar.FLIGHTLAB)
+            self._show_flight_compare()
+        else:
+            nav.show_page(nav.VEHICLES if ws == VEHICLES else nav.RUNS)
+            if self.sidebar.mode != self.sidebar.FLIGHTLAB:
+                self.sidebar.set_mode(self.sidebar.FLIGHTLAB)
+            elif ws == RUNS:
+                self._show_view()
+        self._sync_workspace()
+
+    def _palette_items(self) -> list[PaletteItem]:
+        items = [PaletteItem("Workspace", label, tip, lambda k=key: self.workspace_bar.buttons[k].click())
+                 for key, label, tip in (
+                     (MISSIONS, "Missions", "mission scenes"), (RUNS, "Runs", "flight runs"),
+                     (VEHICLES, "Vehicles", "vehicle catalog"), (COMPARE, "Compare", "two runs side by side"))]
+        sb = self.sidebar
+        for i in range(sb.mission_list.count()):
+            row = sb.mission_list.item(i)
+            items.append(PaletteItem("Mission", row.text(), "", lambda r=i: self._palette_mission(r)))
+        for entry in self.flightlab_nav.entries:
+            items.append(PaletteItem("Run", entry.label, entry.detail,
+                                     lambda e=entry: self._palette_run(e.path)))
+        for name in self.flightlab_nav.vehicle_names():
+            items.append(PaletteItem("Vehicle", name, "", lambda n=name: self._palette_vehicle(n)))
+        return items
+
+    def _open_palette(self) -> None:
+        self.palette.open_with(self._palette_items())
+
+    def _palette_mission(self, row: int) -> None:
+        self.workspace_bar.buttons[MISSIONS].click()
+        self.sidebar.select_row(row)
+
+    def _palette_run(self, path) -> None:
+        self.flightlab_nav.show_page(self.flightlab_nav.RUNS)
+        if self.sidebar.mode != self.sidebar.FLIGHTLAB:
+            self.sidebar.set_mode(self.sidebar.FLIGHTLAB)
+        self.flightlab_nav.select_path(path)
+        self._sync_workspace()
+
+    def _palette_vehicle(self, name: str) -> None:
+        nav = self.flightlab_nav
+        nav.show_page(nav.VEHICLES)
+        if self.sidebar.mode != self.sidebar.FLIGHTLAB:
+            self.sidebar.set_mode(self.sidebar.FLIGHTLAB)
+        if not nav.select_vehicle(name):
+            return
+        self._sync_workspace()
+
+    def _set_scene_chrome(self, on: bool) -> None:
+        """The scene's inspector and view controls mean nothing on a Flight Lab
+        page (Vehicles, Compare); hide them there and bring them back with
+        the 3D view."""
+        for widget in (self.right_stack, self.view_strip, self._view_controls_widget):
+            widget.setVisible(on)
+        self.workspace_bar.set_panel_enabled("right", on)
 
     def _on_flight_nav_page(self, page: str) -> None:
         """The Runs / Vehicles switch of the Flight Lab list."""
@@ -1354,17 +1498,20 @@ class MissionControlWindow(QMainWindow):
         self.vehicle_page.set_vehicle(view, overlay, label, match)
         self._compare_shown = True
         self._flight_page_index = self._vehicle_index
+        self._set_scene_chrome(False)
         self.center_stack.setCurrentIndex(self._vehicle_index)
         self.chart_panel.hide()
         self.timeline_bar.hide()
         self.scene_title_label.setText(f"Vehicle · {view.name}")
         self.scene_subtitle_label.setText("Read-only: what the vehicle file declares")
+        self._sync_workspace()
 
     def _show_view(self):
         """Leave the comparison / vehicle page for the 3D view (no-op when already there)."""
         if not self._compare_shown:
             return
         self._compare_shown = False
+        self._set_scene_chrome(True)
         if self.center_stack.currentWidget() in (self.flightlab_compare, self.vehicle_page):
             self.center_stack.setCurrentIndex(0)
         self.chart_panel.setVisible(self.chart_panel.count() > 0)
@@ -1373,6 +1520,7 @@ class MissionControlWindow(QMainWindow):
         if scene:
             self.scene_title_label.setText(scene.get("title", ""))
             self.scene_subtitle_label.setText(display_subtitle(scene))
+        self._sync_workspace()
 
     def _begin_switch(self, message: str):
         self._loading = True
@@ -2114,6 +2262,9 @@ def main():
 
     multiprocessing.freeze_support()
     app = QApplication(sys.argv)
+    from orbitopt.viz.theme import load_bundled_fonts
+
+    load_bundled_fonts()
     # App-level icon drives the macOS Dock tile / taskbar entry; the window
     # inherits it for its title bar too.
     app.setWindowIcon(app_icon())

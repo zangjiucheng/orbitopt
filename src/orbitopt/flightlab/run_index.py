@@ -18,6 +18,7 @@ Qt-free, so a headless install can list and summarise runs.
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 from dataclasses import dataclass
@@ -62,6 +63,9 @@ class RunEntry:
     detail: str
     mtime: float
     verdict: bool | None
+    #: older copies or flights of this run (same run_id) found elsewhere, folded
+    #: into this newest entry
+    copies: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -128,7 +132,8 @@ def _entry(path: Path) -> RunEntry:
 
 def discover_flight_runs(roots: Iterable[Path | str], *, max_depth: int = 4) -> list[RunEntry]:
     """Every run directory under ``roots`` (a root may itself be a run),
-    newest first, each listed once. Missing roots are skipped; the walk stops
+    newest first, each run listed once (copies and re-flights of one
+    ``run_id`` fold into the newest, see :func:`_merge_copies`). Missing roots are skipped; the walk stops
     at a run directory (its subfolders are its own data) and ``max_depth``
     levels below a root."""
     found: dict[Path, RunEntry] = {}
@@ -154,7 +159,47 @@ def discover_flight_runs(roots: Iterable[Path | str], *, max_depth: int = 4) -> 
         root = Path(root).expanduser()
         if root.is_dir():
             walk(root, 0)
-    return sorted(found.values(), key=lambda e: (-e.mtime, e.label))
+    return sorted(_merge_copies(found.values()), key=lambda e: (-e.mtime, e.label))
+
+
+def _merge_copies(entries: Iterable[RunEntry]) -> list[RunEntry]:
+    """One entry per ``run_id``. The same id is the same run: a copy pulled
+    from a server, a re-synced folder, or the run flown again (its inputs
+    name it, so a re-flight keeps the id). The newest manifest stands for the
+    others, whose paths it records in ``copies``. Runs without a readable
+    id are never folded."""
+    groups: dict[str, list[RunEntry]] = {}
+    out: list[RunEntry] = []
+    for entry in sorted(entries, key=lambda e: (-e.mtime, len(e.path.parts))):
+        run_id = _run_id(entry.path)
+        if run_id is None:
+            out.append(entry)
+        else:
+            groups.setdefault(run_id, []).append(entry)
+    for group in groups.values():
+        first, rest = group[0], group[1:]
+        out.append(dataclasses.replace(first, copies=tuple(e.path for e in rest)) if rest else first)
+    return out
+
+
+def _run_id(path: Path) -> str | None:
+    doc = _read_json(path / "manifest.json") or {}
+    run_id = doc.get("run_id")
+    return str(run_id) if isinstance(run_id, str) and run_id else None
+
+
+def label_hint(path: Path | str) -> str:
+    """What tells two runs with the same list label apart: the nearest
+    enclosing folder that is neither a role name (``recovery``, ``ascent``,
+    ``run`` ...) nor the label itself -- ``e505-44e8c27`` for
+    ``e505-44e8c27/recovery/run``."""
+    path = Path(path)
+    label = run_label(path)
+    for parent in path.parents:
+        name = parent.name
+        if name and name != label and name.lower() not in _ROLE_NAMES and name != path.name:
+            return name
+    return ""
 
 
 def default_run_roots() -> list[Path]:
