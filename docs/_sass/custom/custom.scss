@@ -8,24 +8,24 @@ code, kbd, pre, .highlight { font-family: "IBM Plex Mono", ui-monospace, monospa
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #e8a23e;
+  color: #ffffff;
 }
 
 kbd {
   display: inline-block;
   padding: 0.05em 0.45em;
-  border: 1px solid #262239;
+  border: 1px solid #2e2e2e;
   border-bottom-width: 2px;
   border-radius: 3px;
-  background: #13101e;
-  color: #f4f2ea;
+  background: #141414;
+  color: #ffffff;
   font-size: 0.85em;
   line-height: 1.4;
 }
 
-.main-content img { border: 1px solid #262239; border-radius: 4px; }
+.main-content img { border: 1px solid #2e2e2e; border-radius: 4px; }
 .main-content figure { margin: 1.5rem 0; }
-.main-content figcaption { color: #a9a6bb; font-size: 0.9em; margin-top: 0.4rem; }
+.main-content figcaption { color: #b3b3b3; font-size: 0.9em; margin-top: 0.4rem; }
 
 // The user guide's window map (guide.md): the panels where they sit.
 .layout-map {
@@ -35,14 +35,14 @@ kbd {
   gap: 4px;
   margin: 1.25rem 0;
   font-size: 0.82em;
-  color: #a9a6bb;
+  color: #b3b3b3;
   > div {
-    background: #13101e;
-    border: 1px solid #262239;
+    background: #141414;
+    border: 1px solid #2e2e2e;
     border-radius: 3px;
     padding: 0.6rem 0.7rem;
   }
-  b { display: block; color: #e8a23e; letter-spacing: 0.06em; margin-bottom: 0.2rem; }
+  b { display: block; color: #ffffff; letter-spacing: 0.06em; margin-bottom: 0.2rem; }
   .lm-left { grid-column: 1; grid-row: 1 / 3; }
   .lm-view { grid-column: 2; grid-row: 1; min-height: 6rem; }
   .lm-right { grid-column: 3; grid-row: 1 / 3; }
@@ -52,7 +52,7 @@ kbd {
 
 // Code blocks: the theme colours plain code text with $code-linenumber-color
 // (muted) -- readable ink instead, and tighter lines.
-.highlight, pre.highlight { color: #e6e3ef; }
+.highlight, pre.highlight { color: #e6e6e6; }
 pre.highlight, .highlight pre { line-height: 1.55; }
 
 // Source docstrings can contain long, indented lines; keep expanded API notes

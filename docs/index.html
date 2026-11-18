@@ -22,27 +22,27 @@
      strip, an anomaly log, a console transcript).
 
      Palette: pulled from orbitopt's own code, not invented -- theme.py
-     (Mission Control's QSS) supplies void/panel/hairline/ink/accent, and
-     scene.py's COLOR dict supplies burn/verify/earth/saturn (the actual
-     maneuver-arrow, measure-line, and per-body colors the app renders
-     with). One dark "tracking station" world throughout, by choice.
+     (Mission Control's black/white QSS) supplies void/panel/hairline/ink and
+     white as the accent, and scene.py's COLOR dict supplies burn/verify/
+     earth/saturn (the actual maneuver-arrow, measure-line, and per-body
+     colors the app renders with). One black world throughout, by choice.
   ------------------------------------------------------------------------ */
   :root {
-    --void: #050409;
-    --panel: #0b0916;
-    --panel-raised: #13101e;
-    --card: #14111f;
-    --hairline: #262239;
-    --hairline-soft: #1a1728;
-    --ink: #f4f2ea;
-    --ink-2: #a9a6bb;
-    --ink-muted: #6f6c85;
-    --accent: #e8a23e;
-    --accent-dim: #3a2e17;
-    --verify: #5ec8ff;
-    --verify-dim: #142833;
-    --burn: #ff5a3c;
-    --burn-dim: #331d16;
+    --void: #000000;
+    --panel: #0a0a0a;
+    --panel-raised: #141414;
+    --card: #0f0f0f;
+    --hairline: #2e2e2e;
+    --hairline-soft: #1a1a1a;
+    --ink: #ffffff;
+    --ink-2: #b3b3b3;
+    --ink-muted: #7a7a7a;
+    --accent: #ffffff;
+    --accent-dim: #2a2a2a;
+    --verify: #a6c8ff;
+    --verify-dim: #161c24;
+    --burn: #ff4d3d;
+    --burn-dim: #2a1512;
     --earth: #4c8eff;
     --mars: #e14b3d;
     --saturn: #2fa97a;
@@ -94,7 +94,7 @@
   /* --------------------------------------------------------------- Nav */
   .nav {
     position: sticky; top: 0; z-index: 60;
-    background: rgba(5, 4, 9, 0.88);
+    background: rgba(0, 0, 0, 0.88);
     backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--hairline-soft);
   }
@@ -150,7 +150,7 @@
     writing-mode: vertical-rl; text-orientation: mixed; letter-spacing: 0.04em;
     transition: color .2s ease;
   }
-  .met-stop.active .met-dot { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px 1px rgba(232,162,62,0.6); }
+  .met-stop.active .met-dot { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px 1px rgba(255,255,255,0.6); }
   .met-stop.active .met-time { color: var(--accent); font-weight: 600; }
   .met-stop:hover .met-time { color: var(--ink-2); }
   @media (max-width: 900px) {
@@ -217,7 +217,7 @@
   /* verified-vs-flown strip: one cell per real mission check */
   .hero-verify {
     margin-top: clamp(40px, 6vh, 64px);
-    border: 1px solid var(--hairline); background: rgba(11, 9, 22, 0.72);
+    border: 1px solid var(--hairline); background: rgba(10, 10, 10, 0.72);
     position: relative;
   }
   .hero-verify::before { /* accent tick on the top-left corner, like a HUD bracket */
@@ -234,7 +234,7 @@
     background: var(--verify); margin-right: 8px; vertical-align: 1px;
     animation: hv-pulse 2.4s ease-out infinite;
   }
-  @keyframes hv-pulse { 0% { box-shadow: 0 0 0 0 rgba(94,200,255,.55); } 70%,100% { box-shadow: 0 0 0 7px rgba(94,200,255,0); } }
+  @keyframes hv-pulse { 0% { box-shadow: 0 0 0 0 rgba(166,200,255,.55); } 70%,100% { box-shadow: 0 0 0 7px rgba(166,200,255,0); } }
   @media (prefers-reduced-motion: reduce) { .hv-head .live::before { animation: none; } }
   .hv-head a { color: var(--ink-muted); text-decoration: none; letter-spacing: 0.04em; text-transform: none; transition: color .15s ease; }
   .hv-head a b { color: var(--saturn); font-weight: 600; }
@@ -303,8 +303,8 @@
     transition: transform .12s ease, border-color .15s ease, background .15s ease, color .15s ease;
   }
   .btn:active { transform: translateY(1px); }
-  .btn-primary { background: var(--accent); color: #1c1204; }
-  .btn-primary:hover { background: #f2ad48; }
+  .btn-primary { background: var(--accent); color: #000000; }
+  .btn-primary:hover { background: #d9d9d9; }
   .btn-primary svg { width: 15px; height: 15px; }
   .btn-ghost {
     background: transparent; border-color: var(--hairline); color: var(--ink-2);
@@ -519,7 +519,7 @@
   .plot .ax { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-muted); }
   .plot .ax-title { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-2); }
   .plot .ctr { fill: none; stroke: var(--ink-muted); stroke-width: 1; vector-effect: non-scaling-stroke; }
-  .plot .ctr.c14 { stroke: var(--accent); stroke-width: 1.6; fill: rgba(232,162,62,0.09); }
+  .plot .ctr.c14 { stroke: var(--accent); stroke-width: 1.6; fill: rgba(255,255,255,0.09); }
   .plot .ctr.c16 { stroke-opacity: .85; }
   .plot .ctr.c20 { stroke-opacity: .6; }
   .plot .ctr.c25 { stroke-opacity: .42; }
@@ -540,7 +540,7 @@
   }
   .key { display: inline-flex; align-items: center; gap: 7px; }
   .key i { display: inline-block; width: 14px; height: 0; border-top: 1.6px solid var(--accent); }
-  .key i.band { height: 10px; border: none; background: rgba(94,200,255,0.12); }
+  .key i.band { height: 10px; border: none; background: rgba(166,200,255,0.12); }
   .key i.ring { width: 10px; height: 10px; border: 1.6px solid var(--accent); border-radius: 50%; }
   .key i.real { width: 9px; height: 9px; border: none; background: var(--verify); transform: rotate(45deg); }
 
@@ -563,7 +563,7 @@
   /* launch-window strip: 30 July 2020, 00:00-24:00 UTC */
   .wstrip { position: relative; padding: 46px 0 34px; }
   .wtrack { position: relative; height: 34px; background: var(--panel); border: 1px solid var(--hairline-soft); }
-  .win { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, rgba(94,200,255,0.16) 0 6px, rgba(94,200,255,0.07) 6px 12px); border-left: 1px solid var(--verify); border-right: 1px solid var(--verify); }
+  .win { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, rgba(166,200,255,0.16) 0 6px, rgba(166,200,255,0.07) 6px 12px); border-left: 1px solid var(--verify); border-right: 1px solid var(--verify); }
   .win.open-l { border-left: none; } .win.open-r { border-right: none; }
   .wmark { position: absolute; top: -10px; bottom: -10px; width: 0; border-left: 1.5px solid var(--accent); }
   .wmark.real { border-left: 1.5px dashed var(--ink); }
@@ -591,7 +591,7 @@
   .frow-b .fname { font-size: 13px; color: var(--ink-2); }
   .fbar-wrap { position: relative; height: 22px; }
   .fbar { position: absolute; left: 0; top: 3px; bottom: 3px; background: var(--hairline); }
-  .fbar.go { background: linear-gradient(90deg, rgba(94,200,255,0.35), rgba(94,200,255,0.75)); }
+  .fbar.go { background: linear-gradient(90deg, rgba(166,200,255,0.35), rgba(166,200,255,0.75)); }
   .fbar.nogo { background: var(--burn); }
   .fval { position: absolute; top: 50%; transform: translateY(-50%); font-family: var(--font-mono); font-size: 11.5px; color: var(--ink); padding-left: 8px; white-space: nowrap; }
   .need { position: absolute; top: -18px; bottom: -6px; width: 0; border-left: 1px dashed var(--accent); }
@@ -639,7 +639,7 @@
 <nav class="nav">
   <div class="nav-inner">
     <a class="brand" href="#top">
-      <svg viewBox="0 0 32 32" fill="none"><ellipse cx="16" cy="16" rx="12.5" ry="6.5" stroke="#e8a23e" stroke-width="2"/><circle cx="16" cy="16" r="2.6" fill="#5ec8ff"/><circle cx="27.3" cy="16" r="2.1" fill="#e8a23e"/></svg>
+      <svg viewBox="0 0 32 32" fill="none"><g transform="translate(16 16) rotate(-38)"><path d="M10.69 -4.45A12.6 8.4 0 1 0 10.69 4.45" stroke="#ffffff" stroke-width="2.8" stroke-linecap="round"/><circle r="3.4" fill="#ffffff"/><circle cx="12.6" r="2.4" fill="#ffffff"/></g></svg>
       <span class="brand-word">orbitopt<span class="slash">/flight-log</span></span>
     </a>
     <div class="nav-crumbs">
@@ -663,7 +663,7 @@
   <canvas id="stars"></canvas>
   
   <div class="wrap hero-top">
-    <svg class="patch" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#0b0916"/><rect x="0.5" y="0.5" width="31" height="31" rx="5.5" stroke="#262239"/><ellipse cx="16" cy="17" rx="10.5" ry="5.2" stroke="#e8a23e" stroke-width="1.4" fill="none"/><circle cx="16" cy="17" r="2.1" fill="#5ec8ff"/><circle cx="25.2" cy="17" r="1.7" fill="#e8a23e"/></svg>
+    <svg class="patch" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#000000"/><rect x="0.5" y="0.5" width="31" height="31" rx="5.5" stroke="#2e2e2e"/><g transform="translate(16 16) rotate(-38)"><path d="M8.06 -3.34A9.5 6.3 0 1 0 8.06 3.34" stroke="#ffffff" stroke-width="2.1" stroke-linecap="round"/><circle r="2.5" fill="#ffffff"/><circle cx="9.5" r="1.8" fill="#ffffff"/></g></svg>
     <span><b>orbitopt flight log</b> — a scroll is a mission</span>
   </div>
 
@@ -749,10 +749,10 @@
 
     <div class="burn-sequence">
       <svg class="burn-svg" viewBox="0 0 900 72" preserveAspectRatio="none" aria-hidden="true">
-        <path d="M14,58 C 140,58 180,18 300,18 S 470,58 600,52 S 760,14 886,14" fill="none" stroke="#262239" stroke-width="1.5"/>
-        <circle cx="14" cy="58" r="4" fill="#e8a23e"/>
-        <circle cx="300" cy="18" r="4" fill="#ff5a3c"/>
-        <circle cx="600" cy="52" r="4" fill="#5ec8ff"/>
+        <path d="M14,58 C 140,58 180,18 300,18 S 470,58 600,52 S 760,14 886,14" fill="none" stroke="#2e2e2e" stroke-width="1.5"/>
+        <circle cx="14" cy="58" r="4" fill="#ffffff"/>
+        <circle cx="300" cy="18" r="4" fill="#ff4d3d"/>
+        <circle cx="600" cy="52" r="4" fill="#a6c8ff"/>
         <circle cx="886" cy="14" r="4" fill="#2fa97a"/>
       </svg>
       <div class="burn-nodes">
@@ -811,17 +811,17 @@
     <div class="replay-grid">
       <figure class="plot" id="porkchop">
         <svg viewBox="-58 -16 690 470" role="img" aria-label="Earth to Mars porkchop plot for the 2020 opportunity: departure-C3 contours over departure date and flight time, with the real launch period, orbitopt's optimum and the flown Mars 2020 point marked">
-          <g stroke="#1a1728" stroke-width="1">
+          <g stroke="#1a1a1a" stroke-width="1">
             <line x1="0" y1="0" x2="600" y2="0"/><line x1="0" y1="100" x2="600" y2="100"/>
             <line x1="0" y1="200" x2="600" y2="200"/><line x1="0" y1="300" x2="600" y2="300"/>
             <line x1="104.3" y1="0" x2="104.3" y2="400"/><line x1="195.7" y1="0" x2="195.7" y2="400"/>
             <line x1="306.5" y1="0" x2="306.5" y2="400"/><line x1="397.8" y1="0" x2="397.8" y2="400"/>
             <line x1="508.7" y1="0" x2="508.7" y2="400"/>
           </g>
-          <rect x="208.7" y="0" width="189.1" height="400" fill="rgba(94,200,255,0.07)"/>
-          <line x1="208.7" y1="0" x2="208.7" y2="400" stroke="#5ec8ff" stroke-opacity=".45" stroke-dasharray="3 4"/>
-          <line x1="397.8" y1="0" x2="397.8" y2="400" stroke="#5ec8ff" stroke-opacity=".45" stroke-dasharray="3 4"/>
-          <text x="303" y="16" text-anchor="middle" class="ax" style="fill:#5ec8ff">real launch period · Jul 17 – Aug 15</text>
+          <rect x="208.7" y="0" width="189.1" height="400" fill="rgba(166,200,255,0.07)"/>
+          <line x1="208.7" y1="0" x2="208.7" y2="400" stroke="#a6c8ff" stroke-opacity=".45" stroke-dasharray="3 4"/>
+          <line x1="397.8" y1="0" x2="397.8" y2="400" stroke="#a6c8ff" stroke-opacity=".45" stroke-dasharray="3 4"/>
+          <text x="303" y="16" text-anchor="middle" class="ax" style="fill:#a6c8ff">real launch period · Jul 17 – Aug 15</text>
           <g>
           <path class="ctr c30" pathLength="1" d="M7.3,400.0 L3.8,398.5 L1.4,397.5 L0.0,396.9"/>
           <path class="ctr c30" pathLength="1" d="M0.0,258.5 L7.5,257.0 L11.3,256.3 L18.9,254.8 L22.6,254.0 L30.2,252.5 L34.2,251.6 L41.5,250.1 L46.3,249.1 L52.8,247.8 L58.3,246.5 L64.2,245.4 L70.1,244.0 L75.5,242.9 L81.7,241.5 L86.8,240.5 L93.2,239.0 L98.1,238.0 L104.5,236.5 L109.4,235.4 L115.7,234.0 L120.8,232.9 L126.8,231.4 L132.1,230.3 L137.8,228.9 L143.4,227.7 L148.7,226.4 L154.7,225.1 L159.4,223.9 L166.0,222.4 L170.1,221.4 L177.4,219.7 L181.1,218.8 L188.7,217.0 L192.5,216.1 L200.0,214.3 L203.8,213.4 L211.3,211.5 L215.1,210.6 L222.5,208.8 L226.4,207.9 L232.8,206.3 L237.7,205.1 L243.1,203.8 L249.1,202.4 L253.4,201.3 L260.4,199.6 L264.2,198.6 L271.7,196.8 L275.5,195.9 L283.0,194.0 L286.8,193.1 L294.3,191.3 L298.1,190.4 L305.0,188.7 L309.4,187.7 L315.6,186.2 L320.8,185.0 L326.2,183.6 L332.1,182.3 L337.0,181.1 L343.4,179.7 L348.0,178.6 L354.7,177.2 L359.4,176.1 L366.0,174.7 L371.3,173.6 L377.4,172.4 L383.8,171.1 L388.7,170.2 L396.2,168.8 L400.0,168.1 L407.5,166.9 L413.2,166.0 L418.9,165.3 L426.4,164.4 L434.0,163.7 L437.7,163.5 L445.3,163.2 L452.8,163.3 L456.6,163.6 L464.2,164.5 L470.8,166.0 L475.5,167.7 L479.2,169.6 L483.0,172.1 L486.8,175.5 L489.2,178.6 L490.8,181.1 L493.0,186.2 L494.3,190.5 L495.0,193.7 L495.7,198.7 L496.1,203.8 L496.1,208.8 L496.0,213.8 L495.7,218.9 L495.2,223.9 L494.6,228.9 L494.3,231.4 L493.6,236.5 L492.7,241.5 L491.9,246.5 L491.0,251.6 L490.5,254.1 L489.5,259.1 L488.5,264.2 L487.4,269.2 L486.8,272.2 L485.8,276.7 L484.7,281.8 L483.6,286.8 L483.0,289.3 L481.9,294.3 L480.7,299.4 L479.6,304.4 L479.0,306.9 L477.8,311.9 L476.6,317.0 L475.5,321.9 L474.8,324.5 L473.7,329.6 L472.5,334.6 L471.7,337.8 L470.6,342.1 L469.4,347.2 L468.2,352.2 L467.6,354.7 L466.3,359.7 L465.0,364.8 L464.2,368.2 L463.1,372.3 L461.7,377.4 L460.4,382.3 L459.6,384.9 L458.2,389.9 L456.7,395.0 L455.9,397.5"/>
@@ -837,12 +837,12 @@
           <path class="ctr c14" pathLength="1" d="M226.4,360.0 L222.6,359.5 L215.1,358.0 L211.3,357.1 L203.8,354.8 L200.0,353.4 L196.2,351.9 L191.1,349.7 L186.0,347.2 L181.4,344.7 L177.4,342.2 L173.6,339.7 L170.0,337.1 L166.9,334.6 L164.0,332.1 L161.5,329.6 L158.5,326.1 L155.5,322.0 L154.1,319.5 L152.2,314.5 L151.6,309.4 L152.4,304.4 L154.7,299.7 L156.9,296.9 L159.5,294.3 L162.7,291.8 L166.5,289.3 L171.2,286.8 L176.9,284.3 L181.1,282.7 L184.9,281.4 L192.3,279.2 L196.2,278.3 L203.8,276.8 L207.5,276.1 L215.1,275.2 L222.6,274.5 L230.2,274.3 L237.7,274.6 L245.3,275.4 L252.1,276.7 L256.6,278.0 L260.4,279.4 L265.3,281.8 L269.3,284.3 L272.4,286.8 L275.5,289.9 L278.8,294.3 L280.2,296.9 L282.4,301.9 L283.1,304.4 L284.1,309.4 L284.5,314.5 L284.3,319.5 L283.7,324.5 L283.0,327.4 L281.5,332.1 L279.3,337.1 L277.9,339.6 L275.5,343.2 L272.1,347.2 L269.3,349.7 L266.0,352.2 L261.9,354.7 L256.6,357.1 L252.8,358.3 L246.3,359.7 L241.5,360.3 L234.0,360.5 L226.4,360.0 Z"/>
           </g>
           <g class="mk">
-            <path d="M209.2,316 h12 M215.2,310 v12" stroke="#a9a6bb" stroke-width="1.4"/>
-            <text x="215.2" y="384" text-anchor="middle" class="ax" style="fill:#a9a6bb">window C3 min 13.2</text>
-            <circle cx="262.2" cy="289.4" r="7" fill="none" stroke="#e8a23e" stroke-width="2"/>
-            <text x="250" y="258" text-anchor="end" class="ax" style="fill:#e8a23e">orbitopt optimum · C3 13.8</text>
-            <rect x="288.5" y="288.2" width="10" height="10" fill="#5ec8ff" transform="rotate(45 293.5 293.2)"/>
-            <text x="306" y="306" class="ax" style="fill:#f4f2ea">Mars 2020, flown</text>
+            <path d="M209.2,316 h12 M215.2,310 v12" stroke="#b3b3b3" stroke-width="1.4"/>
+            <text x="215.2" y="384" text-anchor="middle" class="ax" style="fill:#b3b3b3">window C3 min 13.2</text>
+            <circle cx="262.2" cy="289.4" r="7" fill="none" stroke="#ffffff" stroke-width="2"/>
+            <text x="250" y="258" text-anchor="end" class="ax" style="fill:#ffffff">orbitopt optimum · C3 13.8</text>
+            <rect x="288.5" y="288.2" width="10" height="10" fill="#a6c8ff" transform="rotate(45 293.5 293.2)"/>
+            <text x="306" y="306" class="ax" style="fill:#ffffff">Mars 2020, flown</text>
           </g>
           <g class="ax">
             <text x="-10" y="404" text-anchor="end">150</text><text x="-10" y="304" text-anchor="end">200</text>
@@ -854,11 +854,11 @@
           </g>
           <text x="300" y="448" text-anchor="middle" class="ax-title">Earth departure, 2020</text>
           <text transform="translate(-44 200) rotate(-90)" text-anchor="middle" class="ax-title">flight time, days</text>
-          <rect x="0" y="0" width="600" height="400" fill="none" stroke="#262239"/>
+          <rect x="0" y="0" width="600" height="400" fill="none" stroke="#2e2e2e"/>
         </svg>
         <figcaption>
           <span class="key"><i></i>C3 = 14 km²/s² (filled below)</span>
-          <span class="key"><i style="border-color:#6f6c85"></i>16 · 20 · 25 · 30</span>
+          <span class="key"><i style="border-color:#7a7a7a"></i>16 · 20 · 25 · 30</span>
           <span class="key"><i class="band"></i>real launch period</span>
           <span class="key"><i class="ring"></i>multistart optimum</span>
           <span class="key"><i class="real"></i>flown</span>
@@ -971,14 +971,14 @@
 
     <div class="manifest">
       <div class="ticket">
-        <div class="thead"><span class="tdot" style="color:#c9c6d8;background:#c9c6d8"></span><h3>Starship Flight 15</h3><span class="newpill">NEW</span></div>
+        <div class="thead"><span class="tdot" style="color:#cfcfcf;background:#cfcfcf"></span><h3>Starship Flight 15</h3><span class="newpill">NEW</span></div>
         <p>An open prediction for the first return of the ship to Starbase:
           ~14 orbits, a solved deorbit burn and 3-DOF entry to the tower, and
           Super Heavy's boostback and catch. Published before the flight.</p>
         <div class="fact">ship catch <b>T+22:33:18</b> · SpaceX plan T+22:32:34</div>
       </div>
       <div class="ticket">
-        <div class="thead"><span class="tdot" style="color:#5ec8ff;background:#5ec8ff"></span><h3>Flight Lab — pad to orbit</h3><span class="newpill">NEW</span></div>
+        <div class="thead"><span class="tdot" style="color:#a6c8ff;background:#a6c8ff"></span><h3>Flight Lab — pad to orbit</h3><span class="newpill">NEW</span></div>
         <p>Design a two-stage launch, optimize its ascent and fly it in 3-DOF or
           an optional 6-DOF, with booster recovery and its Monte Carlo. One
           command chains the launch window, ascent, injection and propagation,
@@ -999,7 +999,7 @@
         <div class="fact"><b>orbitopt view solar-system</b></div>
       </div>
       <div class="ticket">
-        <div class="thead"><span class="tdot" style="color:#e8a23e;background:#e8a23e"></span><h3>Artemis II Free Return</h3></div>
+        <div class="thead"><span class="tdot" style="color:#ffffff;background:#ffffff"></span><h3>Artemis II Free Return</h3></div>
         <p>Lambert-seeded, B-plane and entry-corridor targeted Earth–Moon free return,
           verified in tudatpy. Artemis II's perilune is the target input and the
           departure date is chosen; this is not a reconstruction of the flown trajectory.</p>
@@ -1017,13 +1017,13 @@
         <div class="fact">periapsis target 500&nbsp;km — flown <b>504.7&nbsp;km</b></div>
       </div>
       <div class="ticket">
-        <div class="thead"><span class="tdot" style="color:#ff5a3c;background:#ff5a3c"></span><h3>Launch windows</h3><span class="newpill">NEW</span></div>
+        <div class="thead"><span class="tdot" style="color:#ff4d3d;background:#ff4d3d"></span><h3>Launch windows</h3><span class="newpill">NEW</span></div>
         <p>Daily open, close and optimal lift-off times from a sourced launch-site
           database, into an orbit plane or along an interplanetary asymptote.</p>
         <div class="fact"><b>orbitopt launch-window</b> ksc --rla 9.6 --dla 23.4</div>
       </div>
       <div class="ticket">
-        <div class="thead"><span class="tdot" style="color:#5ec8ff;background:#5ec8ff"></span><h3>Config-driven runs</h3></div>
+        <div class="thead"><span class="tdot" style="color:#a6c8ff;background:#a6c8ff"></span><h3>Config-driven runs</h3></div>
         <p>Validate a YAML mission, compute a scene and inspect its reports.</p>
         <div class="fact">strict JSON-Schema config → scene + <b>verification report</b></div>
       </div>
@@ -1196,7 +1196,7 @@
     <div class="meco"><span class="bar"></span>T+00:48 · MECO — end of flight log</div>
     <div class="frow">
       <div class="fbrand">
-        <svg viewBox="0 0 32 32" fill="none"><ellipse cx="16" cy="16" rx="12.5" ry="6.5" stroke="#e8a23e" stroke-width="2"/><circle cx="16" cy="16" r="2.6" fill="#5ec8ff"/><circle cx="27.3" cy="16" r="2.1" fill="#e8a23e"/></svg>
+        <svg viewBox="0 0 32 32" fill="none"><g transform="translate(16 16) rotate(-38)"><path d="M10.69 -4.45A12.6 8.4 0 1 0 10.69 4.45" stroke="#ffffff" stroke-width="2.8" stroke-linecap="round"/><circle r="3.4" fill="#ffffff"/><circle cx="12.6" r="2.4" fill="#ffffff"/></g></svg>
         <span class="fmeta">orbitopt · GPL-3.0-or-later · © 2026 Jiucheng Zang</span>
       </div>
       <div class="flinks">
@@ -1332,7 +1332,7 @@
       if (k === 0) ox.moveTo(px, py); else ox.lineTo(px, py);
     }
     ox.closePath();
-    ox.strokeStyle = "rgba(169,166,187,0.24)";
+    ox.strokeStyle = "rgba(179,179,179,0.24)";
     ox.lineWidth = 1 * DPR;
     ox.stroke();
   }
@@ -1367,7 +1367,7 @@
 
     ox.beginPath();
     ox.arc(cx, cy, TARGET_R * scale, 0, Math.PI * 2);
-    ox.strokeStyle = "rgba(94,200,255,0.20)";
+    ox.strokeStyle = "rgba(166,200,255,0.20)";
     ox.setLineDash([2 * DPR, 5 * DPR]);
     ox.lineWidth = 1 * DPR;
     ox.stroke();
@@ -1387,8 +1387,8 @@
 
     var flashing = t < burnFlashUntil;
     ox.beginPath();
-    ox.fillStyle = flashing ? "#ff5a3c" : "#e8a23e";
-    ox.shadowColor = flashing ? "#ff5a3c" : "#e8a23e";
+    ox.fillStyle = flashing ? "#ff4d3d" : "#ffffff";
+    ox.shadowColor = flashing ? "#ff4d3d" : "#ffffff";
     ox.shadowBlur = (flashing ? 20 : 9) * DPR;
     ox.arc(sx, sy, (flashing ? 6 : 4) * DPR, 0, Math.PI * 2);
     ox.fill();
