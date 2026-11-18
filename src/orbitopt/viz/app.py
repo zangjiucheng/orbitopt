@@ -68,7 +68,7 @@ from orbitopt.viz.charts import ChartPanel
 from orbitopt.viz.flight_labels import label_text, labelled_bodies
 from orbitopt.viz.compute import BackendProbeWorker, ComputePool, SceneLoader
 from orbitopt.viz.source_watch import SourceWatch
-from orbitopt.viz.icon import app_icon
+from orbitopt.viz.icon import app_icon, set_macos_dock_icon
 from orbitopt.viz.inspector import InspectorPanel
 from orbitopt.viz.pv_viewer import load_scene
 from orbitopt.viz.scene_renderer import SceneRenderer
@@ -2268,6 +2268,7 @@ def main():
     # App-level icon drives the macOS Dock tile / taskbar entry; the window
     # inherits it for its title bar too.
     app.setWindowIcon(app_icon())
+    set_macos_dock_icon()   # full-resolution Dock tile (Qt's own conversion is soft)
     window = MissionControlWindow()
     window.show()
     sys.exit(app.exec())

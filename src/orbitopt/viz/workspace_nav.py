@@ -103,14 +103,13 @@ class WorkspaceBar(QWidget):
             "left", "Show / hide the list (Ctrl+B)", self.sidebar_toggle_requested)
         layout.addWidget(self.panel_toggles["left"])
         layout.addSpacing(8)
-        from orbitopt.viz.icon import render_logo_mark
-        from orbitopt.viz.theme import INK_PRIMARY
-
         logo = QLabel()
         logo.setObjectName("workspaceLogo")
-        logo.setPixmap(render_logo_mark(40, INK_PRIMARY).scaled(
-            22, 22, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        logo.setFixedSize(26, 26)
+        self._logo = logo
+        self._logo_dpr = 0.0
+        self._paint_logo()
+        logo.setFixedSize(28, 28)
+        logo.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo)
         layout.addSpacing(8)
         mark = QLabel("ORBITOPT")
@@ -141,6 +140,27 @@ class WorkspaceBar(QWidget):
             "right", "Show / hide the inspector (Ctrl+Shift+B)", self.inspector_toggle_requested)
         layout.addWidget(self.panel_toggles["right"])
         self.setFixedHeight(40)
+
+    def _paint_logo(self) -> None:
+        """Draw the logo for this screen's pixel ratio (never below 2x: the
+        ratio is 1.0 until the bar is on a screen, which left it soft on
+        Retina displays)."""
+        from orbitopt.viz.icon import render_logo_mark
+        from orbitopt.viz.theme import INK_PRIMARY
+
+        screen = self.screen()
+        dpr = max(2.0, float(screen.devicePixelRatio()) if screen is not None else 2.0)
+        if dpr != self._logo_dpr:
+            self._logo_dpr = dpr
+            self._logo.setPixmap(render_logo_mark(24, INK_PRIMARY, dpr))
+
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt)
+        super().showEvent(event)
+        self._paint_logo()
+        handle = self.window().windowHandle()
+        if handle is not None and not getattr(self, "_screen_hooked", False):
+            self._screen_hooked = True
+            handle.screenChanged.connect(lambda *_: self._paint_logo())
 
     def _panel_toggle(self, side: str, tip: str, signal) -> QPushButton:
         from orbitopt.viz import icons

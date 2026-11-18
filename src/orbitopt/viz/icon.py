@@ -1,143 +1,64 @@
-"""Programmatic app icon for Mission Control.
+"""Programmatic app icon and logo mark for Mission Control.
 
-An inclined orbit with a planet and a spacecraft marker, drawn in the app's
-own deep-space palette (theme.py) so the Dock/window icon matches the window
-chrome exactly. Rendered with QPainter at several sizes into a QIcon rather
-than shipping a hand-drawn binary asset, so it always tracks the palette and
-stays crisp from the 16px menu-bar glyph up to the Dock tile. ``export_png``
-writes a single high-res PNG for anywhere a file is needed (README, packaging).
+One motif -- a bold tilted orbit, broken where the spacecraft crosses it, with
+the body it circles -- drawn flat in the app's black/white theme (theme.py).
+The Dock/window icon is that mark in white on a black rounded tile; the top-bar
+logo is the same mark alone. Rendered with QPainter at several sizes into a
+QIcon rather than shipping a hand-drawn binary asset, so it always tracks the
+palette and stays crisp from the 16px menu-bar glyph up to the Dock tile.
+``export_png`` writes a single high-res PNG for anywhere a file is needed.
 """
 from __future__ import annotations
 
-import math
-
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import (
-    QBrush,
-    QColor,
-    QIcon,
-    QLinearGradient,
-    QPainter,
-    QPainterPath,
-    QPen,
-    QPixmap,
-    QRadialGradient,
-)
+from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 
-from orbitopt.viz.theme import ACCENT, BG_VOID, INK_PRIMARY, PANEL_RAISED
+from orbitopt.viz.theme import BG_VOID, INK_PRIMARY
 
-_ICON_SIZES = (16, 24, 32, 48, 64, 128, 256, 512)
+_ICON_SIZES = (16, 24, 32, 48, 64, 128, 256, 512)  # logical sizes; 2x bitmaps are added too
 
 
-def render_app_icon(size: int) -> QPixmap:
-    """Draw the icon at ``size`` x ``size`` px and return it as a QPixmap."""
+def _paint_mark(p: QPainter, s: float, ink: QColor) -> None:
+    """The mark, centred on the painter's origin, filling a ``s`` x ``s`` box."""
+    p.save()
+    p.rotate(-38)
+    rx, ry = s * 0.45, s * 0.3
+    pen = QPen(ink, max(1.0, s * 0.1))
+    pen.setCapStyle(Qt.RoundCap)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    # Qt arcs: 1/16 degree, counter-clockwise from 3 o'clock. Leave a gap
+    # around the spacecraft at the right-hand end of the orbit.
+    gap = 64
+    p.drawArc(QRectF(-rx, -ry, 2 * rx, 2 * ry), int(gap / 2 * 16), int((360 - gap) * 16))
+    p.setPen(Qt.NoPen)
+    p.setBrush(QBrush(ink))
+    p.drawEllipse(QPointF(0, 0), s * 0.12, s * 0.12)                       # the body
+    p.drawEllipse(QPointF(rx, 0), s * 0.085, s * 0.085)                    # the spacecraft
+    p.restore()
+
+
+def render_app_icon(size: int, dpr: float = 1.0) -> QPixmap:
+    """The icon at ``size`` x ``size`` logical px (``size * dpr`` device
+    px): the mark in white on a black rounded tile with a hairline edge."""
     s = float(size)
-    px = QPixmap(size, size)
+    side = max(1, round(size * dpr))
+    px = QPixmap(side, side)
+    px.setDevicePixelRatio(dpr)
     px.fill(Qt.transparent)
     p = QPainter(px)
     p.setRenderHint(QPainter.Antialiasing, True)
-    p.setRenderHint(QPainter.SmoothPixmapTransform, True)
-
-    # -- rounded-square tile: vertical gradient + a soft amber glow ----------
     corner = s * 0.22
-    clip = QPainterPath()
-    clip.addRoundedRect(QRectF(0, 0, s, s), corner, corner)
-    p.setClipPath(clip)
-
-    tile = QLinearGradient(0, 0, 0, s)
-    tile.setColorAt(0.0, QColor(PANEL_RAISED))
-    tile.setColorAt(1.0, QColor(BG_VOID))
-    p.fillRect(QRectF(0, 0, s, s), QBrush(tile))
-
-    glow = QRadialGradient(s * 0.5, s * 0.46, s * 0.62)
-    c_in = QColor(ACCENT)
-    c_in.setAlphaF(0.16)
-    c_out = QColor(ACCENT)
-    c_out.setAlphaF(0.0)
-    glow.setColorAt(0.0, c_in)
-    glow.setColorAt(1.0, c_out)
-    p.fillRect(QRectF(0, 0, s, s), QBrush(glow))
-
-    # -- a scatter of faint stars -------------------------------------------
-    p.setPen(Qt.NoPen)
-    for fx, fy, fa, fr in (
-        (0.16, 0.18, 0.70, 0.010),
-        (0.83, 0.15, 0.55, 0.008),
-        (0.74, 0.73, 0.60, 0.009),
-        (0.24, 0.82, 0.45, 0.007),
-        (0.90, 0.50, 0.40, 0.006),
-        (0.12, 0.56, 0.35, 0.006),
-    ):
-        star = QColor(INK_PRIMARY)
-        star.setAlphaF(fa)
-        p.setBrush(star)
-        p.drawEllipse(QPointF(s * fx, s * fy), s * fr, s * fr)
-
-    cx, cy = s * 0.5, s * 0.52
-    a, b = s * 0.37, s * 0.155  # orbit semi-axes
-    orbit_rect = QRectF(cx - a, cy - b, 2 * a, 2 * b)
-    ring_w = max(1.0, s * 0.022)
-
-    ring = QPen(QColor(ACCENT), ring_w)
-    ring.setCapStyle(Qt.RoundCap)
-    halo = QColor(ACCENT)
-    halo.setAlphaF(0.18)
-    ring_glow = QPen(halo, ring_w * 2.6)
-    ring_glow.setCapStyle(Qt.RoundCap)
-
-    # -- orbit ellipse (behind the planet) ----------------------------------
-    p.save()
-    p.translate(cx, cy)
-    p.rotate(-26)
-    p.translate(-cx, -cy)
-    p.setBrush(Qt.NoBrush)
-    p.setPen(ring_glow)
-    p.drawEllipse(orbit_rect)
-    p.setPen(ring)
-    p.drawEllipse(orbit_rect)
-    p.restore()
-
-    # -- planet -------------------------------------------------------------
-    pr = s * 0.145
-    body = QRadialGradient(cx - pr * 0.4, cy - pr * 0.45, pr * 1.8)
-    body.setColorAt(0.0, QColor(ACCENT).lighter(145))
-    body.setColorAt(0.55, QColor(ACCENT))
-    body.setColorAt(1.0, QColor(ACCENT).darker(180))
-    p.setPen(Qt.NoPen)
-    p.setBrush(QBrush(body))
-    p.drawEllipse(QPointF(cx, cy), pr, pr)
-
-    rim = QColor(ACCENT).lighter(165)
-    rim.setAlphaF(0.55)
-    p.setBrush(Qt.NoBrush)
-    p.setPen(QPen(rim, max(1.0, s * 0.006)))
-    p.drawEllipse(QPointF(cx, cy), pr, pr)
-
-    # -- spacecraft marker + short trail, on the near arc (in front) --------
-    p.save()
-    p.translate(cx, cy)
-    p.rotate(-26)
-    p.translate(-cx, -cy)
-    p.setPen(Qt.NoPen)
-    for i, deg in enumerate((72.0, 84.0, 96.0)):
-        t = math.radians(deg)
-        tx, ty = cx + a * math.cos(t), cy + b * math.sin(t)
-        trail = QColor(INK_PRIMARY)
-        trail.setAlphaF(0.45 - i * 0.13)
-        p.setBrush(trail)
-        rr = s * (0.015 - i * 0.003)
-        p.drawEllipse(QPointF(tx, ty), rr, rr)
-
-    mt = math.radians(58.0)
-    mx, my = cx + a * math.cos(mt), cy + b * math.sin(mt)
-    halo_m = QColor(INK_PRIMARY)
-    halo_m.setAlphaF(0.30)
-    p.setBrush(halo_m)
-    p.drawEllipse(QPointF(mx, my), s * 0.046, s * 0.046)
-    p.setBrush(QColor(INK_PRIMARY))
-    p.drawEllipse(QPointF(mx, my), s * 0.026, s * 0.026)
-    p.restore()
-
+    tile = QPainterPath()
+    inset = max(0.5, s * 0.004)
+    tile.addRoundedRect(QRectF(inset, inset, s - 2 * inset, s - 2 * inset), corner, corner)
+    p.setBrush(QColor(BG_VOID))
+    edge = QColor(INK_PRIMARY)
+    edge.setAlphaF(0.22)
+    p.setPen(QPen(edge, max(1.0, s * 0.008)))
+    p.drawPath(tile)
+    p.translate(s / 2, s / 2)
+    _paint_mark(p, s * 0.62, QColor(INK_PRIMARY))
     p.end()
     return px
 
@@ -146,8 +67,54 @@ def app_icon() -> QIcon:
     """A QIcon carrying the icon pre-rendered at every size Qt may ask for."""
     icon = QIcon()
     for size in _ICON_SIZES:
+        # Both the 1x and the 2x bitmap of each size: without the 2x one the
+        # Dock / a Retina title bar upscaled the 1x bitmap and looked soft.
         icon.addPixmap(render_app_icon(size))
+        icon.addPixmap(render_app_icon(size, 2.0))
     return icon
+
+
+def render_dock_icon(size: int = 1024) -> QPixmap:
+    """The icon as macOS wants it for the Dock: the tile inset to ~80% of the
+    canvas (Apple's icon grid leaves the rest as margin and shadow room), so
+    it sits at the same visual size as the other Dock icons."""
+    px = QPixmap(size, size)
+    px.fill(Qt.transparent)
+    p = QPainter(px)
+    p.setRenderHint(QPainter.SmoothPixmapTransform, True)
+    inner = round(size * 0.8)
+    off = (size - inner) // 2
+    p.drawPixmap(off, off, render_app_icon(inner))
+    p.end()
+    return px
+
+
+def set_macos_dock_icon() -> bool:
+    """Hand the Dock a full-resolution 1024 px image directly. Qt's own
+    QIcon -> NSImage conversion hands it a small bitmap that macOS upscales,
+    which is what made the Dock icon soft. No-op (False) off macOS or without
+    PyObjC."""
+    import sys
+
+    if sys.platform != "darwin":
+        return False
+    try:
+        from AppKit import NSApplication, NSImage
+        from Foundation import NSData
+        from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+
+        data = QByteArray()
+        buf = QBuffer(data)
+        buf.open(QIODevice.WriteOnly)
+        render_dock_icon(1024).save(buf, "PNG")
+        buf.close()
+        image = NSImage.alloc().initWithData_(NSData.dataWithBytes_length_(bytes(data), len(data)))
+        if image is None:
+            return False
+        NSApplication.sharedApplication().setApplicationIconImage_(image)
+        return True
+    except Exception:  # noqa: BLE001 -- a cosmetic nicety must never stop the app starting
+        return False
 
 
 def export_png(path: str, size: int = 1024) -> str:
@@ -157,24 +124,18 @@ def export_png(path: str, size: int = 1024) -> str:
     return path
 
 
-def render_logo_mark(size: int, color: str = INK_PRIMARY) -> QPixmap:
-    """The flat, single-colour logo mark for the top bar: a tilted orbit, the
-    body it circles and the spacecraft on it -- the app icon's motif with no
-    tile, gradient or glow, so it reads as type next to the wordmark."""
-    s = float(size)
-    px = QPixmap(size, size)
+def render_logo_mark(size: int, color: str = INK_PRIMARY, dpr: float = 1.0) -> QPixmap:
+    """The flat, single-colour mark alone, for the top bar: no tile, gradient
+    or glow, so it reads as type next to the wordmark. Drawn at ``size``
+    logical pixels x ``dpr`` device pixels, so it stays crisp on HiDPI screens
+    instead of being scaled down from a larger bitmap."""
+    side = max(1, round(size * dpr))
+    px = QPixmap(side, side)
+    px.setDevicePixelRatio(dpr)
     px.fill(Qt.transparent)
     p = QPainter(px)
     p.setRenderHint(QPainter.Antialiasing, True)
-    ink = QColor(color)
-    p.translate(s / 2, s / 2)
-    p.rotate(-28)
-    p.setPen(QPen(ink, max(1.2, s * 0.075)))
-    p.setBrush(Qt.NoBrush)
-    p.drawEllipse(QRectF(-s * 0.46, -s * 0.2, s * 0.92, s * 0.4))
-    p.setPen(Qt.NoPen)
-    p.setBrush(QBrush(ink))
-    p.drawEllipse(QPointF(0, 0), s * 0.13, s * 0.13)                       # the body
-    p.drawEllipse(QPointF(s * 0.34, s * 0.1 * 0.5), s * 0.07, s * 0.07)    # the spacecraft
+    p.translate(size / 2, size / 2)
+    _paint_mark(p, float(size), QColor(color))
     p.end()
     return px
