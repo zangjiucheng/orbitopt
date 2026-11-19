@@ -207,7 +207,11 @@ def matrix_handoff(cell: GuidanceMatrixCell, *, dt_s: float = 0.01,
     """Fly the cell's stack leg on the native rigid-body plant and freeze it
     at separation -- the handoff the JSBSim upper leg inherits, and the one
     the cell's native 6-DOF record consumed.  ``stack_mass_at_t0_kg`` is the
-    scenario's declared wet mass, exactly as the native runner splits it."""
+    scenario's declared wet mass, exactly as the native runner splits it.
+
+    The stack leg depends on the cell only through the stage pair and the
+    pad: cells sharing ``(vehicle_id, pad_latitude_deg)`` share the handoff
+    (:func:`handoff_cache_key`), which the benchmark exploits."""
     scenario = matrix_scenario(cell, dt_s=dt_s)
     mission = run_mission(scenario, backend=BACKEND_6DOF, epoch_utc=epoch_utc)
     frozen = mission.study.frozen_state
@@ -240,10 +244,15 @@ def jsbsim_matrix_record(cell: GuidanceMatrixCell, handoff: MatrixHandoff,
     ``guidance_matrix._backend_record``, read off the JSBSim traces.  The
     attitude/actuator block is the one E6-02 uses to compare its two
     plants; the handoff residuals say how faithfully the frozen native
-    stack state survived the trip into JSBSim."""
+    stack state survived the trip into JSBSim.
+
+    The scenario (and with it the cell's own guidance target) is rebuilt
+    from the cell; the handoff contributes only the separation kinematics
+    and bookkeeping, so a handoff cached for one cell may be passed to any
+    cell of the same :func:`handoff_cache_key`."""
     from orbitopt.flightlab.sixdof.tracking import chart_error_deg
 
-    scenario = handoff.scenario
+    scenario = matrix_scenario(cell)
     t_sep = float(handoff.frozen.t_s)
     ignition_t_s = float(scenario.ignition.ignition_t_s)
     prop = float(handoff.separation["upper_propellant_kg"])
@@ -407,10 +416,17 @@ def _check(cid: str, value: float, limit: float, op: str, unit: str,
             "unit": unit, "note": note, "passed": bool(ok)}
 
 
+def handoff_cache_key(cell: GuidanceMatrixCell) -> tuple[str, float]:
+    """The two cell entries the stack leg of :func:`matrix_handoff` actually
+    depends on: the stage pair (the vehicle config) and the pad."""
+    return (cell.vehicle_id, float(cell.pad_latitude_deg))
+
+
 def _cell_leg(cell: GuidanceMatrixCell, dt_s: float, sample_every: int,
-              native: Mapping[str, Any]) -> dict[str, Any]:
-    handoff = matrix_handoff(cell)
-    rec = jsbsim_matrix_record(cell, handoff, dt_s=dt_s, sample_every=sample_every)
+              native: Mapping[str, Any],
+              handoff: MatrixHandoff | None = None) -> dict[str, Any]:
+    rec = jsbsim_matrix_record(cell, handoff or matrix_handoff(cell),
+                               dt_s=dt_s, sample_every=sample_every)
     n6 = native["backends"][BACKEND_6DOF]
     ins, n_ins = rec["insertion"], n6["insertion"]
     prop = float(rec["propellant_at_ignition_kg"])
@@ -504,15 +520,27 @@ def run_jsbsim_benchmark(cells: tuple[GuidanceMatrixCell, ...] = GUIDANCE_MATRIX
     by_id = {c["cell_id"]: c for c in json.loads(
         Path(native_path).read_text())["cells"]}
     t0 = time.perf_counter()
+    flown: list[dict[str, Any]] = []
     if jobs > 1:
+        # The stack legs first, one per distinct (vehicle, pad), then the
+        # upper legs in the pool -- the frozen states pickle cleanly.
+        keys: dict[tuple, GuidanceMatrixCell] = {}
+        for c in cells:
+            keys.setdefault(handoff_cache_key(c), c)
         with ProcessPoolExecutor(max_workers=int(jobs)) as pool:
+            hands = dict(zip(keys, pool.map(matrix_handoff, keys.values())))
             flown = list(pool.map(
-                lambda c: _cell_leg(c, dt_s, sample_every, by_id[c.cell_id]),
+                lambda c: _cell_leg(c, dt_s, sample_every, by_id[c.cell_id],
+                                    hands[handoff_cache_key(c)]),
                 list(cells)))
     else:
-        flown = []
+        hands: dict[tuple, MatrixHandoff] = {}
         for c in cells:
-            flown.append(_cell_leg(c, dt_s, sample_every, by_id[c.cell_id]))
+            key = handoff_cache_key(c)
+            if key not in hands:
+                hands[key] = matrix_handoff(c)
+            flown.append(_cell_leg(c, dt_s, sample_every, by_id[c.cell_id],
+                                   hands[key]))
             if progress is not None:
                 progress(flown[-1])
     checks = [c for r in flown for c in r["checks"]]
