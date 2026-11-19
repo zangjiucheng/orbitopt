@@ -50,10 +50,12 @@ class TestSpecExtension:
         assert spec.transfer_target is False
         assert spec.climb_time_to_go_gain == 0.0
         assert spec.cutoff_insertion_box is False
+        assert spec.apogee_ceiling_gain == 0.0
 
     @pytest.mark.parametrize("kwargs", [
         {"climb_time_to_go_gain": -0.5},
         {"cutoff_periapsis_margin_m": -1.0},
+        {"apogee_ceiling_gain": -1.0e-4},
     ])
     def test_new_fields_validate(self, kwargs):
         sc = matrix_scenario(_cell("a220-i28.5-V1-A1"))
@@ -65,6 +67,7 @@ class TestSpecExtension:
         assert ug.transfer_target is True
         assert ug.climb_time_to_go_gain == 0.0
         assert ug.cutoff_insertion_box is True
+        assert ug.apogee_ceiling_gain > 0.0
 
 
 class TestGeneratedAirframe:

@@ -47,9 +47,13 @@ changing it there (all default off):
   ellipse whose apogee the remaining delta-v can still circularise*:
   ``v_t = sqrt(mu (2/r - 1/a))`` with ``a = (r + r_a)/2`` and ``r_a`` capped
   by the largest apogee whose apogee circularisation fits the remaining
-  ``dv`` (with a 10 % reserve).  Above the target radius the target falls
-  back to the circular speed, so the law self-selects: transfer while
-  climbing, circular while inserting.
+  ``dv`` (with a 10 % reserve) and by ``r_target - transfer_apogee_bias_m``.
+  Above the target radius the target falls back to the circular speed, so
+  the law self-selects: transfer while climbing, circular while inserting.
+  The bias is the planning margin the matrix needs: on the low-target cells
+  the perigee-kick phase overshoots the commanded apogee by ~50 km, so a
+  plan capped at the target radius itself has its apogee out of the
+  declared band before the periapsis criterion can close.
 * ``climb_time_to_go_gain``: a proportional vertical (climb-hold) feed
   ``k (r_target - r) / tau_burn_left * rhat`` along vertical while below the
   target radius (time-to-go over the remaining burn, clamped by the same
@@ -75,8 +79,22 @@ changing it there (all default off):
   fires, so the burn has to be judged against the whole declared box and
   not against its lower edge alone (the energy/apoapsis termination of ADR
   flightlab-0011).  Terminating inside the declared band is not a tolerance
-  relaxation: the acceptance band is unchanged, the law simply stops where
-  the mission is already satisfied.
+   relaxation: the acceptance band is unchanged, the law simply stops where
+   the mission is already satisfied.
+* ``apogee_ceiling_gain``: terminal apogee hold, the control side of the
+  box cutoff.  A cutoff can only *stop* a burn; on the low-target cells the
+  trace shows the opposite failure -- the periapsis enters the band while
+  the apogee rides ~50-70 km *over* its ceiling (the pull-up dumps a few
+  tens of m/s of tangential over-speed at perigee), and a law whose
+  tangential target is then still the transfer speed keeps pumping energy
+  into an already-overshot apogee until the tank runs dry.  While the
+  cutoff box is armed -- periapsis criterion satisfied, apoapsis criterion
+  not -- the tangential target is trimmed proportionally below the planned
+  speed, ``v_t -= k_apogee (r_apo - r_ceiling)`` (floored at near-circular
+  at the current radius), so the burn bleeds the over-speed instead of
+  adding to it; the apogee converges to the ceiling and the box closes.
+  Proportional, self-clearing (the term vanishes as the apogee enters the
+  band) and off by default.
 
 The command limiter: ``Lambda``'s *direction* is undefined as its
 magnitude vanishes (and its tangential part flips 180 deg when ``v_t``
@@ -311,6 +329,21 @@ class UpperStageGuidanceSpec:
     #: ``r_peri >= r_target - cutoff_periapsis_margin_m`` alone.  Default
     #: off: the F-07 mission cuts on the strict criterion already.
     cutoff_insertion_box: bool = False
+    #: E6-05: planning margin [m] deducted from the transfer cap's apogee
+    #: ceiling (``r_target - transfer_apogee_bias_m`` instead of
+    #: ``r_target``): the perigee-kick phase of the burn overshoots the
+    #: commanded apogee by a few tens of km, so a plan capped at the target
+    #: radius itself arrives with the apogee already out of the declared
+    #: band before the periapsis criterion can close.  Expressed in the
+    #: declared insertion tolerance, not in per-cell numbers.  Default 0.
+    transfer_apogee_bias_m: float = 0.0
+    #: E6-05: terminal apogee hold gain [s^-1 ... m/s per m of apogee over
+    #: the band ceiling]: while the cutoff box's periapsis side is satisfied
+    #: but its apoapsis side is not, the tangential target is lowered by
+    #: ``k (r_apo - r_target - apoapsis_tolerance_m)`` (module docstring) so
+    #: the burn bleeds the perigee over-speed instead of amplifying it.
+    #: Default 0 = off.
+    apogee_ceiling_gain: float = 0.0
 
     def __post_init__(self) -> None:
         if self.dry_mass_kg <= 0.0:
@@ -334,6 +367,12 @@ class UpperStageGuidanceSpec:
         if self.climb_time_to_go_gain < 0.0:
             raise ValueError(f"climb_time_to_go_gain must be >= 0, got "
                              f"{self.climb_time_to_go_gain}")
+        if not 0.0 <= self.transfer_apogee_bias_m < self.target.radius_m:
+            raise ValueError(f"transfer_apogee_bias_m must be in [0, r_target), got "
+                             f"{self.transfer_apogee_bias_m}")
+        if self.apogee_ceiling_gain < 0.0:
+            raise ValueError(f"apogee_ceiling_gain must be >= 0, got "
+                             f"{self.apogee_ceiling_gain}")
 
     @classmethod
     def from_vehicle(cls, vehicle, *, target: ParkingOrbitTarget,
@@ -394,6 +433,22 @@ class UpperStageGuidance:
         g_r = MU_EARTH_M3_S2 / (rmag * rmag)
         v_t_target = (self._capped_transfer_speed(rmag, float(mass_kg))
                       if self.spec.transfer_target and rmag < r_t else v_c)
+        if self.spec.apogee_ceiling_gain > 0.0 and self.spec.cutoff_insertion_box:
+            # E6-05 terminal apogee hold (module docstring): the periapsis
+            # side of the cutoff box is already satisfied, so the burn is in
+            # its terminal phase -- an apogee over the ceiling at this point
+            # is over-speed the cutoff cannot fix by stopping, only by not
+            # adding.  Trim the tangential target proportionally, floored at
+            # near-circular so the command stays a passable orbit.
+            target = self.spec.target
+            r_ceil = target.radius_m + float(target.apoapsis_tolerance_m)
+            r_apo = self._apoapsis_radius(r, v_inertial)
+            if (r_apo > r_ceil
+                    and self._periapsis_radius(r, v_inertial)
+                    >= target.radius_m - float(target.periapsis_tolerance_m)):
+                trim = self.spec.apogee_ceiling_gain * (r_apo - r_ceil)
+                v_t_target = max(v_t_target - trim,
+                                 0.85 * math.sqrt(MU_EARTH_M3_S2 / rmag))
         lam = (v_t_target * t_hat - v_inertial
                + self.spec.gravity_term_gain * g_r * tau * r_hat)
         if self.spec.climb_time_to_go_gain > 0.0 and rmag < r_t:
@@ -406,12 +461,13 @@ class UpperStageGuidance:
     def _capped_transfer_speed(self, rmag: float, mass_kg: float) -> float:
         """E6-05: the tangential speed of the transfer ellipse whose apogee
         is the largest the remaining propellant can still circularise,
-        capped at the target radius (module docstring).  With the reserve
-        exhausted the target degenerates to the circular speed at the
-        current radius -- the law then holds station, and the mission fails
-        on capability with a clean energy bookkeeping, not on guidance."""
+        capped at ``r_target - transfer_apogee_bias_m`` (module docstring).
+        With the reserve exhausted the target degenerates to the circular
+        speed at the current radius -- the law then holds station, and the
+        mission fails on capability with a clean energy bookkeeping, not on
+        guidance."""
         mu = MU_EARTH_M3_S2
-        r_t = self.spec.target.radius_m
+        r_t = self.spec.target.radius_m - float(self.spec.transfer_apogee_bias_m)
 
         def dv_apo(r_a: float) -> float:
             a = 0.5 * (rmag + r_a)

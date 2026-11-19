@@ -78,7 +78,8 @@ def test_spec_validation():
                {"command_heading_limit_deg": 30.5},
                {"gravity_term_gain": -0.1},
                {"gravity_term_gain": 2.5},
-               {"cutoff_periapsis_margin_m": -1.0},
+                {"cutoff_periapsis_margin_m": -1.0},
+                {"apogee_ceiling_gain": -1.0e-4},
                {"dry_mass_kg": 0.0},
                {"rated_thrust_vacuum_n": -1.0}):
         with pytest.raises(ValueError):
@@ -161,6 +162,38 @@ def test_each_flight_gets_its_own_latch():
     r, v = _state(*_circular_inertial())
     g1.throttle_from_state(120.0, r, v, 2000.0)
     assert g1.cutoff_engaged and not g2.cutoff_engaged
+
+
+def test_apogee_ceiling_hold_trims_only_while_the_box_is_armed():
+    # perigee at the target radius (peri side satisfied), apogee 40 km over
+    # the 25 km ceiling (apo side not): the box is armed and the hold bites.
+    band = ParkingOrbitTarget(altitude_m=ALT_M, periapsis_tolerance_m=25_000.0,
+                              apoapsis_tolerance_m=25_000.0)
+    rp = R_T
+    ra = R_T + 40_000.0
+    r = np.array([rp, 0.0, 0.0])
+    v = math.sqrt(2.0 * MU_EARTH_M3_S2 * ra / (rp * (rp + ra))) \
+        * np.array([0.0, math.cos(math.radians(INC_DEG)),
+                    math.sin(math.radians(INC_DEG))])
+    lam_off, _ = _spec(target=band).new_guidance()._lambda_ecef(r, v, 8000.0)
+    lam_on, _ = _spec(target=band, cutoff_insertion_box=True,
+                      apogee_ceiling_gain=8.0e-4).new_guidance()._lambda_ecef(
+                          r, v, 8000.0)
+    trim = 8.0e-4 * (ra - (R_T + 25_000.0))
+    dt = lam_on - lam_off
+    assert float(np.linalg.norm(dt)) == pytest.approx(trim, rel=1e-6)
+    # the correction is retrograde: it removes the tangential over-speed
+    t_hat = v / float(np.linalg.norm(v))
+    assert float(dt @ t_hat) == pytest.approx(-trim, rel=1e-6)
+    # an apogee inside the ceiling (gain on) commands exactly what gain off
+    # commands: the hold is inert outside its regime.
+    v2 = math.sqrt(MU_EARTH_M3_S2 / rp) * np.array(
+        [0.0, math.cos(math.radians(INC_DEG)), math.sin(math.radians(INC_DEG))])
+    lam_a, _ = _spec(target=band, cutoff_insertion_box=True,
+                     apogee_ceiling_gain=8.0e-4).new_guidance()._lambda_ecef(
+                         r, v2, 8000.0)
+    lam_b, _ = _spec(target=band).new_guidance()._lambda_ecef(r, v2, 8000.0)
+    assert np.allclose(lam_a, lam_b)
 
 
 # ---------------------------------------------------------------------------

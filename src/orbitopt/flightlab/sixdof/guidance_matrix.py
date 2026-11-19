@@ -128,6 +128,21 @@ INCLINATION_TOLERANCE_DEG = 1.0
 E605_TRANSFER_TARGET = True
 E605_CLIMB_TIME_TO_GO_GAIN = 0.0
 E605_CUTOFF_INSERTION_BOX = True
+#: The transfer cap's planning margin: one declared insertion tolerance.
+#: A guard, not a tuning knob: it asks the plan to stop one tolerance below
+#: the band ceiling so a tracking error of at most one tolerance still lands
+#: inside the band.  Measured on this envelope it never binds (the misses
+#: under-achieve the plan, they do not overshoot it), so it changes no cell
+#: outcome -- it exists so the cap can never *command* an orbit over the
+#: ceiling while the band is what is graded.
+E605_TRANSFER_APOGEE_BIAS_M = INSERTION_TOLERANCE_M
+#: Terminal apogee hold gain [m/s per m of achieved apogee over the band
+#: ceiling]: while the cutoff box is armed, the law bleeds the perigee
+#: over-speed that would otherwise ride the apogee 50-70 km out of band
+#: (see ``upper_stage`` module docstring).  0.8 m/s per 1 km of overshoot:
+#: the ~70 km overshoot of the worst shape-limited cell asks for ~55 m/s,
+#: and the term is self-clearing as the apogee converges.
+E605_APOGEE_CEILING_GAIN = 8.0e-4
 
 BACKEND_PAIR: tuple[str, str] = BACKENDS
 
@@ -395,7 +410,9 @@ def matrix_scenario(cell: GuidanceMatrixCell, *, dt_s: float = MATRIX_DT_S,
                 ignition_t_s=scenario.ignition.ignition_t_s,
                 transfer_target=E605_TRANSFER_TARGET,
                 climb_time_to_go_gain=E605_CLIMB_TIME_TO_GO_GAIN,
-                cutoff_insertion_box=E605_CUTOFF_INSERTION_BOX))
+                cutoff_insertion_box=E605_CUTOFF_INSERTION_BOX,
+                transfer_apogee_bias_m=E605_TRANSFER_APOGEE_BIAS_M,
+                apogee_ceiling_gain=E605_APOGEE_CEILING_GAIN))
     return scenario
 
 
