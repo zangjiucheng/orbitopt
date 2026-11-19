@@ -194,7 +194,7 @@ class MatrixHandoff:
         prop = float(self.separation["upper_propellant_kg"])
         ox = prop * _MIXTURE_RATIO / (_MIXTURE_RATIO + 1.0)
         return FrozenState(
-            t_s=float(u.t_s), mass_kg=float(u.mass_wet_kg),
+            t_s=float(u.t_s), mass_kg=float(u.mass_kg),
             position_m=tuple(float(v) for v in u.position_m),
             velocity_m_s=tuple(float(v) for v in u.velocity_m_s),
             quaternion=tuple(float(v) for v in u.quaternion),
