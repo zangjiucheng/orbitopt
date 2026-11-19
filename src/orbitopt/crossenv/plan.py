@@ -116,7 +116,10 @@ class CrossEnvStage:
 class CrossEnvPlan:
     """A validated plan with every path absolute and every interpreter path
     expanded. ``source`` records the file it was loaded from (the resolved
-    form has none)."""
+    form has none). ``full_mission`` (E5-06, task #290) declares the joined
+    run the full physical mission: the orchestrator then grades a joint
+    ``full_mission`` gate over both legs' sealed evidence and the overall
+    verdict is that gate's, not the plain stage AND."""
 
     mission_id: str
     scenario: Path
@@ -124,6 +127,7 @@ class CrossEnvPlan:
     stages: tuple[CrossEnvStage, ...]
     out: Path | None = None
     source: Path | None = None
+    full_mission: bool = False
 
     def stage(self, stage_id: str) -> CrossEnvStage:
         for st in self.stages:
@@ -216,9 +220,14 @@ def load_plan(path, *, env_overrides: Mapping[str, str] | None = None) -> CrossE
         stages.append(stage)
 
     out = resolve_path(doc["out"]) if doc.get("out") else None
+    full_mission = bool(doc.get("full_mission", False))
+    if full_mission and not any(st.runner == "recovery" for st in stages):
+        raise PlanError(f"plan {str(src)!r}: full_mission is declared but no stage runs the "
+                        "recovery runner -- a declared full mission cannot be qualified "
+                        "without landing evidence")
     return CrossEnvPlan(mission_id=str(mission), scenario=scenario,
                         environments=environments, stages=tuple(stages),
-                        out=out, source=src)
+                        out=out, source=src, full_mission=full_mission)
 
 
 def _load_json_or_yaml(src: Path) -> dict:
@@ -245,6 +254,7 @@ def to_resolved_dict(plan: CrossEnvPlan) -> dict:
         "mission": {"id": plan.mission_id},
         "scenario": str(plan.scenario),
         **({"out": str(plan.out)} if plan.out else {}),
+        **({"full_mission": True} if plan.full_mission else {}),
         "environments": dict(plan.environments),
         "stages": [{"id": s.id, "runner": s.runner, "env": s.env,
                     **({"consumes": list(s.consumes)} if s.consumes else {}),

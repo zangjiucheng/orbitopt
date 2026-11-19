@@ -271,6 +271,17 @@ class TestCrossEnvironmentE505:
         assert asc["toolchain"]["gfold"] == "absent" and rec["toolchain"]["gfold"] == "0.3.2"
         assert report["overall"]["exchanges_verified"] is True
         assert report["overall"]["mission_ok"] is True, f"verdict: {report['stages']}"
+        # E5-06 (task #290): the joined conclusion is the joint full-mission
+        # gate over both legs' sealed evidence, not just the stage AND.
+        joint = report["joint_qualification"]
+        assert joint["kind"] == "orbitopt.crossenv.joint-qualification"
+        assert joint["verdict"] == "passed" and joint["problems"] == []
+        assert joint["physical_mission_verdict"] == "passed"
+        assert joint["coverage"]["complete"] is True
+        for doc in joint["physical"]["checks"]:
+            assert doc["verdict"] == "passed", doc
+            assert [s for s in doc["sources"] if s.get("exchange_digest")], doc
+        assert report["overall"]["full_mission_verdict"] == "passed"
         assert _script().cmd_crossenv_check(out) == 0
         # A green joined mission must still prove the same EOP was used by
         # both interpreters; missing or foreign snapshots cannot be blessed.

@@ -24,6 +24,10 @@
       "type": "string",
       "description": "Default output root; the CLI --out flag overrides it."
     },
+    "full_mission": {
+      "type": "boolean",
+      "description": "E5-06 (task #290): declare the cross-env run the full physical mission. The orchestrator then grades a joint full_mission gate over the union of both legs' sealed evidence (orbit insertion, parking propagation, landing, mass conservation, epoch/frame continuity -- every required phase forced applicable, E8-03), and the CLI verdict is the joint verdict, not just the AND of stage mission_ok flags."
+    },
     "environments": {
       "type": "object",
       "minProperties": 1,

@@ -8,7 +8,11 @@ stage). The joined verdict lands in ``crossenv.mission-report.json``: per
 stage the runner, environment, envelope digest and mission verdict; an
 ``environment_matrix`` of every involved environment's provenance; and an
 ``overall`` status that is green only when every stage completed, every
-exchange verified and every leg's mission verdict came back green.
+exchange verified, every leg's mission verdict came back green AND the joint
+full-mission gate (E5-06, task #290: :func:`orbitopt.crossenv.
+qualification.joint_qualification` over the union of the legs' sealed
+evidence -- one ``full_mission`` document with the five physical checks and
+their evidence sources) came back ``passed``.
 """
 
 from __future__ import annotations
@@ -107,6 +111,11 @@ def run_plan(plan_path, *, out=None, env_overrides: Mapping[str, str] | None = N
         stages.append(entry)
 
     from orbitopt.crossenv.envelope import environment_record
+    from orbitopt.crossenv.qualification import joint_qualification
+
+    joint = joint_qualification(scenario_path=plan.scenario, stages=stages,
+                                plan_full_mission=plan.full_mission)
+    qualified = joint["verdict"] == "passed"
 
     report = {
         "kind": MISSION_REPORT_KIND,
@@ -118,11 +127,15 @@ def run_plan(plan_path, *, out=None, env_overrides: Mapping[str, str] | None = N
         "stages": stages,
         "environment_matrix": matrix,
         "orchestrator": environment_record("orchestrator"),
+        "joint_qualification": joint,
         "overall": {
-            "status": "ok" if overall_ok else "failed",
+            "status": "ok" if overall_ok and qualified else "failed",
             "stages_total": len(stages),
             "exchanges_verified": all("exchange_digest" in s for s in stages),
             "mission_ok": overall_ok,
+            "full_mission_verdict": joint["verdict"],
+            "physical_mission_verdict": joint["physical_mission_verdict"],
+            "independently_verified": joint["qualification"]["independently_verified"],
         },
         "report_file": str(out_dir / MISSION_REPORT_FILE),
     }
@@ -133,6 +146,11 @@ def run_plan(plan_path, *, out=None, env_overrides: Mapping[str, str] | None = N
             print(f"crossenv: stage {entry['id']!r}: status={entry['status']} "
                   f"mission_ok={entry['mission_ok']} "
                   f"exchange={entry.get('exchange_digest', entry.get('exchange_error', '-'))}")
+        print(f"crossenv: joint full-mission gate: {joint['verdict']} "
+              f"(physical {joint['physical_mission_verdict']}, "
+              f"independently_verified={joint['qualification']['independently_verified']})")
+        for problem in joint["problems"]:
+            print(f"crossenv:   ! {problem}")
         print(f"crossenv: overall {report['overall']['status']} "
               f"-> {out_dir / MISSION_REPORT_FILE}")
     return report

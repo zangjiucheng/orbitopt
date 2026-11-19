@@ -70,6 +70,11 @@ reference plan also selects the recorded Earth-orientation snapshot in both
 interpreters; stage reports record its digest, which `crossenv-check` verifies. The
 joined report must actually pass propagation, landing, insertion, mass and
 continuity checks; configuring this plan alone is not evidence of a pass.
+Since E5-06 the joined report carries a `joint_qualification` document:
+`crossenv-check` re-grades it from the two sealed envelopes and requires all
+five physical checks passed, each naming the environment and envelope digest
+its evidence came from. The plan declares `full_mission: true`, so a missing
+propagation or landing leg grades `not_checked`, never silently green.
 
 ## Check the recorded chain without re-flying
 
