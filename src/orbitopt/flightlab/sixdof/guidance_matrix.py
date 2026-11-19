@@ -121,15 +121,13 @@ LAUNCH_HEADING_DEG = 90.0
 INSERTION_TOLERANCE_M = 25_000.0
 INCLINATION_TOLERANCE_DEG = 1.0
 #: E6-05 (task #292): every guided cell flies the *generalised* law -- the
-#: energy-capped transfer target, the climb-hold feed and the apoapsis-side
-#: cutoff (see the ``upper_stage`` module docstring).  One shared setting for
-#: the whole matrix, declared here once; no cell carries its own gains.  The
-#: climb-hold gain is unity -- the pure time-to-go climb profile (arrive at
-#: the target radius exactly as the tank runs dry); the cutoff's apoapsis
-#: margin sits inside the declared 25 km insertion tolerance so a burn that
-#: cuts on both criteria lands inside the box.
-E605_CLIMB_TIME_TO_GO_GAIN = 1.0
-E605_CUTOFF_APOAPSIS_MARGIN_M = 10_000.0
+#: energy-capped transfer target and the band-aware (box) cutoff; the
+#: climb-hold feed is measured ineffective on this envelope and stays at
+#: zero (see the ``upper_stage`` module docstring).  One shared setting for
+#: the whole matrix, declared here once; no cell carries its own gains.
+E605_TRANSFER_TARGET = True
+E605_CLIMB_TIME_TO_GO_GAIN = 0.0
+E605_CUTOFF_INSERTION_BOX = True
 
 BACKEND_PAIR: tuple[str, str] = BACKENDS
 
@@ -395,9 +393,9 @@ def matrix_scenario(cell: GuidanceMatrixCell, *, dt_s: float = MATRIX_DT_S,
             upper_guidance=UpperStageGuidanceSpec.from_vehicle(
                 scenario.pair.upper, target=matrix_target(cell),
                 ignition_t_s=scenario.ignition.ignition_t_s,
-                transfer_target=True,
+                transfer_target=E605_TRANSFER_TARGET,
                 climb_time_to_go_gain=E605_CLIMB_TIME_TO_GO_GAIN,
-                cutoff_apoapsis_margin_m=E605_CUTOFF_APOAPSIS_MARGIN_M))
+                cutoff_insertion_box=E605_CUTOFF_INSERTION_BOX))
     return scenario
 
 

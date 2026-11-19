@@ -49,11 +49,11 @@ class TestSpecExtension:
             target=ParkingOrbitTarget(altitude_m=220e3), ignition_t_s=180.0)
         assert spec.transfer_target is False
         assert spec.climb_time_to_go_gain == 0.0
-        assert spec.cutoff_apoapsis_margin_m == 0.0
+        assert spec.cutoff_insertion_box is False
 
     @pytest.mark.parametrize("kwargs", [
         {"climb_time_to_go_gain": -0.5},
-        {"cutoff_apoapsis_margin_m": -1.0},
+        {"cutoff_periapsis_margin_m": -1.0},
     ])
     def test_new_fields_validate(self, kwargs):
         sc = matrix_scenario(_cell("a220-i28.5-V1-A1"))
@@ -63,8 +63,8 @@ class TestSpecExtension:
     def test_matrix_flies_the_generalised_law(self):
         ug = matrix_scenario(_cell("a220-i28.5-V1-A1")).upper_guidance
         assert ug.transfer_target is True
-        assert ug.climb_time_to_go_gain > 0.0
-        assert ug.cutoff_apoapsis_margin_m > 0.0
+        assert ug.climb_time_to_go_gain == 0.0
+        assert ug.cutoff_insertion_box is True
 
 
 class TestGeneratedAirframe:

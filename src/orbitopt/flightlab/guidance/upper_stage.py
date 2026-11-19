@@ -57,14 +57,26 @@ changing it there (all default off):
   tank runs dry).  With ``gravity_term_gain`` off, ``Lambda``'s
   vertical part is ``-v_r``, which commands ever-flatter flight as soon as
   the climb starts and collapses the flight-path angle before the target
-  altitude is reached -- the mechanism behind the high-target misses.  The
-  feed holds the climb open until ``r`` converges to ``r_target``.
-* ``cutoff_apoapsis_margin_m``: the cutoff also waits for the osculating
-  *apoapsis* to come down inside ``r_target + margin``.  The periapsis
-  criterion alone ends the burn while the ellipse is still too big, which
-  is why a low-target cell can coast out 50 km high on apoapsis with
-  hundreds of kilograms of propellant still aboard (the energy/apoapsis
-  termination ADR flightlab-0011 asks for).
+  altitude is reached.  Measured on the E6-03 matrix the feed *holds the
+  climb open past the apogee the cutoff can accept*: with the gain at 1.0
+  every cell it touched ended in depletion with a 7000 km apogee, because
+  the apoapsis-side termination then holds a throttle whose target radius
+  recedes faster than the tank empties.  The knob stays available for a
+  target whose altitude the vehicle cannot reach at all; the matrix flies
+  it at zero.
+* ``cutoff_insertion_box``: the cutoff fires at the first instant the
+  osculating orbit lies inside the *declared insertion band* -- ``r_peri >=
+  r_target - periapsis_tolerance_m`` and ``r_apo <= r_target +
+  apoapsis_tolerance_m`` together -- instead of waiting for the strict
+  circular periapsis.  The periapsis-only criterion ends the burn while the
+  ellipse is still too big, which is why a low-target cell can coast out 50
+  km high on apoapsis with hundreds of kilograms of propellant still
+  aboard: the apogee leaves the band *before* the periapsis criterion
+  fires, so the burn has to be judged against the whole declared box and
+  not against its lower edge alone (the energy/apoapsis termination of ADR
+  flightlab-0011).  Terminating inside the declared band is not a tolerance
+  relaxation: the acceptance band is unchanged, the law simply stops where
+  the mission is already satisfied.
 
 The command limiter: ``Lambda``'s *direction* is undefined as its
 magnitude vanishes (and its tangential part flips 180 deg when ``v_t``
@@ -292,11 +304,13 @@ class UpperStageGuidanceSpec:
     #: (1.0 = arrive at the target radius exactly as the tank runs dry).
     #: Default 0 = off.
     climb_time_to_go_gain: float = 0.0
-    #: E6-05: the cutoff also waits for the osculating apoapsis to come down
-    #: inside ``r_target + cutoff_apoapsis_margin_m`` (the energy/apoapsis
-    #: termination of ADR flightlab-0011).  Default 0 = periapsis-only, the
-    #: F-07 behaviour.
-    cutoff_apoapsis_margin_m: float = 0.0
+    #: E6-05: the cutoff fires on the declared insertion band (module
+    #: docstring): the osculating periapsis at or above ``r_target -
+    #: periapsis_tolerance_m`` AND the osculating apoapsis at or below
+    #: ``r_target + apoapsis_tolerance_m`` together, instead of the strict
+    #: ``r_peri >= r_target - cutoff_periapsis_margin_m`` alone.  Default
+    #: off: the F-07 mission cuts on the strict criterion already.
+    cutoff_insertion_box: bool = False
 
     def __post_init__(self) -> None:
         if self.dry_mass_kg <= 0.0:
@@ -320,9 +334,6 @@ class UpperStageGuidanceSpec:
         if self.climb_time_to_go_gain < 0.0:
             raise ValueError(f"climb_time_to_go_gain must be >= 0, got "
                              f"{self.climb_time_to_go_gain}")
-        if self.cutoff_apoapsis_margin_m < 0.0:
-            raise ValueError(f"cutoff_apoapsis_margin_m must be >= 0, got "
-                             f"{self.cutoff_apoapsis_margin_m}")
 
     @classmethod
     def from_vehicle(cls, vehicle, *, target: ParkingOrbitTarget,
@@ -531,12 +542,16 @@ class UpperStageGuidance:
         r = np.asarray(position_m, dtype=float)
         v_inertial = np.asarray(velocity_m_s, dtype=float) + np.cross(_OMEGA, r)
         limit = self.spec.target.radius_m - float(self.spec.cutoff_periapsis_margin_m)
+        if self.spec.cutoff_insertion_box:
+            target = self.spec.target
+            if (self._periapsis_radius(r, v_inertial)
+                        >= target.radius_m - target.periapsis_tolerance_m
+                    and self._apoapsis_radius(r, v_inertial)
+                        <= target.radius_m + target.apoapsis_tolerance_m):
+                self.cutoff_t_s = float(t_s)
+                return 0.0
+            return 1.0
         if self._periapsis_radius(r, v_inertial) >= limit:
-            if self.spec.cutoff_apoapsis_margin_m > 0.0:
-                apo_limit = (self.spec.target.radius_m
-                             + float(self.spec.cutoff_apoapsis_margin_m))
-                if self._apoapsis_radius(r, v_inertial) > apo_limit:
-                    return 1.0
             self.cutoff_t_s = float(t_s)
             return 0.0
         return 1.0
