@@ -207,7 +207,8 @@ _band("landing.touchdown_vertical_speed", "m/s", 15.0,
       "cutoff-height error dh enters as sqrt(v^2+2g dh)); the *design limit* "
       "3 m/s is graded on the FL-301 re-flight alone (design_input)")
 _band("landing.touchdown_lateral_speed", "m/s", 3.0,
-      "measured ~0.25 m/s")
+      "measured ~0.25 m/s: the crossrange channels barely diverge between the two "
+      "re-flights; band leaves 10x margin on the observed disagreement")
 _band("landing.propellant", "kg", 750.0,
       "propellant-burned disagreement at touchdown between the re-flights "
       "(same Isp law, different replay/integration); measured ~1.6e2 kg")
