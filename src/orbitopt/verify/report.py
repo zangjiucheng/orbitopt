@@ -645,10 +645,15 @@ def state_residual(name: str, reference: str, state=None, reference_state=None,
 # --------------------------------------------------------------------------
 
 def _version(dist: str):
-    try:
-        return _metadata.version(dist)
-    except _metadata.PackageNotFoundError:
-        return None
+    """The version of ``dist`` as recorded by :mod:`orbitopt.flightlab.toolchain`
+    -- a conda build that ships no dist-info (tudatpy) still reports its real
+    version from the environment's ``conda-meta``, and an importable-but-
+    unrecorded package says so plainly. ``None`` therefore means genuinely not
+    installed, which is what a null in this block has always claimed."""
+    from orbitopt.flightlab.toolchain import ABSENT, installed_version
+
+    version = installed_version(dist)
+    return None if version == ABSENT else version
 
 
 def provenance() -> dict:
