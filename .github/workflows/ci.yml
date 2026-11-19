@@ -180,6 +180,7 @@ jobs:
           tests/test_flightlab_recovery_handoff_check.py
           tests/test_flightlab_simulate_recovery.py
           tests/test_flightlab_recovery_envelope.py
+          tests/test_flightlab_toolchain.py
           tests/test_e204_reference.py
           tests/test_e505_reference.py
 

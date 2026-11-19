@@ -22,6 +22,36 @@ tool distribution's installed version or `"absent"`, OpenTsiolkovsky's pinned
 version and the SHA-256 of the binary actually found on disk).
 `tests/test_flightlab_contract.py` asserts the record is complete.
 
+### How an installed version is looked up (task #295)
+
+The lookup (`orbitopt.flightlab.toolchain.installed_version`, also used by the
+verification-report provenance in `orbitopt.verify.report`) never imports the
+tool. It asks `importlib.metadata` first; a package that answers is reported at
+its recorded version. A conda build can ship no `dist-info` — `tudatpy` from the
+`tudat-team` channel does not — and then `importlib.metadata` raises
+`PackageNotFoundError` for a package the run demonstrably used: CI run
+44140956089 sealed `tudatpy: absent` into the cross-environment envelope of the
+very environment that flew the ascent. So the lookup falls back to the
+environment's own `conda-meta/<name>-<version>-<build>.json`, and a tool that is
+importable but recorded by neither source is reported as
+`installed (version unknown)` — never `absent`, which would misdescribe the
+environment.
+
+The fallback is keyed on nothing but the distribution name, because a missing
+`dist-info` is a property of how a channel builds packages, not of one package.
+The per-tool conclusion (checked in CI run 44401859923 and locally):
+
+| Tool | Install path | `dist-info`? | Consequence |
+|---|---|---|---|
+| `tudatpy` | conda, `tudat-team` | **no** | conda-meta gives the version the lockfile installed (`1.0.0` in `cpu.conda-lock.yml`); the CI envelope and the manifest carry it |
+| `gfold` | pip wheel (`envs/flightlab-landing.txt`) | yes | first source answers; `tests/test_flightlab_toolchain.py` pins that it reports a version, not `absent` |
+| `cvxpy` | pip (`envs/flightlab-landing.txt`) | yes | as `gfold` (skipped where not installed) |
+| `jsbsim` | pip wheel, hash-locked (`envs/sixdof-requirements.txt`) | yes | as `gfold` |
+| `pygmo` / `pykep` | conda-forge | yes (conda-forge builds install through pip) | not in `TOOL_DISTRIBUTIONS`; recorded by the E2-04/E5-05 scripts, whose committed `PROVENANCE.json` carries `pygmo: 2.20.0`, so no false `absent` there |
+
+`pyyaml` is imported as `yaml`, so the importable-but-unrecorded fallback maps
+distribution names to import names before calling `find_spec`.
+
 ### Why the regression never downloads IERS data
 
 The frame bridge rotates OpenTsiolkovsky's Earth-fixed states into GCRS

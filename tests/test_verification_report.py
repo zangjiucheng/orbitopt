@@ -582,3 +582,36 @@ def test_cli_warns_on_not_checked_report(tmp_path, monkeypatch, capsys):
     _run_cli_with_fake_builder(monkeypatch, tmp_path, rep)
     out = capsys.readouterr().out
     assert "WARNING: wrote verification report" in out and "NOT CHECKED" in out
+
+
+# ------------------------------------------------------------- provenance (task #295)
+
+def test_provenance_nulls_only_a_tool_that_is_not_installed():
+    rep = vr.provenance()
+    assert rep["python"] and rep["numpy"] == np.__version__
+    for tool in ("tudatpy", "pykep"):
+        import importlib.util
+
+        if importlib.util.find_spec(tool) is None:
+            assert rep[tool] is None, f"{tool} is not importable but provenance says {rep[tool]!r}"
+        else:
+            assert rep[tool], f"{tool} is importable, so its provenance is never null"
+
+
+def test_provenance_reads_a_conda_record_when_the_package_has_no_dist_info(tmp_path, monkeypatch):
+    """The report asked ``importlib.metadata`` and nothing else, so a conda
+    build without dist-info (tudatpy) read as null -- the same false absence
+    the FL-601 toolchain record once carried. It shares that lookup now."""
+    import importlib.metadata
+    import json as _json
+
+    from orbitopt.flightlab import toolchain as tc
+
+    meta = tmp_path / "conda-meta"
+    meta.mkdir()
+    (meta / "tudatpy-1.1.0-py310hfeedface_0.json").write_text(_json.dumps({}))
+    monkeypatch.setattr(tc.sys, "prefix", str(tmp_path))
+    monkeypatch.setattr(importlib.metadata, "version",
+                        lambda _name: (_ for _ in ()).throw(importlib.metadata.PackageNotFoundError))
+    assert vr._version("tudatpy") == "1.1.0"
+    assert vr._version("no-such-package-at-all-xyz") is None
