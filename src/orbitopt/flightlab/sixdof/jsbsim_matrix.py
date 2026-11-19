@@ -532,6 +532,13 @@ def _cell_leg(cell: GuidanceMatrixCell, dt_s: float, sample_every: int,
     }
 
 
+def _pool_leg(dt_s: float, sample_every: int, cell: GuidanceMatrixCell,
+              native: Mapping[str, Any], handoff: MatrixHandoff):
+    """Process-pool adapter around :func:`_cell_leg` (a closure over the
+    dt/sample/record arguments is not picklable on forkless platforms)."""
+    return _cell_leg(cell, dt_s, sample_every, native, handoff)
+
+
 def run_jsbsim_benchmark(cells: tuple[GuidanceMatrixCell, ...] = GUIDANCE_MATRIX,
                          *, dt_s: float = 0.01, sample_every: int = 20,
                          jobs: int = 1, native_json: Path | str | None = None,
@@ -557,10 +564,11 @@ def run_jsbsim_benchmark(cells: tuple[GuidanceMatrixCell, ...] = GUIDANCE_MATRIX
             keys.setdefault(handoff_cache_key(c), c)
         with ProcessPoolExecutor(max_workers=int(jobs)) as pool:
             hands = dict(zip(keys, pool.map(matrix_handoff, keys.values())))
+            from functools import partial
+            legs = partial(_pool_leg, dt_s, sample_every)
             flown = list(pool.map(
-                lambda c: _cell_leg(c, dt_s, sample_every, by_id[c.cell_id],
-                                    hands[handoff_cache_key(c)]),
-                list(cells)))
+                legs, list(cells), [by_id[c.cell_id] for c in cells],
+                [hands[handoff_cache_key(c)] for c in cells]))
     else:
         hands: dict[tuple, MatrixHandoff] = {}
         for c in cells:
