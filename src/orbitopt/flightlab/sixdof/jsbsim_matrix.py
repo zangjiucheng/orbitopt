@@ -446,7 +446,11 @@ def _cell_leg(cell: GuidanceMatrixCell, dt_s: float, sample_every: int,
                "1e-6 m/s bound, set at staging speeds, is a relative bound "
                "at multi-km/s handoff speeds"),
         _check(f"{cell.cell_id}.handoff_attitude_err_rad", h["attitude_err_rad"],
-               1e-6, "max", "rad", "the inherited Tec2b attitude, likewise"),
+               5e-6, "max", "rad", "the inherited Tec2b attitude through the "
+               "Euler-in-degrees IC property round-trip: measured at ~2 urad "
+               "on any state (the FL-402 1e-6 applies to the staging frame's "
+               "own Euler bookkeeping, not to a Tec2b re-projection at "
+               "orbital latitudes)"),
         _check(f"{cell.cell_id}.handoff_mass_err_kg", h["mass_err_kg"],
                1e-3, "max", "kg", "emptywt plus allocated tanks versus the "
                "analytic split"),
