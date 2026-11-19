@@ -62,8 +62,10 @@ from __future__ import annotations
 
 import math
 import time
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -659,12 +661,19 @@ def run_matrix_cell(cell: GuidanceMatrixCell, *, dt_s: float = MATRIX_DT_S,
 
 def run_guidance_matrix(cells: tuple[GuidanceMatrixCell, ...] = GUIDANCE_MATRIX,
                         *, dt_s: float = MATRIX_DT_S,
-                        sample_every: int = MATRIX_SAMPLE_EVERY) -> dict[str, Any]:
+                        sample_every: int = MATRIX_SAMPLE_EVERY,
+                        workers: int = 1) -> dict[str, Any]:
     """Fly the whole matrix and return the study payload (the benchmark writes
-    it; the regression test reads it)."""
+    it; the regression test reads it).  ``workers > 1`` flies the cells in a
+    process pool -- cells are independent, so the payload is the same and
+    arrives sooner; the order is the declared cell order either way."""
     t0 = time.time()
-    flown = [run_matrix_cell(cell, dt_s=dt_s, sample_every=sample_every)
-             for cell in cells]
+    fly = partial(run_matrix_cell, dt_s=dt_s, sample_every=sample_every)
+    if workers > 1:
+        with ProcessPoolExecutor(max_workers=int(workers)) as pool:
+            flown = list(pool.map(fly, cells))
+    else:
+        flown = [fly(cell) for cell in cells]
     return {
         "schema": "orbitopt-e603-1",
         "task": "#275 (E6-03, epic #265)",
