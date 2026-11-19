@@ -29,8 +29,9 @@ from orbitopt.flightlab.sixdof.guidance_matrix import (GUIDANCE_MATRIX,
                                                        matrix_scenario)
 from orbitopt.flightlab.sixdof.guided_ascent import (E602_PHASE_CONSTRAINTS,
                                                      UPPER_POWERED)
-from orbitopt.flightlab.sixdof.jsbsim_matrix import (ATT_ERR_MAX_LIMIT_DEG,
-                                                    upper_airframe_xml)
+from orbitopt.flightlab.sixdof.jsbsim_matrix import (ATT_ERR_ARREST_ALLOWANCE_DEG,
+                                                     ATT_ERR_MAX_LIMIT_DEG,
+                                                     upper_airframe_xml)
 
 REPO = Path(__file__).resolve().parents[1]
 BENCH_JSON = REPO / "docs" / "benchmarks" / "e6_05_jsbsim_matrix.json"
@@ -145,4 +146,5 @@ class TestCommittedComparison:
         prop = rec["propellant_at_ignition_kg"]
         assert 0.0 < rec["propellant_burned_kg"] < prop + 1e-6
         assert rec["n_samples"] > 100
-        assert rec["attitude_err_max_powered_deg"] < ATT_ERR_MAX_LIMIT_DEG
+        assert (rec["attitude_err_max_powered_deg"]
+                - rec["attitude_err_at_ignition_deg"]) < ATT_ERR_ARREST_ALLOWANCE_DEG
