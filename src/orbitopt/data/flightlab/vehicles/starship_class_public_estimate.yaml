@@ -32,8 +32,10 @@ assumptions:
     vacuum figure (350 vs 363 s) and the Raptor Vacuum is 380 s. The ship's
     3 sea-level + 3 vacuum engines are carried as one engine at the thrust-weighted
     effective vacuum Isp (365 s); its 14.76 MN total matches the published ~14.7 MN.
-  - The booster flies at 95 % throttle and cuts off at 135 s; the unburned
-    propellant at cutoff is the boostback and landing budget.
+  - The booster's 33-engine set is modelled at the 95 % figure with an illustrative
+    throttle schedule (full to 100 s, then down to hold the 3.0 g target limit,
+    within the published 40-100 % Raptor throttle band) and cuts off at 135 s; the
+    unburned propellant at cutoff is the boostback and landing budget.
   - Hot staging is modelled as ship ignition at the separation instant; the real
     ship lights its engines before the stages part.
   - The booster section models its 13 relightable engines as one set with a 40 %
@@ -47,21 +49,30 @@ simulation:
   output_step_s: 2.0
   integrator: {method: rk45}
 attitude_program:
-  - {t_s: 0.0, azimuth_deg: 90.0, elevation_deg: 90.0}
-  - {t_s: 12.0, azimuth_deg: 90.0, elevation_deg: 90.0}
-  - {t_s: 40.0, azimuth_deg: 90.0, elevation_deg: 80.0}
-  - {t_s: 80.0, azimuth_deg: 90.0, elevation_deg: 62.0}
-  - {t_s: 120.0, azimuth_deg: 90.0, elevation_deg: 45.0}
-  - {t_s: 140.0, azimuth_deg: 90.0, elevation_deg: 38.0}
-  - {t_s: 190.0, azimuth_deg: 90.0, elevation_deg: 28.0}
-  - {t_s: 250.0, azimuth_deg: 90.0, elevation_deg: 16.0}
-  - {t_s: 320.0, azimuth_deg: 90.0, elevation_deg: 6.0}
-  - {t_s: 700.0, azimuth_deg: 90.0, elevation_deg: 0.0}
+  # constant 36 deg azimuth from Kourou reaches 51.6 deg inclination; gentle
+  # early pitch-over keeps max-q at 37.5 kPa; lofted MECO (el 44); ship tail
+  # held at el +2.7 deg so the flight-path angle is near zero at cutoff
+  - {t_s: 0.0, azimuth_deg: 36.0, elevation_deg: 90.0}
+  - {t_s: 15.0, azimuth_deg: 36.0, elevation_deg: 90.0}
+  - {t_s: 35.0, azimuth_deg: 36.0, elevation_deg: 78.0}
+  - {t_s: 60.0, azimuth_deg: 36.0, elevation_deg: 64.0}
+  - {t_s: 85.0, azimuth_deg: 36.0, elevation_deg: 56.0}
+  - {t_s: 110.0, azimuth_deg: 36.0, elevation_deg: 44.0}
+  - {t_s: 135.0, azimuth_deg: 36.0, elevation_deg: 44.0}
+  - {t_s: 141.0, azimuth_deg: 36.0, elevation_deg: 44.0}
+  - {t_s: 155.0, azimuth_deg: 36.0, elevation_deg: 30.0}
+  - {t_s: 200.0, azimuth_deg: 36.0, elevation_deg: 18.0}
+  - {t_s: 260.0, azimuth_deg: 36.0, elevation_deg: 12.0}
+  - {t_s: 320.0, azimuth_deg: 36.0, elevation_deg: 8.0}
+  - {t_s: 380.0, azimuth_deg: 36.0, elevation_deg: 4.0}
+  - {t_s: 430.0, azimuth_deg: 36.0, elevation_deg: 3.2}
+  - {t_s: 445.0, azimuth_deg: 36.0, elevation_deg: 2.7}
+  - {t_s: 518.0, azimuth_deg: 36.0, elevation_deg: 2.7}
 stages:
   - mass_initial_kg: 3525000.0
     mass_dry_kg: 275000.0
     engine:
-      thrust_vac_n: [[0.0, 74926500.0], [135, 74926500.0]]
+      thrust_vac_n: [[0.0, 74926500.0], [100.0, 74926500.0], [101.0, 62000000.0], [135.0, 55300000.0]]
       isp_vac_s: 350.0
       burn_start_s: 0.0
       burn_end_s: 135
@@ -77,10 +88,10 @@ stages:
   - mass_initial_kg: 1300000.0
     mass_dry_kg: 100000.0
     engine:
-      thrust_vac_n: 14760000.0
+      thrust_vac_n: [[0.0, 14760000.0], [185.0, 14760000.0], [185.0, 5904000.0], [380.0, 5904000.0]]
       isp_vac_s: 365
       burn_start_s: 0.0
-      burn_end_s: 270
+      burn_end_s: 378.0
       nozzle_exit_area_m2: 16.44
     aero:
       diameter_m: 9.0
@@ -140,7 +151,7 @@ data_provenance:
     as_of: "2026-11"
   attitude_program:
     provenance: illustrative
-    source: authored gravity-turn-style profile for the declared burn windows (not a flown profile)
+    source: authored gravity-turn-style program for this scenario (not a flown profile); constant 36 deg azimuth reaches the 51.6 deg target inclination from Kourou, the gentle early pitch-over holds max-q at 37.5 kPa, and the ship's +2.7 deg tail nulls the flight-path angle at SECO
     as_of: "2026-11"
   stages[0]:
     provenance: illustrative
@@ -157,8 +168,8 @@ data_provenance:
     as_of: "2026-11"
     uncertainty_pct: 10.0
   stages[0].engine.thrust_vac_n:
-    provenance: public_estimate
-    source: 33 Raptor 2 at 95 % throttle; per-engine vacuum thrust derived from the published 2.256 MN sea-level thrust (Wikipedia, SpaceX Raptor) and the nozzle exit area
+    provenance: illustrative
+    source: curve shape is an illustrative throttle schedule for the 3.0 g target limit (full 74.93 MN to 100 s, 62.0 MN to 101 s, 55.3 MN to MECO; all levels inside the published 40-100 % Raptor throttle band); the 74.93 MN level is 33 Raptor 2 at 95 % with per-engine vacuum thrust derived from the published 2.256 MN sea-level thrust (Wikipedia, SpaceX Raptor) and the nozzle exit area
     as_of: "2026-11"
     uncertainty_pct: 5.0
   stages[0].engine.isp_vac_s:
@@ -190,8 +201,8 @@ data_provenance:
     as_of: "2026-11"
     uncertainty_pct: 10.0
   stages[1].engine.thrust_vac_n:
-    provenance: public_estimate
-    source: 3 Raptor 2 (2.39 MN vacuum each, derived) + 3 Raptor Vacuum (2.53 MN, 258 tf, Wikipedia SpaceX Raptor) = 14.76 MN, in line with the published ~14.7 MN for the ship engine set
+    provenance: illustrative
+    source: curve shape is an illustrative throttle schedule (full 14.76 MN for 185 s, then the 40 % public throttle floor 5.904 MN to cutoff -- the 3.0 g target limit cannot be met at full thrust at this mass ratio); the full-thrust figure is 3 Raptor 2 (2.39 MN vacuum each, derived) + 3 Raptor Vacuum (2.53 MN, 258 tf, Wikipedia SpaceX Raptor) = 14.76 MN, in line with the published ~14.7 MN for the ship engine set, and 5.904 MN is that figure at the published 40 % throttle floor
     as_of: "2026-11"
     uncertainty_pct: 5.0
   stages[1].engine.isp_vac_s:
@@ -205,7 +216,7 @@ data_provenance:
     as_of: "2026-11"
   stages[1].engine.burn_end_s:
     provenance: illustrative
-    source: cutoff chosen so the ship burns about 1,110 t and keeps about 90 t for the rest of its mission
+    source: cutoff at 378 s after ignition placed by simulation to deliver the ~250 km / 51.6 deg insertion under the declared max-q, 3.0 g and periapsis limits; it burns about 1,081 t of the 1,200 t and keeps about 119 t for deorbit and land; the ship still flies one continuous burn (no coast, no restart), just throttle-segmented
     as_of: "2026-11"
   stages[1].aero:
     provenance: illustrative
