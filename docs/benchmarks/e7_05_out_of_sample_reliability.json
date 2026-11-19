@@ -1,0 +1,5936 @@
+{
+ "kind": "e7-05-out-of-sample-reliability",
+ "provenance": {
+  "diagnosis_input": "docs/benchmarks/e7_04_failure_driven.json [e7_04_joint_base paired_rows]",
+  "pairing_input": "docs/benchmarks/e3_03_robust_montecarlo.json [runs.fl305_baseline.paired_rows, same [seed, idx] grid]",
+  "training_calibration": "docs/benchmarks/e7_02_probability_calibration.json",
+  "bootstrap_seeds": {
+   "phi": 20261118,
+   "rate": 20261118,
+   "trials": 4000
+  }
+ },
+ "fairness": "hold-out seeds disjoint from training seeds 1-4 by construction; every hold-out row is a fresh flight on current HEAD under joint-mode semantics with the standard declared actuator; chance specs rebuilt from the bands flown",
+ "diagnosis": {
+  "n_joint_rows": 168,
+  "n_rejections": 99,
+  "inconsistent_rows": 0,
+  "classified": 99,
+  "binding": {
+   "divert": 51,
+   "fuel": 48
+  },
+  "severity": {
+   "near": 18,
+   "mid": 30,
+   "deep": 51
+  },
+  "binding_by_severity": {
+   "divert/deep": 20,
+   "divert/mid": 19,
+   "divert/near": 12,
+   "fuel/deep": 31,
+   "fuel/mid": 11,
+   "fuel/near": 6
+  },
+  "probability_binding": {
+   "bound_on_prob_any": 0,
+   "bound_on_prob_alone": 0,
+   "share_of_rejections": 0.0
+  },
+  "worst_violation_quantiles": {
+   "q0.1": 0.06675830433019542,
+   "q0.25": 0.22148604030569483,
+   "q0.5": 0.5278756264819728,
+   "q0.75": 0.7804668104573169,
+   "q0.9": 1.064273699708922
+  },
+  "corridor_miss_quantiles_m": {
+   "q0.5": 1073.467243875007,
+   "q0.9": 1810.9670865753692,
+   "q0.99": 3667.8223820909807,
+   "q1": 3667.8223820909807
+  },
+  "thresholds": {
+   "borderline": 0.15,
+   "deep": 0.5
+  },
+  "paired_baseline": {
+   "n_paired": 99,
+   "rejected_but_landed": 20,
+   "rejected_and_failed": 79,
+   "landed_anyway_share": 0.20202020202020202,
+   "by_binding": {
+    "divert/failed": 44,
+    "divert/landed": 7,
+    "fuel/failed": 35,
+    "fuel/landed": 13
+   },
+   "note": "a rejection whose paired baseline world LANDED is a measured constraint cost (the chance model refused a world that would have flown); one whose baseline also failed is a rejection that agreed with an independent grading"
+  }
+ },
+ "diagnosis_verdict": {
+  "requirement_too_strict_share": 0.8181818181818182,
+  "probability_model_share": 0.0,
+  "planner_search_share": 0.18181818181818182,
+  "constraint_cost_share": 0.20202020202020202,
+  "reading": "the 59% rejections are physical, not probabilistic: 51/99 bind on the corridor-divert budget and 48 on the fuel quantile; NOT ONE rejection is bound by the landing-probability channel (the p_land term never decides alone, so a mis-calibrated p_land is not what makes the arm infeasible). The dispersion-band meeting the spec (deep violations) is the majority (51/99), planner-search-rescuable near-threshold rejections the minority (18); and 20/99 rejections are worlds the FL-305 grading DID land -- the measured constraint cost of the joint spec on the training grid."
+ },
+ "cluster_reanalysis": {
+  "method_note": "E7-03's headline pooled the three fit arms into ONE 409-row 2x2 (Fisher p = 0.0104) on rows that share four seeds and the same draw grid. Here each seed is one stratum with the fit arms' rows summed inside it (the seed is the sampling unit), tested with Mantel-Haenszel, exact per-seed Fisher combined, and a whole-cluster bootstrap CI; the per-arm MH p-values then form the Holm family.",
+  "headline_pooled_reference": {
+   "phi": -0.12663539398420431,
+   "p": 0.010390451127377343,
+   "n": 409,
+   "cells": [
+    11,
+    46,
+    129,
+    223
+   ],
+   "source": "e7_03 report pooled_fit_set"
+  },
+  "per_seed_stratified": {
+   "method": "Mantel-Haenszel (continuity corrected) + Fisher-combined exact per-cluster p + whole-cluster bootstrap phi; clusters are the resampling unit",
+   "n_clusters": 4,
+   "clusters_skipped": {},
+   "per_cluster": [
+    {
+     "cluster": 1,
+     "cells": [
+      4,
+      10,
+      28,
+      59
+     ],
+     "n": 101,
+     "phi": -0.026830545208027645,
+     "fisher_exact_p": 0.9999999999999383
+    },
+    {
+     "cluster": 2,
+     "cells": [
+      2,
+      10,
+      35,
+      55
+     ],
+     "n": 102,
+     "phi": -0.148916158209988,
+     "fisher_exact_p": 0.20263871712527784
+    },
+    {
+     "cluster": 3,
+     "cells": [
+      4,
+      14,
+      28,
+      49
+     ],
+     "n": 95,
+     "phi": -0.11725441178024142,
+     "fisher_exact_p": 0.4062188521562781
+    },
+    {
+     "cluster": 4,
+     "cells": [
+      1,
+      12,
+      38,
+      60
+     ],
+     "n": 111,
+     "phi": -0.20936877893689726,
+     "fisher_exact_p": 0.03098578215357086
+    }
+   ],
+   "mantel_haenszel": {
+    "statistic": 5.68004349843514,
+    "p_value": 0.017158942376157407,
+    "n_tables": 4,
+    "note": "continuity correction -0.5 on the pooled numerator; df = 1, tail exact via erfc"
+   },
+   "fisher_combined": {
+    "statistic": 11.942841287841347,
+    "p_value": 0.15377244299474455,
+    "k": 4
+   },
+   "phi_cluster_bootstrap_ci95": [
+    -0.18539845833248042,
+    -0.05774190136405677
+   ],
+   "pooled_naive_phi": {
+    "cells": [
+     11,
+     46,
+     129,
+     223
+    ],
+    "n": 409,
+    "phi": -0.12663539398420431,
+    "fisher_exact_p": 0.010390451127377343,
+    "warning": "pools cluster-correlated rows as iid -- optimistic"
+   },
+   "note": "pooled_naive_phi is the E7-03-style pooled reading kept for the comparison only; its significance is the MH / combined-exact numbers, not the pooled 2x2 Fisher"
+  },
+  "per_arm": {
+   "e3_01_declared_chain": {
+    "per_seed": [
+     [
+      1,
+      -0.1044465935734187,
+      1.0
+     ],
+     [
+      2,
+      -0.16772557387550693,
+      0.6253412883001317
+     ],
+     [
+      3,
+      -0.1914455827031196,
+      0.6328154604016786
+     ],
+     [
+      4,
+      -0.2658047665355975,
+      0.2741363211951452
+     ]
+    ],
+    "mantel_haenszel": {
+     "statistic": 3.1928355353014064,
+     "p_value": 0.07396161738497109,
+     "n_tables": 4,
+     "note": "continuity correction -0.5 on the pooled numerator; df = 1, tail exact via erfc"
+    },
+    "fisher_combined": {
+     "statistic": 4.4423278436052485,
+     "p_value": 0.8151749138666048,
+     "k": 4
+    },
+    "phi_cluster_bootstrap_ci95": [
+     -0.2378794005132047,
+     -0.12115650656307653
+    ]
+   },
+   "fl305_baseline": {
+    "per_seed": [
+     [
+      1,
+      -0.050964719143762556,
+      0.9999999999999996
+     ],
+     [
+      2,
+      -0.13093568454461216,
+      0.6197214076246343
+     ],
+     [
+      3,
+      -0.1390758974918296,
+      0.6328154604016776
+     ],
+     [
+      4,
+      -0.2658047665355975,
+      0.2741363211951452
+     ]
+    ],
+    "mantel_haenszel": {
+     "statistic": 1.969442454599053,
+     "p_value": 0.16050705469820487,
+     "n_tables": 4,
+     "note": "continuity correction -0.5 on the pooled numerator; df = 1, tail exact via erfc"
+    },
+    "fisher_combined": {
+     "statistic": 4.460382898536836,
+     "p_value": 0.8133834661782401,
+     "k": 4
+    },
+    "phi_cluster_bootstrap_ci95": [
+     -0.23148622096666382,
+     -0.0722974259465377
+    ]
+   },
+   "r01_landing_aware": {
+    "per_seed": [
+     [
+      1,
+      0.06390096504226937,
+      0.9999999999999971
+     ],
+     [
+      2,
+      -0.18698939800169145,
+      0.5448179271708701
+     ],
+     [
+      3,
+      -0.03984095364447979,
+      1.0
+     ],
+     [
+      4,
+      -0.1084652289093281,
+      0.6477680688207119
+     ]
+    ],
+    "mantel_haenszel": {
+     "statistic": 0.20857351448235187,
+     "p_value": 0.6478877734191499,
+     "n_tables": 4,
+     "note": "continuity correction -0.5 on the pooled numerator; df = 1, tail exact via erfc"
+    },
+    "fisher_combined": {
+     "statistic": 2.0830523678113306,
+     "p_value": 0.9783593067732512,
+     "k": 4
+    },
+    "phi_cluster_bootstrap_ci95": [
+     -0.13613773266174387,
+     0.019514284806274117
+    ]
+   }
+  },
+  "holm_family_per_arm_mh": [
+   {
+    "arm": "e3_01_declared_chain",
+    "raw_p": 0.07396161738497109,
+    "holm_p": 0.22188485215491327,
+    "reject": false
+   },
+   {
+    "arm": "fl305_baseline",
+    "raw_p": 0.16050705469820487,
+    "holm_p": 0.32101410939640973,
+    "reject": false
+   },
+   {
+    "arm": "r01_landing_aware",
+    "raw_p": 0.6478877734191499,
+    "holm_p": 0.6478877734191499,
+    "reject": false
+   }
+  ]
+ },
+ "training": {
+  "e7_02_recorded": {
+   "n": 168,
+   "brier": {
+    "n": 168,
+    "reference_climatology": 0.22222222222222224,
+    "score": 0.2222092902921767,
+    "skill": 5.8193685204877e-05,
+    "success_rate": 0.3333333333333333
+   },
+   "ece": 0.3132532368817256,
+   "mce": 0.5807033394039115,
+   "reliability": [
+    {
+     "bin": [
+      0.0,
+      0.5
+     ],
+     "bin_brier": 0.08774729126830023,
+     "ci": {
+      "confidence_level": 0.95,
+      "lower": 0.0,
+      "method": "wilson_score",
+      "n": 42,
+      "point": 0.0,
+      "standard_error": 0.0,
+      "successes": 0,
+      "upper": 0.08379879086570388
+     },
+     "gap": -0.2682387561044876,
+     "mean_predicted": 0.2682387561044876,
+     "n": 42,
+     "observed_rate": 0.0,
+     "successes": 0,
+     "verdict": "overconfident"
+    },
+    {
+     "bin": [
+      0.5,
+      0.8
+     ],
+     "bin_brier": 0.397446393898959,
+     "ci": {
+      "confidence_level": 0.95,
+      "lower": 0.03279203756296026,
+      "method": "wilson_score",
+      "n": 66,
+      "point": 0.07575757575757576,
+      "standard_error": 0.03257121927940579,
+      "successes": 5,
+      "upper": 0.1653919502061051
+     },
+     "gap": -0.5807033394039115,
+     "mean_predicted": 0.6564609151614873,
+     "n": 66,
+     "observed_rate": 0.07575757575757576,
+     "successes": 5,
+     "verdict": "overconfident"
+    },
+    {
+     "bin": [
+      0.8,
+      0.9
+     ],
+     "bin_brier": 0.17282623500241034,
+     "ci": {
+      "confidence_level": 0.95,
+      "lower": 0.6124500635075647,
+      "method": "wilson_score",
+      "n": 32,
+      "point": 0.78125,
+      "standard_error": 0.07307924583542855,
+      "successes": 25,
+      "upper": 0.8897616374739581
+     },
+     "gap": -0.07323593196791778,
+     "mean_predicted": 0.8544859319679178,
+     "n": 32,
+     "observed_rate": 0.78125,
+     "successes": 25,
+     "verdict": "consistent"
+    },
+    {
+     "bin": [
+      0.9,
+      0.95
+     ],
+     "bin_brier": 0.07857968879293402,
+     "ci": {
+      "confidence_level": 0.95,
+      "lower": 0.6461200888588832,
+      "method": "wilson_score",
+      "n": 12,
+      "point": 0.9166666666666666,
+      "standard_error": 0.07978559231302819,
+      "successes": 11,
+      "upper": 0.9851349055950829
+     },
+     "gap": -0.013857376296800616,
+     "mean_predicted": 0.9305240429634672,
+     "n": 12,
+     "observed_rate": 0.9166666666666666,
+     "successes": 11,
+     "verdict": "consistent"
+    },
+    {
+     "bin": [
+      0.95,
+      1.0
+     ],
+     "bin_brier": 0.05880729705584039,
+     "ci": {
+      "confidence_level": 0.95,
+      "lower": 0.7167126242970108,
+      "method": "wilson_score",
+      "n": 16,
+      "point": 0.9375,
+      "standard_error": 0.06051536478449089,
+      "successes": 15,
+      "upper": 0.9888806552353575
+     },
+     "gap": -0.03276608128426861,
+     "mean_predicted": 0.9702660812842686,
+     "n": 16,
+     "observed_rate": 0.9375,
+     "successes": 15,
+     "verdict": "consistent"
+    }
+   ]
+  },
+  "e7_04_joint_arm": {
+   "n": 168,
+   "confidence_level": 0.95,
+   "bin_edges": [
+    0.0,
+    0.5,
+    0.8,
+    0.9,
+    0.95,
+    1.0
+   ],
+   "brier": {
+    "n": 168,
+    "score": 0.30405519816101595,
+    "reference_climatology": 0.16493055555555555,
+    "skill": -0.8435346751657389,
+    "success_rate": 0.20833333333333334
+   },
+   "ece": 0.43825323688172574,
+   "mce": 0.6564609151614873,
+   "reliability": [
+    {
+     "bin": [
+      0.0,
+      0.5
+     ],
+     "n": 42,
+     "successes": 0,
+     "observed_rate": 0.0,
+     "mean_predicted": 0.2682387561044876,
+     "gap": -0.2682387561044876,
+     "bin_brier": 0.08774729126830023,
+     "ci": {
+      "method": "wilson_score",
+      "confidence_level": 0.95,
+      "successes": 0,
+      "n": 42,
+      "point": 0.0,
+      "standard_error": 0.0,
+      "lower": 0.0,
+      "upper": 0.08379879086570388
+     },
+     "verdict": "overconfident"
+    },
+    {
+     "bin": [
+      0.5,
+      0.8
+     ],
+     "n": 66,
+     "successes": 0,
+     "observed_rate": 0.0,
+     "mean_predicted": 0.6564609151614873,
+     "gap": -0.6564609151614873,
+     "bin_brier": 0.43754807596839174,
+     "ci": {
+      "method": "wilson_score",
+      "confidence_level": 0.95,
+      "successes": 0,
+      "n": 66,
+      "point": 0.0,
+      "standard_error": 0.0,
+      "lower": 0.0,
+      "upper": 0.05500255701354127
+     },
+     "verdict": "overconfident"
+    },
+    {
+     "bin": [
+      0.8,
+      0.9
+     ],
+     "n": 32,
+     "successes": 9,
+     "observed_rate": 0.28125,
+     "mean_predicted": 0.8544859319679178,
+     "gap": -0.5732359319679178,
+     "bin_brier": 0.5198075320456111,
+     "ci": {
+      "method": "wilson_score",
+      "confidence_level": 0.95,
+      "successes": 9,
+      "n": 32,
+      "point": 0.28125,
+      "standard_error": 0.07948042948974923,
+      "lower": 0.1556458049774277,
+      "upper": 0.4537450942591657
+     },
+     "verdict": "overconfident"
+    },
+    {
+     "bin": [
+      0.9,
+      0.95
+     ],
+     "n": 12,
+     "successes": 11,
+     "observed_rate": 0.9166666666666666,
+     "mean_predicted": 0.9305240429634672,
+     "gap": -0.013857376296800616,
+     "bin_brier": 0.07857968879293402,
+     "ci": {
+      "method": "wilson_score",
+      "confidence_level": 0.95,
+      "successes": 11,
+      "n": 12,
+      "point": 0.9166666666666666,
+      "standard_error": 0.07978559231302819,
+      "lower": 0.6461200888588832,
+      "upper": 0.9851349055950829
+     },
+     "verdict": "consistent"
+    },
+    {
+     "bin": [
+      0.95,
+      1.0
+     ],
+     "n": 16,
+     "successes": 15,
+     "observed_rate": 0.9375,
+     "mean_predicted": 0.9702660812842686,
+     "gap": -0.03276608128426861,
+     "bin_brier": 0.05880729705584039,
+     "ci": {
+      "method": "wilson_score",
+      "confidence_level": 0.95,
+      "successes": 15,
+      "n": 16,
+      "point": 0.9375,
+      "standard_error": 0.06051536478449089,
+      "lower": 0.7167126242970108,
+      "upper": 0.9888806552353575
+     },
+     "verdict": "consistent"
+    }
+   ],
+   "reliable_bins": [
+    [
+     0.9,
+     0.95
+    ],
+    [
+     0.95,
+     1.0
+    ]
+   ],
+   "correctable_bins": [
+    [
+     0.0,
+     0.5
+    ],
+    [
+     0.5,
+     0.8
+    ],
+    [
+     0.8,
+     0.9
+    ]
+   ],
+   "reliability_cluster_ci": [
+    {
+     "bin": [
+      0.0,
+      0.5
+     ],
+     "n": 42,
+     "mean_prediction": 0.2682387561044876,
+     "observed_rate": 0.0,
+     "wilson_ci": [
+      0.0,
+      0.08379879086570388
+     ],
+     "verdict": "overconfident",
+     "seed_clusters": 4,
+     "cluster_ci95": [
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "bin": [
+      0.5,
+      0.8
+     ],
+     "n": 66,
+     "mean_prediction": 0.6564609151614873,
+     "observed_rate": 0.0,
+     "wilson_ci": [
+      0.0,
+      0.05500255701354127
+     ],
+     "verdict": "overconfident",
+     "seed_clusters": 4,
+     "cluster_ci95": [
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "bin": [
+      0.8,
+      0.9
+     ],
+     "n": 32,
+     "mean_prediction": 0.8544859319679178,
+     "observed_rate": 0.28125,
+     "wilson_ci": [
+      0.1556458049774277,
+      0.4537450942591657
+     ],
+     "verdict": "overconfident",
+     "seed_clusters": 4,
+     "cluster_ci95": [
+      0.17391304347826086,
+      0.45161290322580644
+     ]
+    },
+    {
+     "bin": [
+      0.9,
+      0.95
+     ],
+     "n": 12,
+     "mean_prediction": 0.9305240429634672,
+     "observed_rate": 0.9166666666666666,
+     "wilson_ci": [
+      0.6461200888588832,
+      0.9851349055950829
+     ],
+     "verdict": "consistent",
+     "seed_clusters": 4,
+     "cluster_ci95": [
+      0.6666666666666666,
+      1.0
+     ]
+    },
+    {
+     "bin": [
+      0.95,
+      1.0
+     ],
+     "n": 16,
+     "mean_prediction": 0.9702660812842686,
+     "observed_rate": 0.9375,
+     "wilson_ci": [
+      0.7167126242970108,
+      0.9888806552353575
+     ],
+     "verdict": "consistent",
+     "seed_clusters": 4,
+     "cluster_ci95": [
+      0.875,
+      1.0
+     ]
+    }
+   ],
+   "brier_skill_cluster_ci95": [
+    -1.6022339149653808,
+    -0.5416505166442795
+   ],
+   "seed_clusters": 4
+  }
+ },
+ "holdout": [
+  {
+   "name": "a_seeds",
+   "what": "independent seeds, standard FL-304 bands, training vehicle/scenario/ascent (unseen draw of the training population)",
+   "vehicle": "src/orbitopt/data/flightlab/vehicles/synthetic_two_stage.yaml",
+   "scenario": "src/orbitopt/data/flightlab/scenarios/leo_two_stage.yaml",
+   "ascent": "tests/test_flightlab_simulate_recovery.py::_ascent_with_textbook_separation",
+   "recipe": "FL-302 stock MC plan, joint-pinned",
+   "seeds": [
+    5,
+    6,
+    7,
+    8
+   ],
+   "n_per_seed": 42,
+   "n": 168,
+   "dispersions": {
+    "thrust_pct": 5.0,
+    "isp_pct": 3.0,
+    "density_pct": 10.0,
+    "cd_pct": 8.0,
+    "sep_altitude_m": 400.0,
+    "sep_downrange_m": 800.0,
+    "sep_crossrange_m": 800.0,
+    "sep_speed_m_s": 4.0,
+    "sep_heading_deg": 0.15
+   },
+   "wide_factor": 1.0,
+   "landed": 39,
+   "reason_histogram": {
+    "CORRIDOR_MISSED": 23,
+    "INSUFFICIENT_PROPELLANT_RESERVE": 13,
+    "JOINT_CHANCE_VIOLATED": 93,
+    "LANDED": 39
+   },
+   "success_rate": 0.23214285714285715,
+   "success_rate_ci": {
+    "method": "wilson_score",
+    "confidence_level": 0.95,
+    "successes": 39,
+    "n": 168,
+    "point": 0.23214285714285715,
+    "standard_error": 0.03257341077331619,
+    "lower": 0.17472226814511396,
+    "upper": 0.3015391613280297
+   },
+   "success_rate_cluster_ci95": [
+    0.19047619047619047,
+    0.27380952380952384
+   ],
+   "calibration": {
+    "n": 168,
+    "confidence_level": 0.95,
+    "bin_edges": [
+     0.0,
+     0.5,
+     0.8,
+     0.9,
+     0.95,
+     1.0
+    ],
+    "brier": {
+     "n": 168,
+     "score": 0.288526241987829,
+     "reference_climatology": 0.17825255102040816,
+     "skill": -0.6186373790229549,
+     "success_rate": 0.23214285714285715
+    },
+    "ece": 0.41939145377747455,
+    "mce": 0.6681729587611789,
+    "reliability": [
+     {
+      "bin": [
+       0.0,
+       0.5
+      ],
+      "n": 53,
+      "successes": 0,
+      "observed_rate": 0.0,
+      "mean_predicted": 0.31127672732346884,
+      "gap": -0.31127672732346884,
+      "bin_brier": 0.1081100113961349,
+      "ci": {
+       "method": "wilson_score",
+       "confidence_level": 0.95,
+       "successes": 0,
+       "n": 53,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "lower": 0.0,
+       "upper": 0.06758198857654184
+      },
+      "verdict": "overconfident"
+     },
+     {
+      "bin": [
+       0.5,
+       0.8
+      ],
+      "n": 48,
+      "successes": 0,
+      "observed_rate": 0.0,
+      "mean_predicted": 0.6651909714497642,
+      "gap": -0.6651909714497642,
+      "bin_brier": 0.4505298517317742,
+      "ci": {
+       "method": "wilson_score",
+       "confidence_level": 0.95,
+       "successes": 0,
+       "n": 48,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "lower": 0.0,
+       "upper": 0.07410012966611745
+      },
+      "verdict": "overconfident"
+     },
+     {
+      "bin": [
+       0.8,
+       0.9
+      ],
+      "n": 27,
+      "successes": 5,
+      "observed_rate": 0.18518518518518517,
+      "mean_predicted": 0.8533581439463641,
+      "gap": -0.6681729587611789,
+      "bin_brier": 0.585001002799009,
+      "ci": {
+       "method": "wilson_score",
+       "confidence_level": 0.95,
+       "successes": 5,
+       "n": 27,
+       "point": 0.18518518518518517,
+       "standard_error": 0.07475679886660473,
+       "lower": 0.08180707142976532,
+       "upper": 0.36698683618548433
+      },
+      "verdict": "overconfident"
+     },
+     {
+      "bin": [
+       0.9,
+       0.95
+      ],
+      "n": 20,
+      "successes": 16,
+      "observed_rate": 0.8,
+      "mean_predicted": 0.9299712696475725,
+      "gap": -0.12997126964757244,
+      "bin_brier": 0.17351746744433721,
+      "ci": {
+       "method": "wilson_score",
+       "confidence_level": 0.95,
+       "successes": 16,
+       "n": 20,
+       "point": 0.8,
+       "standard_error": 0.08944271909999157,
+       "lower": 0.5839825677481065,
+       "upper": 0.9193423374202019
+      },
+      "verdict": "overconfident"
+     },
+     {
+      "bin": [
+       0.95,
+       1.0
+      ],
+      "n": 20,
+      "successes": 18,
+      "observed_rate": 0.9,
+      "mean_predicted": 0.969541788868996,
+      "gap": -0.06954178886899598,
+      "bin_brier": 0.09258843711874845,
+      "ci": {
+       "method": "wilson_score",
+       "confidence_level": 0.95,
+       "successes": 18,
+       "n": 20,
+       "point": 0.9,
+       "standard_error": 0.06708203932499368,
+       "lower": 0.6989663547715128,
+       "upper": 0.9721335187862319
+      },
+      "verdict": "consistent"
+     }
+    ],
+    "reliable_bins": [
+     [
+      0.95,
+      1.0
+     ]
+    ],
+    "correctable_bins": [
+     [
+      0.0,
+      0.5
+     ],
+     [
+      0.5,
+      0.8
+     ],
+     [
+      0.8,
+      0.9
+     ],
+     [
+      0.9,
+      0.95
+     ]
+    ],
+    "reliability_cluster_ci": [
+     {
+      "bin": [
+       0.0,
+       0.5
+      ],
+      "n": 53,
+      "mean_prediction": 0.31127672732346884,
+      "observed_rate": 0.0,
+      "wilson_ci": [
+       0.0,
+       0.06758198857654184
+      ],
+      "verdict": "overconfident",
+      "seed_clusters": 4,
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "bin": [
+       0.5,
+       0.8
+      ],
+      "n": 48,
+      "mean_prediction": 0.6651909714497642,
+      "observed_rate": 0.0,
+      "wilson_ci": [
+       0.0,
+       0.07410012966611745
+      ],
+      "verdict": "overconfident",
+      "seed_clusters": 4,
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "bin": [
+       0.8,
+       0.9
+      ],
+      "n": 27,
+      "mean_prediction": 0.8533581439463641,
+      "observed_rate": 0.18518518518518517,
+      "wilson_ci": [
+       0.08180707142976532,
+       0.36698683618548433
+      ],
+      "verdict": "overconfident",
+      "seed_clusters": 4,
+      "cluster_ci95": [
+       0.03571428571428571,
+       0.36363636363636365
+      ]
+     },
+     {
+      "bin": [
+       0.9,
+       0.95
+      ],
+      "n": 20,
+      "mean_prediction": 0.9299712696475725,
+      "observed_rate": 0.8,
+      "wilson_ci": [
+       0.5839825677481065,
+       0.9193423374202019
+      ],
+      "verdict": "overconfident",
+      "seed_clusters": 4,
+      "cluster_ci95": [
+       0.5,
+       1.0
+      ]
+     },
+     {
+      "bin": [
+       0.95,
+       1.0
+      ],
+      "n": 20,
+      "mean_prediction": 0.969541788868996,
+      "observed_rate": 0.9,
+      "wilson_ci": [
+       0.6989663547715128,
+       0.9721335187862319
+      ],
+      "verdict": "consistent",
+      "seed_clusters": 4,
+      "cluster_ci95": [
+       0.8333333333333334,
+       1.0
+      ]
+     }
+    ],
+    "brier_skill_cluster_ci95": [
+     -1.0313991309874524,
+     -0.3268140216806088
+    ],
+    "seed_clusters": 4
+   },
+   "diagnosis": {
+    "n_joint_rows": 168,
+    "n_rejections": 93,
+    "inconsistent_rows": 0,
+    "classified": 93,
+    "binding": {
+     "divert": 50,
+     "fuel": 43
+    },
+    "severity": {
+     "near": 17,
+     "mid": 29,
+     "deep": 47
+    },
+    "binding_by_severity": {
+     "divert/deep": 26,
+     "divert/mid": 16,
+     "divert/near": 8,
+     "fuel/deep": 21,
+     "fuel/mid": 13,
+     "fuel/near": 9
+    },
+    "probability_binding": {
+     "bound_on_prob_any": 0,
+     "bound_on_prob_alone": 0,
+     "share_of_rejections": 0.0
+    },
+    "worst_violation_quantiles": {
+     "q0.1": 0.08255900123300489,
+     "q0.25": 0.22331936282437415,
+     "q0.5": 0.5012267012718004,
+     "q0.75": 0.8850976284174085,
+     "q0.9": 1.1647060664142803
+    },
+    "corridor_miss_quantiles_m": {
+     "q0.5": 1102.4365893310942,
+     "q0.9": 1941.8261579975422,
+     "q0.99": 2935.2432636741537,
+     "q1": 2935.2432636741537
+    },
+    "thresholds": {
+     "borderline": 0.15,
+     "deep": 0.5
+    }
+   },
+   "wall_s": 1629.8,
+   "paired_rows": [
+    {
+     "seed": 5,
+     "idx": 0,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1789.5054772446258,
+     "corridor_fuel_margin_kg": 1667.263763566989,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.4018081961060233,
+     "joint_violation": 0.9375242736753137
+    },
+    {
+     "seed": 5,
+     "idx": 1,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1199.646907122127,
+     "corridor_fuel_margin_kg": 1059.3303322768625,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5722634062573715,
+     "joint_violation": 0.39804568713437966
+    },
+    {
+     "seed": 5,
+     "idx": 2,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 2050.498598687858,
+     "corridor_fuel_margin_kg": -108.72236282728409,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.16579389017612492,
+     "joint_violation": 1.3688018009888185
+    },
+    {
+     "seed": 5,
+     "idx": 3,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 954.3808351225478,
+     "corridor_fuel_margin_kg": 531.8812600932579,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.565421256095422,
+     "joint_violation": 0.8456805013212537
+    },
+    {
+     "seed": 5,
+     "idx": 4,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 909.9797011038166,
+     "corridor_fuel_margin_kg": 1230.8050166122484,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7387468839742042,
+     "joint_violation": 0.24907896450871023
+    },
+    {
+     "seed": 5,
+     "idx": 5,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1314.0313492500225,
+     "corridor_fuel_margin_kg": 3865.935337315932,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6425756789155455,
+     "joint_violation": 0.46205014568071034
+    },
+    {
+     "seed": 5,
+     "idx": 6,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 649.9108556975796,
+     "corridor_fuel_margin_kg": 1803.1213725342895,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.9165297781078202,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 5,
+     "idx": 7,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1207.546463054033,
+     "corridor_fuel_margin_kg": 1362.5362716273958,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6128195750688656,
+     "joint_violation": 0.35556525948472084
+    },
+    {
+     "seed": 5,
+     "idx": 8,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1150.4605490272738,
+     "corridor_fuel_margin_kg": 1583.4947801705275,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6675725013981293,
+     "joint_violation": 0.2984793454579617
+    },
+    {
+     "seed": 5,
+     "idx": 9,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2403.8660419039998,
+     "corridor_fuel_margin_kg": 637.3748690716457,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.19378696987014216,
+     "joint_violation": 1.5518848383346877
+    },
+    {
+     "seed": 5,
+     "idx": 10,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 545.4656729322576,
+     "corridor_fuel_margin_kg": 2844.0736053996516,
+     "position_error_m": 0.6489811472892971,
+     "touchdown_east_m": 0.5302093415796254,
+     "touchdown_north_m": 0.37423867201350336,
+     "landing_probability": 0.9882028665857161,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 5,
+     "idx": 11,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 894.3008272535077,
+     "corridor_fuel_margin_kg": 1430.5344603208941,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7786981829968005,
+     "joint_violation": 0.07337318649983815
+    },
+    {
+     "seed": 5,
+     "idx": 12,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 671.0015026938,
+     "corridor_fuel_margin_kg": 1525.3871035002521,
+     "position_error_m": 1.0090188362463763,
+     "touchdown_east_m": -0.9628491361361189,
+     "touchdown_north_m": -0.30172927093021706,
+     "landing_probability": 0.875892776159463,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 5,
+     "idx": 13,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 479.74049054028177,
+     "corridor_fuel_margin_kg": 625.635237614486,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6953004029270781,
+     "joint_violation": 0.7672571076049751
+    },
+    {
+     "seed": 5,
+     "idx": 14,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1257.771479557095,
+     "corridor_fuel_margin_kg": 1337.6463200689468,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5854076831129067,
+     "joint_violation": 0.40579027598778294
+    },
+    {
+     "seed": 5,
+     "idx": 15,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1014.8662422187007,
+     "corridor_fuel_margin_kg": 2418.9215395298743,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7974560486517817,
+     "joint_violation": 0.16288503864938855
+    },
+    {
+     "seed": 5,
+     "idx": 16,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 1623.2695666293992,
+     "corridor_fuel_margin_kg": -61.855111949793354,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.23918307100796735,
+     "joint_violation": 1.3312659822339943
+    },
+    {
+     "seed": 5,
+     "idx": 17,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1694.1142163906457,
+     "corridor_fuel_margin_kg": 1331.4585653538088,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.40858790590507227,
+     "joint_violation": 0.8421330128213336
+    },
+    {
+     "seed": 5,
+     "idx": 18,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1119.9374042082216,
+     "corridor_fuel_margin_kg": 815.067638902452,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5629551521078866,
+     "joint_violation": 0.6073040484984739
+    },
+    {
+     "seed": 5,
+     "idx": 19,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 848.9308579663839,
+     "corridor_fuel_margin_kg": 742.9996855767604,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.658199957143788,
+     "joint_violation": 0.668394449322152
+    },
+    {
+     "seed": 5,
+     "idx": 20,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 994.7319130772596,
+     "corridor_fuel_margin_kg": 2462.6018444182846,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8101820056925718,
+     "joint_violation": 0.14275070950794747
+    },
+    {
+     "seed": 5,
+     "idx": 21,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1075.3005663936863,
+     "corridor_fuel_margin_kg": 1677.5808646747682,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7170990034100696,
+     "joint_violation": 0.22331936282437415
+    },
+    {
+     "seed": 5,
+     "idx": 22,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 475.03118968598784,
+     "corridor_fuel_margin_kg": 1765.677720770058,
+     "position_error_m": 0.2603295982443804,
+     "touchdown_east_m": -0.2473801188364649,
+     "touchdown_north_m": 0.08108376240745538,
+     "landing_probability": 0.9328636777751584,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 5,
+     "idx": 23,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1066.3693934766864,
+     "corridor_fuel_margin_kg": 1962.7084917607717,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7459879992153688,
+     "joint_violation": 0.21438818990737424
+    },
+    {
+     "seed": 5,
+     "idx": 24,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 641.896268749886,
+     "corridor_fuel_margin_kg": 2515.6707425424465,
+     "position_error_m": 1.2521881664117116,
+     "touchdown_east_m": -0.5364230811499665,
+     "touchdown_north_m": -1.1314704954315737,
+     "landing_probability": 0.9650670610987783,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 5,
+     "idx": 25,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 2091.3983113178892,
+     "corridor_fuel_margin_kg": -579.3733673170864,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.11182686467093902,
+     "joint_violation": 1.7395279032556419
+    },
+    {
+     "seed": 5,
+     "idx": 26,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 823.0997015428014,
+     "corridor_fuel_margin_kg": 3505.6211690681594,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.9132377770614493,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 5,
+     "idx": 27,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1941.8261579975422,
+     "corridor_fuel_margin_kg": 1333.7167314231701,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.33632002997246196,
+     "joint_violation": 1.08984495442823
+    },
+    {
+     "seed": 5,
+     "idx": 28,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1290.3207861612116,
+     "corridor_fuel_margin_kg": 743.7482989896598,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.4785824881562974,
+     "joint_violation": 0.6677613721633406
+    },
+    {
+     "seed": 5,
+     "idx": 29,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 854.4987366379435,
+     "corridor_fuel_margin_kg": 1590.9607014010908,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8193575195600354,
+     "joint_violation": 0.0025175330686313373
+    },
+    {
+     "seed": 5,
+     "idx": 30,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 986.7761807182488,
+     "corridor_fuel_margin_kg": 353.63837182226416,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5075713533959771,
+     "joint_violation": 0.9934452623833816
+    },
+    {
+     "seed": 5,
+     "idx": 31,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 948.3642753740359,
+     "corridor_fuel_margin_kg": 2683.0604609129223,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8414941371363769,
+     "joint_violation": 0.09638307180472373
+    },
+    {
+     "seed": 5,
+     "idx": 32,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 682.2588988292806,
+     "corridor_fuel_margin_kg": 2678.376238870398,
+     "position_error_m": 1.2415891694872283,
+     "touchdown_east_m": -0.05014211564355758,
+     "touchdown_north_m": -1.2405762507529143,
+     "landing_probability": 0.9592157706433574,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 5,
+     "idx": 33,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 714.4698184343454,
+     "corridor_fuel_margin_kg": 1783.7521577806474,
+     "position_error_m": 1.5556558782185534,
+     "touchdown_east_m": -1.2038985754572902,
+     "touchdown_north_m": 0.9852377537389222,
+     "landing_probability": 0.896966598743479,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 5,
+     "idx": 34,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1131.9567429647275,
+     "corridor_fuel_margin_kg": 1673.2109966249336,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.686417113918064,
+     "joint_violation": 0.27997553939541536
+    },
+    {
+     "seed": 5,
+     "idx": 35,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 293.74829666150333,
+     "corridor_fuel_margin_kg": 2024.228475217773,
+     "position_error_m": 0.2454491135440238,
+     "touchdown_east_m": 0.22857265632781157,
+     "touchdown_north_m": 0.08944164644237686,
+     "landing_probability": 0.9594950591854852,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 5,
+     "idx": 36,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 694.0669625149661,
+     "corridor_fuel_margin_kg": 1592.070711674256,
+     "position_error_m": 1.51337167852847,
+     "touchdown_east_m": -1.3062701685119003,
+     "touchdown_north_m": -0.7641675759876287,
+     "landing_probability": 0.8794390296012391,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 5,
+     "idx": 37,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 437.0780833164612,
+     "corridor_fuel_margin_kg": 181.76681988716882,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.558218647463977,
+     "joint_violation": 1.1342988672176797
+    },
+    {
+     "seed": 5,
+     "idx": 38,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 1017.9520612127326,
+     "corridor_fuel_margin_kg": -649.8565152030787,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.246254278418301,
+     "joint_violation": 1.7940913570060417
+    },
+    {
+     "seed": 5,
+     "idx": 39,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 534.1450143455547,
+     "corridor_fuel_margin_kg": 1931.0779702590953,
+     "position_error_m": 0.33500604824677677,
+     "touchdown_east_m": -0.33137128563262663,
+     "touchdown_north_m": 0.04921507309721002,
+     "landing_probability": 0.9467249527868453,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 5,
+     "idx": 40,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 2055.341933583221,
+     "corridor_fuel_margin_kg": -168.1195602959633,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.1585216779876072,
+     "joint_violation": 1.4162095746889496
+    },
+    {
+     "seed": 5,
+     "idx": 41,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 687.0158627405297,
+     "corridor_fuel_margin_kg": 1255.114230087398,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8254834049180366,
+     "joint_violation": 0.2278206618171085
+    },
+    {
+     "seed": 6,
+     "idx": 0,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 736.5786068094758,
+     "corridor_fuel_margin_kg": 1298.834508632819,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8196229720748686,
+     "joint_violation": 0.18949930066374027
+    },
+    {
+     "seed": 6,
+     "idx": 1,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 668.6200386324666,
+     "corridor_fuel_margin_kg": 1730.2479122857621,
+     "position_error_m": 1.271764531938169,
+     "touchdown_east_m": -1.1481285458077517,
+     "touchdown_north_m": -0.5469788542332,
+     "landing_probability": 0.9038561272595707,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 6,
+     "idx": 2,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 657.8158293180492,
+     "corridor_fuel_margin_kg": -462.5895500526167,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.34774484420630497,
+     "joint_violation": 1.6485799464770787
+    },
+    {
+     "seed": 6,
+     "idx": 3,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 538.3306809934528,
+     "corridor_fuel_margin_kg": 1217.6655832306787,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8418456708204682,
+     "joint_violation": 0.26055479670830495
+    },
+    {
+     "seed": 6,
+     "idx": 4,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 282.360669494717,
+     "corridor_fuel_margin_kg": 1672.4071212019771,
+     "position_error_m": 0.2436825773431799,
+     "touchdown_east_m": -0.1784207660205537,
+     "touchdown_north_m": -0.16597357847437832,
+     "landing_probability": 0.9228032106270366,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 6,
+     "idx": 5,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 566.8066453276829,
+     "corridor_fuel_margin_kg": 2424.3544057493345,
+     "position_error_m": 0.37880926168369655,
+     "touchdown_east_m": -0.3458536224609631,
+     "touchdown_north_m": -0.154537142999728,
+     "landing_probability": 0.9747165541361698,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 6,
+     "idx": 6,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 870.7353893405644,
+     "corridor_fuel_margin_kg": 1715.3996350727102,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8266978579221494,
+     "joint_violation": 0.018754185771252308
+    },
+    {
+     "seed": 6,
+     "idx": 7,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 49.97957196747245,
+     "corridor_fuel_margin_kg": 1371.6930644165332,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8761935045616123,
+     "joint_violation": 0.12538489764511768
+    },
+    {
+     "seed": 6,
+     "idx": 8,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 310.4053182247427,
+     "corridor_fuel_margin_kg": 1868.895517596633,
+     "position_error_m": 0.18336365567845983,
+     "touchdown_east_m": 0.09602336753251559,
+     "touchdown_north_m": 0.15621057297772611,
+     "landing_probability": 0.9454554857073418,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 6,
+     "idx": 9,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 610.0694089876209,
+     "corridor_fuel_margin_kg": 2766.7344290229375,
+     "position_error_m": 1.0186599618483747,
+     "touchdown_east_m": -0.89210058328648,
+     "touchdown_north_m": -0.49175671541700655,
+     "landing_probability": 0.9779300835670777,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 6,
+     "idx": 10,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 330.1346090326113,
+     "corridor_fuel_margin_kg": 2098.766749916911,
+     "position_error_m": 0.08675334972841424,
+     "touchdown_east_m": 0.04715380814654196,
+     "touchdown_north_m": -0.07281937974235166,
+     "landing_probability": 0.965140082585652,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 6,
+     "idx": 11,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1293.317144218781,
+     "corridor_fuel_margin_kg": 563.2789126361822,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.443199832887528,
+     "joint_violation": 0.8194711331465308
+    },
+    {
+     "seed": 6,
+     "idx": 12,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 682.2682147514381,
+     "corridor_fuel_margin_kg": 1843.115352923589,
+     "position_error_m": 1.4747813857280112,
+     "touchdown_east_m": -1.4631630749517424,
+     "touchdown_north_m": -0.18475375986709947,
+     "landing_probability": 0.9126403413554783,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 6,
+     "idx": 13,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 1279.4476361300092,
+     "corridor_fuel_margin_kg": -18.6783416987455,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.32660930067191724,
+     "joint_violation": 1.296584822644743
+    },
+    {
+     "seed": 6,
+     "idx": 14,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1786.865248790088,
+     "corridor_fuel_margin_kg": -30.972240736235108,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.2139856844192646,
+     "joint_violation": 1.306469623115131
+    },
+    {
+     "seed": 6,
+     "idx": 15,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 896.8103513560507,
+     "corridor_fuel_margin_kg": 1353.8092531371658,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7656239731863477,
+     "joint_violation": 0.14115175634549057
+    },
+    {
+     "seed": 6,
+     "idx": 16,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 692.0984889265715,
+     "corridor_fuel_margin_kg": 2981.4656117771665,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.9613001835437756,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 6,
+     "idx": 17,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 823.4063672187581,
+     "corridor_fuel_margin_kg": 380.7348363757628,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.568257722997952,
+     "joint_violation": 0.971093693881555
+    },
+    {
+     "seed": 6,
+     "idx": 18,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 281.102728951511,
+     "corridor_fuel_margin_kg": 939.3887611612154,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7823999887932563,
+     "joint_violation": 0.5012267012718004
+    },
+    {
+     "seed": 6,
+     "idx": 19,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2590.032507050313,
+     "corridor_fuel_margin_kg": 644.0268644641328,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.17169087195739605,
+     "joint_violation": 1.738051303481001
+    },
+    {
+     "seed": 6,
+     "idx": 20,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1495.957582933361,
+     "corridor_fuel_margin_kg": 685.9805834080253,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.3948503951388001,
+     "joint_violation": 0.7165210855407986
+    },
+    {
+     "seed": 6,
+     "idx": 21,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1154.6765078011151,
+     "corridor_fuel_margin_kg": 1564.1070216299777,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6633024401883916,
+     "joint_violation": 0.302695304231803
+    },
+    {
+     "seed": 6,
+     "idx": 22,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 2317.742057768374,
+     "corridor_fuel_margin_kg": 2510.300813370828,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.28973961535537973,
+     "joint_violation": 1.4657608541990617
+    },
+    {
+     "seed": 6,
+     "idx": 23,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1637.8907120855924,
+     "corridor_fuel_margin_kg": 1420.4615132446706,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.43550749784941284,
+     "joint_violation": 0.7859095085162803
+    },
+    {
+     "seed": 6,
+     "idx": 24,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 683.6309351940682,
+     "corridor_fuel_margin_kg": 1285.9227401032913,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8322273207765202,
+     "joint_violation": 0.20082843805336092
+    },
+    {
+     "seed": 6,
+     "idx": 25,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1478.5203760967674,
+     "corridor_fuel_margin_kg": 2495.7809696638287,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5529989345807972,
+     "joint_violation": 0.6265391725274553
+    },
+    {
+     "seed": 6,
+     "idx": 26,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1808.6599313519785,
+     "corridor_fuel_margin_kg": 3430.7293611506248,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.4287821467812189,
+     "joint_violation": 0.9566787277826664
+    },
+    {
+     "seed": 6,
+     "idx": 27,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 1514.015412142712,
+     "corridor_fuel_margin_kg": -129.2849223388621,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.24992823200945147,
+     "joint_violation": 1.3852343802125926
+    },
+    {
+     "seed": 6,
+     "idx": 28,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 301.0035656162708,
+     "corridor_fuel_margin_kg": 1826.252079098238,
+     "position_error_m": 0.25398667563106836,
+     "touchdown_east_m": 0.24898950330207928,
+     "touchdown_north_m": 0.050134405784439395,
+     "landing_probability": 0.9410259791805715,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 6,
+     "idx": 29,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 541.3862502077011,
+     "corridor_fuel_margin_kg": 2277.066225580733,
+     "position_error_m": 0.36293789443257674,
+     "touchdown_east_m": 0.12068451874914422,
+     "touchdown_north_m": 0.34228520584808725,
+     "landing_probability": 0.9706644314609334,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 6,
+     "idx": 30,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2514.547729080492,
+     "corridor_fuel_margin_kg": 943.6227102505436,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.20137613435574736,
+     "joint_violation": 1.66256652551118
+    },
+    {
+     "seed": 6,
+     "idx": 31,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 895.8792889489952,
+     "corridor_fuel_margin_kg": 1429.637381557135,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7778273208288099,
+     "joint_violation": 0.07416770629025034
+    },
+    {
+     "seed": 6,
+     "idx": 32,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 846.4818813657208,
+     "corridor_fuel_margin_kg": 161.94030137098162,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.49843206055123684,
+     "joint_violation": 1.150445596766369
+    },
+    {
+     "seed": 6,
+     "idx": 33,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 525.6734143843559,
+     "corridor_fuel_margin_kg": 1415.801170035571,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8801925683993788,
+     "joint_violation": 0.0864159417183249
+    },
+    {
+     "seed": 6,
+     "idx": 34,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1402.1999606990187,
+     "corridor_fuel_margin_kg": 519.9088951005324,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.39736367485870233,
+     "joint_violation": 0.8556601864103688
+    },
+    {
+     "seed": 6,
+     "idx": 35,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1585.2312256195053,
+     "corridor_fuel_margin_kg": 1135.9341836225067,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.4259336704439555,
+     "joint_violation": 0.7332500220501932
+    },
+    {
+     "seed": 6,
+     "idx": 36,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 263.0692348998358,
+     "corridor_fuel_margin_kg": 1952.8097603557762,
+     "position_error_m": 0.2313563909135959,
+     "touchdown_east_m": 0.2313153730091079,
+     "touchdown_north_m": -0.004356354694064809,
+     "landing_probability": 0.953436935044755,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 6,
+     "idx": 37,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 249.05156328421296,
+     "corridor_fuel_margin_kg": 1492.7517573592922,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8967774968592758,
+     "joint_violation": 0.018150243375697036
+    },
+    {
+     "seed": 6,
+     "idx": 38,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 419.7604769486672,
+     "corridor_fuel_margin_kg": 1484.1223855757416,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8950946310467196,
+     "joint_violation": 0.025823517841347107
+    },
+    {
+     "seed": 6,
+     "idx": 39,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 311.1770949560058,
+     "corridor_fuel_margin_kg": 1771.8396761084296,
+     "position_error_m": 0.23028755385016403,
+     "touchdown_east_m": 0.019115234351454766,
+     "touchdown_north_m": -0.22949284361567807,
+     "landing_probability": 0.9349885642330849,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 6,
+     "idx": 40,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 424.9337495196307,
+     "corridor_fuel_margin_kg": 2506.0504009439173,
+     "position_error_m": 0.10295147923326446,
+     "touchdown_east_m": 0.002295820746070717,
+     "touchdown_north_m": -0.10292587761483102,
+     "landing_probability": 0.9856024252313552,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 6,
+     "idx": 41,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2088.399762295889,
+     "corridor_fuel_margin_kg": 1255.927873532397,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.2959340476727539,
+     "joint_violation": 1.236418558726577
+    },
+    {
+     "seed": 7,
+     "idx": 0,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1027.1949535225292,
+     "corridor_fuel_margin_kg": 2054.5372629390404,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7736929632471945,
+     "joint_violation": 0.17521374995321706
+    },
+    {
+     "seed": 7,
+     "idx": 1,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1938.5997539298928,
+     "corridor_fuel_margin_kg": 597.0233289431708,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.2668785061065533,
+     "joint_violation": 1.0866185503605807
+    },
+    {
+     "seed": 7,
+     "idx": 2,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 362.0342633609068,
+     "corridor_fuel_margin_kg": 2056.710621868384,
+     "position_error_m": 0.1148434739079959,
+     "touchdown_east_m": 0.05798152195568721,
+     "touchdown_north_m": -0.09913206650911596,
+     "landing_probability": 0.9620054647811072,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 7,
+     "idx": 3,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1011.2780322486255,
+     "corridor_fuel_margin_kg": 135.0200854094801,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.44213409296902256,
+     "joint_violation": 1.172336016672282
+    },
+    {
+     "seed": 7,
+     "idx": 4,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 609.5207034155549,
+     "corridor_fuel_margin_kg": 471.2608925741297,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6403542123558207,
+     "joint_violation": 0.8961301650893034
+    },
+    {
+     "seed": 7,
+     "idx": 5,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1404.7036946090266,
+     "corridor_fuel_margin_kg": 1088.8119544044312,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.4880376776320508,
+     "joint_violation": 0.5527224910397145
+    },
+    {
+     "seed": 7,
+     "idx": 6,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 620.5388204136568,
+     "corridor_fuel_margin_kg": 1763.4717209045266,
+     "position_error_m": 0.9669632575762115,
+     "touchdown_east_m": -0.9568652630295791,
+     "touchdown_north_m": 0.1393800915077989,
+     "landing_probability": 0.9181577353049152,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 7,
+     "idx": 7,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 214.47876857232725,
+     "corridor_fuel_margin_kg": 1568.2530276917678,
+     "position_error_m": 0.21678885945503865,
+     "touchdown_east_m": -0.19214856970133357,
+     "touchdown_north_m": -0.10038095807940416,
+     "landing_probability": 0.9083611642262748,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 7,
+     "idx": 8,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1228.2410152456532,
+     "corridor_fuel_margin_kg": 3412.7725198512635,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6885011104036958,
+     "joint_violation": 0.3762598116763411
+    },
+    {
+     "seed": 7,
+     "idx": 9,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1210.9934951931632,
+     "corridor_fuel_margin_kg": 1801.6185377887305,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6557236405759842,
+     "joint_violation": 0.35901229162385107
+    },
+    {
+     "seed": 7,
+     "idx": 10,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1710.0810201033757,
+     "corridor_fuel_margin_kg": 3332.295191476871,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.4636719768945264,
+     "joint_violation": 0.8580998165340636
+    },
+    {
+     "seed": 7,
+     "idx": 11,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1763.4898723717229,
+     "corridor_fuel_margin_kg": 144.40855049194943,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.24311011223059575,
+     "joint_violation": 1.1647060664142803
+    },
+    {
+     "seed": 7,
+     "idx": 12,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1435.4863283103375,
+     "corridor_fuel_margin_kg": 1330.251663875708,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.504978121408994,
+     "joint_violation": 0.5835051247410253
+    },
+    {
+     "seed": 7,
+     "idx": 13,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 633.1089217827854,
+     "corridor_fuel_margin_kg": 1191.9290947807094,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8245216702496011,
+     "joint_violation": 0.2830032400794806
+    },
+    {
+     "seed": 7,
+     "idx": 14,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 469.42857934616245,
+     "corridor_fuel_margin_kg": 1397.2556434845756,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8795802950311615,
+     "joint_violation": 0.1028149257092186
+    },
+    {
+     "seed": 7,
+     "idx": 15,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1556.8486924939994,
+     "corridor_fuel_margin_kg": 966.3018647923745,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.4150533953594653,
+     "joint_violation": 0.7048674889246872
+    },
+    {
+     "seed": 7,
+     "idx": 16,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 2471.835399136732,
+     "corridor_fuel_margin_kg": -624.4345968018388,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.08225492476067,
+     "joint_violation": 1.7744395868977807
+    },
+    {
+     "seed": 7,
+     "idx": 17,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 826.1718900387662,
+     "corridor_fuel_margin_kg": 2864.6350392700406,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.9074501905164846,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 7,
+     "idx": 18,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 707.7226410712016,
+     "corridor_fuel_margin_kg": 2815.7309097772013,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.9541376605185397,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 7,
+     "idx": 19,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1688.4702928306292,
+     "corridor_fuel_margin_kg": 483.5926502345683,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.30889249355506065,
+     "joint_violation": 0.885883739564096
+    },
+    {
+     "seed": 7,
+     "idx": 20,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1085.7748985100477,
+     "corridor_fuel_margin_kg": 2063.8897489589363,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.741624177029799,
+     "joint_violation": 0.23379369494073557
+    },
+    {
+     "seed": 7,
+     "idx": 21,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 1348.9743682576448,
+     "corridor_fuel_margin_kg": -680.5258177742871,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.1847891843374705,
+     "joint_violation": 1.8177572419816297
+    },
+    {
+     "seed": 7,
+     "idx": 22,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1130.681614845764,
+     "corridor_fuel_margin_kg": 671.3488466671406,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5284151032400969,
+     "joint_violation": 0.728841546558369
+    },
+    {
+     "seed": 7,
+     "idx": 23,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1667.4810599899972,
+     "corridor_fuel_margin_kg": 704.6443039251899,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.3456449111684836,
+     "joint_violation": 0.8154998564206851
+    },
+    {
+     "seed": 7,
+     "idx": 24,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 738.4092262851838,
+     "corridor_fuel_margin_kg": 3069.0403763771246,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.946639266456609,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 7,
+     "idx": 25,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1109.059398903359,
+     "corridor_fuel_margin_kg": 1733.4382770014709,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7043321963386167,
+     "joint_violation": 0.25707819533404674
+    },
+    {
+     "seed": 7,
+     "idx": 26,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 934.540204802317,
+     "corridor_fuel_margin_kg": 1705.7315834680849,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7942464603953902,
+     "joint_violation": 0.08255900123300489
+    },
+    {
+     "seed": 7,
+     "idx": 27,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 537.4001115288577,
+     "corridor_fuel_margin_kg": 2624.4259051545596,
+     "position_error_m": 0.3563055633092861,
+     "touchdown_east_m": -0.340288464698349,
+     "touchdown_north_m": -0.10562866674204435,
+     "landing_probability": 0.9843581670821049,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 7,
+     "idx": 28,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 947.1962765228222,
+     "corridor_fuel_margin_kg": 914.5360443922691,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6594859482597478,
+     "joint_violation": 0.5225029309578697
+    },
+    {
+     "seed": 7,
+     "idx": 29,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 824.0906707799649,
+     "corridor_fuel_margin_kg": 2480.7446355522115,
+     "position_error_m": 3.5580850448251304,
+     "touchdown_east_m": -1.5564038425274471,
+     "touchdown_north_m": 3.1996212689330403,
+     "landing_probability": 0.8998270596194238,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 7,
+     "idx": 30,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1195.5206036619238,
+     "corridor_fuel_margin_kg": 1658.6790109915237,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6516076798542572,
+     "joint_violation": 0.3435394000926117
+    },
+    {
+     "seed": 7,
+     "idx": 31,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 431.0725997308534,
+     "corridor_fuel_margin_kg": 863.748591728021,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7625448292986834,
+     "joint_violation": 0.5658718408615661
+    },
+    {
+     "seed": 7,
+     "idx": 32,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 823.2508027708402,
+     "corridor_fuel_margin_kg": 945.8764789395427,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7164698388788986,
+     "joint_violation": 0.4956667827651739
+    },
+    {
+     "seed": 7,
+     "idx": 33,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 210.48881147084816,
+     "corridor_fuel_margin_kg": 2395.4064933812624,
+     "position_error_m": 0.21778919853315026,
+     "touchdown_east_m": -0.21417896707379588,
+     "touchdown_north_m": -0.039490569264296116,
+     "landing_probability": 0.9817716361763091,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 7,
+     "idx": 34,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 391.3924343339954,
+     "corridor_fuel_margin_kg": 1434.8211729067552,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8871297116252468,
+     "joint_violation": 0.06957588423668178
+    },
+    {
+     "seed": 7,
+     "idx": 35,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 2171.0636467680833,
+     "corridor_fuel_margin_kg": -209.62038245787699,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.14134257647902712,
+     "joint_violation": 1.4492256093035878
+    },
+    {
+     "seed": 7,
+     "idx": 36,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1102.4365893310942,
+     "corridor_fuel_margin_kg": 1607.9601654880025,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6954278076258189,
+     "joint_violation": 0.25045538576178206
+    },
+    {
+     "seed": 7,
+     "idx": 37,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2062.271098434847,
+     "corridor_fuel_margin_kg": 2144.6130155175633,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.342051587566801,
+     "joint_violation": 1.2102898948655347
+    },
+    {
+     "seed": 7,
+     "idx": 38,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2019.2928023525226,
+     "corridor_fuel_margin_kg": 375.83917942379776,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.22630791971117417,
+     "joint_violation": 1.1673115987832106
+    },
+    {
+     "seed": 7,
+     "idx": 39,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 909.5344241500046,
+     "corridor_fuel_margin_kg": 1215.7914383272073,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7362597240998541,
+     "joint_violation": 0.26219082294402524
+    },
+    {
+     "seed": 7,
+     "idx": 40,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1604.4483483867853,
+     "corridor_fuel_margin_kg": 1754.0223354471163,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.4718995471360064,
+     "joint_violation": 0.7524671448174731
+    },
+    {
+     "seed": 7,
+     "idx": 41,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 308.76103639952817,
+     "corridor_fuel_margin_kg": 2368.858540041452,
+     "position_error_m": 0.1725238782644912,
+     "touchdown_east_m": -0.04696643647270433,
+     "touchdown_north_m": -0.1660079588899846,
+     "landing_probability": 0.9806161697082482,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 8,
+     "idx": 0,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 719.7592668389843,
+     "corridor_fuel_margin_kg": 2494.182898483159,
+     "position_error_m": 2.3863169528639885,
+     "touchdown_east_m": 0.5596427974227735,
+     "touchdown_north_m": -2.3197647592977915,
+     "landing_probability": 0.9423575893153585,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 8,
+     "idx": 1,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 836.9087471078406,
+     "corridor_fuel_margin_kg": 2512.0979576507816,
+     "position_error_m": 3.5884920417230584,
+     "touchdown_east_m": -1.1750063893676979,
+     "touchdown_north_m": 3.390668830454811,
+     "landing_probability": 0.8948212430108314,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 8,
+     "idx": 2,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 857.3667565003431,
+     "corridor_fuel_margin_kg": 1833.9811897333566,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.845146445868519,
+     "joint_violation": 0.0053855529310309295
+    },
+    {
+     "seed": 8,
+     "idx": 3,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1435.2851594584654,
+     "corridor_fuel_margin_kg": 743.3795811952732,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.42461311111621386,
+     "joint_violation": 0.6680731883290816
+    },
+    {
+     "seed": 8,
+     "idx": 4,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 622.5063449082353,
+     "corridor_fuel_margin_kg": 1243.7521096464552,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8369079730195317,
+     "joint_violation": 0.23776113981557326
+    },
+    {
+     "seed": 8,
+     "idx": 5,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1080.0341891311523,
+     "corridor_fuel_margin_kg": 1646.716451973276,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7114142000153338,
+     "joint_violation": 0.22805298556184017
+    },
+    {
+     "seed": 8,
+     "idx": 6,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1755.7010221472792,
+     "corridor_fuel_margin_kg": 898.4397682122872,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.34553573650425223,
+     "joint_violation": 0.9037198185779671
+    },
+    {
+     "seed": 8,
+     "idx": 7,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1702.6578354764035,
+     "corridor_fuel_margin_kg": 274.70901710534235,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.27478248307922853,
+     "joint_violation": 1.0583270539832024
+    },
+    {
+     "seed": 8,
+     "idx": 8,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1798.3528926386962,
+     "corridor_fuel_margin_kg": 1211.3627345566565,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.3656562140391774,
+     "joint_violation": 0.9463716890693841
+    },
+    {
+     "seed": 8,
+     "idx": 9,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 634.5237616623959,
+     "corridor_fuel_margin_kg": 2335.770373827778,
+     "position_error_m": 0.9656737750887714,
+     "touchdown_east_m": 0.48666758376204244,
+     "touchdown_north_m": 0.834074638607749,
+     "landing_probability": 0.9596198152495016,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 8,
+     "idx": 10,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 532.5895005729973,
+     "corridor_fuel_margin_kg": 1108.3740466206727,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8187731913540219,
+     "joint_violation": 0.355615189476826
+    },
+    {
+     "seed": 8,
+     "idx": 11,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1645.8205112723788,
+     "corridor_fuel_margin_kg": 364.7197483335258,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.3016766697431848,
+     "joint_violation": 0.9843091696325176
+    },
+    {
+     "seed": 8,
+     "idx": 12,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 468.42508592669674,
+     "corridor_fuel_margin_kg": 2161.980943407005,
+     "position_error_m": 0.2942129197108321,
+     "touchdown_east_m": 0.23297599462817656,
+     "touchdown_north_m": 0.17967589724241834,
+     "landing_probability": 0.9681810124307665,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 8,
+     "idx": 13,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 341.758818681395,
+     "corridor_fuel_margin_kg": 1882.7788163213045,
+     "position_error_m": 0.20621802978351655,
+     "touchdown_east_m": -0.1842275975339745,
+     "touchdown_north_m": 0.09266103881430493,
+     "landing_probability": 0.9468318532105395,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 8,
+     "idx": 14,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1248.4029118236153,
+     "corridor_fuel_margin_kg": -192.518463389737,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.2975114935760924,
+     "joint_violation": 1.4356308656131054
+    },
+    {
+     "seed": 8,
+     "idx": 15,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 923.0504578257359,
+     "corridor_fuel_margin_kg": 1069.3302003440767,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7023550626598062,
+     "joint_violation": 0.38940559589165646
+    },
+    {
+     "seed": 8,
+     "idx": 16,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1485.3464736389874,
+     "corridor_fuel_margin_kg": 2800.782333339688,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5542492824707288,
+     "joint_violation": 0.6333652700696752
+    },
+    {
+     "seed": 8,
+     "idx": 17,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 1377.3786363387662,
+     "corridor_fuel_margin_kg": -185.9190664874477,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.2689204702771365,
+     "joint_violation": 1.430380827053248
+    },
+    {
+     "seed": 8,
+     "idx": 18,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1039.6222883805756,
+     "corridor_fuel_margin_kg": 1560.6935061381519,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7232418731095055,
+     "joint_violation": 0.18764108481126346
+    },
+    {
+     "seed": 8,
+     "idx": 19,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2220.4094663494693,
+     "corridor_fuel_margin_kg": 835.7957502560166,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.23777315319252335,
+     "joint_violation": 1.3684282627801572
+    },
+    {
+     "seed": 8,
+     "idx": 20,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1596.2506031434532,
+     "corridor_fuel_margin_kg": 2416.9442895689936,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5004079512575469,
+     "joint_violation": 0.7442693995741411
+    },
+    {
+     "seed": 8,
+     "idx": 21,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 941.970558606379,
+     "corridor_fuel_margin_kg": 1424.4650216246228,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7549975793226518,
+     "joint_violation": 0.08998935503706684
+    },
+    {
+     "seed": 8,
+     "idx": 22,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 597.6506109913165,
+     "corridor_fuel_margin_kg": 649.7398974726311,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6944826367792817,
+     "joint_violation": 0.7470152062625891
+    },
+    {
+     "seed": 8,
+     "idx": 23,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1050.6515360432034,
+     "corridor_fuel_margin_kg": 2437.318890162045,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7777391687423562,
+     "joint_violation": 0.1986703324738912
+    },
+    {
+     "seed": 8,
+     "idx": 24,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 914.2409438938614,
+     "corridor_fuel_margin_kg": -300.5786381522994,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.35168300304508715,
+     "joint_violation": 1.5212793777746287
+    },
+    {
+     "seed": 8,
+     "idx": 25,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1932.7945819302006,
+     "corridor_fuel_margin_kg": 877.4162547492087,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.29863518786113247,
+     "joint_violation": 1.0808133783608884
+    },
+    {
+     "seed": 8,
+     "idx": 26,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 445.60536969028476,
+     "corridor_fuel_margin_kg": 1117.1090835709547,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8241293367218334,
+     "joint_violation": 0.3480433035076725
+    },
+    {
+     "seed": 8,
+     "idx": 27,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 852.6072990613316,
+     "corridor_fuel_margin_kg": 2326.344926288424,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8804787717690339,
+     "joint_violation": 0.0006260954920194309
+    },
+    {
+     "seed": 8,
+     "idx": 28,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1827.1732298091802,
+     "corridor_fuel_margin_kg": 1497.538099443671,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.3796304562849894,
+     "joint_violation": 0.975192026239868
+    },
+    {
+     "seed": 8,
+     "idx": 29,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 551.8750850636737,
+     "corridor_fuel_margin_kg": 2494.624811864698,
+     "position_error_m": 0.42182066841934696,
+     "touchdown_east_m": -0.38766996444106494,
+     "touchdown_north_m": -0.16626687876517596,
+     "landing_probability": 0.979014814333947,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 8,
+     "idx": 30,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 829.7919427508768,
+     "corridor_fuel_margin_kg": 1422.7372434071804,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8061721688102863,
+     "joint_violation": 0.0802773606985311
+    },
+    {
+     "seed": 8,
+     "idx": 31,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 386.633369640029,
+     "corridor_fuel_margin_kg": 1897.7282251832294,
+     "position_error_m": 0.0263806260339219,
+     "touchdown_east_m": -0.02637325155784167,
+     "touchdown_north_m": 0.0006237244651411287,
+     "landing_probability": 0.9482103794296958,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 8,
+     "idx": 32,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2406.876749740091,
+     "corridor_fuel_margin_kg": 948.8337123761303,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.21683763719261714,
+     "joint_violation": 1.5548955461707787
+    },
+    {
+     "seed": 8,
+     "idx": 33,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2935.2432636741537,
+     "corridor_fuel_margin_kg": 1192.1836125123154,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.16607818095834637,
+     "joint_violation": 2.0832620601048415
+    },
+    {
+     "seed": 8,
+     "idx": 34,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 338.35558944014,
+     "corridor_fuel_margin_kg": 1763.9476194184754,
+     "position_error_m": 0.18854838281426692,
+     "touchdown_east_m": 0.020956898139807903,
+     "touchdown_north_m": -0.1873800978762606,
+     "landing_probability": 0.9340683233707461,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 8,
+     "idx": 35,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 882.3752240376532,
+     "corridor_fuel_margin_kg": 1758.314780281049,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8257145252001477,
+     "joint_violation": 0.030394020468341068
+    },
+    {
+     "seed": 8,
+     "idx": 36,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 495.332346837493,
+     "corridor_fuel_margin_kg": 2064.713365208874,
+     "position_error_m": 0.057045792294569665,
+     "touchdown_east_m": -0.020844388151882776,
+     "touchdown_north_m": -0.05310116666251343,
+     "landing_probability": 0.9603595840163399,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 8,
+     "idx": 37,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 980.0763895188604,
+     "corridor_fuel_margin_kg": 484.53833497052983,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.543777096229431,
+     "joint_violation": 0.8850976284174085
+    },
+    {
+     "seed": 8,
+     "idx": 38,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 701.9382348043256,
+     "corridor_fuel_margin_kg": 2381.277619695771,
+     "position_error_m": 1.9826314480512595,
+     "touchdown_east_m": 0.20909079056825167,
+     "touchdown_north_m": 1.9715751316847432,
+     "landing_probability": 0.9439128408611288,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 8,
+     "idx": 39,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 236.45778809212965,
+     "corridor_fuel_margin_kg": 1757.361085775614,
+     "position_error_m": 0.24741656848447138,
+     "touchdown_east_m": 0.24623855681809664,
+     "touchdown_north_m": 0.024114964166238137,
+     "landing_probability": 0.9333101561653414,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 8,
+     "idx": 40,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 1374.8073659400786,
+     "corridor_fuel_margin_kg": -108.1199623553257,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.2845204639369534,
+     "joint_violation": 1.3683200627105552
+    },
+    {
+     "seed": 8,
+     "idx": 41,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1337.3322731227413,
+     "corridor_fuel_margin_kg": 1046.1604456096902,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5097167393603977,
+     "joint_violation": 0.48535106955342916
+    }
+   ]
+  },
+  {
+   "name": "b_bands",
+   "what": "independent seeds, dispersion bands x 1.5 (chance spec rebuilt from the bands flown), training vehicle",
+   "vehicle": "src/orbitopt/data/flightlab/vehicles/synthetic_two_stage.yaml",
+   "scenario": "src/orbitopt/data/flightlab/scenarios/leo_two_stage.yaml",
+   "ascent": "tests/test_flightlab_simulate_recovery.py::_ascent_with_textbook_separation",
+   "recipe": "FL-302 stock MC plan, joint-pinned",
+   "seeds": [
+    9,
+    10
+   ],
+   "n_per_seed": 42,
+   "n": 84,
+   "dispersions": {
+    "thrust_pct": 7.5,
+    "isp_pct": 4.5,
+    "density_pct": 15.0,
+    "cd_pct": 12.0,
+    "sep_altitude_m": 600.0,
+    "sep_downrange_m": 1200.0,
+    "sep_crossrange_m": 1200.0,
+    "sep_speed_m_s": 6.0,
+    "sep_heading_deg": 0.22499999999999998
+   },
+   "wide_factor": 1.5,
+   "landed": 2,
+   "reason_histogram": {
+    "CORRIDOR_MISSED": 17,
+    "INSUFFICIENT_PROPELLANT_RESERVE": 8,
+    "JOINT_CHANCE_VIOLATED": 57,
+    "LANDED": 2
+   },
+   "success_rate": 0.023809523809523808,
+   "success_rate_ci": {
+    "method": "wilson_score",
+    "confidence_level": 0.95,
+    "successes": 2,
+    "n": 84,
+    "point": 0.023809523809523808,
+    "standard_error": 0.01663424121442314,
+    "lower": 0.006553902690167354,
+    "upper": 0.08271441008569917
+   },
+   "success_rate_cluster_ci95": [
+    0.023809523809523808,
+    0.023809523809523808
+   ],
+   "calibration": {
+    "n": 84,
+    "confidence_level": 0.95,
+    "bin_edges": [
+     0.0,
+     0.5,
+     0.8,
+     0.9,
+     0.95,
+     1.0
+    ],
+    "brier": {
+     "n": 84,
+     "score": 0.24133423591972822,
+     "reference_climatology": 0.023242630385487528,
+     "skill": -9.383258345424405,
+     "success_rate": 0.023809523809523808
+    },
+    "ece": 0.4250573102017869,
+    "mce": 0.959644746931056,
+    "reliability": [
+     {
+      "bin": [
+       0.0,
+       0.5
+      ],
+      "n": 51,
+      "successes": 0,
+      "observed_rate": 0.0,
+      "mean_predicted": 0.2838776592239083,
+      "gap": -0.2838776592239083,
+      "bin_brier": 0.09740423474399208,
+      "ci": {
+       "method": "wilson_score",
+       "confidence_level": 0.95,
+       "successes": 0,
+       "n": 51,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "lower": 0.0,
+       "upper": 0.07004661989853139
+      },
+      "verdict": "overconfident"
+     },
+     {
+      "bin": [
+       0.5,
+       0.8
+      ],
+      "n": 25,
+      "successes": 0,
+      "observed_rate": 0.0,
+      "mean_predicted": 0.6446737346794135,
+      "gap": -0.6446737346794135,
+      "bin_brier": 0.4243768648153066,
+      "ci": {
+       "method": "wilson_score",
+       "confidence_level": 0.95,
+       "successes": 0,
+       "n": 25,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "lower": 0.0,
+       "upper": 0.13319225093904843
+      },
+      "verdict": "overconfident"
+     },
+     {
+      "bin": [
+       0.8,
+       0.9
+      ],
+      "n": 4,
+      "successes": 0,
+      "observed_rate": 0.0,
+      "mean_predicted": 0.8479362528872935,
+      "gap": -0.8479362528872935,
+      "bin_brier": 0.7205063096431835,
+      "ci": {
+       "method": "wilson_score",
+       "confidence_level": 0.95,
+       "successes": 0,
+       "n": 4,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "lower": 0.0,
+       "upper": 0.4898908364545972
+      },
+      "verdict": "insufficient_data"
+     },
+     {
+      "bin": [
+       0.9,
+       0.95
+      ],
+      "n": 3,
+      "successes": 2,
+      "observed_rate": 0.6666666666666666,
+      "mean_predicted": 0.9196067703550695,
+      "gap": -0.2529401036884029,
+      "bin_brier": 0.2973649820152681,
+      "ci": {
+       "method": "wilson_score",
+       "confidence_level": 0.95,
+       "successes": 2,
+       "n": 3,
+       "point": 0.6666666666666666,
+       "standard_error": 0.2721655269759087,
+       "lower": 0.20765960080204782,
+       "upper": 0.9385080552796038
+      },
+      "verdict": "insufficient_data"
+     },
+     {
+      "bin": [
+       0.95,
+       1.0
+      ],
+      "n": 1,
+      "successes": 0,
+      "observed_rate": 0.0,
+      "mean_predicted": 0.959644746931056,
+      "gap": -0.959644746931056,
+      "bin_brier": 0.9209180403123705,
+      "ci": {
+       "method": "wilson_score",
+       "confidence_level": 0.95,
+       "successes": 0,
+       "n": 1,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "lower": 0.0,
+       "upper": 0.7934506856227626
+      },
+      "verdict": "insufficient_data"
+     }
+    ],
+    "reliable_bins": [],
+    "correctable_bins": [
+     [
+      0.0,
+      0.5
+     ],
+     [
+      0.5,
+      0.8
+     ]
+    ],
+    "reliability_cluster_ci": [
+     {
+      "bin": [
+       0.0,
+       0.5
+      ],
+      "n": 51,
+      "mean_prediction": 0.2838776592239083,
+      "observed_rate": 0.0,
+      "wilson_ci": [
+       0.0,
+       0.07004661989853139
+      ],
+      "verdict": "overconfident",
+      "seed_clusters": 2,
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "bin": [
+       0.5,
+       0.8
+      ],
+      "n": 25,
+      "mean_prediction": 0.6446737346794135,
+      "observed_rate": 0.0,
+      "wilson_ci": [
+       0.0,
+       0.13319225093904843
+      ],
+      "verdict": "overconfident",
+      "seed_clusters": 2,
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "bin": [
+       0.8,
+       0.9
+      ],
+      "n": 4,
+      "mean_prediction": 0.8479362528872935,
+      "observed_rate": 0.0,
+      "wilson_ci": [
+       0.0,
+       0.4898908364545972
+      ],
+      "verdict": "insufficient_data",
+      "seed_clusters": 2,
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "bin": [
+       0.9,
+       0.95
+      ],
+      "n": 3,
+      "mean_prediction": 0.9196067703550695,
+      "observed_rate": 0.6666666666666666,
+      "wilson_ci": [
+       0.20765960080204782,
+       0.9385080552796038
+      ],
+      "verdict": "insufficient_data",
+      "seed_clusters": 2,
+      "cluster_ci95": [
+       0.5,
+       1.0
+      ]
+     },
+     {
+      "bin": [
+       0.95,
+       1.0
+      ],
+      "n": 1,
+      "mean_prediction": 0.959644746931056,
+      "observed_rate": 0.0,
+      "wilson_ci": [
+       0.0,
+       0.7934506856227626
+      ],
+      "verdict": "insufficient_data",
+      "seed_clusters": 1,
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ]
+     }
+    ],
+    "brier_skill_cluster_ci95": [
+     -10.26419027971017,
+     -8.50232641113864
+    ],
+    "seed_clusters": 2
+   },
+   "diagnosis": {
+    "n_joint_rows": 84,
+    "n_rejections": 57,
+    "inconsistent_rows": 0,
+    "classified": 57,
+    "binding": {
+     "divert": 32,
+     "fuel": 25
+    },
+    "severity": {
+     "near": 1,
+     "mid": 12,
+     "deep": 44
+    },
+    "binding_by_severity": {
+     "divert/deep": 29,
+     "divert/mid": 3,
+     "fuel/deep": 15,
+     "fuel/mid": 9,
+     "fuel/near": 1
+    },
+    "probability_binding": {
+     "bound_on_prob_any": 0,
+     "bound_on_prob_alone": 0,
+     "share_of_rejections": 0.0
+    },
+    "worst_violation_quantiles": {
+     "q0.1": 0.417434910065489,
+     "q0.25": 0.5589786869252269,
+     "q0.5": 0.776527067145584,
+     "q0.75": 1.3007923847578626,
+     "q0.9": 1.8035184411491059
+    },
+    "corridor_miss_quantiles_m": {
+     "q0.5": 1458.3603747743232,
+     "q0.9": 2655.499644718418,
+     "q0.99": 3092.3215075608146,
+     "q1": 3092.3215075608146
+    },
+    "thresholds": {
+     "borderline": 0.15,
+     "deep": 0.5
+    }
+   },
+   "wall_s": 929.9,
+   "paired_rows": [
+    {
+     "seed": 9,
+     "idx": 0,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2852.016365744327,
+     "corridor_fuel_margin_kg": 270.2173305314718,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.11585996712400687,
+     "joint_violation": 2.0000351621750148
+    },
+    {
+     "seed": 9,
+     "idx": 1,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2402.7876771965125,
+     "corridor_fuel_margin_kg": 276.48012236067734,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.15503352082933,
+     "joint_violation": 1.5508064736272005
+    },
+    {
+     "seed": 9,
+     "idx": 2,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1486.5813553386631,
+     "corridor_fuel_margin_kg": 2289.4648445560015,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5059995834789137,
+     "joint_violation": 0.634600151769351
+    },
+    {
+     "seed": 9,
+     "idx": 3,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 616.6244839552307,
+     "corridor_fuel_margin_kg": 1214.5534233624567,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7391944123652673,
+     "joint_violation": 0.6026981410289518
+    },
+    {
+     "seed": 9,
+     "idx": 4,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1592.3328182612413,
+     "corridor_fuel_margin_kg": 2472.305319318948,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.47282084285133913,
+     "joint_violation": 0.7403516146919291
+    },
+    {
+     "seed": 9,
+     "idx": 5,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 421.24689101805006,
+     "corridor_fuel_margin_kg": 1516.7233308239447,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8038569482347033,
+     "joint_violation": 0.42505777962404095
+    },
+    {
+     "seed": 9,
+     "idx": 6,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1026.6340865312702,
+     "corridor_fuel_margin_kg": 245.0432427502019,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.44479027849755487,
+     "joint_violation": 1.148934755434281
+    },
+    {
+     "seed": 9,
+     "idx": 7,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1307.969852526133,
+     "corridor_fuel_margin_kg": 1778.591556466592,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5455092478999227,
+     "joint_violation": 0.45598864895682095
+    },
+    {
+     "seed": 9,
+     "idx": 8,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 394.80541436382447,
+     "corridor_fuel_margin_kg": 1490.9548828969928,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7997703945794825,
+     "joint_violation": 0.44034945807668807
+    },
+    {
+     "seed": 9,
+     "idx": 9,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 1921.560429943699,
+     "corridor_fuel_margin_kg": -275.00887191715447,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.17363574148013072,
+     "joint_violation": 1.4278949056787487
+    },
+    {
+     "seed": 9,
+     "idx": 10,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 626.4758181132777,
+     "corridor_fuel_margin_kg": 2586.8710795041843,
+     "position_error_m": 0.7725974428244523,
+     "touchdown_east_m": 0.6422785058171944,
+     "touchdown_north_m": -0.4294008961480465,
+     "landing_probability": 0.9182596044944884,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 9,
+     "idx": 11,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 790.8465134213836,
+     "corridor_fuel_margin_kg": 1220.7957783016318,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6986831343778815,
+     "joint_violation": 0.5990650851279916
+    },
+    {
+     "seed": 9,
+     "idx": 12,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1244.4724624735704,
+     "corridor_fuel_margin_kg": 1018.5792584039154,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.4857796844579828,
+     "joint_violation": 0.7159808217533042
+    },
+    {
+     "seed": 9,
+     "idx": 13,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2938.526217387379,
+     "corridor_fuel_margin_kg": 3754.006209133302,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.19494189485180116,
+     "joint_violation": 2.086545013818067
+    },
+    {
+     "seed": 9,
+     "idx": 14,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 2882.3815823515265,
+     "corridor_fuel_margin_kg": -336.8635158356774,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.08743064102766761,
+     "joint_violation": 2.0304003787822142
+    },
+    {
+     "seed": 9,
+     "idx": 15,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 2677.311921906404,
+     "corridor_fuel_margin_kg": 2664.8638776164735,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.21774109908234096,
+     "joint_violation": 1.8253307183370922
+    },
+    {
+     "seed": 9,
+     "idx": 16,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 2946.718777533813,
+     "corridor_fuel_margin_kg": 2709.319314304237,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.1852697799537817,
+     "joint_violation": 2.0947375739645007
+    },
+    {
+     "seed": 9,
+     "idx": 17,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2864.265848663999,
+     "corridor_fuel_margin_kg": 2264.3854183436124,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.18651752396525445,
+     "joint_violation": 2.0122846450946867
+    },
+    {
+     "seed": 9,
+     "idx": 18,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 597.4291462950346,
+     "corridor_fuel_margin_kg": 1551.3309722543636,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7994097855352658,
+     "joint_violation": 0.4044782966385714
+    },
+    {
+     "seed": 9,
+     "idx": 19,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1623.9819008600214,
+     "corridor_fuel_margin_kg": 2363.613570652422,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.4556882027294136,
+     "joint_violation": 0.7720006972907092
+    },
+    {
+     "seed": 9,
+     "idx": 20,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 1764.0144143956818,
+     "corridor_fuel_margin_kg": -1357.8062888563945,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.10783869927544071,
+     "joint_violation": 1.9797661574988379
+    },
+    {
+     "seed": 9,
+     "idx": 21,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1989.0286315099986,
+     "corridor_fuel_margin_kg": 2328.7342552152695,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.3403583868106081,
+     "joint_violation": 1.1370474279406866
+    },
+    {
+     "seed": 9,
+     "idx": 22,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1169.6939129995117,
+     "corridor_fuel_margin_kg": 1645.6107359621528,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5955386686378178,
+     "joint_violation": 0.3481668524639838
+    },
+    {
+     "seed": 9,
+     "idx": 23,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 266.6966850715208,
+     "corridor_fuel_margin_kg": 2597.2275308777826,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.9361012054584148,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 9,
+     "idx": 24,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2571.697162669751,
+     "corridor_fuel_margin_kg": 1936.3063324442483,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.21447522301198108,
+     "joint_violation": 1.7197159591004387
+    },
+    {
+     "seed": 9,
+     "idx": 25,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1036.5063215667467,
+     "corridor_fuel_margin_kg": 1652.9695910337614,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6598228898665559,
+     "joint_violation": 0.34375622655790944
+    },
+    {
+     "seed": 9,
+     "idx": 26,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1135.4586536393115,
+     "corridor_fuel_margin_kg": 415.6898155124072,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.43724790789888945,
+     "joint_violation": 1.0553177484363245
+    },
+    {
+     "seed": 9,
+     "idx": 27,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1432.1762688448782,
+     "corridor_fuel_margin_kg": 2420.689884123218,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5368148062568184,
+     "joint_violation": 0.5801950652755661
+    },
+    {
+     "seed": 9,
+     "idx": 28,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 982.8366313333977,
+     "corridor_fuel_margin_kg": 1425.0078260245427,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.654491099837769,
+     "joint_violation": 0.47936199795958817
+    },
+    {
+     "seed": 9,
+     "idx": 29,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 807.0857263995689,
+     "corridor_fuel_margin_kg": 351.87507195236685,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5304380966972471,
+     "joint_violation": 1.0904494618094946
+    },
+    {
+     "seed": 9,
+     "idx": 30,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 771.8976434725773,
+     "corridor_fuel_margin_kg": 971.5778509035372,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6601247698022082,
+     "joint_violation": 0.7429286274178869
+    },
+    {
+     "seed": 9,
+     "idx": 31,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1745.526945314899,
+     "corridor_fuel_margin_kg": 1737.1131010301178,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.37839472638873434,
+     "joint_violation": 0.8935457417455869
+    },
+    {
+     "seed": 9,
+     "idx": 32,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 682.5687750332453,
+     "corridor_fuel_margin_kg": 1204.32280677378,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7254465436390344,
+     "joint_violation": 0.6086490544863371
+    },
+    {
+     "seed": 9,
+     "idx": 33,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1134.5724809025,
+     "corridor_fuel_margin_kg": 1289.4981738547722,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5678418219126166,
+     "joint_violation": 0.5589786869252267
+    },
+    {
+     "seed": 9,
+     "idx": 34,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 873.9650069784334,
+     "corridor_fuel_margin_kg": 2374.8436209007123,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8146658471051181,
+     "joint_violation": 0.021983803409121264
+    },
+    {
+     "seed": 9,
+     "idx": 35,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1741.3949186464747,
+     "corridor_fuel_margin_kg": 675.8023591746387,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.2918810722308551,
+     "joint_violation": 0.9105790499191988
+    },
+    {
+     "seed": 9,
+     "idx": 36,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1381.75319864008,
+     "corridor_fuel_margin_kg": 2543.5730813850387,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.566296594712886,
+     "joint_violation": 0.5297719950707679
+    },
+    {
+     "seed": 9,
+     "idx": 37,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1998.8161111164081,
+     "corridor_fuel_margin_kg": 2502.3479964695,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.34387249118613783,
+     "joint_violation": 1.146834907547096
+    },
+    {
+     "seed": 9,
+     "idx": 38,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 492.25850745777535,
+     "corridor_fuel_margin_kg": -0.10216362533537904,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.49886483020595696,
+     "joint_violation": 1.2816064161794458
+    },
+    {
+     "seed": 9,
+     "idx": 39,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1663.6796713834872,
+     "corridor_fuel_margin_kg": 3590.8788982567785,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.4750030603338674,
+     "joint_violation": 0.8116984678141751
+    },
+    {
+     "seed": 9,
+     "idx": 40,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2982.103909515184,
+     "corridor_fuel_margin_kg": 2487.8934553224244,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.17804503510764275,
+     "joint_violation": 2.130122705945872
+    },
+    {
+     "seed": 9,
+     "idx": 41,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 743.0495746181097,
+     "corridor_fuel_margin_kg": 32.62412294111709,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.48052293263989554,
+     "joint_violation": 1.2640173674941824
+    },
+    {
+     "seed": 10,
+     "idx": 0,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 1954.7739905394044,
+     "corridor_fuel_margin_kg": -358.72921614733787,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.1626299682851657,
+     "joint_violation": 1.4719329722222827
+    },
+    {
+     "seed": 10,
+     "idx": 1,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2157.5933993506687,
+     "corridor_fuel_margin_kg": 1247.1628104494812,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.24941093699240385,
+     "joint_violation": 1.3056121957813567
+    },
+    {
+     "seed": 10,
+     "idx": 2,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1882.132701002947,
+     "corridor_fuel_margin_kg": 1552.853352028309,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.32819958881568306,
+     "joint_violation": 1.0301514974336348
+    },
+    {
+     "seed": 10,
+     "idx": 3,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1510.953789996398,
+     "corridor_fuel_margin_kg": 1547.2898695508848,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.4419651694434476,
+     "joint_violation": 0.6589725864270859
+    },
+    {
+     "seed": 10,
+     "idx": 4,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 3092.3215075608146,
+     "corridor_fuel_margin_kg": 1423.246871969277,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.14210998157345012,
+     "joint_violation": 2.2403403039915024
+    },
+    {
+     "seed": 10,
+     "idx": 5,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 814.5965609165924,
+     "corridor_fuel_margin_kg": 1113.3678803834628,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6722508076691791,
+     "joint_violation": 0.6613751061254497
+    },
+    {
+     "seed": 10,
+     "idx": 6,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 422.8066632532713,
+     "corridor_fuel_margin_kg": 1116.209769826979,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7327007653307717,
+     "joint_violation": 0.6597325692416084
+    },
+    {
+     "seed": 10,
+     "idx": 7,
+     "outcome": "landed",
+     "reason": "LANDED",
+     "corridor_miss_m": 475.8099249893863,
+     "corridor_fuel_margin_kg": 2269.9252659177073,
+     "position_error_m": 0.09646178732204916,
+     "touchdown_east_m": -0.0039017275678585863,
+     "touchdown_north_m": 0.09638284564586759,
+     "landing_probability": 0.9044595011123056,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 10,
+     "idx": 8,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 809.8541709725887,
+     "corridor_fuel_margin_kg": 3008.7148053392593,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8862310562526281,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 10,
+     "idx": 9,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1412.1078865729507,
+     "corridor_fuel_margin_kg": 1191.9471340370656,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.44290031886968917,
+     "joint_violation": 0.6158422012828245
+    },
+    {
+     "seed": 10,
+     "idx": 10,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 386.3600311675159,
+     "corridor_fuel_margin_kg": 1164.52628645402,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7420116886889664,
+     "joint_violation": 0.6317586945503024
+    },
+    {
+     "seed": 10,
+     "idx": 11,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2094.884133575089,
+     "corridor_fuel_margin_kg": 568.6392607421294,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.21450827881177692,
+     "joint_violation": 1.2429029300057768
+    },
+    {
+     "seed": 10,
+     "idx": 12,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 2993.6151504730065,
+     "corridor_fuel_margin_kg": -171.52687907320797,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.08843714210709658,
+     "joint_violation": 2.1416339469036942
+    },
+    {
+     "seed": 10,
+     "idx": 13,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1628.508270714896,
+     "corridor_fuel_margin_kg": 1932.57956249579,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.429462718041537,
+     "joint_violation": 0.776527067145584
+    },
+    {
+     "seed": 10,
+     "idx": 14,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1458.3603747743232,
+     "corridor_fuel_margin_kg": 596.9809015909559,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.3583301858759474,
+     "joint_violation": 0.954702234748193
+    },
+    {
+     "seed": 10,
+     "idx": 15,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1628.7965036143808,
+     "corridor_fuel_margin_kg": 30.117600296856835,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.2511403003576679,
+     "joint_violation": 1.2653658445927187
+    },
+    {
+     "seed": 10,
+     "idx": 16,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1341.7288466884243,
+     "corridor_fuel_margin_kg": 1584.026449784018,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5120147874276547,
+     "joint_violation": 0.4897476431191121
+    },
+    {
+     "seed": 10,
+     "idx": 17,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 377.89305054335927,
+     "corridor_fuel_margin_kg": 2943.567955312654,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.959644746931056,
+     "joint_violation": 0.0
+    },
+    {
+     "seed": 10,
+     "idx": 18,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1269.4161136348011,
+     "corridor_fuel_margin_kg": 3223.4023410595473,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6488303206509167,
+     "joint_violation": 0.417434910065489
+    },
+    {
+     "seed": 10,
+     "idx": 19,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 1741.1520268236793,
+     "corridor_fuel_margin_kg": -385.33587998155417,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.18976532063785104,
+     "joint_violation": 1.4858789348117418
+    },
+    {
+     "seed": 10,
+     "idx": 20,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2525.8405136883352,
+     "corridor_fuel_margin_kg": 229.08106705838145,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.14013992732871225,
+     "joint_violation": 1.6738593101190231
+    },
+    {
+     "seed": 10,
+     "idx": 21,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1427.831019205615,
+     "corridor_fuel_margin_kg": 1590.3037103499228,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.47744135597287396,
+     "joint_violation": 0.5758498156363028
+    },
+    {
+     "seed": 10,
+     "idx": 22,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1469.2685777574616,
+     "corridor_fuel_margin_kg": 2710.1863697596345,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5340996215606101,
+     "joint_violation": 0.6172873741881495
+    },
+    {
+     "seed": 10,
+     "idx": 23,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 170.40192029909778,
+     "corridor_fuel_margin_kg": 1442.4904376999693,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7917518357247113,
+     "joint_violation": 0.46903681925879076
+    },
+    {
+     "seed": 10,
+     "idx": 24,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 327.4012773244945,
+     "corridor_fuel_margin_kg": 2101.1921568389007,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.8869911599567242,
+     "joint_violation": 0.07084350319533463
+    },
+    {
+     "seed": 10,
+     "idx": 25,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 2686.7590687691595,
+     "corridor_fuel_margin_kg": -983.2138589058377,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.07000859141451414,
+     "joint_violation": 1.8347778651998474
+    },
+    {
+     "seed": 10,
+     "idx": 26,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2655.499644718418,
+     "corridor_fuel_margin_kg": 78.91000977369549,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.12124137985224881,
+     "joint_violation": 1.8035184411491059
+    },
+    {
+     "seed": 10,
+     "idx": 27,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1559.735195988786,
+     "corridor_fuel_margin_kg": 518.7352882736523,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.3208735883368041,
+     "joint_violation": 0.9982758774965276
+    },
+    {
+     "seed": 10,
+     "idx": 28,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2356.246256510131,
+     "corridor_fuel_margin_kg": 681.1050780313744,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.18473652396619922,
+     "joint_violation": 1.5042650529408188
+    },
+    {
+     "seed": 10,
+     "idx": 29,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2152.773588327175,
+     "corridor_fuel_margin_kg": 2181.0261934475566,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.29616967947778694,
+     "joint_violation": 1.3007923847578626
+    },
+    {
+     "seed": 10,
+     "idx": 30,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1068.7127106492114,
+     "corridor_fuel_margin_kg": 1690.6611267262851,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6489146487965379,
+     "joint_violation": 0.32113035002376145
+    },
+    {
+     "seed": 10,
+     "idx": 31,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2061.3641064399503,
+     "corridor_fuel_margin_kg": 1023.3439047803113,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.25277443460741256,
+     "joint_violation": 1.2093829028706382
+    },
+    {
+     "seed": 10,
+     "idx": 32,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 848.3879772015915,
+     "corridor_fuel_margin_kg": 465.21948467427865,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5411511723393662,
+     "joint_violation": 1.0279484651096589
+    },
+    {
+     "seed": 10,
+     "idx": 33,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2404.1041060506504,
+     "corridor_fuel_margin_kg": 1075.1385212220703,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.20073290630366958,
+     "joint_violation": 1.5521229024813383
+    },
+    {
+     "seed": 10,
+     "idx": 34,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2169.7798063301466,
+     "corridor_fuel_margin_kg": 4197.230909635051,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.32493158884907614,
+     "joint_violation": 1.3177986027608344
+    },
+    {
+     "seed": 10,
+     "idx": 35,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 2484.427193291567,
+     "corridor_fuel_margin_kg": 2187.7154638686407,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.23520767145988145,
+     "joint_violation": 1.632445989722255
+    },
+    {
+     "seed": 10,
+     "idx": 36,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 1694.1936191670925,
+     "corridor_fuel_margin_kg": 1522.980587686332,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.37863749035037386,
+     "joint_violation": 0.8422124155977804
+    },
+    {
+     "seed": 10,
+     "idx": 37,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1461.414011956882,
+     "corridor_fuel_margin_kg": 1523.6531227624655,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.45824200723288416,
+     "joint_violation": 0.6094328083875699
+    },
+    {
+     "seed": 10,
+     "idx": 38,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 850.8072068068013,
+     "corridor_fuel_margin_kg": 1408.0107851995563,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.7077358691969343,
+     "joint_violation": 0.48938862393495236
+    },
+    {
+     "seed": 10,
+     "idx": 39,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1776.7618910571614,
+     "corridor_fuel_margin_kg": 1911.2981686737912,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.3798804358219329,
+     "joint_violation": 0.9247806874878493
+    },
+    {
+     "seed": 10,
+     "idx": 40,
+     "outcome": "failed",
+     "reason": "CORRIDOR_MISSED",
+     "corridor_miss_m": 3242.905578184721,
+     "corridor_fuel_margin_kg": 1757.5104094371563,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.13941709557449328,
+     "joint_violation": 2.390924374615409
+    },
+    {
+     "seed": 10,
+     "idx": 41,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 2213.807556299778,
+     "corridor_fuel_margin_kg": 1997.3076823127703,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.27645249211812756,
+     "joint_violation": 1.3618263527304657
+    }
+   ]
+  },
+  {
+   "name": "c_rtls",
+   "what": "independent seeds, widened bands, the independent ~180 t-class RTLS redesign vehicle (E5-05a recorded ascent, E5-05c frozen closed-loop recipe + joint chance)",
+   "vehicle": "src/orbitopt/data/flightlab/vehicles/synthetic_two_stage_rtls.yaml",
+   "scenario": "src/orbitopt/data/flightlab/scenarios/leo_two_stage_rtls.yaml",
+   "ascent": "tests/data/mission/reference/e5-05a-rtls-mission/ascent",
+   "recipe": "E5-05c closed-loop recipe, joint-pinned",
+   "seeds": [
+    11,
+    12
+   ],
+   "n_per_seed": 24,
+   "n": 48,
+   "dispersions": {
+    "thrust_pct": 7.5,
+    "isp_pct": 4.5,
+    "density_pct": 15.0,
+    "cd_pct": 12.0,
+    "sep_altitude_m": 600.0,
+    "sep_downrange_m": 1200.0,
+    "sep_crossrange_m": 1200.0,
+    "sep_speed_m_s": 6.0,
+    "sep_heading_deg": 0.22499999999999998
+   },
+   "wide_factor": 1.5,
+   "landed": 0,
+   "reason_histogram": {
+    "INSUFFICIENT_PROPELLANT_RESERVE": 10,
+    "JOINT_CHANCE_VIOLATED": 38
+   },
+   "success_rate": 0.0,
+   "success_rate_ci": {
+    "method": "wilson_score",
+    "confidence_level": 0.95,
+    "successes": 0,
+    "n": 48,
+    "point": 0.0,
+    "standard_error": 0.0,
+    "lower": 0.0,
+    "upper": 0.07410012966611745
+   },
+   "success_rate_cluster_ci95": [
+    0.0,
+    0.0
+   ],
+   "calibration": {
+    "n": 48,
+    "confidence_level": 0.95,
+    "bin_edges": [
+     0.0,
+     0.5,
+     0.8,
+     0.9,
+     0.95,
+     1.0
+    ],
+    "brier": {
+     "n": 48,
+     "score": 0.27716054832011,
+     "reference_climatology": 0.0,
+     "skill": null,
+     "success_rate": 0.0
+    },
+    "ece": 0.5132193253404965,
+    "mce": 0.5818234115620478,
+    "reliability": [
+     {
+      "bin": [
+       0.0,
+       0.5
+      ],
+      "n": 17,
+      "successes": 0,
+      "observed_rate": 0.0,
+      "mean_predicted": 0.38811775634825585,
+      "gap": -0.38811775634825585,
+      "bin_brier": 0.16047928582652232,
+      "ci": {
+       "method": "wilson_score",
+       "confidence_level": 0.95,
+       "successes": 0,
+       "n": 17,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "lower": 0.0,
+       "upper": 0.18431813500885175
+      },
+      "verdict": "overconfident"
+     },
+     {
+      "bin": [
+       0.5,
+       0.8
+      ],
+      "n": 31,
+      "successes": 0,
+      "observed_rate": 0.0,
+      "mean_predicted": 0.5818234115620478,
+      "gap": -0.5818234115620478,
+      "bin_brier": 0.3411470471069162,
+      "ci": {
+       "method": "wilson_score",
+       "confidence_level": 0.95,
+       "successes": 0,
+       "n": 31,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "lower": 0.0,
+       "upper": 0.1102553954604359
+      },
+      "verdict": "overconfident"
+     },
+     {
+      "bin": [
+       0.8,
+       0.9
+      ],
+      "n": 0,
+      "successes": 0,
+      "observed_rate": null,
+      "mean_predicted": null,
+      "gap": null,
+      "bin_brier": null,
+      "ci": null,
+      "verdict": "insufficient_data"
+     },
+     {
+      "bin": [
+       0.9,
+       0.95
+      ],
+      "n": 0,
+      "successes": 0,
+      "observed_rate": null,
+      "mean_predicted": null,
+      "gap": null,
+      "bin_brier": null,
+      "ci": null,
+      "verdict": "insufficient_data"
+     },
+     {
+      "bin": [
+       0.95,
+       1.0
+      ],
+      "n": 0,
+      "successes": 0,
+      "observed_rate": null,
+      "mean_predicted": null,
+      "gap": null,
+      "bin_brier": null,
+      "ci": null,
+      "verdict": "insufficient_data"
+     }
+    ],
+    "reliable_bins": [],
+    "correctable_bins": [
+     [
+      0.0,
+      0.5
+     ],
+     [
+      0.5,
+      0.8
+     ]
+    ],
+    "reliability_cluster_ci": [
+     {
+      "bin": [
+       0.0,
+       0.5
+      ],
+      "n": 17,
+      "mean_prediction": 0.38811775634825585,
+      "observed_rate": 0.0,
+      "wilson_ci": [
+       0.0,
+       0.18431813500885175
+      ],
+      "verdict": "overconfident",
+      "seed_clusters": 2,
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "bin": [
+       0.5,
+       0.8
+      ],
+      "n": 31,
+      "mean_prediction": 0.5818234115620478,
+      "observed_rate": 0.0,
+      "wilson_ci": [
+       0.0,
+       0.1102553954604359
+      ],
+      "verdict": "overconfident",
+      "seed_clusters": 2,
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "bin": [
+       0.8,
+       0.9
+      ],
+      "n": 0,
+      "mean_prediction": null,
+      "observed_rate": null,
+      "wilson_ci": null,
+      "verdict": "insufficient_data",
+      "seed_clusters": 0,
+      "cluster_ci95": null
+     },
+     {
+      "bin": [
+       0.9,
+       0.95
+      ],
+      "n": 0,
+      "mean_prediction": null,
+      "observed_rate": null,
+      "wilson_ci": null,
+      "verdict": "insufficient_data",
+      "seed_clusters": 0,
+      "cluster_ci95": null
+     },
+     {
+      "bin": [
+       0.95,
+       1.0
+      ],
+      "n": 0,
+      "mean_prediction": null,
+      "observed_rate": null,
+      "wilson_ci": null,
+      "verdict": "insufficient_data",
+      "seed_clusters": 0,
+      "cluster_ci95": null
+     }
+    ],
+    "brier_skill_cluster_ci95": null,
+    "seed_clusters": 2
+   },
+   "diagnosis": {
+    "n_joint_rows": 48,
+    "n_rejections": 38,
+    "inconsistent_rows": 0,
+    "classified": 38,
+    "binding": {
+     "fuel": 38
+    },
+    "severity": {
+     "near": 0,
+     "mid": 0,
+     "deep": 38
+    },
+    "binding_by_severity": {
+     "fuel/deep": 38
+    },
+    "probability_binding": {
+     "bound_on_prob_any": 0,
+     "bound_on_prob_alone": 0,
+     "share_of_rejections": 0.0
+    },
+    "worst_violation_quantiles": {
+     "q0.1": 0.9040831484677361,
+     "q0.25": 0.9918046519530359,
+     "q0.5": 1.0925647222361834,
+     "q0.75": 1.1652582334640478,
+     "q0.9": 1.262202292422609
+    },
+    "corridor_miss_quantiles_m": {
+     "q0.5": 358.2866074086744,
+     "q0.9": 1373.231931706892,
+     "q0.99": 1552.1533494615965,
+     "q1": 1552.1533494615965
+    },
+    "thresholds": {
+     "borderline": 0.15,
+     "deep": 0.5
+    }
+   },
+   "wall_s": 7425.4,
+   "paired_rows": [
+    {
+     "seed": 11,
+     "idx": 0,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 128.88624578497436,
+     "corridor_fuel_margin_kg": 2018.3127837941138,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5933061057808892,
+     "joint_violation": 1.0454937257442134
+    },
+    {
+     "seed": 11,
+     "idx": 1,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 334.04580080689874,
+     "corridor_fuel_margin_kg": 2923.2442580302013,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6346087135119032,
+     "joint_violation": 0.9374523667896035
+    },
+    {
+     "seed": 11,
+     "idx": 2,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 924.5815885358983,
+     "corridor_fuel_margin_kg": 2125.071400671761,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5157691495925459,
+     "joint_violation": 1.0328196371851441
+    },
+    {
+     "seed": 11,
+     "idx": 3,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 155.90223907468376,
+     "corridor_fuel_margin_kg": 4387.143736146034,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.699114320547071,
+     "joint_violation": 0.7596966616575791
+    },
+    {
+     "seed": 11,
+     "idx": 4,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 469.68629408692567,
+     "corridor_fuel_margin_kg": -290.8885362582587,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.48599841319143366,
+     "joint_violation": 1.315026576288727
+    },
+    {
+     "seed": 11,
+     "idx": 5,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 153.07596640151516,
+     "corridor_fuel_margin_kg": -1336.351699261657,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.43932747249533505,
+     "joint_violation": 1.4342260985630588
+    },
+    {
+     "seed": 11,
+     "idx": 6,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1416.9984061515145,
+     "corridor_fuel_margin_kg": 1794.537177887003,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.3441705200147378,
+     "joint_violation": 1.0719977403889753
+    },
+    {
+     "seed": 11,
+     "idx": 7,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 187.61009776023872,
+     "corridor_fuel_margin_kg": 1417.2012483975413,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5655482013360272,
+     "joint_violation": 1.1165002568714506
+    },
+    {
+     "seed": 11,
+     "idx": 8,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 183.35708861918914,
+     "corridor_fuel_margin_kg": 718.6843950717957,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5331896383571502,
+     "joint_violation": 1.198261278512702
+    },
+    {
+     "seed": 11,
+     "idx": 9,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 337.67384966204503,
+     "corridor_fuel_margin_kg": 2383.9533110692864,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6100804308088448,
+     "joint_violation": 1.0020062038843742
+    },
+    {
+     "seed": 11,
+     "idx": 10,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 432.9688572854325,
+     "corridor_fuel_margin_kg": 1393.131747043517,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5641516316500252,
+     "joint_violation": 1.1193309591941516
+    },
+    {
+     "seed": 11,
+     "idx": 11,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 358.2866074086744,
+     "corridor_fuel_margin_kg": 1631.4252110303132,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5754407794991513,
+     "joint_violation": 1.0912640250076624
+    },
+    {
+     "seed": 11,
+     "idx": 12,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 340.006057274978,
+     "corridor_fuel_margin_kg": 3186.634926024817,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6464624361953866,
+     "joint_violation": 0.9057436727065863
+    },
+    {
+     "seed": 11,
+     "idx": 13,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 230.22271489266754,
+     "corridor_fuel_margin_kg": 2074.834244515194,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5959064781508506,
+     "joint_violation": 1.0387860389760377
+    },
+    {
+     "seed": 11,
+     "idx": 14,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 554.568046906192,
+     "corridor_fuel_margin_kg": -271.30028605792177,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.48414895249339523,
+     "joint_violation": 1.312776646751414
+    },
+    {
+     "seed": 11,
+     "idx": 15,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 180.1243475914469,
+     "corridor_fuel_margin_kg": 2567.591914129851,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6184725615488177,
+     "joint_violation": 0.9800799311145426
+    },
+    {
+     "seed": 11,
+     "idx": 16,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 703.0726168235625,
+     "corridor_fuel_margin_kg": 3200.4009834996177,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6222854155604147,
+     "joint_violation": 0.9040831484677361
+    },
+    {
+     "seed": 11,
+     "idx": 17,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 210.84987160583796,
+     "corridor_fuel_margin_kg": -2120.8908197458804,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.4047776760093905,
+     "joint_violation": 1.5225512616422014
+    },
+    {
+     "seed": 11,
+     "idx": 18,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 428.5272409766803,
+     "corridor_fuel_margin_kg": 2798.475066624611,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.628692250473424,
+     "joint_violation": 0.9524314334798192
+    },
+    {
+     "seed": 11,
+     "idx": 19,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 364.1997958145558,
+     "corridor_fuel_margin_kg": 1001.4680666818167,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.54626832055444,
+     "joint_violation": 1.1652582334640478
+    },
+    {
+     "seed": 11,
+     "idx": 20,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 613.5988263666304,
+     "corridor_fuel_margin_kg": 1256.461474418793,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5493706392878138,
+     "joint_violation": 1.1353859401666995
+    },
+    {
+     "seed": 11,
+     "idx": 21,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 244.79098973782396,
+     "corridor_fuel_margin_kg": 1435.7973895104296,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.566408986109205,
+     "joint_violation": 1.1143125937824339
+    },
+    {
+     "seed": 11,
+     "idx": 22,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1373.231931706892,
+     "corridor_fuel_margin_kg": 1620.3997238187876,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.35192915662555885,
+     "joint_violation": 1.0925647222361834
+    },
+    {
+     "seed": 11,
+     "idx": 23,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 1507.3019258419718,
+     "corridor_fuel_margin_kg": -667.0907379087148,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.2572191298084645,
+     "joint_violation": 1.3581188969113958
+    },
+    {
+     "seed": 12,
+     "idx": 0,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 237.1907141941353,
+     "corridor_fuel_margin_kg": 3515.201284865754,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6611231088075558,
+     "joint_violation": 0.866021320989989
+    },
+    {
+     "seed": 12,
+     "idx": 1,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 259.7846284546506,
+     "corridor_fuel_margin_kg": 205.620770452726,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.509471807621189,
+     "joint_violation": 1.2578069954449158
+    },
+    {
+     "seed": 12,
+     "idx": 2,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 300.0369761212557,
+     "corridor_fuel_margin_kg": -1764.3840115654675,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.42035603183047815,
+     "joint_violation": 1.4825332727844818
+    },
+    {
+     "seed": 12,
+     "idx": 3,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 357.66037050802197,
+     "corridor_fuel_margin_kg": 1504.5043588312183,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5695718935582196,
+     "joint_violation": 1.106224884853722
+    },
+    {
+     "seed": 12,
+     "idx": 4,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1397.3987243333547,
+     "corridor_fuel_margin_kg": 310.29982230474707,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.3085820773522589,
+     "joint_violation": 1.2456927085087763
+    },
+    {
+     "seed": 12,
+     "idx": 5,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 359.8874912423978,
+     "corridor_fuel_margin_kg": 38.49299371638335,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5017549733839147,
+     "joint_violation": 1.2771116731187357
+    },
+    {
+     "seed": 12,
+     "idx": 6,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1124.9367322451285,
+     "corridor_fuel_margin_kg": 2410.328386900037,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.45712478978583504,
+     "joint_violation": 0.9988605577070189
+    },
+    {
+     "seed": 12,
+     "idx": 7,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 1585.6907846377662,
+     "corridor_fuel_margin_kg": -1755.5774985148382,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.21611863114107063,
+     "joint_violation": 1.481542251469297
+    },
+    {
+     "seed": 12,
+     "idx": 8,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 276.67600364798056,
+     "corridor_fuel_margin_kg": 956.5623408497122,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5442090859080732,
+     "joint_violation": 1.1705078313583381
+    },
+    {
+     "seed": 12,
+     "idx": 9,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 1552.1533494615965,
+     "corridor_fuel_margin_kg": 157.12388274767727,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.26781940862288434,
+     "joint_violation": 1.2634134370208856
+    },
+    {
+     "seed": 12,
+     "idx": 10,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 883.430148351736,
+     "corridor_fuel_margin_kg": 1194.4425652851933,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.4908600282481999,
+     "joint_violation": 1.1426612695154932
+    },
+    {
+     "seed": 12,
+     "idx": 11,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 161.0478752008731,
+     "corridor_fuel_margin_kg": 3678.0004699638666,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6683208443482432,
+     "joint_violation": 0.8462703408006107
+    },
+    {
+     "seed": 12,
+     "idx": 12,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 286.13132197608803,
+     "corridor_fuel_margin_kg": 2469.453668971837,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6139948648545422,
+     "joint_violation": 0.9918046519530358
+    },
+    {
+     "seed": 12,
+     "idx": 13,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 267.95126912722554,
+     "corridor_fuel_margin_kg": -778.0284178537404,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.464448805747847,
+     "joint_violation": 1.370783390387716
+    },
+    {
+     "seed": 12,
+     "idx": 14,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 777.620921118116,
+     "corridor_fuel_margin_kg": 637.7073103879302,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.49453549127708296,
+     "joint_violation": 1.2076878519465208
+    },
+    {
+     "seed": 12,
+     "idx": 15,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 387.5876548243004,
+     "corridor_fuel_margin_kg": 1439.947151178887,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.566540730739292,
+     "joint_violation": 1.1138243346905492
+    },
+    {
+     "seed": 12,
+     "idx": 16,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 364.8296972343499,
+     "corridor_fuel_margin_kg": 2.0863915287918644,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.50007559040437,
+     "joint_violation": 1.2813109762502706
+    },
+    {
+     "seed": 12,
+     "idx": 17,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 1678.9507082841403,
+     "corridor_fuel_margin_kg": -1050.8785503080144,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.2152507722008911,
+     "joint_violation": 1.401848833348117
+    },
+    {
+     "seed": 12,
+     "idx": 18,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 478.4052085851332,
+     "corridor_fuel_margin_kg": 1175.0012431563373,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5534226302823844,
+     "joint_violation": 1.1449405906827392
+    },
+    {
+     "seed": 12,
+     "idx": 19,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 403.05613495650437,
+     "corridor_fuel_margin_kg": 2960.2170452093706,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.6361632226954412,
+     "joint_violation": 0.9330085161930161
+    },
+    {
+     "seed": 12,
+     "idx": 20,
+     "outcome": "failed",
+     "reason": "INSUFFICIENT_PROPELLANT_RESERVE",
+     "corridor_miss_m": 288.5126763790621,
+     "corridor_fuel_margin_kg": -101.48748103756952,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.4953345010754855,
+     "joint_violation": 1.2932460047588856
+    },
+    {
+     "seed": 12,
+     "idx": 21,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 409.2213804627874,
+     "corridor_fuel_margin_kg": 1376.5902320369496,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5635356868504047,
+     "joint_violation": 1.1212757737352266
+    },
+    {
+     "seed": 12,
+     "idx": 22,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 339.56038387228324,
+     "corridor_fuel_margin_kg": 1633.482690773686,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.5755464985537777,
+     "joint_violation": 1.091021277897216
+    },
+    {
+     "seed": 12,
+     "idx": 23,
+     "outcome": "failed",
+     "reason": "JOINT_CHANCE_VIOLATED",
+     "corridor_miss_m": 213.92177581835875,
+     "corridor_fuel_margin_kg": 167.60331727088487,
+     "position_error_m": null,
+     "touchdown_east_m": null,
+     "touchdown_north_m": null,
+     "landing_probability": 0.50771876145211,
+     "joint_violation": 1.2622022924226088
+    }
+   ]
+  }
+ ],
+ "holdout_comparison": {
+  "reference": {
+   "which": "e7_04_joint_base (training seeds 1-4, current-HEAD joint semantics; the recorded E7-02 numbers on the stale e3_02_joint_chance rows are kept alongside)",
+   "brier_skill": -0.8435346751657389,
+   "ece": 0.43825323688172574,
+   "mce": 0.6564609151614873,
+   "e7_02_recorded_skill": 5.8193685204877e-05,
+   "e7_02_recorded_bins": [
+    [
+     [
+      0.0,
+      0.5
+     ],
+     0.2682387561044876,
+     0.0,
+     42
+    ],
+    [
+     [
+      0.5,
+      0.8
+     ],
+     0.6564609151614873,
+     0.07575757575757576,
+     66
+    ],
+    [
+     [
+      0.8,
+      0.9
+     ],
+     0.8544859319679178,
+     0.78125,
+     32
+    ],
+    [
+     [
+      0.9,
+      0.95
+     ],
+     0.9305240429634672,
+     0.9166666666666666,
+     12
+    ],
+    [
+     [
+      0.95,
+      1.0
+     ],
+     0.9702660812842686,
+     0.9375,
+     16
+    ]
+   ]
+  },
+  "cells": [
+   {
+    "name": "a_seeds",
+    "n": 168,
+    "seeds": [
+     5,
+     6,
+     7,
+     8
+    ],
+    "success_rate": 0.23214285714285715,
+    "success_rate_cluster_ci95": [
+     0.19047619047619047,
+     0.27380952380952384
+    ],
+    "brier_skill": -0.6186373790229549,
+    "brier_skill_cluster_ci95": [
+     -1.0313991309874524,
+     -0.3268140216806088
+    ],
+    "ece": 0.41939145377747455,
+    "mce": 0.6681729587611789,
+    "bins": [
+     [
+      [
+       0.0,
+       0.5
+      ],
+      0.31127672732346884,
+      0.0,
+      53,
+      [
+       0.0,
+       0.0
+      ]
+     ],
+     [
+      [
+       0.5,
+       0.8
+      ],
+      0.6651909714497642,
+      0.0,
+      48,
+      [
+       0.0,
+       0.0
+      ]
+     ],
+     [
+      [
+       0.8,
+       0.9
+      ],
+      0.8533581439463641,
+      0.18518518518518517,
+      27,
+      [
+       0.03571428571428571,
+       0.36363636363636365
+      ]
+     ],
+     [
+      [
+       0.9,
+       0.95
+      ],
+      0.9299712696475725,
+      0.8,
+      20,
+      [
+       0.5,
+       1.0
+      ]
+     ],
+     [
+      [
+       0.95,
+       1.0
+      ],
+      0.969541788868996,
+      0.9,
+      20,
+      [
+       0.8333333333333334,
+       1.0
+      ]
+     ]
+    ],
+    "diagnosis_binding": {
+     "divert": 50,
+     "fuel": 43
+    }
+   },
+   {
+    "name": "b_bands",
+    "n": 84,
+    "seeds": [
+     9,
+     10
+    ],
+    "success_rate": 0.023809523809523808,
+    "success_rate_cluster_ci95": [
+     0.023809523809523808,
+     0.023809523809523808
+    ],
+    "brier_skill": -9.383258345424405,
+    "brier_skill_cluster_ci95": [
+     -10.26419027971017,
+     -8.50232641113864
+    ],
+    "ece": 0.4250573102017869,
+    "mce": 0.959644746931056,
+    "bins": [
+     [
+      [
+       0.0,
+       0.5
+      ],
+      0.2838776592239083,
+      0.0,
+      51,
+      [
+       0.0,
+       0.0
+      ]
+     ],
+     [
+      [
+       0.5,
+       0.8
+      ],
+      0.6446737346794135,
+      0.0,
+      25,
+      [
+       0.0,
+       0.0
+      ]
+     ],
+     [
+      [
+       0.8,
+       0.9
+      ],
+      0.8479362528872935,
+      0.0,
+      4,
+      [
+       0.0,
+       0.0
+      ]
+     ],
+     [
+      [
+       0.9,
+       0.95
+      ],
+      0.9196067703550695,
+      0.6666666666666666,
+      3,
+      [
+       0.5,
+       1.0
+      ]
+     ],
+     [
+      [
+       0.95,
+       1.0
+      ],
+      0.959644746931056,
+      0.0,
+      1,
+      [
+       0.0,
+       0.0
+      ]
+     ]
+    ],
+    "diagnosis_binding": {
+     "divert": 32,
+     "fuel": 25
+    }
+   },
+   {
+    "name": "c_rtls",
+    "n": 48,
+    "seeds": [
+     11,
+     12
+    ],
+    "success_rate": 0.0,
+    "success_rate_cluster_ci95": [
+     0.0,
+     0.0
+    ],
+    "brier_skill": null,
+    "brier_skill_cluster_ci95": null,
+    "ece": 0.5132193253404965,
+    "mce": 0.5818234115620478,
+    "bins": [
+     [
+      [
+       0.0,
+       0.5
+      ],
+      0.38811775634825585,
+      0.0,
+      17,
+      [
+       0.0,
+       0.0
+      ]
+     ],
+     [
+      [
+       0.5,
+       0.8
+      ],
+      0.5818234115620478,
+      0.0,
+      31,
+      [
+       0.0,
+       0.0
+      ]
+     ],
+     [
+      [
+       0.8,
+       0.9
+      ],
+      null,
+      null,
+      0,
+      null
+     ],
+     [
+      [
+       0.9,
+       0.95
+      ],
+      null,
+      null,
+      0,
+      null
+     ],
+     [
+      [
+       0.95,
+       1.0
+      ],
+      null,
+      null,
+      0,
+      null
+     ]
+    ],
+    "diagnosis_binding": {
+     "fuel": 38
+    }
+   }
+  ]
+ },
+ "improvement_claim": {
+  "made": false,
+  "why": "E7-04 measured no success-rate improvement to confirm (guidance fix 45->49 McNemar p=0.125, joint fix 35->35), and the diagnosis puts the infeasibility in the physical channels, not the probability model -- this task calibrates out of sample first, as ordered. No improvement is claimed; the acceptance's paired-significance clause does not bind."
+ }
+}

@@ -160,3 +160,5 @@ defaults:
     values: { title: "Joint risk study", parent: "Engineering", nav_order: 8 }
   - scope: { path: "benchmarks/e7_04_failure_driven.md" }
     values: { title: "Paired recovery failure study", parent: "Engineering", nav_order: 9 }
+  - scope: { path: "benchmarks/e7_05_out_of_sample_reliability.md" }
+    values: { title: "Out-of-sample reliability audit", parent: "Engineering", nav_order: 10 }
