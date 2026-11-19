@@ -158,6 +158,30 @@ physics of the comparison, and the value observed at recording is listed.
 
 | check | unit | band | observed | basis (summary) |
 |---|---|---|---|---|
+| `ascent.meco.state_position` | m | 400 | 233 | twin vs raw state history at MECO; the engine-Isp line explains 216 m of it |
+| `ascent.meco.state_velocity` | m/s | 25 | 18.9 | same epoch; Isp-line dominated, residual gated separately below |
+| `ascent.meco.mass` | kg | 20000 | −14514 | pad Isp 329.26 s (recorded) vs 327 s (authored): 0.68% of a 2.35 Ms stage-1 burn |
+| `ascent.meco.residual_position` | m | 250 | −5.5 | budget residual (engine+aero+numerical lines measured; frame/controller declared zero) |
+| `ascent.meco.residual_velocity` | m/s | 18 | 13.2 | unmodelled engine-shape difference (ambient thrust correction, mass-flow profile) through the gravity-turn path |
+| `ascent.separation.state_position` / `.state_velocity` | m / m/s | 600 / 15 | 251 / 5.5 | MECO offset coasted 3 s |
+| `ascent.separation.debris_mass` | kg | 12000 | −6443 | separation mass minus 1.3 Mt ship vs recorded body mass; same Isp line |
+| `ascent.separation.residual_position` | m | 350 | −10.7 | budget residual at separation |
+| `ascent.seco.state_position` | m | 5000 | 2463 | 378 s of stage-2 burn; engine line explains 2402 m |
+| `ascent.seco.state_velocity` | m/s | 20 | 6.5 | stage-2 Isp derived from the recorded vacuum value: small line, small residual |
+| `ascent.seco.mass` | kg | 2000 | −49 | stage-2 mass-flow path terms only |
+| `ascent.seco.residual_position` | m | 2500 | −140 | budget residual at SECO |
+| `ascent.seco.orbit_semi_major_axis` | m | 15000 | 8538 | da ~ 2·a·dv/v ≈ 1.75 km per m/s: the velocity band seen through vis-viva |
+| `ascent.seco.orbit_eccentricity` / `.orbit_inclination` | − / deg | 3e-3 / 0.05 | <1e-4 / 0.0 | elements from both states with the same closed form |
+| `ascent.maxq.value` / `.time` | Pa / s | 1200 / 2.0 | −27 / −0.89 | shared CA polar: amplitude agrees to 0.07%, phase follows the thrust-rise line |
+| `ascent.debris_impact.time` | s | 8.0 | 2.0 | emergent: separation-state offset + power-off CA table (vehicle file: illustrative polar) |
+| `ascent.debris_impact.position` | km | 12 | 3.4 | great-circle distance between impact sites |
+| `ascent.debris_impact.speed` | % | 12 | +8.5 | Earth-relative impact speed vs the recorded event |
+| `landing.cutoff_position` / `.cutoff_velocity` | m / m/s | 15 / 2.5 | 6.3 / 0.29 | the two re-flights disagreeing at the commanded cutoff node |
+| `landing.touchdown_position` | m | 10 | 0.33 | both re-flights converge on the pad target |
+| `landing.touchdown_vertical_speed` | m/s | 15 | 9.0 | cutoff-height offset amplified ballistically by the fixed-clock cutoff |
+| `landing.touchdown_lateral_speed` | m/s | 3 | 0.11 | crossrange channels barely diverge |
+| `landing.propellant` | kg | 750 | 6.2 | same Isp law, different replay/integration: tiny burn-difference |
+| `landing.fl301_gates` | − | 1.0 | 0.74 | design grading of the shared re-flight (design_input evidence) |
 | `ascent.event.meco` / `.fairing_jettison` | s | 2.0 | 0.0 / 0.0 | one OpenTsiolkovsky output-grid interval; events re-extracted from raw thrust/mass columns |
 | `ascent.event.separation` / `.seco` | s | 2.0 | 1.0 / 1.83 | same; SECO sits on an appended event sample, so the nearest grid sample is one step away |
 | `ascent.separation_window_position` | m | 5000 | 4.7 | gfold vs raw-OT debris over the shared unpowered window: environment-model budget |
@@ -176,3 +200,43 @@ physics of the comparison, and the value observed at recording is listed.
 | `recovery.event.landing_burn_ignition` | s | 2.0 | 0.5 | recorder grid again: first powered booster sample after the event |
 | `recovery.event.touchdown` | s | 1.0 | 0.0 | sealed records must agree exactly; 1 s of float round-trip headroom |
 | `recovery.touchdown_gates` | − | 1.0 | 0.70 | design-input gates (target.yaml limits), composite utilisation ≤ 1 |
+
+## Independent dynamics bands (E8-05, task #294)
+
+`src/orbitopt/verify/independent_dynamics.py` recomputes the E5-07 ascent
+and the declared landing corridor with models independent of
+OpenTsiolkovsky. Ascents between models of the same class (both point-mass)
+leave class-internal differences, so every band below was *measured on the
+sealed reference first* and margined, and each event discrepancy is split
+into the E8-02-style budget lines recorded in the report's
+`inputs.error_budget` (engine Isp law, atmosphere band, integrator step --
+all measured by probe re-runs -- the declared-zero frame/time and controller
+lines, and the gated residual). "observed" is the nominal (unprobed) value
+at gate time.
+
+| check | unit | band | observed | basis (summary) |
+|---|---|---|---|---|
+| `ascent.meco.state_position` | m | 400 | 233 | twin vs raw state history at MECO; the engine-Isp line explains 216 m of it |
+| `ascent.meco.state_velocity` | m/s | 25 | 18.9 | same epoch; Isp-line dominated, residual gated separately below |
+| `ascent.meco.mass` | kg | 20000 | −14514 | pad Isp 329.26 s (recorded) vs 327 s (authored): 0.68% of a 2.35 Ms stage-1 burn |
+| `ascent.meco.residual_position` | m | 250 | −5.5 | budget residual (engine+aero+numerical lines measured; frame/controller declared zero) |
+| `ascent.meco.residual_velocity` | m/s | 18 | 13.2 | unmodelled engine-shape difference (ambient thrust correction, mass-flow profile) through the gravity-turn path |
+| `ascent.separation.state_position` / `.state_velocity` | m / m/s | 600 / 15 | 251 / 5.5 | MECO offset coasted 3 s |
+| `ascent.separation.debris_mass` | kg | 12000 | −6443 | separation mass minus 1.3 Mt ship vs recorded body mass; same Isp line |
+| `ascent.separation.residual_position` | m | 350 | −10.7 | budget residual at separation |
+| `ascent.seco.state_position` | m | 5000 | 2463 | 378 s of stage-2 burn; engine line explains 2402 m |
+| `ascent.seco.state_velocity` | m/s | 20 | 6.5 | stage-2 Isp derived from the recorded vacuum value: small line, small residual |
+| `ascent.seco.mass` | kg | 2000 | −49 | stage-2 mass-flow path terms only |
+| `ascent.seco.residual_position` | m | 2500 | −140 | budget residual at SECO |
+| `ascent.seco.orbit_semi_major_axis` | m | 15000 | 8538 | da ~ 2·a·dv/v ≈ 1.75 km per m/s: the velocity band seen through vis-viva |
+| `ascent.seco.orbit_eccentricity` / `.orbit_inclination` | − / deg | 3e-3 / 0.05 | <1e-4 / 0.0 | elements from both states with the same closed form |
+| `ascent.maxq.value` / `.time` | Pa / s | 1200 / 2.0 | −27 / −0.89 | shared CA polar: amplitude agrees to 0.07%, phase follows the thrust-rise line |
+| `ascent.debris_impact.time` | s | 8.0 | 2.0 | emergent: separation-state offset + power-off CA table (vehicle file: illustrative polar) |
+| `ascent.debris_impact.position` | km | 12 | 3.4 | great-circle distance between impact sites |
+| `ascent.debris_impact.speed` | % | 12 | +8.5 | Earth-relative impact speed vs the recorded event |
+| `landing.cutoff_position` / `.cutoff_velocity` | m / m/s | 15 / 2.5 | 6.3 / 0.29 | the two re-flights disagreeing at the commanded cutoff node |
+| `landing.touchdown_position` | m | 10 | 0.33 | both re-flights converge on the pad target |
+| `landing.touchdown_vertical_speed` | m/s | 15 | 9.0 | cutoff-height offset amplified ballistically by the fixed-clock cutoff |
+| `landing.touchdown_lateral_speed` | m/s | 3 | 0.11 | crossrange channels barely diverge |
+| `landing.propellant` | kg | 750 | 6.2 | same Isp law, different replay/integration: tiny burn-difference |
+| `landing.fl301_gates` | − | 1.0 | 0.74 | design grading of the shared re-flight (design_input evidence) |

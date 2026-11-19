@@ -13,25 +13,28 @@ data).
 
 The reference sources (per the E4-03 evidence taxonomy of task #263)
 ---------------------------------------------------------------------
-* ``independent_model`` -- the **raw OpenTsiolkovsky v1.0.0 output** inside
-  the reference ascent run (``opentsiolkovsky/summary.json``,
-  ``trajectory.csv``, ``bodies/*.csv``): an externally developed, separately
-  formulated 3-DOF ascent program (MIT binary, pinned digest, NOTICE; see
-  ``docs/adr/flightlab-0007``). The unit under test is the recorded mission
-  chain -- the events, contract tracks and achieved orbit the chain derived
-  from (and around) that external program's state history. Every
-  independent-model check compares the *chain's* view against the *raw*
-  external recording, extracted independently (state-history mass/thrust
-  transitions, not the event records the adapter copied).
+* ``independent_model`` -- the shared ballistic window only: the raw
+  OpenTsiolkovsky debris track against the independently formulated recovery
+  model's booster track (gfold-planned, repo-propagated) between separation
+  and boostback ignition. **E8-05 relabel:** the ascent event and insertion
+  comparisons against OpenTsiolkovsky's *own raw output* used to be labelled
+  here; they compare the chain against the program that computed the ascent
+  and are extraction/serialisation checks, so they are now
+  ``numerical_consistency`` / ``analytical``. Independent-model evidence for
+  an OpenTsiolkovsky-computed ascent is provided separately, by the native
+  point-mass twin of :mod:`orbitopt.verify.independent_dynamics` (E8-05) on
+  the E5-07 reference.
 * ``analytical`` -- closed forms over the recorded states: Keplerian
   elements recomputed from the recorded SECO state (two-body identities of
-  vis-viva and the period), the Tsiolkovsky ideal-Δv bound on the stage-2
-  burn, and the two-body propagation of the booster's boostback-coast arc
-  up to the entry interface.
+  vis-viva and the period), the insertion elements against the chain's
+  achieved orbit, the Tsiolkovsky ideal-Δv bound on the stage-2 burn, and
+  the two-body propagation of the booster's boostback-coast arc up to the
+  entry interface.
 * ``numerical_consistency`` -- agreement inside the sealed chain record:
   the contract track against the frame-bridged raw backend state, event
-  times against the powered/throttle transitions of the state history,
-  event mass bookkeeping.
+  times extracted independently (powered/throttle transitions, mass
+  bookkeeping) from the raw state history, chain event records against those
+  extractions.
 * ``design_input`` -- the landing gates at touchdown, graded against the
   flight target's own limits. Honestly labelled: this is *not* independent
   validation, and no telemetry of this synthetic vehicle exists. There is
@@ -39,12 +42,12 @@ The reference sources (per the E4-03 evidence taxonomy of task #263)
 
 Honesty notes (the gate must not over-claim, E8-03 discipline)
 --------------------------------------------------------------
-* The ascent was computed *by* OpenTsiolkovsky, so the ``independent_model``
-  checks validate the chain's extraction, framing and propagation of the
-  external recording -- "two independently formulated models agree" applies
-  to the gfold recovery legs and the frame/orbit mechanics, while for the
-  ascent they establish that the chain reports the external program's own
-  events and terminal state without drift.
+* The ascent was computed *by* OpenTsiolkovsky; since E8-05 the event and
+  insertion comparisons against its raw output are labelled as what they
+  are -- extraction and closed-form mechanics over the sealed record, not
+  independent-model evidence for the ascent physics. The shared ballistic
+  window keeps ``independent_model``: there the comparison is OpenTsiolkovsky
+  against the repo's own recovery propagator over the same unpowered arc.
 * The recovery leg was driven from the recorded separation state; the
   shared ballistic window before the boostback ignition (both records
   unpowered, same body, same environment) is what carries the recovery
@@ -399,19 +402,19 @@ def build_full_chain_report(reference_root: Path | None = None, *,
     raw_stage = [int(r["stage"]) for r in raw]
 
     meco_t = ev("meco")["t_s"]
-    add("ascent.event.meco", CHECK_MODEL, EVIDENCE_INDEPENDENT_MODEL,
+    add("ascent.event.meco", CHECK_MODEL, EVIDENCE_NUMERICAL,
         next(t for t, th, st in zip(raw_t, raw_thrust, raw_stage)
              if st == 1 and th == 0.0 and t > 100.0) - meco_t,
         "raw trajectory.csv first stage-1 thrust-off sample after t > 100 s")
 
     sep_t = ev("separation", ot_name="separation")["t_s"]
-    add("ascent.event.separation", CHECK_MODEL, EVIDENCE_INDEPENDENT_MODEL,
+    add("ascent.event.separation", CHECK_MODEL, EVIDENCE_NUMERICAL,
         next(t for t, m in zip(raw_t, raw_mass) if m < 200000.0) - sep_t,
         "raw trajectory.csv staging mass step (311 t -> 128 t)")
 
     jet_t = ev("separation", ot_name="jettison")["t_s"]
     fairing_raw = _read_csv_rows(ot_dir / "bodies" / "stage2_fairing.csv")
-    add("ascent.event.fairing_jettison", CHECK_MODEL, EVIDENCE_INDEPENDENT_MODEL,
+    add("ascent.event.fairing_jettison", CHECK_MODEL, EVIDENCE_NUMERICAL,
         float(fairing_raw[0]["time_s"]) - jet_t,
         "raw bodies/stage2_fairing.csv track-start sample")
 
@@ -420,7 +423,7 @@ def build_full_chain_report(reference_root: Path | None = None, *,
                      if st == 2 and th > 0.0)
     seco_raw = next(t for t, th, st in zip(raw_t, raw_thrust, raw_stage)
                     if st == 2 and th == 0.0 and t > last_burn2)
-    add("ascent.event.seco", CHECK_MODEL, EVIDENCE_INDEPENDENT_MODEL,
+    add("ascent.event.seco", CHECK_MODEL, EVIDENCE_NUMERICAL,
         seco_raw - seco_t,
         "raw trajectory.csv stage-2 thrust-off transition after the final "
         "powered sample")
@@ -460,15 +463,15 @@ def build_full_chain_report(reference_root: Path | None = None, *,
                            np.asarray([fs["time_s"]]))
         el = orbital_elements(b_r[0], b_v[0])
         ach = mission_report["targets"]["achieved_parking_orbit"]
-        add("insertion.semi_major_axis", CHECK_MODEL, EVIDENCE_INDEPENDENT_MODEL,
+        add("insertion.semi_major_axis", CHECK_MODEL, EVIDENCE_ANALYTICAL,
             el["semi_major_axis_m"] - ach["semi_major_axis_m"],
             "closed-form elements of the frame-bridged raw SECO state vs the "
             "chain's achieved parking orbit")
-        add("insertion.eccentricity", CHECK_MODEL, EVIDENCE_INDEPENDENT_MODEL,
+        add("insertion.eccentricity", CHECK_MODEL, EVIDENCE_ANALYTICAL,
             el["eccentricity"] - ach["eccentricity"], "same comparison")
-        add("insertion.inclination", CHECK_MODEL, EVIDENCE_INDEPENDENT_MODEL,
+        add("insertion.inclination", CHECK_MODEL, EVIDENCE_ANALYTICAL,
             el["inclination_deg"] - ach["inclination_deg"], "same comparison")
-        add("insertion.raan", CHECK_MODEL, EVIDENCE_INDEPENDENT_MODEL,
+        add("insertion.raan", CHECK_MODEL, EVIDENCE_ANALYTICAL,
             el["raan_deg"] - ach["raan_deg"],
             "same comparison (both computed in GCRS at the mission epoch)")
 
