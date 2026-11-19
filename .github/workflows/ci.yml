@@ -130,6 +130,14 @@ jobs:
       - name: The pinned solver is importable (a missing gfold must fail here, not skip)
         run: python -c "import gfold, cvxpy; from importlib.metadata import version; assert version('gfold') == '0.3.2', version('gfold'); print('gfold', version('gfold'))"
 
+      # E8-05 (task #294): the E5-07 ascent and stage-1 debris recomputed
+      # with a native point-mass twin (plus three error-budget probes) and
+      # the declared landing corridor re-flown through two independent
+      # dynamics models (the gfold SOCP plan needs this job's pinned solver;
+      # the twins are CPU-bound and run in parallel inside the gate).
+      - name: E8-05 independent dynamics validation (task #294)
+        run: pytest tests/test_e805_independent_dynamics.py -m slow -v
+
       # E2-04 (task #257): the frozen dual-branch reference mission. The
       # provenance + input-pin guards are fast tests that also run in every
       # other job (without gfold the numerical rerun skips); the G5 guards

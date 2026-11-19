@@ -172,14 +172,16 @@ committed reference files.
 
 The E4-03 evidence split is honest about what is what:
 
-* `independent_model` — the raw OpenTsiolkovsky v1.0.0 recording
-  (externally developed binary, pinned digest): the chain's MECO,
-  separation, jettison and SECO event times re-extracted from the raw
-  state history (thrust-off / staging-mass transitions, not the event
-  records the adapter copied), the achieved parking orbit against the
-  frame-bridged raw SECO state, and the gfold recovery leg against the raw
-  OT stage-1 debris track over the shared unpowered window between
-  separation and boostback ignition.
+* `independent_model` — the shared unpowered ballistic window: the raw
+  OpenTsiolkovsky stage-1 debris track against the gfold recovery leg between
+  separation and boostback ignition — two independently formulated models of
+  the same physical arc. Since E8-05 (task #294) this is the only
+  independent-model check in this report: the ascent event times and the
+  insertion elements compared against OpenTsiolkovsky's *own raw output*
+  compare the chain against the program that computed the ascent, so they are
+  labelled `numerical_consistency` (event extraction from the raw state
+  history) and `analytical` (Kepler identities over the recorded state), and
+  are not counted as independent-model evidence.
 * `analytical` — vis-viva/Kepler identities of the recorded SECO state,
   the Tsiolkovsky ideal-Δv bound on the stage-2 burn, and exact two-body
   propagation of the boostback coast to the entry interface.
@@ -198,6 +200,46 @@ is where two independently formulated models (the 3-DOF recovery model vs the pi
 external binary) genuinely cross. The report's
 `inputs.honesty_notes` repeat this so a reader of the JSON alone cannot
 miss it.
+
+## Independent dynamics validation (E8-05, task #294)
+
+The E5-07 physics-qualification reference is a Starship-class mission whose
+ascent was computed by OpenTsiolkovsky, so — per the acceptance rule that an
+OpenTsiolkovsky-versus-OpenTsiolkovsky comparison is not independent-model
+evidence — E8-05 recomputes it with models that are independent *of that
+program* and grades the discrepancies inside declared bands
+(`python -m orbitopt.verify.independent_dynamics`, gated by
+`tests/test_e805_independent_dynamics.py`, report kind `independent-dynamics`):
+
+* **Ascent and stage-1 debris: a native point-mass twin.** The repo's own
+  3-DOF plant (`propagate_point_mass`), driven *open-loop* by the authored
+  attitude program and throttle schedules (no event-driven feedback), from
+  pad to MECO, coast to separation, ship to SECO; the spent stage re-entrys
+  through a separately written RK4 integrator with the power-off CA polar.
+  MECO/separation/SECO event states, mass, max-Q, the SECO orbit and the
+  debris impact point are compared with the sealed raw state history and the
+  recorded impact event. Every discrepancy is split E8-02-style into a
+  measured engine-Isp line (re-run at the recorded pad Isp 329.26 s), a
+  measured aero/atmosphere line (density x1.03), a measured numerical line
+  (dt/2), a declared-zero frame/time line (identical epoch and ECI
+  convention, pad match < 1 m), a declared-zero controller line (identical
+  authored program), and a *reported, gated residual* that absorbs the
+  interaction and tracking-implementation terms — never zeroed.
+* **Powered landing: two independent re-flights of one plan.** No landing is
+  flown in E5-07 (`RECOVERY_GAP.md`), so the burn is validated on a declared
+  design corridor at the pad (insertion state and the 3-engine landing
+  configuration are `design_input`; the vehicle file itself records that the
+  13-engine set cannot throttle below weight): the gfold SOCP arc is re-flown
+  by the FL-301 propagator and by a newly written independent integrator
+  (own geodesy, IGF-80 gravity, US76 tables, physical-thrust command replay).
+  Touchdown position, vertical/lateral speed, end-of-burn state and remaining
+  propellant are compared between the re-flights; the FL-301 design gates are
+  graded separately as `design_input`.
+
+The bands and their derivations are in the
+[reference tolerance audit](reference-tolerance-audit.md#independent-dynamics-bands-e8-05-task-294).
+No check in this report uses `historical_telemetry` evidence: the reference
+vehicle is a public estimate, not flown hardware.
 
 ## Benchmarks against public references
 

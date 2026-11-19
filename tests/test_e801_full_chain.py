@@ -52,9 +52,10 @@ def test_report_kind_and_verdict(report: dict) -> None:
     assert status["result"] == "passed" and status["passed"] is True
     assert len(status["checks"]) >= 20
     assert all(status["checks"].values())
-    # the external OpenTsiolkovsky recording really is the evidence base
+    # the ballistic-window pair really is the evidence base (E8-05 relabel:
+    # OT-raw-output extraction checks no longer count as independent models)
     assert status["independent_validation"]["result"] == "passed"
-    assert status["independent_validation"]["checks_passed"] >= 10
+    assert status["independent_validation"]["checks_passed"] >= 2
 
 
 @NOT_RECORDED
@@ -75,9 +76,9 @@ def test_acceptance_events_are_covered(report: dict) -> None:
                 "insertion.semi_major_axis", "insertion.eccentricity",
                 "recovery.event.touchdown", "recovery.touchdown_gates"):
         assert key in ev, f"acceptance coverage missing {key}"
-    for key in ("ascent.event.meco", "ascent.event.separation", "ascent.event.seco",
-                "insertion.semi_major_axis"):
-        assert ev[key] == "independent_model"
+    for key in ("ascent.event.meco", "ascent.event.separation", "ascent.event.seco"):
+        assert ev[key] == "numerical_consistency"
+    assert ev["insertion.semi_major_axis"] == "analytical"
     assert ev["recovery.touchdown_gates"] == "design_input"
     landing = [k for k in ev if k.startswith("recovery.")]
     assert any(ev[k] == "analytical" for k in landing), \
