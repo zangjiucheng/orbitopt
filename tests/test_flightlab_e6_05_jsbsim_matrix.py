@@ -145,4 +145,4 @@ class TestCommittedComparison:
         prop = rec["propellant_at_ignition_kg"]
         assert 0.0 < rec["propellant_burned_kg"] < prop + 1e-6
         assert rec["n_samples"] > 100
-        assert rec["attitude_err_max_deg"] < ATT_ERR_MAX_LIMIT_DEG
+        assert rec["attitude_err_max_powered_deg"] < ATT_ERR_MAX_LIMIT_DEG

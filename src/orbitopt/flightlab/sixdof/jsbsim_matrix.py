@@ -272,6 +272,7 @@ def jsbsim_matrix_record(cell: GuidanceMatrixCell, handoff: MatrixHandoff,
     ctrl = PidAttitudeController() if g is not None else None
     rows: list[dict[str, float]] = []
     err: list[float] = []
+    err_thr: list[float] = []
     cmd_defl: list[float] = []
     act_defl: list[float] = []
     ignited: list[bool] = []
@@ -300,6 +301,7 @@ def jsbsim_matrix_record(cell: GuidanceMatrixCell, handoff: MatrixHandoff,
             rows.append(dict(st.sample()))
             if chart is not None:
                 err.append(chart_error_deg(st.sample(), chart))
+                err_thr.append(float(st.sample()["throttle"]))
                 cmd_defl.append(max(abs(s["gimbal_pitch_cmd_rad"]),
                                     abs(s["gimbal_yaw_cmd_rad"])))
                 act_defl.append(max(abs(s["gimbal_pitch_actual_rad"]),
@@ -320,6 +322,7 @@ def jsbsim_matrix_record(cell: GuidanceMatrixCell, handoff: MatrixHandoff,
     speed = float(np.linalg.norm(v_inertial))
     fpa_deg = math.degrees(math.asin(max(-1.0, min(1.0, float(v_inertial @ r)
                                                    / (speed * rmag)))))
+    pwr = [e for e, t in zip(err, err_thr) if t > 0.0]
     v_circ = math.sqrt(MU_EARTH_M3_S2 / graded.radius_m)
     mass_end = float(s_last["mass_kg"])
     prop_left = max(mass_end - dry, 0.0)
@@ -358,6 +361,9 @@ def jsbsim_matrix_record(cell: GuidanceMatrixCell, handoff: MatrixHandoff,
         "attitude_err_max_deg": max(err) if err else 0.0,
         "attitude_err_rms_deg": (float(np.sqrt(np.mean(np.square(err))))
                                  if err else 0.0),
+        "attitude_err_max_powered_deg": max(pwr) if pwr else 0.0,
+        "attitude_err_rms_powered_deg": (float(np.sqrt(np.mean(np.square(pwr))))
+                                         if pwr else 0.0),
         "gimbal_cmd_max_deg": math.degrees(max(cmd_defl)) if cmd_defl else 0.0,
         "gimbal_lag_max_deg": (math.degrees(max(abs(c - a) for c, a in
                                                 zip(cmd_defl, act_defl)))
@@ -468,14 +474,21 @@ def _cell_leg(cell: GuidanceMatrixCell, dt_s: float, sample_every: int,
             "one shared cutoff law on both channels; a cell whose burn ended "
             "differently on the two channels records no time comparison"))
     if native["status"] == "pass":
-        checks.append(_check(f"{cell.cell_id}.att_err_max_deg",
-                             rec["attitude_err_max_deg"], ATT_ERR_MAX_LIMIT_DEG,
+        checks.append(_check(f"{cell.cell_id}.att_err_max_powered_deg",
+                             rec["attitude_err_max_powered_deg"],
+                             ATT_ERR_MAX_LIMIT_DEG,
                              "max", "deg", "the E6-05 upper-powered attitude "
-                             "band (E6-02's rationale) on a cell the native "
-                             "channel declares inserted"))
-        checks.append(_check(f"{cell.cell_id}.att_err_rms_deg",
-                             rec["attitude_err_rms_deg"], ATT_ERR_RMS_LIMIT_DEG,
-                             "max", "deg", "the same band's RMS companion"))
+                             "band (E6-02's drift-accrual rationale) over the "
+                             "POWERED window only, on a cell the native "
+                             "channel declares inserted; the whole-span error "
+                             "is recorded too but the band does not apply to "
+                             "the unactuated coast after cutoff (E6-02's own "
+                             "post-burnout phase drifts to 92 deg)"))
+        checks.append(_check(f"{cell.cell_id}.att_err_rms_powered_deg",
+                             rec["attitude_err_rms_powered_deg"],
+                             ATT_ERR_RMS_LIMIT_DEG,
+                             "max", "deg", "the same band's RMS companion, "
+                             "powered window"))
     finite = (math.isfinite(rec["terminal_semi_major_axis_m"])
               and math.isfinite(rec["terminal_speed_m_s"])
               and rec["n_samples"] > 10)
