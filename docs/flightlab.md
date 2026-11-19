@@ -316,3 +316,24 @@ adjusted 0.3516). The gate alone reproduces baseline verdicts; compensation
 carries the measured change. The enforced joint arm stays 35/168 with or
 without the fix. Default cutoff and corridor-aim knobs remain off; see
 `orbitopt.flightlab.recovery.failure_driven` for the paired analysis.
+
+## Out-of-sample reliability (E7-05)
+
+The [reliability report](benchmarks/e7_05_out_of_sample_reliability.md)
+diagnoses E7-04's 99/168 `JOINT_CHANCE_VIOLATED`: reconstructing the three
+normalized violations from each recorded verdict (identity checked on all
+99 rows) shows **51 bind on the divert budget, 48 on the fuel quantile, 0 on
+the landing-probability term** -- and under the shipped spec the probability
+term provably cannot bind alone (the sweep test in
+`tests/test_flightlab_recovery_reliability.py`). The rejections are physical
+(51/99 deep: the dispersion band itself misses the spec), with 20 of 99
+rejected worlds landing anyway under FL-305 grading. Re-analysing the E7-03
+headline per-seed instead of pooled: Mantel-Haenszel p = 0.017 and a
+cluster-bootstrap CI of [-0.185, -0.058] survive, but seed 1 sits at phi = 0,
+Fisher-combined p = 0.154 and no per-arm Holm p reaches 0.05. Hold-out flights
+on disjoint seeds reproduce the pattern (39/168 landed, Brier skill -0.62,
+overconfident mid-bins, 0 probability-bound rejections); widened bands (x1.5)
+collapse to 2/84 and an independent ~180 t-class RTLS vehicle to 0/48, all
+deep fuel-bound. The probability model generalizes only in shape, not level:
+it stays unskilled out of sample. No success-rate improvement is claimed.
+API: `orbitopt.flightlab.recovery.reliability`.
