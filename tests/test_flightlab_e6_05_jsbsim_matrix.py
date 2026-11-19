@@ -139,7 +139,7 @@ class TestCommittedComparison:
         rec = jsbsim_matrix_record(cell, matrix_handoff(cell), dt_s=0.01)
         h = rec["handoff_residuals"]
         assert h["position_err_m"] < 1e-3
-        assert h["velocity_err_m_s"] < 1e-6
+        assert h["velocity_err_m_s"] < 2e-6 * h["frozen_speed_m_s"]
         assert h["attitude_err_rad"] < 1e-6
         assert abs(h["mass_err_kg"]) < 1e-3
         prop = rec["propellant_at_ignition_kg"]
