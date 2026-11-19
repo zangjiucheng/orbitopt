@@ -95,6 +95,19 @@ changing it there (all default off):
   adding to it; the apogee converges to the ceiling and the box closes.
   Proportional, self-clearing (the term vanishes as the apogee enters the
   band) and off by default.
+  Measured on the matrix this hold is inert-but-correct, and the reason is
+  a limit of the law family, not of the cutoff: the command is clamped to
+  +/-``command_alpha_limit_deg`` off the velocity vector, so within 30 deg
+  a retro correction is >= 87 % prograde and the apogee keeps growing
+  anyway.  Widening that limiter to 45 deg *does* convert the last
+  shape-limited cell -- but the same extra pitch authority dumps the two
+  high-inclination reference cells' periapsis just under the band floor
+  (they deplete 3-6 km short), so the 45 deg point is recorded as rejected:
+  the envelope boundary is the finding, not a wider setting that trades
+  cells.  No setting of the cutoff, the cap, the feeds or this hold turns
+  the depletion-class misses either: their periapsis never reaches the band
+  floor while the tank empties, so the box is never armed and their cause
+  is the stage's delta-v budget, not the law's terminal conditions.
 
 The command limiter: ``Lambda``'s *direction* is undefined as its
 magnitude vanishes (and its tangential part flips 180 deg when ``v_t``

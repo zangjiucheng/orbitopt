@@ -145,6 +145,15 @@ E605_TRANSFER_APOGEE_BIAS_M = INSERTION_TOLERANCE_M
 #: the ~70 km overshoot of the worst shape-limited cell asks for ~55 m/s,
 #: and the term is self-clearing as the apogee converges.
 E605_APOGEE_CEILING_GAIN = 8.0e-4
+#: The matrix flies the F-07 proven pitch-bias (AoA) limiter, not a widened
+#: one.  E6-05 measured the alternative: at 45 deg the last shape-limited
+#: cell (a180) inserts on both backends -- the pull-up finally pitches
+#: steeply enough through perigee -- but a220-i45 and a220-i51.6 then
+#: deplete with their periapsis 3-6 km short of the band floor, and the
+#: a220 reference cell's own periapsis margin collapses to ~1 km.  One
+#: shared law cannot buy a180 with two other cells; the envelope boundary,
+#: not a wider setting, is the honest result (module docstring, upper_stage).
+E605_COMMAND_ALPHA_LIMIT_DEG = 30.0
 
 BACKEND_PAIR: tuple[str, str] = BACKENDS
 
@@ -414,7 +423,8 @@ def matrix_scenario(cell: GuidanceMatrixCell, *, dt_s: float = MATRIX_DT_S,
                 climb_time_to_go_gain=E605_CLIMB_TIME_TO_GO_GAIN,
                 cutoff_insertion_box=E605_CUTOFF_INSERTION_BOX,
                 transfer_apogee_bias_m=E605_TRANSFER_APOGEE_BIAS_M,
-                apogee_ceiling_gain=E605_APOGEE_CEILING_GAIN))
+                apogee_ceiling_gain=E605_APOGEE_CEILING_GAIN,
+                command_alpha_limit_deg=E605_COMMAND_ALPHA_LIMIT_DEG))
     return scenario
 
 

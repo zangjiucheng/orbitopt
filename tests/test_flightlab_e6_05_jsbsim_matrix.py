@@ -68,6 +68,7 @@ class TestSpecExtension:
         assert ug.climb_time_to_go_gain == 0.0
         assert ug.cutoff_insertion_box is True
         assert ug.apogee_ceiling_gain > 0.0
+        assert ug.command_alpha_limit_deg == 30.0
 
 
 class TestGeneratedAirframe:
