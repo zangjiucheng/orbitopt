@@ -1,0 +1,46 @@
+# Cross-environment plan for the E5-07 physics qualification reference
+# (task #291).
+#
+#   orbitopt crossenv run --plan src/orbitopt/data/crossenv_e507_plan.yaml \
+#     --env tudat=/path/to/tudatpy-env/bin/python
+#
+# One mission leg in the tudatpy environment: the recorded computed ascent is
+# replayed through the mission runner and the parking-orbit propagation is
+# PHYSICALLY EVIDENCED there (stage option propagate: true) -- the E5-04
+# phase the reference recording itself keeps not_checked. The achieved orbit
+# is graded in the foreign environment against the reference within the
+# declared bands (scripts/e507_reference.py crossenv-check).
+#
+# full_mission is deliberately NOT declared: the E5-07 booster recovery leg
+# cannot be flown (the vehicle's restart-2 aerodynamic-entry RTLS profile has
+# no representation in the FL-302 planner -- see
+# tests/data/mission/reference/e5-07-physics-qualification/RECOVERY_GAP.md),
+# so a joint full-mission gate over the five physical phases would either lie
+# about the landing phase or silently drop a required one. The E5-06 joint
+# gate reports NOT-DECLARED for this mission; the acceptance report carries
+# the reason instead of a relaxed constraint. The E5-05 plan
+# (crossenv_e505_plan.yaml) remains the end-to-end demonstration of the full
+# joint gate.
+kind: orbitopt.crossenv.plan
+schema_version: "1.0"
+
+mission:
+  id: e5-07-cross-env-physics-qualification
+
+scenario: src/orbitopt/data/mission_two_stage_leo_starship_e507.yaml
+
+out: runs/crossenv-e5-07
+
+environments:
+  tudat: ${ORBITOPT_TUDAT_PYTHON:-python}
+
+stages:
+  # Mission leg in the tudatpy environment: replay of the recorded computed
+  # ascent, station chain, staging handoffs, SECO-to-parking gate and the
+  # M-05 propagation. No recovery leg exists to couple to.
+  - id: mission
+    runner: ascent
+    env: tudat
+    options:
+      earth_orientation_snapshot: tests/data/mission/reference/e5-07-physics-qualification/earth_orientation.json
+      propagate: true               # evidence the parking-orbit leg here
