@@ -286,6 +286,20 @@ E602_PHASE_CONSTRAINTS: Mapping[tuple[str, str], tuple[float, str, str, str]] = 
     (UPPER_COAST_BEFORE, "q_alpha_max_pa_deg"): (5.0e5, "max", "Pa.deg",
         "structural budget; the pre-ignition coast is the first phase in "
         "which the upper airframe sees live air on its own."),
+    (UPPER_POWERED, "att_err_max_deg"): (12.0, "max", "deg",
+        "E6-05 (#292): the child is unactuated through its whole burn "
+        "(assumption 3), so its powered attitude error is the drift the "
+        "separation left it with, accrued over coast + burn at the rate it "
+        "was separated with: the program this scenario ends with slews at "
+        "70 deg over its last 130 s (0.54 deg/s at MECO), the ignition delay "
+        "is 8 s and the disclosed upper burn 3 s, so the accrual bound is "
+        "0.54 x 11 s = 5.9 deg on top of the stack's own closed-loop 6 deg "
+        "band (F-05) the child inherits at separation; declared 12 deg."),
+    (UPPER_POWERED, "att_err_rms_deg"): (7.0, "max", "deg",
+        "E6-05 (#292): same rationale: a body drifting at a constant rate "
+        "accumulates a "
+        "linear ramp, whose RMS is its peak / sqrt(3); declared at the ramp "
+        "ratio rounded up (12 / 1.7 ~= 7)."),
     (UPPER_POWERED, "alpha_max_deg"): (25.0, "max", "deg",
         "the child airframes carry no aerodynamics at all (FL-402), so no "
         "table envelope applies; this upper bound keeps the free-drift angle "
