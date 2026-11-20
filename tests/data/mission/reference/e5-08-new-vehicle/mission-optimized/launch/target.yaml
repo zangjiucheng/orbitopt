@@ -1,0 +1,72 @@
+schema_version: '1.0'
+mission:
+  id: leo-starship-class-rtls-e5-08
+  title: Starship-class RTLS-derived design LEO insertion + booster powered-entry
+    RTLS (E5-08 new-vehicle design)
+  epoch_utc: '2026-11-10T12:00:00Z'
+launch_site:
+  name: kourou
+  latitude_deg: 5.2392
+  longitude_deg: -52.7685
+  altitude_wgs84_m: 15.0
+target_orbit:
+  central_body: Earth
+  periapsis_altitude_m: 250000
+  apoapsis_altitude_m: 250000
+  inclination_deg: 51.6
+  raan_deg: null
+vehicle:
+  source: vehicles/starship_class_rtls_derived.yaml
+  provenance: public_estimate
+constraints:
+  max_dynamic_pressure_pa: 55000
+  max_specific_acceleration_g: 3.0
+  minimum_insertion_periapsis_m: 230000
+  orbit_altitude_tolerance_m: 60000
+  inclination_tolerance_deg: 1.0
+recovery:
+  kind: rtls
+  target: launch_site
+  max_touchdown_speed_m_s: 3.0
+  max_touchdown_lateral_speed_m_s: 1.0
+  min_propellant_reserve_kg: 100000
+simulation:
+  ascent_backend: opentsiolkovsky
+  atmosphere_6dof_backend: jsbsim
+  orbit_verify_backend: tudatpy
+  enabled_phases:
+  - ascent_3dof
+  - orbit_verify
+assumptions:
+- 'Constraint basis (E5-07): every limit above is PUBLIC SOURCE or ASSUMPTION as commented;
+  none was widened to make the computed flight close. Vehicle-parameter uncertainty
+  (generated aero +-30 %, nose length +-30 % assumption) is recorded as the SENSITIVITY
+  RANGE of the reference, quantified in the E5-07 sensitivity record (scripts/e507_reference.py
+  sensitivity), not by loosening a limit.'
+- 'q*alpha structural load (a Starship-class sizing case the E5-05 fixture never carried):
+  the reference does not impose an unpublished allowable as a number. It is qualified
+  as a REPORTED load -- the ascent run carries q and the attitude program''s angle
+  of attack (gravity-turn: beta ~ 0, q*alpha ~ 0 by construction of the commanded
+  program), and the sensitivity record evaluates the +-30 % aerodynamic band on the
+  same trajectory. The entry cross-check is reported separately as not-closable with
+  the current guidance chain (see the E5-07 report).'
+- 'Thrust-to-weight ratio: liftoff TWR of the declared stack is 74.93 MN vacuum thrust
+  (33 x Raptor 2 at 95 %, derived from the published 2.256 MN sea-level figure) on
+  3,525 t at pad -> 2.17 vacuum / ~1.95 sea-level-class; the published Block 1 liftoff
+  TWR is ~1.5. The OT backend flies the declared full-thrust burn window (no throttle
+  authority), so the declared thrust curve -- not a mission gate -- carries this figure;
+  it is reported in the E5-07 record as a vehicle-capability note.'
+- The vehicle flies its DECLARED attitude program and burn windows (fixed-program
+  OT flight; the program in the vehicle file is an authored gravity-turn-style profile,
+  scenario choice, tagged illustrative there).
+- 'Booster RTLS (design change DC1, E5-08): the vehicle models THREE relightable ignitions
+  (boostback, ONE powered entry burn, landing), the profile the shipped E3 chain plans,
+  flies and grades; the E5-07 gap report''s restart-2 aerodynamic-entry profile is
+  not expressible in FL-302 and is NOT claimed here. Entry-phase planning limits (250
+  kPa / 12 g) are ADR-0008 DESIGN ASSUMPTIONs -- planning knobs, not graded constraints;
+  the graded recovery numbers (touchdown 3 m/s vertical / 1 m/s lateral, reserve 100
+  t) are the E5-07 values, unchanged.'
+- 'Constraint basis inherited from the E5-07 reference unchanged (E5-08 acceptance
+  rule): no limit was widened for the new vehicle; a computed violation is reported
+  with its reason class (vehicle capability / guidance / constraint), not fixed by
+  editing this file.'
