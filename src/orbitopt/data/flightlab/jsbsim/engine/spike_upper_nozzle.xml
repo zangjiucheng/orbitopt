@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!--
+  E6-05 (task #292): the F-07 upper-stage nozzle on the JSBSim channel:
+  the parity source's stage2_engine.nozzle_exit_area_m2 = 0.35 m^2
+  = 3.7673689 ft^2.  With spike_upper_engine.xml this reproduces the
+  native engine's ambient debit (E6-01's method, ADR flightlab-0009).
+-->
+<nozzle name="spike_upper_nozzle">
+  <area unit="FT2"> 3.7673689 </area>
+</nozzle>

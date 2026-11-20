@@ -168,8 +168,9 @@ single qualified production vehicle:
 |---|---|---|
 | F-05 / E1-02 | Powered attitude error 4.77° peak, alpha 14.42°, max-Q 71.2 kPa. | Powered and coast gates differ; the later 62.6° alpha peak is in near-vacuum coast. [Record](benchmarks/fl605_gravity_turn_ascent.json). |
 | F-07 / E1-03 | Native point mass: 225.3/228.5 km peri/apo; rigid body: 220.5/226.5 km, within ±25 km. | Shared feedback law on a disclosed 1 t dry / 7 t propellant upper stage with 3° gimbal; not original F-06 parity. [Record](benchmarks/fl607_mission_outputs.json). |
-| E6-02 | Guided production JSBSim ascent with TVC, MECO, staging and delayed ignition; powered error 0.44° peak, alpha 11.7°. | Its 70 t stack and spike-engine children are illustrative; native and JSBSim controller differences are attributed, not assumed away. [ADR 0010](adr/flightlab-0010-guided-jsbsim-ascent.md), [record](benchmarks/e6_02_guided_ascent.json). |
-| E6-03 | Six of 17 declared scenario points insert on both native backends. | Sweeps altitude, inclination, vehicle and actuator sets; misses distinguish vehicle, terminal-law and actuator limits. [ADR 0011](adr/flightlab-0011-guidance-generalisation-envelope.md), [matrix](benchmarks/e6_03_guidance_matrix.json). |
+| E6-02 | Guided production JSBSim ascent with TVC, MECO, staging and delayed ignition; powered error 0.44° peak, alpha 11.7°. | Its 70 t stack and spike-engine children are illustrative; native and JSBSim controller differences are attributed, not assumed away. E6-05 added the upper stage's own powered attitude band: the child is unactuated through its burn, so the declared 12° peak / 7° RMS bound is the accrual of the separation-time drift rate over coast + burn (0.54°/s × 11 s + the inherited 6° band); measured 6.13° / 6.15°. [ADR 0010](adr/flightlab-0010-guided-jsbsim-ascent.md), [record](benchmarks/e6_02_guided_ascent.json). |
+| E6-03 | Six of 17 declared scenario points insert on both native backends. | Sweeps altitude, inclination, vehicle and actuator sets; misses distinguish vehicle, terminal-law and actuator limits. The E6-05 re-flight under the generalised box-cutoff law (transfer cap, planning guard, terminal apogee hold) reproduces the same six with zero unexpected verdicts; the guidance-class mechanism and its boundary are recorded in [ADR 0011](adr/flightlab-0011-guidance-generalisation-envelope.md), [matrix](benchmarks/e6_03_guidance_matrix.json). |
+| E6-05 | The E6-03 matrix on JSBSim agrees with the native verdict on 16 of 17 cells; the one difference is the cell E6-03 attributes to the servo realisation. | Each cell restarts JSBSim at the native run's frozen separation state, so the comparison is upper-stage like-for-like; median periapsis/apoapsis difference 6.7 / 14.1 km (largest agreement-class gap: the ballistic V0 control, 764 km — recorded, not gated), engine parity ≤0.05 % where both channels end the same way, and every inserted cell arrests its inherited attitude drift to 0.00° growth. The A3 actuator-boundary cell cuts off on JSBSim with 480 kg left where the native rigid body depletes — the disclosed execution-channel difference, recorded at 6.85 % propellant divergence. [record](benchmarks/e6_05_jsbsim_matrix.json). |
 | E6-04 | Stateful guidance/control sampled once per step and held across RK4 stages. | The study justifies `dt_s = dt_c_s = 0.02`; this is not a universal backend step. [Sampled-control ADR](adr/flightlab-0008-sampled-data-control-and-rk4-plant.md), [sweep](benchmarks/e604_step_convergence.json). |
 
 Run the native two-backend mission and open its saved outputs:
@@ -183,6 +184,15 @@ For the guided JSBSim study (requires the six-DOF dependency):
 
 ```bash
 PYTHONPATH=src python benchmarks/bench_e6_02_guided_ascent.py -o runs/e602.json
+```
+
+The guidance matrix (native) and its JSBSim applicability twin regenerate from
+their benchmarks; both fly every cell independently, so `--jobs` scales with
+cores (cells take minutes each):
+
+```bash
+PYTHONPATH=src python benchmarks/bench_e6_03_guidance_matrix.py --jobs 4 -o docs/benchmarks/e6_03_guidance_matrix.json
+PYTHONPATH=src python benchmarks/bench_e6_05_jsbsim_matrix.py --jobs 4 -o docs/benchmarks/e6_05_jsbsim_matrix.json
 ```
 
 The study writes measurement JSON rather than a Flight Lab run directory.
