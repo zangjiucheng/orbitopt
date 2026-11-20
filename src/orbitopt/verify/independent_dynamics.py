@@ -332,16 +332,19 @@ class _SchedGuidance:
 
 
 def _twin_ascent(dt_s: float, isp_sl_stage1: float | None = None,
-                 density_scale: float = 1.0, ) -> dict[str, Any]:
+                 density_scale: float = 1.0,
+                 vehicle_yaml: Path | str | None = None, ) -> dict[str, Any]:
     """Fly pad -> MECO -> coast -> separation -> SECO with the point-mass twin
-    and integrate the stage-1 debris to impact; return the event states."""
+    and integrate the stage-1 debris to impact; return the event states.
+    ``vehicle_yaml`` overrides the vehicle the twin flies (E5-08: the twin
+    flies the derived vehicle file); ``None`` keeps the E5-07 reference."""
     import yaml
     from orbitopt.flightlab import frames
     from orbitopt.flightlab.sixdof.aero import AeroModel
     from orbitopt.flightlab.sixdof.gravity_turn import WaypointAttitudeProgram, propagate_point_mass
     from orbitopt.flightlab.sixdof.rigidbody import (RigidBodyEngine, RigidBodyPhysics,
                                                      RigidBodyState, RigidBodyVehicle)
-    doc = yaml.safe_load(_VEHICLE_YAML.read_text(encoding="utf-8"))
+    doc = yaml.safe_load(Path(vehicle_yaml or _VEHICLE_YAML).read_text(encoding="utf-8"))
     prog = doc["attitude_program"]
     program = WaypointAttitudeProgram(tuple(p["t_s"] for p in prog),
                                       tuple(p["azimuth_deg"] for p in prog),
@@ -422,7 +425,8 @@ def _twin_ascent(dt_s: float, isp_sl_stage1: float | None = None,
     r_seco = np.array([e_s["x_m"], e_s["y_m"], e_s["z_m"]])
     v_seco = np.array([e_s["vx_m_s"], e_s["vy_m_s"], e_s["vz_m_s"]])
     debris = _debris_to_impact(r_sep, v_sep, m_sep - ship_kg,
-                               s1["aero"]["ca_power_off"], DEBRIS_DT_S)
+                               s1["aero"]["ca_power_off"], DEBRIS_DT_S,
+                               diameter_m=float(s1["aero"]["diameter_m"]))
     return {"meco": (r_meco, v_meco, float(m_s["mass_kg"])),
             "separation": (r_sep, v_sep, m_sep),
             "seco": (r_seco, v_seco, float(e_s["mass_kg"])),
@@ -431,12 +435,13 @@ def _twin_ascent(dt_s: float, isp_sl_stage1: float | None = None,
 
 
 def _debris_to_impact(r0: np.ndarray, v0: np.ndarray, mass_kg: float,
-                      ca_off: Sequence[Sequence[float]], dt: float) -> dict:
+                      ca_off: Sequence[Sequence[float]], dt: float, *,
+                      diameter_m: float | None = None) -> dict:
     """Ballistic re-entry of the spent stage-1: power-off CA polar, velocity-
     aligned, point mass, J2 + Coriolis + centrifugal, US76 (altitude only);
     own RK4, linear interpolation of the geodetic-altitude ground crossing."""
     from orbitopt.flightlab import atmosphere
-    s_ref = math.pi * float(_twin_diameter_m()) ** 2 / 4.0
+    s_ref = math.pi * float(diameter_m or _twin_diameter_m()) ** 2 / 4.0
     ca = np.asarray(ca_off, dtype=float)
     om = np.array([0.0, 0.0, OMEGA_EARTH_RAD_S])
 
@@ -651,9 +656,15 @@ def independent_landing_refly(plan_times: np.ndarray, plan_thrust_enu: np.ndarra
             "cutoff": cutoff}
 
 
-def _landing_pair(vehicle_yaml: Path, engines: int) -> dict[str, Any]:
+def _landing_pair(vehicle_yaml: Path, engines: int,
+                  landing: Mapping[str, Any] | None = None, *,
+                  allow_infeasible: bool = False) -> dict[str, Any] | None:
     """Solve the gfold arc, re-fly it with FL-301 and with the independent
-    integrator; return everything the checks need."""
+    integrator; return everything the checks need. ``landing`` overrides the
+    corridor insertion state (E5-08: the state the recorded recovery script
+    flew out of); ``None`` keeps the declared E5-07 corridor. With
+    ``allow_infeasible`` an unplannable corridor returns ``None`` (the E5-08
+    gap design: the reported infeasibility IS the finding) instead of raising."""
     import dataclasses
     from datetime import datetime, timezone
     from orbitopt.flightlab.recovery.landing import LandingBurnEnu, fly_landing_burn
@@ -663,26 +674,30 @@ def _landing_pair(vehicle_yaml: Path, engines: int) -> dict[str, Any]:
     vehicle = dataclasses.replace(v0, engine=dataclasses.replace(v0.engine,
                                                                  count=engines))
     pad, bas = _pad_state_and_basis()
-    pos = np.array(LANDING_CORRIDOR_ENU_M)
-    vel = np.array(LANDING_CORRIDOR_V_ENU_M_S)
-    enu = LandingBurnEnu(t_s=200.0, position_enu_m=tuple(float(c) for c in pos),
+    t_ins = float((landing or {}).get("t_s", 200.0))
+    pos = np.array((landing or {}).get("position_enu_m", LANDING_CORRIDOR_ENU_M), float)
+    vel = np.array((landing or {}).get("velocity_enu_m", LANDING_CORRIDOR_V_ENU_M_S), float)
+    mass = float((landing or {}).get("mass_kg", LANDING_INSERTION_MASS_KG))
+    enu = LandingBurnEnu(t_s=t_ins, position_enu_m=tuple(float(c) for c in pos),
                         velocity_enu_m=tuple(float(c) for c in vel),
-                        mass_kg=LANDING_INSERTION_MASS_KG)
-    st = BoosterState(t_s=200.0, epoch_utc=datetime.fromisoformat(_EPOCH_ISO),
+                        mass_kg=mass)
+    st = BoosterState(t_s=t_ins, epoch_utc=datetime.fromisoformat(_EPOCH_ISO),
                       frame="ECEF",
                       position_m=tuple(float(c) for c in pad + bas.T @ pos),
                       velocity_m_s=tuple(float(c) for c in bas.T @ vel),
-                      mass_kg=LANDING_INSERTION_MASS_KG)
+                      mass_kg=mass)
     target = RecoveryTarget(kind="rtls", name="kourou",
                             latitude_deg=LAUNCH_LAT_DEG, longitude_deg=LAUNCH_LON_DEG,
                             altitude_m=LAUNCH_ALT_M)
     result = fly_landing_burn(enu, st, target, vehicle)
     if not result.feasible or result.plan is None:
+        if allow_infeasible:
+            return None
         raise RuntimeError(f"landing plan infeasible: {result.reason_codes}")
     plan = result.plan
-    state = {"t_s": 200.0, "position_enu_m": tuple(float(c) for c in pos),
+    state = {"t_s": t_ins, "position_enu_m": tuple(float(c) for c in pos),
              "velocity_enu_m": tuple(float(c) for c in vel),
-             "mass_kg": LANDING_INSERTION_MASS_KG}
+             "mass_kg": mass}
     indep = independent_landing_refly(np.asarray(plan.times_s),
                                       np.asarray(plan.thrust_enu_n), state, vehicle)
     tr = result.track
@@ -713,9 +728,18 @@ def _orbit_elements(r_eci: np.ndarray, v_eci: np.ndarray) -> dict:
 
 def verify_independent_dynamics(reference_root: Path | None = None, *,
                                 check_digests: bool = True, workers: int = 4,
+                                vehicle_yaml: Path | str | None = None,
+                                landing: Mapping[str, Any] | None = None,
                                 ) -> dict:
-    """Recompute the E5-07 ascent/debris and the declared landing corridor with
-    independent dynamics models and grade them inside the declared bands.
+    """Recompute the reference ascent/debris with independent dynamics models
+    and grade them inside the declared bands; the powered-landing corridor is
+    re-flown through two independent dynamics models.
+
+    ``vehicle_yaml`` / ``landing`` let a derived vehicle (E5-08) be validated
+    the same way: the twin flies that vehicle file and the landing pair flies
+    the given corridor insertion state (``position_enu_m`` /
+    ``velocity_enu_m`` / ``mass_kg`` / ``t_s`` / ``engines``) instead of the
+    declared E5-07 corridor; both default to the E5-07 reference inputs.
 
     Returns a ``verification-report-1.0`` document of kind
     ``independent-dynamics`` whose ascent checks carry
@@ -736,6 +760,14 @@ def verify_independent_dynamics(reference_root: Path | None = None, *,
         to_jsonable)
 
     root = Path(reference_root) if reference_root is not None else REFERENCE_ROOT
+    vy = Path(vehicle_yaml) if vehicle_yaml is not None else _VEHICLE_YAML
+    land_engines = int((landing or {}).get("engines", LANDING_ENGINES))
+    lpos = [float(c) for c in (landing or {}).get("position_enu_m",
+                                                  LANDING_CORRIDOR_ENU_M)]
+    lvel = [float(c) for c in (landing or {}).get("velocity_enu_m",
+                                                 LANDING_CORRIDOR_V_ENU_M_S)]
+    lmass = float((landing or {}).get("mass_kg", LANDING_INSERTION_MASS_KG))
+    lt_s = float((landing or {}).get("t_s", 200.0))
     if not (root / "PROVENANCE.json").is_file():
         raise ReferenceNotFound(f"{root}: sealed E5-07 reference tree not found")
     prov = json.loads((root / "PROVENANCE.json").read_text(encoding="utf-8"))
@@ -746,13 +778,38 @@ def verify_independent_dynamics(reference_root: Path | None = None, *,
 
     with ProcessPoolExecutor(max_workers=workers) as pool:
         futures = {
-            "nominal": pool.submit(_twin_ascent, TWIN_DT_S, None, 1.0),
-            "engine": pool.submit(_twin_ascent, TWIN_DT_S, OT_PAD_ISP_S, 1.0),
-            "aero": pool.submit(_twin_ascent, TWIN_DT_S, None, 1.03),
-            "numerical": pool.submit(_twin_ascent, TWIN_DT_S / 2.0, None, 1.0),
+            "nominal": pool.submit(_twin_ascent, TWIN_DT_S, None, 1.0, vy),
+            "engine": pool.submit(_twin_ascent, TWIN_DT_S, OT_PAD_ISP_S, 1.0, vy),
+            "aero": pool.submit(_twin_ascent, TWIN_DT_S, None, 1.03, vy),
+            "numerical": pool.submit(_twin_ascent, TWIN_DT_S / 2.0, None, 1.0, vy),
         }
         twin = {k: f.result() for k, f in futures.items()}
-    lp = _landing_pair(_VEHICLE_YAML, LANDING_ENGINES)
+    lp = _landing_pair(vy, land_engines, landing)
+    _explicit = bool(landing) and "position_enu_m" in landing
+    if _explicit:
+        _lead = ("landing: the corridor insertion state is recorded from the flown "
+                 "recovery script of this mission; both re-flights share the gfold "
+                 f"plan nodes and the {land_engines}-engine landing configuration "
+                 "declared from the vehicle file's own ")
+    elif landing is not None:
+        _lead = ("landing: the corridor insertion state is the cool DECLARED design "
+                 "input (the E5-07 convention), flown on this derived vehicle's own "
+                 f"{land_engines}-engine landing set; both re-flights share the gfold "
+                 "plan nodes and the landing configuration declared from the vehicle "
+                 "file's own ")
+    else:
+        _lead = ("landing: no landing is flown in E5-07 (RECOVERY_GAP.md); the "
+                 "corridor insertion state is a declared design input. Both "
+                 "re-flights share the gfold plan nodes and the 3-engine "
+                 "landing configuration declared from the vehicle file's own ")
+    landing_bullet = _lead + (
+          "note; they differ in gravity (J2 point-mass + centrifugal vs "
+          "IGF-80 normal gravity with the centrifugal absorbed, Coriolis "
+          "omitted -- below 0.15 m on this arc), atmosphere (FL-301's "
+          "entry density table vs independent US76 tables), command "
+          "replay (node-acceleration FOH x current mass vs physical-"
+          "thrust FOH with the engine's own ambient correction and "
+          "throttle limits) and integrator (RK4 0.1 s vs RK4 0.05 s).")
 
     details: list[dict] = []
     checks: dict[str, bool] = {}
@@ -931,7 +988,7 @@ def verify_independent_dynamics(reference_root: Path | None = None, *,
     band = {"unit": "-", "limit": 1.0,
             "basis": "FL-301 design gates on the shared re-flight (gfold arc, "
                      "FL-303 re-integration): worst gate utilisation; the "
-                     "corridor and the 3-engine landing configuration are "
+                     f"corridor and the {land_engines}-engine landing configuration are "
                      "design inputs, so this is the design grading, not "
                      "independent validation"}
     details.append({"id": "landing.fl301_gates", "category": CHECK_MODEL,
@@ -947,7 +1004,11 @@ def verify_independent_dynamics(reference_root: Path | None = None, *,
     report = {
         "schemaVersion": "1.0",
         "kind": "independent-dynamics",
-        "label": ("E5-07 Starship-class reference: ascent and stage-1 debris "
+        "label": (f"{Path(vy).stem}: ascent and stage-1 debris recomputed with a "
+                  "native point-mass twin (E8-05), and the given landing corridor "
+                  "re-flown through two independent dynamics models"
+                  ) if (vehicle_yaml is not None or landing is not None) else (
+                  "E5-07 Starship-class reference: ascent and stage-1 debris "
                   "recomputed with a native point-mass twin (E8-05), and the "
                   "declared landing corridor re-flown through two independent "
                   "dynamics models"),
@@ -974,10 +1035,10 @@ def verify_independent_dynamics(reference_root: Path | None = None, *,
                 "numerical": f"twin re-run at dt/2 ({TWIN_DT_S / 2} s)",
             },
             "landing_corridor": {
-                "position_enu_m": list(LANDING_CORRIDOR_ENU_M),
-                "velocity_enu_m": list(LANDING_CORRIDOR_V_ENU_M_S),
-                "mass_kg": LANDING_INSERTION_MASS_KG, "t_s": 200.0,
-                "engines": LANDING_ENGINES,
+                "position_enu_m": lpos,
+                "velocity_enu_m": lvel,
+                "mass_kg": lmass, "t_s": lt_s,
+                "engines": land_engines,
                 "plan_tof_s": float(lp["plan"].times_s[-1] - lp["plan"].times_s[0]),
                 "fl301_position_error_m": res.position_error_m,
                 "fl301_vertical_speed_m_s": res.vertical_speed_m_s,
@@ -1003,17 +1064,7 @@ def verify_independent_dynamics(reference_root: Path | None = None, *,
                 "from the same YAML; OpenTsiolkovsky integrates its own debris "
                 "body; the impact comparison is therefore an emergent, "
                 "widest-band check.",
-                "landing: no landing is flown in E5-07 (RECOVERY_GAP.md); the "
-                "corridor insertion state is a declared design input. Both "
-                "re-flights share the gfold plan nodes and the 3-engine "
-                "landing configuration declared from the vehicle file's own "
-                "note; they differ in gravity (J2 point-mass + centrifugal vs "
-                "IGF-80 normal gravity with the centrifugal absorbed, Coriolis "
-                "omitted -- below 0.15 m on this arc), atmosphere (FL-301's "
-                "entry density table vs independent US76 tables), command "
-                "replay (node-acceleration FOH x current mass vs physical-"
-                "thrust FOH with the engine's own ambient correction and "
-                "throttle limits) and integrator (RK4 0.1 s vs RK4 0.05 s).",
+                landing_bullet,
                 "no check in this report uses historical_telemetry evidence: "
                 "the reference vehicle is a public estimate, not flown "
                 "hardware, and there is no telemetry to compare against.",

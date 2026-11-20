@@ -272,6 +272,19 @@ jobs:
           python -m orbitopt crossenv run --plan src/orbitopt/data/crossenv_e505_plan.yaml \
             -o runs/crossenv-e5-05
           python scripts/e505_reference.py crossenv-check runs/crossenv-e5-05
+      # E5-08 (task #296): the NEW vehicle (starship_class_rtls_derived)
+      # through the joint five-check gate: ascent leg propagated in the
+      # tudatpy env, recovery leg DRIVEN from the canonical separation
+      # handoff in the gfold env with the sealed DC1 recipe, the joined
+      # full_mission verdict graded by crossenv-check.
+      - name: E5-08 new vehicle flies the joint gate across the boundary
+        env:
+          ORBITOPT_GFOLD_PYTHON: ${{ github.workspace }}/.venv-landing/bin/python
+        run: |
+          export ORBITOPT_TUDAT_PYTHON="${MAMBA_ROOT_PREFIX:?}/envs/orbitopt/bin/python"
+          python -m orbitopt crossenv run --plan src/orbitopt/data/crossenv_e508_plan.yaml \
+            -o runs/crossenv-e5-08
+          python scripts/e508_new_vehicle.py crossenv-check runs/crossenv-e5-08
 
   test-macos:
     # Same locked CPU env on macOS: micromamba picks the osx-arm64 or osx-64

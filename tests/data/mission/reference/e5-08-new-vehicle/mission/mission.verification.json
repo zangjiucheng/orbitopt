@@ -1,0 +1,1673 @@
+{
+  "digest": "10965653d180a5bb5d4f1572a3853282be3ab2acc8ed59dcce9d9d10ef79e689",
+  "inputs": {
+    "ascent": {
+      "launch": null,
+      "mode": "run_dir",
+      "run_dir": "/var/lib/context-forge/296/repo/tests/data/mission/reference/e5-08-new-vehicle/mission-optimized/launch/ascent",
+      "run_id": "ot-e92c0aef-463716b9"
+    },
+    "child_reports": [
+      {
+        "kind": "orbit-propagation"
+      }
+    ],
+    "expected_basis": {
+      "constraint_defaults": {
+        "inclination_tolerance_deg": 0.2,
+        "orbit_altitude_tolerance_m": 20000.0,
+        "raan_tolerance_deg": 1.0
+      },
+      "declared": [
+        "apoapsis_altitude_m",
+        "eccentricity",
+        "inclination_deg",
+        "periapsis_altitude_m",
+        "semi_major_axis_m",
+        "tolerances.semi_major_axis_m",
+        "tolerances.eccentricity",
+        "tolerances.inclination_deg",
+        "tolerances.raan_deg",
+        "tolerances.periapsis_altitude_m",
+        "tolerances.apoapsis_altitude_m"
+      ],
+      "derived_from": {},
+      "orbit_spec": "232.5x292.1@51.98"
+    },
+    "full_mission": {
+      "coverage": {
+        "complete": false,
+        "phases": {
+          "orbit_injection": {
+            "reason": "",
+            "required": true,
+            "status": "checked"
+          },
+          "parking_propagation": {
+            "reason": "out-of-scope declaration refused: parking_propagation is a required physical phase of a run declared full_mission (declared: propagation declared out of scope (expected.propagation_result: not_checked): the parking orbit is not required to be propagated)",
+            "required": true,
+            "status": "not_checked"
+          },
+          "recovery_touchdown": {
+            "reason": "",
+            "required": true,
+            "status": "checked"
+          }
+        },
+        "phases_checked": 2,
+        "phases_required": 3,
+        "required_phases": [
+          "orbit_injection",
+          "parking_propagation",
+          "recovery_touchdown"
+        ],
+        "summary": "2/3"
+      },
+      "full_mission_declared": true,
+      "phases": [
+        {
+          "applicability": "applicable",
+          "applicable": true,
+          "checks": {
+            "ascent.insertion_verified": true,
+            "expected.apoapsis": true,
+            "expected.eccentricity": true,
+            "expected.inclination": true,
+            "expected.periapsis": true,
+            "expected.semi_major_axis": true,
+            "handoff.booster.epoch_monotonic": true,
+            "handoff.booster.mass_conservation": true,
+            "handoff.booster.position_continuity": true,
+            "handoff.booster.separation_event": true,
+            "handoff.booster.velocity_continuity": true,
+            "handoff.coupled.booster.epoch_monotonic": true,
+            "handoff.coupled.booster.mass_conservation": true,
+            "handoff.coupled.booster.position_continuity": true,
+            "handoff.coupled.booster.shared_source": true,
+            "handoff.coupled.booster.velocity_continuity": true,
+            "handoff.coupled.upper-stage.epoch_monotonic": true,
+            "handoff.coupled.upper-stage.mass_conservation": true,
+            "handoff.coupled.upper-stage.position_continuity": true,
+            "handoff.coupled.upper-stage.shared_source": true,
+            "handoff.coupled.upper-stage.velocity_continuity": true,
+            "handoff.stage2.epoch_monotonic": true,
+            "handoff.stage2.mass_conservation": true,
+            "handoff.stage2.position_continuity": true,
+            "handoff.stage2.separation_event": true,
+            "handoff.stage2.velocity_continuity": true,
+            "mass.booster.non_increasing": true,
+            "mass.coupled.branch_mass_split": true,
+            "mass.separation_fork": true,
+            "mass.stage1.non_increasing": true,
+            "mass.stage2.non_increasing": true,
+            "parking.apoapsis": true,
+            "parking.eccentricity": true,
+            "parking.epoch_monotonic": true,
+            "parking.inclination": true,
+            "parking.mass_conservation": true,
+            "parking.periapsis": true,
+            "parking.position_continuity": true,
+            "parking.raan": true,
+            "parking.semi_major_axis": true,
+            "parking.velocity_continuity": true,
+            "station.event_chain_order": true,
+            "station.liftoff": true,
+            "station.meco": true,
+            "station.seco": true,
+            "station.separation": true
+          },
+          "checks_passed": 46,
+          "checks_total": 46,
+          "label": "Orbit injection",
+          "phase": "orbit_injection",
+          "reason": "",
+          "reason_codes": [],
+          "verdict": "passed"
+        },
+        {
+          "applicability": "applicable",
+          "applicable": true,
+          "checks": {},
+          "checks_passed": 0,
+          "checks_total": 0,
+          "label": "Parking-orbit propagation",
+          "phase": "parking_propagation",
+          "reason": "out-of-scope declaration refused: parking_propagation is a required physical phase of a run declared full_mission (declared: propagation declared out of scope (expected.propagation_result: not_checked): the parking orbit is not required to be propagated)",
+          "reason_codes": [],
+          "verdict": "not_checked"
+        },
+        {
+          "applicability": "applicable",
+          "applicable": true,
+          "checks": {
+            "recovery.handoff-boostback-entry": true,
+            "recovery.handoff-landing-touchdown": true,
+            "recovery.handoff-mass-coast-entry": true,
+            "recovery.handoff-mass-monotonic-boostback": true,
+            "recovery.handoff-mass-terminal": true,
+            "recovery.handoff-separation-boostback": true,
+            "recovery.joint-max-q-boostback": true,
+            "recovery.joint-max-q-entry": true,
+            "recovery.joint-propellant-corridor-budget": false,
+            "recovery.joint-propellant-reserve-touchdown": false,
+            "recovery.joint-touchdown-lateral-speed": false,
+            "recovery.joint-touchdown-position": false,
+            "recovery.joint-touchdown-vertical-speed": false,
+            "recovery.landed": false,
+            "recovery.propellant_reserve": true
+          },
+          "checks_passed": 9,
+          "checks_total": 15,
+          "label": "Recovery touchdown",
+          "phase": "recovery_touchdown",
+          "reason": "",
+          "reason_codes": [
+            "CORRIDOR_MISSED",
+            "INSUFFICIENT_PROPELLANT_RESERVE",
+            "LANDING_LATERAL_SPEED_EXCEEDED",
+            "LANDING_POSITION_OUT_OF_TOLERANCE",
+            "LANDING_VERTICAL_SPEED_EXCEEDED",
+            "PROPELLANT_RESERVE_LOW"
+          ],
+          "verdict": "failed"
+        }
+      ],
+      "physical": {
+        "checks": [
+          {
+            "check": "orbit_insertion",
+            "checks": {
+              "ascent.insertion_verified": true,
+              "expected.apoapsis": true,
+              "expected.eccentricity": true,
+              "expected.inclination": true,
+              "expected.periapsis": true,
+              "expected.semi_major_axis": true,
+              "station.event_chain_order": true,
+              "station.liftoff": true,
+              "station.meco": true,
+              "station.seco": true,
+              "station.separation": true
+            },
+            "checks_passed": 11,
+            "checks_total": 11,
+            "label": "Orbit insertion",
+            "reason": "",
+            "reason_codes": [],
+            "required": true,
+            "verdict": "passed"
+          },
+          {
+            "check": "parking_propagation",
+            "checks": {},
+            "checks_passed": 0,
+            "checks_total": 0,
+            "label": "Parking-orbit propagation",
+            "reason": "propagation not requested (expected result: 'not_checked'); the scenario declares propagation out of scope, but an out-of-scope declaration never waives a required physical check (E5-04: E2-04's declared-out-of-scope parking propagation is exactly what this gate must not pass)",
+            "reason_codes": [
+              "parking_propagation_not_evidenced"
+            ],
+            "required": true,
+            "verdict": "not_checked"
+          },
+          {
+            "check": "landing",
+            "checks": {
+              "recovery.handoff-boostback-entry": true,
+              "recovery.handoff-landing-touchdown": true,
+              "recovery.handoff-mass-coast-entry": true,
+              "recovery.handoff-mass-monotonic-boostback": true,
+              "recovery.handoff-mass-terminal": true,
+              "recovery.handoff-separation-boostback": true,
+              "recovery.joint-max-q-boostback": true,
+              "recovery.joint-max-q-entry": true,
+              "recovery.joint-propellant-corridor-budget": false,
+              "recovery.joint-propellant-reserve-touchdown": false,
+              "recovery.joint-touchdown-lateral-speed": false,
+              "recovery.joint-touchdown-position": false,
+              "recovery.joint-touchdown-vertical-speed": false,
+              "recovery.landed": false,
+              "recovery.propellant_reserve": true
+            },
+            "checks_passed": 9,
+            "checks_total": 15,
+            "label": "Landing",
+            "reason": "",
+            "reason_codes": [
+              "CORRIDOR_MISSED",
+              "INSUFFICIENT_PROPELLANT_RESERVE",
+              "LANDING_LATERAL_SPEED_EXCEEDED",
+              "LANDING_POSITION_OUT_OF_TOLERANCE",
+              "LANDING_VERTICAL_SPEED_EXCEEDED",
+              "PROPELLANT_RESERVE_LOW"
+            ],
+            "required": true,
+            "verdict": "failed"
+          },
+          {
+            "check": "mass_conservation",
+            "checks": {
+              "handoff.booster.mass_conservation": true,
+              "handoff.coupled.booster.mass_conservation": true,
+              "handoff.coupled.upper-stage.mass_conservation": true,
+              "handoff.stage2.mass_conservation": true,
+              "mass.booster.non_increasing": true,
+              "mass.coupled.branch_mass_split": true,
+              "mass.separation_fork": true,
+              "mass.stage1.non_increasing": true,
+              "mass.stage2.non_increasing": true,
+              "parking.mass_conservation": true
+            },
+            "checks_passed": 10,
+            "checks_total": 10,
+            "label": "Mass conservation",
+            "reason": "",
+            "reason_codes": [],
+            "required": true,
+            "verdict": "passed"
+          },
+          {
+            "check": "epoch_frame_continuity",
+            "checks": {
+              "handoff.booster.epoch_monotonic": true,
+              "handoff.booster.position_continuity": true,
+              "handoff.booster.separation_event": true,
+              "handoff.booster.velocity_continuity": true,
+              "handoff.coupled.booster.epoch_monotonic": true,
+              "handoff.coupled.booster.position_continuity": true,
+              "handoff.coupled.booster.shared_source": true,
+              "handoff.coupled.booster.velocity_continuity": true,
+              "handoff.coupled.upper-stage.epoch_monotonic": true,
+              "handoff.coupled.upper-stage.position_continuity": true,
+              "handoff.coupled.upper-stage.shared_source": true,
+              "handoff.coupled.upper-stage.velocity_continuity": true,
+              "handoff.stage2.epoch_monotonic": true,
+              "handoff.stage2.position_continuity": true,
+              "handoff.stage2.separation_event": true,
+              "handoff.stage2.velocity_continuity": true,
+              "parking.apoapsis": true,
+              "parking.eccentricity": true,
+              "parking.epoch_monotonic": true,
+              "parking.inclination": true,
+              "parking.periapsis": true,
+              "parking.position_continuity": true,
+              "parking.raan": true,
+              "parking.semi_major_axis": true,
+              "parking.velocity_continuity": true
+            },
+            "checks_passed": 25,
+            "checks_total": 25,
+            "label": "Epoch/frame continuity",
+            "reason": "",
+            "reason_codes": [],
+            "required": true,
+            "verdict": "passed"
+          }
+        ],
+        "reason_codes": [
+          "CORRIDOR_MISSED",
+          "INSUFFICIENT_PROPELLANT_RESERVE",
+          "LANDING_LATERAL_SPEED_EXCEEDED",
+          "LANDING_POSITION_OUT_OF_TOLERANCE",
+          "LANDING_VERTICAL_SPEED_EXCEEDED",
+          "PROPELLANT_RESERVE_LOW",
+          "parking_propagation_not_evidenced"
+        ],
+        "rule": "all five physical checks are required for a computed mission: failed if any check failed; else not_checked if any check carries no evidence (absent evidence is never a pass, and an out-of-scope declaration does not waive a required check); passed only when every check passed",
+        "verdict": "failed"
+      },
+      "qualification": {
+        "independent_validation": "not_checked",
+        "independently_verified": false,
+        "reason": "full-mission verdict failed; required-phase coverage incomplete (2/3): parking_propagation; no passing validation-grade independent evidence (status.independent_validation: not_checked)"
+      },
+      "reason_codes": [
+        "CORRIDOR_MISSED",
+        "INSUFFICIENT_PROPELLANT_RESERVE",
+        "LANDING_LATERAL_SPEED_EXCEEDED",
+        "LANDING_POSITION_OUT_OF_TOLERANCE",
+        "LANDING_VERTICAL_SPEED_EXCEEDED",
+        "PROPELLANT_RESERVE_LOW"
+      ],
+      "required_phases": [
+        "orbit_injection",
+        "parking_propagation",
+        "recovery_touchdown"
+      ],
+      "rule": "full mission failed if any applicable phase failed; else not_checked if any applicable phase is not_checked (absent evidence is never a pass); passed only when every applicable phase passed; a phase the mission does not fly is not applicable and never blocks the verdict",
+      "verdict": "failed"
+    },
+    "handoffs": {
+      "coupled_branches": {
+        "branches": [
+          {
+            "body_id": "stage2",
+            "bridge": {
+              "gap_s": 2.0,
+              "method": "j2_coast",
+              "pole": "itrs_z_in_gcrs"
+            },
+            "checks": [
+              {
+                "id": "handoff.coupled.upper-stage.position_continuity",
+                "limit": 1.0,
+                "passed": true,
+                "reason_code": "",
+                "unit": "m",
+                "value": 0.0019222294080918992
+              },
+              {
+                "id": "handoff.coupled.upper-stage.velocity_continuity",
+                "limit": 0.05,
+                "passed": true,
+                "reason_code": "",
+                "unit": "m/s",
+                "value": 0.0018211647989530948
+              },
+              {
+                "id": "handoff.coupled.upper-stage.epoch_monotonic",
+                "limit": null,
+                "passed": true,
+                "reason_code": "",
+                "unit": "s",
+                "value": 0.0
+              },
+              {
+                "id": "handoff.coupled.upper-stage.mass_conservation",
+                "limit": 0.001,
+                "passed": true,
+                "reason_code": "staging_mass_drop",
+                "unit": "kg",
+                "value": -741112.6036047286
+              },
+              {
+                "id": "handoff.coupled.upper-stage.shared_source",
+                "limit": 0.0001,
+                "passed": true,
+                "reason_code": "",
+                "unit": "m",
+                "value": 0.0
+              }
+            ],
+            "handoff_id": "d9fa173e9f5ebaaf049e24806794d999eea7d0dec85c79ab72f41c3cea49c605",
+            "kind": "upper-stage",
+            "passed": true,
+            "result": {
+              "insertion_passed": true,
+              "parking_elements": {
+                "apoapsis_altitude_m": 292126.0433095144,
+                "argument_of_perigee_deg": 84.00358309164342,
+                "eccentricity": 0.0044898345278265046,
+                "inclination_deg": 51.98429612423203,
+                "periapsis_altitude_m": 232497.01314493548,
+                "period_s": 5385.265293480512,
+                "raan_deg": 173.66085248881137,
+                "semi_major_axis_m": 6640448.528227225
+              },
+              "propagation_status": "not_run"
+            },
+            "state": {
+              "epoch_mjd2000": 9810.501597222223,
+              "frame": "GCRS",
+              "mass_kg": 1300000.0,
+              "position_m": [
+                -6413126.50786978,
+                287251.5932815741,
+                650535.6380410211
+              ],
+              "timescale": "UTC",
+              "velocity_m_s": [
+                -1053.1290305832,
+                -1203.411688354992,
+                1195.233624425717
+              ]
+            }
+          },
+          {
+            "body_id": "booster",
+            "bridge": null,
+            "checks": [
+              {
+                "id": "handoff.coupled.booster.position_continuity",
+                "limit": 1.0,
+                "passed": true,
+                "reason_code": "",
+                "unit": "m",
+                "value": 1.9927093256990996e-09
+              },
+              {
+                "id": "handoff.coupled.booster.velocity_continuity",
+                "limit": 0.05,
+                "passed": true,
+                "reason_code": "",
+                "unit": "m/s",
+                "value": 2.187489210415655e-09
+              },
+              {
+                "id": "handoff.coupled.booster.epoch_monotonic",
+                "limit": null,
+                "passed": true,
+                "reason_code": "",
+                "unit": "s",
+                "value": 0.0
+              },
+              {
+                "id": "handoff.coupled.booster.mass_conservation",
+                "limit": 0.001,
+                "passed": true,
+                "reason_code": "staging_mass_drop",
+                "unit": "kg",
+                "value": -1300000.0
+              },
+              {
+                "id": "handoff.coupled.booster.shared_source",
+                "limit": 0.0001,
+                "passed": true,
+                "reason_code": "",
+                "unit": "m",
+                "value": 0.0
+              }
+            ],
+            "handoff_id": "d9fa173e9f5ebaaf049e24806794d999eea7d0dec85c79ab72f41c3cea49c605",
+            "kind": "booster",
+            "passed": true,
+            "result": {
+              "assumptions": [
+                "FL-304 recovery: FL-302 boostback/entry script + FL-303 landing burn (FL-305 closed-loop guidance unless plan_options select the single G-FOLD plan), integrated through the FL-301 propagator; the booster track replaces the ballistic stage1_debris track",
+                "entry q limit 400000 Pa, entry g limit 12.0 g over the post-boostback descent window (DESIGN ASSUMPTIONs unless overridden)",
+                "R-01 landing-aware objective: corridor miss soft-constrained against a 1000 m landing-divert budget, corridor propellant against landing need + reserve + 2500 kg fuel margin (DESIGN ASSUMPTIONs unless overridden)",
+                "E5-05c throttled entry burns (entry_throttle=True): each entry burn flies at its optimized throttle within the engine's throttle range instead of full throttle (DESIGN ASSUMPTION unless overridden)"
+              ],
+              "driven_from_separation": true,
+              "handoff_passed": false,
+              "ignitions_used": 2,
+              "kind": "rtls",
+              "landed": false,
+              "landing_feasible": null,
+              "max_tilt_deg": null,
+              "plan_feasible": false,
+              "position_error_m": null,
+              "reason_codes": [
+                "CORRIDOR_MISSED"
+              ],
+              "run_dir": "/var/lib/context-forge/296/repo/tests/data/mission/reference/e5-08-new-vehicle/mission/recovery/run",
+              "separation_handoff_id": "d9fa173e9f5ebaaf049e24806794d999eea7d0dec85c79ab72f41c3cea49c605",
+              "status": "flown",
+              "success": false,
+              "target": "launch_site",
+              "target_file": "/var/lib/context-forge/296/repo/tests/data/mission/reference/e5-08-new-vehicle/mission-optimized/launch/target.yaml",
+              "touchdown_enu_m": null,
+              "vehicle": "/var/lib/context-forge/296/repo/src/orbitopt/data/flightlab/vehicles/starship_class_rtls_derived.yaml",
+              "vertical_speed_m_s": null
+            },
+            "state": {
+              "epoch_mjd2000": 9810.501574074075,
+              "frame": "GCRS",
+              "mass_kg": 741112.6036047286,
+              "position_m": [
+                -6411001.184789105,
+                289657.5611426318,
+                648143.2317464234
+              ],
+              "timescale": "UTC",
+              "velocity_m_s": [
+                -1072.1963638588788,
+                -1202.554879567353,
+                1197.1718969433568
+              ]
+            }
+          }
+        ],
+        "checks": [
+          {
+            "id": "handoff.coupled.upper-stage.position_continuity",
+            "limit": 1.0,
+            "passed": true,
+            "reason_code": "",
+            "unit": "m",
+            "value": 0.0019222294080918992
+          },
+          {
+            "id": "handoff.coupled.upper-stage.velocity_continuity",
+            "limit": 0.05,
+            "passed": true,
+            "reason_code": "",
+            "unit": "m/s",
+            "value": 0.0018211647989530948
+          },
+          {
+            "id": "handoff.coupled.upper-stage.epoch_monotonic",
+            "limit": null,
+            "passed": true,
+            "reason_code": "",
+            "unit": "s",
+            "value": 0.0
+          },
+          {
+            "id": "handoff.coupled.upper-stage.mass_conservation",
+            "limit": 0.001,
+            "passed": true,
+            "reason_code": "staging_mass_drop",
+            "unit": "kg",
+            "value": -741112.6036047286
+          },
+          {
+            "id": "handoff.coupled.upper-stage.shared_source",
+            "limit": 0.0001,
+            "passed": true,
+            "reason_code": "",
+            "unit": "m",
+            "value": 0.0
+          },
+          {
+            "id": "handoff.coupled.booster.position_continuity",
+            "limit": 1.0,
+            "passed": true,
+            "reason_code": "",
+            "unit": "m",
+            "value": 1.9927093256990996e-09
+          },
+          {
+            "id": "handoff.coupled.booster.velocity_continuity",
+            "limit": 0.05,
+            "passed": true,
+            "reason_code": "",
+            "unit": "m/s",
+            "value": 2.187489210415655e-09
+          },
+          {
+            "id": "handoff.coupled.booster.epoch_monotonic",
+            "limit": null,
+            "passed": true,
+            "reason_code": "",
+            "unit": "s",
+            "value": 0.0
+          },
+          {
+            "id": "handoff.coupled.booster.mass_conservation",
+            "limit": 0.001,
+            "passed": true,
+            "reason_code": "staging_mass_drop",
+            "unit": "kg",
+            "value": -1300000.0
+          },
+          {
+            "id": "handoff.coupled.booster.shared_source",
+            "limit": 0.0001,
+            "passed": true,
+            "reason_code": "",
+            "unit": "m",
+            "value": 0.0
+          },
+          {
+            "id": "mass.coupled.branch_mass_split",
+            "limit": 0.001,
+            "passed": true,
+            "reason_code": "",
+            "unit": "kg",
+            "value": 0.0
+          }
+        ],
+        "driven_from_separation": true,
+        "epoch_utc": "2026-11-10T12:02:16+00:00",
+        "handoff_id": "d9fa173e9f5ebaaf049e24806794d999eea7d0dec85c79ab72f41c3cea49c605",
+        "mass_residual_kg": 0.0,
+        "mass_sum_kg": 2041112.6036047286,
+        "parent_body": "stage1",
+        "parent_mass_kg": 2041112.6036047286,
+        "passed": true,
+        "separation_event_t_s": 138.0,
+        "separation_state": {
+          "epoch": {
+            "mjd2000": 9810.501574074075,
+            "timescale": "UTC"
+          },
+          "frame": "GCRS",
+          "mass_kg": 2041112.6036047286,
+          "metadata": {
+            "ascent_frame": "GCRS",
+            "body_id": "stage1",
+            "event": "separation",
+            "separation_event_t_s": 138.0,
+            "source": "flightlab-track-sample",
+            "t_s": 136.0
+          },
+          "position_m": [
+            -6411001.184789103,
+            289657.5611426325,
+            648143.2317464233
+          ],
+          "schema_version": "1.0",
+          "stage_config": {
+            "body_id": "stage1",
+            "parent_body_id": ""
+          },
+          "velocity_m_s": [
+            -1072.1963638609427,
+            -1202.5548795680077,
+            1197.1718969436683
+          ]
+        },
+        "t_s": 136.0
+      },
+      "parking_orbit": {
+        "ascent_elements": {
+          "apoapsis_altitude_m": 292126.0433095144,
+          "argument_of_perigee_deg": 84.00358309164342,
+          "eccentricity": 0.0044898345278265046,
+          "inclination_deg": 51.98429612423203,
+          "periapsis_altitude_m": 232497.01314493548,
+          "period_s": 5385.265293480512,
+          "raan_deg": 173.66085248881137,
+          "semi_major_axis_m": 6640448.528227225
+        },
+        "checks": [
+          {
+            "id": "parking.position_continuity",
+            "limit": 1.0,
+            "passed": true,
+            "reason_code": "",
+            "unit": "m",
+            "value": 0.0
+          },
+          {
+            "id": "parking.velocity_continuity",
+            "limit": 0.01,
+            "passed": true,
+            "reason_code": "",
+            "unit": "m/s",
+            "value": 0.0
+          },
+          {
+            "id": "parking.epoch_monotonic",
+            "limit": null,
+            "passed": true,
+            "reason_code": "",
+            "unit": "s",
+            "value": 0.0
+          },
+          {
+            "id": "parking.mass_conservation",
+            "limit": 0.001,
+            "passed": true,
+            "reason_code": "",
+            "unit": "kg",
+            "value": 0.0
+          },
+          {
+            "id": "parking.semi_major_axis",
+            "limit": 10.0,
+            "passed": true,
+            "reason_code": "",
+            "unit": "m",
+            "value": 0.0
+          },
+          {
+            "id": "parking.eccentricity",
+            "limit": 1e-06,
+            "passed": true,
+            "reason_code": "",
+            "unit": "",
+            "value": 0.0
+          },
+          {
+            "id": "parking.inclination",
+            "limit": 0.001,
+            "passed": true,
+            "reason_code": "",
+            "unit": "deg",
+            "value": 0.0
+          },
+          {
+            "id": "parking.raan",
+            "limit": 0.01,
+            "passed": true,
+            "reason_code": "",
+            "unit": "deg",
+            "value": 0.0
+          },
+          {
+            "id": "parking.periapsis",
+            "limit": 10.0,
+            "passed": true,
+            "reason_code": "",
+            "unit": "m",
+            "value": 0.0
+          },
+          {
+            "id": "parking.apoapsis",
+            "limit": 10.0,
+            "passed": true,
+            "reason_code": "",
+            "unit": "m",
+            "value": 0.0
+          }
+        ],
+        "parking_elements": {
+          "apoapsis_altitude_m": 292126.0433095144,
+          "argument_of_perigee_deg": 84.00358309164342,
+          "eccentricity": 0.0044898345278265046,
+          "inclination_deg": 51.98429612423203,
+          "periapsis_altitude_m": 232497.01314493548,
+          "period_s": 5385.265293480512,
+          "raan_deg": 173.66085248881137,
+          "semi_major_axis_m": 6640448.528227225
+        },
+        "passed": true,
+        "state": {
+          "epoch_mjd2000": 9810.505972222221,
+          "frame": "GCRS",
+          "mass_kg": 218801.3500445286,
+          "position_m": [
+            -6296988.013502681,
+            -797726.5911246901,
+            1903632.362325436
+          ],
+          "timescale": "UTC",
+          "velocity_m_s": [
+            2351.3291543032983,
+            -4733.939338203306,
+            5686.609192601227
+          ]
+        }
+      },
+      "separation_fork": {
+        "branches": [
+          {
+            "body_id": "stage2",
+            "graded": true,
+            "handoff": {
+              "after": {
+                "epoch_mjd2000": 9810.501597222223,
+                "frame": "GCRS",
+                "mass_kg": 1300000.0,
+                "position_m": [
+                  -6413126.50786978,
+                  287251.5932815741,
+                  650535.6380410211
+                ],
+                "timescale": "UTC",
+                "velocity_m_s": [
+                  -1053.1290305832,
+                  -1203.411688354992,
+                  1195.233624425717
+                ]
+              },
+              "before": {
+                "epoch_mjd2000": 9810.501597222223,
+                "frame": "GCRS",
+                "mass_kg": 2041112.6036047286,
+                "position_m": [
+                  -6413126.508496913,
+                  287251.59229889774,
+                  650535.6395694246
+                ],
+                "timescale": "UTC",
+                "velocity_m_s": [
+                  -1053.1296140962663,
+                  -1203.4126222683963,
+                  1195.2350749288985
+                ]
+              },
+              "bridge": {
+                "gap_s": 2.0,
+                "method": "j2_coast",
+                "pole": "itrs_z_in_gcrs"
+              },
+              "checks": [
+                {
+                  "id": "handoff.stage2.position_continuity",
+                  "limit": 1.0,
+                  "passed": true,
+                  "reason_code": "",
+                  "unit": "m",
+                  "value": 0.0019222294080918992
+                },
+                {
+                  "id": "handoff.stage2.velocity_continuity",
+                  "limit": 0.05,
+                  "passed": true,
+                  "reason_code": "",
+                  "unit": "m/s",
+                  "value": 0.0018211647989530948
+                },
+                {
+                  "id": "handoff.stage2.epoch_monotonic",
+                  "limit": null,
+                  "passed": true,
+                  "reason_code": "",
+                  "unit": "s",
+                  "value": 0.0
+                },
+                {
+                  "id": "handoff.stage2.mass_conservation",
+                  "limit": 0.001,
+                  "passed": true,
+                  "reason_code": "staging_mass_drop",
+                  "unit": "kg",
+                  "value": -741112.6036047286
+                },
+                {
+                  "id": "handoff.stage2.separation_event",
+                  "limit": null,
+                  "passed": true,
+                  "reason_code": "",
+                  "unit": "s",
+                  "value": 138.0
+                }
+              ],
+              "child_body": "stage2",
+              "graded": true,
+              "parent_body": "stage1",
+              "passed": true,
+              "separation_t_s": 138.0
+            },
+            "kind": "upper-stage",
+            "label": "Upper stage",
+            "passed": true,
+            "t_end_s": 700.0,
+            "t_start_s": 138.0
+          },
+          {
+            "body_id": "booster",
+            "graded": true,
+            "handoff": {
+              "after": {
+                "epoch_mjd2000": 9810.501574074075,
+                "frame": "GCRS",
+                "mass_kg": 741112.6036047286,
+                "position_m": [
+                  -6411001.184789105,
+                  289657.5611426318,
+                  648143.2317464234
+                ],
+                "timescale": "UTC",
+                "velocity_m_s": [
+                  -1072.1963638588788,
+                  -1202.554879567353,
+                  1197.1718969433568
+                ]
+              },
+              "before": {
+                "epoch_mjd2000": 9810.501574074075,
+                "frame": "GCRS",
+                "mass_kg": 2041112.6036047286,
+                "position_m": [
+                  -6411001.184789103,
+                  289657.5611426325,
+                  648143.2317464233
+                ],
+                "timescale": "UTC",
+                "velocity_m_s": [
+                  -1072.1963638609427,
+                  -1202.5548795680077,
+                  1197.1718969436683
+                ]
+              },
+              "bridge": null,
+              "checks": [
+                {
+                  "id": "handoff.booster.position_continuity",
+                  "limit": 1.0,
+                  "passed": true,
+                  "reason_code": "",
+                  "unit": "m",
+                  "value": 1.9927093256990996e-09
+                },
+                {
+                  "id": "handoff.booster.velocity_continuity",
+                  "limit": 0.05,
+                  "passed": true,
+                  "reason_code": "",
+                  "unit": "m/s",
+                  "value": 2.187489210415655e-09
+                },
+                {
+                  "id": "handoff.booster.epoch_monotonic",
+                  "limit": null,
+                  "passed": true,
+                  "reason_code": "",
+                  "unit": "s",
+                  "value": 0.0
+                },
+                {
+                  "id": "handoff.booster.mass_conservation",
+                  "limit": 0.001,
+                  "passed": true,
+                  "reason_code": "staging_mass_drop",
+                  "unit": "kg",
+                  "value": -1300000.0
+                },
+                {
+                  "id": "handoff.booster.separation_event",
+                  "limit": null,
+                  "passed": true,
+                  "reason_code": "",
+                  "unit": "s",
+                  "value": 138.0
+                }
+              ],
+              "child_body": "booster",
+              "graded": true,
+              "parent_body": "stage1",
+              "passed": true,
+              "separation_t_s": 138.0
+            },
+            "kind": "booster",
+            "label": "First stage",
+            "passed": true,
+            "t_end_s": 433.8566193878269,
+            "t_start_s": 136.0
+          }
+        ],
+        "checks": [
+          {
+            "id": "mass.separation_fork",
+            "limit": 0.001,
+            "passed": true,
+            "reason_code": "",
+            "unit": "kg",
+            "value": 0.0
+          }
+        ],
+        "mass_residual_kg": 0.0,
+        "mass_sum_kg": 2041112.6036047286,
+        "parent_body": "stage1",
+        "parent_mass_kg": 2041112.6036047286,
+        "passed": true,
+        "t_s": 138.0
+      },
+      "staging": [
+        {
+          "after": {
+            "epoch_mjd2000": 9810.501597222223,
+            "frame": "GCRS",
+            "mass_kg": 1300000.0,
+            "position_m": [
+              -6413126.50786978,
+              287251.5932815741,
+              650535.6380410211
+            ],
+            "timescale": "UTC",
+            "velocity_m_s": [
+              -1053.1290305832,
+              -1203.411688354992,
+              1195.233624425717
+            ]
+          },
+          "before": {
+            "epoch_mjd2000": 9810.501597222223,
+            "frame": "GCRS",
+            "mass_kg": 2041112.6036047286,
+            "position_m": [
+              -6413126.508496913,
+              287251.59229889774,
+              650535.6395694246
+            ],
+            "timescale": "UTC",
+            "velocity_m_s": [
+              -1053.1296140962663,
+              -1203.4126222683963,
+              1195.2350749288985
+            ]
+          },
+          "bridge": {
+            "gap_s": 2.0,
+            "method": "j2_coast",
+            "pole": "itrs_z_in_gcrs"
+          },
+          "checks": [
+            {
+              "id": "handoff.stage2.position_continuity",
+              "limit": 1.0,
+              "passed": true,
+              "reason_code": "",
+              "unit": "m",
+              "value": 0.0019222294080918992
+            },
+            {
+              "id": "handoff.stage2.velocity_continuity",
+              "limit": 0.05,
+              "passed": true,
+              "reason_code": "",
+              "unit": "m/s",
+              "value": 0.0018211647989530948
+            },
+            {
+              "id": "handoff.stage2.epoch_monotonic",
+              "limit": null,
+              "passed": true,
+              "reason_code": "",
+              "unit": "s",
+              "value": 0.0
+            },
+            {
+              "id": "handoff.stage2.mass_conservation",
+              "limit": 0.001,
+              "passed": true,
+              "reason_code": "staging_mass_drop",
+              "unit": "kg",
+              "value": -741112.6036047286
+            },
+            {
+              "id": "handoff.stage2.separation_event",
+              "limit": null,
+              "passed": true,
+              "reason_code": "",
+              "unit": "s",
+              "value": 138.0
+            }
+          ],
+          "child_body": "stage2",
+          "graded": true,
+          "parent_body": "stage1",
+          "passed": true,
+          "separation_t_s": 138.0
+        },
+        {
+          "after": {
+            "epoch_mjd2000": 9810.501574074075,
+            "frame": "GCRS",
+            "mass_kg": 741112.6036047286,
+            "position_m": [
+              -6411001.184789105,
+              289657.5611426318,
+              648143.2317464234
+            ],
+            "timescale": "UTC",
+            "velocity_m_s": [
+              -1072.1963638588788,
+              -1202.554879567353,
+              1197.1718969433568
+            ]
+          },
+          "before": {
+            "epoch_mjd2000": 9810.501574074075,
+            "frame": "GCRS",
+            "mass_kg": 2041112.6036047286,
+            "position_m": [
+              -6411001.184789103,
+              289657.5611426325,
+              648143.2317464233
+            ],
+            "timescale": "UTC",
+            "velocity_m_s": [
+              -1072.1963638609427,
+              -1202.5548795680077,
+              1197.1718969436683
+            ]
+          },
+          "bridge": null,
+          "checks": [
+            {
+              "id": "handoff.booster.position_continuity",
+              "limit": 1.0,
+              "passed": true,
+              "reason_code": "",
+              "unit": "m",
+              "value": 1.9927093256990996e-09
+            },
+            {
+              "id": "handoff.booster.velocity_continuity",
+              "limit": 0.05,
+              "passed": true,
+              "reason_code": "",
+              "unit": "m/s",
+              "value": 2.187489210415655e-09
+            },
+            {
+              "id": "handoff.booster.epoch_monotonic",
+              "limit": null,
+              "passed": true,
+              "reason_code": "",
+              "unit": "s",
+              "value": 0.0
+            },
+            {
+              "id": "handoff.booster.mass_conservation",
+              "limit": 0.001,
+              "passed": true,
+              "reason_code": "staging_mass_drop",
+              "unit": "kg",
+              "value": -1300000.0
+            },
+            {
+              "id": "handoff.booster.separation_event",
+              "limit": null,
+              "passed": true,
+              "reason_code": "",
+              "unit": "s",
+              "value": 138.0
+            }
+          ],
+          "child_body": "booster",
+          "graded": true,
+          "parent_body": "stage1",
+          "passed": true,
+          "separation_t_s": 138.0
+        }
+      ]
+    },
+    "not_assessed": [
+      {
+        "id": "recovery.handoff-entry-landing",
+        "reason": "phase landing: landing burn never flew (no landing track)"
+      },
+      {
+        "id": "recovery.handoff-mass-monotonic-landing",
+        "reason": "phase landing: landing burn never flew"
+      },
+      {
+        "id": "ascent.optimizer_converged",
+        "reason": "run records no optimizer verdict"
+      },
+      {
+        "id": "ascent.physics_verified",
+        "reason": "Gate-B re-fly skipped or unavailable -- never treated as passed"
+      },
+      {
+        "id": "launch.window_and_optimization",
+        "reason": "run_dir mode replays a flown run; its launch window and ascent optimization are recorded, not re-graded"
+      },
+      {
+        "id": "expected.raan",
+        "reason": "RAAN unconstrained"
+      },
+      {
+        "id": "propagation",
+        "reason": "skipped by caller"
+      }
+    ],
+    "propagation": {
+      "reason": "propagation not requested (expected result: 'not_checked')",
+      "status": "not_run"
+    },
+    "recovery": {
+      "assumptions": [
+        "FL-304 recovery: FL-302 boostback/entry script + FL-303 landing burn (FL-305 closed-loop guidance unless plan_options select the single G-FOLD plan), integrated through the FL-301 propagator; the booster track replaces the ballistic stage1_debris track",
+        "entry q limit 400000 Pa, entry g limit 12.0 g over the post-boostback descent window (DESIGN ASSUMPTIONs unless overridden)",
+        "R-01 landing-aware objective: corridor miss soft-constrained against a 1000 m landing-divert budget, corridor propellant against landing need + reserve + 2500 kg fuel margin (DESIGN ASSUMPTIONs unless overridden)",
+        "E5-05c throttled entry burns (entry_throttle=True): each entry burn flies at its optimized throttle within the engine's throttle range instead of full throttle (DESIGN ASSUMPTION unless overridden)"
+      ],
+      "driven_from_separation": true,
+      "handoff_passed": false,
+      "ignitions_used": 2,
+      "kind": "rtls",
+      "landed": false,
+      "landing_feasible": null,
+      "max_tilt_deg": null,
+      "plan_feasible": false,
+      "position_error_m": null,
+      "reason_codes": [
+        "CORRIDOR_MISSED"
+      ],
+      "run_dir": "/var/lib/context-forge/296/repo/tests/data/mission/reference/e5-08-new-vehicle/mission/recovery/run",
+      "separation_handoff_id": "d9fa173e9f5ebaaf049e24806794d999eea7d0dec85c79ab72f41c3cea49c605",
+      "status": "flown",
+      "success": false,
+      "target": "launch_site",
+      "target_file": "/var/lib/context-forge/296/repo/tests/data/mission/reference/e5-08-new-vehicle/mission-optimized/launch/target.yaml",
+      "touchdown_enu_m": null,
+      "vehicle": "/var/lib/context-forge/296/repo/src/orbitopt/data/flightlab/vehicles/starship_class_rtls_derived.yaml",
+      "vertical_speed_m_s": null
+    },
+    "scenario": {
+      "ascent": {
+        "mode": "run_dir",
+        "run_dir": "/var/lib/context-forge/296/repo/tests/data/mission/reference/e5-08-new-vehicle/mission-optimized/launch/ascent",
+        "target_file": "/var/lib/context-forge/296/repo/tests/data/mission/reference/e5-08-new-vehicle/mission-optimized/launch/target.yaml"
+      },
+      "expected": {
+        "events": [
+          "liftoff",
+          "meco",
+          "separation",
+          "seco"
+        ],
+        "parking_orbit": {
+          "apoapsis_altitude_m": 292126.04,
+          "eccentricity": 0.0044898345,
+          "inclination_deg": 51.984296,
+          "periapsis_altitude_m": 232497.01,
+          "raan_deg": null,
+          "semi_major_axis_m": 6640448.5
+        },
+        "propagation_result": "not_checked",
+        "tolerances": {
+          "apoapsis_altitude_m": 20000.0,
+          "eccentricity": 0.003008,
+          "inclination_deg": 0.2,
+          "periapsis_altitude_m": 20000.0,
+          "raan_deg": 1.0,
+          "semi_major_axis_m": 20000.0
+        }
+      },
+      "full_mission": true,
+      "handoff": {
+        "elements": {
+          "apsides_m": 10.0,
+          "eccentricity": 1e-06,
+          "inclination_deg": 0.001,
+          "raan_deg": 0.01,
+          "semi_major_axis_m": 10.0
+        },
+        "epoch_s": 1.0,
+        "mass_kg": 0.001,
+        "max_epoch_gap_s": null,
+        "position_m": 1.0,
+        "staging_velocity_m_s": 0.05,
+        "velocity_m_s": 0.01
+      },
+      "launch": {
+        "date_utc": "2026-11-10",
+        "orbit": "232.5x292.1@51.98",
+        "raan_deg": null,
+        "site": "kourou",
+        "vehicle": "starship_class_rtls_derived",
+        "window_days": 1.0
+      },
+      "mission": {
+        "id": "e5-08-new-vehicle-starship-rtls",
+        "kind": "two-stage-leo",
+        "title": "E5-08 new-vehicle qualification (Starship-class RTLS-derived design, LEO insertion + booster powered-entry RTLS, full mission)"
+      },
+      "propagation": {
+        "drag": null,
+        "j2": true,
+        "max_step_s": 300.0,
+        "revolutions": 1.0,
+        "third_bodies": []
+      },
+      "recovery": {
+        "drive_from_separation": true,
+        "landing_sites": {},
+        "plan_options": {
+          "boostback_cutoff": "iip",
+          "corridor_aim_margin_m": 7000.0,
+          "dt_final": 0.1,
+          "dt_opt": 0.25,
+          "entry_burns": 1,
+          "entry_cutoff": "speed",
+          "entry_g_max": 12.0,
+          "entry_q_max_pa": 400000.0,
+          "entry_throttle": true,
+          "horizon_s": 900.0,
+          "initial_guess": [
+            32.46587675454384,
+            34.48089072412681,
+            0.5045463260465197,
+            0.0002036344411273428,
+            5.2220942489958065e-05,
+            20213.98316769467,
+            1470.9519433342393,
+            0.40523664306297996
+          ],
+          "landing": {
+            "max_thrust_accel_g": 5.5,
+            "tvc_lag_compensation": true,
+            "tvc_lag_tau_s": 0.2,
+            "tvc_rate_limit_deg_s": 45.0
+          },
+          "landing_need_model": "closed_loop",
+          "landing_reserve": 135000.0,
+          "landing_reserve_margin_kg": 2500.0,
+          "search": "keep"
+        },
+        "spec": null,
+        "target_file": "/var/lib/context-forge/296/repo/tests/data/mission/reference/e5-08-new-vehicle/mission-optimized/launch/target.yaml",
+        "vehicle_file": null
+      },
+      "scene": {
+        "coast_orbits": 2.0,
+        "earth_texture": true
+      }
+    },
+    "stations": [
+      {
+        "kind": "liftoff",
+        "passed": true,
+        "t_s": 0.0
+      },
+      {
+        "kind": "meco",
+        "passed": true,
+        "t_s": 135.0
+      },
+      {
+        "kind": "separation",
+        "passed": true,
+        "t_s": 138.0
+      },
+      {
+        "kind": "seco",
+        "passed": true,
+        "t_s": 516.0
+      }
+    ],
+    "warnings": [
+      "ascent is replayed from a flown run directory: that flight's launch window and ascent optimization are not re-graded here (recorded not_checked, never passed)",
+      "RAAN unconstrained: the liftoff epoch is the configured date, not an in-plane node pass",
+      "expected.propagation_result is 'not_checked': a passing M-05 report is not required for the mission to pass, but the E5-04 physical gate keeps parking_propagation required (a declaration is not evidence)",
+      "recovery: the first stage flies the FL-302/FL-303(/FL-305) chain after separation and is merged into the run; recovery.landed must be green for the mission to pass (an unassessed landing -- solver stack missing -- is reported failed with its reason code, never as a pass)",
+      "full_mission declared with expected.propagation_result 'not_checked': parking_propagation is a required physical phase -- the out-of-scope declaration is refused and the phase stays not_checked (E8-03, task #283)"
+    ]
+  },
+  "kind": "two-stage-leo-mission",
+  "label": "e5-08-new-vehicle-starship-rtls: liftoff -> meco -> separation -> booster recovery -> seco (branched after separation: upper stage + first stage) -> parking orbit -> orbit propagation",
+  "propagations": [],
+  "provenance": {
+    "numpy": "2.5.5",
+    "orbitopt": "installed (version unknown)",
+    "pykep": null,
+    "python": "3.13.18",
+    "tudatpy": null
+  },
+  "residuals": [],
+  "schemaVersion": "1.0",
+  "status": {
+    "categories": {
+      "historical_validation": {
+        "checks_passed": 0,
+        "checks_total": 0,
+        "result": "not_checked"
+      },
+      "model_agreement": {
+        "checks_passed": 9,
+        "checks_total": 16,
+        "result": "failed"
+      },
+      "numerical_consistency": {
+        "checks_passed": 46,
+        "checks_total": 46,
+        "result": "passed"
+      }
+    },
+    "check_categories": {
+      "ascent.flight_verified": "model_agreement",
+      "ascent.insertion_verified": "model_agreement",
+      "expected.apoapsis": "model_agreement",
+      "expected.eccentricity": "model_agreement",
+      "expected.inclination": "model_agreement",
+      "expected.periapsis": "model_agreement",
+      "expected.semi_major_axis": "model_agreement",
+      "handoff.booster.epoch_monotonic": "numerical_consistency",
+      "handoff.booster.mass_conservation": "numerical_consistency",
+      "handoff.booster.position_continuity": "numerical_consistency",
+      "handoff.booster.separation_event": "numerical_consistency",
+      "handoff.booster.velocity_continuity": "numerical_consistency",
+      "handoff.coupled.booster.epoch_monotonic": "numerical_consistency",
+      "handoff.coupled.booster.mass_conservation": "numerical_consistency",
+      "handoff.coupled.booster.position_continuity": "numerical_consistency",
+      "handoff.coupled.booster.shared_source": "numerical_consistency",
+      "handoff.coupled.booster.velocity_continuity": "numerical_consistency",
+      "handoff.coupled.upper-stage.epoch_monotonic": "numerical_consistency",
+      "handoff.coupled.upper-stage.mass_conservation": "numerical_consistency",
+      "handoff.coupled.upper-stage.position_continuity": "numerical_consistency",
+      "handoff.coupled.upper-stage.shared_source": "numerical_consistency",
+      "handoff.coupled.upper-stage.velocity_continuity": "numerical_consistency",
+      "handoff.stage2.epoch_monotonic": "numerical_consistency",
+      "handoff.stage2.mass_conservation": "numerical_consistency",
+      "handoff.stage2.position_continuity": "numerical_consistency",
+      "handoff.stage2.separation_event": "numerical_consistency",
+      "handoff.stage2.velocity_continuity": "numerical_consistency",
+      "mass.booster.non_increasing": "numerical_consistency",
+      "mass.coupled.branch_mass_split": "numerical_consistency",
+      "mass.separation_fork": "numerical_consistency",
+      "mass.stage1.non_increasing": "numerical_consistency",
+      "mass.stage2.non_increasing": "numerical_consistency",
+      "parking.apoapsis": "numerical_consistency",
+      "parking.eccentricity": "numerical_consistency",
+      "parking.epoch_monotonic": "numerical_consistency",
+      "parking.inclination": "numerical_consistency",
+      "parking.mass_conservation": "numerical_consistency",
+      "parking.periapsis": "numerical_consistency",
+      "parking.position_continuity": "numerical_consistency",
+      "parking.raan": "numerical_consistency",
+      "parking.semi_major_axis": "numerical_consistency",
+      "parking.velocity_continuity": "numerical_consistency",
+      "recovery.handoff-boostback-entry": "numerical_consistency",
+      "recovery.handoff-landing-touchdown": "numerical_consistency",
+      "recovery.handoff-mass-coast-entry": "numerical_consistency",
+      "recovery.handoff-mass-monotonic-boostback": "numerical_consistency",
+      "recovery.handoff-mass-terminal": "numerical_consistency",
+      "recovery.handoff-separation-boostback": "numerical_consistency",
+      "recovery.joint-max-q-boostback": "model_agreement",
+      "recovery.joint-max-q-entry": "model_agreement",
+      "recovery.joint-propellant-corridor-budget": "model_agreement",
+      "recovery.joint-propellant-reserve-touchdown": "model_agreement",
+      "recovery.joint-touchdown-lateral-speed": "model_agreement",
+      "recovery.joint-touchdown-position": "model_agreement",
+      "recovery.joint-touchdown-vertical-speed": "model_agreement",
+      "recovery.landed": "model_agreement",
+      "recovery.propellant_reserve": "model_agreement",
+      "station.event_chain_order": "numerical_consistency",
+      "station.liftoff": "numerical_consistency",
+      "station.meco": "numerical_consistency",
+      "station.seco": "numerical_consistency",
+      "station.separation": "numerical_consistency"
+    },
+    "check_evidence": {
+      "ascent.flight_verified": "design_input",
+      "ascent.insertion_verified": "design_input",
+      "expected.apoapsis": "design_input",
+      "expected.eccentricity": "design_input",
+      "expected.inclination": "design_input",
+      "expected.periapsis": "design_input",
+      "expected.semi_major_axis": "design_input",
+      "handoff.booster.epoch_monotonic": "numerical_consistency",
+      "handoff.booster.mass_conservation": "numerical_consistency",
+      "handoff.booster.position_continuity": "numerical_consistency",
+      "handoff.booster.separation_event": "numerical_consistency",
+      "handoff.booster.velocity_continuity": "numerical_consistency",
+      "handoff.coupled.booster.epoch_monotonic": "numerical_consistency",
+      "handoff.coupled.booster.mass_conservation": "numerical_consistency",
+      "handoff.coupled.booster.position_continuity": "numerical_consistency",
+      "handoff.coupled.booster.shared_source": "numerical_consistency",
+      "handoff.coupled.booster.velocity_continuity": "numerical_consistency",
+      "handoff.coupled.upper-stage.epoch_monotonic": "numerical_consistency",
+      "handoff.coupled.upper-stage.mass_conservation": "numerical_consistency",
+      "handoff.coupled.upper-stage.position_continuity": "numerical_consistency",
+      "handoff.coupled.upper-stage.shared_source": "numerical_consistency",
+      "handoff.coupled.upper-stage.velocity_continuity": "numerical_consistency",
+      "handoff.stage2.epoch_monotonic": "numerical_consistency",
+      "handoff.stage2.mass_conservation": "numerical_consistency",
+      "handoff.stage2.position_continuity": "numerical_consistency",
+      "handoff.stage2.separation_event": "numerical_consistency",
+      "handoff.stage2.velocity_continuity": "numerical_consistency",
+      "mass.booster.non_increasing": "numerical_consistency",
+      "mass.coupled.branch_mass_split": "numerical_consistency",
+      "mass.separation_fork": "numerical_consistency",
+      "mass.stage1.non_increasing": "numerical_consistency",
+      "mass.stage2.non_increasing": "numerical_consistency",
+      "parking.apoapsis": "numerical_consistency",
+      "parking.eccentricity": "numerical_consistency",
+      "parking.epoch_monotonic": "numerical_consistency",
+      "parking.inclination": "numerical_consistency",
+      "parking.mass_conservation": "numerical_consistency",
+      "parking.periapsis": "numerical_consistency",
+      "parking.position_continuity": "numerical_consistency",
+      "parking.raan": "numerical_consistency",
+      "parking.semi_major_axis": "numerical_consistency",
+      "parking.velocity_continuity": "numerical_consistency",
+      "recovery.handoff-boostback-entry": "numerical_consistency",
+      "recovery.handoff-landing-touchdown": "numerical_consistency",
+      "recovery.handoff-mass-coast-entry": "numerical_consistency",
+      "recovery.handoff-mass-monotonic-boostback": "numerical_consistency",
+      "recovery.handoff-mass-terminal": "numerical_consistency",
+      "recovery.handoff-separation-boostback": "numerical_consistency",
+      "recovery.joint-max-q-boostback": "design_input",
+      "recovery.joint-max-q-entry": "design_input",
+      "recovery.joint-propellant-corridor-budget": "design_input",
+      "recovery.joint-propellant-reserve-touchdown": "design_input",
+      "recovery.joint-touchdown-lateral-speed": "design_input",
+      "recovery.joint-touchdown-position": "design_input",
+      "recovery.joint-touchdown-vertical-speed": "design_input",
+      "recovery.landed": "design_input",
+      "recovery.propellant_reserve": "design_input",
+      "station.event_chain_order": "numerical_consistency",
+      "station.liftoff": "numerical_consistency",
+      "station.meco": "numerical_consistency",
+      "station.seco": "numerical_consistency",
+      "station.separation": "numerical_consistency"
+    },
+    "checks": {
+      "ascent.flight_verified": false,
+      "ascent.insertion_verified": true,
+      "expected.apoapsis": true,
+      "expected.eccentricity": true,
+      "expected.inclination": true,
+      "expected.periapsis": true,
+      "expected.semi_major_axis": true,
+      "handoff.booster.epoch_monotonic": true,
+      "handoff.booster.mass_conservation": true,
+      "handoff.booster.position_continuity": true,
+      "handoff.booster.separation_event": true,
+      "handoff.booster.velocity_continuity": true,
+      "handoff.coupled.booster.epoch_monotonic": true,
+      "handoff.coupled.booster.mass_conservation": true,
+      "handoff.coupled.booster.position_continuity": true,
+      "handoff.coupled.booster.shared_source": true,
+      "handoff.coupled.booster.velocity_continuity": true,
+      "handoff.coupled.upper-stage.epoch_monotonic": true,
+      "handoff.coupled.upper-stage.mass_conservation": true,
+      "handoff.coupled.upper-stage.position_continuity": true,
+      "handoff.coupled.upper-stage.shared_source": true,
+      "handoff.coupled.upper-stage.velocity_continuity": true,
+      "handoff.stage2.epoch_monotonic": true,
+      "handoff.stage2.mass_conservation": true,
+      "handoff.stage2.position_continuity": true,
+      "handoff.stage2.separation_event": true,
+      "handoff.stage2.velocity_continuity": true,
+      "mass.booster.non_increasing": true,
+      "mass.coupled.branch_mass_split": true,
+      "mass.separation_fork": true,
+      "mass.stage1.non_increasing": true,
+      "mass.stage2.non_increasing": true,
+      "parking.apoapsis": true,
+      "parking.eccentricity": true,
+      "parking.epoch_monotonic": true,
+      "parking.inclination": true,
+      "parking.mass_conservation": true,
+      "parking.periapsis": true,
+      "parking.position_continuity": true,
+      "parking.raan": true,
+      "parking.semi_major_axis": true,
+      "parking.velocity_continuity": true,
+      "recovery.handoff-boostback-entry": true,
+      "recovery.handoff-landing-touchdown": true,
+      "recovery.handoff-mass-coast-entry": true,
+      "recovery.handoff-mass-monotonic-boostback": true,
+      "recovery.handoff-mass-terminal": true,
+      "recovery.handoff-separation-boostback": true,
+      "recovery.joint-max-q-boostback": true,
+      "recovery.joint-max-q-entry": true,
+      "recovery.joint-propellant-corridor-budget": false,
+      "recovery.joint-propellant-reserve-touchdown": false,
+      "recovery.joint-touchdown-lateral-speed": false,
+      "recovery.joint-touchdown-position": false,
+      "recovery.joint-touchdown-vertical-speed": false,
+      "recovery.landed": false,
+      "recovery.propellant_reserve": true,
+      "station.event_chain_order": true,
+      "station.liftoff": true,
+      "station.meco": true,
+      "station.seco": true,
+      "station.separation": true
+    },
+    "evidence": {
+      "analytical": {
+        "cannot_prove": "that the model represents reality -- the closed-form reference shares the model's own assumptions (point mass, impulsive burns, idealised field).",
+        "checks_passed": 0,
+        "checks_total": 0,
+        "independent": false,
+        "label": "Analytic solution",
+        "proves": "the numerics reproduce the closed-form solution of the model they integrate (the equations and the integrator, not their agreement with reality).",
+        "result": "not_checked"
+      },
+      "design_input": {
+        "cannot_prove": "anything about fidelity to reality: the reference IS the design input, so this is NOT independent validation and must never be read as historical proof.",
+        "checks_passed": 9,
+        "checks_total": 16,
+        "independent": false,
+        "label": "Matches design input",
+        "proves": "the solver reached the aim point, or the plan respects the site/vehicle/corridor envelope it was designed against -- internal consistency only.",
+        "result": "failed"
+      },
+      "historical_telemetry": {
+        "cannot_prove": "any other vehicle, phase or operating point -- one published event validates that event, not the model as a whole, and the reference's own provenance is only as good as its source.",
+        "checks_passed": 0,
+        "checks_total": 0,
+        "independent": true,
+        "label": "Historical telemetry",
+        "proves": "the model reproduces a published, observed (flown) value it was not tuned to.",
+        "result": "not_checked"
+      },
+      "independent_model": {
+        "cannot_prove": "that either model is right in the real world -- an assumption shared by both stays invisible; the phase and force inventory of the comparison bound its reach.",
+        "checks_passed": 0,
+        "checks_total": 0,
+        "independent": true,
+        "label": "Independent model",
+        "proves": "two independently formulated models agree, so neither is trivially mis-implemented.",
+        "result": "not_checked"
+      },
+      "numerical_consistency": {
+        "cannot_prove": "agreement with any other model or with reality -- it bounds numerical error only.",
+        "checks_passed": 46,
+        "checks_total": 46,
+        "independent": false,
+        "label": "Numerical consistency",
+        "proves": "integration error is under tolerance and the model's own invariants / self-consistency hold (step convergence, exact integrals, a same-model re-fly).",
+        "result": "passed"
+      }
+    },
+    "independent_validation": {
+      "checks_passed": 0,
+      "checks_total": 0,
+      "result": "not_checked"
+    },
+    "passed": false,
+    "result": "failed"
+  },
+  "targets": {
+    "achieved_parking_orbit": {
+      "apoapsis_altitude_m": 292126.0433095144,
+      "eccentricity": 0.0044898345278265046,
+      "inclination_deg": 51.98429612423203,
+      "periapsis_altitude_m": 232497.01314493548,
+      "raan_deg": 173.66085248881137,
+      "semi_major_axis_m": 6640448.528227225
+    },
+    "converged": false,
+    "deviations": {
+      "apoapsis_altitude_m": {
+        "deviation": 0.003309514431748539,
+        "tolerance": 20000.0
+      },
+      "eccentricity": {
+        "deviation": 2.7826504989114653e-11,
+        "tolerance": 0.003008
+      },
+      "inclination_deg": {
+        "deviation": 1.242320308847411e-07,
+        "tolerance": 0.2
+      },
+      "periapsis_altitude_m": {
+        "deviation": 0.0031449354719370604,
+        "tolerance": 20000.0
+      },
+      "semi_major_axis_m": {
+        "deviation": 0.028227224946022034,
+        "tolerance": 20000.0
+      }
+    },
+    "expected_parking_orbit": {
+      "apoapsis_altitude_m": 292126.04,
+      "eccentricity": 0.0044898345,
+      "inclination_deg": 51.984296,
+      "periapsis_altitude_m": 232497.01,
+      "raan_deg": null,
+      "semi_major_axis_m": 6640448.5
+    }
+  }
+}
