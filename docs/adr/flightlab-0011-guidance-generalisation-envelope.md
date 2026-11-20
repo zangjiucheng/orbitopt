@@ -163,6 +163,14 @@ termination term". It exists now, and the envelope did not move:
   the envelope's boundary. Conversion of the overshoot class needs a law that
   commands attitude beyond the airframe's realisable AoA window (a
   pitch-reversal / braking-phasing regime), not a wider limiter.
-* The same cell set runs on the JSBSim channel (E6-05, `sixdof/jsbsim_matrix.py`):
-  the upper leg's attitude-tracking residuals stay parity-grade across both
-  channels and the verdict sets agree; see the E6-05 record for the numbers.
+* The same cell set runs on the JSBSim channel (`sixdof/jsbsim_matrix.py`,
+  record `benchmarks/e6_05_jsbsim_matrix.json`): each leg restarts JSBSim at
+  the native run's frozen separation state, and 16 of 17 verdicts agree. The
+  exception is a220-i28.5-V1-A3 — the cell this matrix already attributes to
+  the servo realisation — which cuts off on JSBSim with 480 kg of propellant
+  left where the native rigid body depletes (6.85 % propellant history
+  divergence, recorded and expected, not gated away). On the six inserted
+  cells the engine histories agree to ≤0.05 %, the cutoff times to <1 s, and
+  the powered-window attitude error grows by 0.00° over the drift handed at
+  ignition; the predicted-miss cells burn out chasing an unreachable target
+  and are judged on their verdict, which stays a miss on both channels.
