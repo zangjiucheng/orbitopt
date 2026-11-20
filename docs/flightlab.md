@@ -185,6 +185,15 @@ For the guided JSBSim study (requires the six-DOF dependency):
 PYTHONPATH=src python benchmarks/bench_e6_02_guided_ascent.py -o runs/e602.json
 ```
 
+The guidance matrix (native) and its JSBSim applicability twin regenerate from
+their benchmarks; both fly every cell independently, so `--jobs` scales with
+cores (cells take minutes each):
+
+```bash
+PYTHONPATH=src python benchmarks/bench_e6_03_guidance_matrix.py --jobs 4 -o docs/benchmarks/e6_03_guidance_matrix.json
+PYTHONPATH=src python benchmarks/bench_e6_05_jsbsim_matrix.py --jobs 4 -o docs/benchmarks/e6_05_jsbsim_matrix.json
+```
+
 The study writes measurement JSON rather than a Flight Lab run directory.
 The [API reference](api.md#mission-and-qualification-interfaces) covers its
 scenario, runner and comparison functions.
