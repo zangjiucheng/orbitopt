@@ -54,11 +54,15 @@ def variant_doc(base: dict, dt1: float, burn2: float, sep_gap: float = 3.0) -> d
 PROGRAM_NODES = (155.0, 200.0, 260.0, 320.0, 380.0, 430.0, 445.0)   # post-MECO elevation nodes [s]
 
 
-def with_program(doc: dict, elev: list[float]) -> dict:
-    """``doc`` with the post-MECO elevation nodes replaced (azimuth, pre-MECO
-    program and the final hold untouched)."""
+def with_program(doc: dict, elev: list[float], azimuth: float | None = None) -> dict:
+    """``doc`` with the post-MECO elevation nodes replaced (pre-MECO program and the
+    final hold untouched); ``azimuth`` (Starbase: searched) replaces the constant
+    azimuth of every row."""
     d = copy.deepcopy(doc)
     prog = d["attitude_program"]
+    if azimuth is not None:
+        for row in prog:
+            row["azimuth_deg"] = float(azimuth)
     for t, el in zip(PROGRAM_NODES, elev):
         for row in prog:
             if abs(float(row["t_s"]) - t) < 1e-6:
@@ -101,8 +105,10 @@ def penalty(r: dict) -> float:
 
 def _obj(x):
     c = _OBJ
-    elev, burn2 = list(x[:-1]), float(x[-1])
-    doc = with_program(variant_doc(c["base"], c["dt1"], burn2), elev)
+    n_el = len(PROGRAM_NODES)
+    elev, burn2 = list(x[:n_el]), float(x[n_el])
+    az = float(x[n_el + 1]) if len(x) > n_el + 1 else None
+    doc = with_program(variant_doc(c["base"], c["dt1"], burn2, c.get("sep_gap", 3.0)), elev, az)
     import os
     r = evaluate(doc, c["tmp"], f"w{os.getpid()}")
     return penalty(r) + monotone_penalty(elev)
@@ -122,11 +128,20 @@ def cmd_search(a) -> int:
     base = yaml.safe_load(e508.VEHICLE.read_text())
     tmp = Path(a.out)
     tmp.mkdir(parents=True, exist_ok=True)
-    _OBJ.update(base=base, dt1=a.dt1[0], tmp=tmp)
+    _OBJ.update(base=base, dt1=a.dt1[0], tmp=tmp, sep_gap=a.sep_gap)
     base_el = [next(float(r["elevation_deg"]) for r in base["attitude_program"]
                     if abs(float(r["t_s"]) - t) < 1e-6) for t in PROGRAM_NODES]
-    bounds = [(max(0.5, e - 9.0), min(89.0, e + 9.0)) for e in base_el] + [(370.0, 400.0)]
-    x0 = np.array(base_el + [378.0 + 0.0])
+    bounds = [(max(0.5, e - 9.0), min(89.0, e + 9.0)) for e in base_el] + [(335.0, 400.0)]
+    x0 = np.array(base_el + [float(base["stages"][1]["engine"]["burn_end_s"])])
+    # the insertion inclination window follows the scenario's target (Kourou 51.6, Starbase 30.5)
+    from orbitopt.flightlab.contract import load_target
+
+    inc = float(load_target(e508.SCENARIO).target_orbit.inclination_deg)
+    _LIM["incl"] = (inc - 0.9, inc + 0.9)
+    if a.azimuth_search:
+        az0 = float(base["attitude_program"][0]["azimuth_deg"])
+        bounds += [(az0 - a.azimuth_search, az0 + a.azimuth_search)]
+        x0 = np.append(x0, az0)
     history = []
 
     def cb(intermediate_result):
@@ -139,7 +154,8 @@ def cmd_search(a) -> int:
                                      init="latinhypercube", tol=0.0, polish=False,
                                      updating="deferred", workers=pool.map, callback=cb)
     x = [float(v) for v in res.x]
-    doc = with_program(variant_doc(base, a.dt1[0], x[-1]), x[:-1])
+    n_el = len(PROGRAM_NODES)
+    doc = with_program(variant_doc(base, a.dt1[0], x[n_el], a.sep_gap), x[:n_el], x[n_el + 1] if len(x) > n_el + 1 else None)
     r = evaluate(doc, tmp, "best")
     (tmp / "best_vehicle.yaml").write_text(yaml.safe_dump(doc, sort_keys=False))
     out = {"dt1": a.dt1[0], "penalty": float(res.fun), "x": x, "ok": r.get("ok"),
@@ -178,6 +194,11 @@ def main(argv=None) -> int:
     p.add_argument("--dt1", type=float, nargs="+", default=[0, 3, 6, 9])
     p.add_argument("--burn2", type=float, nargs="+", default=[378, 384, 390, 396, 402, 410, 420])
     p.add_argument("--out", required=True)
+    p.add_argument("--sep-gap", type=float, default=3.0,
+                   help="coast from MECO to separation [s]; the separation time must sit on the 2 s "
+                        "trajectory grid or the mission's handoff-continuity checks fail")
+    p.add_argument("--azimuth-search", type=float, default=0.0,
+                   help="also search the constant launch azimuth, +/- this many degrees around the vehicle file's")
     p.add_argument("--workers", type=int, default=8)
     p.add_argument("--popsize", type=int, default=12)
     p.add_argument("--maxiter", type=int, default=40)

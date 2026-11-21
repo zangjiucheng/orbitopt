@@ -53,13 +53,14 @@ REPO = Path(__file__).resolve().parents[1]
 # ORBITOPT_E508_VARIANT selects which E5-08 design this script records / checks:
 # unset = the sealed E5-08 design (starship_class_rtls_derived, an honest gap
 # record); "dc7" = E5-08b, the same flight target flown by starship_class_rtls_dc7
-# (an earlier stage-1 cutoff, DC7) with its own parallel files. Default behaviour
+# (an earlier stage-1 cutoff, DC7) with its own parallel files; "starbase" = E5-08c,
+# the DC7 design flown from Starbase (starship_class_rtls_starbase). Default behaviour
 # and every default path are unchanged.
 VARIANT = os.environ.get("ORBITOPT_E508_VARIANT", "").strip().lower()
-if VARIANT not in ("", "dc7"):
-    raise SystemExit(f"ORBITOPT_E508_VARIANT must be unset or 'dc7', got {VARIANT!r}")
+if VARIANT not in ("", "dc7", "starbase"):
+    raise SystemExit(f"ORBITOPT_E508_VARIANT must be unset, 'dc7' or 'starbase', got {VARIANT!r}")
 _SUF, _ROOT_SUF = (f"_{VARIANT}", f"-{VARIANT}") if VARIANT else ("", "")
-_VEH = "dc7" if VARIANT else "derived"
+_VEH = VARIANT or "derived"
 
 VEHICLE = REPO / f"src/orbitopt/data/flightlab/vehicles/starship_class_rtls_{_VEH}.yaml"
 SCENARIO = REPO / f"src/orbitopt/data/flightlab/scenarios/leo_starship_class_rtls_e508{_SUF}.yaml"
@@ -147,6 +148,22 @@ def _recovery_sep_state_ecef(run):
                    velocity_m_s=tuple(float(c) for c in v_e))
 
 
+def _eop_scope():
+    """The Earth-orientation scope a record / replay / Monte Carlo runs in. The Starbase
+    variant runs under the frozen snapshot of the E5-07 epoch -- the same one its
+    cross-environment plan hands to every stage -- so that the script it records is the
+    script the sealed cross-environment evidence flies (a recovery solution with little
+    margin reads a different answer under live EOP). The Kourou designs were recorded
+    without it and keep that, so their sealed numbers are unchanged."""
+    from contextlib import nullcontext
+
+    if VARIANT != "starbase":
+        return nullcontext()
+    from orbitopt.reference_eop import freeze_reference, load_snapshot
+
+    return freeze_reference(load_snapshot(E507_ROOT / "earth_orientation.json"))
+
+
 def _load_e505c(path: Path):
     spec = importlib.util.spec_from_file_location(path.stem, path)
     mod = importlib.util.module_from_spec(spec)
@@ -175,6 +192,11 @@ def _recipe_defaults(**over) -> dict:
 # ------------------------------------------------------------------ recording
 
 def cmd_record(args) -> int:
+    with _eop_scope():
+        return _cmd_record_body(args)
+
+
+def _cmd_record_body(args) -> int:
     sys.path.insert(0, str(REPO / "src"))
     import yaml
     from orbitopt.flightlab.contract import load_target, read_run
@@ -801,6 +823,11 @@ def _dc7_comparison(comp: dict, asc_dir: Path, ref: dict, cur: dict, e507_asc: P
 # ---------------------------------------------------------------- run/compare
 
 def cmd_run(out_dir: Path) -> int:
+    with _eop_scope():
+        return _cmd_run_body(out_dir)
+
+
+def _cmd_run_body(out_dir: Path) -> int:
     sys.path.insert(0, str(REPO / "src"))
     mission = _run_mission(REF_ROOT / "mission-optimized",
                            json.loads(SCRIPT_JSON.read_text())["recipe"], out_dir)
@@ -979,6 +1006,11 @@ def cmd_e805() -> int:
 # ------------------------------------------------------------------------ MC
 
 def cmd_mc(args) -> int:
+    with _eop_scope():
+        return _cmd_mc_body(args)
+
+
+def _cmd_mc_body(args) -> int:
     sys.path.insert(0, str(REPO / "src"))
     from orbitopt.flightlab.contract import load_target, read_run
     from orbitopt.flightlab.recovery.montecarlo import run_monte_carlo

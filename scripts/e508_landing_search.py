@@ -52,7 +52,8 @@ def _context(args):
     vehicle = Path(getattr(args, "vehicle", None) or e508.VEHICLE)
     run = read_run(asc)
     target = load_target(e508.SCENARIO)
-    recorded = json.loads((e508.REF_ROOT / "recovery-script.json").read_text())
+    rs = e508.REF_ROOT / "recovery-script.json"       # absent for a design not yet recorded: --x0 is then required
+    recorded = json.loads(rs.read_text()) if rs.is_file() else {"recipe": {"initial_guess": json.loads(args.x0)}}
     if getattr(args, "recipe", "gap") == "gap":          # exactly as recorded
         gap = dict(e508.GAP_RECIPE)
         gap["entry_q_max_pa"] = 1000.0 * float(args.entry_q_kpa)   # recorded: 400 kPa
@@ -257,7 +258,7 @@ def _score(x) -> float:
         pen += _landing_g_penalty(outcome, c)
     qlim = float(c["recipe"]["entry_q_max_pa"])
     pen += max(0.0, float(rep.entry_max_q_pa) - qlim) / 1e3
-    pen += float(rep.miss_m) / 100.0     # 424 m -> 4, 8 km (the referee) -> 80
+    pen += float(rep.miss_m) * float(_CTX.get("miss_w", 0.01))   # default: 424 m -> 4, 8 km (the referee) -> 80
     if _CTX.get("ens_k") and pen < _CTX["ens_gate"]:
         pen += _ensemble_penalty(x)      # only worth its cost once the nominal case is (nearly) closed
     return pen
@@ -279,8 +280,26 @@ def _final_flight(x) -> dict:
     return r
 
 
+def _enter_eop(args):
+    """``--eop e507``: run under the frozen Earth-orientation snapshot of the E5-07 epoch --
+    the one a cross-environment plan hands to every stage -- so what the search closes is what
+    the sealed cross-environment evidence flies. Entered for the life of the process (forked
+    workers inherit it)."""
+    if getattr(args, "eop", "live") != "e507":
+        return None
+    from contextlib import ExitStack
+
+    from orbitopt.reference_eop import freeze_reference, load_snapshot
+
+    stack = ExitStack()
+    stack.enter_context(freeze_reference(load_snapshot(
+        REPO / "tests/data/mission/reference/e5-07-physics-qualification/earth_orientation.json")))
+    return stack
+
+
 def cmd_search(args) -> int:
     import multiprocessing as mp
+    _eop_stack = _enter_eop(args)
 
     import numpy as np
     from scipy.optimize import differential_evolution
@@ -294,7 +313,8 @@ def cmd_search(args) -> int:
     from orbitopt.flightlab.recovery.boostback import DEFAULT_CORRIDOR
 
     _CTX.update(c, recipe=recipe, target=target, sites=sites, target_corridor=DEFAULT_CORRIDOR,
-                margin=getattr(args, "margin", "base"), ens_k=int(getattr(args, "ensemble", 0) or 0),
+                margin=getattr(args, "margin", "base"), miss_w=float(getattr(args, "miss_weight", 0.01)),
+                ens_k=int(getattr(args, "ensemble", 0) or 0),
                 ens_seed=int(getattr(args, "ens_seed", 101)), ens_weight=float(getattr(args, "ens_weight", 40.0)),
                 ens_gate=float(getattr(args, "ens_gate", 3.0)))
     if _CTX["ens_k"]:
@@ -362,6 +382,11 @@ def main(argv=None) -> int:
     s = sub.add_parser("search", help="global DE search with a lever applied")
     s.add_argument("--cut-max", type=float, default=1500.0)
     s.add_argument("--margin", choices=tuple(_MARGINS), default="base")
+    s.add_argument("--eop", choices=("live", "e507"), default="live",
+                   help="e507: freeze the Earth orientation of the E5-07 epoch (as a cross-env plan does)")
+    s.add_argument("--miss-weight", type=float, default=0.01,
+                   help="penalty per metre of corridor miss (0.01: 8 km = 80; raise it when the landing "
+                        "is only infeasible because the aim is off)")
     s.add_argument("--ensemble", type=int, default=0, help="dispersed samples per candidate (0 = off)")
     s.add_argument("--ens-seed", type=int, default=101)
     s.add_argument("--ens-weight", type=float, default=40.0)
