@@ -1,0 +1,82 @@
+{
+  "schema_version": "1.0",
+  "run_id": "ot-e92c0aef-463716b9",
+  "target_sha256": "e92c0aef1f5e75291378064b8ce404f0eb2e07b9088b2e6540c6ceebd98e4776",
+  "vehicle_sha256": "4f4aa32a394a295c774c615f4429afdb5dd298647787e46aae32281b4581bdfe",
+  "engines": {
+    "opentsiolkovsky-cli": "1.0.0",
+    "propagator": "orbitopt.flightlab.recovery.propagator",
+    "cvxpy": "reference",
+    "gfold": "not-run"
+  },
+  "backend": "opentsiolkovsky",
+  "git_sha": "cd6572eead11be5ad2f1764518e30b01ef5a7209",
+  "created_utc": "2026-11-10T12:00:00Z",
+  "assumptions": [
+    "OpenTsiolkovsky 1.0.0 (MIT, external binary -- not vendored; see NOTICE; openTsiolkovsky-v1.0.0-<platform>.tar.gz, pinned per-platform SHA-256 digests live in scripts/fetch_opentsiolkovsky.py)",
+    "opentsiolkovsky run-config sha256 463716b9914aeb28fec35a46907aba2fd808f0f37df472747fc4f24968ced201",
+    "OT pos_eci_*/vel_eci_* read as LAUNCH_ECI (axes = ECEF at the launch epoch, held inertial) and converted to GCRS by orbitopt.flightlab.frames.to_gcrs at the epoch",
+    "created_utc is the mission epoch: this adapter is a pure function of (target, vehicle, attitude program), so repeated calls write byte-identical runs",
+    "vehicle: DC1 recovery scheme (DESIGN CHANGE): three relightable ignitions after separation (boostback, one throttled powered entry burn, landing burn) with the 13-engine relight set usable for all three phases. Reason: the E5-07 RECOVERY_GAP.md -- the reference's boostback + aerodynamic entry + landing needs 2 ignitions with an UNPOWERED entry the FL-302 planner cannot represent, so the reference mission declares no recovery stage; a powered entry (entry_burns = 1) is the closest profile the shipped chain plans, flies and grades, and powered entry deceleration is public behaviour of the class (the flip-and-burn deceleration of the Starship flight tests, the landing burn of Falcon 9). Entry-phase planning limits (250 kPa / 12 g) are the ADR-0008 DESIGN ASSUMPTIONs the E5-05c/E7 campaign carries.",
+    "vehicle: DC2 stage-1 burn window and throttle schedule: UNCHANGED (cutoff 135 s). Reason: the E5-07 record shows 466 t unburned at MECO against a 100 t graded reserve -- the reserve was never the reference's gap (the gap was architectural), so no earlier cutoff is designed in; cutting earlier would trade stage-2 propellant (and so delivered payload) for reserve that is already sufficient. Re-verified against the flown recovery budget in the E5-08 comparison record.",
+    "vehicle: DC3 stage-2 burn window: UNCHANGED (cutoff 378 s after ignition, ~1,081 t burned, ~119 t kept). Reason: same delivered insertion orbit as the reference (232.5 x 292.1 km at 51.98 deg) with no constraint relaxation; payload capability is then identical by construction and the comparison report attributes every REAL difference to DC1 and model uncertainty.",
+    "vehicle: DC4 nose geometry and aero: UNCHANGED (13.5 m tangent ogive assumption, +-30 %, tables regenerated from the nose by orbitopt.flightlab.nose_aero and held equal by test). Reason: keeping the aero identity makes the Max-Q / peak-g comparison between reference and derived vehicle isolate DC1; a nose change would move both and confound the report.",
+    "vehicle: DC5 stage masses, engines (33 x Raptor 2 stage-1 set at the 95 % figure; 6-engine ship; 13-engine relight set at the 40 % floor) and launch site / epoch: UNCHANGED. Reason: the task inherits the E5-07 sourced constraint set; re-sizing stages or engines without a new public basis would break the provenance rule (every parameter sourced or a reasoned DESIGN ASSUMPTION).",
+    "vehicle: Block 1 figures throughout, Raptor 2 at 2.256 MN sea-level / 327 s SL Isp / 350 s vacuum, ship set at the thrust-weighted 365 s effective Isp -- inherited one for one from starship_class_public_estimate.yaml, with the same source caveats (public disagreement on the vacuum Isp figure; the nose length is an assumption with no public value).",
+    "vehicle: The booster section models its relightable engines as one set; the real vehicle shuts down toward 3 engines for the last seconds of the landing burn, which one engine set cannot express (inherited limitation; the E8-05 landing comparison declares its 3-engine landing configuration).",
+    "target: Constraint basis (E5-07): every limit above is PUBLIC SOURCE or ASSUMPTION as commented; none was widened to make the computed flight close. Vehicle-parameter uncertainty (generated aero +-30 %, nose length +-30 % assumption) is recorded as the SENSITIVITY RANGE of the reference, quantified in the E5-07 sensitivity record (scripts/e507_reference.py sensitivity), not by loosening a limit.",
+    "target: q*alpha structural load (a Starship-class sizing case the E5-05 fixture never carried): the reference does not impose an unpublished allowable as a number. It is qualified as a REPORTED load -- the ascent run carries q and the attitude program's angle of attack (gravity-turn: beta ~ 0, q*alpha ~ 0 by construction of the commanded program), and the sensitivity record evaluates the +-30 % aerodynamic band on the same trajectory. The entry cross-check is reported separately as not-closable with the current guidance chain (see the E5-07 report).",
+    "target: Thrust-to-weight ratio: liftoff TWR of the declared stack is 74.93 MN vacuum thrust (33 x Raptor 2 at 95 %, derived from the published 2.256 MN sea-level figure) on 3,525 t at pad -> 2.17 vacuum / ~1.95 sea-level-class; the published Block 1 liftoff TWR is ~1.5. The OT backend flies the declared full-thrust burn window (no throttle authority), so the declared thrust curve -- not a mission gate -- carries this figure; it is reported in the E5-07 record as a vehicle-capability note.",
+    "target: The vehicle flies its DECLARED attitude program and burn windows (fixed-program OT flight; the program in the vehicle file is an authored gravity-turn-style profile, scenario choice, tagged illustrative there).",
+    "target: Booster RTLS (design change DC1, E5-08): the vehicle models THREE relightable ignitions (boostback, ONE powered entry burn, landing), the profile the shipped E3 chain plans, flies and grades; the E5-07 gap report's restart-2 aerodynamic-entry profile is not expressible in FL-302 and is NOT claimed here. Entry-phase planning limits (250 kPa / 12 g) are ADR-0008 DESIGN ASSUMPTIONs -- planning knobs, not graded constraints; the graded recovery numbers (touchdown 3 m/s vertical / 1 m/s lateral, reserve 100 t) are the E5-07 values, unchanged.",
+    "target: Constraint basis inherited from the E5-07 reference unchanged (E5-08 acceptance rule): no limit was widened for the new vehicle; a computed violation is reported with its reason class (vehicle capability / guidance / constraint), not fixed by editing this file.",
+    "FL-304 recovery: FL-302 boostback/entry script + FL-303 landing burn (FL-305 closed-loop guidance unless plan_options select the single G-FOLD plan), integrated through the FL-301 propagator; the booster track replaces the ballistic stage1_debris track",
+    "entry q limit 400000 Pa, entry g limit 12.0 g over the post-boostback descent window (DESIGN ASSUMPTIONs unless overridden)",
+    "R-01 landing-aware objective: corridor miss soft-constrained against a 1000 m landing-divert budget, corridor propellant against landing need + reserve + 2500 kg fuel margin (DESIGN ASSUMPTIONs unless overridden)",
+    "E5-05c throttled entry burns (entry_throttle=True): each entry burn flies at its optimized throttle within the engine's throttle range instead of full throttle (DESIGN ASSUMPTION unless overridden)"
+  ],
+  "toolchain": {
+    "python": "3.13.18",
+    "orbitopt": "unknown (source tree; see git_sha)",
+    "numpy": "2.5.5",
+    "scipy": "1.18.1",
+    "astropy": "8.0.3",
+    "tudatpy": "absent",
+    "gfold": "0.3.2",
+    "jsbsim": "absent",
+    "cvxpy": "1.9.3",
+    "jsonschema": "4.26.0",
+    "pyyaml": "6.0.3",
+    "opentsiolkovsky": "1.0.0",
+    "opentsiolkovsky_sha256": "8041a9b5806136eb0e9d2a7b2c9ebed58ccc1876198cbf5c6373c440cb182c4c"
+  },
+  "bodies": [
+    {
+      "body_id": "stage1",
+      "parent_body_id": null,
+      "frame": "GCRS",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 0.0,
+      "t_end_s": 136.0,
+      "provenance": "public_estimate"
+    },
+    {
+      "body_id": "stage2",
+      "parent_body_id": "stage1",
+      "frame": "GCRS",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 138.0,
+      "t_end_s": 700.0,
+      "provenance": "public_estimate"
+    },
+    {
+      "body_id": "booster",
+      "parent_body_id": "stage1",
+      "frame": "GCRS",
+      "epoch_utc": "2026-11-10T12:00:00Z",
+      "t_start_s": 136.0,
+      "t_end_s": 433.8566193878269,
+      "provenance": "illustrative"
+    }
+  ]
+}

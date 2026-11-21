@@ -1,0 +1,11 @@
+{
+  "ascent_run_id_stable": true,
+  "maxq_pa": 250.0,
+  "maxg": 0.01,
+  "separation_mass_kg": 250.0,
+  "touchdown_pos_m": 50.0,
+  "touchdown_vert_m_s": 0.1,
+  "touchdown_lateral_m_s": 0.05,
+  "touchdown_propellant_kg": 1500.0,
+  "plan_script_rel": 0.02
+}

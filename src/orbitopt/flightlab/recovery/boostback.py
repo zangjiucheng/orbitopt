@@ -210,6 +210,11 @@ DEFAULT_ENTRY_G_MAX = 8.0
 #: out (lands inside every limit), FL-304's 1.76 km overshoot missed the pad.
 #: ``float("inf")`` (``None`` at the planner API) reproduces the FL-305
 #: objective, which graded the miss against the corridor radius only.
+#: E5-05c ``entry_cutoff="speed"``: ceiling [m/s] of the entry burn's cutoff
+#: speed in the planner's clamp -- a planning bound of the guidance search,
+#: not a graded constraint (``plan_boostback_entry(entry_cut_speed_max_m_s=)``).
+ENTRY_CUT_SPEED_MAX_M_S = 1500.0
+
 DEFAULT_LANDING_DIVERT_BUDGET_M = 1000.0
 
 #: R-01 minimum fuel reserve margin [kg] the objective keeps at the corridor
@@ -1074,7 +1079,8 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                           landing_guidance: Any = None,
                           verdict_physics: Any = None,
                           boostback_cutoff: str = "duration",
-                          entry_cutoff: str = "duration") -> ReturnPlan:
+                          entry_cutoff: str = "duration",
+                          entry_cut_speed_max_m_s: float = ENTRY_CUT_SPEED_MAX_M_S) -> ReturnPlan:
     """Optimize the boostback/entry-burn script so the FL-301-propagated
     booster reaches ``recovery_target.corridor``; returns the corridor
     insertion state, its pad-ENU mirror, and the flown track.
@@ -1185,7 +1191,11 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     bit-for-bit) burns ``x[6]`` seconds; ``"speed"`` ends the burn when the
     Earth-relative speed falls to ``x[6]`` [m/s] (:data:`ENTRY_CUTOFF_CAP_S`
     the cap), so the handoff speed no longer follows every thrust / Isp /
-    density dispersion."""
+    density dispersion. ``entry_cut_speed_max_m_s`` is the ceiling of that
+    cutoff speed (default :data:`ENTRY_CUT_SPEED_MAX_M_S`, the E5-05c clamp,
+    bit-for-bit): a planning-domain bound of the guidance search, not a graded
+    constraint (E5-08 RECOVERY_GAP_E508.md names raising it as a declared
+    design iteration)."""
     corridor = recovery_target.corridor
     eng = booster.engine
     if boostback_cutoff not in ("duration", "iip"):
@@ -1281,7 +1291,7 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
         pitch = min(max(float(pitch), 0.0), 30.0)
         yaw = min(max(float(yaw), -45.0), 45.0)
         h_trig = min(max(float(h_trig), corridor.h0_m + 2000.0), 35_000.0)
-        dur_e = (min(max(float(dur_e), 60.0), 1500.0) if speed_mode  # cutoff speed [m/s]
+        dur_e = (min(max(float(dur_e), 60.0), float(entry_cut_speed_max_m_s)) if speed_mode  # cutoff speed [m/s]
                  else min(max(float(dur_e), 3.0), 45.0))
         out = [delay, dur, thr, pitch, yaw, h_trig, dur_e]
         if entry_burns == 2:

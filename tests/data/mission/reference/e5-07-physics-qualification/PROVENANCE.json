@@ -1,0 +1,59 @@
+{
+  "distinct_from": "tests/data/mission/reference/e5-05-reference-mission (software-integration reference; NOT engineering-grade verification)",
+  "earth_orientation": "recorded IERS-A snapshot (earth_orientation.json), the identical finalized rows used by the E5-05 recording (same epoch); astropy-iers-data 0.2026.11.16.0.37.44",
+  "files": {
+    "RECOVERY_GAP.md": "ec29d378bd8e4c17c7c3ee51ba13befb69ee1b373957dad0b54eea17e4007717",
+    "earth_orientation.json": "eb63834a036a90440f680004351711c11f2e079920dbef35476e383b04f6c00a",
+    "mission-optimized/launch/ascent/events.json": "f6175b396dc34366d9c9ec78bcd2e3dea0d58252341fbe2e8ef99d36cc21c98e",
+    "mission-optimized/launch/ascent/manifest.json": "de846db3b4dcec55f3ad35d72925ecedd7a7a2871237ce84e4083a1f6af1ccdd",
+    "mission-optimized/launch/ascent/opentsiolkovsky/bodies/stage1.csv": "bf50ccc9fb9cf046732d1f72585b5d939ccba95e8bb0a4160732e531e6c1df37",
+    "mission-optimized/launch/ascent/opentsiolkovsky/summary.json": "990c252cc30e6a58188e3afcec7eaa17e61c8f2239224cad4208b2595f79a788",
+    "mission-optimized/launch/ascent/opentsiolkovsky/trajectory.csv": "4a4d5bbd103ac05b0964e99821d3105417f64ada88db5a0be0212f00a5a46212",
+    "mission-optimized/launch/ascent/trajectories/stage1.csv": "115e42885a7de385cdf269133b33b4003f54711551464b0a17e34c886f6f4a57",
+    "mission-optimized/launch/ascent/trajectories/stage1_debris.csv": "134e4ad7f133127c55595b490848ac0a57744d1ef4b518ea43d6581534373955",
+    "mission-optimized/launch/ascent/trajectories/stage2.csv": "7aa83800e8f32ef6ce833f8c9f62a438713bec78b0141e9826747c42852fc415",
+    "mission-optimized/launch/ascent/verification.json": "75b37673aaaa3ed1d6185a5c261d79e147b5c96f8cf0a7f3686b5afa7a7560a0",
+    "mission-optimized/launch/target.yaml": "45372f799bbd5ebff9888169d6c081f04a15e4da78e68a46e28bfabb67b81466",
+    "mission-optimized/mission.verification.json": "e35138f2b706f9db21bb7f332c8d86b3f6f6a6b54b819163428e5a9897aeaf9a",
+    "mission/mission.verification.json": "e35138f2b706f9db21bb7f332c8d86b3f6f6a6b54b819163428e5a9897aeaf9a",
+    "tolerances.json": "5afb95c11272383226244cd2ffcd2f9b4e73570457996228280469e9a665a69a"
+  },
+  "frozen_inputs": {
+    "ascent_target_sha256": "6a925bdbc6ffe2ec75109a8d41689207f68a097efbcb1a6e9b5844cdf72f9635",
+    "constraint_basis": "leo_starship_class.yaml: max-q 55 kPa (public Block 1 Max-Q figures), max specific acceleration 3.0 g (ASSUMPTION: upper bound on human-rating and loads for an uncrewed-class test flight; never relaxed -- the recording peaks at 2.89 g with a throttle schedule inside the published 40-100 % Raptor band), periapsis >= 230 km, insertion 250 km +/- 60 km, inclination 51.6 deg +/- 1.0 deg",
+    "crossenv_plan_sha256": "7349011d9811950828560edf61a8d6c3218063afc766c0d2489868ba8a00ac35",
+    "scenario_sha256": "cf22d685764d3a566a27a602be91b69c6befda1a161925784847510e12a0d1b8",
+    "vehicle_sha256": "32e64c9c55ca7195787af64ff7ad1577eb61ba6f1e990ee343172f11490aaa19",
+    "vehicle_uncertainty_sensitivity": "aero tables generated from the declared nose +-30 % (nose_aero) and the 13.5 m nose length assumption +-30 %: recorded max-q 37.5 kPa against the 55 kPa limit leaves +-30 % aero headroom on q (48.75 kPa < 55 kPa at +30 %); mass and thrust bands (5-10 %) move the insertion apex well inside the declared 60 km band"
+  },
+  "generated_by": "scripts/e507_reference.py update",
+  "git_sha_recording": "be994aef59fb02d451623d645519ac350da7dbe7",
+  "recording": {
+    "ascent_engines": {
+      "opentsiolkovsky-cli": "1.0.0"
+    },
+    "ascent_run_id": "ot-668aecfc-53751e73",
+    "mode": "computed ascent (fixed-program OpenTsiolkovsky v1.0.0 flight against leo_starship_class.yaml; every constraint sourced or ASSUMPTION-tagged in the target, none relaxed) -> recorded run_dir replay",
+    "physical_gate_verdict": "not_checked",
+    "recovery_phase": "not applicable -- declared gap, see RECOVERY_GAP.md"
+  },
+  "reference": "E5-07 physics qualification reference mission (Starship-class public-estimate vehicle to LEO against publicly-sourced constraints; booster recovery REPORTED not flown -- RECOVERY_GAP.md)",
+  "reference_class": "physics-qualification",
+  "requires_commit_tag": "[e507-reference-update]",
+  "requires_opentsiolkovsky": "1.0.0",
+  "scenario": "src/orbitopt/data/mission_two_stage_leo_starship_e507.yaml",
+  "toolchain": {
+    "astropy": "6.1.7",
+    "astropy_iers_data": "0.2026.11.16.0.37.44",
+    "gfold": "0.3.2",
+    "numpy": "1.26.4",
+    "opentsiolkovsky": "1.0.0",
+    "orbitopt": "be994aef59fb02d451623d645519ac350da7dbe7",
+    "platform": "Linux-7.2.11-x86_64-with-glibc2.41",
+    "pygmo": "absent",
+    "python": "3.12.16",
+    "scipy": "1.13.1",
+    "tudatpy": "recorded absent; the cross-environment leg (crossenv_e507_plan.yaml) runs the mission + parking propagation in the tudatpy environment"
+  },
+  "vehicle": "src/orbitopt/data/flightlab/vehicles/starship_class_public_estimate.yaml"
+}

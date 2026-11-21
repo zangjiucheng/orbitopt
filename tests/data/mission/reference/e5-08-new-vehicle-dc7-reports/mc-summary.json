@@ -1,0 +1,256 @@
+{
+  "generated_by": "scripts/e508_new_vehicle.py mc",
+  "method": "FL-304 standard dispersions (vehicle-file bands) on the recorded separation state, recorded recipe pinned with per-sample local refine (max_fevals 40); E7-05 statistics: seeds disjoint from the search seed, whole-seed clusters resampled for the rate CI",
+  "search_seed": 287,
+  "separation_state": "canonical separation handoff (the state the full mission and the cross-environment recovery leg fly from)",
+  "seeds": [
+    8,
+    9,
+    10
+  ],
+  "n_per_seed": 12,
+  "success_rate": 0.08333333333333333,
+  "successes": 3,
+  "n": 36,
+  "per_seed": {
+    "8": {
+      "successes": 0,
+      "n": 12,
+      "rate": 0.0,
+      "reasons": {
+        "CORRIDOR_MISSED": 12
+      },
+      "landing_stats": {
+        "position_error_m": {
+          "n": 0
+        },
+        "vertical_speed_m_s": {
+          "n": 0
+        },
+        "lateral_speed_m_s": {
+          "n": 0
+        },
+        "control_margin": {
+          "n": 0
+        }
+      }
+    },
+    "9": {
+      "successes": 1,
+      "n": 12,
+      "rate": 0.08333333333333333,
+      "reasons": {
+        "CORRIDOR_MISSED": 11
+      },
+      "landing_stats": {
+        "position_error_m": {
+          "n": 1,
+          "p50": 0.3666245932014065,
+          "p95": 0.3666245932014065
+        },
+        "vertical_speed_m_s": {
+          "n": 1,
+          "p50": -1.5000881152501664,
+          "p95": -1.5000881152501664
+        },
+        "lateral_speed_m_s": {
+          "n": 1,
+          "p50": 0.03406635733384321,
+          "p95": 0.03406635733384321
+        },
+        "control_margin": {
+          "n": 1,
+          "burn_time_s": {
+            "n": 1,
+            "min": 10.5,
+            "mean": 10.5,
+            "max": 10.5
+          },
+          "saturated_high_s": {
+            "n": 1,
+            "min": 0.0,
+            "mean": 0.0,
+            "max": 0.0
+          },
+          "saturated_low_s": {
+            "n": 1,
+            "min": 0.0,
+            "mean": 0.0,
+            "max": 0.0
+          },
+          "slew_deg_s_max": {
+            "n": 1,
+            "min": 18.8268,
+            "mean": 18.8268,
+            "max": 18.8268
+          },
+          "throttle_floor_room_min": {
+            "n": 1,
+            "min": 0.031396,
+            "mean": 0.031396,
+            "max": 0.031396
+          },
+          "throttle_headroom_at_ignition": {
+            "n": 1,
+            "min": 0.429367,
+            "mean": 0.429367,
+            "max": 0.429367
+          },
+          "throttle_headroom_min": {
+            "n": 1,
+            "min": 0.429367,
+            "mean": 0.429367,
+            "max": 0.429367
+          },
+          "throttle_rate_limit_per_s": {
+            "n": 1,
+            "min": 0.0,
+            "mean": 0.0,
+            "max": 0.0
+          },
+          "throttle_slew_max_per_s": {
+            "n": 1,
+            "min": 0.0,
+            "mean": 0.0,
+            "max": 0.0
+          },
+          "tilt_margin_deg_min": {
+            "n": 1,
+            "min": 17.4728,
+            "mean": 17.4728,
+            "max": 17.4728
+          },
+          "tvc_lag_compensation": {
+            "n": 1,
+            "min": 1.0,
+            "mean": 1.0,
+            "max": 1.0
+          },
+          "tvc_lag_tau_s": {
+            "n": 1,
+            "min": 0.2,
+            "mean": 0.2,
+            "max": 0.2
+          },
+          "tvc_rate_limit_deg_s": {
+            "n": 1,
+            "min": 20.0,
+            "mean": 20.0,
+            "max": 20.0
+          }
+        }
+      }
+    },
+    "10": {
+      "successes": 2,
+      "n": 12,
+      "rate": 0.16666666666666666,
+      "reasons": {
+        "CORRIDOR_MISSED": 10
+      },
+      "landing_stats": {
+        "position_error_m": {
+          "n": 2,
+          "p50": 0.33698189378512294,
+          "p95": 0.35800730213075693
+        },
+        "vertical_speed_m_s": {
+          "n": 2,
+          "p50": -1.6167566037734513,
+          "p95": -1.5117844447494206
+        },
+        "lateral_speed_m_s": {
+          "n": 2,
+          "p50": 0.03146081108305232,
+          "p95": 0.03299606429610026
+        },
+        "control_margin": {
+          "n": 2,
+          "burn_time_s": {
+            "n": 2,
+            "min": 10.2,
+            "mean": 10.3,
+            "max": 10.4
+          },
+          "saturated_high_s": {
+            "n": 2,
+            "min": 0.0,
+            "mean": 0.0,
+            "max": 0.0
+          },
+          "saturated_low_s": {
+            "n": 2,
+            "min": 0.0,
+            "mean": 0.0,
+            "max": 0.0
+          },
+          "slew_deg_s_max": {
+            "n": 2,
+            "min": 17.3685,
+            "mean": 18.08865,
+            "max": 18.8088
+          },
+          "throttle_floor_room_min": {
+            "n": 2,
+            "min": 0.042838,
+            "mean": 0.056280000000000004,
+            "max": 0.069722
+          },
+          "throttle_headroom_at_ignition": {
+            "n": 2,
+            "min": 0.41184,
+            "mean": 0.415577,
+            "max": 0.419314
+          },
+          "throttle_headroom_min": {
+            "n": 2,
+            "min": 0.41184,
+            "mean": 0.415577,
+            "max": 0.419314
+          },
+          "throttle_rate_limit_per_s": {
+            "n": 2,
+            "min": 0.0,
+            "mean": 0.0,
+            "max": 0.0
+          },
+          "throttle_slew_max_per_s": {
+            "n": 2,
+            "min": 0.0,
+            "mean": 0.0,
+            "max": 0.0
+          },
+          "tilt_margin_deg_min": {
+            "n": 2,
+            "min": 16.3137,
+            "mean": 18.81055,
+            "max": 21.3074
+          },
+          "tvc_lag_compensation": {
+            "n": 2,
+            "min": 1.0,
+            "mean": 1.0,
+            "max": 1.0
+          },
+          "tvc_lag_tau_s": {
+            "n": 2,
+            "min": 0.2,
+            "mean": 0.2,
+            "max": 0.2
+          },
+          "tvc_rate_limit_deg_s": {
+            "n": 2,
+            "min": 20.0,
+            "mean": 20.0,
+            "max": 20.0
+          }
+        }
+      }
+    }
+  },
+  "cluster_bootstrap_rate_ci_95": [
+    0.0,
+    0.16666666666666666
+  ],
+  "mode": "per-sample local refine (FL-304 standard)"
+}

@@ -1,8 +1,8 @@
 {
  "meta": {
   "task": "E6-02 guided JSBSim ascent with staging (#274)",
-  "generated_utc": "2026-11-15T23:06:32+00:00",
-  "runtime_s": 86.4,
+  "generated_utc": "2026-11-19T01:38:13+00:00",
+  "runtime_s": 1241.8,
   "dt_s": 0.02,
   "sample_every": 10,
   "phases": [
@@ -108,6 +108,18 @@
    "sense": "max",
    "unit": "Pa.deg",
    "rationale": "structural budget; the pre-ignition coast is the first phase in which the upper airframe sees live air on its own."
+  },
+  "upper.powered|att_err_max_deg": {
+   "limit": 12.0,
+   "sense": "max",
+   "unit": "deg",
+   "rationale": "E6-05 (#292): the child is unactuated through its whole burn (assumption 3), so its powered attitude error is the drift the separation left it with, accrued over coast + burn at the rate it was separated with: the program this scenario ends with slews at 70 deg over its last 130 s (0.54 deg/s at MECO), the ignition delay is 8 s and the disclosed upper burn 3 s, so the accrual bound is 0.54 x 11 s = 5.9 deg on top of the stack's own closed-loop 6 deg band (F-05) the child inherits at separation; declared 12 deg."
+  },
+  "upper.powered|att_err_rms_deg": {
+   "limit": 7.0,
+   "sense": "max",
+   "unit": "deg",
+   "rationale": "E6-05 (#292): same rationale: a body drifting at a constant rate accumulates a linear ramp, whose RMS is its peak / sqrt(3); declared at the ramp ratio rounded up (12 / 1.7 ~= 7)."
   },
   "upper.powered|alpha_max_deg": {
    "limit": 25.0,
@@ -505,6 +517,22 @@
    "value": 15.732071,
    "limit": 500000.0,
    "unit": "Pa.deg",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-upper.powered-att_err_max_deg",
+   "passed": true,
+   "value": 6.128404,
+   "limit": 12.0,
+   "unit": "deg",
+   "reason_code": ""
+  },
+  {
+   "id": "e602-upper.powered-att_err_rms_deg",
+   "passed": true,
+   "value": 5.317578,
+   "limit": 7.0,
+   "unit": "deg",
    "reason_code": ""
   },
   {

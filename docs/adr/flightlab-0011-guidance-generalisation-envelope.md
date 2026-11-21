@@ -129,3 +129,48 @@ constraint); see `docs/benchmarks/e6_03_guidance_matrix.json`.
   are all graded against declared tolerances.
 * **Attribute a dry tank to the vehicle**: rejected, because a law that cannot
   terminate also empties the tank. The terminal orbit's energy separates them.
+
+## Follow-through: E6-05 (task #292)
+
+The consequences asked the next guidance task for "an energy/apoapsis
+termination term". It exists now, and the envelope did not move:
+
+* The cutoff is a two-sided insertion box (periapsis *and* apoapsis inside the
+  declared band) instead of the apoapsis-margin proxy, with a transfer-apogee
+  planning guard of one declared tolerance (25 km) that exists only to keep the
+  guidance target finite when the box sits under the current orbit, and an
+  apogee-ceiling hold that trims tangential command once the box is armed.
+  The hold is off-by-default (`apogee_ceiling_gain`); the matrix flies 8e-4.
+* The matrix was re-flown on the generalised law: the same six insert, the same
+  eleven miss, zero unexpected. The law change is verdict-neutral on every cell.
+* The seven guidance-class misses split into two mechanisms, both measured:
+  **six** deplete with the terminal orbit *wider* than target and periapsis
+  still short of the band floor while the tank empties — the box never arms,
+  and no cutoff, cap, feed or hold can arm it; their binding limit is the
+  stage's delta-v budget, and re-labelling them "vehicle-capability" would
+  contradict the energy rule this ADR's last alternative already rejected.
+  **One** (a180-i28.5-V1-A1) is the overshoot this ADR diagnosed: the box
+  *would* arm, but only while the apoapsis is already past the ceiling; the
+  apogee hold's retro correction is physically unrealisable inside the
+  ±30° velocity-frame command clamp (any command inside 30° of the velocity
+  vector is ≥ 87% prograde), so the perigee passage still prints 30–70 km
+  above the ceiling.
+* Widening that clamp to 45° converts the a180 cell on both backends
+  (-21/+17 km, 517 kg to spare) — and flips a220-i45 and a220-i51.6 from
+  insert to depletion 3–6 km *under* the periapsis floor, with the a220
+  reference cell's own periapsis margin down to ~1 km. One shared law cannot
+  buy one cell with two others; 30° stays, and the rejection is recorded as
+  the envelope's boundary. Conversion of the overshoot class needs a law that
+  commands attitude beyond the airframe's realisable AoA window (a
+  pitch-reversal / braking-phasing regime), not a wider limiter.
+* The same cell set runs on the JSBSim channel (`sixdof/jsbsim_matrix.py`,
+  record `benchmarks/e6_05_jsbsim_matrix.json`): each leg restarts JSBSim at
+  the native run's frozen separation state, and 16 of 17 verdicts agree. The
+  exception is a220-i28.5-V1-A3 — the cell this matrix already attributes to
+  the servo realisation — which cuts off on JSBSim with 480 kg of propellant
+  left where the native rigid body depletes (6.85 % propellant history
+  divergence, recorded and expected, not gated away). On the six inserted
+  cells the engine histories agree to ≤0.05 %, the cutoff times to <1 s, and
+  the powered-window attitude error grows by 0.00° over the drift handed at
+  ignition; the predicted-miss cells burn out chasing an unreachable target
+  and are judged on their verdict, which stays a miss on both channels.

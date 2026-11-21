@@ -16,6 +16,8 @@ gates. Choose the run that answers your question:
 | E2-04 | Synthetic ascent endpoints + simulated recovery. | Fast integration fixture; no computed ascent or parking propagation. |
 | E5-05 replay | Recorded computed ascent + freshly simulated recovery. | One canonical separation state; parking propagation remains `not_checked`. |
 | E5-05 cross-environment | Recorded ascent + TudatPy parking propagation + gfold recovery. | The joined run must evidence all five physical checks. |
+| E5-07 replay | Recorded Starship-class computed ascent, no recovery stage. | Physics Qualification Reference; recovery gap reported (`RECOVERY_GAP.md`), `full_mission` not declared. |
+| E5-07 cross-environment | Recorded ascent + TudatPy mission leg with parking propagation. | Propagation evidenced in the foreign environment; joint gate NOT-DECLARED by design. |
 | E8-01 reference check | Compares sealed records with raw backend output and closed forms. | No new flight; validates extraction, continuity and stated reference comparisons. |
 
 ## Replay and view the RTLS mission
@@ -70,6 +72,39 @@ reference plan also selects the recorded Earth-orientation snapshot in both
 interpreters; stage reports record its digest, which `crossenv-check` verifies. The
 joined report must actually pass propagation, landing, insertion, mass and
 continuity checks; configuring this plan alone is not evidence of a pass.
+Since E5-06 the joined report carries a `joint_qualification` document:
+`crossenv-check` re-grades it from the two sealed envelopes and requires all
+five physical checks passed, each naming the environment and envelope digest
+its evidence came from. The plan declares `full_mission: true`, so a missing
+propagation or landing leg grades `not_checked`, never silently green.
+
+## The Physics Qualification Reference (E5-07)
+
+E5-05 above is the **Software Integration Reference**: a synthetic vehicle
+with ADR-recorded relaxations, proving the chain -- never engineering-grade
+verification. The **Physics Qualification Reference** flies the
+public-sourced `starship_class_public_estimate` vehicle against
+`leo_starship_class.yaml` (Max-Q 55 kPa public, 3.0 g ASSUMPTION never
+relaxed; the flight peaks at 2.89 g), reaching **232.5 × 292.1 km at
+51.98°**:
+
+```bash
+python scripts/e507_reference.py verify
+python scripts/e507_reference.py run --out runs/e507
+python scripts/e507_reference.py compare runs/e507
+orbitopt crossenv run --plan src/orbitopt/data/crossenv_e507_plan.yaml \
+  --env tudat=/path/to/tudatpy/bin/python -o runs/crossenv-e5-07
+python scripts/e507_reference.py crossenv-check runs/crossenv-e5-07
+```
+
+The booster RTLS leg is **reported, not flown**: the vehicle's restart-2
+aerodynamic-entry architecture has no representation in the FL-302 planner
+(see `tests/data/mission/reference/e5-07-physics-qualification/RECOVERY_GAP.md`
+for the verbatim planner rejections), so the mission declares no recovery,
+the physical gate caps at `not_checked`, and the plan does not declare
+`full_mission` -- the joint gate reports NOT-DECLARED instead of a relaxed
+pass. Details in the
+[recording procedure](flightlab-regression-ci.md#e5-07-the-physics-qualification-reference-starship-class-task-291).
 
 ## Check the recorded chain without re-flying
 

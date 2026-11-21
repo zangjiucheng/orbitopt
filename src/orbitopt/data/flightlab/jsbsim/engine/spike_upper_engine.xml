@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!--
+  E6-05 (task #292): the F-07 upper-stage engine on the JSBSim channel.
+
+  Same figures as the parity source's stage2_engine (ADR flightlab-0009):
+  220 kN vacuum at Isp 340 s, choked flow, mixture ratio 2.5 -
+
+    propflowmax = thrust_vac / (Isp_vac * g0)
+                = 220000 / (340 * 9.80665) = 66.0297 kg/s = 145.5687 lbm/s
+
+  The ambient back-pressure debit is carried by the matching nozzle
+  (spike_upper_nozzle.xml, the 0.35 m^2 exit area of the same parity
+  record), so this engine flies the same T = thrust_vac - A_exit * p_amb
+  law as the native plant (the E6-01 alignment, applied to stage 2).
+-->
+<rocket_engine name="spike_upper_engine">
+  <isp> 340.0 </isp>
+  <propflowmax unit="LBS/SEC"> 145.5687 </propflowmax>
+  <mixtureratio> 2.5 </mixtureratio>
+  <minthrottle> 0.0 </minthrottle>
+  <maxthrottle> 1.0 </maxthrottle>
+</rocket_engine>

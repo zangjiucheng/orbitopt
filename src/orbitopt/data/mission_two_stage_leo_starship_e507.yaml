@@ -1,0 +1,63 @@
+# E5-07 (task #291): the PHYSICS QUALIFICATION REFERENCE mission --
+# Starship-class public-estimate vehicle to LEO with a declared booster
+# recovery profile the shipped planner cannot fly (see
+# tests/data/mission/reference/e5-07-physics-qualification/RECOVERY_GAP.md).
+#
+# This is the mission of record AND the regression replay document: the
+# ascent is recorded once as a computed fixed-program OpenTsiolkovsky flight
+# (scripts/e507_reference.py update) and replayed from the run directory
+# thereafter -- never re-optimised. Unlike the E5-05 mission (the SOFTWARE
+# INTEGRATION reference, synthetic vehicle, relaxed 45 g design-assumption
+# ceiling), this mission flies the public-estimate vehicle against
+# publicly-sourced flight-limited constraints and declares NO recovery
+# stage: the booster's RTLS profile (boostback + aerodynamic entry with no
+# entry burn + landing burn, restarts_max 2) has no representation in the
+# FL-302 planner, which accepts only entry_burns in {1, 2} (3 or 4 ignitions
+# for an RTLS profile). The recovery gap is reported, not worked around; the
+# full-mission physical gate therefore caps at not_checked (E2-03/E8-03) and
+# full_mission is deliberately not declared.
+#
+# The launch.orbit below is the DELIVERED insertion orbit of the recording
+# (232.5 x 292.1 km at 51.98 deg), inside the flight target's declared
+# 250 km / 51.6 deg design point with its declared tolerances -- the same
+# "declare what the recording delivered" convention as
+# mission_two_stage_leo_rtls_replay.yaml.
+schemaVersion: "1.0"
+mission:
+  id: e5-07-physics-qualification-starship-leo
+  title: E5-07 physics qualification reference (Starship-class public estimate, LEO insertion, recovery reported not flown)
+  kind: two-stage-leo
+scenario:
+  mission:
+    id: e5-07-physics-qualification-starship-leo
+    title: E5-07 physics qualification reference (Starship-class public estimate, LEO insertion, recovery reported not flown)
+    kind: two-stage-leo
+  launch:
+    site: kourou                    # 5.2392 N 52.7685 W (the flight target's launch site)
+    vehicle: starship_class_public_estimate
+    orbit: 232.5x292.1@51.98        # the delivered orbit of the recording (PROVENANCE.json)
+    date_utc: "2026-11-10"          # the flight target's mission epoch
+    raan_deg: null
+    window_days: 1.0
+  ascent:
+    mode: run_dir                   # replay the recorded COMPUTED ascent, never refly it
+    run_dir: tests/data/mission/reference/e5-07-physics-qualification/mission-optimized/launch/ascent
+    target_file: tests/data/mission/reference/e5-07-physics-qualification/mission-optimized/launch/target.yaml
+  handoff:
+    position_m: 1.0
+    velocity_m_s: 0.01
+    epoch_s: 1.0
+    max_epoch_gap_s: null
+    mass_kg: 0.001
+    staging_velocity_m_s: 0.05
+    elements:
+      semi_major_axis_m: 10.0
+      eccentricity: 1.0e-6
+      inclination_deg: 1.0e-3
+      raan_deg: 1.0e-2
+      apsides_m: 10.0
+  # No recovery block: see the header. The graded recovery checks come out
+  # "not applicable" and the E5-04 physical gate caps at not_checked.
+  expected:
+    propagation_result: not_checked   # single-interpreter replay; the cross-environment
+                                      # tudatpy leg (crossenv_e507_plan.yaml) evidences it

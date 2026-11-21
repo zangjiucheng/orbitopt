@@ -406,15 +406,16 @@ def test_the_altitude_axis_is_bounded_at_both_ends_and_neither_limit_is_the_tank
     assert recs["a180-i28.5-V1-A1"]["status"] == "miss"
     for cell_id in ("a260-i28.5-V1-A1", "a300-i28.5-V1-A1", "a400-i28.5-V1-A1"):
         assert recs[cell_id]["status"] == "miss"
-    # low end: the burn terminated by the law, periapsis inside the band, and it
-    # is APOAPSIS that sits outside it -- the criterion grades one element.
+    # low end: the box cutoff never armed (the perigee passage put the periapsis
+    # INSIDE the band while the apoapsis had already flown past the ceiling), so
+    # the burn rode to depletion on a terminal orbit WIDER than the target --
+    # the stage had the energy and the law flew past it: the criterion is the
+    # limit, not the tank (E6-05 re-flight signature).
     low = recs["a180-i28.5-V1-A1"]
     assert [r["code"] for r in low["reasons"]] == [REASON_GUIDANCE]
     for data in low["backends"].values():
-        assert data["burn_ended_by"] == "law-cutoff"
-        assert data["propellant_remaining_kg"] > 100.0  # nothing ran dry here
-        assert abs(data["insertion"]["d_periapsis_m"]) < INSERTION_TOLERANCE_M
-        assert data["insertion"]["d_apoapsis_m"] > INSERTION_TOLERANCE_M
+        assert data["burn_ended_by"] == "depletion"
+        assert data["energy_margin_vs_target_orbit_m"] > 0.0
     # high end: 200 kg MORE propellant makes the same missed target WORSE, so the
     # tank was never the binding limit -- the cutoff criterion is.
     lean, standard = recs["a300-i28.5-V2-A1"], recs["a300-i28.5-V1-A1"]

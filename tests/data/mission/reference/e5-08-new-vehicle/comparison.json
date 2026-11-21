@@ -1,0 +1,33 @@
+{
+  "ascent": {
+    "max_q_pa": {
+      "reference": 37479.27754272647,
+      "derived": 37479.27754272647,
+      "delta": "0 by construction (DC2-DC5 unchanged)"
+    },
+    "peak_g": {
+      "reference": 2.8875404152803634,
+      "derived": 2.8875404152803634,
+      "delta": "0 by construction (DC2-DC5 unchanged)"
+    }
+  },
+  "payload_capability": {
+    "delivered_orbit": "identical insertion (250 km class, same band, same epoch): the ascent is byte-for-byte the reference's (DC2/DC3 unchanged), so payload capability is UNCHANGED BY DESIGN",
+    "ship_propellant_margin": "unchanged (~119 t kept, stage-2 cutoff 378 s)"
+  },
+  "propellant_margin": {
+    "booster_sep_propellant_kg": null,
+    "touchdown_propellant_kg": 96128.53753693955,
+    "graded_reserve_kg": 100000,
+    "attribution": "DC1 buys a FLOWN-to-the-corridor recovery leg at the price of the entry-burn propellant: propellant at the corridor minus the landing model's need is 96.1 t against the inherited 100 t reserve gate -- the gate is NOT met on any landing-flying variant of this design (see RECOVERY_GAP_E508.md for the classification)"
+  },
+  "recovery": {
+    "reference": "NOT FLOWN (RECOVERY_GAP.md: restart-2 aerodynamic entry has no planner representation)",
+    "derived": "FLOWN (DC1) to the landing corridor -- the corridor IS reached and the leg is graded (not the E5-07 no-representation outcome); soft landing NOT achieved, see RECOVERY_GAP_E508.md",
+    "touchdown": {
+      "propellant_remaining_kg": 96128.53753693955,
+      "max_proper_g": 7.2433054567986845
+    }
+  },
+  "model_uncertainty": "aero tables +-30 % (nose_aero band, inherited): recorded max-q 37.5 kPa -> 48.75 kPa at +30 %, still inside the 55 kPa ceiling; engine/Isp bands enter the recovery leg as the FL-304 MC dispersion (see mc-summary.json)"
+}

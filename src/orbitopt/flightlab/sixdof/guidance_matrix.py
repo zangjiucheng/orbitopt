@@ -62,8 +62,10 @@ from __future__ import annotations
 
 import math
 import time
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -120,6 +122,38 @@ LAUNCH_HEADING_DEG = 90.0
 #: E1-03 packaged mission's own band).
 INSERTION_TOLERANCE_M = 25_000.0
 INCLINATION_TOLERANCE_DEG = 1.0
+#: E6-05 (task #292): every guided cell flies the *generalised* law -- the
+#: energy-capped transfer target and the band-aware (box) cutoff; the
+#: climb-hold feed is measured ineffective on this envelope and stays at
+#: zero (see the ``upper_stage`` module docstring).  One shared setting for
+#: the whole matrix, declared here once; no cell carries its own gains.
+E605_TRANSFER_TARGET = True
+E605_CLIMB_TIME_TO_GO_GAIN = 0.0
+E605_CUTOFF_INSERTION_BOX = True
+#: The transfer cap's planning margin: one declared insertion tolerance.
+#: A guard, not a tuning knob: it asks the plan to stop one tolerance below
+#: the band ceiling so a tracking error of at most one tolerance still lands
+#: inside the band.  Measured on this envelope it never binds (the misses
+#: under-achieve the plan, they do not overshoot it), so it changes no cell
+#: outcome -- it exists so the cap can never *command* an orbit over the
+#: ceiling while the band is what is graded.
+E605_TRANSFER_APOGEE_BIAS_M = INSERTION_TOLERANCE_M
+#: Terminal apogee hold gain [m/s per m of achieved apogee over the band
+#: ceiling]: while the cutoff box is armed, the law bleeds the perigee
+#: over-speed that would otherwise ride the apogee 50-70 km out of band
+#: (see ``upper_stage`` module docstring).  0.8 m/s per 1 km of overshoot:
+#: the ~70 km overshoot of the worst shape-limited cell asks for ~55 m/s,
+#: and the term is self-clearing as the apogee converges.
+E605_APOGEE_CEILING_GAIN = 8.0e-4
+#: The matrix flies the F-07 proven pitch-bias (AoA) limiter, not a widened
+#: one.  E6-05 measured the alternative: at 45 deg the last shape-limited
+#: cell (a180) inserts on both backends -- the pull-up finally pitches
+#: steeply enough through perigee -- but a220-i45 and a220-i51.6 then
+#: deplete with their periapsis 3-6 km short of the band floor, and the
+#: a220 reference cell's own periapsis margin collapses to ~1 km.  One
+#: shared law cannot buy a180 with two other cells; the envelope boundary,
+#: not a wider setting, is the honest result (module docstring, upper_stage).
+E605_COMMAND_ALPHA_LIMIT_DEG = 30.0
 
 BACKEND_PAIR: tuple[str, str] = BACKENDS
 
@@ -384,7 +418,13 @@ def matrix_scenario(cell: GuidanceMatrixCell, *, dt_s: float = MATRIX_DT_S,
             scenario, upper_actuator=servo,
             upper_guidance=UpperStageGuidanceSpec.from_vehicle(
                 scenario.pair.upper, target=matrix_target(cell),
-                ignition_t_s=scenario.ignition.ignition_t_s))
+                ignition_t_s=scenario.ignition.ignition_t_s,
+                transfer_target=E605_TRANSFER_TARGET,
+                climb_time_to_go_gain=E605_CLIMB_TIME_TO_GO_GAIN,
+                cutoff_insertion_box=E605_CUTOFF_INSERTION_BOX,
+                transfer_apogee_bias_m=E605_TRANSFER_APOGEE_BIAS_M,
+                apogee_ceiling_gain=E605_APOGEE_CEILING_GAIN,
+                command_alpha_limit_deg=E605_COMMAND_ALPHA_LIMIT_DEG))
     return scenario
 
 
@@ -631,12 +671,19 @@ def run_matrix_cell(cell: GuidanceMatrixCell, *, dt_s: float = MATRIX_DT_S,
 
 def run_guidance_matrix(cells: tuple[GuidanceMatrixCell, ...] = GUIDANCE_MATRIX,
                         *, dt_s: float = MATRIX_DT_S,
-                        sample_every: int = MATRIX_SAMPLE_EVERY) -> dict[str, Any]:
+                        sample_every: int = MATRIX_SAMPLE_EVERY,
+                        workers: int = 1) -> dict[str, Any]:
     """Fly the whole matrix and return the study payload (the benchmark writes
-    it; the regression test reads it)."""
+    it; the regression test reads it).  ``workers > 1`` flies the cells in a
+    process pool -- cells are independent, so the payload is the same and
+    arrives sooner; the order is the declared cell order either way."""
     t0 = time.time()
-    flown = [run_matrix_cell(cell, dt_s=dt_s, sample_every=sample_every)
-             for cell in cells]
+    fly = partial(run_matrix_cell, dt_s=dt_s, sample_every=sample_every)
+    if workers > 1:
+        with ProcessPoolExecutor(max_workers=int(workers)) as pool:
+            flown = list(pool.map(fly, cells))
+    else:
+        flown = [fly(cell) for cell in cells]
     return {
         "schema": "orbitopt-e603-1",
         "task": "#275 (E6-03, epic #265)",

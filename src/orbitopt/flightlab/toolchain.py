@@ -19,6 +19,13 @@ cannot drag a heavy or broken dependency into the write path. It asks
 second source, and a package that is importable but unrecorded is reported as
 ``"installed (version unknown)"`` -- never as ``"absent"``, which would
 misdescribe an environment the run actually used.
+
+The fallback covers every recorded distribution, not just tudatpy: the missing
+dist-info is a property of how a channel builds a package, not of one package,
+so any conda-installed tool could hit it. The checked-in tools that arrive
+through pip (gfold, cvxpy, jsbsim -- see envs/flightlab-landing.txt and
+envs/sixdof-requirements.txt) always carry dist-info, so for them the first
+source answers and the fallback is inert.
 """
 from __future__ import annotations
 
@@ -30,7 +37,8 @@ import re
 import sys
 from pathlib import Path
 
-__all__ = ["TOOL_DISTRIBUTIONS", "toolchain_record", "opentsiolkovsky_pinned"]
+__all__ = ["TOOL_DISTRIBUTIONS", "installed_version", "toolchain_record",
+           "opentsiolkovsky_pinned"]
 
 ABSENT = "absent"
 
@@ -51,9 +59,11 @@ TOOL_DISTRIBUTIONS: tuple[str, ...] = (
 )
 
 
-#: ``distribution name -> import name`` of the tools that can be installed
-#: without dist-info metadata (conda builds of tudatpy)
-_IMPORT_NAMES = {"tudatpy": "tudatpy"}
+#: ``distribution name -> import name`` where the two differ; every other
+#: recorded tool is imported under its own distribution name. Used only by the
+#: importable-but-unrecorded fallback below (``importlib.metadata`` and
+#: ``conda-meta`` both speak distribution names).
+_IMPORT_NAMES = {"pyyaml": "yaml"}
 UNKNOWN_VERSION = "installed (version unknown)"
 
 
@@ -72,15 +82,23 @@ def _conda_version(name: str) -> str | None:
     return None
 
 
-def _dist_version(name: str) -> str:
+def installed_version(dist: str) -> str:
+    """What this environment can prove about distribution ``dist``: its
+    version, ``"installed (version unknown)"`` when it is importable but no
+    metadata records it, or ``"absent"``. Never imports the package."""
     try:
-        return importlib.metadata.version(name)
+        return importlib.metadata.version(dist)
     except importlib.metadata.PackageNotFoundError:
         pass
-    module = _IMPORT_NAMES.get(name)
-    if module is not None and importlib.util.find_spec(module) is not None:
-        return _conda_version(name) or UNKNOWN_VERSION
-    return ABSENT
+    version = _conda_version(dist)
+    if version is not None:
+        return version
+    module = _IMPORT_NAMES.get(dist, dist.replace("-", "_"))
+    try:
+        found = importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError):  # unresolvable module name: not importable
+        found = False
+    return UNKNOWN_VERSION if found else ABSENT
 
 
 def _orbitopt_version() -> str:
@@ -145,7 +163,7 @@ def toolchain_record() -> dict[str, str]:
 
     record: dict[str, str] = {"python": platform.python_version(), "orbitopt": _orbitopt_version()}
     for dist in TOOL_DISTRIBUTIONS:
-        record[dist.replace("-", "_")] = _dist_version(dist)
+        record[dist.replace("-", "_")] = installed_version(dist)
     record["opentsiolkovsky"] = OT_VERSION
     try:
         record["opentsiolkovsky_sha256"] = _binary_sha256(find_binary())

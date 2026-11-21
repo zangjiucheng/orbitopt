@@ -22,6 +22,36 @@ tool distribution's installed version or `"absent"`, OpenTsiolkovsky's pinned
 version and the SHA-256 of the binary actually found on disk).
 `tests/test_flightlab_contract.py` asserts the record is complete.
 
+### How an installed version is looked up (task #295)
+
+The lookup (`orbitopt.flightlab.toolchain.installed_version`, also used by the
+verification-report provenance in `orbitopt.verify.report`) never imports the
+tool. It asks `importlib.metadata` first; a package that answers is reported at
+its recorded version. A conda build can ship no `dist-info` — `tudatpy` from the
+`tudat-team` channel does not — and then `importlib.metadata` raises
+`PackageNotFoundError` for a package the run demonstrably used: CI run
+44140956089 sealed `tudatpy: absent` into the cross-environment envelope of the
+very environment that flew the ascent. So the lookup falls back to the
+environment's own `conda-meta/<name>-<version>-<build>.json`, and a tool that is
+importable but recorded by neither source is reported as
+`installed (version unknown)` — never `absent`, which would misdescribe the
+environment.
+
+The fallback is keyed on nothing but the distribution name, because a missing
+`dist-info` is a property of how a channel builds packages, not of one package.
+The per-tool conclusion (checked in CI run 44401859923 and locally):
+
+| Tool | Install path | `dist-info`? | Consequence |
+|---|---|---|---|
+| `tudatpy` | conda, `tudat-team` | **no** | conda-meta gives the version the lockfile installed (`1.0.0` in `cpu.conda-lock.yml`); the CI envelope and the manifest carry it |
+| `gfold` | pip wheel (`envs/flightlab-landing.txt`) | yes | first source answers; `tests/test_flightlab_toolchain.py` pins that it reports a version, not `absent` |
+| `cvxpy` | pip (`envs/flightlab-landing.txt`) | yes | as `gfold` (skipped where not installed) |
+| `jsbsim` | pip wheel, hash-locked (`envs/sixdof-requirements.txt`) | yes | as `gfold` |
+| `pygmo` / `pykep` | conda-forge | yes (conda-forge builds install through pip) | not in `TOOL_DISTRIBUTIONS`; recorded by the E2-04/E5-05 scripts, whose committed `PROVENANCE.json` carries `pygmo: 2.20.0`, so no false `absent` there |
+
+`pyyaml` is imported as `yaml`, so the importable-but-unrecorded fallback maps
+distribution names to import names before calling `find_spec`.
+
 ### Why the regression never downloads IERS data
 
 The frame bridge rotates OpenTsiolkovsky's Earth-fixed states into GCRS
@@ -284,6 +314,83 @@ python scripts/e505_reference.py crossenv-check runs/crossenv-e505
 ```
 
 The checker verifies both exchange envelopes, handoff identity, joined
-physical-gate evidence and recovery numerics against the reference. All five
-physical checks must pass; the existence of a plan or a green single-stack
-recording is insufficient. E2-04 remains the fast synthetic fixture.
+physical-gate evidence and recovery numerics against the reference. Since
+E5-06 it re-grades the joint full-mission gate itself from the sealed
+envelopes: all five physical checks must pass, each pinned to the envelope
+digest of the environment that measured it, and the joint job also runs the
+negative tests (`tests/test_crossenv_qualification.py`: deleted propagation
+evidence, a broken shared separation state and a fabricated landing failure
+must each grade `failed` or `not_checked`). The existence of a plan or a green
+single-stack recording is insufficient. E2-04 remains the fast synthetic
+fixture.
+
+## E5-07: the physics qualification reference, Starship-class (task #291)
+
+E5-07 is a **Physics Qualification Reference**, deliberately distinct from
+E5-05: E5-05 is the **Software Integration Reference** -- a synthetic
+vehicle with recorded, relaxed-and-documented limits, proving the chain
+works end to end, never an engineering-grade verification of a real
+vehicle. E5-07 instead flies
+`src/orbitopt/data/flightlab/vehicles/starship_class_public_estimate.yaml`
+(Super Heavy + Ship, Block 1 figures, every parameter with a public source
+or an `ASSUMPTION` tag) against
+`src/orbitopt/data/flightlab/scenarios/leo_starship_class.yaml`, where the
+55 kPa Max-Q cap is public and the 3.0 g structural/loads cap is an
+explicit ASSUMPTION -- never relaxed: the recording peaks at 2.89 g with a
+throttle schedule inside the published 40-100 % Raptor band. The recorded
+flight reaches **232.5 x 292.1 km at 51.98°** from Kourou, Max-Q 37.5 kPa.
+Aerodynamic uncertainty (nose tables generated with ~+/-30 % accuracy, nose
+length assumed) is recorded as a **sensitivity range** in
+`PROVENANCE.json`, not as widened limits.
+
+| Reference artifact | Meaning |
+|---|---|
+| `mission-optimized/` | The recording: computed fixed-program OT v1.0.0 ascent (target, raw backend output, trajectories incl. the booster's ballistic arc) + joined report. No optimizer ran. |
+| `mission/` | Replay baseline of the same recorded ascent (regression target for `compare`). |
+| `RECOVERY_GAP.md` | Why the booster RTLS leg is **reported, not flown** -- see below. |
+| `earth_orientation.json` | The frozen IERS-A snapshot (identical finalized rows as the E5-05 recording, same epoch). |
+| `PROVENANCE.json` | File hashes, toolchain/dependency matrix, frozen input digests, the aero +/-30 % sensitivity note and the `distinct_from` line naming E5-05 as the software-integration reference. |
+| `tolerances.json` | Comparison bands for `compare`/`crossenv-check`; changing them is an audited reference update. |
+
+### The recovery gap is reported, not relaxed
+
+The flight target declares RTLS with soft-touchdown assumptions. The
+vehicle's architecture is restart-2 with an aerodynamic entry (boostback +
+landing burn, no entry burn), but the FL-302 `plan_boostback_entry` script
+family accepts only entry-burn counts 1 or 2, and each needs more
+ignitions than the vehicle has -- `entry_burns=0` is refused outright.
+Running `entry_burns=1` would fly an engine architecture the vehicle does
+not have: a relaxation dressed as a result. So `RECOVERY_GAP.md` carries
+the verbatim planner rejections, the mission declares no recovery stage,
+the recovery-phase checks grade `not applicable`, the physical gate caps at
+`not_checked`, and **`full_mission` is not declared anywhere in the E5-07
+chain** (the joint gate reports NOT-DECLARED; E5-05 remains the joint-gate
+demonstration). The booster's un-flown boostback/landing budget is intact.
+
+### Replaying and cross-checking it
+
+No OT executable is needed to replay -- the mission consumes the recorded
+ascent by digest:
+
+```bash
+python scripts/e507_reference.py verify          # committed hashes
+python scripts/e507_reference.py run --out runs/e507
+python scripts/e507_reference.py compare runs/e507
+```
+
+`crossenv_e507_plan.yaml` flies the mission leg -- and **the parking-orbit
+propagation, physically evidenced** -- in the tudatpy environment, with
+`options.earth_orientation_snapshot` set to the reference snapshot (the
+stage report must record its digest):
+
+```bash
+orbitopt crossenv run --plan src/orbitopt/data/crossenv_e507_plan.yaml \
+  --env tudat=/path/to/tudatpy/bin/python -o runs/crossenv-e5-07
+python scripts/e507_reference.py crossenv-check runs/crossenv-e5-07
+```
+
+The checker re-verifies the sealed envelope, the propagation evidence in
+the foreign environment, and the achieved orbit against the reference
+within `tolerances.json`. `update` re-flies the whole chain (the only
+sanctioned way to move the reference; commit with `[e507-reference-update]`);
+`tag-check --base SHA` guards that tag.

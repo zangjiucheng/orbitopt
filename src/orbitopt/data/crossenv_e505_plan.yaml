@@ -19,11 +19,20 @@
 # sealed recovery run compares against the recorded reference within the
 # tolerances of tests/data/mission/reference/e5-05-reference-mission/
 # tolerances.json (scripts/e505_reference.py crossenv-check grades this).
+#
+# E5-06 (task #290): full_mission declares this joined run the full physical
+# mission. The orchestrator grades ONE joint full-mission gate over the union
+# of the two legs' sealed evidence (every required phase forced applicable),
+# attaches the environment + envelope digest behind every physical check, and
+# makes the overall verdict that gate's -- not just the AND of the stage
+# mission_ok flags.
 kind: orbitopt.crossenv.plan
 schema_version: "1.0"
 
 mission:
   id: e5-05-cross-env-reference-mission
+
+full_mission: true
 
 scenario: src/orbitopt/data/mission_two_stage_leo_rtls_replay.yaml
 

@@ -33,6 +33,7 @@ from typing import Any
 from orbitopt.crossenv.envelope import (CrossEnvError, environment_record, read_envelope,
                                         read_payloads, write_envelope)
 from orbitopt.crossenv.plan import CrossEnvPlan, CrossEnvStage
+from orbitopt.crossenv.qualification import RECOVERY_CHECKS_KIND
 
 STAGE_REPORT_KIND = "orbitopt.crossenv.stage-report"
 STAGE_REPORT_SCHEMA_VERSION = "1.0"
@@ -233,7 +234,7 @@ def run_recovery_stage(plan: CrossEnvPlan, stage: CrossEnvStage, out_dir: Path) 
     scenario = _absolutise(load_scenario(plan.scenario))
     report_file = exchange / "states" / "recovery-handoff-report.json"
 
-    _combined, block, recovery_checks, _notes = _fly_recovery_stage(
+    _combined, block, recovery_checks, recovery_notes = _fly_recovery_stage(
         scenario, run, exchange, handoff_report_file=report_file, separation=separation)
     if separation is not None:
         driven = block.get("separation_handoff_id")
@@ -252,12 +253,26 @@ def run_recovery_stage(plan: CrossEnvPlan, stage: CrossEnvStage, out_dir: Path) 
     _write_json(exchange / "reports" / "recovery-block.json",
                 {"kind": REPORT_WRAPPER_KIND, "schema_version": "1.0",
                  "label": "recovery block of the two-stage-leo report", "report": block})
+    # E5-06 (task #290): the graded recovery-leg checks cross the boundary as a
+    # sealed document of their own, so the orchestrator's joint full-mission
+    # gate can grade the landing evidence without re-flying anything.
+    _write_json(exchange / "reports" / "recovery-checks.json",
+                {"kind": RECOVERY_CHECKS_KIND, "schema_version": "1.0",
+                 "label": "recovery-leg graded checks and unassessed notes (E5-06 joint gate)",
+                 "success": bool(block["success"]), "landed": bool(block.get("landed")),
+                 "checks": [{"id": c.id, "passed": bool(c.passed), "value": c.value,
+                             "limit": c.limit, "unit": c.unit, "reason_code": c.reason_code}
+                            for c in recovery_checks],
+                 "not_assessed": [dict(n) for n in recovery_notes]})
 
     payloads_spec = [
         {"name": "recovery-run", "type": "flight-run", "schema_version": FLIGHT_SCHEMA_VERSION,
          "path": "recovery/run", "digest_kind": "run-dir"},
         {"name": "recovery-block", "type": "report", "schema_version": "1.0",
          "report_kind": REPORT_WRAPPER_KIND, "path": "reports/recovery-block.json",
+         "digest_kind": "file"},
+        {"name": "recovery-checks", "type": "report", "schema_version": "1.0",
+         "report_kind": RECOVERY_CHECKS_KIND, "path": "reports/recovery-checks.json",
          "digest_kind": "file"},
         {"name": "recovery-handoff-report", "type": "report",
          "schema_version": report_doc["schema_version"],

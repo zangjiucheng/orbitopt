@@ -76,15 +76,18 @@ class TestEnvelope:
         doc = read_envelope(_seal_sample(tmp_path))
         env = doc["environment"]
         assert env["python_executable"] == sys.executable
+        from orbitopt.flightlab.toolchain import (ABSENT, TOOL_DISTRIBUTIONS,
+                                                 _IMPORT_NAMES)
+
         for tool in ("numpy", "scipy", "astropy", "tudatpy", "gfold"):
             assert tool in env["toolchain"]
         # a key is not a record: an importable tool must not be sealed as "absent"
         # (the CI envelope of the tudatpy environment once said tudatpy: absent)
         import importlib.util
 
-        for tool in ("tudatpy", "gfold"):
-            if importlib.util.find_spec(tool) is not None:
-                assert env["toolchain"][tool] != "absent", tool
+        for tool in TOOL_DISTRIBUTIONS:
+            if importlib.util.find_spec(_IMPORT_NAMES.get(tool, tool)) is not None:
+                assert env["toolchain"][tool] != ABSENT, tool
 
     def test_tampered_run_csv_is_rejected(self, tmp_path):
         ex = _seal_sample(tmp_path)

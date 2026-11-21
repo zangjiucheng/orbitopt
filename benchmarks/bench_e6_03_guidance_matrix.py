@@ -19,10 +19,11 @@ runner, and records per cell:
 
 Run (this is the command that regenerates the committed JSON; the matrix is
 seventeen two-backend RK4 missions, roughly a quarter of an hour of single-core
-CPU):
+CPU -- ``--jobs N`` flies the cells on N processes, which changes nothing but
+the wall clock):
 
     PYTHONPATH=src python benchmarks/bench_e6_03_guidance_matrix.py \
-        -o docs/benchmarks/e6_03_guidance_matrix.json
+        -o docs/benchmarks/e6_03_guidance_matrix.json --jobs 6
 
 ``tests/test_flightlab_e6_03_guidance_matrix.py`` checks the committed file
 against the declared expectations; ``docs/flightlab.md`` (E6-03) records the
@@ -59,9 +60,9 @@ def _json_safe(x):
     return x
 
 
-def main(out_path: Path | None) -> None:
+def main(out_path: Path | None, jobs: int = 1) -> None:
     t0 = time.time()
-    payload = run_guidance_matrix(GUIDANCE_MATRIX)
+    payload = run_guidance_matrix(GUIDANCE_MATRIX, workers=jobs)
     payload["command"] = " ".join(sys.argv)
     payload["generated_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     payload["wall_clock_s"] = round(time.time() - t0, 1)
@@ -97,5 +98,8 @@ def main(out_path: Path | None) -> None:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("-o", "--out", type=Path, default=None)
+    ap.add_argument("--jobs", type=int, default=1,
+                    help="fly the cells in a process pool (cells are "
+                         "independent; the payload is identical)")
     args = ap.parse_args()
-    main(args.out)
+    main(args.out, jobs=max(1, args.jobs))

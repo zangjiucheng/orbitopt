@@ -56,9 +56,12 @@ Subcommands
     compare DIR           compare a fresh replay against the reference
     crossenv-check DIR    grade a cross-environment run (
                           src/orbitopt/data/crossenv_e505_plan.yaml) against
-                          the reference: exchanges verified, mission green,
-                          the recovery leg driven from the reference's
-                          separation handoff, run numerics within tolerance
+                          the reference: exchanges verified, the JOINT
+                          full-mission qualification passed (five physical
+                          checks, each re-graded from the sealed envelopes and
+                          pinned to its environment's envelope digest), the
+                          recovery leg driven from the reference's separation
+                          handoff, run numerics within tolerance
     verify                provenance check: committed files unmodified
     update                re-fly the WHOLE mission (OpenTsiolkovsky binary +
                           gfold; minutes) and re-record the reference
@@ -601,13 +604,19 @@ def cmd_crossenv_check(out_dir: Path) -> int:
     """Grade a finished cross-environment run (the orchestrator's out dir of
     crossenv_e505_plan.yaml) against the reference: the two envelopes verify
     independently, both legs are green, the recovery leg was driven from the
-    reference's separation handoff, and the sealed recovery run matches the
-    reference within the declared tolerances."""
+    reference's separation handoff, the sealed recovery run matches the
+    reference within the declared tolerances -- and, E5-06 (task #290), the
+    JOINT full-mission qualification (the one ``full_mission`` gate over both
+    legs' sealed evidence: five physical checks, required-phase coverage,
+    ``qualification.independently_verified``) is present, complete and green.
+    The gate is re-computed here from the sealed exchanges, so the report is
+    graded, not trusted."""
     if not REF_ROOT.is_dir():
         print(NOT_RECORDED)
         return 0
     _load_repo_package()
-    from orbitopt.crossenv.envelope import read_envelope
+    from orbitopt.crossenv.envelope import envelope_digest, read_envelope
+    from orbitopt.crossenv.qualification import JOINT_KIND, joint_qualification
 
     out = Path(out_dir)
     tol = json.loads(TOLERANCES.read_text(encoding="utf-8"))
@@ -660,6 +669,63 @@ def cmd_crossenv_check(out_dir: Path) -> int:
                      f"{rec_report.get('separation_handoff_id')!r} != the reference's "
                      f"{ref_handoff!r} -- the two environments did not branch from "
                      "the one recorded state")
+
+    # E5-06 (task #290): the conclusion graded here is the JOINT full-mission
+    # qualification, not the AND of the stage mission_ok flags. The gate is
+    # re-computed from the sealed exchanges in this process -- the joined
+    # report is graded against the evidence, so a report that claims green
+    # over envelopes that no longer grade green cannot pass.
+    joint = joined.get("joint_qualification")
+    if not isinstance(joint, dict) or joint.get("kind") != JOINT_KIND:
+        fails.append("joined report carries no joint qualification document (E5-06)")
+    else:
+        recomputed = joint_qualification(scenario_path=joined.get("scenario"),
+                                         stages=joined.get("stages", []),
+                                         plan_full_mission=bool(joint.get("plan_full_mission")))
+        if joint.get("full_mission_declared") is not True:
+            fails.append("joint qualification: the run does not declare full_mission")
+        if recomputed["verdict"] != joint.get("verdict"):
+            fails.append(f"joint verdict re-graded: the report says {joint.get('verdict')!r}, "
+                         f"the sealed evidence grades {recomputed['verdict']!r}")
+        if joint.get("verdict") != "passed":
+            fails.append(f"joint full-mission verdict: {joint.get('verdict')} "
+                         f"(problems: {joint.get('problems')})")
+        phys = joint.get("physical") or {}
+        if phys.get("verdict") != "passed":
+            fails.append(f"joint physical gate: {phys.get('verdict')} "
+                         f"{phys.get('reason_codes')}")
+        by_name = {c.get("check"): c for c in phys.get("checks") or []}
+        for name in ("orbit_insertion", "parking_propagation", "landing",
+                     "mass_conservation", "epoch_frame_continuity"):
+            doc = by_name.get(name) or {}
+            if doc.get("verdict") != "passed":
+                fails.append(f"physical check {name}: "
+                             f"{doc.get('verdict') or 'absent from the joint gate document'}")
+            srcs = [s for s in doc.get("sources") or [] if s.get("exchange_digest")]
+            if not srcs:
+                fails.append(f"physical check {name}: no evidence source pinned to an "
+                             "envelope digest")
+            for src in srcs:
+                ex = out / str(src.get("stage")) / "exchange"
+                try:
+                    now = envelope_digest(ex)
+                except Exception as exc:  # noqa: BLE001 -- reported, not raised
+                    fails.append(f"physical check {name}: evidence source envelope "
+                                 f"{ex} unreadable: {exc}")
+                    continue
+                if now != src["exchange_digest"]:
+                    fails.append(f"physical check {name}: evidence pinned to "
+                                 f"{src['exchange_digest']} but stage {src['stage']!r} "
+                                 f"envelope now hashes {now}")
+        if (joint.get("coverage") or {}).get("complete") is not True:
+            fails.append("joint required-phase coverage incomplete: "
+                         f"{(joint.get('coverage') or {}).get('summary')}")
+        if recomputed["qualification"] != joint.get("qualification"):
+            fails.append("joint qualification block does not match a re-grade of the sealed "
+                         "evidence (report tampered or evidence moved?)")
+        qual = joint.get("qualification") or {}
+        if not isinstance(qual.get("independently_verified"), bool):
+            fails.append("joint qualification.independently_verified is not a verdict")
     fails += compare_runs(out / "recovery" / "exchange" / "recovery" / "run", tol)
 
     if fails:
@@ -667,9 +733,13 @@ def cmd_crossenv_check(out_dir: Path) -> int:
         for line in fails[:40]:
             print(f"  {line}", file=sys.stderr)
         return 1
+    joint = joined.get("joint_qualification") or {}
     print(f"E5-05 cross-environment check OK: {out} -- two envelopes verified, both legs "
           "green, booster driven from the reference separation handoff across the "
-          "environment boundary, recovery numerics within tolerance")
+          "environment boundary, recovery numerics within tolerance; joint full-mission "
+          f"gate {joint.get('verdict')} with physical "
+          f"{joint.get('physical_mission_verdict')} over five evidenced checks "
+          f"(independently_verified={joint.get('qualification', {}).get('independently_verified')})")
     return 0
 
 
