@@ -81,6 +81,36 @@ def resolve_family(stack: str = FONT_SANS) -> str:
     return ""
 
 
+_GENERIC_FAMILIES = {"serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui"}
+
+
+def installed_stack(stack: str) -> str:
+    """``stack`` without the families Qt does not have (needs a QGuiApplication).
+
+    A QSS ``font-family`` list that names a family the machine lacks makes Qt rebuild
+    its font-alias table when it polishes widgets -- ``qt.qpa.fonts: Populating font
+    family aliases took 144 ms. Replace uses of missing font family "D-DIN"`` -- and
+    the stack leads with D-DIN, which is not bundled. Only installed families (and the
+    generic CSS ones) stay; CSS-only keywords such as ``-apple-system`` are dropped too."""
+    from PySide6.QtGui import QFontDatabase
+
+    have = set(QFontDatabase.families())
+    keep = []
+    for part in stack.split(","):
+        name = part.strip()
+        bare = name.strip('"')
+        if (name.startswith('"') and bare in have) or bare in _GENERIC_FAMILIES:
+            keep.append(name)
+    return ", ".join(keep) if keep else "sans-serif"
+
+
+def stylesheet() -> str:
+    """:data:`STYLESHEET` with its two font stacks cut to the installed families (call it
+    after ``load_bundled_fonts``, once a QApplication exists)."""
+    return (STYLESHEET.replace(FONT_SANS, installed_stack(FONT_SANS))
+            .replace(FONT_MONO, installed_stack(FONT_MONO)))
+
+
 STYLESHEET = f"""
 * {{
     font-family: {FONT_SANS};

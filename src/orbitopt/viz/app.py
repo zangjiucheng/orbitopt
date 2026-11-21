@@ -91,7 +91,7 @@ from orbitopt.viz.state import (
     nearest_maneuver,
     timeline_span,
 )
-from orbitopt.viz.theme import BG_VOID, DANGER, STYLESHEET, SUCCESS
+from orbitopt.viz.theme import BG_VOID, DANGER, SUCCESS, stylesheet
 from orbitopt.viz.timeline_bar import TimelineBar, timeline_unit_seconds
 from orbitopt.viz.ui_kit import MetricRow, StatusBadge
 from orbitopt.viz.verification_panel import (
@@ -166,7 +166,7 @@ class MissionControlWindow(QMainWindow):
         self.setWindowTitle("Mission Control — orbitopt")
         self.setWindowIcon(app_icon())
         self._size_to_screen()
-        self.setStyleSheet(STYLESHEET)
+        self.setStyleSheet(stylesheet())
 
         # The scene, current time and body selection live here; every panel
         # subscribes to its signals (see state.py).
@@ -669,7 +669,7 @@ class MissionControlWindow(QMainWindow):
         # Qt.Popup makes this its own top-level window, which (like
         # _show_shortcuts_dialog's QDialog) does not inherit self's
         # stylesheet automatically -- set it explicitly.
-        popover.setStyleSheet(STYLESHEET)
+        popover.setStyleSheet(stylesheet())
         layout = QVBoxLayout(popover)
         layout.setContentsMargins(10, 8, 10, 10)
         layout.setSpacing(6)
@@ -903,7 +903,7 @@ class MissionControlWindow(QMainWindow):
             dialog = QDialog(self)
             dialog.setObjectName("shortcutsDialog")
             dialog.setWindowTitle("Keyboard Shortcuts")
-            dialog.setStyleSheet(STYLESHEET)
+            dialog.setStyleSheet(stylesheet())
 
             outer = QVBoxLayout(dialog)
             outer.setContentsMargins(22, 20, 22, 20)
