@@ -50,13 +50,24 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 
-VEHICLE = REPO / "src/orbitopt/data/flightlab/vehicles/starship_class_rtls_derived.yaml"
-SCENARIO = REPO / "src/orbitopt/data/flightlab/scenarios/leo_starship_class_rtls_e508.yaml"
-MISSION_DOC = REPO / "src/orbitopt/data/mission_two_stage_leo_starship_e508.yaml"
-CROSSPLAN = REPO / "src/orbitopt/data/crossenv_e508_plan.yaml"
-REF_ROOT = REPO / "tests/data/mission/reference/e5-08-new-vehicle"
+# ORBITOPT_E508_VARIANT selects which E5-08 design this script records / checks:
+# unset = the sealed E5-08 design (starship_class_rtls_derived, an honest gap
+# record); "dc7" = E5-08b, the same flight target flown by starship_class_rtls_dc7
+# (an earlier stage-1 cutoff, DC7) with its own parallel files. Default behaviour
+# and every default path are unchanged.
+VARIANT = os.environ.get("ORBITOPT_E508_VARIANT", "").strip().lower()
+if VARIANT not in ("", "dc7"):
+    raise SystemExit(f"ORBITOPT_E508_VARIANT must be unset or 'dc7', got {VARIANT!r}")
+_SUF, _ROOT_SUF = (f"_{VARIANT}", f"-{VARIANT}") if VARIANT else ("", "")
+_VEH = "dc7" if VARIANT else "derived"
+
+VEHICLE = REPO / f"src/orbitopt/data/flightlab/vehicles/starship_class_rtls_{_VEH}.yaml"
+SCENARIO = REPO / f"src/orbitopt/data/flightlab/scenarios/leo_starship_class_rtls_e508{_SUF}.yaml"
+MISSION_DOC = REPO / f"src/orbitopt/data/mission_two_stage_leo_starship_e508{_SUF}.yaml"
+CROSSPLAN = REPO / f"src/orbitopt/data/crossenv_e508{_SUF}_plan.yaml"
+REF_ROOT = REPO / f"tests/data/mission/reference/e5-08-new-vehicle{_ROOT_SUF}"
 E507_ROOT = REPO / "tests/data/mission/reference/e5-07-physics-qualification"
-CROSS_OUT = REPO / "runs/crossenv-e5-08"
+CROSS_OUT = REPO / f"runs/crossenv-e5-08{_ROOT_SUF}"
 PROVENANCE = REF_ROOT / "PROVENANCE.json"
 EOP_SNAPSHOT = REF_ROOT / "earth_orientation.json"
 COMPARISON = REF_ROOT / "comparison.json"
@@ -67,7 +78,7 @@ GAP_MD = REF_ROOT / "RECOVERY_GAP_E508.md"
 # Derived reports are computed AFTER the tree is sealed, so they live in a
 # sibling directory the tamper check does not walk (the E5-07 convention: its
 # E8-05 / MC evidence also sits outside the hashed reference root).
-REPORTS_ROOT = REF_ROOT.parent / "e5-08-new-vehicle-reports"
+REPORTS_ROOT = REF_ROOT.parent / f"e5-08-new-vehicle{_ROOT_SUF}-reports"
 MC_SUMMARY = REPORTS_ROOT / "mc-summary.json"
 E805_REPORT = REPORTS_ROOT / "independent-dynamics.json"
 
@@ -102,6 +113,38 @@ def _toolchain() -> dict:
         except Exception:
             pass
     return out
+
+
+def _recovery_sep_state(run):
+    """The state the recovery leg is flown from. The sealed E5-08 design keeps the
+    separation read-out it was recorded with. The DC7 variant records against the
+    CANONICAL separation handoff -- the stack's last sample before separation with
+    the booster branch's own mass -- because that is the state the full mission and
+    the cross-environment recovery leg fly the booster from (``drive_from_separation``):
+    a script that closes from a different state does not close in the mission."""
+    from orbitopt.flightlab.recovery.pipeline import separation_state_ecef
+
+    if VARIANT:
+        from orbitopt.mission.coupled_branches import booster_state_from_run, separation_handoff
+
+        return booster_state_from_run(run, separation_handoff(run))
+    return separation_state_ecef(run)
+
+
+def _recovery_sep_state_ecef(run):
+    """:func:`_recovery_sep_state` expressed in ECEF. The Monte Carlo disperses in the
+    geodetic ENU basis of the state, an ECEF-frame statement (pipeline.separation_state_ecef),
+    so a canonical GCRS handoff state is converted first, exactly as pipeline does."""
+    from dataclasses import replace
+
+    from orbitopt.flightlab.recovery.pipeline import _to_ecef_state
+
+    sep = _recovery_sep_state(run)
+    if sep.frame == "ECEF":
+        return sep
+    r_e, v_e = _to_ecef_state(sep)
+    return replace(sep, frame="ECEF", position_m=tuple(float(c) for c in r_e),
+                   velocity_m_s=tuple(float(c) for c in v_e))
 
 
 def _load_e505c(path: Path):
@@ -179,7 +222,7 @@ def cmd_record(args) -> int:
             print(f"record: sealing the given script (search=keep), gates decide "
                   f"{accepted['x']}")
             outcome = fly_recovery(run, target, VEHICLE,
-                                   sep_state=separation_state_ecef(run),
+                                   sep_state=_recovery_sep_state(run),
                                    plan_options={**recipe,
                                                  "initial_guess": accepted["x"],
                                                  "search": "keep"})
@@ -195,7 +238,7 @@ def cmd_record(args) -> int:
 
           search = e505c.make_search(bounds, A, history, accepted)
           outcome = fly_recovery(run, target, VEHICLE,
-                                 sep_state=separation_state_ecef(run),
+                                 sep_state=_recovery_sep_state(run),
                                  plan_options={**recipe, "initial_guess": x0,
                                                "search": search})
         checks = {c.id: bool(c.passed) for c in outcome.checks}
@@ -217,6 +260,15 @@ def cmd_record(args) -> int:
             return 1
         landing_readout = e505c.touchdown_readout(outcome)
 
+        # the delivered parking orbit is measured BEFORE the mission is replayed and written
+        # into the mission document: the replay grades the delivered orbit against the
+        # document's expectation, which is stale whenever the ascent changed (DC7)
+        parking = _parking_expectation(optimized, tmp_root / "parking")
+        if parking:
+            doc0 = MISSION_DOC.read_text()
+            MISSION_DOC.write_text(re.sub(r"(parking_orbit:.*?\n)(.*?)(    tolerances:)",
+                                          lambda m: m.group(1) + _fmt_parking(parking) + m.group(3),
+                                          doc0, flags=re.S))
         print("record: flying the full mission with the pinned script")
         mission_report = _run_mission(optimized, plan_opts, tmp_root / "mission")
         if mission_report.status != "OK":
@@ -224,9 +276,6 @@ def cmd_record(args) -> int:
                   file=sys.stderr)
             return 1
 
-        # parking-orbit expectation: propagate the delivered orbit in the
-        # tudatpy environment (the one leg this stack cannot fly locally)
-        parking = _parking_expectation(optimized, tmp_root / "parking")
 
         # --- seal the reference tree -----------------------------------------
         if REF_ROOT.exists():
@@ -265,7 +314,7 @@ def cmd_record(args) -> int:
 
         # patch the packaged mission document with the accepted recipe
         doc = MISSION_DOC.read_text()
-        doc = re.sub(r"(initial_guess: )RECIPE",
+        doc = re.sub(r"(initial_guess: )(?:RECIPE|\[[^\]]*\])",
                      r"\g<1>" + json.dumps(x_best), doc)
         if parking:
             doc = re.sub(r"(parking_orbit:.*?\n)(.*?)(    tolerances:)",
@@ -406,7 +455,7 @@ def cmd_record_gap(args) -> int:
                            REF_ROOT / "mission")
     print(f"record-gap: mission replay status {mission.status}")
     doc = MISSION_DOC.read_text()
-    doc = re.sub(r"(initial_guess: )RECIPE", r"\g<1>" + json.dumps(x), doc)
+    doc = re.sub(r"(initial_guess: )(?:RECIPE|\[[^\]]*\])", r"\g<1>" + json.dumps(x), doc)
     if parking:
         doc = re.sub(r"(parking_orbit:.*?\n)(.*?)(    tolerances:)",
                      lambda m: m.group(1) + _fmt_parking(parking) + m.group(3),
@@ -694,7 +743,59 @@ def _write_comparison(asc_dir: Path, landing: dict, plan_opts: dict) -> None:
                              "kPa ceiling; engine/Isp bands enter the recovery leg as "
                              "the FL-304 MC dispersion (see mc-summary.json)",
     }
+    if VARIANT:
+        _dc7_comparison(comp, asc_dir, ref, cur, e507_asc)
     COMPARISON.write_text(json.dumps(comp, indent=2) + "\n")
+
+
+def _ship_kept_kg(asc_dir: Path, dry_kg: float = 100_000.0) -> float | None:
+    """Propellant the ship still holds at SECO: its last tracked mass minus dry."""
+    try:
+        sys.path.insert(0, str(REPO / "src"))
+        from orbitopt.flightlab.contract import read_run
+
+        run = read_run(asc_dir)
+        stage2 = next(t for t in run.tracks if t.body_id == "stage2")
+        return float(stage2.mass_kg[-1]) - dry_kg
+    except Exception:
+        return None
+
+
+def _dc7_comparison(comp: dict, asc_dir: Path, ref: dict, cur: dict, e507_asc: Path) -> None:
+    """The DC7 variant changes the staging point, so the ascent rows are MEASURED
+    deltas against the E5-07 reference and the cost is stated, not 'unchanged by
+    construction' (that sentence belongs to the sealed E5-08 design)."""
+    def row(key, check_id, unit):
+        a, b = ref.get(key), cur.get(check_id, {}).get("value")
+        return {"reference": a, "derived": b,
+                "delta": (None if a is None or b is None else f"{b - a:+.4g} {unit}")}
+
+    comp["ascent"] = {
+        "max_q_pa": row("max_q_pa", "max-q-within-limit", "Pa"),
+        "peak_g": row("peak_g", "max-accel-within-limit", "g"),
+        "periapsis_m": row("periapsis_m", "insertion-periapsis-above-minimum", "m"),
+        "apoapsis_m": row("apoapsis_m", "insertion-apoapsis-within-tolerance", "m"),
+        "inclination_deg": row("inclination_deg", "insertion-inclination-within-tolerance", "deg"),
+        "note": "DC7 (stage-1 cutoff 12 s earlier, ship burn longer, post-MECO pitch program "
+                "re-tuned): every inherited limit still holds -- 3.0 g, max-q 55 kPa, periapsis "
+                ">= 230 km, apoapsis 250 +/- 60 km, inclination 51.6 +/- 1 deg; the numbers above "
+                "are measured against the E5-07 reference, not 'unchanged by construction'",
+    }
+    kept_new, kept_ref = _ship_kept_kg(asc_dir), _ship_kept_kg(e507_asc)
+    comp["payload_capability"] = {
+        "delivered_orbit": "inside the inherited insertion band (see the ascent rows): "
+                           "the same flight target, with every constraint unchanged",
+        "ship_propellant_margin": {
+            "reference_kept_kg": kept_ref, "derived_kept_kg": kept_new,
+            "delta_kg": None if kept_new is None or kept_ref is None else kept_new - kept_ref,
+            "statement": "DC7 spends this much of the ship's spare propellant (the ship burns longer "
+                         "to make up the earlier booster cutoff). It is the price of the booster's "
+                         "reserve; nothing absorbs it silently."},
+    }
+    comp["propellant_margin"]["attribution"] = (
+        "DC1 (powered-entry RTLS) plus DC7 (earlier stage-1 cutoff): the booster separates "
+        "heavier and slower, the graded reserve (>= 100 t, inherited unchanged) is met by the "
+        "recorded touchdown figure, flown not predicted")
 
 
 # ---------------------------------------------------------------- run/compare
@@ -743,11 +844,22 @@ def cmd_compare(candidate_dir: Path) -> int:
 
 # ------------------------------------------------------------------- crossenv
 
+def _report_is_stale(report_file: Path, inputs) -> bool:
+    """A cross-environment report older than any file it was computed from. Grading it
+    would grade a previous recording: ``crossenv-check`` once re-graded an old report after
+    the recovery script (and the mission document) had changed, and said OK."""
+    if not Path(report_file).is_file():
+        return True
+    built = Path(report_file).stat().st_mtime
+    return any(Path(p).stat().st_mtime > built for p in inputs if Path(p).exists())
+
+
 def cmd_crossenv_check(out: Path | None = None, *, rerun: bool | None = None) -> int:
     out = Path(out) if out else CROSS_OUT
     report_file = out / "crossenv.mission-report.json"
     if rerun is None:
-        rerun = not report_file.is_file()
+        rerun = _report_is_stale(report_file, (CROSSPLAN, MISSION_DOC, VEHICLE, SCENARIO,
+                                               SCRIPT_JSON, PROVENANCE))
     if rerun:
         if not os.environ.get("ORBITOPT_TUDAT_PYTHON") or not os.environ.get("ORBITOPT_GFOLD_PYTHON"):
             print("crossenv-check: set ORBITOPT_TUDAT_PYTHON and ORBITOPT_GFOLD_PYTHON")
@@ -775,8 +887,13 @@ def cmd_crossenv_check(out: Path | None = None, *, rerun: bool | None = None) ->
         print("problems:", jg["problems"])
     closed = json.loads(SCRIPT_JSON.read_text()).get("status") != "not_closed"
     if closed:
-        ok = (verdict in ("OK", "PASS") and jg.get("full_mission_declared") is True
-              and jg.get("physical_mission_verdict") in ("OK", "PASS"))
+        # a closed design: the joint gate says "passed" (the verdict strings of
+        # orbitopt.mission.phases), the five physical checks all passed with
+        # their evidence, nothing was a problem and no reason code is left over
+        ok = (verdict == "passed" and jg.get("full_mission_declared") is True
+              and jg.get("physical_mission_verdict") == "passed"
+              and len(phys) == 5 and all(v == "passed" for v in phys.values())
+              and not jg.get("problems") and not jg.get("reason_codes"))
     else:
         # a sealed gap: the joint gate must be a CLEAN fail -- the ascent, parking,
         # mass and epoch/frame physical checks all pass across the boundary, and
@@ -868,11 +985,26 @@ def cmd_mc(args) -> int:
     from orbitopt.flightlab.recovery.reliability import cluster_bootstrap_rate_ci
     import numpy as np
 
+    if VARIANT:
+        # disperse around the state the full mission flies the booster from (the
+        # canonical separation handoff), not around the plain read-out; the patch is
+        # in-process, so the samples run in this process
+        import orbitopt.flightlab.recovery.montecarlo as _mc
+
+        _mc.separation_state_ecef = _recovery_sep_state_ecef
+        args.workers = 1
     target = load_target(SCENARIO)
     ascent = read_run(REF_ROOT / "mission-optimized" / "launch" / "ascent")
     recipe = dict(json.loads(SCRIPT_JSON.read_text())["recipe"])
-    recipe.pop("search", None)
-    recipe["max_fevals"] = 40          # FL-304 standard per-sample local refine
+    pinned = bool(getattr(args, "pinned", False))
+    if pinned:
+        # the recorded script flown through the dispersions as it is -- no per-sample
+        # re-planning (the strict, open-loop reading of robustness)
+        recipe["search"] = "keep"
+        recipe.pop("max_fevals", None)
+    else:
+        recipe.pop("search", None)
+        recipe["max_fevals"] = 40      # FL-304 standard per-sample local refine
     counts, records = [], {}
     for seed in args.seeds:
         print(f"MC seed {seed}: {args.n} samples (disjoint from search seed "
@@ -901,13 +1033,18 @@ def cmd_mc(args) -> int:
                   "refine (max_fevals 40); E7-05 statistics: seeds disjoint from the "
                   "search seed, whole-seed clusters resampled for the rate CI",
         "search_seed": SEARCH_SEED,
+        "separation_state": ("canonical separation handoff (the state the full mission and the "
+                             "cross-environment recovery leg fly from)" if VARIANT
+                             else "separation read-out"),
         "seeds": list(args.seeds), "n_per_seed": args.n,
         "success_rate": succ / total, "successes": succ, "n": total,
         "per_seed": records,
         "cluster_bootstrap_rate_ci_95": list(ci) if ci else None,
     }
     REPORTS_ROOT.mkdir(parents=True, exist_ok=True)
-    MC_SUMMARY.write_text(json.dumps(summary, indent=2) + "\n")
+    summary["mode"] = "pinned script (no re-planning)" if pinned else "per-sample local refine (FL-304 standard)"
+    out_file = MC_SUMMARY.with_name("mc-summary-pinned.json") if pinned else MC_SUMMARY
+    out_file.write_text(json.dumps(summary, indent=2) + "\n")
     print(f"success rate {succ}/{total} = {succ/total:.3f} "
           f"cluster bootstrap 95% CI {ci}")
     return 0
@@ -916,7 +1053,7 @@ def cmd_mc(args) -> int:
 # -------------------------------------------------------------------- report
 
 def cmd_report() -> int:
-    out = REPO / "docs/e5-08-new-vehicle-report.md"
+    out = REPO / f"docs/e5-08-new-vehicle{_ROOT_SUF}-report.md"
     prov = json.loads(PROVENANCE.read_text())
     comp = json.loads(COMPARISON.read_text())
     mc = json.loads(MC_SUMMARY.read_text()) if MC_SUMMARY.is_file() else None
@@ -1029,6 +1166,8 @@ def main(argv=None) -> int:
     m = sub.add_parser("mc")
     m.add_argument("--seeds", type=int, nargs="+", default=MC_SEEDS_DEFAULT)
     m.add_argument("--n", type=int, default=24)
+    m.add_argument("--pinned", action="store_true",
+                   help="fly the recorded script as it is (search=keep), no per-sample refine")
     m.add_argument("--workers", type=int, default=8)
     sub.add_parser("report")
     args = ap.parse_args(argv)
