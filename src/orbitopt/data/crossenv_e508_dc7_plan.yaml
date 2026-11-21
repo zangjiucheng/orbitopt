@@ -1,0 +1,60 @@
+# Cross-environment plan for the E5-08b (DC7 staging) new-vehicle mission.
+#
+#   orbitopt crossenv run --plan src/orbitopt/data/crossenv_e508_dc7_plan.yaml \
+#     --env tudat=/path/to/tudatpy-env/bin/python \
+#     --env gfold=/path/to/gfold-env/bin/python
+#
+# The E5-05 coupled two-leg layout (crossenv_e505_plan.yaml) applied to the
+# E5-08 recorded mission: the ascent leg replays the recorded computed ascent
+# in the tudatpy environment and EVIDENCES the parking-orbit propagation
+# there; the recovery leg is DRIVEN from the ascent leg's canonical
+# separation handoff across the environment boundary and flies the recorded
+# booster script in the gfold environment. full_mission is declared: the
+# orchestrator grades ONE joint full-mission gate over the union of the two
+# legs' sealed evidence (all five physical checks evidenced; E5-06 contract),
+# and that gate -- not the AND of the stage mission_ok flags -- is the
+# verdict. This is the closure the E5-07 reference could not declare: the
+# E5-08 design change DC1 (powered-entry RTLS) gives the recovery leg a
+# representation the planner can plan, fly and grade.
+kind: orbitopt.crossenv.plan
+schema_version: "1.0"
+
+mission:
+  id: e5-08b-cross-env-new-vehicle-mission
+
+full_mission: true
+
+scenario: src/orbitopt/data/mission_two_stage_leo_starship_e508_dc7.yaml
+
+out: runs/crossenv-e5-08-dc7
+
+environments:
+  tudat: ${ORBITOPT_TUDAT_PYTHON:-python}
+  gfold: ${ORBITOPT_GFOLD_PYTHON:-python}
+
+stages:
+  # Ascent/mission leg in the tudatpy environment: replay of the recorded
+  # computed ascent, station chain, staging handoffs, SECO-to-parking gate
+  # and the M-05 propagation, with the recovery block stripped. Seals the
+  # flown FlightRun, the boundary states AND the canonical separation handoff
+  # the landing leg drives from.
+  - id: ascent
+    runner: ascent
+    env: tudat
+    options:
+      earth_orientation_snapshot: tests/data/mission/reference/e5-08-new-vehicle-dc7/earth_orientation.json
+      propagate: true               # evidence the parking-orbit leg here
+      coupled_separation: true      # seal the E5-02 canonical handoff
+
+  # Recovery leg in the gfold environment: re-validates the ascent exchange,
+  # rebuilds the separation handoff from the sealed document, and flies the
+  # recorded E5-08 booster script from that one shared state (the handoff
+  # digest the leg reports must equal the handed-over one -- the continuity
+  # proof across the environment boundary).
+  - id: recovery
+    runner: recovery
+    env: gfold
+    consumes: [ascent]
+    options:
+      earth_orientation_snapshot: tests/data/mission/reference/e5-08-new-vehicle-dc7/earth_orientation.json
+      drive_from_separation: true

@@ -1,0 +1,65 @@
+{
+  "crossenv_plan": "src/orbitopt/data/crossenv_e508_dc7_plan.yaml",
+  "derived_from": {
+    "design_change": "DC1 powered-entry recovery scheme (restarts_max 3; usable_for entry); DC2-DC5 unchanged (see vehicle file)",
+    "reference": "tests/data/mission/reference/e5-07-physics-qualification",
+    "vehicle": "starship_class_public_estimate"
+  },
+  "files": {
+    "comparison.json": "4efd99eb0e54a810e12cbaf82720c12d5be54678e9bf2202d783375419642ee0",
+    "earth_orientation.json": "eb63834a036a90440f680004351711c11f2e079920dbef35476e383b04f6c00a",
+    "landing-corridor.json": "930e3e8fe8e5db7bc5acffb21bab348a17aba86c9aedd08fae4550147ac3934d",
+    "mission-optimized/launch/ascent/events.json": "d78634d3d69fe5519a0f518d0e079648189c470582141cee365711fe9ef3a821",
+    "mission-optimized/launch/ascent/manifest.json": "15acaccd2d861ded82e8152cee9a3b50e748718103e0f4c0e6626944d111a1aa",
+    "mission-optimized/launch/ascent/opentsiolkovsky/bodies/stage1.csv": "4d82533ae0af27771fe73237c5bed115826f0cf34d44b81838491e9317bb6251",
+    "mission-optimized/launch/ascent/opentsiolkovsky/summary.json": "0afaedc7d01cf4688570f91ca20226f98f1b084c09e19089b5db81ee01b193ff",
+    "mission-optimized/launch/ascent/opentsiolkovsky/trajectory.csv": "9f601e8524b8f9b30402109b4df3c19fa2687971d07b970e87f1fff022d66540",
+    "mission-optimized/launch/ascent/trajectories/stage1.csv": "bb2a1ef95083f322d42d919561ee036da5726f60b32dafb9cbc66bccd15e3de5",
+    "mission-optimized/launch/ascent/trajectories/stage1_debris.csv": "d861a853a34b6aa53438cc94f42c2de56b4ffe857b9eb3cab2276d6fe0ae3d5e",
+    "mission-optimized/launch/ascent/trajectories/stage2.csv": "4e6971618a46eeb017a632aafeb3ce4f6216bdeb25c6671182b734c458ea6d76",
+    "mission-optimized/launch/ascent/verification.json": "f306da51f257fa078187365c0f083894d950b27cd34f27515b44029a2751b1d1",
+    "mission-optimized/launch/target.yaml": "8660ed30302fcfd0e2fdd0349029937f0630b147cef5e051dd68404add2816bb",
+    "mission/mission.verification.json": "744c96ad81b8bc94107a579c9e9b19bb9c1f1dada061302cec7ddc70ae98e907",
+    "mission/recovery/run/events.json": "4f93c966e710b47176624e3ea7dd3fc3db31a4055bbceeea45cd7edd6b58edd8",
+    "mission/recovery/run/manifest.json": "86a919d222919dc62f9b071322bfa069dba4291ab3fdc6b92b638632a9911438",
+    "mission/recovery/run/trajectories/booster.csv": "0c4315467748c79debeb6ed3479b96ba683e03aef01ceb80da38838139bb9591",
+    "mission/recovery/run/trajectories/stage1.csv": "bb2a1ef95083f322d42d919561ee036da5726f60b32dafb9cbc66bccd15e3de5",
+    "mission/recovery/run/trajectories/stage2.csv": "4e6971618a46eeb017a632aafeb3ce4f6216bdeb25c6671182b734c458ea6d76",
+    "mission/recovery/run/verification.json": "6c0b057872354c82656da56748cedcebdd687782bf2c7bd9363f51f979895635",
+    "recovery-script.json": "7f60e2217ece3460b7814e247c616a01691e84078cbf1eb08474c852074bdab4",
+    "tolerances.json": "16b44c275898d33a52f0efa46b8fd3d11871891c35201818b6d844b5a60e7667"
+  },
+  "frozen_inputs": {
+    "constraint_basis": "inherited UNCHANGED from leo_starship_class.yaml (E5-07): max-q 55 kPa, max specific acceleration 3.0 g, periapsis >= 230 km, insertion 250 km +/- 60 km, inclination 51.6 +/- 1.0 deg, RTLS touchdown 3 m/s vertical / 1 m/s lateral, propellant reserve >= 100 t",
+    "crossenv_plan_sha256": "829cd651b485106245ff61200f0f391cbadb49652f1de13d3e18c2b4acb7c611",
+    "mc_holdout_seeds": [
+      5,
+      6,
+      7,
+      8
+    ],
+    "scenario_sha256": "328b432a438de881886662039c40556dee2ad9b85e9d49849f99714aef455751",
+    "search_seed": 287,
+    "vehicle_sha256": "0b0a607fa57dd43f779ae4a0680a0f621d79c6f32a0aaf0748345678b9531bca"
+  },
+  "generated_by": "scripts/e508_new_vehicle.py record",
+  "git_sha_recording": "c847a46f82d0d9aa10e54e1f9ad76bdbb888c99b",
+  "mission_doc": "src/orbitopt/data/mission_two_stage_leo_starship_e508_dc7.yaml",
+  "recording": {
+    "mode": "computed ascent (fixed-program OpenTsiolkovsky flight of starship_class_rtls_derived against leo_starship_class_rtls_e508.yaml; every constraint inherited from the E5-07 reference unchanged) + DE-searched booster script pinned + mission replay",
+    "recovery_phase": "flown (E3 chain, DC1 scheme); recorded closed: {\"recovery-landing\": true, \"recovery-propellant-reserve\": true}"
+  },
+  "reference": "E5-08 new-vehicle qualification mission (Starship-class RTLS-derived design: the E5-07 reference stack with the DC1 powered-entry RTLS scheme; ascent recorded computed, booster recovery FLOWN through the shipped E3 chain, full_mission declared -- the closure E5-07 reported as a gap)",
+  "reference_class": "new-vehicle-qualification",
+  "scenario": "src/orbitopt/data/flightlab/scenarios/leo_starship_class_rtls_e508_dc7.yaml",
+  "toolchain": {
+    "astropy": "8.0.2",
+    "gfold": "0.3.2",
+    "jsonschema": "4.26.0",
+    "numpy": "2.5.4",
+    "platform": "macOS-27.2.1-arm64-arm-64bit",
+    "python": "3.12.13",
+    "scipy": "1.18.1"
+  },
+  "vehicle": "src/orbitopt/data/flightlab/vehicles/starship_class_rtls_dc7.yaml"
+}

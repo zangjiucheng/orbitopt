@@ -1,0 +1,859 @@
+{
+ "schemaVersion": "1.0",
+ "kind": "independent-dynamics",
+ "label": "starship_class_rtls_dc7: ascent and stage-1 debris recomputed with a native point-mass twin (E8-05), and the given landing corridor re-flown through two independent dynamics models",
+ "status": {
+  "result": "failed",
+  "passed": false,
+  "checks": {
+   "ascent.meco.residual_position": true,
+   "ascent.meco.residual_velocity": true,
+   "ascent.separation.residual_position": true,
+   "ascent.seco.residual_position": true,
+   "ascent.meco.state_position": true,
+   "ascent.meco.state_velocity": true,
+   "ascent.separation.state_position": true,
+   "ascent.separation.state_velocity": true,
+   "ascent.seco.state_position": true,
+   "ascent.seco.state_velocity": true,
+   "ascent.meco.mass": true,
+   "ascent.separation.debris_mass": true,
+   "ascent.seco.mass": true,
+   "ascent.maxq.value": true,
+   "ascent.maxq.time": true,
+   "ascent.seco.orbit_semi_major_axis": false,
+   "ascent.seco.orbit_eccentricity": true,
+   "ascent.seco.orbit_inclination": true,
+   "ascent.debris_impact.time": true,
+   "ascent.debris_impact.position": true,
+   "ascent.debris_impact.speed": true,
+   "landing.cutoff_position": true,
+   "landing.cutoff_velocity": true,
+   "landing.touchdown_position": true,
+   "landing.touchdown_vertical_speed": true,
+   "landing.touchdown_lateral_speed": true,
+   "landing.propellant": true,
+   "landing.fl301_gates": true
+  },
+  "check_categories": {
+   "ascent.meco.residual_position": "model_agreement",
+   "ascent.meco.residual_velocity": "model_agreement",
+   "ascent.separation.residual_position": "model_agreement",
+   "ascent.seco.residual_position": "model_agreement",
+   "ascent.meco.state_position": "model_agreement",
+   "ascent.meco.state_velocity": "model_agreement",
+   "ascent.separation.state_position": "model_agreement",
+   "ascent.separation.state_velocity": "model_agreement",
+   "ascent.seco.state_position": "model_agreement",
+   "ascent.seco.state_velocity": "model_agreement",
+   "ascent.meco.mass": "model_agreement",
+   "ascent.separation.debris_mass": "model_agreement",
+   "ascent.seco.mass": "model_agreement",
+   "ascent.maxq.value": "model_agreement",
+   "ascent.maxq.time": "model_agreement",
+   "ascent.seco.orbit_semi_major_axis": "model_agreement",
+   "ascent.seco.orbit_eccentricity": "model_agreement",
+   "ascent.seco.orbit_inclination": "model_agreement",
+   "ascent.debris_impact.time": "model_agreement",
+   "ascent.debris_impact.position": "model_agreement",
+   "ascent.debris_impact.speed": "model_agreement",
+   "landing.cutoff_position": "model_agreement",
+   "landing.cutoff_velocity": "model_agreement",
+   "landing.touchdown_position": "model_agreement",
+   "landing.touchdown_vertical_speed": "model_agreement",
+   "landing.touchdown_lateral_speed": "model_agreement",
+   "landing.propellant": "model_agreement",
+   "landing.fl301_gates": "model_agreement"
+  },
+  "categories": {
+   "numerical_consistency": {
+    "result": "not_checked",
+    "checks_passed": 0,
+    "checks_total": 0
+   },
+   "model_agreement": {
+    "result": "failed",
+    "checks_passed": 27,
+    "checks_total": 28
+   },
+   "historical_validation": {
+    "result": "not_checked",
+    "checks_passed": 0,
+    "checks_total": 0
+   }
+  },
+  "check_evidence": {
+   "ascent.meco.residual_position": "independent_model",
+   "ascent.meco.residual_velocity": "independent_model",
+   "ascent.separation.residual_position": "independent_model",
+   "ascent.seco.residual_position": "independent_model",
+   "ascent.meco.state_position": "independent_model",
+   "ascent.meco.state_velocity": "independent_model",
+   "ascent.separation.state_position": "independent_model",
+   "ascent.separation.state_velocity": "independent_model",
+   "ascent.seco.state_position": "independent_model",
+   "ascent.seco.state_velocity": "independent_model",
+   "ascent.meco.mass": "independent_model",
+   "ascent.separation.debris_mass": "independent_model",
+   "ascent.seco.mass": "independent_model",
+   "ascent.maxq.value": "independent_model",
+   "ascent.maxq.time": "independent_model",
+   "ascent.seco.orbit_semi_major_axis": "independent_model",
+   "ascent.seco.orbit_eccentricity": "independent_model",
+   "ascent.seco.orbit_inclination": "independent_model",
+   "ascent.debris_impact.time": "independent_model",
+   "ascent.debris_impact.position": "independent_model",
+   "ascent.debris_impact.speed": "independent_model",
+   "landing.cutoff_position": "independent_model",
+   "landing.cutoff_velocity": "independent_model",
+   "landing.touchdown_position": "independent_model",
+   "landing.touchdown_vertical_speed": "independent_model",
+   "landing.touchdown_lateral_speed": "independent_model",
+   "landing.propellant": "independent_model",
+   "landing.fl301_gates": "design_input"
+  },
+  "evidence": {
+   "analytical": {
+    "result": "not_checked",
+    "checks_passed": 0,
+    "checks_total": 0,
+    "label": "Analytic solution",
+    "independent": false,
+    "proves": "the numerics reproduce the closed-form solution of the model they integrate (the equations and the integrator, not their agreement with reality).",
+    "cannot_prove": "that the model represents reality -- the closed-form reference shares the model's own assumptions (point mass, impulsive burns, idealised field)."
+   },
+   "independent_model": {
+    "result": "failed",
+    "checks_passed": 26,
+    "checks_total": 27,
+    "label": "Independent model",
+    "independent": true,
+    "proves": "two independently formulated models agree, so neither is trivially mis-implemented.",
+    "cannot_prove": "that either model is right in the real world -- an assumption shared by both stays invisible; the phase and force inventory of the comparison bound its reach."
+   },
+   "historical_telemetry": {
+    "result": "not_checked",
+    "checks_passed": 0,
+    "checks_total": 0,
+    "label": "Historical telemetry",
+    "independent": true,
+    "proves": "the model reproduces a published, observed (flown) value it was not tuned to.",
+    "cannot_prove": "any other vehicle, phase or operating point -- one published event validates that event, not the model as a whole, and the reference's own provenance is only as good as its source."
+   },
+   "design_input": {
+    "result": "passed",
+    "checks_passed": 1,
+    "checks_total": 1,
+    "label": "Matches design input",
+    "independent": false,
+    "proves": "the solver reached the aim point, or the plan respects the site/vehicle/corridor envelope it was designed against -- internal consistency only.",
+    "cannot_prove": "anything about fidelity to reality: the reference IS the design input, so this is NOT independent validation and must never be read as historical proof."
+   },
+   "numerical_consistency": {
+    "result": "not_checked",
+    "checks_passed": 0,
+    "checks_total": 0,
+    "label": "Numerical consistency",
+    "independent": false,
+    "proves": "integration error is under tolerance and the model's own invariants / self-consistency hold (step convergence, exact integrals, a same-model re-fly).",
+    "cannot_prove": "agreement with any other model or with reality -- it bounds numerical error only."
+   }
+  },
+  "independent_validation": {
+   "result": "failed",
+   "checks_passed": 26,
+   "checks_total": 27
+  }
+ },
+ "inputs": {
+  "reference": {
+   "root": "/Users/jiucheng/Dev/orbitopt-e508-search/tests/data/mission/reference/e5-08-new-vehicle-dc7",
+   "description": "E5-08 new-vehicle qualification mission (Starship-class RTLS-derived design: the E5-07 reference stack with the DC1 powered-entry RTLS scheme; ascent recorded computed, booster recovery FLOWN through the shipped E3 chain, full_mission declared -- the closure E5-07 reported as a gap)",
+   "provenance_files_checked": 22,
+   "provenance_ok": true,
+   "toolchain": {
+    "astropy": "8.0.2",
+    "gfold": "0.3.2",
+    "jsonschema": "4.26.0",
+    "numpy": "2.5.4",
+    "platform": "macOS-27.2.1-arm64-arm-64bit",
+    "python": "3.12.13",
+    "scipy": "1.18.1"
+   },
+   "git_sha_recording": "c847a46f82d0d9aa10e54e1f9ad76bdbb888c99b"
+  },
+  "tolerances": {
+   "ascent.meco.state_position": {
+    "unit": "m",
+    "limit": 400.0,
+    "basis": "point-mass twin vs the recorded OT state history at MECO; measured ~2.2e2 m nominal, almost all of it the engine-Isp line; band = measured + ~80% margin for probe-interaction terms charged to it"
+   },
+   "ascent.meco.state_velocity": {
+    "unit": "m/s",
+    "limit": 25.0,
+    "basis": "measured ~15 m/s nominal, engine-Isp line; margin on MECO mass-deficit line (Isp law mismatch ~1.2% of stage-1 burn)"
+   },
+   "ascent.meco.mass": {
+    "unit": "kg",
+    "limit": 20000.0,
+    "basis": "stage-1 burnout mass deficit is the engine-Isp line: pad 329.26 s vs authored 327 s (linear laws), ~1.2% of the 1.2 Mt stage-1 propellant"
+   },
+   "ascent.separation.state_position": {
+    "unit": "m",
+    "limit": 600.0,
+    "basis": "coasted 3 s from MECO; measured ~2.4e2 m; band covers the carried MECO offset plus coast propagation of the same discrepancy"
+   },
+   "ascent.separation.state_velocity": {
+    "unit": "m/s",
+    "limit": 15.0,
+    "basis": "the MECO velocity offset, coasted 3 s nearly unchanged; measured ~5.4 m/s with the same engine-line origin"
+   },
+   "ascent.separation.debris_mass": {
+    "unit": "kg",
+    "limit": 12000.0,
+    "basis": "debris mass = twin separation mass - 1.3 Mt ship vs recorded body mass; engine line again; measured ~6.4e3 kg"
+   },
+   "ascent.seco.state_position": {
+    "unit": "m",
+    "limit": 5000.0,
+    "basis": "378 s of stage-2 burn accumulate the (smaller, +0.3 s equivalent) Isp-law offset plus gravity-loss-path drift; measured ~2.7e3 m"
+   },
+   "ascent.seco.state_velocity": {
+    "unit": "m/s",
+    "limit": 20.0,
+    "basis": "measured ~7 m/s; margin for the stage-2 mass-flow-line offset"
+   },
+   "ascent.seco.mass": {
+    "unit": "kg",
+    "limit": 2000.0,
+    "basis": "measured ~5e1 kg: the stage-2 Isp line is declared from the recorded vacuum Isp directly, so only integration-path terms remain"
+   },
+   "ascent.meco.residual_position": {
+    "unit": "m",
+    "limit": 250.0,
+    "basis": "nominal MECO position discrepancy minus the measured engine/aero/numerical budget lines; what remains is interaction terms, engine-model shape differences and throttle-schedule tracking"
+   },
+   "ascent.meco.residual_velocity": {
+    "unit": "m/s",
+    "limit": 18.0,
+    "basis": "residual MECO velocity discrepancy after the three measured lines: the part of the engine-model difference invisible from the raw state history (ambient thrust correction and mass-flow shape) coupled through the gravity-turn path; measured 13.2 m/s"
+   },
+   "ascent.separation.residual_position": {
+    "unit": "m",
+    "limit": 350.0,
+    "basis": "residual at separation: carries the MECO residual forward through 3 s of coast, plus coast-integration cross terms"
+   },
+   "ascent.seco.residual_position": {
+    "unit": "m",
+    "limit": 2500.0,
+    "basis": "residual at SECO after 378 s of stage-2 burn: accumulated path difference not explained by the three measured probe lines"
+   },
+   "ascent.maxq.value": {
+    "unit": "Pa",
+    "limit": 1200.0,
+    "basis": "max-q agreement of two point-mass models sharing the CA polar: measured ~3e1 Pa (-0.08%); band ~3%"
+   },
+   "ascent.maxq.time": {
+    "unit": "s",
+    "limit": 2.0,
+    "basis": "max-q is a broad maximum; phase offset follows the thrust-rise line; measured -0.9 s"
+   },
+   "ascent.seco.orbit_semi_major_axis": {
+    "unit": "m",
+    "limit": 15000.0,
+    "basis": "osculating elements from both SECO states with the same closed form; the semi-major axis follows the velocity discrepancy, da ~ 2*a*dv/v (about 1.75 km per m/s here), so the band is the SECO velocity band seen through vis-viva; measured 8.5 km"
+   },
+   "ascent.seco.orbit_eccentricity": {
+    "unit": "-",
+    "limit": 0.003,
+    "basis": "tracks the SECO state band; measured ~1e-4"
+   },
+   "ascent.seco.orbit_inclination": {
+    "unit": "deg",
+    "limit": 0.05,
+    "basis": "the attitude program fixes the azimuth profile; inclination discrepancy is second-order in the state offset"
+   },
+   "ascent.debris_impact.time": {
+    "unit": "s",
+    "limit": 8.0,
+    "basis": "emergent check: debris ballistic range is sensitive to the (engine-line-shifted) separation state and to CA power-off +/-30% (vehicle file); measured +2 s"
+   },
+   "ascent.debris_impact.position": {
+    "unit": "km",
+    "limit": 12.0,
+    "basis": "great-circle impact-point distance; measured ~3.5 km"
+   },
+   "ascent.debris_impact.speed": {
+    "unit": "%",
+    "limit": 12.0,
+    "basis": "impact speed vs recorded (both Earth-relative); measured ~8.5%; the power-off CA table is an illustrative blunt-body polar"
+   },
+   "landing.cutoff_position": {
+    "unit": "m",
+    "limit": 15.0,
+    "basis": "re-flight disagreement at the commanded cutoff node: the two re-integrators fly the same profile through different gravity/atmosphere/replay implementations; measured ~6 m vertical"
+   },
+   "landing.cutoff_velocity": {
+    "unit": "m/s",
+    "limit": 2.5,
+    "basis": "same comparison at the cutoff node; measured ~0.9 m/s"
+   },
+   "landing.touchdown_position": {
+    "unit": "m",
+    "limit": 10.0,
+    "basis": "touchdown position disagreement between the two re-flights; measured ~0.3 m (both converge toward the pad target)"
+   },
+   "landing.touchdown_vertical_speed": {
+    "unit": "m/s",
+    "limit": 15.0,
+    "basis": "touchdown vertical-speed disagreement: amplifies the cutoff-state offset ballistically (the cutoff is a fixed-clock engine stop, so a cutoff-height error dh enters as sqrt(v^2+2g dh)); the *design limit* 3 m/s is graded on the FL-301 re-flight alone (design_input)"
+   },
+   "landing.touchdown_lateral_speed": {
+    "unit": "m/s",
+    "limit": 3.0,
+    "basis": "measured ~0.25 m/s: the crossrange channels barely diverge between the two re-flights; band leaves 10x margin on the observed disagreement"
+   },
+   "landing.propellant": {
+    "unit": "kg",
+    "limit": 750.0,
+    "basis": "propellant-burned disagreement at touchdown between the re-flights (same Isp law, different replay/integration); measured ~1.6e2 kg"
+   }
+  },
+  "check_details": [
+   {
+    "id": "ascent.meco.residual_position",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m",
+    "limit": 250.0,
+    "value": -3.1089707706584306,
+    "passed": true,
+    "reference": "nominal discrepancy minus the measured error-budget lines (reported, never zeroed; E8-02 accounting discipline)",
+    "basis": "nominal MECO position discrepancy minus the measured engine/aero/numerical budget lines; what remains is interaction terms, engine-model shape differences and throttle-schedule tracking"
+   },
+   {
+    "id": "ascent.meco.residual_velocity",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m/s",
+    "limit": 18.0,
+    "value": 12.487755699227291,
+    "passed": true,
+    "reference": "nominal discrepancy minus the measured error-budget lines (reported, never zeroed; E8-02 accounting discipline)",
+    "basis": "residual MECO velocity discrepancy after the three measured lines: the part of the engine-model difference invisible from the raw state history (ambient thrust correction and mass-flow shape) coupled through the gravity-turn path; measured 13.2 m/s"
+   },
+   {
+    "id": "ascent.separation.residual_position",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m",
+    "limit": 350.0,
+    "value": -7.970863955056046,
+    "passed": true,
+    "reference": "nominal discrepancy minus the measured error-budget lines (reported, never zeroed; E8-02 accounting discipline)",
+    "basis": "residual at separation: carries the MECO residual forward through 3 s of coast, plus coast-integration cross terms"
+   },
+   {
+    "id": "ascent.seco.residual_position",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m",
+    "limit": 2500.0,
+    "value": -61.501562332887715,
+    "passed": true,
+    "reference": "nominal discrepancy minus the measured error-budget lines (reported, never zeroed; E8-02 accounting discipline)",
+    "basis": "residual at SECO after 378 s of stage-2 burn: accumulated path difference not explained by the three measured probe lines"
+   },
+   {
+    "id": "ascent.meco.state_position",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m",
+    "limit": 400.0,
+    "value": 174.2693688035544,
+    "passed": true,
+    "reference": "point-mass twin (repo 3-DOF plant, open-loop authored program) vs the raw OpenTsiolkovsky state history interpolated at the declared event epoch",
+    "basis": "point-mass twin vs the recorded OT state history at MECO; measured ~2.2e2 m nominal, almost all of it the engine-Isp line; band = measured + ~80% margin for probe-interaction terms charged to it"
+   },
+   {
+    "id": "ascent.meco.state_velocity",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m/s",
+    "limit": 25.0,
+    "value": 17.269267771728458,
+    "passed": true,
+    "reference": "same comparison, velocity",
+    "basis": "measured ~15 m/s nominal, engine-Isp line; margin on MECO mass-deficit line (Isp law mismatch ~1.2% of stage-1 burn)"
+   },
+   {
+    "id": "ascent.separation.state_position",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m",
+    "limit": 600.0,
+    "value": 189.07124320240143,
+    "passed": true,
+    "reference": "point-mass twin (repo 3-DOF plant, open-loop authored program) vs the raw OpenTsiolkovsky state history interpolated at the declared event epoch",
+    "basis": "coasted 3 s from MECO; measured ~2.4e2 m; band covers the carried MECO offset plus coast propagation of the same discrepancy"
+   },
+   {
+    "id": "ascent.separation.state_velocity",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m/s",
+    "limit": 15.0,
+    "value": 4.522221593481238,
+    "passed": true,
+    "reference": "same comparison, velocity",
+    "basis": "the MECO velocity offset, coasted 3 s nearly unchanged; measured ~5.4 m/s with the same engine-line origin"
+   },
+   {
+    "id": "ascent.seco.state_position",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m",
+    "limit": 5000.0,
+    "value": 2046.319616637049,
+    "passed": true,
+    "reference": "point-mass twin (repo 3-DOF plant, open-loop authored program) vs the raw OpenTsiolkovsky state history interpolated at the declared event epoch",
+    "basis": "378 s of stage-2 burn accumulate the (smaller, +0.3 s equivalent) Isp-law offset plus gravity-loss-path drift; measured ~2.7e3 m"
+   },
+   {
+    "id": "ascent.seco.state_velocity",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m/s",
+    "limit": 20.0,
+    "value": 15.146314516309497,
+    "passed": true,
+    "reference": "same comparison, velocity",
+    "basis": "measured ~7 m/s; margin for the stage-2 mass-flow-line offset"
+   },
+   {
+    "id": "ascent.meco.mass",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "kg",
+    "limit": 20000.0,
+    "value": -14851.036431727465,
+    "passed": true,
+    "reference": "twin stage-1 burnout mass vs raw",
+    "basis": "stage-1 burnout mass deficit is the engine-Isp line: pad 329.26 s vs authored 327 s (linear laws), ~1.2% of the 1.2 Mt stage-1 propellant"
+   },
+   {
+    "id": "ascent.separation.debris_mass",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "kg",
+    "limit": 12000.0,
+    "value": -6436.449637290556,
+    "passed": true,
+    "reference": "twin separation mass minus the 1.2 Mt ship vs the recorded stage-1 body mass",
+    "basis": "debris mass = twin separation mass - 1.3 Mt ship vs recorded body mass; engine line again; measured ~6.4e3 kg"
+   },
+   {
+    "id": "ascent.seco.mass",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "kg",
+    "limit": 2000.0,
+    "value": -730.8622839069867,
+    "passed": true,
+    "reference": "twin stage-2 burnout mass vs raw",
+    "basis": "measured ~5e1 kg: the stage-2 Isp line is declared from the recorded vacuum Isp directly, so only integration-path terms remain"
+   },
+   {
+    "id": "ascent.maxq.value",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "Pa",
+    "limit": 1200.0,
+    "value": -26.80495887381403,
+    "passed": true,
+    "reference": "twin max-q vs the recorded maxima (dynamic_pressure_pa)",
+    "basis": "max-q agreement of two point-mass models sharing the CA polar: measured ~3e1 Pa (-0.08%); band ~3%"
+   },
+   {
+    "id": "ascent.maxq.time",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "s",
+    "limit": 2.0,
+    "value": -0.8888371434335127,
+    "passed": true,
+    "reference": "same, epoch of the max",
+    "basis": "max-q is a broad maximum; phase offset follows the thrust-rise line; measured -0.9 s"
+   },
+   {
+    "id": "ascent.seco.orbit_semi_major_axis",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m",
+    "limit": 15000.0,
+    "value": 27704.101933830418,
+    "passed": false,
+    "reference": "closed-form elements of the twin SECO state vs the recorded raw state at the same epoch (same formula both sides)",
+    "basis": "osculating elements from both SECO states with the same closed form; the semi-major axis follows the velocity discrepancy, da ~ 2*a*dv/v (about 1.75 km per m/s here), so the band is the SECO velocity band seen through vis-viva; measured 8.5 km"
+   },
+   {
+    "id": "ascent.seco.orbit_eccentricity",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "-",
+    "limit": 0.003,
+    "value": -0.0020244321819373363,
+    "passed": true,
+    "reference": "same comparison",
+    "basis": "tracks the SECO state band; measured ~1e-4"
+   },
+   {
+    "id": "ascent.seco.orbit_inclination",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "deg",
+    "limit": 0.05,
+    "value": 0.00753854597917325,
+    "passed": true,
+    "reference": "same comparison",
+    "basis": "the attitude program fixes the azimuth profile; inclination discrepancy is second-order in the state offset"
+   },
+   {
+    "id": "ascent.debris_impact.time",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "s",
+    "limit": 8.0,
+    "value": 1.6817974274089238,
+    "passed": true,
+    "reference": "twin power-off debris re-entry (own RK4, CA polar, US76) impact epoch vs the recorded impact event",
+    "basis": "emergent check: debris ballistic range is sensitive to the (engine-line-shifted) separation state and to CA power-off +/-30% (vehicle file); measured +2 s"
+   },
+   {
+    "id": "ascent.debris_impact.position",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "km",
+    "limit": 12.0,
+    "value": 2.424236349101751,
+    "passed": true,
+    "reference": "great-circle distance between impact sites",
+    "basis": "great-circle impact-point distance; measured ~3.5 km"
+   },
+   {
+    "id": "ascent.debris_impact.speed",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "%",
+    "limit": 12.0,
+    "value": 9.957271707159851,
+    "passed": true,
+    "reference": "Earth-relative impact speed difference, percent of recorded",
+    "basis": "impact speed vs recorded (both Earth-relative); measured ~8.5%; the power-off CA table is an illustrative blunt-body polar"
+   },
+   {
+    "id": "landing.cutoff_position",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m",
+    "limit": 15.0,
+    "value": 6.305811859383148,
+    "passed": true,
+    "reference": "FL-301 re-flight vs independent re-integrator at the commanded cutoff node (pad-local ENU)",
+    "basis": "re-flight disagreement at the commanded cutoff node: the two re-integrators fly the same profile through different gravity/atmosphere/replay implementations; measured ~6 m vertical"
+   },
+   {
+    "id": "landing.cutoff_velocity",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m/s",
+    "limit": 2.5,
+    "value": 0.289117144541271,
+    "passed": true,
+    "reference": "same, velocity",
+    "basis": "same comparison at the cutoff node; measured ~0.9 m/s"
+   },
+   {
+    "id": "landing.touchdown_position",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m",
+    "limit": 10.0,
+    "value": 0.3274601779650217,
+    "passed": true,
+    "reference": "touchdown position disagreement between the two re-flights",
+    "basis": "touchdown position disagreement between the two re-flights; measured ~0.3 m (both converge toward the pad target)"
+   },
+   {
+    "id": "landing.touchdown_vertical_speed",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m/s",
+    "limit": 15.0,
+    "value": 9.018159922688133,
+    "passed": true,
+    "reference": "vertical-speed disagreement at touchdown (cutoff-state offset amplified ballistically; the design limit itself is graded on the FL-301 re-flight, design_input)",
+    "basis": "touchdown vertical-speed disagreement: amplifies the cutoff-state offset ballistically (the cutoff is a fixed-clock engine stop, so a cutoff-height error dh enters as sqrt(v^2+2g dh)); the *design limit* 3 m/s is graded on the FL-301 re-flight alone (design_input)"
+   },
+   {
+    "id": "landing.touchdown_lateral_speed",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "m/s",
+    "limit": 3.0,
+    "value": 0.10650735611401718,
+    "passed": true,
+    "reference": "lateral-speed disagreement",
+    "basis": "measured ~0.25 m/s: the crossrange channels barely diverge between the two re-flights; band leaves 10x margin on the observed disagreement"
+   },
+   {
+    "id": "landing.propellant",
+    "category": "model_agreement",
+    "evidence": "independent_model",
+    "unit": "kg",
+    "limit": 750.0,
+    "value": 6.2280418741866015,
+    "passed": true,
+    "reference": "remaining-propellant disagreement at the end of the burn",
+    "basis": "propellant-burned disagreement at touchdown between the re-flights (same Isp law, different replay/integration); measured ~1.6e2 kg"
+   },
+   {
+    "id": "landing.fl301_gates",
+    "category": "model_agreement",
+    "evidence": "design_input",
+    "unit": "-",
+    "limit": 1.0,
+    "value": 0.7357548883900934,
+    "passed": true,
+    "reference": "FL-301 landing checks of the re-flown plan",
+    "basis": "FL-301 design gates on the shared re-flight (gfold arc, FL-303 re-integration): worst gate utilisation; the corridor and the 3-engine landing configuration are design inputs, so this is the design grading, not independent validation"
+   }
+  ],
+  "evidence_map": {
+   "ascent.debris_impact.position": "independent_model",
+   "ascent.debris_impact.speed": "independent_model",
+   "ascent.debris_impact.time": "independent_model",
+   "ascent.maxq.time": "independent_model",
+   "ascent.maxq.value": "independent_model",
+   "ascent.meco.mass": "independent_model",
+   "ascent.meco.residual_position": "independent_model",
+   "ascent.meco.residual_velocity": "independent_model",
+   "ascent.meco.state_position": "independent_model",
+   "ascent.meco.state_velocity": "independent_model",
+   "ascent.seco.mass": "independent_model",
+   "ascent.seco.orbit_eccentricity": "independent_model",
+   "ascent.seco.orbit_inclination": "independent_model",
+   "ascent.seco.orbit_semi_major_axis": "independent_model",
+   "ascent.seco.residual_position": "independent_model",
+   "ascent.seco.state_position": "independent_model",
+   "ascent.seco.state_velocity": "independent_model",
+   "ascent.separation.debris_mass": "independent_model",
+   "ascent.separation.residual_position": "independent_model",
+   "ascent.separation.state_position": "independent_model",
+   "ascent.separation.state_velocity": "independent_model",
+   "landing.cutoff_position": "independent_model",
+   "landing.cutoff_velocity": "independent_model",
+   "landing.fl301_gates": "design_input",
+   "landing.propellant": "independent_model",
+   "landing.touchdown_lateral_speed": "independent_model",
+   "landing.touchdown_position": "independent_model",
+   "landing.touchdown_vertical_speed": "independent_model"
+  },
+  "error_budget": {
+   "meco_pos": {
+    "measured_delta": 174.2693688035544,
+    "lines": {
+     "engine": 159.2843990623743,
+     "aero": 17.67649371287621,
+     "numerical": 0.41744679896234516,
+     "frame_time": 0.0,
+     "controller": 0.0,
+     "residual": -3.1089707706584306
+    }
+   },
+   "meco_vel": {
+    "measured_delta": 17.269267771728458,
+    "lines": {
+     "engine": 4.475666381458884,
+     "aero": 0.2902254903627153,
+     "numerical": 0.015620200679567375,
+     "frame_time": 0.0,
+     "controller": 0.0,
+     "residual": 12.487755699227291
+    }
+   },
+   "meco_mass": {
+    "measured_delta": 14851.036431727465,
+    "lines": {
+     "engine": 6482.534702231642,
+     "aero": -0.26640372490510345,
+     "numerical": 25.120212162844837,
+     "frame_time": 0.0,
+     "controller": 0.0,
+     "residual": 8343.647921057884
+    }
+   },
+   "separation_pos": {
+    "measured_delta": 189.07124320240143,
+    "lines": {
+     "engine": 178.1315867733792,
+     "aero": 18.53869060425683,
+     "numerical": 0.3718297798214394,
+     "frame_time": 0.0,
+     "controller": 0.0,
+     "residual": -7.970863955056046
+    }
+   },
+   "separation_vel": {
+    "measured_delta": 4.522221593481238,
+    "lines": {
+     "engine": 4.401572324340506,
+     "aero": 0.30608681208072586,
+     "numerical": 0.029041191685990952,
+     "frame_time": 0.0,
+     "controller": 0.0,
+     "residual": -0.21447873462598466
+    }
+   },
+   "separation_debris_mass": {
+    "measured_delta": 6436.449637290556,
+    "lines": {
+     "engine": 6390.36457234947,
+     "aero": -0.26640372490510345,
+     "numerical": 25.120212162844837,
+     "frame_time": 0.0,
+     "controller": 0.0,
+     "residual": 21.23125650314614
+    }
+   },
+   "seco_pos": {
+    "measured_delta": 2046.319616637049,
+    "lines": {
+     "engine": 1959.7114821841237,
+     "aero": 147.0096459547167,
+     "numerical": 1.1000508310962687,
+     "frame_time": 0.0,
+     "controller": 0.0,
+     "residual": -61.501562332887715
+    }
+   },
+   "seco_vel": {
+    "measured_delta": 15.146314516309497,
+    "lines": {
+     "engine": 2.3400100651261457,
+     "aero": 0.16197695447356075,
+     "numerical": -0.45108016542625506,
+     "frame_time": 0.0,
+     "controller": 0.0,
+     "residual": 13.095407662136045
+    }
+   },
+   "seco_mass": {
+    "measured_delta": 730.8622839069867,
+    "lines": {
+     "engine": 0.006673867115750909,
+     "aero": 0.0006437188712880015,
+     "numerical": -24.741301889298484,
+     "frame_time": 0.0,
+     "controller": 0.0,
+     "residual": 755.5962682102981
+    }
+   }
+  },
+  "probes": {
+   "engine": "twin re-run with the recorded pad Isp 329.26 s (the difference between the authored YAML Isp law and the recorded OpenTsiolkovsky Isp law)",
+   "aero": "twin re-run with atmosphere density x1.03 (US76 vs the recorded program's own atmosphere model, ~3% band near sea level)",
+   "numerical": "twin re-run at dt/2 (0.01 s)"
+  },
+  "landing_corridor": {
+   "position_enu_m": [
+    150.0,
+    0.0,
+    800.0
+   ],
+   "velocity_enu_m": [
+    -15.0,
+    0.0,
+    -55.0
+   ],
+   "mass_kg": 456000.0,
+   "t_s": 200.0,
+   "engines": 3,
+   "plan_tof_s": 17.436304416173073,
+   "fl301_position_error_m": 7.438792785037869,
+   "fl301_vertical_speed_m_s": -2.20726466517028,
+   "fl301_lateral_speed_m_s": 0.6213606019811032,
+   "fl301_final_mass_kg": 425673.76379188104,
+   "independent_touchdown": {
+    "t_s": 218.39988768776706,
+    "pos_enu_m": [
+     7.112164603303259,
+     -1.342274093581273e-09,
+     -3.965572821114912e-06
+    ],
+    "vel_enu_m": [
+     0.514853245867086,
+     6.0459901850586405e-12,
+     -11.225424587858413
+    ],
+    "mass_kg": 425667.53575000685
+   },
+   "independent_cutoff": {
+    "t_s": 217.43630441617307,
+    "pos_enu_m": [
+     6.622968083047454,
+     -1.290569052238089e-09,
+     6.252770037124102
+    ],
+    "vel_enu_m": [
+     0.5151003733283949,
+     6.0437299401954594e-12,
+     -1.9383895237307391
+    ],
+    "mass_kg": 425667.53575000685
+   }
+  },
+  "assumption_differences": [
+   "ascent: the two models share the authored attitude program, throttle schedules and vehicle constants (design inputs); they differ in formulation (external OpenTsiolkovsky vs the repo 3-DOF plant), in the engine Isp law (YAML linear-in-pressure law, pad 327 s, vs the recorded pad 329.26 s law -- the measured engine line), the atmosphere (US76 x1.03 band -- the measured aero line) and the integrator step (RK4 0.02 s vs the recorded program's own scheme -- the measured numerical line).",
+   "ascent frame: both sides expressed in the launch-aligned ECI-at-t=0 convention (raw columns rotated by R3(-omega*t)); the t=0 pad state agrees to < 1 m, which is why the frame/time line is declared zero rather than fitted.",
+   "debris: the twin's re-entry is a separately written variable-mass-free ballistic integrator with the power-off CA polar from the same YAML; OpenTsiolkovsky integrates its own debris body; the impact comparison is therefore an emergent, widest-band check.",
+   "landing: the corridor insertion state is the cool DECLARED design input (the E5-07 convention), flown on this derived vehicle's own 3-engine landing set; both re-flights share the gfold plan nodes and the landing configuration declared from the vehicle file's own note; they differ in gravity (J2 point-mass + centrifugal vs IGF-80 normal gravity with the centrifugal absorbed, Coriolis omitted -- below 0.15 m on this arc), atmosphere (FL-301's entry density table vs independent US76 tables), command replay (node-acceleration FOH x current mass vs physical-thrust FOH with the engine's own ambient correction and throttle limits) and integrator (RK4 0.1 s vs RK4 0.05 s).",
+   "no check in this report uses historical_telemetry evidence: the reference vehicle is a public estimate, not flown hardware, and there is no telemetry to compare against."
+  ],
+  "honesty_notes": [
+   "E8-01's comparisons of the chain against OpenTsiolkovsky's own raw output are extraction/serialisation checks and are relabelled numerical_consistency/analytical in full_chain; the independent ascent-model evidence for the E5-07 reference is this module's twin, and only this module's.",
+   "Residual lines are reported, never zeroed; where a probe over-explains (negative line), the surplus is carried in the residual."
+  ],
+  "actual_recorded_corridor": {
+   "position_enu_m": [
+    -3.592119904540926,
+    55.14386781682891,
+    2985.8808867253038
+   ],
+   "velocity_enu_m": [
+    0.5420276187874453,
+    0.6776174442295944,
+    -257.19264096095
+   ],
+   "mass_kg": 435120.78332413296,
+   "t_s": 428.95247573856693,
+   "recorded_engines": 13,
+   "probe_engines": 3,
+   "landing_plannable": false,
+   "note": "the actual corridor insertion state this mission reached, probed with the same two-model E8-05 machinery on the declared 3-engine landing set. It is UNPLANNABLE from here -- the independent models agree with the E3 planner that no soft landing exists inside the reserve at this arrival state, corroborating the landing gap (RECOVERY_GAP_E508.md). The powered-landing SYSTEM is validated above on the cool declared design corridor in the 3-engine configuration, exactly as in the E5-07 reference."
+  }
+ },
+ "propagations": [],
+ "residuals": [],
+ "targets": {
+  "converged": true
+ },
+ "provenance": {
+  "python": "3.12.13",
+  "numpy": "2.5.4",
+  "orbitopt": "0.1.0",
+  "tudatpy": "1.1.0",
+  "pykep": "2.6.4"
+ },
+ "digest": "a5d0ee053aaed64b8bfdfa2ccd12359f5a9253b6c57bc27399cba01e33d4607d"
+}

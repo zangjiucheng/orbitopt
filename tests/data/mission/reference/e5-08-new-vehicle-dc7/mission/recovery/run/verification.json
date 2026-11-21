@@ -1,0 +1,144 @@
+{
+  "optimizer_converged": null,
+  "physics_verified": null,
+  "backend_self_check": true,
+  "mission_constraints_passed": true,
+  "checks": [
+    {
+      "id": "mass-non-negative",
+      "passed": true,
+      "value": 201213.52171249603,
+      "limit": 0.0,
+      "unit": "kg",
+      "reason_code": ""
+    },
+    {
+      "id": "mass-continuity-stage2",
+      "passed": true,
+      "value": 0.0,
+      "limit": 0.02,
+      "unit": "fraction",
+      "reason_code": ""
+    },
+    {
+      "id": "max-q-within-limit",
+      "passed": true,
+      "value": 37479.27754270955,
+      "limit": 55000.0,
+      "unit": "Pa",
+      "reason_code": ""
+    },
+    {
+      "id": "max-accel-within-limit",
+      "passed": true,
+      "value": 2.9758741727162406,
+      "limit": 3.0,
+      "unit": "g",
+      "reason_code": ""
+    },
+    {
+      "id": "recovery-propellant-reserve",
+      "passed": true,
+      "value": 113115.84898297,
+      "limit": 100000.0,
+      "unit": "kg",
+      "reason_code": ""
+    },
+    {
+      "id": "recovery-landing",
+      "passed": true,
+      "value": null,
+      "limit": null,
+      "unit": "",
+      "reason_code": ""
+    },
+    {
+      "id": "landing-position",
+      "passed": true,
+      "value": 0.33908419777976007,
+      "limit": 25.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "landing-vertical-speed",
+      "passed": true,
+      "value": -1.50003341739229,
+      "limit": 3.0,
+      "unit": "m/s",
+      "reason_code": ""
+    },
+    {
+      "id": "landing-lateral-speed",
+      "passed": true,
+      "value": 0.03155062180058664,
+      "limit": 1.0,
+      "unit": "m/s",
+      "reason_code": ""
+    },
+    {
+      "id": "landing-tilt",
+      "passed": true,
+      "value": 9.791820783190857,
+      "limit": 40.0,
+      "unit": "deg",
+      "reason_code": ""
+    },
+    {
+      "id": "landing-propellant-reserve",
+      "passed": true,
+      "value": 13115.848982969997,
+      "limit": 100000.0,
+      "unit": "kg",
+      "reason_code": ""
+    },
+    {
+      "id": "landing-max-g",
+      "passed": true,
+      "value": 4.591903271073983,
+      "limit": 5.0,
+      "unit": "g",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-above-atmosphere",
+      "passed": true,
+      "value": 232026.43047139887,
+      "limit": 120000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-periapsis-above-minimum",
+      "passed": true,
+      "value": 232026.43047139887,
+      "limit": 230000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-periapsis-within-tolerance",
+      "passed": true,
+      "value": 232026.43047139887,
+      "limit": 250000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-apoapsis-within-tolerance",
+      "passed": true,
+      "value": 234780.31626438256,
+      "limit": 250000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-inclination-within-tolerance",
+      "passed": true,
+      "value": 51.97680703539541,
+      "limit": 51.6,
+      "unit": "deg",
+      "reason_code": ""
+    }
+  ]
+}
