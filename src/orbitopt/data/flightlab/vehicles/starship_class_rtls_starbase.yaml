@@ -1,0 +1,292 @@
+# E5-08c: the E5-08b (DC7) design flown from STARBASE -- launch azimuth 110.801 deg, a 30.5 deg
+# target orbit; staging point identical to DC7 (MECO 120.0 s), the ship burn and the post-MECO
+# pitch nodes re-searched for the new range geometry. Everything below the DC7 notes is
+# inherited. Flight Lab vehicle: E5-08 NEW VEHICLE DESIGN derived from
+# starship_class_public_estimate.yaml (the E5-07 physics-qualification
+# reference). Same public-estimate stack and the same sourced ascent
+# parameters; the design changes below are the E5-08 design work, each tagged
+# in 'data_provenance:' and reasoned in 'assumptions:'. (flight-vehicle-1.0,
+# orbitopt.flightlab.vehicle_catalog)
+#
+# Design changes vs the E5-07 reference (the E5-07 RECOVERY_GAP.md is the
+# starting point: the reference's restart-2 aerodynamic-entry RTLS profile has
+# no representation in the FL-302 planner, which accepts 1 + entry_burns
+# ignitions, entry_burns in {1, 2}):
+#  * DC1 (recovery scheme): the booster returns on a POWERED entry --
+#    boostback, ONE throttled entry burn, landing burn: three ignitions,
+#    restarts_max 3, relight set usable_for [boostback, entry, landing].
+#    This is the F9-heritage architecture (boostback + landing burn) extended
+#    by the powered entry deceleration SpaceX has flown on Starship flight
+#    tests; it is the profile the shipped E3 chain can plan and fly, so the
+#    recovery leg CLOSES instead of being reported as a gap.
+#  * DC7 (staging point, E5-08b): stage-1 cutoff 12 s EARLIER (MECO 135 -> 123 s,
+#    separation 138 -> 126 s), the ship burns 387.891 s instead of 378 s to make up
+#    the speed from its spare propellant, and the post-MECO pitch program is
+#    re-tuned so the SAME insertion band, 3.0 g and max-Q limits hold. Cost,
+#    stated plainly: the ship keeps ~102.5 t instead of ~118.8 t (the E5-07 reference) for deorbit/landing
+#    and the booster separates ~989 t heavy (741 t at the E5-07 cutoff) -- the
+#    recovery leg gets the propellant it needs without touching any graded limit.
+#  * DC2, DC4, DC5 (stage masses, engines, nose): UNCHANGED from the
+#    reference, deliberately -- see assumptions. Max-Q and peak-g comparisons
+#    therefore isolate the recovery change from ascent drift, and the +-30 %
+#    generated-aero sensitivity band of the reference carries over verbatim.
+schema_version: flight-vehicle-1.0
+name: starship-class-rtls-starbase-v1
+provenance: public_estimate
+as_of: "2026-11"
+disclaimer: >
+  Derived DESIGN on the public-estimate Starship-class stack of
+  starship_class_public_estimate.yaml: inherited figures keep that file's
+  public-estimate tags; every design change is tagged illustrative with its
+  reason. Not official SpaceX performance data and never to be presented as
+  such.
+assumptions:
+  - >-
+      DC1 recovery scheme (DESIGN CHANGE): three relightable ignitions after separation
+      (boostback, one throttled powered entry burn, landing burn) with the 13-engine
+      relight set usable for all three phases. Reason: the E5-07 RECOVERY_GAP.md -- the
+      reference's boostback + aerodynamic entry + landing needs 2 ignitions with an
+      UNPOWERED entry the FL-302 planner cannot represent, so the reference mission
+      declares no recovery stage; a powered entry (entry_burns = 1) is the closest profile
+      the shipped chain plans, flies and grades, and powered entry deceleration is public
+      behaviour of the class (the flip-and-burn deceleration of the Starship flight tests,
+      the landing burn of Falcon 9). Entry-phase planning limits (250 kPa / 12 g) are the
+      ADR-0008 DESIGN ASSUMPTIONs the E5-05c/E7 campaign carries.
+  - >-
+      DC7 stage-1 cutoff and separation (replaces the inherited DC2 burn window): MECO at
+      123 s and separation at 126 s (the inherited vehicle cuts off at 135 s / 138 s).
+      Reason: the E5-08 record (RECOVERY_GAP_E508.md) found the powered-entry recovery leg
+      short of the graded reserve at the inherited staging point; a global search over the
+      booster script (150+ evaluations per generation on two staging points) showed the
+      binding limit is the propellant the booster carries into the recovery leg. An earlier
+      cutoff (120 s against the inherited 135 s) leaves it ~248 t more propellant at separation, and the
+      graded reserve (100 t) is met at the corridor with the inherited limits unchanged.
+      Cost, not hidden: the ship has to make up the speed.
+  - >-
+      DC7 stage-2 burn window and pitch program (replaces the inherited DC3): the ship
+      burns 387.891 s (inherited 378 s) from its spare propellant, and the post-MECO
+      elevation nodes (155-445 s) are re-tuned, searched with the same fixed-program
+      OpenTsiolkovsky flight so that every inherited ascent limit still holds (periapsis
+      >= 230 km, apoapsis inside 250 +/- 60 km, inclination 30.5 +/- 1 deg, 3.0 g, max-Q
+      55 kPa). The ship keeps ~102.5 t for deorbit and landing instead of ~118.8 t: that is the
+      price of the booster's reserve, reported in the comparison record, not absorbed.
+  - >-
+      DC4 nose geometry and aero: UNCHANGED (13.5 m tangent ogive assumption, +-30 %,
+      tables regenerated from the nose by orbitopt.flightlab.nose_aero and held equal by
+      test). Reason: keeping the aero identity makes the Max-Q / peak-g comparison between
+      reference and derived vehicle isolate DC1; a nose change would move both and confound
+      the report.
+  - >-
+      DC5 stage masses, engines (33 x Raptor 2 stage-1 set at the 95 % figure; 6-engine
+      ship; 13-engine relight set at the 40 % floor) and launch site / epoch: UNCHANGED.
+      Reason: the task inherits the E5-07 sourced constraint set; re-sizing stages or
+      engines without a new public basis would break the provenance rule (every parameter
+      sourced or a reasoned DESIGN ASSUMPTION).
+  - >-
+      Block 1 figures throughout, Raptor 2 at 2.256 MN sea-level / 327 s SL Isp / 350 s
+      vacuum, ship set at the thrust-weighted 365 s effective Isp -- inherited one for one
+      from starship_class_public_estimate.yaml, with the same source caveats (public
+      disagreement on the vacuum Isp figure; the nose length is an assumption with no
+      public value).
+  - >-
+      The booster section models its relightable engines as one set; the real vehicle shuts
+      down toward 3 engines for the last seconds of the landing burn, which one engine set
+      cannot express (inherited limitation; the E8-05 landing comparison declares its
+      3-engine landing configuration).
+simulation:
+  end_time_s: 700.0
+  output_step_s: 2.0
+  integrator: {method: rk45}
+attitude_program:
+  # E5-08c (Starbase): constant 110.801 deg launch azimuth (searched; with Earth rotation it
+  # delivers ~30 deg inclination, the 30.5 deg target); the pre-MECO pitch-over is inherited from
+  # the Kourou references; gentle early pitch-over
+  # keeps max-q at 37.5 kPa; lofted MECO (el 44); ship tail held at el +2.7
+  # deg so the flight-path angle is near zero at cutoff
+  - {t_s: 0.0, azimuth_deg: 110.801, elevation_deg: 90.0}
+  - {t_s: 15.0, azimuth_deg: 110.801, elevation_deg: 90.0}
+  - {t_s: 35.0, azimuth_deg: 110.801, elevation_deg: 78.0}
+  - {t_s: 60.0, azimuth_deg: 110.801, elevation_deg: 64.0}
+  - {t_s: 85.0, azimuth_deg: 110.801, elevation_deg: 56.0}
+  - {t_s: 110.0, azimuth_deg: 110.801, elevation_deg: 44.0}
+  - {t_s: 135.0, azimuth_deg: 110.801, elevation_deg: 44.0}
+  - {t_s: 141.0, azimuth_deg: 110.801, elevation_deg: 44.0}
+  - {t_s: 155.0, azimuth_deg: 110.801, elevation_deg: 38.696}
+  - {t_s: 200.0, azimuth_deg: 110.801, elevation_deg: 16.894}
+  - {t_s: 260.0, azimuth_deg: 110.801, elevation_deg: 14.371}
+  - {t_s: 320.0, azimuth_deg: 110.801, elevation_deg: 9.36}
+  - {t_s: 380.0, azimuth_deg: 110.801, elevation_deg: 4.934}
+  - {t_s: 430.0, azimuth_deg: 110.801, elevation_deg: 3.991}
+  - {t_s: 445.0, azimuth_deg: 110.801, elevation_deg: 3.301}
+  - {t_s: 518.0, azimuth_deg: 110.801, elevation_deg: 2.7}
+stages:
+  - mass_initial_kg: 3525000.0
+    mass_dry_kg: 275000.0
+    engine:
+      thrust_vac_n: [[0.0, 74926500.0], [100.0, 74926500.0], [101.0, 62000000.0], [120.0, 58255882.4]]
+      isp_vac_s: 350.0
+      burn_start_s: 0.0
+      burn_end_s: 120.0
+      nozzle_exit_area_m2: 43.89
+    aero:
+      diameter_m: 9.0
+      ca: [[0, 0.0956], [0.5, 0.0934], [0.8, 0.0903], [1, 0.1373], [1.2, 0.353], [1.5, 0.4546], [2, 0.4163], [3, 0.3588], [4, 0.3319], [6, 0.3054], [8, 0.2927], [12, 0.2812]]
+      ca_power_off: [[0, 0.2156], [0.5, 0.2459], [0.8, 0.2935], [1, 0.3873], [1.2, 0.5613], [1.5, 0.6213], [2, 0.5413], [3, 0.4422], [4, 0.3944], [6, 0.347], [8, 0.324], [12, 0.302]]
+      cn_alpha_per_rad: 2
+      ballistic_coefficient_kg_m2: 3600
+    free_flight: attitude_program
+    separation_time_s: 122.0
+  - mass_initial_kg: 1300000.0
+    mass_dry_kg: 100000.0
+    engine:
+      thrust_vac_n: [[0.0, 14760000.0], [185.0, 14760000.0], [185.0, 5904000.0], [380.0, 5904000.0], [387.891, 5904000.0]]
+      isp_vac_s: 365
+      burn_start_s: 0.0
+      burn_end_s: 387.891
+      nozzle_exit_area_m2: 16.44
+    aero:
+      diameter_m: 9.0
+      ca: [[0, 0.0378], [0.5, 0.0369], [0.8, 0.0357], [1, 0.0843], [1.2, 0.3018], [1.5, 0.4065], [2, 0.3732], [3, 0.3251], [4, 0.3053], [6, 0.2877], [8, 0.28], [12, 0.2734]]
+      ca_power_off: [[0, 0.1578], [0.5, 0.1894], [0.8, 0.2389], [1, 0.3343], [1.2, 0.5101], [1.5, 0.5731], [2, 0.4982], [3, 0.4085], [4, 0.3678], [6, 0.3293], [8, 0.3112], [12, 0.2942]]
+      cn_alpha_per_rad: 2
+      ballistic_coefficient_kg_m2: 1600
+    free_flight: attitude_program
+booster:
+  provenance: public_estimate
+  dry_mass_kg:
+    value: 275000.0
+    provenance: public_estimate
+    source: Wikipedia, SpaceX Super Heavy (empty mass 275 t); older revisions list 200 t, so the spread across sources is large
+    as_of: "2026-11"
+    uncertainty_pct: 10.0
+  landing_propellant_reserve_kg:
+    value: 150000.0
+    provenance: illustrative
+    source: planning margin for boostback, entry burn and landing carried by the booster model (about half the dry mass); the graded reserve belongs to the flight target
+    as_of: "2026-11"
+  reference_area_m2:
+    value: 63.617
+    provenance: public_estimate
+    source: pi/4 * 9^2 with the published 9 m body diameter
+    as_of: "2026-11"
+    uncertainty_pct: 2.0
+  cd_mach:
+    value: [[0.0, 0.8], [0.8, 0.9], [1.1, 1.3], [2.0, 1.25], [4.0, 1.2], [8.0, 1.15]]
+    provenance: illustrative
+    source: blunt-cylinder-class table for the booster falling engines-first with grid fins stowed; not derived from the declared nose, which the booster does not carry
+    as_of: "2026-11"
+    accuracy: "+/-30% (generic aero, attitude-dependent)"
+    uncertainty_pct: 30.0
+  engines:
+    count: 13
+    usable_for: [boostback, entry, landing]
+    thrust_vacuum_n: 2390000.0
+    isp_sea_level_s: 327.0
+    isp_vacuum_s: 350.0
+    nozzle_exit_area_m2: 1.33
+    throttle_min: 0.4
+    throttle_max: 1.0
+    restarts_max: 3
+  assumptions:
+    - Three ignitions after separation, one per phase (boostback, entry burn,
+      landing) -- design change DC1; the entry is a powered phase for this
+      vehicle, unlike the E5-07 reference it is derived from.
+geometry:
+  stages:
+    - {length_m: 71.0}
+    - {length_m: 50.3}
+  nose: {shape: tangent_ogive, length_m: 13.5}
+data_provenance:
+  simulation:
+    provenance: illustrative
+    source: inherited from starship_class_public_estimate.yaml (scenario choice)
+    as_of: "2026-11"
+  attitude_program:
+    provenance: illustrative
+    source: inherited from starship_class_public_estimate.yaml up to MECO (authored gravity-turn-style program for this scenario, not a flown profile); the post-MECO elevation nodes (155-445 s) are re-tuned by DC7 so the earlier cutoff still reaches the same insertion band
+    as_of: "2026-11"
+  stages[0]:
+    provenance: illustrative
+    source: "throttle schedule and ballistic coefficient inherited unchanged from starship_class_public_estimate.yaml; burn window and separation timing are DC7 (MECO 120.0 s, separation 122.0 s)"
+    as_of: "2026-11"
+  stages[0].mass_initial_kg:
+    provenance: public_estimate
+    source: Wikipedia, SpaceX Super Heavy -- Block 1 empty mass 275 t plus 3,250 t propellant (inherited)
+    as_of: "2026-11"
+    uncertainty_pct: 5.0
+  stages[0].mass_dry_kg:
+    provenance: public_estimate
+    source: Wikipedia, SpaceX Super Heavy -- empty mass 275 t (older revisions 200 t) (inherited)
+    as_of: "2026-11"
+    uncertainty_pct: 10.0
+  stages[0].engine.thrust_vac_n:
+    provenance: illustrative
+    source: inherited from starship_class_public_estimate.yaml, truncated at the DC7 cutoff (123 s, thrust interpolated on the reference throttle schedule; all levels inside the published 40-100 % Raptor throttle band; 74.93 MN = 33 Raptor 2 at 95 %)
+    as_of: "2026-11"
+    uncertainty_pct: 5.0
+  stages[0].engine.isp_vac_s:
+    provenance: public_estimate
+    source: Wikipedia, SpaceX Raptor -- Raptor 2 vacuum Isp quoted 350 s / 363 s depending on source (inherited)
+    as_of: "2026-11"
+    uncertainty_pct: 3.0
+  stages[0].engine.nozzle_exit_area_m2:
+    provenance: illustrative
+    source: 33 x 1.33 m2 (inherited)
+    as_of: "2026-11"
+  stages[0].aero:
+    provenance: illustrative
+    source: ca, ca_power_off and cn_alpha_per_rad generated from geometry.nose by orbitopt.flightlab.nose_aero (about +-30 %); DC4 keeps the nose and tables identical to the reference
+    as_of: "2026-11"
+    uncertainty_pct: 30.0
+  stages[1]:
+    provenance: illustrative
+    source: "ballistic coefficient inherited unchanged from starship_class_public_estimate.yaml; the burn window is DC7 (387.891 s after ignition)"
+    as_of: "2026-11"
+  stages[1].mass_initial_kg:
+    provenance: public_estimate
+    source: Wikipedia, SpaceX Starship -- Block 1 empty mass about 100 t plus about 1,200 t propellant (inherited)
+    as_of: "2026-11"
+    uncertainty_pct: 5.0
+  stages[1].mass_dry_kg:
+    provenance: public_estimate
+    source: Wikipedia, SpaceX Starship -- Block 1 empty mass about 100 t (Block 2 listed 85 t) (inherited)
+    as_of: "2026-11"
+    uncertainty_pct: 10.0
+  stages[1].engine.thrust_vac_n:
+    provenance: illustrative
+    source: inherited from starship_class_public_estimate.yaml (14.76 MN full, 40 % floor 5.904 MN); held at the floor to the DC7 cutoff
+    as_of: "2026-11"
+    uncertainty_pct: 5.0
+  stages[1].engine.isp_vac_s:
+    provenance: public_estimate
+    source: thrust-weighted effective vacuum Isp of 3 Raptor 2 (350 s) and 3 Raptor Vacuum (380 s) (inherited)
+    as_of: "2026-11"
+    uncertainty_pct: 3.0
+  stages[1].engine.nozzle_exit_area_m2:
+    provenance: illustrative
+    source: 3 x 1.33 m2 + 3 x 4.15 m2 (inherited)
+    as_of: "2026-11"
+  stages[1].engine.burn_end_s:
+    provenance: illustrative
+    source: DC7 design change (387.891 s after ignition against the inherited 378 s; ~102.5 t kept for deorbit and land against ~118.8 t); the delivered insertion stays inside the inherited band (periapsis >= 230 km, apoapsis 250 +/- 60 km) with every ascent limit unchanged
+    as_of: "2026-11"
+  stages[1].aero:
+    provenance: illustrative
+    source: generated from geometry.nose by orbitopt.flightlab.nose_aero (about +-30 %); ballistic coefficient inherited (DC4)
+    as_of: "2026-11"
+    uncertainty_pct: 30.0
+  booster:
+    provenance: public_estimate
+    source: Wikipedia, SpaceX Super Heavy and SpaceX Raptor, as for the reference; the relight policy is a design change (see booster.engines)
+    as_of: "2026-11"
+  booster.engines:
+    provenance: illustrative
+    source: DESIGN CHANGE DC1 on the reference engine set -- Raptor 2 per Wikipedia, SpaceX Raptor (2.256 MN sea-level, 327 s SL Isp), 13-engine relight set, 40 % throttle floor (assumption, inherited); usable_for gains entry and restarts_max rises 2 -> 3 so the three-phase powered-entry RTLS profile (boostback, entry burn, landing) is expressible and flyable by the shipped E3 chain; the entry-burn phase is public behaviour of the class (flip-and-burn deceleration on the Starship flight tests; Falcon 9 landing burn)
+    as_of: "2026-11"
+    uncertainty_pct: 3.0
+  geometry:
+    provenance: public_estimate
+    source: "Wikipedia, SpaceX Super Heavy (71 m) and SpaceX Starship (Block 1 ship 50.3 m, 9 m diameter); the 13.5 m tangent-ogive nose is an assumption (DC4: unchanged)"
+    as_of: "2026-11"
+    accuracy: "+/-30% on the nose length, +/-5% on the stage lengths"
+    uncertainty_pct: 30.0

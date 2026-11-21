@@ -1,0 +1,107 @@
+# E5-08 (task #296): NEW VEHICLE DESIGN & QUALIFICATION mission --
+# starship_class_rtls_starbase (E5-08 design on the E5-07 reference stack, DC1
+# powered-entry recovery) from Kourou to LEO with the booster flown RTLS
+# through the shipped E3 chain, declared full_mission.
+#
+# Unlike the E5-07 document (recovery reported, not flown), this mission
+# FLIES the recovery leg: the booster script is the fixed recipe the E5-08
+# search recorded (scripts/e508_new_vehicle.py record), replayed byte-for-byte
+# on the recorded separation state -- the same pinned-script convention as
+# mission_two_stage_leo_rtls_replay.yaml. full_mission is declared (E5-06
+# contract): the ascent leg of a cross-environment run evidences the parking
+# propagation in the tudatpy environment, the recovery leg flies in the gfold
+# environment, and the orchestrator grades ONE joint five-check gate over the
+# union of the legs (crossenv_e508_plan.yaml). The single-interpreter replay
+# caps the physical gate at not_checked on the propagation check by
+# construction.
+#
+# The launch.orbit below is the DELIVERED insertion orbit of the recording
+# (232.5 x 292.1 km at 51.98 deg -- identical to the E5-07 reference by
+# design change DC2/DC3), inside the flight target's declared 250 km /
+# 51.6 deg design point with its declared tolerances.
+schemaVersion: "1.0"
+mission:
+  id: e5-08-new-vehicle-starbase-starship-rtls
+  title: E5-08b new-vehicle qualification (Starship-class RTLS-derived design with DC7 staging, LEO insertion + booster powered-entry RTLS, full mission)
+  kind: two-stage-leo
+scenario:
+  mission:
+    id: e5-08-new-vehicle-starbase-starship-rtls
+    title: E5-08b new-vehicle qualification (Starship-class RTLS-derived design with DC7 staging, LEO insertion + booster powered-entry RTLS, full mission)
+    kind: two-stage-leo
+  full_mission: true
+  launch:
+    site: starbase                  # 25.997 N 97.157 W (the flight target's launch site)
+    vehicle: starship_class_rtls_starbase
+    orbit: 232.5x292.1@51.98        # the delivered orbit of the recording (PROVENANCE.json)
+    date_utc: "2026-11-10"          # the flight target's mission epoch
+    raan_deg: null
+    window_days: 1.0
+  ascent:
+    mode: run_dir                   # replay the recorded COMPUTED ascent, never refly it
+    run_dir: tests/data/mission/reference/e5-08-new-vehicle-starbase/mission-optimized/launch/ascent
+    target_file: tests/data/mission/reference/e5-08-new-vehicle-starbase/mission-optimized/launch/target.yaml
+  handoff:
+    position_m: 1.0
+    velocity_m_s: 0.01
+    epoch_s: 1.0
+    max_epoch_gap_s: null
+    mass_kg: 0.001
+    staging_velocity_m_s: 0.05
+    elements:
+      semi_major_axis_m: 10.0
+      eccentricity: 1.0e-6
+      inclination_deg: 1.0e-3
+      raan_deg: 1.0e-2
+      apsides_m: 10.0
+  recovery:
+    target_file: tests/data/mission/reference/e5-08-new-vehicle-starbase/mission-optimized/launch/target.yaml
+    # The E5-08 recorded booster script (scripts/e508_new_vehicle.py record
+    # writes it after the global search accepted it): the same fixed recipe
+    # the Monte Carlo and the cross-environment recovery leg re-fly.
+    plan_options:
+      initial_guess: [54.327041908511475, 3.3912768164526135, 0.8430780477848527, 11.070997231839547, 7.148301332410036, 20838.60261613965, 218.4, 1.0512027354096385]
+      search: keep
+      entry_burns: 1
+      entry_throttle: true
+      boostback_cutoff: iip
+      entry_cutoff: speed
+      landing_need_model: closed_loop
+      corridor_aim_margin_m: 7000.0
+      landing_reserve: target
+      landing_reserve_margin_kg: 2500.0
+      entry_q_max_pa: 250000.0
+      entry_g_max: 12.0
+      horizon_s: 900.0
+      dt_opt: 0.25
+      dt_final: 0.1
+      landing:
+        max_thrust_accel_g: 4.0
+        tvc_rate_limit_deg_s: 20.0
+        tvc_lag_tau_s: 0.2
+        tvc_lag_compensation: true
+    drive_from_separation: true
+  propagation:
+    j2: true
+    third_bodies: []
+    drag: null
+    revolutions: 1.0
+    max_step_s: 300.0
+  expected:
+    events: [liftoff, meco, separation, seco]
+    parking_orbit:                  # filled by scripts/e508_new_vehicle.py record
+      semi_major_axis_m: 6626470.5
+      eccentricity: 0.002434241
+      inclination_deg: 30.787496
+      raan_deg: null
+      periapsis_altitude_m: 232203.1
+      apoapsis_altitude_m: 264463.95
+    tolerances:
+      semi_major_axis_m: 20000.0
+      eccentricity: 0.003008
+      inclination_deg: 0.2
+      raan_deg: 1.0
+      periapsis_altitude_m: 20000.0
+      apoapsis_altitude_m: 20000.0
+    propagation_result: not_checked   # single-interpreter replay; the cross-environment
+                                      # tudatpy leg (crossenv_e508_plan.yaml) evidences it

@@ -1,0 +1,88 @@
+{
+  "generated_by": "scripts/e508_new_vehicle.py mc",
+  "method": "FL-304 standard dispersions (vehicle-file bands) on the recorded separation state, recorded recipe pinned with per-sample local refine (max_fevals 40); E7-05 statistics: seeds disjoint from the search seed, whole-seed clusters resampled for the rate CI",
+  "search_seed": 287,
+  "separation_state": "canonical separation handoff (the state the full mission and the cross-environment recovery leg fly from)",
+  "seeds": [
+    8,
+    9,
+    10
+  ],
+  "n_per_seed": 12,
+  "success_rate": 0.0,
+  "successes": 0,
+  "n": 36,
+  "per_seed": {
+    "8": {
+      "successes": 0,
+      "n": 12,
+      "rate": 0.0,
+      "reasons": {
+        "CORRIDOR_MISSED": 12
+      },
+      "landing_stats": {
+        "position_error_m": {
+          "n": 0
+        },
+        "vertical_speed_m_s": {
+          "n": 0
+        },
+        "lateral_speed_m_s": {
+          "n": 0
+        },
+        "control_margin": {
+          "n": 0
+        }
+      }
+    },
+    "9": {
+      "successes": 0,
+      "n": 12,
+      "rate": 0.0,
+      "reasons": {
+        "CORRIDOR_MISSED": 12
+      },
+      "landing_stats": {
+        "position_error_m": {
+          "n": 0
+        },
+        "vertical_speed_m_s": {
+          "n": 0
+        },
+        "lateral_speed_m_s": {
+          "n": 0
+        },
+        "control_margin": {
+          "n": 0
+        }
+      }
+    },
+    "10": {
+      "successes": 0,
+      "n": 12,
+      "rate": 0.0,
+      "reasons": {
+        "CORRIDOR_MISSED": 12
+      },
+      "landing_stats": {
+        "position_error_m": {
+          "n": 0
+        },
+        "vertical_speed_m_s": {
+          "n": 0
+        },
+        "lateral_speed_m_s": {
+          "n": 0
+        },
+        "control_margin": {
+          "n": 0
+        }
+      }
+    }
+  },
+  "cluster_bootstrap_rate_ci_95": [
+    0.0,
+    0.0
+  ],
+  "mode": "per-sample local refine (FL-304 standard)"
+}

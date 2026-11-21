@@ -1,0 +1,81 @@
+{
+  "generated_by": "scripts/e508_new_vehicle.py record",
+  "recipe": {
+    "entry_burns": 1,
+    "entry_throttle": true,
+    "boostback_cutoff": "iip",
+    "entry_cutoff": "speed",
+    "landing_need_model": "closed_loop",
+    "corridor_aim_margin_m": 7000.0,
+    "entry_q_max_pa": 250000.0,
+    "entry_g_max": 12.0,
+    "horizon_s": 900.0,
+    "dt_opt": 0.25,
+    "dt_final": 0.1,
+    "landing_reserve": "target",
+    "landing_reserve_margin_kg": 2500.0,
+    "landing": {
+      "max_thrust_accel_g": 4.0,
+      "tvc_rate_limit_deg_s": 20.0,
+      "tvc_lag_tau_s": 0.2,
+      "tvc_lag_compensation": true
+    },
+    "initial_guess": [
+      54.327041908511475,
+      3.3912768164526135,
+      0.8430780477848527,
+      11.070997231839547,
+      7.148301332410036,
+      20838.60261613965,
+      218.4,
+      1.0512027354096385
+    ],
+    "search": "keep"
+  },
+  "search": {
+    "seed": 287,
+    "popsize": 12,
+    "maxiter": 60,
+    "workers": 9
+  },
+  "checks": {
+    "recovery-landing": true,
+    "landing-position": true,
+    "landing-vertical-speed": true,
+    "landing-lateral-speed": true,
+    "landing-tilt": true,
+    "landing-propellant-reserve": true,
+    "landing-max-g": true,
+    "recovery-propellant-reserve": true
+  },
+  "corridor_report": {
+    "reached": true,
+    "t_s": 433.94569598107205,
+    "miss_m": 18.66645283358857,
+    "tilt_deg": 0.18163966168253368,
+    "speed_m_s": 245.59989671516482,
+    "propellant_available_kg": 152224.45572064555,
+    "landing_need_kg": 45493.11489748588,
+    "reserve_kg": 100000.0,
+    "entry_max_q_pa": 131521.7367165047,
+    "entry_max_proper_g": 7.994645410858867,
+    "landing_divert_budget_m": 1000.0,
+    "min_landing_reserve_margin_kg": 2500.0,
+    "landing_probability": null,
+    "joint_violation": null,
+    "entry_cutoff_altitude_m": 4061.281054623425,
+    "landing_ignition_altitude_m": 1332.5813453431524,
+    "landing_touchdown_vertical_m_s": 2.107442746937253,
+    "landing_touchdown_lateral_m_s": 0.007663062779943486,
+    "landing_touchdown_miss_m": 0.08596137097442837
+  },
+  "touchdown": {
+    "landed": true,
+    "reason_codes": [],
+    "position_error_m": 0.07781001303585297,
+    "vertical_speed_m_s": -1.7016832888479423,
+    "lateral_speed_m_s": 0.0070816551125680895,
+    "max_proper_g": 4.562910967237679,
+    "propellant_remaining_kg": 107110.7800696498
+  }
+}
