@@ -75,6 +75,9 @@ _TELEMETRY_SPECS = (
     ("g_load", "G-load", "g"),
     ("mass", "Mass", "kg"),
     ("throttle", "Throttle", "%"),
+    ("propellant", "Propellant remaining", "t"),
+    ("vertical_speed", "Vertical speed (radial)", "m/s"),
+    ("downrange", "Downrange", "km"),
 )
 
 
@@ -491,8 +494,9 @@ class FlightLabComparePage(QWidget):
 
     def _populate_telemetry(self, a: RunBundle | None, b: RunBundle | None) -> None:
         colors = _body_colors([x for x in (a, b) if x is not None])
-        ch_a = build_telemetry_channels(a.run, colors) if a else ()
-        ch_b = build_telemetry_channels(b.run, colors) if b else ()
+        from orbitopt.flightlab.replay_context import replay_inputs
+        ch_a = build_telemetry_channels(a.run, colors, vehicle=replay_inputs(a.run, a.run_dir)[0]) if a else ()
+        ch_b = build_telemetry_channels(b.run, colors, vehicle=replay_inputs(b.run, b.run_dir)[0]) if b else ()
         merged = overlay_channels(ch_a, ch_b)
         bundles = [x for x in (a, b) if x is not None]
         tmin = min((t.t_start_s for x in bundles for t in x.run.tracks), default=0.0)

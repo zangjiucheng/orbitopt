@@ -25,7 +25,8 @@ REPO = Path(__file__).resolve().parents[1]
 OT_FIX = Path(__file__).parent / "fixtures" / "flightlab" / "opentsiolkovsky"
 VEHICLE = REPO / "src" / "orbitopt" / "data" / "flightlab" / "vehicles" / "synthetic_two_stage.yaml"
 TARGET = REPO / "src" / "orbitopt" / "data" / "flightlab" / "scenarios" / "leo_two_stage.yaml"
-REQUIRED_CHANNELS = {"altitude", "speed", "dynamic_pressure", "g_load", "mass", "throttle"}
+REQUIRED_CHANNELS = {"altitude", "speed", "dynamic_pressure", "g_load", "mass", "throttle",
+                     "propellant", "vertical_speed", "downrange"}
 
 
 def _copy_run(tmp_path):
@@ -41,7 +42,7 @@ def _channels():
     return {channel.id: channel for channel in build_telemetry_channels(run)}
 
 
-def test_replay_telemetry_exposes_six_required_channels():
+def test_replay_telemetry_exposes_required_channels():
     channels = _channels()
     assert set(channels) == REQUIRED_CHANNELS
     for channel in channels.values():
@@ -233,6 +234,12 @@ def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypat
         assert window.right_tabs.currentWidget() is window.flight_panel
         assert window.chart_panel.currentWidget() is window.telemetry_panel
         assert window.state.timeline is not None and window.timeline_bar.isVisible()
+        assert window.body_strip.isVisible()
+        assert set(window.body_strip.buttons) == {b["id"] for b in window.state.scene["bodies"]}
+        window.body_strip.buttons["earth"].click()
+        app.processEvents()  # queued initial framing must not override the click
+        assert window.state.selected_body_id == "earth" and window._tracking
+        assert window.right_tabs.currentWidget() is window.flight_panel
         assert window._lock_reference_body_id is None  # face lock stays off until picked
         t = window.flight_panel.events[-1].t_s
         window.flight_panel._event_clicked(window.flight_panel.event_table.rowCount() - 1, 0)

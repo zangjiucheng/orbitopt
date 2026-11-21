@@ -417,11 +417,20 @@ class MissionControlWindow(QMainWindow):
         # The 3D view over the linked 2D charts; the splitter lets the charts
         # be dragged smaller, never the 3D view away.
         self.chart_panel = ChartPanel(self.state)
+        from orbitopt.viz.body_strip import BodyStrip
+        self.body_strip = BodyStrip(self.state)
+        self.body_strip.focus_requested.connect(self._focus_from_strip)
+        self.plot_area = QWidget()
+        plots = QVBoxLayout(self.plot_area)
+        plots.setContentsMargins(0, 0, 0, 0)
+        plots.setSpacing(0)
+        plots.addWidget(self.body_strip)
+        plots.addWidget(self.chart_panel, 1)
         self.center_splitter = QSplitter(Qt.Vertical)
         self.center_splitter.setObjectName("centerSplitter")
         self.center_splitter.setHandleWidth(4)
         self.center_splitter.addWidget(self.center_stack)
-        self.center_splitter.addWidget(self.chart_panel)
+        self.center_splitter.addWidget(self.plot_area)
         self.center_splitter.setCollapsible(0, False)
         self.center_splitter.setStretchFactor(0, 3)
         self.center_splitter.setStretchFactor(1, 1)
@@ -1035,6 +1044,11 @@ class MissionControlWindow(QMainWindow):
             f"Focused {self.state.body(body_id)['name']} — ⌘/Ctrl-click another to measure"
         )
 
+    def _focus_from_strip(self, body_id: str):
+        body = self.state.body(body_id)
+        behind = "earth" if self.state.body("earth") and body.get("kind") in ("site", "spacecraft") else None
+        self._focus_on(body_id, frame_behind=behind)
+
     def _update_measure(self, render: bool = True):
         """Redraw the measurement line + readout for the current (A, B) pair, or
         clear it if a full pair isn't selected. Called on selection changes and
@@ -1453,7 +1467,7 @@ class MissionControlWindow(QMainWindow):
         """The scene's inspector and view controls mean nothing on a Flight Lab
         page (Vehicles, Compare); hide them there and bring them back with
         the 3D view."""
-        for widget in (self.right_stack, self.view_strip, self._view_controls_widget):
+        for widget in (self.right_stack, self.view_strip, self._view_controls_widget, self.plot_area):
             widget.setVisible(on)
         self.workspace_bar.set_panel_enabled("right", on)
 
@@ -1564,6 +1578,11 @@ class MissionControlWindow(QMainWindow):
 
     def _refit_camera(self):
         if self.state.scene is None:
+            return
+        # A Bodies click may already have framed a target between showing
+        # the view and this queued callback. Never replace that choice with
+        # the scene's default vessel (or reset its camera zoom).
+        if self.state.selected_body_id is not None:
             return
         self.plotter.reset_camera()
         view = self.state.scene.get("initialView") or {}

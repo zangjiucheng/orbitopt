@@ -1,10 +1,10 @@
 # Flight Lab
 
 Flight Lab simulates ascent and booster recovery from code or the CLI.
-Mission Control's **Flight Lab** mode displays saved runs in its shared 3D
-view, timeline and inspector.
+Mission Control's **Runs**, **Vehicles** and **Compare** workspaces display
+saved flights, vehicle definitions and run comparisons.
 
-![A Flight Lab run with telemetry, events and verification checks](assets/flightlab-replay.png)
+[![Starbase RTLS replay with the persistent Bodies strip, launch/recovery target and per-stage telemetry](assets/flightlab-runs-tracking.png)](assets/flightlab-runs-tracking.png)
 
 ## Quick start
 
@@ -19,7 +19,7 @@ orbitopt flight simulate src/orbitopt/data/flightlab/scenarios/leo_two_stage.yam
 orbitopt
 ```
 
-Select **Flight Lab** to open the run. To export a standalone scene, use
+Select **Runs** to open the run. To export a standalone scene, use
 `orbitopt flight to-scene runs/leo/ -o scene.json`. The
 [command reference](https://zangjiucheng.github.io/orbitopt/api/cli/flight/)
 lists all options.
@@ -29,19 +29,39 @@ lists all options.
 - **Run list:** scans `./runs`, `ORBITOPT_FLIGHT_RUNS` (platform path separator)
   and remembered **Add folder…** locations. **Refresh** finds new runs;
   `orbitopt launch -o DIR` produces the listed `DIR/ascent` run.
-- **Shared view:** selection loads the 3D scene, timeline, Inspector and
-  Verification tab. Returning to Missions restores the previous mission.
+- **Shared view:** selecting a run loads the 3D scene, timeline, Inspector and
+  Verification tab. Returning to **Missions** restores the previous mission.
 - **Flight tab:** launch inputs, target/achieved orbit, verdicts, seekable
   events, failure explanations and recovery details.
 - **Telemetry:** altitude, speed, dynamic pressure, load, mass and throttle;
-  clicking a chart seeks the timeline. **Compare runs…** compares two runs.
+  clicking a chart seeks the timeline. **Compare** opens two saved runs side by side.
+
+The **Bodies** strip stays above the plots: click Earth, a stage, the booster
+or a site to focus and follow it without opening the Inspector. Stage buttons
+are enabled during their recorded lifespans. When a matching target definition
+is available, launch/recovery markers stay fixed on the rotating Earth; RTLS
+uses one shared marker. An unresolved offshore target is not replaced by the pad.
+
+Plots also show **propellant remaining**, **radial vertical speed** and
+recorded **downrange**. Fuel curves use recorded propellant where present;
+otherwise `(est.)` means track mass minus dry mass and any attached upper
+stages, using the vehicle file matched by the run's digest. Payload already
+included in dry mass is not subtracted twice. Unknown dry masses remain missing.
+
+**Double-click a telemetry plot** to open a larger, live-linked window.
+Scroll to zoom around the pointer, right-drag to pan, hover for time and
+interpolated per-series values, and use **Reset view** to restore the full range.
+Left-click or drag still seeks the shared mission clock. The same controls
+work on the inline plots and comparison telemetry.
+
+[![Expanded propellant plot showing stage and booster estimates with a precise time readout](assets/flightlab-telemetry-detail.png)](assets/flightlab-telemetry-detail.png)
 
 Targets and vehicles are edited in YAML or through the Python designer API;
 the desktop mode renders runs rather than configuring or flying them.
 
 ## Vehicle view
 
-Open **Flight Lab → Vehicles** and select a catalog vehicle. This read-only
+Open **Vehicles** in the top workspace bar and select a catalog vehicle. This read-only
 page shows its stage profile, masses, thrust, ideal Δv, recovery reserves
 and declared thrust/staging schedule. Profiles use declared geometry when
 available; otherwise they are labelled **schematic, not to scale**. Hover
@@ -160,17 +180,17 @@ See the [acceptance results](acceptance-e1-e4.md).
 
 ## 6-DOF studies
 
-The current records include E6-01 engine/mass-flow alignment and E6-04
-control sampling. These are declared study vehicles and controllers, not a
-single qualified production vehicle:
+The records cover engine parity, sampled control and native/JSBSim guidance
+matrices. These are declared study vehicles and controllers, not a single
+qualified production vehicle:
 
 | Study | Recorded result | Scope / source |
 |---|---|---|
 | F-05 / E1-02 | Powered attitude error 4.77° peak, alpha 14.42°, max-Q 71.2 kPa. | Powered and coast gates differ; the later 62.6° alpha peak is in near-vacuum coast. [Record](benchmarks/fl605_gravity_turn_ascent.json). |
 | F-07 / E1-03 | Native point mass: 225.3/228.5 km peri/apo; rigid body: 220.5/226.5 km, within ±25 km. | Shared feedback law on a disclosed 1 t dry / 7 t propellant upper stage with 3° gimbal; not original F-06 parity. [Record](benchmarks/fl607_mission_outputs.json). |
-| E6-02 | Guided production JSBSim ascent with TVC, MECO, staging and delayed ignition; powered error 0.44° peak, alpha 11.7°. | Its 70 t stack and spike-engine children are illustrative; native and JSBSim controller differences are attributed, not assumed away. E6-05 added the upper stage's own powered attitude band: the child is unactuated through its burn, so the declared 12° peak / 7° RMS bound is the accrual of the separation-time drift rate over coast + burn (0.54°/s × 11 s + the inherited 6° band); measured 6.13° / 6.15°. [ADR 0010](adr/flightlab-0010-guided-jsbsim-ascent.md), [record](benchmarks/e6_02_guided_ascent.json). |
-| E6-03 | Six of 17 declared scenario points insert on both native backends. | Sweeps altitude, inclination, vehicle and actuator sets; misses distinguish vehicle, terminal-law and actuator limits. The E6-05 re-flight under the generalised box-cutoff law (transfer cap, planning guard, terminal apogee hold) reproduces the same six with zero unexpected verdicts; the guidance-class mechanism and its boundary are recorded in [ADR 0011](adr/flightlab-0011-guidance-generalisation-envelope.md), [matrix](benchmarks/e6_03_guidance_matrix.json). |
-| E6-05 | The E6-03 matrix on JSBSim agrees with the native verdict on 16 of 17 cells; the one difference is the cell E6-03 attributes to the servo realisation. | Each cell restarts JSBSim at the native run's frozen separation state, so the comparison is upper-stage like-for-like; median periapsis/apoapsis difference 6.7 / 14.1 km (largest agreement-class gap: the ballistic V0 control, 764 km — recorded, not gated), engine parity ≤0.05 % where both channels end the same way, and every inserted cell arrests its inherited attitude drift to 0.00° growth. The A3 actuator-boundary cell cuts off on JSBSim with 480 kg left where the native rigid body depletes — the disclosed execution-channel difference, recorded at 6.85 % propellant divergence. [record](benchmarks/e6_05_jsbsim_matrix.json). |
+| E6-02 | Guided JSBSim staging: powered error 0.44° peak, alpha 11.7°; upper-powered attitude error 6.13° peak / 5.32° RMS. | Illustrative 70 t stack; upper-stage bounds differ from booster bounds. [ADR 0010](adr/flightlab-0010-guided-jsbsim-ascent.md), [record](benchmarks/e6_02_guided_ascent.json). |
+| E6-03 | Six of 17 points insert on both native backends, reproduced by the generalised cutoff law. | Misses distinguish vehicle, guidance and actuator limits. [ADR 0011](adr/flightlab-0011-guidance-generalisation-envelope.md), [matrix](benchmarks/e6_03_guidance_matrix.json). |
+| E6-05 | JSBSim and native verdicts agree on 16/17 cells; median peri/apo difference 6.7/14.1 km. | Shared frozen separation state. The A3 servo-boundary cell differs, with 6.85% propellant divergence; ballistic-control gaps remain reported. [Record](benchmarks/e6_05_jsbsim_matrix.json). |
 | E6-04 | Stateful guidance/control sampled once per step and held across RK4 stages. | The study justifies `dt_s = dt_c_s = 0.02`; this is not a universal backend step. [Sampled-control ADR](adr/flightlab-0008-sampled-data-control-and-rk4-plant.md), [sweep](benchmarks/e604_step_convergence.json). |
 
 Run the native two-backend mission and open its saved outputs:

@@ -640,11 +640,13 @@ class SceneRenderer:
                 full_positions = np.asarray(trail_positions, dtype=float)
                 full_poly = pv.MultipleLines(full_positions)
                 full_actor = self.plotter.add_mesh(
-                    full_poly, color=color, line_width=1.1, opacity=0.3, pickable=False)
+                    full_poly, color=color, line_width=1.1,
+                    opacity=0.0 if body.get("hideTrail") else 0.3, pickable=False)
 
                 past_trail = _PastTrail(full_positions)
                 past_actor = self.plotter.add_mesh(
-                    past_trail.poly, color=color, line_width=2.6, opacity=0.95,
+                    past_trail.poly, color=color, line_width=2.6,
+                    opacity=0.0 if body.get("hideTrail") else 0.95,
                     name=f"past-{body['id']}", pickable=False,
                 )
 

@@ -12,3 +12,5 @@ description: Mission examples, model assumptions and source data.
 - [GOES mission plan](goes_gto_geo_mission_plan.md): transfer orbit and GEO raising.
 - [Re-entry constraints](reentry_safety_constraints.md): current checks and proposed assessment.
 - [Launch data sources](launch-data-sources.md): provenance and limitations.
+- [Computed mission workflow](computed-mission.md): recorded ascent, RTLS and cross-environment propagation.
+- [E5-08 design variants](e5-08-new-vehicle-report.md): Kourou and Starbase results, independent-model gaps and hold-out reliability.

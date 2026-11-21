@@ -9,7 +9,7 @@ description: Use the 3D view, timeline and verification reports in Mission Contr
 
 Mission Control links a 3D view, timeline, charts and verification reports.
 [Install orbitopt](quickstart.md#installation), then run `orbitopt` and select
-a mission in the sidebar.
+a mission in the **Missions** workspace.
 
 <figure>
 <img src="assets/mission-control-starship-landing.png" alt="Mission Control showing a Starship landing scene and its timeline" />
@@ -25,19 +25,28 @@ single-scene viewer.
 
 ## The window
 
-- **Sidebar:** select a mission or switch to [Flight Lab](flightlab.md).
+- **Workspace bar:** switch between **Missions**, **Runs**, **Vehicles** and
+  **Compare**. Runs, Vehicles and Compare are the [Flight Lab](flightlab.md) views.
+- **Context list:** select a mission, saved run or catalog vehicle.
 - **3D view:** select a body; use **CENTER** to change the reference body.
 - **Charts:** click or drag the distance chart to change time; the launch-window
   chart shows screened candidates when available.
 - **Inspector:** inspect bodies, maneuvers and the selected candidate. Its
   Verification tab shows checks and their tolerances.
 - **Timeline:** play, scrub and zoom through the mission.
+- **Bodies strip above the plots:** focus and follow a body or site without
+  changing Inspector tabs. In Runs, double-click a telemetry plot to expand it;
+  scroll to zoom, right-drag to pan and hover for exact values.
 
-Panels share the selected body and mission time. Collapse them with their
-header chevrons; `I` toggles the right panel.
+Panels share the selected body and mission time. The breadcrumb shows the
+current workspace and selection. Use the top-bar panel buttons to show or
+hide the context list and inspector; `I` also toggles the inspector.
 
-For vehicle profiles, thrust schedules and declared-versus-flown comparisons,
-open **Flight Lab → Vehicles**. See [Vehicle view](flightlab.md#vehicle-view).
+Press **Command/Ctrl+K** to search missions, runs, vehicles and workspaces.
+**Command/Ctrl+1–4** selects the four workspaces in order;
+**Command/Ctrl+B** toggles the context list and **Command/Ctrl+Shift+B** the
+inspector. Vehicles and Compare hide the scene controls and inspector.
+See [Vehicle view](flightlab.md#vehicle-view) for profiles and flight overlays.
 
 ## Moving around in 3D
 

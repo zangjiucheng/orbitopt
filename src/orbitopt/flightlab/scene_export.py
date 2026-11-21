@@ -609,7 +609,7 @@ def _earth_body(earth_texture: bool, orientation_basis: list | None) -> dict:
 
 
 def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
-                 coast_orbits: float = 0.0, coast_samples: int = 120) -> dict:
+                 coast_orbits: float = 0.0, coast_samples: int = 120, target=None) -> dict:
     """Convert a FlightResult v1 run into a scene-1.0 document (Earth scene,
     one trailed body per track, contract events as timeline markers, a
     continuous phase row and a per-boundary ``handoffs`` verdict block).
@@ -626,6 +626,10 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
     orbital periods, which is what gives the Parking-orbit and Propagation
     phases (and their trail) a span to occupy; the coast is recorded as a
     scene assumption, never as flown data.
+
+    ``target`` optionally supplies launch/recovery coordinates for Earth-fixed
+    markers. Replay resolves it by the run's target digest; unavailable named
+    recovery coordinates are not replaced with an assumed launch-site target.
     """
     if coast_orbits < 0.0:
         raise ValueError(f"coast_orbits must be >= 0, got {coast_orbits!r}")
@@ -687,6 +691,8 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
     t_max = max([float(track.t_end_s) for track in run.tracks]
                 + [float(event.t_s) for event in run.events]
                 + ([coast["t0"] + coast["duration"]] if coast else []))
+    if target is not None:
+        bodies.extend(_site_bodies(target, epoch, t_max))
     timeline = {
         "unitLabel": "seconds",
         "min": 0.0,
@@ -740,3 +746,56 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
         scene["sceneAssumptions"] = assumptions
     validate_scene(scene)
     return scene
+
+
+def _site_bodies(target, epoch, end: float) -> list[dict]:
+    """Earth-fixed launch/recovery markers, rotating with the mission clock.
+
+    The optional target must be the run's resolved input, not a nearest-name
+    catalog guess. The 300 m lift is display-only, as in the Starship scene.
+    """
+    site = target.launch_site
+    locations = [("launch_site", "Launch · " + site.name, site.latitude_deg,
+                  site.longitude_deg, site.altitude_wgs84_m, "#f2c66d")]
+    if target.recovery.kind != "none":
+        from orbitopt.flightlab.recovery.boostback import RecoveryTarget
+        try:
+            recovery = RecoveryTarget.from_scenario(target.to_dict())
+        except ValueError:
+            recovery = None  # No coordinates for a named offshore target: never assume RTLS.
+        if recovery:
+            if (recovery.latitude_deg, recovery.longitude_deg) == (site.latitude_deg, site.longitude_deg):
+                locations[0] = ("launch_site", "Launch / recovery · " + site.name,
+                                site.latitude_deg, site.longitude_deg, site.altitude_wgs84_m, "#f2c66d")
+            else:
+                locations.append(("recovery_site", "Recovery · " + recovery.name,
+                                  recovery.latitude_deg, recovery.longitude_deg, recovery.altitude_m, "#35c48b"))
+    count = max(2, min(8192, math.ceil(end / 5) + 1))
+    times = [end * i / (count - 1) for i in range(count)]
+    basis, _ = _earth_orientation_basis(epoch, utc_datetime_to_mjd2000(epoch))
+    bodies = []
+    for body_id, name, lat, lon, altitude, color in locations:
+        phi, lam = math.radians(lat), math.radians(lon)
+        e2 = EARTH_FLATTENING * (2 - EARTH_FLATTENING)
+        n = EARTH_RADIUS_KM * 1000 / math.sqrt(1 - e2 * math.sin(phi)**2)
+        h = altitude + 300
+        xyz = ((n + h) * math.cos(phi) * math.cos(lam),
+               (n + h) * math.cos(phi) * math.sin(lam),
+               (n * (1 - e2) + h) * math.sin(phi))
+        try:
+            from orbitopt.flightlab.frames import to_gcrs
+            positions, _ = to_gcrs([xyz] * count, [(0, 0, 0)] * count, "ECEF", epoch, times)
+            points = [[float(v) / 1000 for v in row] for row in positions]
+        except ImportError:
+            points = []
+            for t in times:
+                angle = 2 * math.pi * t / (EARTH_SIDEREAL_DAY_HOURS * 3600)
+                c, s = math.cos(angle), math.sin(angle)
+                rotated = (c * xyz[0] - s * xyz[1], s * xyz[0] + c * xyz[1], xyz[2])
+                points.append([sum(a*b for a, b in zip(row, rotated)) / 1000 for row in basis])
+        bodies.append({"id": body_id, "name": name, "color": color, "kind": "site",
+                       "radiusDisplay": 4.0, "hideTrail": True,
+                       "trail": {"times": times, "positions": points},
+                       "info": [{"label": "Coordinates", "value": f"{lat:.4f}°, {lon:.4f}°"},
+                                {"label": "Marker", "value": "Earth-fixed target; display lift 300 m"}]})
+    return bodies

@@ -15,6 +15,7 @@ results and explore them in Mission Control.
 | [Quickstart](quickstart.md) | Install orbitopt and run a mission. |
 | [Mission Control](guide.md) | Navigate the viewer, timeline and verification reports. |
 | [Flight Lab](flightlab.md) | Simulate ascent and recovery, compare runs and inspect vehicle definitions against flown data. |
+| [Computed missions](computed-mission.md) | Replay the RTLS references and choose the right evidence checks. |
 | [Verification](verification.md) | Reports, kinds of evidence, benchmarks and convergence studies. |
 | [Missions and examples](missions.md) | Explore modeled missions, validation and source data. |
 | [API reference](api.md) | Look up Python interfaces, commands and schemas. |
@@ -22,3 +23,7 @@ results and explore them in Mission Control.
 
 The [repository](https://github.com/zangjiucheng/orbitopt) contains the source,
 schemas and examples.
+
+Recent records: [E5-08 Kourou and Starbase designs](e5-08-new-vehicle-report.md),
+[E7-05 hold-out reliability](benchmarks/e7_05_out_of_sample_reliability.md) and
+[E8-05 independent dynamics](verification.md#independent-dynamics-validation-e8-05-task-294).

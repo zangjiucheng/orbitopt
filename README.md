@@ -43,7 +43,8 @@ and viewer-only options. Use `orbitopt --help` for commands.
 - [Flight Lab](docs/flightlab.md): ascent, recovery and run comparisons;
   [Vehicle view](docs/flightlab.md#vehicle-view) shows the catalog and flight overlays.
 - [Computed mission](docs/computed-mission.md): replay ascent and recovery,
-  then propagate across separate TudatPy and G-FOLD environments.
+  then propagate across TudatPy and G-FOLD environments;
+  [Kourou/Starbase designs](docs/e5-08-new-vehicle-report.md) report remaining qualification gaps.
 - [API reference](docs/api.md): Python interfaces, CLI commands and schemas.
 
 Verification applies to declared models and tolerances. See

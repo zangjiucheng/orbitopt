@@ -78,6 +78,12 @@ def _track_color(track_colors: Mapping[str, str], track: BodyTrack, index: int) 
     return track_colors.get(track.body_id) or TRAIL_PALETTE[index % len(TRAIL_PALETTE)]
 
 
+def _body_label(body_id: str) -> str:
+    if body_id.startswith("stage") and body_id[5:].isdigit():
+        return "Stage " + body_id[5:]
+    return body_id.replace("_", " ").capitalize()
+
+
 def _altitude_series(track: BodyTrack, color: str) -> TelemetrySeries | None:
     extra = _extra_values(track, ALTITUDE_ALIASES)
     if extra is not None:
@@ -172,8 +178,9 @@ def _velocity_delta(a: Sequence[float], b: Sequence[float]) -> list[float]:
 def build_telemetry_channels(
     run: FlightRun,
     track_colors: Mapping[str, str] | None = None,
+    *, vehicle: Mapping | None = None,
 ) -> tuple[TelemetryChannel, ...]:
-    """Build the six replay telemetry channels from a ``FlightRun``.
+    """Build replay telemetry, including explicitly labelled mass-based fuel estimates.
 
     Channels are returned in display order even when empty so the page layout
     stays stable and an absent measurement gets an explicit reason instead of
@@ -206,7 +213,74 @@ def build_telemetry_channels(
                 series.append(built)
         missing = "" if series else missing_reason
         channels.append(TelemetryChannel(channel_id, label, unit, missing, tuple(series)))
+    fuel = []
+    for i, track in enumerate(run.tracks):
+        color = _track_color(track_colors, track, i)
+        extra = _extra_values(track, ("propellant_kg", "fuel_remaining_kg"))
+        if extra is not None:
+            fuel.append(TelemetrySeries("propellant", _body_label(track.body_id) + " (recorded)", "t",
+                        color, track.body_id, _finite_pairs(track.t_s, (v / 1000 for v in extra[1]))))
+        elif vehicle:
+            dry = _non_propellant_mass(vehicle, track.body_id)
+            if dry is not None:
+                # Unknown/mismatched mass conventions must not become zero-fuel curves.
+                values = [m - dry for m in track.mass_kg]
+                if math.isfinite(dry) and dry >= 0 and all(math.isfinite(v) and v >= -1e-3 for v in values):
+                    points = _finite_pairs(track.t_s, (max(0, v) / 1000 for v in values))
+                    # An attached upper stage carries its declared fuel before
+                    # its own track starts. Extend only a verified unburned
+                    # initial stack mass; never extend an already-burning arc.
+                    stages = vehicle.get("stages", [])
+                    if track.body_id.startswith("stage") and track.body_id[5:].isdigit():
+                        index = int(track.body_id[5:]) - 1
+                        initial = sum(float(s["mass_initial_kg"]) for s in stages[index:])
+                        start = min(t.t_start_s for t in run.tracks)
+                        if start < track.t_start_s and abs(track.mass_kg[0] - initial) < 1e-3:
+                            points = ((start, points[0][1]), *points)
+                    fuel.append(TelemetrySeries("propellant", _body_label(track.body_id) + " (est.)", "t",
+                                color, track.body_id, points, derived=True))
+    channels.append(TelemetryChannel("propellant", "Propellant remaining", "t",
+                    "no recorded propellant or matching vehicle dry masses" if not fuel else "", tuple(fuel)))
+    vertical, downrange = [], []
+    for i, track in enumerate(run.tracks):
+        color = _track_color(track_colors, track, i)
+        label = _body_label(track.body_id)
+        pairs = _finite_pairs(track.t_s, (sum(r * v for r, v in zip(pos, vel)) / _norm3(pos)
+                              if _norm3(pos) else float("nan")
+                              for pos, vel in zip(track.position_m, track.velocity_m_s)))
+        vertical.append(TelemetrySeries("vertical_speed", label + " (est.)", "m/s",
+                                       color, track.body_id, pairs, derived=True))
+        extra = _extra_values(track, ("downrange_m",))
+        if extra:
+            downrange.append(TelemetrySeries("downrange", label, "km", color, track.body_id,
+                                            _finite_pairs(track.t_s, (v / 1000 for v in extra[1]))))
+    channels.extend((TelemetryChannel("vertical_speed", "Vertical speed (radial)", "m/s", "no state samples", tuple(vertical)),
+                     TelemetryChannel("downrange", "Downrange", "km", "no recorded downrange", tuple(downrange))))
     return tuple(channels)
+
+
+def _non_propellant_mass(vehicle: Mapping, body_id: str) -> float | None:
+    """Stage track mass includes its dry mass and the attached upper stack.
+
+    Recovery/debris tracks carry only the detached first stage. The vehicle
+    designer already folds payload into the final stage's wet and dry mass.
+    """
+    def number(x):
+        return float(x.get("value") if isinstance(x, Mapping) else x)
+    try:
+        stages = vehicle.get("stages", [])
+        if body_id in ("booster", "stage1_debris"):
+            dry = (vehicle.get("booster") or {}).get("dry_mass_kg")
+            return number(dry if dry is not None else stages[0]["mass_dry_kg"])
+        if body_id.startswith("stage") and body_id[5:].isdigit():
+            index = int(body_id[5:]) - 1
+            if index < 0 or index >= len(stages):
+                return None
+            return (number(stages[index]["mass_dry_kg"])
+                    + sum(number(s["mass_initial_kg"]) for s in stages[index + 1:]))
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+    return None
 
 
 def interpolated_value(points: Sequence[tuple[float, float]], t: float) -> float | None:
@@ -242,6 +316,7 @@ def channel_values_at(channel: TelemetryChannel, t: float) -> tuple[tuple[str, f
 
 def _run_scene_cache_id(run_dir: Path, run: FlightRun) -> str:
     digest = hashlib.sha256()
+    digest.update(b"replay-sites-v1\0")
     digest.update(str(run_dir.resolve()).encode("utf-8"))
     digest.update(b"\0")
     for path in sorted(run_dir.rglob("*")):
@@ -269,8 +344,10 @@ def load_run_scene(run_dir: Path | str, *, earth_texture: bool = True) -> tuple[
 
     path = Path(run_dir).expanduser()
     run = read_run(path)
+    from orbitopt.flightlab.replay_context import replay_inputs
+    _, target = replay_inputs(run, path)
 
     def compute() -> dict:
-        return run_to_scene(run, earth_texture=earth_texture)
+        return run_to_scene(run, earth_texture=earth_texture, target=target)
 
     return run, cached_scene(_run_scene_cache_id(path, run), compute)

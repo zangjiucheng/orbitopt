@@ -9,7 +9,8 @@ launch-vehicle flight has:
   the three verdicts), the key events with altitude/speed at each (click one to seek),
   and the Checks / Why / Recovery detail;
 * :class:`TelemetryPanel` -- the chart panel's *Telemetry* tab: altitude,
-  speed, dynamic pressure, g-load, mass and throttle against mission time,
+  speed, dynamic pressure, g-load, mass, throttle, estimated stage propellant,
+  radial vertical speed and recorded downrange against mission time,
   linked to the timeline both ways.
 
 Both are read-only views of a precomputed run: nothing here simulates.
@@ -60,6 +61,9 @@ TELEMETRY_CHARTS = (
     ("g_load", "G-load", "g"),
     ("mass", "Mass", "kg"),
     ("throttle", "Throttle", "%"),
+    ("propellant", "Propellant remaining", "t"),
+    ("vertical_speed", "Vertical speed (radial)", "m/s"),
+    ("downrange", "Downrange", "km"),
 )
 
 
@@ -262,7 +266,7 @@ class TelemetryPanel(QWidget):
             grid.addWidget(chart, index // 3, index % 3)
         for column in range(3):
             grid.setColumnStretch(column, 1)
-        for row in range(2):
+        for row in range(3):
             grid.setRowStretch(row, 1)
 
     def set_channels(self, channels: Sequence[TelemetryChannel], t_min: float, t_max: float) -> None:
@@ -297,4 +301,6 @@ def load_flight_bundle(run_dir: Path | str, run=None, scene: dict | None = None)
     run_dir = Path(run_dir).expanduser()
     run = run if run is not None else read_run(run_dir)
     bundle = bundle_from_run(run, run_dir, **load_side_files(run_dir))
-    return bundle, find_target(run_dir), build_telemetry_channels(run, scene_track_colors(scene))
+    from orbitopt.flightlab.replay_context import replay_inputs
+    vehicle, target = replay_inputs(run, run_dir)
+    return bundle, target, build_telemetry_channels(run, scene_track_colors(scene), vehicle=vehicle)

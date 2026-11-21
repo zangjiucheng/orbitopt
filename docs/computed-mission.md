@@ -7,9 +7,9 @@ description: Replay the recorded LEO and RTLS mission, add propagation across en
 
 # Computed mission workflow
 
-E5–E8 add a computed-ascent RTLS reference, coupled separation handoffs,
-cross-environment execution, guided JSBSim studies and stricter evidence
-gates. Choose the run that answers your question:
+Choose a reference by its vehicle, flight target and evidence scope. A
+nominal landing, a joint physical pass, independent-model agreement and
+dispersion reliability are separate results.
 
 | Workflow | What runs | Evidence boundary |
 |---|---|---|
@@ -18,6 +18,7 @@ gates. Choose the run that answers your question:
 | E5-05 cross-environment | Recorded ascent + TudatPy parking propagation + gfold recovery. | The joined run must evidence all five physical checks. |
 | E5-07 replay | Recorded Starship-class computed ascent, no recovery stage. | Physics Qualification Reference; recovery gap reported (`RECOVERY_GAP.md`), `full_mission` not declared. |
 | E5-07 cross-environment | Recorded ascent + TudatPy mission leg with parking propagation. | Propagation evidenced in the foreign environment; joint gate NOT-DECLARED by design. |
+| E5-08 design variants | Powered-entry RTLS, then earlier staging at Kourou and Starbase. | Original recovery fails; DC7 and Starbase nominal landings pass, with independent-model and reliability gaps. [Results](e5-08-new-vehicle-report.md). |
 | E8-01 reference check | Compares sealed records with raw backend output and closed forms. | No new flight; validates extraction, continuity and stated reference comparisons. |
 
 ## Replay and view the RTLS mission
@@ -35,7 +36,7 @@ orbitopt view runs/e505/scene.json
 
 The last command needs the local viewer. Computation may run on another
 machine: copy the output directory back, then open its scene locally. For
-telemetry, add `runs/e505/recovery/run` in Mission Control's **Flight Lab**.
+telemetry, add `runs/e505/recovery/run` in Mission Control's **Runs** workspace.
 The scene is the combined flight run; the unified mission report is
 `runs/e505/mission.verification.json`.
 

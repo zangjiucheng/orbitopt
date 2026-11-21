@@ -10,7 +10,7 @@ import math
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPixmap, QPolygonF
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from orbitopt.flightlab.ui.telemetry import TelemetryChannel
 from orbitopt.viz.theme import HAIRLINE, INFO, INK_MUTED, INK_SECONDARY, PANEL
@@ -90,6 +90,7 @@ class _TelemetryChart(QWidget):
     """
 
     time_requested = Signal(float)
+    hovered = Signal(float)
 
     MARGINS = (66, 26, 18, 28)
     _TITLE_X = 8.0
@@ -105,6 +106,11 @@ class _TelemetryChart(QWidget):
         self._ymax = 1.0
         self._time = 0.0
         self._dragging = False
+        self._pan_x = None
+        self._full_range = (0.0, 1.0)
+        self._detail_chart = None
+        self._detail_dialog = None
+        self.setToolTip("Double-click to expand · scroll to zoom · right-drag to pan · left-click to seek")
         self._cache: QPixmap | None = None
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setMouseTracking(True)
@@ -114,11 +120,17 @@ class _TelemetryChart(QWidget):
         self._channel = channel
         self._recompute_y_range()
         self.invalidate()
+        if self._detail_chart is not None:
+            self._detail_chart.set_channel(channel)
 
     def set_time_range(self, lo: float, hi: float) -> None:
         self._xmin = float(lo)
         self._xmax = float(hi)
+        self._full_range = (float(lo), float(hi))
+        self._recompute_y_range()
         self.invalidate()
+        if self._detail_chart is not None:
+            self._detail_chart.set_time_range(lo, hi)
 
     def clear(self) -> None:
         self.set_channel(TelemetryChannel(self.channel_id, self._label(), self._unit(), "waiting for a Flight Lab run"))
@@ -126,6 +138,8 @@ class _TelemetryChart(QWidget):
     def set_time(self, t: float) -> None:
         self._time = float(t)
         self.update()
+        if self._detail_chart is not None:
+            self._detail_chart.set_time(t)
 
     def invalidate(self) -> None:
         self._cache = None
@@ -146,7 +160,12 @@ class _TelemetryChart(QWidget):
         return QRectF(left, top, max(1.0, self.width() - left - right), max(1.0, self.height() - top - bottom))
 
     def _recompute_y_range(self) -> None:
-        values = [value for series in self._channel.series for _, value in series.points if math.isfinite(value)]
+        from orbitopt.flightlab.ui.telemetry import interpolated_value
+        values = [value for series in self._channel.series for t, value in series.points
+                  if self._xmin <= t <= self._xmax and math.isfinite(value)]
+        values += [v for series in self._channel.series for t in (self._xmin, self._xmax)
+                   if series.points and series.points[0][0] <= t <= series.points[-1][0]
+                   and (v := interpolated_value(series.points, t)) is not None]
         if not values:
             self._ymin, self._ymax = 0.0, 1.0
             return
@@ -240,6 +259,14 @@ class _TelemetryChart(QWidget):
 
         for series in self._channel.series:
             points = series.points
+            from orbitopt.flightlab.ui.telemetry import interpolated_value
+            if points:
+                lo, hi = max(self._xmin, points[0][0]), min(self._xmax, points[-1][0])
+                if hi < lo:
+                    continue
+                points = ((lo, interpolated_value(points, lo)),
+                          *[(t, v) for t, v in points if lo < t < hi],
+                          (hi, interpolated_value(points, hi)))
             if not points:
                 continue
             color = QColor(series.color)
@@ -251,7 +278,11 @@ class _TelemetryChart(QWidget):
                 continue
             max_samples = max(2, int(rect.width() * 1.5))
             stride = max(1, len(points) // max_samples)
-            samples = list(points[::stride])
+            # Keep narrow spikes when decimating: each pixel bucket retains
+            # both extrema, ordered in time, rather than every nth sample.
+            samples = [point for start in range(0, len(points), stride)
+                       for point in sorted({min(points[start:start+stride], key=lambda p: p[1]),
+                                            max(points[start:start+stride], key=lambda p: p[1])})]
             if samples[-1] != points[-1]:
                 samples.append(points[-1])
             line = Qt.DashLine if getattr(series, "style", "solid") == "dash" else Qt.SolidLine
@@ -312,7 +343,10 @@ class _TelemetryChart(QWidget):
         p.drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()))
 
     def mousePressEvent(self, event):  # noqa: N802
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event.button() in (Qt.MouseButton.RightButton, Qt.MouseButton.MiddleButton):
+            self._pan_x = event.position().x()
+            event.accept()
+        elif event.button() == Qt.MouseButton.LeftButton:
             self._dragging = True
             self.time_requested.emit(self._time_at_x(event.position().x()))
             event.accept()
@@ -320,18 +354,99 @@ class _TelemetryChart(QWidget):
             super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):  # noqa: N802
-        if self._dragging:
+        if self._pan_x is not None:
+            delta = (self._pan_x - event.position().x()) / self.plot_rect().width() * (self._xmax - self._xmin)
+            self._pan_x = event.position().x()
+            self._set_visible_range(self._xmin + delta, self._xmax + delta)
+            event.accept()
+        elif self._dragging:
             self.time_requested.emit(self._time_at_x(event.position().x()))
             event.accept()
         else:
+            self.hovered.emit(self._time_at_x(event.position().x()))
             super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):  # noqa: N802
-        if event.button() == Qt.MouseButton.LeftButton and self._dragging:
+        if event.button() in (Qt.MouseButton.RightButton, Qt.MouseButton.MiddleButton):
+            self._pan_x = None
+            event.accept()
+        elif event.button() == Qt.MouseButton.LeftButton and self._dragging:
             self._dragging = False
             event.accept()
         else:
             super().mouseReleaseEvent(event)
+
+    def _set_visible_range(self, lo, hi):
+        full_lo, full_hi = self._full_range
+        width = min(hi - lo, full_hi - full_lo)
+        if width <= 0:
+            return
+        lo = max(full_lo, min(lo, full_hi - width))
+        self._xmin, self._xmax = lo, lo + width
+        self._recompute_y_range()
+        self.invalidate()
+
+    def reset_view(self):
+        self._set_visible_range(*self._full_range)
+
+    def wheelEvent(self, event):  # noqa: N802
+        steps = event.angleDelta().y() / 120
+        if not steps:
+            return
+        anchor = self._time_at_x(event.position().x())
+        factor = 1.3 ** max(-8, min(8, -steps))
+        if (self._xmax - self._xmin) * factor >= max(1e-6, (self._full_range[1] - self._full_range[0]) * 1e-6):
+            self._set_visible_range(anchor + (self._xmin - anchor) * factor,
+                                    anchor + (self._xmax - anchor) * factor)
+        event.accept()
+
+    def mouseDoubleClickEvent(self, event):  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.open_detail()
+            event.accept()
+
+    def open_detail(self):
+        """Open a modeless full-size plot; seeks stay linked to playback."""
+        if self._detail_dialog is not None:
+            self._detail_dialog.show()
+            self._detail_dialog.raise_()
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle(self._channel.label + " · Flight telemetry")
+        dialog.resize(1100, 680)
+        layout = QVBoxLayout(dialog)
+        toolbar = QHBoxLayout()
+        toolbar.addWidget(QLabel("Scroll: zoom · right-drag: pan · left-click: seek"))
+        toolbar.addStretch(1)
+        reset = QPushButton("Reset view")
+        reset.setFixedWidth(110)
+        toolbar.addWidget(reset)
+        layout.addLayout(toolbar)
+        chart = _TelemetryChart(self.channel_id, self._label(), self._unit(), dialog)
+        chart.set_channel(self._channel)
+        chart.set_time_range(*self._full_range)
+        chart.set_time(self._time)
+        chart.time_requested.connect(self.time_requested)
+        reset.clicked.connect(chart.reset_view)
+        layout.addWidget(chart, 1)
+        readout = QLabel()
+        readout.setWordWrap(True)
+        readout.setTextFormat(Qt.PlainText)
+        layout.addWidget(readout)
+
+        def show_values(t):
+            from orbitopt.flightlab.ui.telemetry import interpolated_value
+            values = []
+            for series in chart._channel.series:
+                if series.points and series.points[0][0] <= t <= series.points[-1][0]:
+                    value = interpolated_value(series.points, t)
+                    values.append(f"{series.label}: {value:,.6g} {series.unit}")
+            readout.setText(f"T+{t:.3f} s (interpolated)  |  " + (" · ".join(values) or "No samples at this time"))
+
+        chart.hovered.connect(show_values)
+        show_values(self._time)
+        self._detail_chart, self._detail_dialog = chart, dialog
+        dialog.show()
 
 
 # Public aliases (the leading-underscore names stay for the replay page).

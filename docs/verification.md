@@ -241,6 +241,11 @@ The bands and their derivations are in the
 No check in this report uses `historical_telemetry` evidence: the reference
 vehicle is a public estimate, not flown hardware.
 
+The [E5-08 variants](e5-08-new-vehicle-report.md) apply these checks to new
+designs. DC7 fails the 15 km SECO semi-major-axis band (27.7 km measured);
+Starbase fails the 12% debris impact-speed band (12.80% measured). Their
+nominal joint physical passes do not clear these independent-model failures.
+
 ## Benchmarks against public references
 
 ```bash
