@@ -19,15 +19,15 @@ concurrency:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: read
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact_id }}
     steps:
       - uses: actions/checkout@v4
 
@@ -57,10 +57,52 @@ jobs:
         run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
 
       - name: Upload the built site as the Pages artifact
+        id: upload
         uses: actions/upload-pages-artifact@v3
         with:
+          name: github-pages
           path: docs/_site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Upload finalization can precede artifact metadata visibility. Start
+      # deployment in a dependent job and require this build's exact artifact.
+      - name: Wait for the uploaded Pages artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PAGES_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PAGES_ARTIFACT_ID" =~ ^[0-9]+$ ]] || {
+            echo "::error::The build returned no valid Pages artifact ID"
+            exit 1
+          }
+          for attempt in {1..6}; do
+            if visible=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$PAGES_ARTIFACT_ID" \
+              --jq '.name == "github-pages" and .expired == false'); then
+              if [[ "$visible" == true ]]; then
+                echo "Pages artifact $PAGES_ARTIFACT_ID is available"
+                exit 0
+              fi
+            fi
+            echo "Waiting for Pages artifact metadata ($attempt/6)"
+            if (( attempt < 6 )); then sleep 5; fi
+          done
+          echo "::error::The uploaded github-pages artifact is still unavailable"
+          exit 1
 
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages

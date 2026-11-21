@@ -28,3 +28,7 @@ CI skips documentation-only pushes and PRs. Benchmark JSON under
 input. Pages also rebuilds when its source/API inputs change; translation
 reruns when its scripts, model requirements or workflow change. Manual runs
 remain available regardless of changed paths.
+
+Pages builds and uploads in one job, then deploys in a dependent job after
+checking the exact uploaded artifact ID. Metadata checks make up to six
+attempts, five seconds apart; missing or expired artifacts fail before deployment.
