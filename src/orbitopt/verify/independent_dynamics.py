@@ -88,6 +88,20 @@ LAUNCH_LON_DEG = -52.7685
 LAUNCH_ALT_M = 15.0
 LAUNCH_HEADING_DEG = 36.0
 
+
+def _site() -> tuple[float, float, float]:
+    """``(lat_deg, lon_deg, alt_m)`` of the launch pad the twin flies from: the E5-07 Kourou
+    pad unless ``verify_independent_dynamics`` was given a reference whose flight target
+    launches elsewhere (then it exports ``ORBITOPT_E805_SITE`` before starting its worker
+    processes, which inherit it -- module constants would not reach a spawned worker)."""
+    import os
+
+    raw = os.environ.get("ORBITOPT_E805_SITE")
+    if raw:
+        lat, lon, alt = (float(t) for t in raw.split(","))
+        return lat, lon, alt
+    return LAUNCH_LAT_DEG, LAUNCH_LON_DEG, LAUNCH_ALT_M
+
 #: Twin integration steps (probed; the numerical budget line halves them).
 TWIN_DT_S = 0.02
 DEBRIS_DT_S = 0.05
@@ -379,10 +393,12 @@ def _twin_ascent(dt_s: float, isp_sl_stage1: float | None = None,
                      float(eng["isp_sea_level_s"]))
     v2, lev2 = stage(s2, float(s2["engine"]["isp_vac_s"]) * sl_ratio)
     physics = RigidBodyPhysics(density_scale=density_scale)
-    state0 = RigidBodyState.from_launch(lat_geod_deg=LAUNCH_LAT_DEG,
-                                        lon_deg=LAUNCH_LON_DEG,
-                                        alt_m=LAUNCH_ALT_M,
-                                        heading_deg=LAUNCH_HEADING_DEG,
+    site_lat, site_lon, site_alt = _site()
+    heading = float(doc["attitude_program"][0].get("azimuth_deg", LAUNCH_HEADING_DEG))
+    state0 = RigidBodyState.from_launch(lat_geod_deg=site_lat,
+                                        lon_deg=site_lon,
+                                        alt_m=site_alt,
+                                        heading_deg=heading,
                                         pitch_deg=90.0,
                                         mass_kg=float(s1["mass_initial_kg"])
                                         + float(s2["mass_initial_kg"]))
@@ -393,40 +409,58 @@ def _twin_ascent(dt_s: float, isp_sl_stage1: float | None = None,
                                     physics=physics,
                                     guidance=_SchedGuidance(program, lev1))
 
-    burn1 = run1(135.0, dt_s)
+    # the staging timeline comes from the vehicle file given (the E5-07 vehicle reads
+    # 135 / 138 / 138 + 378 = 516 s -- the values this function used to hard-code, so
+    # the sealed references are unchanged); a design with another staging point (DC7)
+    # is checked on ITS OWN timeline, not on a stale one
+    t_meco = float(s1["engine"]["burn_end_s"])
+    t_sep = float(s1.get("separation_time_s", t_meco + 3.0))
+    t_seco = t_sep + float(s2["engine"]["burn_end_s"])
+    burn1 = run1(t_meco, dt_s)
     mq = burn1.max_q
 
     def at(run: Any, t: float) -> dict:
-        i = int(np.searchsorted(run.samples["t_s"], t))
-        return {k: run.samples[k][i] for k in ("x_m", "y_m", "z_m", "vx_m_s",
-                                              "vy_m_s", "vz_m_s", "mass_kg")}
+        """The state at time ``t``: on a sample time exactly that sample (the sealed
+        references' integer-second events), between two samples their linear
+        interpolation (a design whose cutoff is not on the grid), clamped at the ends."""
+        ts = np.asarray(run.samples["t_s"], dtype=float)
+        keys = ("x_m", "y_m", "z_m", "vx_m_s", "vy_m_s", "vz_m_s", "mass_kg")
+        i = int(np.searchsorted(ts, t))
+        if i <= 0:
+            return {k: run.samples[k][0] for k in keys}
+        if i >= len(ts):
+            return {k: run.samples[k][-1] for k in keys}
+        if ts[i] == t or ts[i] - ts[i - 1] <= 0.0:
+            return {k: run.samples[k][i] for k in keys}
+        f = (t - ts[i - 1]) / (ts[i] - ts[i - 1])
+        return {k: run.samples[k][i - 1] + f * (run.samples[k][i] - run.samples[k][i - 1]) for k in keys}
 
-    m_s = at(burn1, 135.0)
+    m_s = at(burn1, t_meco)
     r_meco = np.array([m_s["x_m"], m_s["y_m"], m_s["z_m"]])
     v_meco = np.array([m_s["vx_m_s"], m_s["vy_m_s"], m_s["vz_m_s"]])
-    st_meco = RigidBodyState(t_s=135.0, position_m=r_meco, velocity_m_s=v_meco,
+    st_meco = RigidBodyState(t_s=t_meco, position_m=r_meco, velocity_m_s=v_meco,
                              quaternion=(1.0, 0.0, 0.0, 0.0), omega_rad_s=(0.0, 0.0, 0.0),
                              mass_kg=float(m_s["mass_kg"]))
-    coast = propagate_point_mass(st_meco, v1, program, 138.0, dt_s=dt_s,
+    coast = propagate_point_mass(st_meco, v1, program, t_sep, dt_s=dt_s,
                                  sample_every=1, physics=physics, throttle=0.0)
-    s_s = at(coast, 138.0)
+    s_s = at(coast, t_sep)
     r_sep = np.array([s_s["x_m"], s_s["y_m"], s_s["z_m"]])
     v_sep = np.array([s_s["vx_m_s"], s_s["vy_m_s"], s_s["vz_m_s"]])
     m_sep = float(s_s["mass_kg"])
     ship_kg = float(s2["mass_initial_kg"])
-    st2 = RigidBodyState(t_s=138.0, position_m=r_sep, velocity_m_s=v_sep,
+    st2 = RigidBodyState(t_s=t_sep, position_m=r_sep, velocity_m_s=v_sep,
                          quaternion=(1.0, 0.0, 0.0, 0.0), omega_rad_s=(0.0, 0.0, 0.0),
                          mass_kg=ship_kg)
-    burn2 = propagate_point_mass(st2, v2, program, 516.0, dt_s=dt_s,
+    burn2 = propagate_point_mass(st2, v2, program, t_seco, dt_s=dt_s,
                                  sample_every=max(1, int(round(dt_s / dt_s * 100))),
                                  physics=physics,
-                                 guidance=_SchedGuidance(program, lev2, 138.0))
-    e_s = at(burn2, 516.0)
+                                 guidance=_SchedGuidance(program, lev2, t_sep))
+    e_s = at(burn2, t_seco)
     r_seco = np.array([e_s["x_m"], e_s["y_m"], e_s["z_m"]])
     v_seco = np.array([e_s["vx_m_s"], e_s["vy_m_s"], e_s["vz_m_s"]])
     debris = _debris_to_impact(r_sep, v_sep, m_sep - ship_kg,
                                s1["aero"]["ca_power_off"], DEBRIS_DT_S,
-                               diameter_m=float(s1["aero"]["diameter_m"]))
+                               diameter_m=float(s1["aero"]["diameter_m"]), t0_s=t_sep)
     return {"meco": (r_meco, v_meco, float(m_s["mass_kg"])),
             "separation": (r_sep, v_sep, m_sep),
             "seco": (r_seco, v_seco, float(e_s["mass_kg"])),
@@ -436,7 +470,7 @@ def _twin_ascent(dt_s: float, isp_sl_stage1: float | None = None,
 
 def _debris_to_impact(r0: np.ndarray, v0: np.ndarray, mass_kg: float,
                       ca_off: Sequence[Sequence[float]], dt: float, *,
-                      diameter_m: float | None = None) -> dict:
+                      diameter_m: float | None = None, t0_s: float = 138.0) -> dict:
     """Ballistic re-entry of the spent stage-1: power-off CA polar, velocity-
     aligned, point mass, J2 + Coriolis + centrifugal, US76 (altitude only);
     own RK4, linear interpolation of the geodetic-altitude ground crossing."""
@@ -465,7 +499,7 @@ def _debris_to_impact(r0: np.ndarray, v0: np.ndarray, mass_kg: float,
                 a = a - (0.5 * rho * speed * speed * cd * s_ref / mass_kg) * (v_rel / speed)
         return np.concatenate([v, a])
 
-    t, y = 138.0, np.concatenate([r0, v0])
+    t, y = float(t0_s), np.concatenate([r0, v0])
     h_prev = _geodetic(y[:3])[2]
     while t < 600.0:
         k1 = deriv(y)
@@ -551,9 +585,9 @@ def _rec_state(rec: Mapping[str, Any], t: float) -> tuple[np.ndarray, np.ndarray
 
 def _pad_state_and_basis() -> tuple[np.ndarray, np.ndarray]:
     from orbitopt.flightlab import frames
-    pad = frames.geodetic_to_ecef(LAUNCH_LAT_DEG, LAUNCH_LON_DEG,
-                                  LAUNCH_ALT_M).reshape(3)
-    return pad, _enu_basis(LAUNCH_LAT_DEG, LAUNCH_LON_DEG)
+    lat, lon, alt = _site()
+    pad = frames.geodetic_to_ecef(lat, lon, alt).reshape(3)
+    return pad, _enu_basis(lat, lon)
 
 
 def independent_landing_refly(plan_times: np.ndarray, plan_thrust_enu: np.ndarray,
@@ -686,9 +720,9 @@ def _landing_pair(vehicle_yaml: Path, engines: int,
                       position_m=tuple(float(c) for c in pad + bas.T @ pos),
                       velocity_m_s=tuple(float(c) for c in bas.T @ vel),
                       mass_kg=mass)
-    target = RecoveryTarget(kind="rtls", name="kourou",
-                            latitude_deg=LAUNCH_LAT_DEG, longitude_deg=LAUNCH_LON_DEG,
-                            altitude_m=LAUNCH_ALT_M)
+    lat, lon, alt = _site()
+    target = RecoveryTarget(kind="rtls", name="launch_site",
+                            latitude_deg=lat, longitude_deg=lon, altitude_m=alt)
     result = fly_landing_burn(enu, st, target, vehicle)
     if not result.feasible or result.plan is None:
         if allow_infeasible:
@@ -726,6 +760,27 @@ def _orbit_elements(r_eci: np.ndarray, v_eci: np.ndarray) -> dict:
     return orbital_elements(np.asarray(r_eci, float), np.asarray(v_eci, float))
 
 
+def _export_site(root: Path) -> None:
+    """Point the twin at the pad of ``root``'s flight target: set ``ORBITOPT_E805_SITE`` from
+    ``<root>/mission-optimized/launch/target.yaml`` (Starbase), or clear it (the E5-07 pad is the
+    default). Set-or-clear on every call, so a Starbase verification cannot leak into a Kourou
+    one in the same process; worker processes inherit it when the pool starts."""
+    import os
+
+    os.environ.pop("ORBITOPT_E805_SITE", None)
+    target_file = Path(root) / "mission-optimized" / "launch" / "target.yaml"
+    if not target_file.is_file():
+        return
+    import yaml
+
+    site = (yaml.safe_load(target_file.read_text(encoding="utf-8")) or {}).get("launch_site") or {}
+    if {"latitude_deg", "longitude_deg"} <= site.keys():
+        lat, lon = float(site["latitude_deg"]), float(site["longitude_deg"])
+        alt = float(site.get("altitude_wgs84_m", 0.0))
+        if (lat, lon, alt) != (LAUNCH_LAT_DEG, LAUNCH_LON_DEG, LAUNCH_ALT_M):
+            os.environ["ORBITOPT_E805_SITE"] = "%r,%r,%r" % (lat, lon, alt)
+
+
 def verify_independent_dynamics(reference_root: Path | None = None, *,
                                 check_digests: bool = True, workers: int = 4,
                                 vehicle_yaml: Path | str | None = None,
@@ -760,6 +815,7 @@ def verify_independent_dynamics(reference_root: Path | None = None, *,
         to_jsonable)
 
     root = Path(reference_root) if reference_root is not None else REFERENCE_ROOT
+    _export_site(root)
     vy = Path(vehicle_yaml) if vehicle_yaml is not None else _VEHICLE_YAML
     land_engines = int((landing or {}).get("engines", LANDING_ENGINES))
     lpos = [float(c) for c in (landing or {}).get("position_enu_m",
