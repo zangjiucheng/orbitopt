@@ -17,7 +17,7 @@ reproducible to the last digit):
    arm; selection table = leave-one-seed-out skill over the training grid
    plus the band-shifted cell, against the Platt-augmented variant and
    the raw surrogate. The shipped model (``redesign.DEFAULT_CALIBRATION``
-   -- this benchmark refits it and asserts bit agreement) wins the two
+   -- this benchmark refits it and checks agreement within roundoff) wins the two
    criteria the task states: monotone in the physical arguments by fit
    (E7-01 constraint semantics) and no severe overconfidence when the
    bands move; it scores +0.56 / +0.75-style skill where the raw model
@@ -244,8 +244,13 @@ def main(argv: list[str] | None = None) -> int:
             "bands_x15": {"skill": bands["calibrated"]["skill"],
                           "ece": bands["calibrated"]["ece"]},
         }
-    assert tuple(cands["physical"]["coefficients"]) == DEFAULT_CALIBRATION.coefficients, \
-        "recorded-data refit disagrees with the shipped DEFAULT_CALIBRATION"
+    coefficient_pairs = zip(
+        cands["physical"]["coefficients"], DEFAULT_CALIBRATION.coefficients, strict=True
+    )
+    assert all(
+        math.isclose(fitted, shipped, rel_tol=1e-14)
+        for fitted, shipped in coefficient_pairs
+    ), "recorded-data refit disagrees with the shipped DEFAULT_CALIBRATION"
     monotone = (cands["physical"]["coefficients"][1] > 0.0
                 and cands["physical"]["coefficients"][2] < 0.0)
     selection = {

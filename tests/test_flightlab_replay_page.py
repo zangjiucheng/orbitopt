@@ -237,10 +237,14 @@ def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypat
         assert window.chart_panel.currentWidget() is window.telemetry_panel
         assert window.state.timeline is not None and window.timeline_bar.isVisible()
         assert window.body_strip.isVisible()
-        window.resize(1200, 640)
+        # Leave room for native macOS widget metrics while still exercising a
+        # genuinely short window. Flush the workspace's queued layout first.
+        app.processEvents()
+        compact_height = 680
+        window.resize(1200, compact_height)
         window.center_splitter.setSizes([300, 220])
         app.processEvents()
-        assert window.height() == 640
+        assert window.height() == compact_height
         assert window.timeline_bar.mapTo(window, window.timeline_bar.rect().bottomLeft()).y() < window.height()
         telemetry = window.telemetry_panel
         assert telemetry.verticalScrollBar().maximum() > 0

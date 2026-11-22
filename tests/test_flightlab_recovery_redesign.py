@@ -6,8 +6,9 @@ e3_03_robust_montecarlo.json FL-305 pairing, both committed artifacts):
 
     REFIT_IS_SHIPPED      LandingCalibration.fit over the recorded
                           e7_04_joint_base rows reproduces
-                          DEFAULT_CALIBRATION to the last bit (the fit
-                          is deterministic Newton IRLS).
+                          DEFAULT_CALIBRATION within floating-point
+                          roundoff. Repeated fits on one platform are
+                          bit-identical (deterministic Newton IRLS).
     GRADED_REGRADE        The recorded training grid regrades 99 -> 84
                           joint rejections, false rejections (joint-
                           rejected, FL-305 landed) 20 -> 10, newly
@@ -64,10 +65,10 @@ def grid() -> dict:
 
 
 def test_default_calibration_is_the_recorded_refit(grid):
-    assert LandingCalibration.fit(grid["rows"], SPEC) == DEFAULT_CALIBRATION
-    # deterministic: a second fit is bit-identical
-    assert LandingCalibration.fit(grid["rows"], SPEC).coefficients \
-        == DEFAULT_CALIBRATION.coefficients
+    fitted = LandingCalibration.fit(grid["rows"], SPEC)
+    assert fitted.features == DEFAULT_CALIBRATION.features
+    assert fitted.coefficients == pytest.approx(DEFAULT_CALIBRATION.coefficients, rel=1e-14)
+    assert LandingCalibration.fit(grid["rows"], SPEC) == fitted
 
 
 def test_calibration_is_monotone_in_the_physical_margins():

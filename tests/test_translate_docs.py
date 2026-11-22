@@ -124,6 +124,24 @@ def test_frontmatter_indented_code_and_liquid_never_enter_translator():
     assert '{{ site.baseurl }}' in result
 
 
+def test_comparisons_across_lines_do_not_form_a_protected_html_tag():
+    source = ('* Delay is <1 s and the check passes.\n'
+              '  Margin is `x` > 0.\n\n'
+              '<span id="entry">Check</span>\n')
+    result = MODULE['translate_markdown'](
+        source, lambda text: text.replace('Delay is', '延迟为'), fallbacks=[])
+    assert '延迟为' in result
+    assert MODULE['protected'](result) == {'<span id="entry">': 1, '</span>': 1, '`x`': 1}
+    assert '`x`' in result
+
+
+def test_multiline_inline_code_is_preserved_byte_for_byte():
+    source = '- Check `orbitopt\n  --help`, or run `python`.\n'
+    result = MODULE['translate_markdown'](source, lambda text: text.replace('Check', '检查'))
+    assert '检查' in result
+    assert MODULE['protected'](result) == {'`orbitopt\n  --help`': 1, '`python`': 1}
+
+
 def test_missing_placeholders_retain_english_and_are_reported():
     source = 'Use `orbitopt` at 400 km.\n'
     retained = []

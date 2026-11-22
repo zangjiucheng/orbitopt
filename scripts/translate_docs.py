@@ -20,9 +20,11 @@ TECHNICAL = re.compile(
     r"\A---\n.*?\n---(?=\n|$)|"
     r"^[ \t]*(`{3,}|~{3,})[^\n]*\n.*?^[ \t]*\1[ \t]*(?=\n|$)|"
     r"(?:^(?: {4}|\t)[^\n]*(?:\n|$))+|"
-    r"(`+)[^`\n]*?\2|"
+    r"(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n).)*?(?<!`)\2(?!`)|"
     r"\]\([^\n]*?\)|^\s*\[[^\]\n]+\]:[^\n]+|"
-    r"<[^>]+>|\{\{.*?\}\}|\{%.*?%\}",
+    r"<!--.*?-->|</?[A-Za-z][\w:-]*(?:\s+[^<>]*?)?\s*/?>|"
+    r"<(?:[A-Za-z][\w+.-]*:[^<>\s]+|[^<>\s]+@[^<>\s]+)>|"
+    r"\{\{.*?\}\}|\{%.*?%\}",
     re.MULTILINE | re.DOTALL,
 )
 LINK = re.compile(r"(\]\()((?:\{\{.*?\}\}|[^\s)])+)([^)]*\))")
@@ -147,9 +149,10 @@ def translate_markdown(source, translate_text, *, fallbacks=None):
     offset = 0
     for match in TECHNICAL.finditer(source):
         value = match.group()
-        is_block = (match.start() == 0 and value.startswith("---\n")) or bool(
-            re.match(r"(?:[ \t]*(?:`{3,}|~{3,})| {4}|\t)", value))
-        if is_block:
+        # Keep spans that cross a line break out of the line/paragraph translator.
+        if ((match.start() == 0 and value.startswith("---\n"))
+                or re.match(r"(?:[ \t]*(?:`{3,}|~{3,})| {4}|\t)", value)
+                or ("\n" in value and value.startswith(("`", "<")))):
             parts.extend((paragraphs(source[offset:match.start()]), value))
             offset = match.end()
     parts.append(paragraphs(source[offset:]))
