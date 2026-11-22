@@ -46,7 +46,12 @@ recording metadata.
 - **Starbase independent dynamics:** debris impact-speed discrepancy is
   12.80% against a 12% band. E10-04 evidenced it as a genuine drag-model
   difference, not an implementation artifact (see below). The band was not
-  changed and the check is recorded as failing.
+  changed and the check is recorded as failing. E11-05 qualified the booster
+  power-off drag model (build-up, recorded-flight inversion, grid-fin states):
+  the recorded flights invert 4-7% *below* the declared polar, no supported
+  correction closes the gap, and the replay stays at +12.70% - the difference
+  stands, localized to the OT/twin aero-atmosphere line
+  ([E11-05 report](benchmarks/e11_05_starbase_aero_qualification.md)).
 - **Reliability:** both nominally closing designs have low hold-out success
   under the declared FL-304 dispersions. Pinned and per-sample-refined
   experiments use different planning modes; do not pool their rates.

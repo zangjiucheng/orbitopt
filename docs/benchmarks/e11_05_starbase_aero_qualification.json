@@ -1,0 +1,408 @@
+{
+ "task": "E11-05 Starbase aero model qualification",
+ "generated_by": "bench_e11_05_starbase_aero_qualification.py",
+ "git_commit": "add2caeae2d727865704be6736e22d5f2c84b479",
+ "modules": [
+  "orbitopt.flightlab.booster_aero"
+ ],
+ "design_assumptions": [
+  "Grid-fin stowed frontal blockage: stowed fin treated as a flat fairing of frontal area planform * (t/c), t/c = 0.12 (lattice truss depth over chord) -- DESIGN ASSUMPTION from E11-01 photos, +/-50 % on t/c, which propagates linearly into the stowed increment.",
+  "Protuberance interference factor K = 1.9 (Hoerner fairing-body interference) -- DESIGN ASSUMPTION, range 1.5..2.3.",
+  "Engines-first aft face effective area fraction 0.85 of the body cross-section (engine gimbal ring + landing-leg recesses cover the rest) -- DESIGN ASSUMPTION, +/-10 %.",
+  "Subsonic/low-supersonic forward base treated as a flat carry-deck base (DESIGN ASSUMPTION: (full suction, Missile DATCOM base term) -- the real forward end is a shallow cavity, so the true base drag is smaller; the table errs high in subsonic Cd by up to ~0.05."
+ ],
+ "sources": [
+  {
+   "tag": "nose_aero primitives",
+   "detail": "orbitopt.flightlab.nose_aero: Taylor-Maccoll cone/ogive wave drag, Rayleigh pitot Cp, Prandtl-Glauert corrected turbulent Cf, DATCOM power-off base term -- the repo's own semi-empirical aero generator."
+  },
+  {
+   "tag": "E11-01 grid fins",
+   "detail": "vehicle grid_fins block (cd_add_mach / cn_alpha_mach), provenance public_estimate, derivation in docs/benchmarks/e11_01_grid_fin_authority.md."
+  },
+  {
+   "tag": "recorded debris flight",
+   "detail": "tests/data/mission/reference/e5-08-new-vehicle-starbase/.../stage1_debris.csv and the DC7 twin: an in-flight power-off Cd inversion is public data in the strongest sense the repo holds -- a measured trajectory of the actual model."
+  },
+  {
+   "tag": "F9-class ballistic coefficient",
+   "detail": "f9_class_public_estimate.yaml declares ballistic_coefficient_kg_m2 for the booster stage; m/(Cd*S) at the declared masses bounds the power-off Cd from published empty-mass and diameter figures."
+  }
+ ],
+ "part_a_component_tables": {
+  "engines_first_stowed_qualified": [
+   [
+    0.0,
+    0.87
+   ],
+   [
+    0.3,
+    0.859
+   ],
+   [
+    0.8,
+    0.796
+   ],
+   [
+    1.0,
+    0.754
+   ],
+   [
+    1.1,
+    1.059
+   ],
+   [
+    1.5,
+    1.272
+   ],
+   [
+    2.0,
+    1.408
+   ],
+   [
+    3.0,
+    1.518
+   ],
+   [
+    4.0,
+    1.558
+   ],
+   [
+    5.0,
+    1.578
+   ],
+   [
+    6.0,
+    1.589
+   ],
+   [
+    8.0,
+    1.601
+   ],
+   [
+    12.0,
+    1.61
+   ]
+  ],
+  "engines_first_anchors_vs_declared": {
+   "0.0": {
+    "declared": 0.8,
+    "qualified_buildup": 0.87,
+    "ratio": 1.087
+   },
+   "0.8": {
+    "declared": 0.9,
+    "qualified_buildup": 0.796,
+    "ratio": 0.884
+   },
+   "1.1": {
+    "declared": 1.3,
+    "qualified_buildup": 1.059,
+    "ratio": 0.815
+   },
+   "2.0": {
+    "declared": 1.25,
+    "qualified_buildup": 1.408,
+    "ratio": 1.126
+   },
+   "4.0": {
+    "declared": 1.2,
+    "qualified_buildup": 1.558,
+    "ratio": 1.298
+   },
+   "6.0": {
+    "declared": 1.175,
+    "qualified_buildup": 1.589,
+    "ratio": 1.352
+   },
+   "8.0": {
+    "declared": 1.15,
+    "qualified_buildup": 1.601,
+    "ratio": 1.392
+   }
+  },
+  "axial_stacked_stowed_starbase_v1": [
+   [
+    0.0,
+    0.2156
+   ],
+   [
+    0.5,
+    0.2459
+   ],
+   [
+    0.8,
+    0.2935
+   ],
+   [
+    1.0,
+    0.3873
+   ],
+   [
+    1.2,
+    0.5613
+   ],
+   [
+    1.5,
+    0.6213
+   ],
+   [
+    2.0,
+    0.5413
+   ],
+   [
+    3.0,
+    0.4422
+   ],
+   [
+    4.0,
+    0.3944
+   ],
+   [
+    6.0,
+    0.347
+   ],
+   [
+    8.0,
+    0.324
+   ],
+   [
+    12.0,
+    0.302
+   ]
+  ],
+  "axial_stacked_stowed_dc8": [
+   [
+    0.0,
+    0.2795
+   ],
+   [
+    0.5,
+    0.3097
+   ],
+   [
+    0.8,
+    0.3572
+   ],
+   [
+    1.0,
+    0.4509
+   ],
+   [
+    1.2,
+    0.6248
+   ],
+   [
+    1.5,
+    0.6846
+   ],
+   [
+    2.0,
+    0.6043
+   ],
+   [
+    3.0,
+    0.5046
+   ],
+   [
+    4.0,
+    0.4564
+   ],
+   [
+    6.0,
+    0.4084
+   ],
+   [
+    8.0,
+    0.3851
+   ],
+   [
+    12.0,
+    0.3628
+   ]
+  ],
+  "f9_bc_anchor": {
+   "stage_index": 0,
+   "bc_kg_m2": 3600.0,
+   "dry_mass_kg": 275000.0,
+   "implied_cd": 1.201
+  }
+ },
+ "part_b_recorded_inversion": {
+  "method": "central difference of recorded ECEF velocity, gravity (J2) + Coriolis + centrifugal removed with the twin's own force package, projected on -v_rel; Cd = m a / (q S) with the recorded q; rows with q > 50 kPa",
+  "starbase": {
+   "n_dense": 10,
+   "bins": [
+    {
+     "mach_bin": [
+      4.5,
+      5.0
+     ],
+     "n": 2,
+     "cd_eff_median": 0.3438,
+     "declared_median": 0.3765,
+     "ratio_median": 0.9135
+    },
+    {
+     "mach_bin": [
+      5.0,
+      5.5
+     ],
+     "n": 2,
+     "cd_eff_median": 0.3482,
+     "declared_median": 0.3638,
+     "ratio_median": 0.957
+    },
+    {
+     "mach_bin": [
+      5.5,
+      6.0
+     ],
+     "n": 6,
+     "cd_eff_median": 0.3479,
+     "declared_median": 0.3551,
+     "ratio_median": 0.98
+    }
+   ],
+   "cd_eff_mean_ratio": 0.9597
+  },
+  "dc7": {
+   "n_dense": 10,
+   "bins": [
+    {
+     "mach_bin": [
+      4.5,
+      5.0
+     ],
+     "n": 1,
+     "cd_eff_median": 0.321,
+     "declared_median": 0.3764,
+     "ratio_median": 0.8527
+    },
+    {
+     "mach_bin": [
+      5.0,
+      5.5
+     ],
+     "n": 2,
+     "cd_eff_median": 0.3377,
+     "declared_median": 0.3657,
+     "ratio_median": 0.9235
+    },
+    {
+     "mach_bin": [
+      5.5,
+      6.0
+     ],
+     "n": 7,
+     "cd_eff_median": 0.3336,
+     "declared_median": 0.3501,
+     "ratio_median": 0.9542
+    }
+   ],
+   "cd_eff_mean_ratio": 0.9341
+  }
+ },
+ "part_c_same_state_replays": {
+  "control_declared_starbase": {
+   "twin_speed_m_s": 1741.246,
+   "recorded_speed_m_s": 1545.014,
+   "speed_pct": 12.701
+  },
+  "control_declared_dc7": {
+   "twin_speed_m_s": 1744.081,
+   "recorded_speed_m_s": 1587.447,
+   "speed_pct": 9.867
+  },
+  "qualified_axial_starbase_v1": {
+   "twin_speed_m_s": 1741.246,
+   "recorded_speed_m_s": 1545.014,
+   "speed_pct": 12.701
+  },
+  "fins_deployed_bound_starbase": {
+   "twin_speed_m_s": 796.341,
+   "recorded_speed_m_s": 1545.014,
+   "speed_pct": -48.457
+  },
+  "qualified_axial_dc7": {
+   "twin_speed_m_s": 1744.081,
+   "recorded_speed_m_s": 1587.447,
+   "speed_pct": 9.867
+  }
+ },
+ "part_d_fin_state": {
+  "stowed_increment_cd": 0.064,
+  "deployed_minus_stowed": [
+   [
+    0.0,
+    1.586
+   ],
+   [
+    0.3,
+    1.586
+   ],
+   [
+    0.8,
+    2.086
+   ],
+   [
+    1.0,
+    2.286
+   ],
+   [
+    1.1,
+    2.261
+   ],
+   [
+    1.5,
+    2.162
+   ],
+   [
+    2.0,
+    2.037
+   ],
+   [
+    3.0,
+    1.871
+   ],
+   [
+    4.0,
+    1.705
+   ],
+   [
+    5.0,
+    1.538
+   ],
+   [
+    6.0,
+    1.503
+   ],
+   [
+    8.0,
+    1.432
+   ],
+   [
+    12.0,
+    1.289
+   ]
+  ],
+  "note": "deployed at zero incidence = profile + blockage; at flying alpha the E11-01 envelope adds the normal-force and induced terms on top (docs/benchmarks/e11_01_grid_fin_authority.md)"
+ },
+ "part_e_sync_main_twin": {
+  "interp_agreement_abs": 0.0,
+  "main_model": {
+   "speed_m_s": 1059.049
+  },
+  "twin": {
+   "speed_m_s": 988.204
+  },
+  "impact_speed_delta_pct": 7.169
+ },
+ "verdict": {
+  "band_impact_speed_pct_UNCHANGED": 12.0,
+  "starbase_qualified_speed_pct": 12.701,
+  "inside_band": false,
+  "conclusion": "the qualified power-off model leaves the Starbase debris check outside the unchanged 12 % band (replay +12.70 %), so the discrepancy stays recorded as a genuine aero-model difference; the new evidence narrows WHERE it lives: the recorded flights invert to a power-off Cd BELOW the declared polar (Starbase 0.960, DC7 0.934), so no physically supported power-off correction (protuberances +, deployed fins +) closes it -- every build-up term moves the replay FURTHER out; the remaining gap is the aero/atmosphere line between OT and the twin in dense high-q air, not a booster Cd error",
+  "control_reproduces_e1004": true
+ }
+}
