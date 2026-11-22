@@ -5,12 +5,38 @@ from pathlib import Path
 import pytest
 
 from orbitopt.flightlab.contract import read_run
-from orbitopt.flightlab.replay_context import replay_inputs
+from orbitopt.flightlab.replay_context import replay_inputs, replay_mission_scenario
 from orbitopt.flightlab.scene_export import run_to_scene
-from orbitopt.flightlab.ui.telemetry import build_telemetry_channels
+from orbitopt.flightlab.ui.telemetry import build_telemetry_channels, load_run_scene
 
 ROOT = Path(__file__).resolve().parents[1]
 RUN = ROOT / "tests/data/mission/reference/e5-08-new-vehicle-starbase/mission/recovery/run"
+
+
+def test_starbase_replay_grades_separation_with_its_recorded_mission_policy(tmp_path, monkeypatch):
+    monkeypatch.setenv("ORBITOPT_CACHE_DIR", str(tmp_path / "cache"))
+    run, replay = load_run_scene(RUN, earth_texture=False)
+    standalone = run_to_scene(run, earth_texture=False)
+
+    def stage2(scene):
+        return next(item for item in scene["handoffs"] if item["id"] == "separation:stage2")
+
+    assert stage2(standalone)["status"] == "failed"
+    assert stage2(replay)["status"] == "passed"
+    velocity = next(c for c in stage2(replay)["checks"] if c["id"] == "handoff.velocity_continuity")
+    assert 0.01 < velocity["value"] < velocity["limit"] == 0.05
+    separation = next(event for event in replay["timeline"]["events"] if event["label"] == "Separation")
+    assert "stage2 PASSED" in separation["note"] and "limit 0.05 m/s" in separation["note"]
+    assert replay_mission_scenario(replace(run, vehicle_sha256="0" * 64)) is None
+
+    # The recorded policy must still flag a discontinuity above its limit.
+    tracks = list(run.tracks)
+    i = next(i for i, track in enumerate(tracks) if track.body_id == "stage2")
+    v = tracks[i].velocity_m_s
+    tracks[i] = replace(tracks[i], velocity_m_s=((v[0][0] + 1.0, *v[0][1:]), *v[1:]))
+    changed = run_to_scene(replace(run, tracks=tuple(tracks)), earth_texture=False,
+                           mission_scenario=replay_mission_scenario(run))
+    assert stage2(changed)["status"] == "failed"
 
 
 def test_recorded_stage_fuel_accounts_for_attached_upper_stack_and_booster():

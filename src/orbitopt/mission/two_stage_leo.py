@@ -1826,7 +1826,8 @@ def build_from_config(config: dict, recorder=None) -> dict:
     scene_run_dir = mission.recovery_run_dir or mission.ascent_run_dir
     scene = run_to_scene(read_run(scene_run_dir),
                          earth_texture=scenario.earth_texture,
-                         coast_orbits=scenario.coast_orbits)
+                         coast_orbits=scenario.coast_orbits,
+                         mission_scenario=scenario)
     scene["id"] = mission_doc["id"]
     scene["title"] = mission_doc["title"]
     attach_to_scene(scene, mission.report)

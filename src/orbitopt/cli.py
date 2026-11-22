@@ -349,10 +349,13 @@ def _cmd_flight_to_scene(args):
     import jsonschema
 
     from orbitopt.flightlab.contract import read_run
+    from orbitopt.flightlab.replay_context import replay_mission_scenario
     from orbitopt.flightlab.scene_export import run_to_scene
 
     try:
-        scene = run_to_scene(read_run(args.run_dir), earth_texture=not args.no_earth_texture)
+        run = read_run(args.run_dir)
+        scene = run_to_scene(run, earth_texture=not args.no_earth_texture,
+                             mission_scenario=replay_mission_scenario(run))
     except (jsonschema.ValidationError, ValueError) as exc:
         print(f"REJECTED: {args.run_dir}\n  {exc}")
         raise SystemExit(1) from None

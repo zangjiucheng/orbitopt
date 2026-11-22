@@ -57,6 +57,7 @@ verification authority.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -72,6 +73,7 @@ from orbitopt.flightlab.contract import FlightRun, _parse_utc
 # cached-module lookup).
 if TYPE_CHECKING:
     from orbitopt.mission.contract import HandoffState
+    from orbitopt.mission.two_stage_leo import TwoStageLeoScenario
 
 #: Earth rendering constants (the scene's distanceUnit is always km here).
 EARTH_RADIUS_KM = 6378.137  # WGS-84 equatorial radius
@@ -292,7 +294,8 @@ def _check_summary(checks: list) -> str:
     return text + (f" ({', '.join(reasons)})" if reasons else "")
 
 
-def _staging_handoffs(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dict) -> list:
+def _staging_handoffs(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dict,
+                      mission_scenario: TwoStageLeoScenario | None = None) -> list:
     """One handoff per child body: the parent track's final GCRS state vs the
     child track's initial GCRS state (position, velocity, epoch, mass), graded
     the way the M-07 reference chain grades staging
@@ -308,10 +311,8 @@ def _staging_handoffs(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dic
       inheriting the stack state. A fairing jettisoned off a branch is
       recorded as not graded: it diverges on purpose.
 
-    Graded raw, the scene showed every staging of a nominal flight as FAILED
-    (position/velocity discontinuity across the gap, a fairing's
-    "epoch_backwards"). A declared separation impulse is a real, intended
-    delta-v, so the velocity gate gets that much headroom."""
+    Mission replays use the scenario's staging tolerances. Standalone runs
+    use the default handoff tolerances plus any declared separation impulse."""
     from orbitopt.mission.branches import separation_fork
     from orbitopt.mission.contract import HandoffTolerances, check_handoff
     from orbitopt.mission.two_stage_leo import (BRIDGE_METHOD, _ascent_lineage,
@@ -353,11 +354,20 @@ def _staging_handoffs(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dic
                                 or ev.data.get("impulse_ns") or 0.0)
                            for ev in run.events
                            if ev.kind == "separation" and ev.body_id == parent_id), 0.0)
-        tolerances = HandoffTolerances(
-            velocity_m_s=0.01 + abs(impulse_ns) / max(float(child.mass_kg[0]), 1.0))
+        if mission_scenario is None:
+            tolerances = HandoffTolerances(
+                velocity_m_s=0.01 + abs(impulse_ns) / max(float(child.mass_kg[0]), 1.0))
+            basis = "standalone staging check"
+        else:
+            tolerances = replace(mission_scenario.handoff,
+                                 velocity_m_s=mission_scenario.staging_velocity_m_s)
+            basis = "mission staging tolerance"
         report = check_handoff(before, after, tolerances)
         checks = [_check_doc(c) for c in report.checks]
         detail = _check_summary(checks)
+        velocity = next(c for c in checks if c["id"] == "handoff.velocity_continuity")
+        detail += (f" · velocity difference {velocity['value']:.5g} m/s"
+                   f" (limit {velocity['limit']:.5g} m/s, {basis})")
         if bridge is not None:
             detail += (f" \u00b7 parent coasted {bridge['gap_s']:.1f} s to the child's first sample"
                        if bridge["method"] == BRIDGE_METHOD else f" \u00b7 {bridge['method']}")
@@ -402,7 +412,7 @@ def _seco_handoff(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dict):
 
 
 def _fork_handoff(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dict,
-                  fork) -> dict | None:
+                  fork, mission_scenario: TwoStageLeoScenario | None = None) -> dict | None:
     """The E2-02 separation-fork card: the split itself, graded as the mass
     gate the per-boundary cards cannot see -- the branches' initial masses sum
     to the stack's mass at separation within the contract's mass tolerance
@@ -418,7 +428,7 @@ def _fork_handoff(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dict,
     branch_mass = sum(float(by_id[b["body_id"]].mass_kg[0]) for b in fork["branches"]
                       if b["body_id"] in by_id)
     residual = branch_mass - float(fork["parent_mass_kg"])
-    limit = HandoffTolerances().mass_kg
+    limit = (mission_scenario.handoff if mission_scenario else HandoffTolerances()).mass_kg
     check = {"id": "mass.separation_fork", "passed": bool(abs(residual) <= limit),
              "value": float(residual), "limit": float(limit), "unit": "kg",
              "reason_code": "" if abs(residual) <= limit else "mass_not_conserved_across_fork"}
@@ -609,7 +619,8 @@ def _earth_body(earth_texture: bool, orientation_basis: list | None) -> dict:
 
 
 def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
-                 coast_orbits: float = 0.0, coast_samples: int = 120, target=None) -> dict:
+                 coast_orbits: float = 0.0, coast_samples: int = 120, target=None,
+                 mission_scenario: TwoStageLeoScenario | None = None) -> dict:
     """Convert a FlightResult v1 run into a scene-1.0 document (Earth scene,
     one trailed body per track, contract events as timeline markers, a
     continuous phase row and a per-boundary ``handoffs`` verdict block).
@@ -652,10 +663,10 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
         bodies.append(_track_body_entry(track, TRAIL_PALETTE[i % len(TRAIL_PALETTE)],
                                         positions_km, velocities_km_s))
 
-    handoffs = _staging_handoffs(run, epoch, mjd2000, gcrs)
+    handoffs = _staging_handoffs(run, epoch, mjd2000, gcrs, mission_scenario)
     from orbitopt.mission.branches import fork_lanes, separation_fork
     fork = separation_fork(run)
-    fork_card = _fork_handoff(run, epoch, mjd2000, gcrs, fork)
+    fork_card = _fork_handoff(run, epoch, mjd2000, gcrs, fork, mission_scenario)
     if fork_card is not None:
         handoffs.append(fork_card)
     seco = _seco_handoff(run, epoch, mjd2000, gcrs)
@@ -679,7 +690,9 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
         # tooltip), so a staging or insertion boundary shows its pass/fail.
         if event.kind == "separation":
             mine = [h for h in handoffs if h["id"].startswith("separation:")
-                    and h.get("from_body") == event.body_id]
+                    and (h.get("from_body") == event.body_id
+                         or (h.get("to", {}).get("body") == event.body_id
+                             and math.isclose(h["time"], event.t_s, rel_tol=0, abs_tol=1e-6)))]
             if mine:
                 entry["note"] += " \u00b7 handoff " + " | ".join(
                     f"{h.get('to', {}).get('body', 'fork')} {h['status'].upper()} ({h['detail']})"

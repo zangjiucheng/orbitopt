@@ -64,6 +64,10 @@ In **Distance**, scroll vertically to zoom, then swipe horizontally or
 right-drag to move through time. Left-click or drag to seek. Double-click
 to fit the full time range.
 
+Separation tooltips show the velocity difference and the applicable limit.
+Recorded mission replays use their mission configuration when the run and
+input digests match. Other runs use the standalone staging check.
+
 [![Expanded propellant plot showing stage and booster estimates with a precise time readout](assets/flightlab-telemetry-detail.png)](assets/flightlab-telemetry-detail.png)
 
 Targets and vehicles are edited in YAML or through the Python designer API;

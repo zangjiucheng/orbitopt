@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from functools import lru_cache
 from pathlib import Path
 
@@ -53,3 +54,39 @@ def replay_inputs(run, run_dir):
     if vehicle is None and run.vehicle_sha256 in vehicles:
         vehicle = yaml.safe_load(vehicles[run.vehicle_sha256].read_text())
     return vehicle, target or targets.get(run.target_sha256)
+
+
+@lru_cache(maxsize=1)
+def _recorded_mission_configs():
+    """Index mission configs whose recorded ascent is available in this checkout."""
+    data = Path(__file__).resolve().parents[1] / "data"
+    repo = Path(__file__).resolve().parents[3]
+    configs = {}
+    for path in sorted(data.glob("mission_two_stage_leo*.yaml")):
+        try:
+            config = yaml.safe_load(path.read_text())
+            ascent = config["scenario"]["ascent"]
+            if ascent.get("mode") != "run_dir":
+                continue
+            manifest = json.loads((repo / ascent["run_dir"] / "manifest.json").read_text())
+            key = tuple(manifest[field] for field in ("run_id", "target_sha256", "vehicle_sha256"))
+            configs.setdefault(key, []).append(config)
+        except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError):
+            continue
+    return configs
+
+
+def replay_mission_scenario(run):
+    """Use the mission's staging policy for its recorded ascent or recovery replay."""
+    key = run.run_id, run.target_sha256, run.vehicle_sha256
+    configs = _recorded_mission_configs().get(key, ())
+    if not configs:
+        return None
+    from orbitopt.mission.two_stage_leo import scenario_from_config
+
+    scenarios = [scenario_from_config(config) for config in configs]
+    first = scenarios[0]
+    if all((scenario.handoff, scenario.staging_velocity_m_s) ==
+           (first.handoff, first.staging_velocity_m_s) for scenario in scenarios):
+        return first
+    return None

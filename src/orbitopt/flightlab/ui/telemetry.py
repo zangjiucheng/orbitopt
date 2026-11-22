@@ -314,9 +314,10 @@ def channel_values_at(channel: TelemetryChannel, t: float) -> tuple[tuple[str, f
     return tuple(out)
 
 
-def _run_scene_cache_id(run_dir: Path, run: FlightRun) -> str:
+def _run_scene_cache_id(run_dir: Path, run: FlightRun, *, earth_texture: bool, scenario) -> str:
     digest = hashlib.sha256()
-    digest.update(b"replay-sites-v1\0")
+    staging = (scenario.handoff, scenario.staging_velocity_m_s) if scenario else None
+    digest.update(f"replay-staging-v2:{earth_texture}:{staging!r}\0".encode())
     digest.update(str(run_dir.resolve()).encode("utf-8"))
     digest.update(b"\0")
     for path in sorted(run_dir.rglob("*")):
@@ -344,10 +345,13 @@ def load_run_scene(run_dir: Path | str, *, earth_texture: bool = True) -> tuple[
 
     path = Path(run_dir).expanduser()
     run = read_run(path)
-    from orbitopt.flightlab.replay_context import replay_inputs
+    from orbitopt.flightlab.replay_context import replay_inputs, replay_mission_scenario
     _, target = replay_inputs(run, path)
+    scenario = replay_mission_scenario(run)
 
     def compute() -> dict:
-        return run_to_scene(run, earth_texture=earth_texture, target=target)
+        return run_to_scene(run, earth_texture=earth_texture, target=target,
+                            mission_scenario=scenario)
 
-    return run, cached_scene(_run_scene_cache_id(path, run), compute)
+    return run, cached_scene(_run_scene_cache_id(path, run, earth_texture=earth_texture,
+                                                scenario=scenario), compute)
