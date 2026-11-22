@@ -61,6 +61,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -353,7 +354,7 @@ def _twin_ascent(dt_s: float, isp_sl_stage1: float | None = None,
     ``vehicle_yaml`` overrides the vehicle the twin flies (E5-08: the twin
     flies the derived vehicle file); ``None`` keeps the E5-07 reference."""
     import yaml
-    from orbitopt.flightlab import frames
+    from orbitopt.flightlab import frames, hot_staging
     from orbitopt.flightlab.sixdof.aero import AeroModel
     from orbitopt.flightlab.sixdof.gravity_turn import WaypointAttitudeProgram, propagate_point_mass
     from orbitopt.flightlab.sixdof.rigidbody import (RigidBodyEngine, RigidBodyPhysics,
@@ -412,11 +413,19 @@ def _twin_ascent(dt_s: float, isp_sl_stage1: float | None = None,
     # the staging timeline comes from the vehicle file given (the E5-07 vehicle reads
     # 135 / 138 / 138 + 378 = 516 s -- the values this function used to hard-code, so
     # the sealed references are unchanged); a design with another staging point (DC7)
-    # is checked on ITS OWN timeline, not on a stale one
+    # is checked on ITS OWN timeline, not on a stale one. A vehicle with a hot-staging
+    # block (DC8, E10-02) flies NO coast: the booster leg stops at the ship-ignition
+    # command, a composite (booster + plume-corrected ship) leg carries the mated
+    # stack to separation, and the returned ``meco`` entry is the end-of-stack-power
+    # state -- what the OT side reports at the same instant (a separated stage
+    # cannot thrust in either model; the booster's post-separation floor burn is
+    # the declared backend difference, ~2.6 t / ~1 m/s, booster-only).
+    hs = hot_staging.load_hot_staging(doc)
     t_meco = float(s1["engine"]["burn_end_s"])
-    t_sep = float(s1.get("separation_time_s", t_meco + 3.0))
-    t_seco = t_sep + float(s2["engine"]["burn_end_s"])
-    burn1 = run1(t_meco, dt_s)
+    t_sep = float(hs.separation_s) if hs is not None else float(
+        s1.get("separation_time_s", t_meco + 3.0))
+    t_seco = t_sep + float(s2["engine"]["burn_end_s"]) - (hs.overlap_s if hs else 0.0)
+    burn1 = run1(hs.ship_ignition_s if hs is not None else t_meco, dt_s)
     mq = burn1.max_q
 
     def at(run: Any, t: float) -> dict:
@@ -435,26 +444,59 @@ def _twin_ascent(dt_s: float, isp_sl_stage1: float | None = None,
         f = (t - ts[i - 1]) / (ts[i] - ts[i - 1])
         return {k: run.samples[k][i - 1] + f * (run.samples[k][i] - run.samples[k][i - 1]) for k in keys}
 
-    m_s = at(burn1, t_meco)
-    r_meco = np.array([m_s["x_m"], m_s["y_m"], m_s["z_m"]])
-    v_meco = np.array([m_s["vx_m_s"], m_s["vy_m_s"], m_s["vz_m_s"]])
-    st_meco = RigidBodyState(t_s=t_meco, position_m=r_meco, velocity_m_s=v_meco,
-                             quaternion=(1.0, 0.0, 0.0, 0.0), omega_rad_s=(0.0, 0.0, 0.0),
-                             mass_kg=float(m_s["mass_kg"]))
-    coast = propagate_point_mass(st_meco, v1, program, t_sep, dt_s=dt_s,
-                                 sample_every=1, physics=physics, throttle=0.0)
-    s_s = at(coast, t_sep)
+    ship_burn_kg = 0.0
+    if hs is None:
+        m_s = at(burn1, t_meco)
+        r_meco = np.array([m_s["x_m"], m_s["y_m"], m_s["z_m"]])
+        v_meco = np.array([m_s["vx_m_s"], m_s["vy_m_s"], m_s["vz_m_s"]])
+        st_meco = RigidBodyState(t_s=t_meco, position_m=r_meco, velocity_m_s=v_meco,
+                                 quaternion=(1.0, 0.0, 0.0, 0.0), omega_rad_s=(0.0, 0.0, 0.0),
+                                 mass_kg=float(m_s["mass_kg"]))
+        coast = propagate_point_mass(st_meco, v1, program, t_sep, dt_s=dt_s,
+                                     sample_every=1, physics=physics, throttle=0.0)
+        s_s = at(coast, t_sep)
+        t_ship0 = t_sep
+    else:
+        ship_burn_kg = hs.ship_burn_kg(s2["engine"]["thrust_vac_n"],
+                                       float(s2["engine"]["isp_vac_s"]))
+        comp, _ = hs.composite_stack_curve(
+            s1["engine"]["thrust_vac_n"], s2["engine"]["thrust_vac_n"],
+            float(s2["engine"]["isp_vac_s"]))
+        t_ig = hs.ship_ignition_s
+        lev_c, peak_c = _sched_level([[t, f] for t, f in comp if t >= t_ig])
+        eta = 1.0 - hs.plume_axial_loss_fraction
+        f_b = hot_staging.interp_thrust(s1["engine"]["thrust_vac_n"], t_ig)
+        f_s = hot_staging.interp_thrust(s2["engine"]["thrust_vac_n"], 0.0)
+        isp_c = (f_b + eta * f_s) / (f_b / float(s1["engine"]["isp_vac_s"])
+                                     + f_s / float(s2["engine"]["isp_vac_s"]))
+        v_c = replace(v1, engine=replace(v1.engine, thrust_vacuum_n=peak_c,
+                                         isp_vacuum_s=isp_c, isp_sea_level_s=isp_c))
+        ig_s = at(burn1, t_ig)
+        st_ig = RigidBodyState(t_s=t_ig,
+                               position_m=(ig_s["x_m"], ig_s["y_m"], ig_s["z_m"]),
+                               velocity_m_s=(ig_s["vx_m_s"], ig_s["vy_m_s"], ig_s["vz_m_s"]),
+                               quaternion=(1.0, 0.0, 0.0, 0.0), omega_rad_s=(0.0, 0.0, 0.0),
+                               mass_kg=float(ig_s["mass_kg"]))
+        hot = propagate_point_mass(st_ig, v_c, program, t_sep, dt_s=dt_s,
+                                   sample_every=max(1, int(round(1.0 / dt_s))),
+                                   physics=physics,
+                                   guidance=_SchedGuidance(program, lev_c))
+        m_s = at(hot, t_sep)  # the stack's power ends AT separation
+        r_meco = np.array([m_s["x_m"], m_s["y_m"], m_s["z_m"]])
+        v_meco = np.array([m_s["vx_m_s"], m_s["vy_m_s"], m_s["vz_m_s"]])
+        s_s = m_s
+        t_ship0 = t_ig  # the ship's engine clock started at ignition
     r_sep = np.array([s_s["x_m"], s_s["y_m"], s_s["z_m"]])
     v_sep = np.array([s_s["vx_m_s"], s_s["vy_m_s"], s_s["vz_m_s"]])
     m_sep = float(s_s["mass_kg"])
-    ship_kg = float(s2["mass_initial_kg"])
+    ship_kg = float(s2["mass_initial_kg"]) - ship_burn_kg
     st2 = RigidBodyState(t_s=t_sep, position_m=r_sep, velocity_m_s=v_sep,
                          quaternion=(1.0, 0.0, 0.0, 0.0), omega_rad_s=(0.0, 0.0, 0.0),
                          mass_kg=ship_kg)
     burn2 = propagate_point_mass(st2, v2, program, t_seco, dt_s=dt_s,
                                  sample_every=max(1, int(round(dt_s / dt_s * 100))),
                                  physics=physics,
-                                 guidance=_SchedGuidance(program, lev2, t_sep))
+                                 guidance=_SchedGuidance(program, lev2, t_ship0))
     e_s = at(burn2, t_seco)
     r_seco = np.array([e_s["x_m"], e_s["y_m"], e_s["z_m"]])
     v_seco = np.array([e_s["vx_m_s"], e_s["vy_m_s"], e_s["vz_m_s"]])
@@ -465,7 +507,10 @@ def _twin_ascent(dt_s: float, isp_sl_stage1: float | None = None,
             "separation": (r_sep, v_sep, m_sep),
             "seco": (r_seco, v_seco, float(e_s["mass_kg"])),
             "maxq": (float(mq.q_pa), float(mq.t_s)),
-            "debris_mass_kg": m_sep - ship_kg, "impact": debris}
+            "debris_mass_kg": m_sep - ship_kg, "impact": debris,
+            **({} if hs is None else
+               {"booster_meco_s": hs.booster_meco_s,
+                "ship_overlap_burn_kg": ship_burn_kg})}
 
 
 def _debris_to_impact(r0: np.ndarray, v0: np.ndarray, mass_kg: float,
@@ -543,7 +588,13 @@ def _load_recorded(reference_root: Path) -> dict[str, Any]:
                 return e
         raise KeyError(kind)
 
-    return {"raw": raw, "events": events, "summary": summary,
+    split = len(raw)
+    for i in range(1, len(raw)):
+        if (float(raw[i]["time_s"]) > float(raw[i - 1]["time_s"])
+                and float(raw[i]["mass_kg"]) < 0.7 * float(raw[i - 1]["mass_kg"])):
+            split = i
+            break
+    return {"raw": raw, "trace_split": split, "events": events, "summary": summary,
             "event_times": {k: float(event(k, b)["t_s"]) for k, b in
                             (("meco", None), ("separation", "stage2"),
                              ("seco", None), ("max_q", None),
@@ -558,22 +609,40 @@ _RAW_COLS = ("pos_eci_x_m", "pos_eci_y_m", "pos_eci_z_m", "vel_eci_x_mps",
              "vel_eci_y_mps", "vel_eci_z_mps", "mass_kg")
 
 
-def _raw_interp(rec: Mapping[str, Any], t: float) -> dict[str, float]:
-    """Linear interpolation of the raw 2-s state history at a 2-s grid time.
-    The contract event records carry no state; the raw history is the only
-    state evidence, and the declared grid times land on samples exactly."""
+def _raw_interp(rec: Mapping[str, Any], t: float,
+                stage: int | None = None) -> dict[str, float]:
+    """Linear interpolation of the raw 2-s state history at ``t``, inside the
+    trace of ONE body: ``stage=1`` uses the stage-1 (stack) trace only,
+    ``stage=2`` the stage-2 trace, ``None`` the whole series. The raw history
+    is the only state evidence; the contract event records carry no state.
+    Where the stage-1 trace ends at the separation seam a stage-1 event can
+    fall between the last stage-1 row and the first stage-2 row (hot staging
+    puts MECO/separation exactly there): the value is then linearly
+    extrapolated along the stage-1 trace, never blended across the seam --
+    the mass column switches meaning (stack -> ship) at that row.
+    """
     raw = rec["raw"]
     for row in raw:
         if abs(float(row["time_s"]) - t) < 1e-6:
             return {c: float(row[c]) for c in _RAW_COLS}
-    lo = raw[int(t // 2)]
-    hi = raw[min(int(t // 2) + 1, len(raw) - 1)]
+    split = int(rec.get("trace_split", len(raw)))
+    sub = raw if stage is None else (raw[:split] if stage == 1 else raw[split:])
+    if len(sub) < 2:
+        sub = raw
+    base = float(sub[0]["time_s"])
+    i = max(0, min(len(sub) - 2, int((t - base) / 2.0)))
+    while i > 0 and float(sub[i]["time_s"]) > t:
+        i -= 1
+    while i < len(sub) - 2 and float(sub[i + 1]["time_s"]) < t:
+        i += 1
+    lo, hi = sub[i], sub[i + 1]
     f = (t - float(lo["time_s"])) / (float(hi["time_s"]) - float(lo["time_s"]))
     return {c: float(lo[c]) + f * (float(hi[c]) - float(lo[c])) for c in _RAW_COLS}
 
 
-def _rec_state(rec: Mapping[str, Any], t: float) -> tuple[np.ndarray, np.ndarray, float]:
-    s = _raw_interp(rec, t)
+def _rec_state(rec: Mapping[str, Any], t: float,
+               stage: int | None = None) -> tuple[np.ndarray, np.ndarray, float]:
+    s = _raw_interp(rec, t, stage)
     r = np.array([s["pos_eci_x_m"], s["pos_eci_y_m"], s["pos_eci_z_m"]])
     v = np.array([s["vel_eci_x_mps"], s["vel_eci_y_mps"], s["vel_eci_z_mps"]])
     return r, v, s["mass_kg"]
@@ -889,11 +958,11 @@ def verify_independent_dynamics(reference_root: Path | None = None, *,
     deltas: dict[str, dict[str, float]] = {}
     for variant, res in twin.items():
         d: dict[str, float] = {}
-        for ev_key, t in (("meco", rec["event_times"]["meco"]),
-                          ("separation", rec["event_times"]["separation"]),
-                          ("seco", rec["event_times"]["seco"])):
+        for ev_key, t, stg in (("meco", rec["event_times"]["meco"], 1),
+                               ("separation", rec["event_times"]["separation"], 1),
+                               ("seco", rec["event_times"]["seco"], 2)):
             r, v, m = res[ev_key]
-            rr, rv, rm = _rec_state(rec, t)
+            rr, rv, rm = _rec_state(rec, t, stg)
             r_t, v_t = _ecef_to_eci(t, r, v)
             d[f"{ev_key}_pos"] = float(np.linalg.norm(r_t - rr))
             d[f"{ev_key}_vel"] = float(np.linalg.norm(v_t - rv))
@@ -980,7 +1049,7 @@ def verify_independent_dynamics(reference_root: Path | None = None, *,
     r_t, v_t, _ = tn["seco"]
     r_eci, v_eci = _ecef_to_eci(rec["event_times"]["seco"], r_t, v_t)
     el_twin = _orbit_elements(r_eci, v_eci)
-    rr, rv, _ = _rec_state(rec, rec["event_times"]["seco"])
+    rr, rv, _ = _rec_state(rec, rec["event_times"]["seco"], 2)
     el_rec = _orbit_elements(rr, rv)
     add("ascent.seco.orbit_semi_major_axis", CHECK_MODEL,
         EVIDENCE_INDEPENDENT_MODEL,
