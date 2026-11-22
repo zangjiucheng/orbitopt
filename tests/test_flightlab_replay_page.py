@@ -235,6 +235,17 @@ def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypat
         assert window.chart_panel.currentWidget() is window.telemetry_panel
         assert window.state.timeline is not None and window.timeline_bar.isVisible()
         assert window.body_strip.isVisible()
+        window.resize(1200, 640)
+        window.center_splitter.setSizes([300, 220])
+        app.processEvents()
+        assert window.height() == 640
+        assert window.timeline_bar.mapTo(window, window.timeline_bar.rect().bottomLeft()).y() < window.height()
+        telemetry = window.telemetry_panel
+        assert telemetry.verticalScrollBar().maximum() > 0
+        last_chart = telemetry.charts["downrange"]
+        telemetry.ensureWidgetVisible(last_chart)
+        assert telemetry.verticalScrollBar().value() > 0
+        assert last_chart.mapTo(telemetry.viewport(), last_chart.rect().center()).y() < telemetry.viewport().height()
         assert set(window.body_strip.buttons) == {b["id"] for b in window.state.scene["bodies"]}
         window.body_strip.buttons["earth"].click()
         app.processEvents()  # queued initial framing must not override the click

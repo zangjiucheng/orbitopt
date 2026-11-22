@@ -57,6 +57,9 @@ interpolated per-series values, and use **Reset view** to restore the full range
 Left-click or drag still seeks the shared mission clock. The same controls
 work on the inline plots and comparison telemetry.
 
+Drag the divider above **Bodies** to resize the plot pane. In a short window,
+use the telemetry scrollbar or **Shift + scroll** to reach lower plots.
+
 [![Expanded propellant plot showing stage and booster estimates with a precise time readout](assets/flightlab-telemetry-detail.png)](assets/flightlab-telemetry-detail.png)
 
 Targets and vehicles are edited in YAML or through the Python designer API;

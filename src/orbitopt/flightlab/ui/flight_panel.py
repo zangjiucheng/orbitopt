@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHeaderView,
     QLabel,
+    QScrollArea,
     QSplitter,
     QTabWidget,
     QTableWidget,
@@ -51,7 +52,7 @@ from orbitopt.flightlab.ui.recovery_panel import (
     reason_tooltip,
 )
 from orbitopt.flightlab.ui.telemetry import TelemetryChannel, build_telemetry_channels
-from orbitopt.viz.theme import ACCENT, DANGER, INK_MUTED, INK_SECONDARY, SUCCESS, WARNING
+from orbitopt.viz.theme import ACCENT, DANGER, INK_MUTED, INK_SECONDARY, PANEL, SUCCESS, WARNING
 
 #: (channel id, label, unit) of the telemetry grid, in display order.
 TELEMETRY_CHARTS = (
@@ -246,7 +247,7 @@ class FlightRunPanel(QWidget):
             self.time_requested.emit(float(item.data(Qt.ItemDataRole.UserRole)))
 
 
-class TelemetryPanel(QWidget):
+class TelemetryPanel(QScrollArea):
     """The *Telemetry* chart tab. Signal ``time_requested(t)``: a chart was
     clicked or dragged."""
 
@@ -255,12 +256,20 @@ class TelemetryPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("flightTelemetry")
-        grid = QGridLayout(self)
+        self.setWidgetResizable(True)
+        self.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setStyleSheet(
+            f"QScrollArea#flightTelemetry, QWidget#telemetryGrid {{ background: {PANEL}; }}"
+        )
+        chart_host = QWidget()
+        chart_host.setObjectName("telemetryGrid")
+        grid = QGridLayout(chart_host)
         grid.setContentsMargins(4, 4, 4, 4)
         grid.setSpacing(6)
         self.charts: dict[str, _TelemetryChart] = {}
         for index, (channel_id, label, unit) in enumerate(TELEMETRY_CHARTS):
-            chart = _TelemetryChart(channel_id, label, unit, self)
+            chart = _TelemetryChart(channel_id, label, unit, chart_host)
             chart.time_requested.connect(self.time_requested)
             self.charts[channel_id] = chart
             grid.addWidget(chart, index // 3, index % 3)
@@ -268,6 +277,7 @@ class TelemetryPanel(QWidget):
             grid.setColumnStretch(column, 1)
         for row in range(3):
             grid.setRowStretch(row, 1)
+        self.setWidget(chart_host)
 
     def set_channels(self, channels: Sequence[TelemetryChannel], t_min: float, t_max: float) -> None:
         for chart in self.charts.values():

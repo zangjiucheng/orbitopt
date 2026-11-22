@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
-    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -52,7 +51,8 @@ from orbitopt.flightlab.compare import (
     trajectory_profiles,
 )
 from orbitopt.flightlab.scene_export import TRAIL_PALETTE
-from orbitopt.flightlab.ui.charts import TelemetryChart, fmt_number, nice_ticks, qfont
+from orbitopt.flightlab.ui.charts import fmt_number, nice_ticks, qfont
+from orbitopt.flightlab.ui.flight_panel import TelemetryPanel
 from orbitopt.flightlab.ui.recovery_panel import FLIGHTLAB_PANEL_QSS, ReasonPanel, RecoveryPanel
 from orbitopt.flightlab.ui.telemetry import build_telemetry_channels
 from orbitopt.viz.theme import (
@@ -67,19 +67,6 @@ from orbitopt.viz.theme import (
 )
 
 __all__ = ["FlightLabComparePage", "ProfileChart"]
-
-_TELEMETRY_SPECS = (
-    ("altitude", "Altitude", "km"),
-    ("speed", "Speed", "km/s"),
-    ("dynamic_pressure", "Dynamic pressure", "kPa"),
-    ("g_load", "G-load", "g"),
-    ("mass", "Mass", "kg"),
-    ("throttle", "Throttle", "%"),
-    ("propellant", "Propellant remaining", "t"),
-    ("vertical_speed", "Vertical speed (radial)", "m/s"),
-    ("downrange", "Downrange", "km"),
-)
-
 
 def _body_colors(bundles) -> dict[str, str]:
     ids: list[str] = []
@@ -379,19 +366,12 @@ class FlightLabComparePage(QWidget):
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
         self.profile_chart = ProfileChart()
-        chart_host = QWidget()
-        grid = QGridLayout(chart_host)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setSpacing(6)
-        self.charts: dict[str, TelemetryChart] = {}
-        for i, (cid, label, unit) in enumerate(_TELEMETRY_SPECS):
-            chart = TelemetryChart(cid, label, unit, chart_host)
-            chart.time_requested.connect(self._cursor_to)
-            self.charts[cid] = chart
-            grid.addWidget(chart, i // 3, i % 3)
+        telemetry = TelemetryPanel()
+        telemetry.time_requested.connect(self._cursor_to)
+        self.charts = telemetry.charts
         vsplit = QSplitter(Qt.Vertical)
         vsplit.addWidget(self.profile_chart)
-        vsplit.addWidget(chart_host)
+        vsplit.addWidget(telemetry)
         vsplit.setSizes([300, 320])
         left_layout.addWidget(vsplit)
         splitter.addWidget(left)

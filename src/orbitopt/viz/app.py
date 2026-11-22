@@ -55,6 +55,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSplitter,
+    QSizePolicy,
     QStackedWidget,
     QTabWidget,
     QVBoxLayout,
@@ -399,6 +400,20 @@ class MissionControlWindow(QMainWindow):
         # the read-only Vehicle page: the other Flight Lab view that is not the 3D scene
         self.vehicle_page = VehiclePage()
         self._vehicle_index = self.center_stack.addWidget(self.vehicle_page)
+        # QStackedWidget includes hidden pages in its minimum size. The
+        # comparison page must not impose its height on the 3D workspace.
+        pages = [self.center_stack.widget(i) for i in range(self.center_stack.count())]
+        original_policies = [page.sizePolicy() for page in pages]
+
+        def fit_current_page(index: int) -> None:
+            for i, (page, original) in enumerate(zip(pages, original_policies)):
+                policy = QSizePolicy(original)
+                if i != index:
+                    policy.setVerticalPolicy(QSizePolicy.Policy.Ignored)
+                page.setSizePolicy(policy)
+
+        self.center_stack.currentChanged.connect(fit_current_page)
+        fit_current_page(self.center_stack.currentIndex())
         self._flight_page_index = self._flightlab_index   # which of the two is up
         self.sidebar.set_flightlab_panel(self.flightlab_nav)
         self.sidebar.mode_changed.connect(self._on_sidebar_mode)

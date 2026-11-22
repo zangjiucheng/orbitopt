@@ -390,6 +390,9 @@ class _TelemetryChart(QWidget):
         self._set_visible_range(*self._full_range)
 
     def wheelEvent(self, event):  # noqa: N802
+        if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            event.ignore()
+            return
         steps = event.angleDelta().y() / 120
         if not steps:
             return
