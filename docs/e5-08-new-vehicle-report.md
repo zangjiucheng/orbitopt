@@ -53,8 +53,14 @@ recording metadata.
 The DC7 and Starbase experiments each use seeds 8, 9 and 10, with 12 flights
 per seed. Original-design results use seeds 5, 6 and 7, with 10 per seed.
 See [E7-05](benchmarks/e7_05_out_of_sample_reliability.md) for cluster-aware
-statistics. The original independent landing check uses a declared design
-corridor; it does not validate the failed mission's actual arrival state.
+statistics. The original independent landing check starts from a declared
+design corridor and is recorded as a `design_input`, not full-path
+verification: it does not re-fly the actual recovery, so it cannot be read
+as independent physical verification of the complete RTLS chain. The E10-07
+full recovery re-flight ([E10-07 report](e10-07-full-recovery-reflight.md))
+supersedes it for that purpose: it re-flies boostback, unpowered entry and
+the landing phase from the actual DC8 hot-staging separation handoff under
+an independently written twin model.
 
 ## Replay and view
 

@@ -241,6 +241,49 @@ The bands and their derivations are in the
 No check in this report uses `historical_telemetry` evidence: the reference
 vehicle is a public estimate, not flown hardware.
 
+## Full recovery independent re-flight (E10-07, task #304)
+
+E8-05's landing evidence starts from a *declared* design corridor, so it
+never re-flew an actual recovery trajectory; it is not independent physical
+verification of the complete RTLS chain (the E5-08 report now records the
+corridor-start check as `design_input`). E10-07 closes that gap end to end
+(`orbitopt.verify.full_recovery_reflight`, benchmark
+`benchmarks/bench_e10_07_full_recovery_reflight.py`, gated by
+`tests/test_e10_07_full_recovery_reflight.py`, report kind
+`full-recovery-reflight`, committed results in
+`benchmarks/e10_07_full_recovery_reflight.json`):
+
+* The start state is the *actual* DC8 hot-staging separation handoff flown
+  fresh from the OpenTsiolkovsky OT plant — separation at t = 125.0 s, mass
+  900 172 kg, 1 569.8 m/s — pinned by a SHA-256 handoff digest that the
+  fast test recomputes from the recorded state. No declared corridor is
+  used as a start condition.
+* An independently written twin re-flies the whole chain — boostback to
+  cutoff, the E10-01 unpowered aerodynamic entry to the corridor read-out,
+  and the terminal descent to impact — with its own RK4 integrator, own
+  WGS-84 geodesy, own J2 + ECEF rotation dynamics, textbook US76
+  (geopotential) tables and a physical-thrust replay of the *identical*
+  authored mission script. The landing phase at the actual crossed-corridor
+  handoff (1 067 m/s) is probed with `fly_landing_burn` and is honestly
+  reported infeasible (`LANDING_INFEASIBLE`), not gated as a pass.
+* Nine acceptance quantities (cutoff time/position/speed, entry peak-q and
+  peak-g, impact time/position/speed, remaining propellant) are compared to
+  the main FL-301 model inside measured bands, and every discrepancy is
+  split into error-budget lines: declared-zero frame and controller lines,
+  a measured numerical line (dt/2), a measured gravity line (twin without
+  J2) and a measured atmosphere line — the twin re-run on the main model's
+  density profile. The atmosphere *form* line accounts for the whole
+  entry-peak-q and impact-speed discrepancy (residual 0.0), so those checks
+  are attributed to the two density profiles, not to either propagator.
+* The verdict stays honest: the main model itself reports
+  `CORRIDOR_MISSED` + `ENTRY_Q_LIMIT_EXCEEDED` at this handoff (E10-01's
+  NOT-CLOSED status), and the report says so; independent re-flight
+  agreement here certifies the *chain physics*, not a closed design.
+  All checks carry `independent_model` evidence under the `CHECK_MODEL`
+  subject — a distinct, stricter class than the corridor-start checks.
+
+See [E10-07 full recovery re-flight report](e10-07-full-recovery-reflight.md).
+
 The [E5-08 variants](e5-08-new-vehicle-report.md) apply these checks to new
 designs. DC7 fails the 15 km SECO semi-major-axis band (27.7 km measured);
 Starbase fails the 12% debris impact-speed band (12.80% measured). Their
