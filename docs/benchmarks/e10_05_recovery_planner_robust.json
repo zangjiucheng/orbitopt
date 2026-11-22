@@ -1,0 +1,6101 @@
+{
+ "generated_by": "benchmarks/bench_e10_05_recovery_planner_robust.py",
+ "provenance": {
+  "generated_utc": "2026-11-22T05:22:36+00:00",
+  "git_sha": "dd2436131b769ddfd262aaaa13720b70eba87863",
+  "python": "3.13.18",
+  "numpy": "2.5.5",
+  "gfold": "0.3.2",
+  "wall_s": 18018.2,
+  "workers": 6,
+  "sealed_reference_read_only": {
+   "mc-summary-pinned": {
+    "successes": 11,
+    "n": 36,
+    "success_rate": 0.3055555555555556,
+    "per_seed": {
+     "8": {
+      "successes": 4,
+      "n": 12
+     },
+     "9": {
+      "successes": 3,
+      "n": 12
+     },
+     "10": {
+      "successes": 4,
+      "n": 12
+     }
+    }
+   },
+   "mc-summary": {
+    "successes": 3,
+    "n": 36,
+    "success_rate": 0.08333333333333333,
+    "per_seed": {
+     "8": {
+      "successes": 0,
+      "n": 12
+     },
+     "9": {
+      "successes": 1,
+      "n": 12
+     },
+     "10": {
+      "successes": 2,
+      "n": 12
+     }
+    }
+   }
+  }
+ },
+ "seed_manifest": {
+  "holdout_seeds": [
+   8,
+   9,
+   10
+  ],
+  "n_per_seed": 12,
+  "train_seeds": [
+   401,
+   402
+  ],
+  "train_per_seed": 5,
+  "recorded_search_seed": 287,
+  "es_seed": 41171,
+  "bootstrap_seed": 20261121,
+  "disjoint": "training seeds, hold-out seeds and the recorded search seed are pairwise disjoint; the ES rng is its own stream",
+  "uncertainty": "the vehicle file's FL-602 uncertainty tags via vehicle_dispersions() -> UncertaintyModel, per-sample numpy stream [seed, idx] (identical draws for every arm and every ES candidate: common random numbers)"
+ },
+ "arms_summary": {
+  "fixed": {
+   "successes": 11,
+   "n": 36,
+   "rate": 0.3056,
+   "per_seed": {
+    "8": {
+     "successes": 4,
+     "n": 12
+    },
+    "9": {
+     "successes": 3,
+     "n": 12
+    },
+    "10": {
+     "successes": 4,
+     "n": 12
+    }
+   },
+   "cluster_ci95": [
+    0.25,
+    0.3333
+   ],
+   "wilson_ci95": [
+    0.18,
+    0.4686
+   ],
+   "reasons": {
+    "CORRIDOR_MISSED": 25
+   }
+  },
+  "replan40": {
+   "successes": 3,
+   "n": 36,
+   "rate": 0.0833,
+   "per_seed": {
+    "8": {
+     "successes": 0,
+     "n": 12
+    },
+    "9": {
+     "successes": 1,
+     "n": 12
+    },
+    "10": {
+     "successes": 2,
+     "n": 12
+    }
+   },
+   "cluster_ci95": [
+    0.0,
+    0.1667
+   ],
+   "wilson_ci95": [
+    0.0287,
+    0.2183
+   ],
+   "reasons": {
+    "CORRIDOR_MISSED": 33
+   }
+  },
+  "robust": {
+   "successes": 11,
+   "n": 36,
+   "rate": 0.3056,
+   "per_seed": {
+    "8": {
+     "successes": 4,
+     "n": 12
+    },
+    "9": {
+     "successes": 3,
+     "n": 12
+    },
+    "10": {
+     "successes": 4,
+     "n": 12
+    }
+   },
+   "cluster_ci95": [
+    0.25,
+    0.3333
+   ],
+   "wilson_ci95": [
+    0.18,
+    0.4686
+   ],
+   "reasons": {
+    "CORRIDOR_MISSED": 25
+   }
+  }
+ },
+ "pairwise": [
+  {
+   "method": "exact binomial on discordant pairs (McNemar); chi-squared with continuity correction alongside",
+   "n_pairs": 36,
+   "n_discordant": 10,
+   "successes_a_only": 9,
+   "successes_b_only": 1,
+   "paired_rate_difference": 0.2222222222222222,
+   "exact": {
+    "statistic": 1,
+    "p_value": 0.021484375
+   },
+   "chi2_continuity": {
+    "statistic": 4.9,
+    "p_value": 0.026856695507524425
+   },
+   "table": {
+    "both": 2,
+    "a_only": 9,
+    "b_only": 1,
+    "neither": 24
+   },
+   "arms": [
+    "fixed",
+    "replan40"
+   ],
+   "paired_ci": {
+    "diff": 0.2222,
+    "ci95": [
+     0.1667,
+     0.3333
+    ]
+   },
+   "adjusted_p": 0.064453125,
+   "holm_reject": false
+  },
+  {
+   "method": "exact binomial on discordant pairs (McNemar); chi-squared with continuity correction alongside",
+   "n_pairs": 36,
+   "n_discordant": 0,
+   "successes_a_only": 0,
+   "successes_b_only": 0,
+   "paired_rate_difference": 0.0,
+   "exact": {
+    "statistic": 0,
+    "p_value": 1.0
+   },
+   "chi2_continuity": null,
+   "table": {
+    "both": 11,
+    "a_only": 0,
+    "b_only": 0,
+    "neither": 25
+   },
+   "arms": [
+    "fixed",
+    "robust"
+   ],
+   "paired_ci": {
+    "diff": 0.0,
+    "ci95": [
+     0.0,
+     0.0
+    ]
+   },
+   "adjusted_p": 1.0,
+   "holm_reject": false
+  },
+  {
+   "method": "exact binomial on discordant pairs (McNemar); chi-squared with continuity correction alongside",
+   "n_pairs": 36,
+   "n_discordant": 10,
+   "successes_a_only": 1,
+   "successes_b_only": 9,
+   "paired_rate_difference": -0.2222222222222222,
+   "exact": {
+    "statistic": 1,
+    "p_value": 0.021484375
+   },
+   "chi2_continuity": {
+    "statistic": 4.9,
+    "p_value": 0.026856695507524425
+   },
+   "table": {
+    "both": 2,
+    "a_only": 1,
+    "b_only": 9,
+    "neither": 24
+   },
+   "arms": [
+    "replan40",
+    "robust"
+   ],
+   "paired_ci": {
+    "diff": -0.2222,
+    "ci95": [
+     -0.3333,
+     -0.1667
+    ]
+   },
+   "adjusted_p": 0.064453125,
+   "holm_reject": false
+  }
+ ],
+ "diagnosis": {
+  "flip_table": {
+   "both": 2,
+   "a_only": 9,
+   "b_only": 1,
+   "neither": 24
+  },
+  "flips": [
+   {
+    "seed": 8,
+    "idx": 0,
+    "direction": "down",
+    "fixed_reason": "LANDED",
+    "replan_reason": "CORRIDOR_MISSED",
+    "script_delta": {
+     "available": true,
+     "delta": [
+      3.6271,
+      0.1722,
+      -0.0887,
+      -2.4267,
+      6.5288,
+      1450.8483,
+      3.6271,
+      -0.0907
+     ],
+     "norm_box": 0.2438,
+     "max_param": "entry throttle"
+    },
+    "fixed_miss_m": 76.19982155110421,
+    "replan_miss_m": 454.45219753215764,
+    "fixed_fuel_margin_kg": 27262.277575289947,
+    "replan_fuel_margin_kg": -100000.0,
+    "replan_checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    }
+   },
+   {
+    "seed": 8,
+    "idx": 4,
+    "direction": "down",
+    "fixed_reason": "LANDED",
+    "replan_reason": "CORRIDOR_MISSED",
+    "script_delta": {
+     "available": true,
+     "delta": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      -0.25
+     ],
+     "norm_box": 0.4167,
+     "max_param": "entry throttle"
+    },
+    "fixed_miss_m": 135.1359323695798,
+    "replan_miss_m": 503.26240765238936,
+    "fixed_fuel_margin_kg": 6018.719856101612,
+    "replan_fuel_margin_kg": 68377.86278598406,
+    "replan_checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    }
+   },
+   {
+    "seed": 8,
+    "idx": 9,
+    "direction": "down",
+    "fixed_reason": "LANDED",
+    "replan_reason": "CORRIDOR_MISSED",
+    "script_delta": {
+     "available": true,
+     "delta": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      -0.25
+     ],
+     "norm_box": 0.4167,
+     "max_param": "entry throttle"
+    },
+    "fixed_miss_m": 80.53838139191963,
+    "replan_miss_m": 562.0455740837282,
+    "fixed_fuel_margin_kg": 21128.67492713628,
+    "replan_fuel_margin_kg": 85083.4225885222,
+    "replan_checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    }
+   },
+   {
+    "seed": 8,
+    "idx": 10,
+    "direction": "down",
+    "fixed_reason": "LANDED",
+    "replan_reason": "CORRIDOR_MISSED",
+    "script_delta": {
+     "available": true,
+     "delta": [
+      8.75,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      -0.0312
+     ],
+     "norm_box": 0.0782,
+     "max_param": "boostback delay [s]"
+    },
+    "fixed_miss_m": 102.34932426795638,
+    "replan_miss_m": 93.46740507387194,
+    "fixed_fuel_margin_kg": 6108.180601410684,
+    "replan_fuel_margin_kg": -100000.0,
+    "replan_checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    }
+   },
+   {
+    "seed": 9,
+    "idx": 3,
+    "direction": "down",
+    "fixed_reason": "LANDED",
+    "replan_reason": "CORRIDOR_MISSED",
+    "script_delta": {
+     "available": true,
+     "delta": [
+      0.8823,
+      0.0172,
+      -0.0024,
+      -0.5159,
+      11.6276,
+      352.9157,
+      0.8823,
+      -0.0221
+     ],
+     "norm_box": 0.1361,
+     "max_param": "boostback yaw trim [deg]"
+    },
+    "fixed_miss_m": 71.47742296742395,
+    "replan_miss_m": 148.0704973694843,
+    "fixed_fuel_margin_kg": 5689.199320208398,
+    "replan_fuel_margin_kg": -100000.0,
+    "replan_checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    }
+   },
+   {
+    "seed": 9,
+    "idx": 10,
+    "direction": "down",
+    "fixed_reason": "LANDED",
+    "replan_reason": "CORRIDOR_MISSED",
+    "script_delta": {
+     "available": true,
+     "delta": [
+      3.7429,
+      0.3619,
+      -0.0793,
+      -2.6168,
+      6.7371,
+      1497.1408,
+      3.7429,
+      -0.0936
+     ],
+     "norm_box": 0.2411,
+     "max_param": "entry throttle"
+    },
+    "fixed_miss_m": 61.85070134310718,
+    "replan_miss_m": 125.12824915499412,
+    "fixed_fuel_margin_kg": 17202.542708799534,
+    "replan_fuel_margin_kg": -100000.0,
+    "replan_checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    }
+   },
+   {
+    "seed": 9,
+    "idx": 11,
+    "direction": "down",
+    "fixed_reason": "LANDED",
+    "replan_reason": "CORRIDOR_MISSED",
+    "script_delta": {
+     "available": true,
+     "delta": [
+      8.75,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "norm_box": 0.0672,
+     "max_param": "boostback delay [s]"
+    },
+    "fixed_miss_m": 29.02656780627783,
+    "replan_miss_m": 221.12665269388464,
+    "fixed_fuel_margin_kg": 19188.44868034107,
+    "replan_fuel_margin_kg": -100000.0,
+    "replan_checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    }
+   },
+   {
+    "seed": 10,
+    "idx": 1,
+    "direction": "down",
+    "fixed_reason": "LANDED",
+    "replan_reason": "CORRIDOR_MISSED",
+    "script_delta": {
+     "available": true,
+     "delta": [
+      3.6271,
+      0.0476,
+      -0.0887,
+      -2.3436,
+      6.5288,
+      1450.8483,
+      3.6271,
+      -0.0907
+     ],
+     "norm_box": 0.2429,
+     "max_param": "entry throttle"
+    },
+    "fixed_miss_m": 103.85948706066483,
+    "replan_miss_m": 459.4867018447597,
+    "fixed_fuel_margin_kg": 22330.162680821144,
+    "replan_fuel_margin_kg": -100000.0,
+    "replan_checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    }
+   },
+   {
+    "seed": 10,
+    "idx": 4,
+    "direction": "down",
+    "fixed_reason": "LANDED",
+    "replan_reason": "CORRIDOR_MISSED",
+    "script_delta": {
+     "available": true,
+     "delta": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      -0.25
+     ],
+     "norm_box": 0.4167,
+     "max_param": "entry throttle"
+    },
+    "fixed_miss_m": 70.86109747503293,
+    "replan_miss_m": 650.5071126095767,
+    "fixed_fuel_margin_kg": 3895.920480810164,
+    "replan_fuel_margin_kg": 76164.39888630237,
+    "replan_checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    }
+   },
+   {
+    "seed": 9,
+    "idx": 2,
+    "direction": "up",
+    "fixed_reason": "CORRIDOR_MISSED",
+    "replan_reason": "LANDED",
+    "script_delta": {
+     "available": true,
+     "delta": [
+      0.0,
+      0.0,
+      0.0977,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "norm_box": 0.1629,
+     "max_param": "boostback throttle"
+    },
+    "fixed_miss_m": 170.84630191612078,
+    "replan_miss_m": 74.64720463308538,
+    "fixed_fuel_margin_kg": -100000.0,
+    "replan_fuel_margin_kg": 11884.160831306712,
+    "replan_checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    }
+   }
+  ],
+  "budget": {
+   "n_samples": 18,
+   "n_failed_controls": 6,
+   "diag_grid": [
+    [
+     8,
+     0
+    ],
+    [
+     8,
+     1
+    ],
+    [
+     8,
+     2
+    ],
+    [
+     8,
+     3
+    ],
+    [
+     8,
+     4
+    ],
+    [
+     8,
+     5
+    ],
+    [
+     8,
+     6
+    ],
+    [
+     8,
+     7
+    ],
+    [
+     8,
+     9
+    ],
+    [
+     8,
+     10
+    ],
+    [
+     9,
+     2
+    ],
+    [
+     9,
+     3
+    ],
+    [
+     9,
+     10
+    ],
+    [
+     9,
+     11
+    ],
+    [
+     10,
+     1
+    ],
+    [
+     10,
+     4
+    ],
+    [
+     10,
+     6
+    ],
+    [
+     10,
+     11
+    ]
+   ],
+   "rows": [
+    {
+     "max_fevals": 10,
+     "arm": "replan10",
+     "landed": 2,
+     "n_samples": 18,
+     "fixed_kept": 1,
+     "rescued": 1
+    },
+    {
+     "max_fevals": 120,
+     "arm": "replan120",
+     "landed": 2,
+     "n_samples": 18,
+     "fixed_kept": 1,
+     "rescued": 1
+    }
+   ]
+  },
+  "nominal_fixed": {
+   "outcome": "landed",
+   "reason": "LANDED"
+  }
+ },
+ "robust": {
+  "training": {
+   "stages": [
+    {
+     "stage": 0,
+     "sigma_frac": 0.04,
+     "lambda": 8,
+     "generations": 4,
+     "candidates_evaluated": 33,
+     "baseline": {
+      "score": 0.6663636363636364,
+      "fail_frac": 0.6363636363636364,
+      "landed_train": 4,
+      "n_train": 11,
+      "margin_med_kg": -30000.0,
+      "per_scenario": "01100000101"
+     },
+     "best": {
+      "x": [
+       12.603029379697258,
+       2.224379974065916,
+       0.9022621735815163,
+       7.250849321660938,
+       -4.407638122975939,
+       22742.87307869621,
+       232.9253255233905,
+       0.9152642191683049
+      ],
+      "score": 0.6663636363636364,
+      "fail_frac": 0.6363636363636364,
+      "landed_train": 4,
+      "n_train": 11,
+      "margin_med_kg": -30000.0,
+      "per_scenario": "01100000101"
+     },
+     "trace": [
+      {
+       "gen": 0,
+       "child": -1,
+       "score": 0.6663636363636364,
+       "fail_frac": 0.6363636363636364,
+       "landed_train": 4,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 1,
+       "child": 0,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 1,
+       "child": 1,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 1,
+       "child": 2,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 1,
+       "child": 3,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 1,
+       "child": 4,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 1,
+       "child": 5,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 1,
+       "child": 6,
+       "score": 0.9390909090909091,
+       "fail_frac": 0.9090909090909091,
+       "landed_train": 1,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 1,
+       "child": 7,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 0,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 1,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 2,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 3,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 4,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 5,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 6,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 7,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 3,
+       "child": 0,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 3,
+       "child": 1,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 3,
+       "child": 2,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 3,
+       "child": 3,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 3,
+       "child": 4,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 3,
+       "child": 5,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 3,
+       "child": 6,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 3,
+       "child": 7,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 4,
+       "child": 0,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 4,
+       "child": 1,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 4,
+       "child": 2,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 4,
+       "child": 3,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 4,
+       "child": 4,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 4,
+       "child": 5,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 4,
+       "child": 6,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 4,
+       "child": 7,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      }
+     ]
+    },
+    {
+     "stage": 1,
+     "sigma_frac": 0.1,
+     "lambda": 8,
+     "generations": 4,
+     "candidates_evaluated": 33,
+     "baseline": {
+      "score": 0.6663636363636364,
+      "fail_frac": 0.6363636363636364,
+      "landed_train": 4,
+      "n_train": 11,
+      "margin_med_kg": -30000.0,
+      "per_scenario": "01100000101"
+     },
+     "best": {
+      "x": [
+       12.603029379697258,
+       2.224379974065916,
+       0.9022621735815163,
+       7.250849321660938,
+       -4.407638122975939,
+       22742.87307869621,
+       232.9253255233905,
+       0.9152642191683049
+      ],
+      "score": 0.6663636363636364,
+      "fail_frac": 0.6363636363636364,
+      "landed_train": 4,
+      "n_train": 11,
+      "margin_med_kg": -30000.0,
+      "per_scenario": "01100000101"
+     },
+     "trace": [
+      {
+       "gen": 0,
+       "child": -1,
+       "score": 0.6663636363636364,
+       "fail_frac": 0.6363636363636364,
+       "landed_train": 4,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 1,
+       "child": 0,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 1,
+       "child": 1,
+       "score": 0.97,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": 30000.0
+      },
+      {
+       "gen": 1,
+       "child": 2,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 1,
+       "child": 3,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 1,
+       "child": 4,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 1,
+       "child": 5,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 1,
+       "child": 6,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 1,
+       "child": 7,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 0,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 1,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 2,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 3,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 4,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 5,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 6,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 2,
+       "child": 7,
+       "score": 0.97,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": 30000.0
+      },
+      {
+       "gen": 3,
+       "child": 0,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 3,
+       "child": 1,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 3,
+       "child": 2,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 3,
+       "child": 3,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 3,
+       "child": 4,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 3,
+       "child": 5,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 3,
+       "child": 6,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 3,
+       "child": 7,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 4,
+       "child": 0,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 4,
+       "child": 1,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 4,
+       "child": 2,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 4,
+       "child": 3,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 4,
+       "child": 4,
+       "score": 0.97,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": 30000.0
+      },
+      {
+       "gen": 4,
+       "child": 5,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 4,
+       "child": 6,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      },
+      {
+       "gen": 4,
+       "child": 7,
+       "score": 1.03,
+       "fail_frac": 1.0,
+       "landed_train": 0,
+       "margin_med_kg": -30000.0
+      }
+     ]
+    }
+   ],
+   "selected": {
+    "x": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "score": 0.6663636363636364,
+    "fail_frac": 0.6363636363636364,
+    "landed_train": 4,
+    "n_train": 11,
+    "margin_med_kg": -30000.0,
+    "per_scenario": "01100000101",
+    "stage": 0,
+    "sigma_frac": 0.04
+   },
+   "candidates_evaluated": 66
+  },
+  "script_delta": {
+   "available": true,
+   "delta": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "norm_box": 0.0,
+   "max_param": "boostback delay [s]"
+  },
+  "param_names": [
+   "boostback delay [s]",
+   "boostback aim past pad [km]",
+   "boostback throttle",
+   "boostback pitch [deg]",
+   "boostback yaw trim [deg]",
+   "entry trigger alt [m]",
+   "entry cutoff speed [m/s]",
+   "entry throttle"
+  ]
+ },
+ "holdout_samples": {
+  "fixed": {
+   "8|0": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 0,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9826972276605561,
+     "isp_factor": 1.0292366106002755,
+     "density_scale": 0.9637421676971033,
+     "cd_factor": 1.1731293614920175,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -925.0326318786813,
+     "sep_downrange_m": -151.11775686768624,
+     "sep_crossrange_m": -765.7833824770768,
+     "sep_speed_m_s": 3.5744007397199153,
+     "sep_heading_deg": 0.1435270856368851
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 76.19982155110421,
+    "entry_q_pa": 115048.39189159012,
+    "entry_g": 7.270098514190017,
+    "entry_cut_h_m": 4112.827350156382,
+    "fuel_margin_kg": 27262.277575289947,
+    "touch_err_m": 0.37053546305562163,
+    "vert_m_s": -1.4996430774845781,
+    "lat_m_s": 0.03371378854503351,
+    "dur_s": 40.1
+   },
+   "8|1": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 1,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9668088855884703,
+     "isp_factor": 1.0098817650782532,
+     "density_scale": 0.9455131282186452,
+     "cd_factor": 1.2594812537971145,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -77.76185316319037,
+     "sep_downrange_m": -1526.8498575457784,
+     "sep_crossrange_m": 783.1595330113549,
+     "sep_speed_m_s": 5.89636285271098,
+     "sep_heading_deg": 0.26947097438934847
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 149.4865457392146,
+    "entry_q_pa": 113208.98778916674,
+    "entry_g": 7.3405775549204515,
+    "entry_cut_h_m": 4278.447352075018,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 34.6
+   },
+   "8|2": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 2,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9916934577059454,
+     "isp_factor": 1.0059790975111682,
+     "density_scale": 0.9784924567112483,
+     "cd_factor": 1.0836409221242447,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -16.230524006644483,
+     "sep_downrange_m": 381.80663694699797,
+     "sep_crossrange_m": 882.4315195279421,
+     "sep_speed_m_s": 7.301696748768436,
+     "sep_heading_deg": 0.16075925548819803
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 123.74180280501214,
+    "entry_q_pa": 118650.19424958255,
+    "entry_g": 7.3468583976254465,
+    "entry_cut_h_m": 4032.8558408655226,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 35.4
+   },
+   "8|3": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 3,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0460489708584408,
+     "isp_factor": 0.9953274287871402,
+     "density_scale": 1.0182320322356668,
+     "cd_factor": 0.8990042120165772,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 181.3970430549066,
+     "sep_downrange_m": 1554.7621140575052,
+     "sep_crossrange_m": 1472.3501711270587,
+     "sep_speed_m_s": -5.122145771916145,
+     "sep_heading_deg": 0.024463857758296754
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 216.12170272611766,
+    "entry_q_pa": 116272.40260479704,
+    "entry_g": 7.4360212026159624,
+    "entry_cut_h_m": 4311.951440993696,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 41.7
+   },
+   "8|4": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 4,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9873286390585757,
+     "isp_factor": 0.9732774588501003,
+     "density_scale": 0.9820749820121514,
+     "cd_factor": 1.1111343875876034,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 20.855704248164308,
+     "sep_downrange_m": 13.476508547370539,
+     "sep_crossrange_m": 596.1270852200606,
+     "sep_speed_m_s": -3.5550983867064785,
+     "sep_heading_deg": -0.0017014710047931266
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 135.1359323695798,
+    "entry_q_pa": 113154.70011323347,
+    "entry_g": 7.401025004336724,
+    "entry_cut_h_m": 4451.662222092971,
+    "fuel_margin_kg": 6018.719856101612,
+    "touch_err_m": 0.008537477337076984,
+    "vert_m_s": -1.4995390959086916,
+    "lat_m_s": 0.010804366027314681,
+    "dur_s": 44.9
+   },
+   "8|5": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 5,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0198923129145316,
+     "isp_factor": 1.0113664297441634,
+     "density_scale": 1.0410517146698504,
+     "cd_factor": 0.8252862321690035,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 160.6908351130957,
+     "sep_downrange_m": 76.16801676501686,
+     "sep_crossrange_m": 559.2257640685035,
+     "sep_speed_m_s": 1.0646547425986699,
+     "sep_heading_deg": -0.1959009158697501
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 155.07139734307486,
+    "entry_q_pa": 126635.41274281926,
+    "entry_g": 7.240120204089291,
+    "entry_cut_h_m": 3467.9549351437017,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 37.5
+   },
+   "8|6": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 6,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0499125906736075,
+     "isp_factor": 1.0048755469994777,
+     "density_scale": 1.0629547502282226,
+     "cd_factor": 1.0639835434865077,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -184.14072216128721,
+     "sep_downrange_m": 388.77243301706085,
+     "sep_crossrange_m": -620.0207594961001,
+     "sep_speed_m_s": -4.318003603778706,
+     "sep_heading_deg": 0.19250674032984824
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 249.3426803843746,
+    "entry_q_pa": 109257.10816449525,
+    "entry_g": 7.505207159764534,
+    "entry_cut_h_m": 4834.050191283226,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 43.6
+   },
+   "8|7": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 7,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9630019844918157,
+     "isp_factor": 0.9927580911026704,
+     "density_scale": 0.932886154418787,
+     "cd_factor": 0.8428352147169839,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -771.449901598258,
+     "sep_downrange_m": -578.8368614645453,
+     "sep_crossrange_m": 416.65779631015977,
+     "sep_speed_m_s": -1.211370395746104,
+     "sep_heading_deg": -0.05639491519957724
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 28.773095395724123,
+    "entry_q_pa": 130392.9803615615,
+    "entry_g": 7.054201162496814,
+    "entry_cut_h_m": 2997.420686511323,
+    "fuel_margin_kg": 9941.820111334207,
+    "dur_s": 45.6
+   },
+   "8|8": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 8,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.966648803305507,
+     "isp_factor": 0.9718191642982517,
+     "density_scale": 0.9085440807657088,
+     "cd_factor": 0.792229788218438,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 172.1032829209889,
+     "sep_downrange_m": -1593.4298416757474,
+     "sep_crossrange_m": 1458.963909094834,
+     "sep_speed_m_s": -3.4742450645186236,
+     "sep_heading_deg": -0.160088241314198
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 422.2958683918926,
+    "entry_q_pa": 133284.71254488293,
+    "entry_g": 7.105045170519238,
+    "entry_cut_h_m": 2940.3632961399853,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 49.2
+   },
+   "8|9": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 9,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9656479749581243,
+     "isp_factor": 1.0069213886324087,
+     "density_scale": 1.039309725663686,
+     "cd_factor": 1.190963689516281,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 518.7772164468307,
+     "sep_downrange_m": 676.6054277057282,
+     "sep_crossrange_m": 568.3109763158424,
+     "sep_speed_m_s": -2.798334644647021,
+     "sep_heading_deg": -0.08610582406219155
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 80.53838139191963,
+    "entry_q_pa": 116209.82457651173,
+    "entry_g": 7.312694666001015,
+    "entry_cut_h_m": 4056.7769567919895,
+    "fuel_margin_kg": 21128.67492713628,
+    "touch_err_m": 0.3619301532051282,
+    "vert_m_s": -1.4995924355972927,
+    "lat_m_s": 0.03453323883457846,
+    "dur_s": 45.3
+   },
+   "8|10": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 10,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9981522843944964,
+     "isp_factor": 0.9787552151154632,
+     "density_scale": 1.0458016178177652,
+     "cd_factor": 1.0814994338936608,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -189.75319937625085,
+     "sep_downrange_m": 668.2385011260136,
+     "sep_crossrange_m": 159.56406001235385,
+     "sep_speed_m_s": -1.0418114476007696,
+     "sep_heading_deg": -0.0014125417721927679
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 102.34932426795638,
+    "entry_q_pa": 113151.65234545202,
+    "entry_g": 7.420904492684111,
+    "entry_cut_h_m": 4457.399842450395,
+    "fuel_margin_kg": 6108.180601410684,
+    "touch_err_m": 0.3331338710477851,
+    "vert_m_s": -1.54466030430126,
+    "lat_m_s": 0.03146231865774057,
+    "dur_s": 46.1
+   },
+   "8|11": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 11,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0310740368055973,
+     "isp_factor": 0.9714822698377292,
+     "density_scale": 1.0486027605650472,
+     "cd_factor": 1.1411700521728547,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 816.0351714257653,
+     "sep_downrange_m": -898.516588029033,
+     "sep_crossrange_m": -717.5768645115953,
+     "sep_speed_m_s": -4.011297172379322,
+     "sep_heading_deg": -0.18273108923798667
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 188.3238451202787,
+    "entry_q_pa": 107280.53233036606,
+    "entry_g": 7.600165462938306,
+    "entry_cut_h_m": 5058.278295678087,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 44.1
+   },
+   "9|0": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 0,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0370249203970086,
+     "isp_factor": 0.9872090325452533,
+     "density_scale": 1.0206296300103124,
+     "cd_factor": 1.1665204497521073,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 457.3812090768358,
+     "sep_downrange_m": -362.0888024063192,
+     "sep_crossrange_m": 344.38859644344734,
+     "sep_speed_m_s": 1.0037302763367282,
+     "sep_heading_deg": -0.059152808318834044
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 204.03409593605778,
+    "entry_q_pa": 107255.88224501422,
+    "entry_g": 7.61209631626535,
+    "entry_cut_h_m": 5040.65291959513,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 39.9
+   },
+   "9|1": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 1,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0330267572834544,
+     "isp_factor": 0.992362092371323,
+     "density_scale": 1.0867914118452056,
+     "cd_factor": 0.9147090386261024,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -476.0529885539169,
+     "sep_downrange_m": 1837.5504885880725,
+     "sep_crossrange_m": 2001.4888526532052,
+     "sep_speed_m_s": -5.433640532560511,
+     "sep_heading_deg": 0.11876967743609063
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 182.94705110043185,
+    "entry_q_pa": 115483.94437755218,
+    "entry_g": 7.390630076552022,
+    "entry_cut_h_m": 4311.161309512332,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 43.4
+   },
+   "9|2": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 2,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0119448148201173,
+     "isp_factor": 0.9850646436359547,
+     "density_scale": 1.0756388629677593,
+     "cd_factor": 1.1337057600172644,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 350.57074263704334,
+     "sep_downrange_m": -157.58875208897138,
+     "sep_crossrange_m": 911.1740713316678,
+     "sep_speed_m_s": -8.85793796548767,
+     "sep_heading_deg": -0.21659760589692872
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 170.84630191612078,
+    "entry_q_pa": 108999.27688206384,
+    "entry_g": 7.452630642962059,
+    "entry_cut_h_m": 4732.230873238295,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 38.3
+   },
+   "9|3": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 3,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9794171296249515,
+     "isp_factor": 0.9743881075162831,
+     "density_scale": 1.0103518656377608,
+     "cd_factor": 1.068781638822833,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -628.1632928401227,
+     "sep_downrange_m": -221.2903831351344,
+     "sep_crossrange_m": -336.6384696673261,
+     "sep_speed_m_s": -1.3739519964132239,
+     "sep_heading_deg": -0.01777006392178227
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 71.47742296742395,
+    "entry_q_pa": 114661.5933341396,
+    "entry_g": 7.326047054717849,
+    "entry_cut_h_m": 4265.893624225631,
+    "fuel_margin_kg": 5689.199320208398,
+    "touch_err_m": 0.3560858250303687,
+    "vert_m_s": -1.500073984898959,
+    "lat_m_s": 0.03308491200159264,
+    "dur_s": 47.5
+   },
+   "9|4": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 4,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.030965998232757,
+     "isp_factor": 0.9961389039170178,
+     "density_scale": 1.066460547971577,
+     "cd_factor": 1.2177811410700783,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 38.32114867940861,
+     "sep_downrange_m": -85.3847333047346,
+     "sep_crossrange_m": 1008.760649778369,
+     "sep_speed_m_s": -2.3681777795140935,
+     "sep_heading_deg": -0.03931249850941473
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 229.35823270596663,
+    "entry_q_pa": 106328.24458619815,
+    "entry_g": 7.553337284766924,
+    "entry_cut_h_m": 5068.530960758217,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 35.4
+   },
+   "9|5": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 5,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0240506014521724,
+     "isp_factor": 0.9992765440235795,
+     "density_scale": 0.9203138696157642,
+     "cd_factor": 1.1217034793611855,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 411.33406548055706,
+     "sep_downrange_m": -1329.0862543091162,
+     "sep_crossrange_m": -1106.0936336020568,
+     "sep_speed_m_s": 1.5088350175696859,
+     "sep_heading_deg": -0.0075617637202506395
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 324.99535991497584,
+    "entry_q_pa": 111594.7574040852,
+    "entry_g": 7.497259686451518,
+    "entry_cut_h_m": 4603.745611396618,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 46.4
+   },
+   "9|6": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 6,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0202888646674888,
+     "isp_factor": 0.9786703978902307,
+     "density_scale": 0.9613914392677838,
+     "cd_factor": 1.2943862843669225,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 412.30538944996357,
+     "sep_downrange_m": 2006.5439945190487,
+     "sep_crossrange_m": 752.5401638094725,
+     "sep_speed_m_s": 0.2058336972457795,
+     "sep_heading_deg": -0.13292210627349452
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 183.5348433861452,
+    "entry_q_pa": 104086.95231166942,
+    "entry_g": 7.663423059896447,
+    "entry_cut_h_m": 5308.476649408229,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 41.5
+   },
+   "9|7": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 7,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.014989293192153,
+     "isp_factor": 1.0140142774855971,
+     "density_scale": 1.0256524709283399,
+     "cd_factor": 0.9337870261884436,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -47.14659958437506,
+     "sep_downrange_m": 765.2219090076514,
+     "sep_crossrange_m": -1061.5951623874544,
+     "sep_speed_m_s": -1.7495103523872528,
+     "sep_heading_deg": 0.12335609647600722
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 254.36601927435274,
+    "entry_q_pa": 119771.98635814972,
+    "entry_g": 7.2746855542220015,
+    "entry_cut_h_m": 3856.572525232099,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 43.1
+   },
+   "9|8": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 8,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9702618163613399,
+     "isp_factor": 0.9737850300242681,
+     "density_scale": 0.9687854507134961,
+     "cd_factor": 1.0492280569954318,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 270.018331934862,
+     "sep_downrange_m": -514.7362574965973,
+     "sep_crossrange_m": 221.03455172024545,
+     "sep_speed_m_s": 0.87551019114131,
+     "sep_heading_deg": -0.21829904721397772
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 153.32274305813146,
+    "entry_q_pa": 118414.45540224729,
+    "entry_g": 7.317753874418839,
+    "entry_cut_h_m": 3986.448965670541,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 57.8
+   },
+   "9|9": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 9,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.007081398232477,
+     "isp_factor": 1.0096883448827452,
+     "density_scale": 1.072330031904371,
+     "cd_factor": 0.9660444257560904,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 75.9053195008753,
+     "sep_downrange_m": 352.8380024585451,
+     "sep_crossrange_m": 1667.7466312091362,
+     "sep_speed_m_s": 1.8954440768483196,
+     "sep_heading_deg": 0.1284126344656369
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 230.1872610570074,
+    "entry_q_pa": 120868.57364050363,
+    "entry_g": 7.287637240604815,
+    "entry_cut_h_m": 3841.9252610672265,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 47.7
+   },
+   "9|10": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 10,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9558072391514753,
+     "isp_factor": 0.997119162339198,
+     "density_scale": 1.048638179712635,
+     "cd_factor": 1.113833477399949,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -211.92020470761204,
+     "sep_downrange_m": 577.0500570304652,
+     "sep_crossrange_m": -295.4477977760029,
+     "sep_speed_m_s": -11.525653915354502,
+     "sep_heading_deg": 0.00670501624638358
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 61.85070134310718,
+    "entry_q_pa": 117411.91015633469,
+    "entry_g": 7.195827942209531,
+    "entry_cut_h_m": 3885.8339230008423,
+    "fuel_margin_kg": 17202.542708799534,
+    "touch_err_m": 0.3463052123254619,
+    "vert_m_s": -1.500133365649798,
+    "lat_m_s": 0.031775989681860364,
+    "dur_s": 48.5
+   },
+   "9|11": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 11,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9783964089795547,
+     "isp_factor": 1.014160144171357,
+     "density_scale": 1.0775497174186273,
+     "cd_factor": 0.9349059289278746,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 127.15799070729102,
+     "sep_downrange_m": -1675.3191255816014,
+     "sep_crossrange_m": -541.22120779038,
+     "sep_speed_m_s": -2.2745193778292006,
+     "sep_heading_deg": 0.0814656309758069
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 29.02656780627783,
+    "entry_q_pa": 126593.05185433946,
+    "entry_g": 7.128446525864798,
+    "entry_cut_h_m": 3290.4333587400615,
+    "fuel_margin_kg": 19188.44868034107,
+    "touch_err_m": 0.1515603687796108,
+    "vert_m_s": -2.1662215048572975,
+    "lat_m_s": 0.01335652726384149,
+    "dur_s": 53.2
+   },
+   "10|0": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 0,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0456001709628975,
+     "isp_factor": 0.9824609086047488,
+     "density_scale": 1.065688977054906,
+     "cd_factor": 0.7895692738492122,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -99.43229177555634,
+     "sep_downrange_m": 101.18644120947987,
+     "sep_crossrange_m": 674.4340566434703,
+     "sep_speed_m_s": 3.431746197903074,
+     "sep_heading_deg": 0.07127754629228777
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 66.69578713856731,
+    "entry_q_pa": 121877.58772834628,
+    "entry_g": 7.42818379135393,
+    "entry_cut_h_m": 3970.854566617869,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 45.1
+   },
+   "10|1": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 1,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9652577979940706,
+     "isp_factor": 1.0150272481826843,
+     "density_scale": 1.0749431412179895,
+     "cd_factor": 1.1608393709351006,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 746.0370744399058,
+     "sep_downrange_m": 273.2272238121749,
+     "sep_crossrange_m": 829.7916387146754,
+     "sep_speed_m_s": 3.8671361308246777,
+     "sep_heading_deg": -0.16022409999998258
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 103.85948706066483,
+    "entry_q_pa": 120084.10618938481,
+    "entry_g": 7.277911449767018,
+    "entry_cut_h_m": 3825.8137648319826,
+    "fuel_margin_kg": 22330.162680821144,
+    "touch_err_m": 0.10399764929360326,
+    "vert_m_s": -1.4995404583522691,
+    "lat_m_s": 0.016926042171083774,
+    "dur_s": 39.6
+   },
+   "10|2": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 2,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9772388991417581,
+     "isp_factor": 1.0116689878189846,
+     "density_scale": 1.0947006676422342,
+     "cd_factor": 0.745694938663841,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 80.03842689300889,
+     "sep_downrange_m": -1534.076849870235,
+     "sep_crossrange_m": -584.9931529120342,
+     "sep_speed_m_s": 2.7098930821228158,
+     "sep_heading_deg": -0.14501079512686896
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 363.71844900443784,
+    "entry_q_pa": 138372.89150023262,
+    "entry_g": 7.000492290317983,
+    "entry_cut_h_m": 2546.3966402243823,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 45.5
+   },
+   "10|3": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 3,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0087066139796586,
+     "isp_factor": 1.0017297917178114,
+     "density_scale": 0.9143605155314805,
+     "cd_factor": 1.1350762447469103,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -44.98190377884034,
+     "sep_downrange_m": 347.9641299028704,
+     "sep_crossrange_m": -314.58091601338117,
+     "sep_speed_m_s": -9.927846649911453,
+     "sep_heading_deg": 0.16323474255492534
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 197.256874623833,
+    "entry_q_pa": 109258.061849495,
+    "entry_g": 7.383694447016625,
+    "entry_cut_h_m": 4606.255749942735,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 40.3
+   },
+   "10|4": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 4,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9817385037734314,
+     "isp_factor": 0.9722483094420062,
+     "density_scale": 1.0576150923529481,
+     "cd_factor": 1.0339630464065517,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 35.96294493236796,
+     "sep_downrange_m": 692.6720986559053,
+     "sep_crossrange_m": -33.24858965192745,
+     "sep_speed_m_s": 1.9918447120604168,
+     "sep_heading_deg": -0.016697851818695857
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 70.86109747503293,
+    "entry_q_pa": 118430.36785813131,
+    "entry_g": 7.372322422433508,
+    "entry_cut_h_m": 4054.4623714732006,
+    "fuel_margin_kg": 3895.920480810164,
+    "touch_err_m": 0.3611995431469077,
+    "vert_m_s": -1.5473696065008529,
+    "lat_m_s": 0.03293211790668515,
+    "dur_s": 67.3
+   },
+   "10|5": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 5,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0433463686560658,
+     "isp_factor": 1.0034742608955958,
+     "density_scale": 0.9607015368149608,
+     "cd_factor": 0.8166787364273208,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 275.7306374135895,
+     "sep_downrange_m": -329.20657585833493,
+     "sep_crossrange_m": -1431.5050576405959,
+     "sep_speed_m_s": -2.9835650592722622,
+     "sep_heading_deg": -0.10048754522789677
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 150.91950057827302,
+    "entry_q_pa": 120865.89004545956,
+    "entry_g": 7.327674175109157,
+    "entry_cut_h_m": 3887.0501939114183,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 58.2
+   },
+   "10|6": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 6,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9916936515801771,
+     "isp_factor": 0.9786597028259685,
+     "density_scale": 0.9598270302164508,
+     "cd_factor": 1.1646491883562555,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 541.6704446732687,
+     "sep_downrange_m": 674.7102951992392,
+     "sep_crossrange_m": 296.38615377580624,
+     "sep_speed_m_s": 1.746742716778169,
+     "sep_heading_deg": 0.15668582571874914
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 96.79905614084011,
+    "entry_q_pa": 112064.66739026789,
+    "entry_g": 7.482810447306984,
+    "entry_cut_h_m": 4539.982538477518,
+    "fuel_margin_kg": 7996.275638191961,
+    "touch_err_m": 0.3379791088759727,
+    "vert_m_s": -1.5000367298254855,
+    "lat_m_s": 0.03209229139685332,
+    "dur_s": 59.4
+   },
+   "10|7": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 7,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.007867962967078,
+     "isp_factor": 1.0245230092174986,
+     "density_scale": 0.9353489685231435,
+     "cd_factor": 1.2824955019313302,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 65.54641583930251,
+     "sep_downrange_m": 825.3308454822582,
+     "sep_crossrange_m": 283.2414828233875,
+     "sep_speed_m_s": 3.0341876042838476,
+     "sep_heading_deg": -0.26644738826019854
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 214.59906513074955,
+    "entry_q_pa": 108991.09705895768,
+    "entry_g": 7.479217669359149,
+    "entry_cut_h_m": 4699.79995542299,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 56.7
+   },
+   "10|8": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 8,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.033557549467213,
+     "isp_factor": 1.018086584008562,
+     "density_scale": 0.9801064237450013,
+     "cd_factor": 0.7892258564323028,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -260.7272293678567,
+     "sep_downrange_m": 574.6233134207995,
+     "sep_crossrange_m": -1061.0140411737734,
+     "sep_speed_m_s": -0.7779082325851183,
+     "sep_heading_deg": 0.14822560481624983
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 345.20504500188986,
+    "entry_q_pa": 125470.90113278413,
+    "entry_g": 7.234205274937909,
+    "entry_cut_h_m": 3516.6046036705375,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 58.2
+   },
+   "10|9": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 9,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9796436929117015,
+     "isp_factor": 0.9776655255124653,
+     "density_scale": 0.9151787356524996,
+     "cd_factor": 0.8693326544993666,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -41.95345684013458,
+     "sep_downrange_m": -841.9635319462404,
+     "sep_crossrange_m": -282.9970202919287,
+     "sep_speed_m_s": -0.10245132914784925,
+     "sep_heading_deg": -0.10653829195372144
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 371.6234146022467,
+    "entry_q_pa": 126088.32580173833,
+    "entry_g": 7.196579004373519,
+    "entry_cut_h_m": 3437.36144302506,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 54.4
+   },
+   "10|10": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 10,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0192327868546147,
+     "isp_factor": 0.999406939788977,
+     "density_scale": 0.9082100588053288,
+     "cd_factor": 1.1326585089847905,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 144.62975489004586,
+     "sep_downrange_m": 1121.3908148620228,
+     "sep_crossrange_m": -87.95133674322103,
+     "sep_speed_m_s": -0.3051823780405064,
+     "sep_heading_deg": -0.24609626737504034
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 123.75198860865109,
+    "entry_q_pa": 110489.60046742161,
+    "entry_g": 7.481651242507125,
+    "entry_cut_h_m": 4673.918555570766,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 36.7
+   },
+   "10|11": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 11,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9920266668629901,
+     "isp_factor": 1.0180064037862282,
+     "density_scale": 0.9306000880595571,
+     "cd_factor": 0.9213636259110541,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 176.18772170396568,
+     "sep_downrange_m": 491.4985123812108,
+     "sep_crossrange_m": 64.60492723757325,
+     "sep_speed_m_s": 5.494640186435278,
+     "sep_heading_deg": -0.11994473736075102
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 47.39383947265309,
+    "entry_q_pa": 126533.26643535825,
+    "entry_g": 7.200992925206491,
+    "entry_cut_h_m": 3395.1487172292545,
+    "fuel_margin_kg": 17367.69483213604,
+    "touch_err_m": 0.33082734995277463,
+    "vert_m_s": -1.4996948480560615,
+    "lat_m_s": 0.03137420220724509,
+    "dur_s": 35.5
+   }
+  },
+  "replan40": {
+   "8|0": {
+    "arm": "replan40",
+    "seed": 8,
+    "idx": 0,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9826972276605561,
+     "isp_factor": 1.0292366106002755,
+     "density_scale": 0.9637421676971033,
+     "cd_factor": 1.1731293614920175,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -925.0326318786813,
+     "sep_downrange_m": -151.11775686768624,
+     "sep_crossrange_m": -765.7833824770768,
+     "sep_speed_m_s": 3.5744007397199153,
+     "sep_heading_deg": 0.1435270856368851
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     16.23015018560153,
+     2.3965739483224304,
+     0.8135333816405592,
+     4.824176825759352,
+     2.1211793276517454,
+     24193.72140105792,
+     236.55244632929478,
+     0.8245861990206986
+    ],
+    "miss_m": 454.45219753215764,
+    "entry_q_pa": 101804.38194201693,
+    "entry_g": 6.651505074966983,
+    "entry_cut_h_m": 4310.813419443555,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 1062.9
+   },
+   "8|1": {
+    "arm": "replan40",
+    "seed": 8,
+    "idx": 1,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9668088855884703,
+     "isp_factor": 1.0098817650782532,
+     "density_scale": 0.9455131282186452,
+     "cd_factor": 1.2594812537971145,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -77.76185316319037,
+     "sep_downrange_m": -1526.8498575457784,
+     "sep_crossrange_m": 783.1595330113549,
+     "sep_speed_m_s": 5.89636285271098,
+     "sep_heading_deg": 0.26947097438934847
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     242.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 149.4778749287413,
+    "entry_q_pa": 113208.98778916674,
+    "entry_g": 7.3405775549204515,
+    "entry_cut_h_m": 4325.462984099984,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 1118.5
+   },
+   "8|2": {
+    "arm": "replan40",
+    "seed": 8,
+    "idx": 2,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9916934577059454,
+     "isp_factor": 1.0059790975111682,
+     "density_scale": 0.9784924567112483,
+     "cd_factor": 1.0836409221242447,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -16.230524006644483,
+     "sep_downrange_m": 381.80663694699797,
+     "sep_crossrange_m": 882.4315195279421,
+     "sep_speed_m_s": 7.301696748768436,
+     "sep_heading_deg": 0.16075925548819803
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.6652642191683049
+    ],
+    "miss_m": 691.0127565474729,
+    "entry_q_pa": 173499.88955485128,
+    "entry_g": 6.621823751932296,
+    "entry_cut_h_m": 8.983586402609944,
+    "fuel_margin_kg": 86551.54261759168,
+    "dur_s": 1150.5
+   },
+   "8|3": {
+    "arm": "replan40",
+    "seed": 8,
+    "idx": 3,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0460489708584408,
+     "isp_factor": 0.9953274287871402,
+     "density_scale": 1.0182320322356668,
+     "cd_factor": 0.8990042120165772,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 181.3970430549066,
+     "sep_downrange_m": 1554.7621140575052,
+     "sep_crossrange_m": 1472.3501711270587,
+     "sep_speed_m_s": -5.122145771916145,
+     "sep_heading_deg": 0.024463857758296754
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.6652642191683049
+    ],
+    "miss_m": 453.87905405815695,
+    "entry_q_pa": 179065.26375625227,
+    "entry_g": 6.5421260375645724,
+    "entry_cut_h_m": null,
+    "fuel_margin_kg": 83089.30997776164,
+    "dur_s": 1091.6
+   },
+   "8|4": {
+    "arm": "replan40",
+    "seed": 8,
+    "idx": 4,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9873286390585757,
+     "isp_factor": 0.9732774588501003,
+     "density_scale": 0.9820749820121514,
+     "cd_factor": 1.1111343875876034,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 20.855704248164308,
+     "sep_downrange_m": 13.476508547370539,
+     "sep_crossrange_m": 596.1270852200606,
+     "sep_speed_m_s": -3.5550983867064785,
+     "sep_heading_deg": -0.0017014710047931266
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.6652642191683049
+    ],
+    "miss_m": 503.26240765238936,
+    "entry_q_pa": 164663.91394727933,
+    "entry_g": 6.624840070439774,
+    "entry_cut_h_m": 445.649913915433,
+    "fuel_margin_kg": 68377.86278598406,
+    "dur_s": 1131.9
+   },
+   "8|5": {
+    "arm": "replan40",
+    "seed": 8,
+    "idx": 5,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0198923129145316,
+     "isp_factor": 1.0113664297441634,
+     "density_scale": 1.0410517146698504,
+     "cd_factor": 0.8252862321690035,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 160.6908351130957,
+     "sep_downrange_m": 76.16801676501686,
+     "sep_crossrange_m": 559.2257640685035,
+     "sep_speed_m_s": 1.0646547425986699,
+     "sep_heading_deg": -0.1959009158697501
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     21.353029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     8.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 190.18917430180542,
+    "entry_q_pa": 128325.81078573113,
+    "entry_g": 7.374700422595645,
+    "entry_cut_h_m": 3536.3675748165697,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 1140.8
+   },
+   "8|6": {
+    "arm": "replan40",
+    "seed": 8,
+    "idx": 6,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0499125906736075,
+     "isp_factor": 1.0048755469994777,
+     "density_scale": 1.0629547502282226,
+     "cd_factor": 1.0639835434865077,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -184.14072216128721,
+     "sep_downrange_m": 388.77243301706085,
+     "sep_crossrange_m": -620.0207594961001,
+     "sep_speed_m_s": -4.318003603778706,
+     "sep_heading_deg": 0.19250674032984824
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.6652642191683049
+    ],
+    "miss_m": 875.8230207078848,
+    "entry_q_pa": 161448.0590153778,
+    "entry_g": 6.630718493044425,
+    "entry_cut_h_m": 649.2705560661852,
+    "fuel_margin_kg": 72494.21161626925,
+    "dur_s": 819.0
+   },
+   "8|7": {
+    "arm": "replan40",
+    "seed": 8,
+    "idx": 7,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9630019844918157,
+     "isp_factor": 0.9927580911026704,
+     "density_scale": 0.932886154418787,
+     "cd_factor": 0.8428352147169839,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -771.449901598258,
+     "sep_downrange_m": -578.8368614645453,
+     "sep_crossrange_m": 416.65779631015977,
+     "sep_speed_m_s": -1.211370395746104,
+     "sep_heading_deg": -0.05639491519957724
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     17.59345289201964,
+     3.6414756102078094,
+     0.8619732630185941,
+     10.74832951439996,
+     -4.2804308688274135,
+     24250.809613505557,
+     231.92070133409604,
+     0.8403002385358355
+    ],
+    "miss_m": 1733.3717008330423,
+    "entry_q_pa": 144782.01530726036,
+    "entry_g": 6.9159326532013985,
+    "entry_cut_h_m": 2037.1242558341473,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 898.3
+   },
+   "8|8": {
+    "arm": "replan40",
+    "seed": 8,
+    "idx": 8,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.966648803305507,
+     "isp_factor": 0.9718191642982517,
+     "density_scale": 0.9085440807657088,
+     "cd_factor": 0.792229788218438,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 172.1032829209889,
+     "sep_downrange_m": -1593.4298416757474,
+     "sep_crossrange_m": 1458.963909094834,
+     "sep_speed_m_s": -3.4742450645186236,
+     "sep_heading_deg": -0.160088241314198
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     15.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 542.0435495183816,
+    "entry_q_pa": 185731.53453166757,
+    "entry_g": 7.744101685694448,
+    "entry_cut_h_m": 1089.3808838911355,
+    "fuel_margin_kg": 41822.164621726086,
+    "dur_s": 853.7
+   },
+   "8|9": {
+    "arm": "replan40",
+    "seed": 8,
+    "idx": 9,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9656479749581243,
+     "isp_factor": 1.0069213886324087,
+     "density_scale": 1.039309725663686,
+     "cd_factor": 1.190963689516281,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 518.7772164468307,
+     "sep_downrange_m": 676.6054277057282,
+     "sep_crossrange_m": 568.3109763158424,
+     "sep_speed_m_s": -2.798334644647021,
+     "sep_heading_deg": -0.08610582406219155
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.6652642191683049
+    ],
+    "miss_m": 562.0455740837282,
+    "entry_q_pa": 168570.08760286207,
+    "entry_g": 6.6395925712652195,
+    "entry_cut_h_m": 212.6013214364648,
+    "fuel_margin_kg": 85083.4225885222,
+    "dur_s": 847.9
+   },
+   "8|10": {
+    "arm": "replan40",
+    "seed": 8,
+    "idx": 10,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9981522843944964,
+     "isp_factor": 0.9787552151154632,
+     "density_scale": 1.0458016178177652,
+     "cd_factor": 1.0814994338936608,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -189.75319937625085,
+     "sep_downrange_m": 668.2385011260136,
+     "sep_crossrange_m": 159.56406001235385,
+     "sep_speed_m_s": -1.0418114476007696,
+     "sep_heading_deg": -0.0014125417721927679
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     21.353029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.8840142191683049
+    ],
+    "miss_m": 93.46740507387194,
+    "entry_q_pa": 114916.89207373421,
+    "entry_g": 7.374758429482105,
+    "entry_cut_h_m": 4261.191366955638,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 836.3
+   },
+   "8|11": {
+    "arm": "replan40",
+    "seed": 8,
+    "idx": 11,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0310740368055973,
+     "isp_factor": 0.9714822698377292,
+     "density_scale": 1.0486027605650472,
+     "cd_factor": 1.1411700521728547,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 816.0351714257653,
+     "sep_downrange_m": -898.516588029033,
+     "sep_crossrange_m": -717.5768645115953,
+     "sep_speed_m_s": -4.011297172379322,
+     "sep_heading_deg": -0.18273108923798667
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.6652642191683049
+    ],
+    "miss_m": 435.81805628050313,
+    "entry_q_pa": 155577.05341726355,
+    "entry_g": 6.72162179703712,
+    "entry_cut_h_m": 1026.9786996850744,
+    "fuel_margin_kg": 44992.788628283364,
+    "dur_s": 855.1
+   },
+   "9|0": {
+    "arm": "replan40",
+    "seed": 9,
+    "idx": 0,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0370249203970086,
+     "isp_factor": 0.9872090325452533,
+     "density_scale": 1.0206296300103124,
+     "cd_factor": 1.1665204497521073,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 457.3812090768358,
+     "sep_downrange_m": -362.0888024063192,
+     "sep_crossrange_m": 344.38859644344734,
+     "sep_speed_m_s": 1.0037302763367282,
+     "sep_heading_deg": -0.059152808318834044
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.6652642191683049
+    ],
+    "miss_m": 783.5511227038876,
+    "entry_q_pa": 155982.62876105797,
+    "entry_g": 6.755037414373982,
+    "entry_cut_h_m": 1041.8999815834686,
+    "fuel_margin_kg": 55221.307652130956,
+    "dur_s": 1187.7
+   },
+   "9|1": {
+    "arm": "replan40",
+    "seed": 9,
+    "idx": 1,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0330267572834544,
+     "isp_factor": 0.992362092371323,
+     "density_scale": 1.0867914118452056,
+     "cd_factor": 0.9147090386261024,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -476.0529885539169,
+     "sep_downrange_m": 1837.5504885880725,
+     "sep_crossrange_m": 2001.4888526532052,
+     "sep_speed_m_s": -5.433640532560511,
+     "sep_heading_deg": 0.11876967743609063
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     16.698015667929173,
+     2.3856199652641985,
+     0.8900729697676687,
+     5.042856032917678,
+     1.095166882304381,
+     24380.86759398898,
+     237.0203118116224,
+     0.7816395619625074
+    ],
+    "miss_m": 125.54276486044961,
+    "entry_q_pa": 110371.5563450932,
+    "entry_g": 6.5520764633416695,
+    "entry_cut_h_m": 3699.3608066886663,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 1096.9
+   },
+   "9|2": {
+    "arm": "replan40",
+    "seed": 9,
+    "idx": 2,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0119448148201173,
+     "isp_factor": 0.9850646436359547,
+     "density_scale": 1.0756388629677593,
+     "cd_factor": 1.1337057600172644,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 350.57074263704334,
+     "sep_downrange_m": -157.58875208897138,
+     "sep_crossrange_m": 911.1740713316678,
+     "sep_speed_m_s": -8.85793796548767,
+     "sep_heading_deg": -0.21659760589692872
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     1.0,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 74.64720463308538,
+    "entry_q_pa": 110290.91784155254,
+    "entry_g": 7.44250842355077,
+    "entry_cut_h_m": 4639.319559213705,
+    "fuel_margin_kg": 11884.160831306712,
+    "touch_err_m": 0.3666144497107241,
+    "vert_m_s": -1.500088117872146,
+    "lat_m_s": 0.03406733150288764,
+    "dur_s": 1215.6
+   },
+   "9|3": {
+    "arm": "replan40",
+    "seed": 9,
+    "idx": 3,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9794171296249515,
+     "isp_factor": 0.9743881075162831,
+     "density_scale": 1.0103518656377608,
+     "cd_factor": 1.068781638822833,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -628.1632928401227,
+     "sep_downrange_m": -221.2903831351344,
+     "sep_crossrange_m": -336.6384696673261,
+     "sep_speed_m_s": -1.3739519964132239,
+     "sep_heading_deg": -0.01777006392178227
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     13.485318609212685,
+     2.241611540957504,
+     0.8998545971266706,
+     6.734971425693324,
+     7.2200004888472025,
+     23095.788770502382,
+     233.80761475290592,
+     0.8932069884304192
+    ],
+    "miss_m": 148.0704973694843,
+    "entry_q_pa": 111416.9024675937,
+    "entry_g": 7.187510715123169,
+    "entry_cut_h_m": 4325.5680053997785,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 1188.9
+   },
+   "9|4": {
+    "arm": "replan40",
+    "seed": 9,
+    "idx": 4,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.030965998232757,
+     "isp_factor": 0.9961389039170178,
+     "density_scale": 1.066460547971577,
+     "cd_factor": 1.2177811410700783,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 38.32114867940861,
+     "sep_downrange_m": -85.3847333047346,
+     "sep_crossrange_m": 1008.760649778369,
+     "sep_speed_m_s": -2.3681777795140935,
+     "sep_heading_deg": -0.03931249850941473
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.6652642191683049
+    ],
+    "miss_m": 394.78908670760757,
+    "entry_q_pa": 152458.4520320965,
+    "entry_g": 6.739787316919757,
+    "entry_cut_h_m": 1158.3137737680227,
+    "fuel_margin_kg": 39955.68772057141,
+    "dur_s": 1282.7
+   },
+   "9|5": {
+    "arm": "replan40",
+    "seed": 9,
+    "idx": 5,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0240506014521724,
+     "isp_factor": 0.9992765440235795,
+     "density_scale": 0.9203138696157642,
+     "cd_factor": 1.1217034793611855,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 411.33406548055706,
+     "sep_downrange_m": -1329.0862543091162,
+     "sep_crossrange_m": -1106.0936336020568,
+     "sep_speed_m_s": 1.5088350175696859,
+     "sep_heading_deg": -0.0075617637202506395
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.6652642191683049
+    ],
+    "miss_m": 943.9452039307688,
+    "entry_q_pa": 164354.33229980007,
+    "entry_g": 6.693985791837939,
+    "entry_cut_h_m": 580.309484041296,
+    "fuel_margin_kg": 73958.25794996234,
+    "dur_s": 1247.5
+   },
+   "9|6": {
+    "arm": "replan40",
+    "seed": 9,
+    "idx": 6,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0202888646674888,
+     "isp_factor": 0.9786703978902307,
+     "density_scale": 0.9613914392677838,
+     "cd_factor": 1.2943862843669225,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 412.30538944996357,
+     "sep_downrange_m": 2006.5439945190487,
+     "sep_crossrange_m": 752.5401638094725,
+     "sep_speed_m_s": 0.2058336972457795,
+     "sep_heading_deg": -0.13292210627349452
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.6652642191683049
+    ],
+    "miss_m": 452.12266310477725,
+    "entry_q_pa": 147236.36509057766,
+    "entry_g": 6.820751564078721,
+    "entry_cut_h_m": 1507.7598674651235,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 877.9
+   },
+   "9|7": {
+    "arm": "replan40",
+    "seed": 9,
+    "idx": 7,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.014989293192153,
+     "isp_factor": 1.0140142774855971,
+     "density_scale": 1.0256524709283399,
+     "cd_factor": 0.9337870261884436,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -47.14659958437506,
+     "sep_downrange_m": 765.2219090076514,
+     "sep_crossrange_m": -1061.5951623874544,
+     "sep_speed_m_s": -1.7495103523872528,
+     "sep_heading_deg": 0.12335609647600722
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     22.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 174.3973829197172,
+    "entry_q_pa": 118254.86427139568,
+    "entry_g": 7.374097295615519,
+    "entry_cut_h_m": 4085.184659110382,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 866.9
+   },
+   "9|8": {
+    "arm": "replan40",
+    "seed": 9,
+    "idx": 8,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9702618163613399,
+     "isp_factor": 0.9737850300242681,
+     "density_scale": 0.9687854507134961,
+     "cd_factor": 1.0492280569954318,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 270.018331934862,
+     "sep_downrange_m": -514.7362574965973,
+     "sep_crossrange_m": 221.03455172024545,
+     "sep_speed_m_s": 0.87551019114131,
+     "sep_heading_deg": -0.21829904721397772
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     15.778114962394909,
+     2.2529949875293376,
+     0.9465130294084926,
+     5.201293382911828,
+     1.3075159258798266,
+     24012.90731177527,
+     236.10041110608816,
+     0.8358870796008642
+    ],
+    "miss_m": 303.91990312593197,
+    "entry_q_pa": 108293.02191132797,
+    "entry_g": 6.76070189666417,
+    "entry_cut_h_m": 3980.432186178863,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 791.7
+   },
+   "9|9": {
+    "arm": "replan40",
+    "seed": 9,
+    "idx": 9,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.007081398232477,
+     "isp_factor": 1.0096883448827452,
+     "density_scale": 1.072330031904371,
+     "cd_factor": 0.9660444257560904,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 75.9053195008753,
+     "sep_downrange_m": 352.8380024585451,
+     "sep_crossrange_m": 1667.7466312091362,
+     "sep_speed_m_s": 1.8954440768483196,
+     "sep_heading_deg": 0.1284126344656369
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     15.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 848.0261343733907,
+    "entry_q_pa": 167736.21375980336,
+    "entry_g": 7.967162536881003,
+    "entry_cut_h_m": 2062.975003413856,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 947.0
+   },
+   "9|10": {
+    "arm": "replan40",
+    "seed": 9,
+    "idx": 10,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9558072391514753,
+     "isp_factor": 0.997119162339198,
+     "density_scale": 1.048638179712635,
+     "cd_factor": 1.113833477399949,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -211.92020470761204,
+     "sep_downrange_m": 577.0500570304652,
+     "sep_crossrange_m": -295.4477977760029,
+     "sep_speed_m_s": -11.525653915354502,
+     "sep_heading_deg": 0.00670501624638358
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     16.345881484939753,
+     2.586287517796837,
+     0.8230097864308165,
+     4.634078492732371,
+     2.329495666460545,
+     24240.013920793208,
+     236.668177628633,
+     0.8216929165372431
+    ],
+    "miss_m": 125.12824915499412,
+    "entry_q_pa": 103768.66665311501,
+    "entry_g": 6.570242382668915,
+    "entry_cut_h_m": 4080.372285532765,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 789.6
+   },
+   "9|11": {
+    "arm": "replan40",
+    "seed": 9,
+    "idx": 11,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9783964089795547,
+     "isp_factor": 1.014160144171357,
+     "density_scale": 1.0775497174186273,
+     "cd_factor": 0.9349059289278746,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 127.15799070729102,
+     "sep_downrange_m": -1675.3191255816014,
+     "sep_crossrange_m": -541.22120779038,
+     "sep_speed_m_s": -2.2745193778292006,
+     "sep_heading_deg": 0.0814656309758069
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     21.353029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     8.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 221.12665269388464,
+    "entry_q_pa": 129578.99843804214,
+    "entry_g": 7.256278626870793,
+    "entry_cut_h_m": 3297.731307516806,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 887.3
+   },
+   "10|0": {
+    "arm": "replan40",
+    "seed": 10,
+    "idx": 0,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0456001709628975,
+     "isp_factor": 0.9824609086047488,
+     "density_scale": 1.065688977054906,
+     "cd_factor": 0.7895692738492122,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -99.43229177555634,
+     "sep_downrange_m": 101.18644120947987,
+     "sep_crossrange_m": 674.4340566434703,
+     "sep_speed_m_s": 3.431746197903074,
+     "sep_heading_deg": 0.07127754629228777
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     15.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 570.1368973295105,
+    "entry_q_pa": 171432.37031573823,
+    "entry_g": 8.007843665811444,
+    "entry_cut_h_m": 2049.5841425266117,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 1062.3
+   },
+   "10|1": {
+    "arm": "replan40",
+    "seed": 10,
+    "idx": 1,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9652577979940706,
+     "isp_factor": 1.0150272481826843,
+     "density_scale": 1.0749431412179895,
+     "cd_factor": 1.1608393709351006,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 746.0370744399058,
+     "sep_downrange_m": 273.2272238121749,
+     "sep_crossrange_m": 829.7916387146754,
+     "sep_speed_m_s": 3.8671361308246777,
+     "sep_heading_deg": -0.16022409999998258
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     16.23015018560153,
+     2.2719477886544617,
+     0.8135333816405592,
+     4.9072609322046645,
+     2.1211793276517454,
+     24193.72140105792,
+     236.55244632929478,
+     0.8245861990206986
+    ],
+    "miss_m": 459.4867018447597,
+    "entry_q_pa": 108135.35318070547,
+    "entry_g": 6.701650081407314,
+    "entry_cut_h_m": 3913.474082882516,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 1061.4
+   },
+   "10|2": {
+    "arm": "replan40",
+    "seed": 10,
+    "idx": 2,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9772388991417581,
+     "isp_factor": 1.0116689878189846,
+     "density_scale": 1.0947006676422342,
+     "cd_factor": 0.745694938663841,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 80.03842689300889,
+     "sep_downrange_m": -1534.076849870235,
+     "sep_crossrange_m": -584.9931529120342,
+     "sep_speed_m_s": 2.7098930821228158,
+     "sep_heading_deg": -0.14501079512686896
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     22.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 127.39515011948065,
+    "entry_q_pa": 136167.67228915932,
+    "entry_g": 7.0977536258123815,
+    "entry_cut_h_m": 2776.1336774211377,
+    "fuel_margin_kg": 7240.9290239850525,
+    "dur_s": 1083.5
+   },
+   "10|3": {
+    "arm": "replan40",
+    "seed": 10,
+    "idx": 3,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0087066139796586,
+     "isp_factor": 1.0017297917178114,
+     "density_scale": 0.9143605155314805,
+     "cd_factor": 1.1350762447469103,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -44.98190377884034,
+     "sep_downrange_m": 347.9641299028704,
+     "sep_crossrange_m": -314.58091601338117,
+     "sep_speed_m_s": -9.927846649911453,
+     "sep_heading_deg": 0.16323474255492534
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.6652642191683049
+    ],
+    "miss_m": 770.1630904167076,
+    "entry_q_pa": 161534.0242925198,
+    "entry_g": 6.608304359418157,
+    "entry_cut_h_m": 586.5174152730033,
+    "fuel_margin_kg": 74308.86325615144,
+    "dur_s": 1015.1
+   },
+   "10|4": {
+    "arm": "replan40",
+    "seed": 10,
+    "idx": 4,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9817385037734314,
+     "isp_factor": 0.9722483094420062,
+     "density_scale": 1.0576150923529481,
+     "cd_factor": 1.0339630464065517,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 35.96294493236796,
+     "sep_downrange_m": 692.6720986559053,
+     "sep_crossrange_m": -33.24858965192745,
+     "sep_speed_m_s": 1.9918447120604168,
+     "sep_heading_deg": -0.016697851818695857
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.6652642191683049
+    ],
+    "miss_m": 650.5071126095767,
+    "entry_q_pa": 175744.18515995465,
+    "entry_g": 6.624830315142099,
+    "entry_cut_h_m": null,
+    "fuel_margin_kg": 76164.39888630237,
+    "dur_s": 927.8
+   },
+   "10|5": {
+    "arm": "replan40",
+    "seed": 10,
+    "idx": 5,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0433463686560658,
+     "isp_factor": 1.0034742608955958,
+     "density_scale": 0.9607015368149608,
+     "cd_factor": 0.8166787364273208,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 275.7306374135895,
+     "sep_downrange_m": -329.20657585833493,
+     "sep_crossrange_m": -1431.5050576405959,
+     "sep_speed_m_s": -2.9835650592722622,
+     "sep_heading_deg": -0.10048754522789677
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     15.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 395.197058324918,
+    "entry_q_pa": 169877.85682013063,
+    "entry_g": 7.939523514108298,
+    "entry_cut_h_m": 1951.5634424211457,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 1008.6
+   },
+   "10|6": {
+    "arm": "replan40",
+    "seed": 10,
+    "idx": 6,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9916936515801771,
+     "isp_factor": 0.9786597028259685,
+     "density_scale": 0.9598270302164508,
+     "cd_factor": 1.1646491883562555,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 541.6704446732687,
+     "sep_downrange_m": 674.7102951992392,
+     "sep_crossrange_m": 296.38615377580624,
+     "sep_speed_m_s": 1.746742716778169,
+     "sep_heading_deg": 0.15668582571874914
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     241.6753255233905,
+     0.8840142191683049
+    ],
+    "miss_m": 93.67013309239144,
+    "entry_q_pa": 117203.40909365455,
+    "entry_g": 7.3591423421630715,
+    "entry_cut_h_m": 4123.24555812683,
+    "fuel_margin_kg": 10809.356560622575,
+    "touch_err_m": 0.36073130947211285,
+    "vert_m_s": -1.7352235262773106,
+    "lat_m_s": 0.0331937871479123,
+    "dur_s": 965.4
+   },
+   "10|7": {
+    "arm": "replan40",
+    "seed": 10,
+    "idx": 7,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.007867962967078,
+     "isp_factor": 1.0245230092174986,
+     "density_scale": 0.9353489685231435,
+     "cd_factor": 1.2824955019313302,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 65.54641583930251,
+     "sep_downrange_m": 825.3308454822582,
+     "sep_crossrange_m": 283.2414828233875,
+     "sep_speed_m_s": 3.0341876042838476,
+     "sep_heading_deg": -0.26644738826019854
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 214.59906513074955,
+    "entry_q_pa": 108991.09705895768,
+    "entry_g": 7.479217669359149,
+    "entry_cut_h_m": 4699.79995542299,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 930.9
+   },
+   "10|8": {
+    "arm": "replan40",
+    "seed": 10,
+    "idx": 8,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.033557549467213,
+     "isp_factor": 1.018086584008562,
+     "density_scale": 0.9801064237450013,
+     "cd_factor": 0.7892258564323028,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -260.7272293678567,
+     "sep_downrange_m": 574.6233134207995,
+     "sep_crossrange_m": -1061.0140411737734,
+     "sep_speed_m_s": -0.7779082325851183,
+     "sep_heading_deg": 0.14822560481624983
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     15.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 480.10228474965754,
+    "entry_q_pa": 177302.96092057787,
+    "entry_g": 7.8353982538744384,
+    "entry_cut_h_m": 1574.3630738649517,
+    "fuel_margin_kg": 35072.69925473863,
+    "dur_s": 967.5
+   },
+   "10|9": {
+    "arm": "replan40",
+    "seed": 10,
+    "idx": 9,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9796436929117015,
+     "isp_factor": 0.9776655255124653,
+     "density_scale": 0.9151787356524996,
+     "cd_factor": 0.8693326544993666,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -41.95345684013458,
+     "sep_downrange_m": -841.9635319462404,
+     "sep_crossrange_m": -282.9970202919287,
+     "sep_speed_m_s": -0.10245132914784925,
+     "sep_heading_deg": -0.10653829195372144
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     22.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 271.2381221853339,
+    "entry_q_pa": 122953.81310882141,
+    "entry_g": 7.29308681196173,
+    "entry_cut_h_m": 3750.6369644766673,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 927.6
+   },
+   "10|10": {
+    "arm": "replan40",
+    "seed": 10,
+    "idx": 10,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0192327868546147,
+     "isp_factor": 0.999406939788977,
+     "density_scale": 0.9082100588053288,
+     "cd_factor": 1.1326585089847905,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 144.62975489004586,
+     "sep_downrange_m": 1121.3908148620228,
+     "sep_crossrange_m": -87.95133674322103,
+     "sep_speed_m_s": -0.3051823780405064,
+     "sep_heading_deg": -0.24609626737504034
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     16.986039205429215,
+     2.2986304627552907,
+     0.8900471624327225,
+     4.400310854140955,
+     2.313795554552524,
+     24496.077008989003,
+     229.44700722412247,
+     0.7744389735250063
+    ],
+    "miss_m": 475.4365449463326,
+    "entry_q_pa": 101859.95883699806,
+    "entry_g": 6.573354269369003,
+    "entry_cut_h_m": 4216.652939055115,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 931.0
+   },
+   "10|11": {
+    "arm": "replan40",
+    "seed": 10,
+    "idx": 11,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9920266668629901,
+     "isp_factor": 1.0180064037862282,
+     "density_scale": 0.9306000880595571,
+     "cd_factor": 0.9213636259110541,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 176.18772170396568,
+     "sep_downrange_m": 491.4985123812108,
+     "sep_crossrange_m": 64.60492723757325,
+     "sep_speed_m_s": 5.494640186435278,
+     "sep_heading_deg": -0.11994473736075102
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     242.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 47.461677348200546,
+    "entry_q_pa": 126533.26643535825,
+    "entry_g": 7.200992925206491,
+    "entry_cut_h_m": 3442.1896004499868,
+    "fuel_margin_kg": 17833.093118384946,
+    "touch_err_m": 0.3142563505267501,
+    "vert_m_s": -1.500120930434597,
+    "lat_m_s": 0.02981462157958734,
+    "dur_s": 942.3
+   }
+  },
+  "robust": {
+   "8|0": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 0,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9826972276605561,
+     "isp_factor": 1.0292366106002755,
+     "density_scale": 0.9637421676971033,
+     "cd_factor": 1.1731293614920175,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -925.0326318786813,
+     "sep_downrange_m": -151.11775686768624,
+     "sep_crossrange_m": -765.7833824770768,
+     "sep_speed_m_s": 3.5744007397199153,
+     "sep_heading_deg": 0.1435270856368851
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 76.19982155110421,
+    "entry_q_pa": 115048.39189159012,
+    "entry_g": 7.270098514190017,
+    "entry_cut_h_m": 4112.827350156382,
+    "fuel_margin_kg": 27262.277575289947,
+    "touch_err_m": 0.37053546305562163,
+    "vert_m_s": -1.4996430774845781,
+    "lat_m_s": 0.03371378854503351,
+    "dur_s": 40.1
+   },
+   "8|1": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 1,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9668088855884703,
+     "isp_factor": 1.0098817650782532,
+     "density_scale": 0.9455131282186452,
+     "cd_factor": 1.2594812537971145,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -77.76185316319037,
+     "sep_downrange_m": -1526.8498575457784,
+     "sep_crossrange_m": 783.1595330113549,
+     "sep_speed_m_s": 5.89636285271098,
+     "sep_heading_deg": 0.26947097438934847
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 149.4865457392146,
+    "entry_q_pa": 113208.98778916674,
+    "entry_g": 7.3405775549204515,
+    "entry_cut_h_m": 4278.447352075018,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 34.6
+   },
+   "8|2": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 2,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9916934577059454,
+     "isp_factor": 1.0059790975111682,
+     "density_scale": 0.9784924567112483,
+     "cd_factor": 1.0836409221242447,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -16.230524006644483,
+     "sep_downrange_m": 381.80663694699797,
+     "sep_crossrange_m": 882.4315195279421,
+     "sep_speed_m_s": 7.301696748768436,
+     "sep_heading_deg": 0.16075925548819803
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 123.74180280501214,
+    "entry_q_pa": 118650.19424958255,
+    "entry_g": 7.3468583976254465,
+    "entry_cut_h_m": 4032.8558408655226,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 35.4
+   },
+   "8|3": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 3,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0460489708584408,
+     "isp_factor": 0.9953274287871402,
+     "density_scale": 1.0182320322356668,
+     "cd_factor": 0.8990042120165772,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 181.3970430549066,
+     "sep_downrange_m": 1554.7621140575052,
+     "sep_crossrange_m": 1472.3501711270587,
+     "sep_speed_m_s": -5.122145771916145,
+     "sep_heading_deg": 0.024463857758296754
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 216.12170272611766,
+    "entry_q_pa": 116272.40260479704,
+    "entry_g": 7.4360212026159624,
+    "entry_cut_h_m": 4311.951440993696,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 41.7
+   },
+   "8|4": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 4,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9873286390585757,
+     "isp_factor": 0.9732774588501003,
+     "density_scale": 0.9820749820121514,
+     "cd_factor": 1.1111343875876034,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 20.855704248164308,
+     "sep_downrange_m": 13.476508547370539,
+     "sep_crossrange_m": 596.1270852200606,
+     "sep_speed_m_s": -3.5550983867064785,
+     "sep_heading_deg": -0.0017014710047931266
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 135.1359323695798,
+    "entry_q_pa": 113154.70011323347,
+    "entry_g": 7.401025004336724,
+    "entry_cut_h_m": 4451.662222092971,
+    "fuel_margin_kg": 6018.719856101612,
+    "touch_err_m": 0.008537477337076984,
+    "vert_m_s": -1.4995390959086916,
+    "lat_m_s": 0.010804366027314681,
+    "dur_s": 44.9
+   },
+   "8|5": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 5,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0198923129145316,
+     "isp_factor": 1.0113664297441634,
+     "density_scale": 1.0410517146698504,
+     "cd_factor": 0.8252862321690035,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 160.6908351130957,
+     "sep_downrange_m": 76.16801676501686,
+     "sep_crossrange_m": 559.2257640685035,
+     "sep_speed_m_s": 1.0646547425986699,
+     "sep_heading_deg": -0.1959009158697501
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 155.07139734307486,
+    "entry_q_pa": 126635.41274281926,
+    "entry_g": 7.240120204089291,
+    "entry_cut_h_m": 3467.9549351437017,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 37.5
+   },
+   "8|6": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 6,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0499125906736075,
+     "isp_factor": 1.0048755469994777,
+     "density_scale": 1.0629547502282226,
+     "cd_factor": 1.0639835434865077,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -184.14072216128721,
+     "sep_downrange_m": 388.77243301706085,
+     "sep_crossrange_m": -620.0207594961001,
+     "sep_speed_m_s": -4.318003603778706,
+     "sep_heading_deg": 0.19250674032984824
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 249.3426803843746,
+    "entry_q_pa": 109257.10816449525,
+    "entry_g": 7.505207159764534,
+    "entry_cut_h_m": 4834.050191283226,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 43.6
+   },
+   "8|7": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 7,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9630019844918157,
+     "isp_factor": 0.9927580911026704,
+     "density_scale": 0.932886154418787,
+     "cd_factor": 0.8428352147169839,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -771.449901598258,
+     "sep_downrange_m": -578.8368614645453,
+     "sep_crossrange_m": 416.65779631015977,
+     "sep_speed_m_s": -1.211370395746104,
+     "sep_heading_deg": -0.05639491519957724
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 28.773095395724123,
+    "entry_q_pa": 130392.9803615615,
+    "entry_g": 7.054201162496814,
+    "entry_cut_h_m": 2997.420686511323,
+    "fuel_margin_kg": 9941.820111334207,
+    "dur_s": 45.6
+   },
+   "8|8": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 8,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.966648803305507,
+     "isp_factor": 0.9718191642982517,
+     "density_scale": 0.9085440807657088,
+     "cd_factor": 0.792229788218438,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 172.1032829209889,
+     "sep_downrange_m": -1593.4298416757474,
+     "sep_crossrange_m": 1458.963909094834,
+     "sep_speed_m_s": -3.4742450645186236,
+     "sep_heading_deg": -0.160088241314198
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 422.2958683918926,
+    "entry_q_pa": 133284.71254488293,
+    "entry_g": 7.105045170519238,
+    "entry_cut_h_m": 2940.3632961399853,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 49.2
+   },
+   "8|9": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 9,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9656479749581243,
+     "isp_factor": 1.0069213886324087,
+     "density_scale": 1.039309725663686,
+     "cd_factor": 1.190963689516281,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 518.7772164468307,
+     "sep_downrange_m": 676.6054277057282,
+     "sep_crossrange_m": 568.3109763158424,
+     "sep_speed_m_s": -2.798334644647021,
+     "sep_heading_deg": -0.08610582406219155
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 80.53838139191963,
+    "entry_q_pa": 116209.82457651173,
+    "entry_g": 7.312694666001015,
+    "entry_cut_h_m": 4056.7769567919895,
+    "fuel_margin_kg": 21128.67492713628,
+    "touch_err_m": 0.3619301532051282,
+    "vert_m_s": -1.4995924355972927,
+    "lat_m_s": 0.03453323883457846,
+    "dur_s": 45.3
+   },
+   "8|10": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 10,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9981522843944964,
+     "isp_factor": 0.9787552151154632,
+     "density_scale": 1.0458016178177652,
+     "cd_factor": 1.0814994338936608,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -189.75319937625085,
+     "sep_downrange_m": 668.2385011260136,
+     "sep_crossrange_m": 159.56406001235385,
+     "sep_speed_m_s": -1.0418114476007696,
+     "sep_heading_deg": -0.0014125417721927679
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 102.34932426795638,
+    "entry_q_pa": 113151.65234545202,
+    "entry_g": 7.420904492684111,
+    "entry_cut_h_m": 4457.399842450395,
+    "fuel_margin_kg": 6108.180601410684,
+    "touch_err_m": 0.3331338710477851,
+    "vert_m_s": -1.54466030430126,
+    "lat_m_s": 0.03146231865774057,
+    "dur_s": 46.1
+   },
+   "8|11": {
+    "arm": "fixed",
+    "seed": 8,
+    "idx": 11,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0310740368055973,
+     "isp_factor": 0.9714822698377292,
+     "density_scale": 1.0486027605650472,
+     "cd_factor": 1.1411700521728547,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 816.0351714257653,
+     "sep_downrange_m": -898.516588029033,
+     "sep_crossrange_m": -717.5768645115953,
+     "sep_speed_m_s": -4.011297172379322,
+     "sep_heading_deg": -0.18273108923798667
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 188.3238451202787,
+    "entry_q_pa": 107280.53233036606,
+    "entry_g": 7.600165462938306,
+    "entry_cut_h_m": 5058.278295678087,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 44.1
+   },
+   "9|0": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 0,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0370249203970086,
+     "isp_factor": 0.9872090325452533,
+     "density_scale": 1.0206296300103124,
+     "cd_factor": 1.1665204497521073,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 457.3812090768358,
+     "sep_downrange_m": -362.0888024063192,
+     "sep_crossrange_m": 344.38859644344734,
+     "sep_speed_m_s": 1.0037302763367282,
+     "sep_heading_deg": -0.059152808318834044
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 204.03409593605778,
+    "entry_q_pa": 107255.88224501422,
+    "entry_g": 7.61209631626535,
+    "entry_cut_h_m": 5040.65291959513,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 39.9
+   },
+   "9|1": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 1,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0330267572834544,
+     "isp_factor": 0.992362092371323,
+     "density_scale": 1.0867914118452056,
+     "cd_factor": 0.9147090386261024,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -476.0529885539169,
+     "sep_downrange_m": 1837.5504885880725,
+     "sep_crossrange_m": 2001.4888526532052,
+     "sep_speed_m_s": -5.433640532560511,
+     "sep_heading_deg": 0.11876967743609063
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 182.94705110043185,
+    "entry_q_pa": 115483.94437755218,
+    "entry_g": 7.390630076552022,
+    "entry_cut_h_m": 4311.161309512332,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 43.4
+   },
+   "9|2": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 2,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0119448148201173,
+     "isp_factor": 0.9850646436359547,
+     "density_scale": 1.0756388629677593,
+     "cd_factor": 1.1337057600172644,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 350.57074263704334,
+     "sep_downrange_m": -157.58875208897138,
+     "sep_crossrange_m": 911.1740713316678,
+     "sep_speed_m_s": -8.85793796548767,
+     "sep_heading_deg": -0.21659760589692872
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 170.84630191612078,
+    "entry_q_pa": 108999.27688206384,
+    "entry_g": 7.452630642962059,
+    "entry_cut_h_m": 4732.230873238295,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 38.3
+   },
+   "9|3": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 3,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9794171296249515,
+     "isp_factor": 0.9743881075162831,
+     "density_scale": 1.0103518656377608,
+     "cd_factor": 1.068781638822833,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -628.1632928401227,
+     "sep_downrange_m": -221.2903831351344,
+     "sep_crossrange_m": -336.6384696673261,
+     "sep_speed_m_s": -1.3739519964132239,
+     "sep_heading_deg": -0.01777006392178227
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 71.47742296742395,
+    "entry_q_pa": 114661.5933341396,
+    "entry_g": 7.326047054717849,
+    "entry_cut_h_m": 4265.893624225631,
+    "fuel_margin_kg": 5689.199320208398,
+    "touch_err_m": 0.3560858250303687,
+    "vert_m_s": -1.500073984898959,
+    "lat_m_s": 0.03308491200159264,
+    "dur_s": 47.5
+   },
+   "9|4": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 4,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.030965998232757,
+     "isp_factor": 0.9961389039170178,
+     "density_scale": 1.066460547971577,
+     "cd_factor": 1.2177811410700783,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 38.32114867940861,
+     "sep_downrange_m": -85.3847333047346,
+     "sep_crossrange_m": 1008.760649778369,
+     "sep_speed_m_s": -2.3681777795140935,
+     "sep_heading_deg": -0.03931249850941473
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 229.35823270596663,
+    "entry_q_pa": 106328.24458619815,
+    "entry_g": 7.553337284766924,
+    "entry_cut_h_m": 5068.530960758217,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 35.4
+   },
+   "9|5": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 5,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0240506014521724,
+     "isp_factor": 0.9992765440235795,
+     "density_scale": 0.9203138696157642,
+     "cd_factor": 1.1217034793611855,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 411.33406548055706,
+     "sep_downrange_m": -1329.0862543091162,
+     "sep_crossrange_m": -1106.0936336020568,
+     "sep_speed_m_s": 1.5088350175696859,
+     "sep_heading_deg": -0.0075617637202506395
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 324.99535991497584,
+    "entry_q_pa": 111594.7574040852,
+    "entry_g": 7.497259686451518,
+    "entry_cut_h_m": 4603.745611396618,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 46.4
+   },
+   "9|6": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 6,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0202888646674888,
+     "isp_factor": 0.9786703978902307,
+     "density_scale": 0.9613914392677838,
+     "cd_factor": 1.2943862843669225,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 412.30538944996357,
+     "sep_downrange_m": 2006.5439945190487,
+     "sep_crossrange_m": 752.5401638094725,
+     "sep_speed_m_s": 0.2058336972457795,
+     "sep_heading_deg": -0.13292210627349452
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 183.5348433861452,
+    "entry_q_pa": 104086.95231166942,
+    "entry_g": 7.663423059896447,
+    "entry_cut_h_m": 5308.476649408229,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 41.5
+   },
+   "9|7": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 7,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.014989293192153,
+     "isp_factor": 1.0140142774855971,
+     "density_scale": 1.0256524709283399,
+     "cd_factor": 0.9337870261884436,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -47.14659958437506,
+     "sep_downrange_m": 765.2219090076514,
+     "sep_crossrange_m": -1061.5951623874544,
+     "sep_speed_m_s": -1.7495103523872528,
+     "sep_heading_deg": 0.12335609647600722
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 254.36601927435274,
+    "entry_q_pa": 119771.98635814972,
+    "entry_g": 7.2746855542220015,
+    "entry_cut_h_m": 3856.572525232099,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 43.1
+   },
+   "9|8": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 8,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9702618163613399,
+     "isp_factor": 0.9737850300242681,
+     "density_scale": 0.9687854507134961,
+     "cd_factor": 1.0492280569954318,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 270.018331934862,
+     "sep_downrange_m": -514.7362574965973,
+     "sep_crossrange_m": 221.03455172024545,
+     "sep_speed_m_s": 0.87551019114131,
+     "sep_heading_deg": -0.21829904721397772
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 153.32274305813146,
+    "entry_q_pa": 118414.45540224729,
+    "entry_g": 7.317753874418839,
+    "entry_cut_h_m": 3986.448965670541,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 57.8
+   },
+   "9|9": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 9,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.007081398232477,
+     "isp_factor": 1.0096883448827452,
+     "density_scale": 1.072330031904371,
+     "cd_factor": 0.9660444257560904,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 75.9053195008753,
+     "sep_downrange_m": 352.8380024585451,
+     "sep_crossrange_m": 1667.7466312091362,
+     "sep_speed_m_s": 1.8954440768483196,
+     "sep_heading_deg": 0.1284126344656369
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 230.1872610570074,
+    "entry_q_pa": 120868.57364050363,
+    "entry_g": 7.287637240604815,
+    "entry_cut_h_m": 3841.9252610672265,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 47.7
+   },
+   "9|10": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 10,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9558072391514753,
+     "isp_factor": 0.997119162339198,
+     "density_scale": 1.048638179712635,
+     "cd_factor": 1.113833477399949,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -211.92020470761204,
+     "sep_downrange_m": 577.0500570304652,
+     "sep_crossrange_m": -295.4477977760029,
+     "sep_speed_m_s": -11.525653915354502,
+     "sep_heading_deg": 0.00670501624638358
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 61.85070134310718,
+    "entry_q_pa": 117411.91015633469,
+    "entry_g": 7.195827942209531,
+    "entry_cut_h_m": 3885.8339230008423,
+    "fuel_margin_kg": 17202.542708799534,
+    "touch_err_m": 0.3463052123254619,
+    "vert_m_s": -1.500133365649798,
+    "lat_m_s": 0.031775989681860364,
+    "dur_s": 48.5
+   },
+   "9|11": {
+    "arm": "fixed",
+    "seed": 9,
+    "idx": 11,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9783964089795547,
+     "isp_factor": 1.014160144171357,
+     "density_scale": 1.0775497174186273,
+     "cd_factor": 0.9349059289278746,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 127.15799070729102,
+     "sep_downrange_m": -1675.3191255816014,
+     "sep_crossrange_m": -541.22120779038,
+     "sep_speed_m_s": -2.2745193778292006,
+     "sep_heading_deg": 0.0814656309758069
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 29.02656780627783,
+    "entry_q_pa": 126593.05185433946,
+    "entry_g": 7.128446525864798,
+    "entry_cut_h_m": 3290.4333587400615,
+    "fuel_margin_kg": 19188.44868034107,
+    "touch_err_m": 0.1515603687796108,
+    "vert_m_s": -2.1662215048572975,
+    "lat_m_s": 0.01335652726384149,
+    "dur_s": 53.2
+   },
+   "10|0": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 0,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0456001709628975,
+     "isp_factor": 0.9824609086047488,
+     "density_scale": 1.065688977054906,
+     "cd_factor": 0.7895692738492122,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -99.43229177555634,
+     "sep_downrange_m": 101.18644120947987,
+     "sep_crossrange_m": 674.4340566434703,
+     "sep_speed_m_s": 3.431746197903074,
+     "sep_heading_deg": 0.07127754629228777
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 66.69578713856731,
+    "entry_q_pa": 121877.58772834628,
+    "entry_g": 7.42818379135393,
+    "entry_cut_h_m": 3970.854566617869,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 45.1
+   },
+   "10|1": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 1,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9652577979940706,
+     "isp_factor": 1.0150272481826843,
+     "density_scale": 1.0749431412179895,
+     "cd_factor": 1.1608393709351006,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 746.0370744399058,
+     "sep_downrange_m": 273.2272238121749,
+     "sep_crossrange_m": 829.7916387146754,
+     "sep_speed_m_s": 3.8671361308246777,
+     "sep_heading_deg": -0.16022409999998258
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 103.85948706066483,
+    "entry_q_pa": 120084.10618938481,
+    "entry_g": 7.277911449767018,
+    "entry_cut_h_m": 3825.8137648319826,
+    "fuel_margin_kg": 22330.162680821144,
+    "touch_err_m": 0.10399764929360326,
+    "vert_m_s": -1.4995404583522691,
+    "lat_m_s": 0.016926042171083774,
+    "dur_s": 39.6
+   },
+   "10|2": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 2,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9772388991417581,
+     "isp_factor": 1.0116689878189846,
+     "density_scale": 1.0947006676422342,
+     "cd_factor": 0.745694938663841,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 80.03842689300889,
+     "sep_downrange_m": -1534.076849870235,
+     "sep_crossrange_m": -584.9931529120342,
+     "sep_speed_m_s": 2.7098930821228158,
+     "sep_heading_deg": -0.14501079512686896
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 363.71844900443784,
+    "entry_q_pa": 138372.89150023262,
+    "entry_g": 7.000492290317983,
+    "entry_cut_h_m": 2546.3966402243823,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 45.5
+   },
+   "10|3": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 3,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0087066139796586,
+     "isp_factor": 1.0017297917178114,
+     "density_scale": 0.9143605155314805,
+     "cd_factor": 1.1350762447469103,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -44.98190377884034,
+     "sep_downrange_m": 347.9641299028704,
+     "sep_crossrange_m": -314.58091601338117,
+     "sep_speed_m_s": -9.927846649911453,
+     "sep_heading_deg": 0.16323474255492534
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 197.256874623833,
+    "entry_q_pa": 109258.061849495,
+    "entry_g": 7.383694447016625,
+    "entry_cut_h_m": 4606.255749942735,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 40.3
+   },
+   "10|4": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 4,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9817385037734314,
+     "isp_factor": 0.9722483094420062,
+     "density_scale": 1.0576150923529481,
+     "cd_factor": 1.0339630464065517,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 35.96294493236796,
+     "sep_downrange_m": 692.6720986559053,
+     "sep_crossrange_m": -33.24858965192745,
+     "sep_speed_m_s": 1.9918447120604168,
+     "sep_heading_deg": -0.016697851818695857
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 70.86109747503293,
+    "entry_q_pa": 118430.36785813131,
+    "entry_g": 7.372322422433508,
+    "entry_cut_h_m": 4054.4623714732006,
+    "fuel_margin_kg": 3895.920480810164,
+    "touch_err_m": 0.3611995431469077,
+    "vert_m_s": -1.5473696065008529,
+    "lat_m_s": 0.03293211790668515,
+    "dur_s": 67.3
+   },
+   "10|5": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 5,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0433463686560658,
+     "isp_factor": 1.0034742608955958,
+     "density_scale": 0.9607015368149608,
+     "cd_factor": 0.8166787364273208,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 275.7306374135895,
+     "sep_downrange_m": -329.20657585833493,
+     "sep_crossrange_m": -1431.5050576405959,
+     "sep_speed_m_s": -2.9835650592722622,
+     "sep_heading_deg": -0.10048754522789677
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 150.91950057827302,
+    "entry_q_pa": 120865.89004545956,
+    "entry_g": 7.327674175109157,
+    "entry_cut_h_m": 3887.0501939114183,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 58.2
+   },
+   "10|6": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 6,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9916936515801771,
+     "isp_factor": 0.9786597028259685,
+     "density_scale": 0.9598270302164508,
+     "cd_factor": 1.1646491883562555,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 541.6704446732687,
+     "sep_downrange_m": 674.7102951992392,
+     "sep_crossrange_m": 296.38615377580624,
+     "sep_speed_m_s": 1.746742716778169,
+     "sep_heading_deg": 0.15668582571874914
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 96.79905614084011,
+    "entry_q_pa": 112064.66739026789,
+    "entry_g": 7.482810447306984,
+    "entry_cut_h_m": 4539.982538477518,
+    "fuel_margin_kg": 7996.275638191961,
+    "touch_err_m": 0.3379791088759727,
+    "vert_m_s": -1.5000367298254855,
+    "lat_m_s": 0.03209229139685332,
+    "dur_s": 59.4
+   },
+   "10|7": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 7,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.007867962967078,
+     "isp_factor": 1.0245230092174986,
+     "density_scale": 0.9353489685231435,
+     "cd_factor": 1.2824955019313302,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 65.54641583930251,
+     "sep_downrange_m": 825.3308454822582,
+     "sep_crossrange_m": 283.2414828233875,
+     "sep_speed_m_s": 3.0341876042838476,
+     "sep_heading_deg": -0.26644738826019854
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 214.59906513074955,
+    "entry_q_pa": 108991.09705895768,
+    "entry_g": 7.479217669359149,
+    "entry_cut_h_m": 4699.79995542299,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 56.7
+   },
+   "10|8": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 8,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.033557549467213,
+     "isp_factor": 1.018086584008562,
+     "density_scale": 0.9801064237450013,
+     "cd_factor": 0.7892258564323028,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -260.7272293678567,
+     "sep_downrange_m": 574.6233134207995,
+     "sep_crossrange_m": -1061.0140411737734,
+     "sep_speed_m_s": -0.7779082325851183,
+     "sep_heading_deg": 0.14822560481624983
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 345.20504500188986,
+    "entry_q_pa": 125470.90113278413,
+    "entry_g": 7.234205274937909,
+    "entry_cut_h_m": 3516.6046036705375,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 58.2
+   },
+   "10|9": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 9,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9796436929117015,
+     "isp_factor": 0.9776655255124653,
+     "density_scale": 0.9151787356524996,
+     "cd_factor": 0.8693326544993666,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": -41.95345684013458,
+     "sep_downrange_m": -841.9635319462404,
+     "sep_crossrange_m": -282.9970202919287,
+     "sep_speed_m_s": -0.10245132914784925,
+     "sep_heading_deg": -0.10653829195372144
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 371.6234146022467,
+    "entry_q_pa": 126088.32580173833,
+    "entry_g": 7.196579004373519,
+    "entry_cut_h_m": 3437.36144302506,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 54.4
+   },
+   "10|10": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 10,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 1.0192327868546147,
+     "isp_factor": 0.999406939788977,
+     "density_scale": 0.9082100588053288,
+     "cd_factor": 1.1326585089847905,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 144.62975489004586,
+     "sep_downrange_m": 1121.3908148620228,
+     "sep_crossrange_m": -87.95133674322103,
+     "sep_speed_m_s": -0.3051823780405064,
+     "sep_heading_deg": -0.24609626737504034
+    },
+    "outcome": "failed",
+    "reason": "CORRIDOR_MISSED",
+    "checks": {
+     "recovery-landing": false,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 123.75198860865109,
+    "entry_q_pa": 110489.60046742161,
+    "entry_g": 7.481651242507125,
+    "entry_cut_h_m": 4673.918555570766,
+    "fuel_margin_kg": -100000.0,
+    "dur_s": 36.7
+   },
+   "10|11": {
+    "arm": "fixed",
+    "seed": 10,
+    "idx": 11,
+    "script_tag": "v0",
+    "draw": {
+     "thrust_factor": 0.9920266668629901,
+     "isp_factor": 1.0180064037862282,
+     "density_scale": 0.9306000880595571,
+     "cd_factor": 0.9213636259110541,
+     "wind_east_m_s": 0.0,
+     "wind_north_m_s": 0.0,
+     "wind_up_m_s": 0.0,
+     "sep_altitude_m": 176.18772170396568,
+     "sep_downrange_m": 491.4985123812108,
+     "sep_crossrange_m": 64.60492723757325,
+     "sep_speed_m_s": 5.494640186435278,
+     "sep_heading_deg": -0.11994473736075102
+    },
+    "outcome": "landed",
+    "reason": "LANDED",
+    "checks": {
+     "recovery-landing": true,
+     "landing-position": true,
+     "landing-vertical-speed": true,
+     "landing-lateral-speed": true,
+     "landing-tilt": true,
+     "landing-propellant-reserve": true,
+     "landing-max-g": true,
+     "recovery-propellant-reserve": true
+    },
+    "script": [
+     12.603029379697258,
+     2.224379974065916,
+     0.9022621735815163,
+     7.250849321660938,
+     -4.407638122975939,
+     22742.87307869621,
+     232.9253255233905,
+     0.9152642191683049
+    ],
+    "miss_m": 47.39383947265309,
+    "entry_q_pa": 126533.26643535825,
+    "entry_g": 7.200992925206491,
+    "entry_cut_h_m": 3395.1487172292545,
+    "fuel_margin_kg": 17367.69483213604,
+    "touch_err_m": 0.33082734995277463,
+    "vert_m_s": -1.4996948480560615,
+    "lat_m_s": 0.03137420220724509,
+    "dur_s": 35.5
+   }
+  }
+ }
+}
