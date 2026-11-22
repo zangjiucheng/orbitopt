@@ -367,3 +367,22 @@ collapse to 2/84 and an independent ~180 t-class RTLS vehicle to 0/48, all
 deep fuel-bound. The probability model generalizes only in shape, not level:
 it stays unskilled out of sample. No success-rate improvement is claimed.
 API: `orbitopt.flightlab.recovery.reliability`.
+
+## Graded admission (E10-06)
+
+The [chance-constraint redesign report](benchmarks/e10_06_chance_constraint_redesign.md)
+replaces the E7-01 binary gate with a graded rule over the same reconstructed
+violations: reject only deep violations (worst > 0.5), a second binding
+channel (> 0.15), or a calibrated landing probability below the recorded
+joint-arm climatology (0.208). The probability is a logistic refit on
+fuel-quantile z and divert violation -- monotone by fit, and the only fit
+that stays short of severe overconfidence when the dispersion bands shift
+x1.5 (skill -0.09, ECE 0.03, against -9.38 / 0.43 for the raw surrogate).
+Regrading the recorded grid row-for-row: 99 -> 84 rejections, false
+rejections (joint-rejected, FL-305 landed) 20 -> 10, all 51 deep violations
+kept, nothing previously accepted re-rejected; on the E7-05 hold-out the
+calibrated model scores Brier skill +0.565 (raw: -0.62) with no
+high-probability bin significantly below its own prediction. Wired into
+FL-302 as `plan_boostback_entry(..., joint_admission=...)`; the search
+objective is unchanged and no success-rate improvement is claimed.
+API: `orbitopt.flightlab.recovery.redesign`.
