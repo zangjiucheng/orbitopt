@@ -145,6 +145,7 @@ from orbitopt.flightlab.recovery.chance import (
     evaluate_joint_chance,
     joint_penalty,
 )
+from orbitopt.flightlab.recovery.redesign import AdmissionPolicy
 from orbitopt.flightlab.recovery.propagator import (
     AltitudeThreshold,
     BoosterModel,
@@ -772,6 +773,7 @@ class _Rollout:
     penalty: float = float("inf")
     p_land: float | None = None           # E3-02 joint landing probability
     joint_violation: float | None = None  # E3-02 worst normalized violation
+    joint_verdict: Any = None             # E3-02 JointVerdict (E10-06 admission input)
     #: E5-05c two-burn mode: scheduled engine-on time [s] still owed after
     #: the corridor crossing (0 = an engine-off handoff, the only valid one)
     handoff_burn_overlap_s: float = 0.0
@@ -1057,6 +1059,7 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
             pen += joint_penalty(verdict)
             out.p_land = verdict.p_land
             out.joint_violation = verdict.worst_violation
+            out.joint_verdict = verdict
     elif tr.impact is not None:
         pen += 25.0 + 2.0 * min(out.impact_miss_m, 20.0 * corridor.radius_m) / corridor.radius_m
     else:
@@ -1094,6 +1097,8 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                              DEFAULT_LANDING_RESERVE_MARGIN_KG,
                           joint_chance: JointChanceSpec | Mapping[str, Any] | None =
                               None,
+                          joint_admission: AdmissionPolicy | Mapping[str, Any] | None =
+                              None,
                           corridor_aim_margin_m: float = 0.0,
                           entry_burns: int = 1,
                           entry_throttle: bool = False,
@@ -1129,7 +1134,17 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     exceeds ``JointChanceSpec.violation_tolerance`` comes back
     ``feasible=False`` with reason code ``JOINT_CHANCE_VIOLATED``; the
     search itself remains a penalized optimization (exact-penalty method on
-    Nelder-Mead), not a constrained solver. All trajectories are flown by
+    Nelder-Mead), not a constrained solver. ``joint_admission`` (E10-06,
+    task #303) optionally replaces that binary verdict with the graded
+    admission rule of :mod:`orbitopt.flightlab.recovery.redesign`: an
+    :class:`~orbitopt.flightlab.recovery.redesign.AdmissionPolicy` (or a
+    mapping of its fields) -- a violating handoff is admitted when the
+    violation is shallow (not deep), no second channel is also binding,
+    and the calibrated landing probability clears the policy floor; deep
+    violations and policy rejects stay rejected exactly as before, and
+    nothing the binary gate accepted can the policy reject. Requires
+    ``joint_chance``; the objective and penalties are untouched (the
+    policy grades the verdict, it does not steer the search). All trajectories are flown by
     ``orbitopt.flightlab.recovery.propagator.propagate`` -- the optimizer
     only ever sees full-physics rollouts, and the accepted solution is
     re-integrated at ``dt_final`` before it is reported (no kinematic
@@ -1285,6 +1300,11 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                 "joint_chance replaces the R-01 soft objective terms: pin them "
                 "off alongside it (landing_divert_budget_m=None, "
                 "landing_reserve_margin_kg=0.0)")
+    admission = (None if joint_admission is None
+                 else AdmissionPolicy.from_option(joint_admission))
+    if admission is not None and chance is None:
+        raise ValueError("joint_admission grades the joint chance verdict: "
+                         "it requires joint_chance")
     dry = float(booster.dry_mass_kg)
     sep_mass = float(sep_state.mass_kg)
     reserve = float(booster.landing_propellant_reserve_kg)
@@ -1439,13 +1459,15 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                                      f"{horiz_speed:.0f} m/s horizontal separation velocity"),
                          q_lim=entry_q_max_pa, g_lim=entry_g_max, reserve=reserve,
                          divert_budget=divert_budget, reserve_margin=reserve_margin,
-                         chance=chance, layout=(entry_burns, entry_throttle))
+                         chance=chance, admission=admission,
+                         layout=(entry_burns, entry_throttle))
 
     final = rollout(best_x, dt_final, physics=verdict_physics)
     return _assemble(final, best_x, sep_state, booster, recovery_target, corridor,
                      None, q_lim=entry_q_max_pa, g_lim=entry_g_max, reserve=reserve,
                      divert_budget=divert_budget, reserve_margin=reserve_margin,
-                     chance=chance, layout=(entry_burns, entry_throttle))
+                     chance=chance, admission=admission,
+                     layout=(entry_burns, entry_throttle))
 
 
 #: E5-05c ``boostback_cutoff="iip"``: burn-time safety cap [s] of the
@@ -1495,6 +1517,7 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
                divert_budget: float = float("inf"),
                reserve_margin: float = 0.0,
                chance: JointChanceSpec | None = None,
+               admission: AdmissionPolicy | None = None,
                layout: tuple[int, bool] = (1, False)) -> ReturnPlan:
     """Turn the final re-integrated rollout into the ReturnPlan: feasibility
     checks in physical order (first violation governs), corridor report,
@@ -1532,11 +1555,17 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
         # E7-01 (task #277): the joint chance verdict is a feasibility check,
         # not just a penalty term -- a crossed handoff whose worst normalized
         # violation exceeds the spec's tolerance does not satisfy the
-        # constraints and is never reported feasible.
+        # constraints and is never reported feasible. E10-06 (task #303):
+        # with a joint_admission policy the binary gate is replaced by its
+        # graded one -- a shallow violation with a second channel clean and
+        # a calibrated landing probability at or above the policy's floor
+        # is admitted (the deep layer and every policy reject stay rejected).
         if (chance is not None and final.crossed
                 and final.joint_violation is not None
                 and not chance.satisfies(final.joint_violation)):
-            reasons.append(JOINT_CHANCE_VIOLATED)
+            if not (admission is not None and final.joint_verdict is not None
+                    and admission.admits_verdict(chance, final.joint_verdict)):
+                reasons.append(JOINT_CHANCE_VIOLATED)
 
     report = CorridorReport(
         reached=final.crossed,

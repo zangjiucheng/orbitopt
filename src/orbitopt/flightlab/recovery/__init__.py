@@ -169,6 +169,13 @@ from orbitopt.flightlab.recovery.failure_driven import (  # noqa: F401
     sensitivity_shift,
     verdict_summary,
 )
+from orbitopt.flightlab.recovery.redesign import (  # noqa: F401
+    DEFAULT_MIN_ADMISSION_PROBABILITY,
+    AdmissionPolicy,
+    LandingCalibration,
+    candidate_rank,
+    regrade,
+)
 from orbitopt.flightlab.recovery.uncertainty import (  # noqa: F401
     ComponentScale,
     SOURCE_ORDER,
@@ -192,6 +199,7 @@ from orbitopt.flightlab.recovery.envelope import (  # noqa: F401
 
 __all__ = [
     "ActuatorMargin",
+    "AdmissionPolicy",
     "AltitudeThreshold",
     "BoostbackPlan",
     "BoosterEngine",
@@ -235,6 +243,7 @@ __all__ = [
     "JointConstraints",
     "JointVerdict",
     "LandingBurnEnu",
+    "LandingCalibration",
     "LANDING_INFEASIBLE",
     "LANDING_LATERAL_SPEED_EXCEEDED",
     "LANDING_MAX_G_EXCEEDED",
@@ -279,6 +288,7 @@ __all__ = [
     "evaluate_joint_chance",
     "failure_breakdown",
     "failure_class_title",
+    "DEFAULT_MIN_ADMISSION_PROBABILITY",
     "joint_penalty",
     "landing_burn_propellant_need_kg",
     "fly_landing_burn",
@@ -296,6 +306,8 @@ __all__ = [
     "landing_touchdown_checks",
     "assess_landing_model_mismatch",
     "fly_recovery",
+    "candidate_rank",
+    "regrade",
     "reintegrate_landing",
     "run_monte_carlo",
     "nominal_recovery",
