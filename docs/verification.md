@@ -295,6 +295,32 @@ recorded as still failing. See
 Their nominal joint physical passes do not clear the remaining
 independent-model failure.
 
+## Final schemes in cross-environment CI (E10-09, task #306)
+
+E10-09 promotes the two sealed E5-08 variants -- **DC7** and **Starbase** --
+to a dedicated cross-environment CI regression: the `cross-env` job now flies
+each scheme's own frozen plan (`crossenv_e508_dc7_plan.yaml`,
+`crossenv_e508_starbase_plan.yaml`) across the tudatpy/gfold boundary and
+re-grades the joined run with `scripts/e1009_starbase_dc7.py crossenv-check`:
+all five physical checks passed with every evidence source pinned to an
+envelope digest that re-hashes, `physical_mission_verdict` passed, the
+qualification block matching a re-grade (its `independently_verified` verdict
+and reason recorded as-is -- False with the one admissible blocker, the
+mission chain carrying no validation-grade independent check), the recovery
+leg driven from the sealed separation handoff under the sealed
+Earth-orientation snapshot, and the flown touchdown inside the frozen
+tolerances. The original E5-08 record stays in the same job as the
+**expected-fail negative regression**: its run must keep grading a clean joint
+fail and the check keeps accepting exactly the sealed gap shape. The reference
+outputs are frozen by `tests/data/mission/reference/e10-09-ci/tolerance-audit.json`
+(digests of both tolerance files and crossenv plans plus the full audit trail,
+including E10-04's finding that no band was ever relaxed); the G5 pair
+`verify` + `tag-check` refuses any tolerance or plan change that carries no
+new audit entry in the same diff. The epic's aspirational two-ignition
+hot-staging gate remains classified out of vehicle capability (E10-01,
+E10-03, E10-07), so these three-ignition records are graded exactly as the
+final schemes they are.
+
 ## Benchmarks against public references
 
 ```bash
