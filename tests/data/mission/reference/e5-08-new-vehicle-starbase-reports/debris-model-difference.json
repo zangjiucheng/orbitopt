@@ -1,0 +1,100 @@
+{
+ "schemaVersion": 1,
+ "kind": "e10-04-debris-model-difference-evidence",
+ "task": 301,
+ "purpose": "E10-04: replay the twin's own power-off debris integrator from the RECORDED separation state (ECI columns of the raw history rotated with the verified launch-aligned convention) and the RECORDED debris mass, sweeping a uniform multiplier on the declared power-off CA polar. Identical initial state, mass and environment: any remaining impact-speed gap is an aero-model difference, not an implementation artifact. Band unchanged (12%).",
+ "method": {
+  "initial_state": "raw opentsiolkovsky trajectory pos/vel_eci_* at separation epoch, ECI->ECEF via the verified _ecef_to_eci convention",
+  "debris_mass_kg": "first row of trajectories/stage1_debris.csv",
+  "ca_polar": "vehicle YAML stages[0].aero.ca_power_off, supersonic branch scaled by the listed multiplier",
+  "integrator": "orbitopt.verify.independent_dynamics._debris_to_impact, dt=0.05 s (twin's own path)"
+ },
+ "descent_profile_at_shared_altitudes": [
+  "== dc7: twin(t,h,speed_earth) | recorded(t,h,q,|v_csv|)",
+  " h<40000 twin t=364.4 v=1867.3 | rec t=364.0 v=1869.2 dq=5.67",
+  " h<30000 twin t=372.6 v=1915.5 | rec t=372.0 v=1916.9 dq=27.15",
+  " h<25000 twin t=376.5 v=1936.0 | rec t=376.0 v=1938.8 dq=62.03",
+  " h<22000 twin t=378.8 v=1945.9 | rec t=380.0 v=1955.9 dq=146.33",
+  "== starbase: twin(t,h,speed_earth) | recorded(t,h,q,|v_csv|)",
+  " h<40000 twin t=352.9 v=1851.5 | rec t=354.0 v=1861.3 dq=6.22",
+  " h<30000 twin t=361.4 v=1900.1 | rec t=362.0 v=1907.6 dq=28.75",
+  " h<25000 twin t=365.5 v=1921.2 | rec t=366.0 v=1928.7 dq=64.47",
+  " h<22000 twin t=367.9 v=1931.3 | rec t=368.0 v=1937.9 dq=97.81"
+ ],
+ "replays": {
+  "dc7": {
+   "t_sep": 126.0,
+   "recorded": {
+    "time_s": 394.5894409245597,
+    "latitude_deg": 7.710775339877802,
+    "longitude_deg": -50.99003452882104,
+    "speed_mps": 1587.4466488470534
+   },
+   "twin_from_recorded_state": {
+    "1.0": {
+     "t_s": 395.3813803937063,
+     "speed": 1744.080484218929,
+     "speed_pct": 9.86702989266677,
+     "dt_s": 0.7919394691465982
+    },
+    "1.1": {
+     "t_s": 395.47359536791396,
+     "speed": 1713.729300007332,
+     "speed_pct": 7.955080018090465,
+     "dt_s": 0.8841544433542481
+    },
+    "1.2": {
+     "t_s": 395.5668133226861,
+     "speed": 1683.7749305496648,
+     "speed_pct": 6.068127188562436,
+     "dt_s": 0.9773723981263629
+    },
+    "1.3": {
+     "t_s": 395.66104971139663,
+     "speed": 1654.2304175577067,
+     "speed_pct": 4.206992956844101,
+     "dt_s": 1.0716087868369186
+    }
+   }
+  },
+  "starbase": {
+   "t_sep": 122.0,
+   "recorded": {
+    "time_s": 384.5191186294185,
+    "latitude_deg": 24.940279900462983,
+    "longitude_deg": -94.29045800514378,
+    "speed_mps": 1545.013872689264
+   },
+   "twin_from_recorded_state": {
+    "1.0": {
+     "t_s": 384.9245102708256,
+     "speed": 1740.8750224777737,
+     "speed_pct": 12.676983245955723,
+     "dt_s": 0.4053916414071068
+    },
+    "1.1": {
+     "t_s": 385.0153561020699,
+     "speed": 1711.466445500649,
+     "speed_pct": 10.773532571695048,
+     "dt_s": 0.496237472651444
+    },
+    "1.2": {
+     "t_s": 385.10715375068816,
+     "speed": 1682.420734121333,
+     "speed_pct": 8.893568133009545,
+     "dt_s": 0.5880351212696837
+    },
+    "1.3": {
+     "t_s": 385.19991681442394,
+     "speed": 1656.0293950279254,
+     "speed_pct": 7.185406183144937,
+     "dt_s": 0.6807981850054716
+    }
+   }
+  }
+ },
+ "conclusion": {
+  "dc7": "replay at CA x1.0 gives +9.87% vs reported +9.96%: the twin debris propagation is faithful; DC7 debris sits inside its band",
+  "starbase": "replay at CA x1.0 gives +12.68% vs reported +12.80%: the whole 12.8% gap is the declared power-off CA polar under-dragging the recorded OT debris in high-q transonic descent; CA x1.1 would put Starbase at +10.8% (inside band) but the polar is a declared illustrative design input, so the discrepancy is recorded as a genuine model difference and the band is NOT changed; recorded vs twin speed below 22 km: 393 m/s shed against 190 m/s"
+ }
+}

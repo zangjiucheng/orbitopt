@@ -607,19 +607,43 @@ def _load_recorded(reference_root: Path) -> dict[str, Any]:
 
 _RAW_COLS = ("pos_eci_x_m", "pos_eci_y_m", "pos_eci_z_m", "vel_eci_x_mps",
              "vel_eci_y_mps", "vel_eci_z_mps", "mass_kg")
+_RAW_ACCEL = ("accel_eci_x_mps2", "accel_eci_y_mps2", "accel_eci_z_mps2")
+_RAW_POS = ("pos_eci_x_m", "pos_eci_y_m", "pos_eci_z_m")
+_RAW_VEL = ("vel_eci_x_mps", "vel_eci_y_mps", "vel_eci_z_mps")
+_G0 = 9.80665
+#: acceleration jump (m/s^2) across a 2-s segment that marks it as straddling
+#: an engine/separation discontinuity (MECO/SECO jump 25-30; smooth flight
+#: changes stay under 1).
+_KINK_A_MPS2 = 10.0
 
 
 def _raw_interp(rec: Mapping[str, Any], t: float,
                 stage: int | None = None) -> dict[str, float]:
-    """Linear interpolation of the raw 2-s state history at ``t``, inside the
-    trace of ONE body: ``stage=1`` uses the stage-1 (stack) trace only,
-    ``stage=2`` the stage-2 trace, ``None`` the whole series. The raw history
-    is the only state evidence; the contract event records carry no state.
+    """State of the raw 2-s history at ``t``, inside the trace of ONE body:
+    ``stage=1`` uses the stage-1 (stack) trace only, ``stage=2`` the stage-2
+    trace, ``None`` the whole series. The raw history is the only state
+    evidence; the contract event records carry no state.
+
     Where the stage-1 trace ends at the separation seam a stage-1 event can
     fall between the last stage-1 row and the first stage-2 row (hot staging
-    puts MECO/separation exactly there): the value is then linearly
-    extrapolated along the stage-1 trace, never blended across the seam --
-    the mass column switches meaning (stack -> ship) at that row.
+    puts MECO/separation exactly there): the value is then extrapolated along
+    the stage-1 trace, never blended across the seam -- the mass column
+    switches meaning (stack -> ship) at that row.
+
+    E10-04: a straight chord ACROSS an event discontinuity is not a state
+    estimate. The 2-s grid routinely straddles a cutoff (DC7 MECO 123.0 s,
+    SECO 514.663 s -- both mid-segment), and the chord there averages the
+    powered and unpowered slopes: ~12 m/s low at MECO and ~13 m/s low at
+    SECO, the latter inflating the SECO SMA delta alone by ~22 km. Where the
+    segment carries a discontinuity (the recorded acceleration jumps by more
+    than ``_KINK_A_MPS2``) the state is instead reconstructed from the LEFT
+    row by the left row's own recorded acceleration -- exact up to the first
+    switch inside the segment, which is exactly where the compared event sits
+    (an event time is the cutoff instant, i.e. the end of the powered
+    interval the left row is taken in). Mass across a cutoff segment uses the
+    left row's own mass flow (recorded thrust / recorded Isp), clamped to the
+    segment's total drop; before an ignition it stays at the left value.
+    Smooth segments keep the plain chord.
     """
     raw = rec["raw"]
     for row in raw:
@@ -636,8 +660,25 @@ def _raw_interp(rec: Mapping[str, Any], t: float,
     while i < len(sub) - 2 and float(sub[i + 1]["time_s"]) < t:
         i += 1
     lo, hi = sub[i], sub[i + 1]
-    f = (t - float(lo["time_s"])) / (float(hi["time_s"]) - float(lo["time_s"]))
-    return {c: float(lo[c]) + f * (float(hi[c]) - float(lo[c])) for c in _RAW_COLS}
+    dt = t - float(lo["time_s"])
+    seg = float(hi["time_s"]) - float(lo["time_s"])
+    f = dt / seg
+    out = {c: float(lo[c]) + f * (float(hi[c]) - float(lo[c])) for c in _RAW_COLS}
+    a_lo = [float(lo[c]) for c in _RAW_ACCEL]
+    a_hi = [float(hi[c]) for c in _RAW_ACCEL]
+    if math.sqrt(sum((x - y) ** 2 for x, y in zip(a_lo, a_hi))) > _KINK_A_MPS2:
+        for j, c in enumerate(_RAW_POS):
+            out[c] = float(lo[c]) + float(lo[_RAW_VEL[j]]) * dt + 0.5 * a_lo[j] * dt * dt
+        for j, c in enumerate(_RAW_VEL):
+            out[c] = float(lo[c]) + a_lo[j] * dt
+        th_lo, th_hi = float(lo["thrust_n"]), float(hi["thrust_n"])
+        m_lo, m_hi = float(lo["mass_kg"]), float(hi["mass_kg"])
+        if th_lo > 0.0 and th_hi <= 0.0:                       # cutoff inside
+            mdot = th_lo / (float(lo["isp_s"]) * _G0)
+            out["mass_kg"] = m_lo - min(mdot * dt, max(m_lo - m_hi, 0.0))
+        elif th_lo <= 0.0 and th_hi > 0.0:                     # ignition inside
+            out["mass_kg"] = m_lo
+    return out
 
 
 def _rec_state(rec: Mapping[str, Any], t: float,

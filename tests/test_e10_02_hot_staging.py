@@ -233,8 +233,12 @@ class TestBenchmarkArtifact:
         # stage-1 tank at stage-1 Isp and drops the booster's post-separation
         # floor burn; the twin burns it from the ship tank at flow-blended Isp)
         # accumulating over the 390-s stage-2 arc, or of E8-05's budget-residual
-        # discipline. DC7's own sealed report carries the same open velocity
-        # and SMA bands for the same family of programme differences.
+        # discipline. E10-04's event-aware raw interpolation removed the
+        # chord-across-cutoff artifact here too (SECO velocity 45.2 -> 37.0 m/s,
+        # SMA 50.7 -> 34.5 km, separation position back inside its band, SECO
+        # mass -2.9 -> -2.3 t); what remains is the hot-timeline split itself,
+        # larger on this timeline because the stack flies powered through
+        # MECO/separation. DC7's own sealed report closes fully after E10-04.
         assert set(e["failing"]) <= {
             "ascent.meco.residual_position", "ascent.meco.residual_velocity",
             "ascent.meco.state_velocity",

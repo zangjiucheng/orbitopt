@@ -185,21 +185,25 @@ def test_the_mission_replays_green_from_the_sealed_tree(tmp_path):
 
 
 def test_the_independent_dynamics_result_is_recorded_as_it_is():
-    """E8-05 on this design: 27 of 28 checks pass. The one that does not is the SECO
-    semi-major axis (27.7 km against a 15 km band) -- the same SECO velocity discrepancy
-    (15.1 m/s, inside its own 20 m/s band) seen through vis-viva. The band's recorded
-    basis is "the SECO velocity band seen through vis-viva" (~1.75 km per m/s), which
-    would be ~35 km for a 20 m/s velocity band: the two bands of the E5-07 flight are
-    not mutually consistent. The outcome is recorded as it is; the band is NOT loosened
-    here to make this design pass."""
+    """E8-05 on this design: all 28 checks pass. E10-04 closed the SECO
+    semi-major-axis gate (it read 27.7 km against the unchanged 15 km band) by
+    fixing the comparison side, not the band: the raw 2-s history was chorded
+    linearly across the MECO (123.0 s) and SECO (514.663 s) mid-segment engine
+    discontinuities, which is itself a ~13 m/s / ~22 km artifact at both events
+    (see orbitopt.verify.independent_dynamics._raw_interp and the E10-04
+    regression tests in tests/test_e805_independent_dynamics.py). Reconstructed
+    against the left-segment recorded accelerations the SECO discrepancy is
+    ~5.9 km and the SECO velocity discrepancy ~5.2 m/s, both inside their
+    original bands. The band is NOT loosened."""
     rep = json.loads((REPORTS / "independent-dynamics.json").read_text())
     details = rep["inputs"]["check_details"]
     failing = sorted(c["id"] for c in details if not c["passed"])
-    assert rep["status"]["passed"] is False
-    assert failing == ["ascent.seco.orbit_semi_major_axis"] and len(details) == 28
+    assert rep["status"]["passed"] is True
+    assert failing == [] and len(details) == 28
     by = {c["id"]: c for c in details}
-    # the velocity discrepancy behind it is inside its own band, and the post-MECO
+    # the closed gate sits near a third of its band, and the post-MECO
     # program no longer carries the unphysical bump that the first DC7 search found
+    assert by["ascent.seco.orbit_semi_major_axis"]["value"] < 15000.0 / 2
     assert by["ascent.seco.state_velocity"]["passed"] and by["ascent.seco.orbit_eccentricity"]["passed"]
     prog = _load(DC7)["attitude_program"]
     elev = [r["elevation_deg"] for r in prog if r["t_s"] >= 141.0]

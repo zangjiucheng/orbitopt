@@ -12,9 +12,12 @@ marked ``slow``; the pure-table tests run in the fast suite.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
+import numpy as np
 import pytest
 
+import orbitopt.verify.independent_dynamics as idyn
 from orbitopt.verify.independent_dynamics import (
     REFERENCE_ROOT, declared_tolerances, verify_independent_dynamics)
 from orbitopt.verify.report import EVIDENCE_TYPES
@@ -133,3 +136,64 @@ def test_reference_digests_verified(report: dict) -> None:
     ref = report["inputs"]["reference"]
     assert ref["provenance_ok"] is True
     assert ref["provenance_files_checked"] >= 10
+
+
+# ---------------------------------------------------------------------------
+# E10-04 (task #301): event-aware interpolation of the raw 2-s history
+# ---------------------------------------------------------------------------
+
+E508_DC7_REF = Path(__file__).resolve().parents[1] / \
+    "tests/data/mission/reference/e5-08-new-vehicle-dc7"
+
+
+def _mk_row(t, x, v, a, thrust, isp, mass):
+    return {"time_s": t, "pos_eci_x_m": x, "pos_eci_y_m": 0.0, "pos_eci_z_m": 0.0,
+            "vel_eci_x_mps": v, "vel_eci_y_mps": 0.0, "vel_eci_z_mps": 0.0,
+            "accel_eci_x_mps2": a, "accel_eci_y_mps2": 0.0, "accel_eci_z_mps2": 0.0,
+            "thrust_n": thrust, "isp_s": isp, "mass_kg": mass}
+
+
+def test_chord_across_a_cutoff_kink_is_replaced_by_the_left_segment():
+    """A 2-s chord spanning a cutoff averages the powered and unpowered
+    slopes; the state AT the cutoff instant must come from the powered side."""
+    g, a_pow, mdot, v0, m0 = -9.8, 20.0, 1000.0, 100.0, 10_000.0
+    v1 = v0 + a_pow * 1.0                       # cutoff at t = 1.0 mid-segment
+    rows = [_mk_row(0.0, v0 * 0.5, v0, g + a_pow, 1e6, 100.0, m0),
+            _mk_row(2.0, 0.0, v1 + g * 1.0, g, 0.0, 0.0, m0 - mdot),
+            _mk_row(4.0, 0.0, v1 + g * 3.0, g, 0.0, 0.0, m0 - mdot)]
+    rec = {"raw": rows, "trace_split": len(rows)}
+    s = idyn._raw_interp(rec, 1.0, None)
+    assert s["vel_eci_x_mps"] == pytest.approx(v0 + (g + a_pow), abs=1e-9)
+    assert s["mass_kg"] == pytest.approx(m0 - mdot, abs=1e-6)
+    # the plain chord on a smooth segment is unchanged
+    s2 = idyn._raw_interp(rec, 3.0, None)
+    assert s2["vel_eci_x_mps"] == pytest.approx(v1 + g * 2.0, abs=1e-9)
+
+
+def test_ignition_inside_a_segment_holds_mass_at_the_left_value():
+    rows = [_mk_row(0.0, 0.0, 50.0, -5.0, 0.0, 0.0, 5000.0),
+            _mk_row(2.0, 0.0, 40.0, 15.0, 1e6, 100.0, 3000.0)]
+    s = idyn._raw_interp({"raw": rows, "trace_split": 2}, 0.5, None)
+    assert s["mass_kg"] == pytest.approx(5000.0)             # not yet ignited
+
+
+@pytest.mark.skipif(not E508_DC7_REF.is_dir(), reason="E5-08 DC7 reference absent")
+def test_recorded_dc7_event_states_reconstruct_their_own_segments() -> None:
+    """DC7's sealed history: MECO 123.0 and SECO 514.663 sit mid-segment. The
+    reconstruction must return the state the trace itself implies: the MECO
+    mass equals the coast rows, and the SECO state lies on the orbit the
+    coast rows fly (a straight chord was ~13 m/s slow, ~22 km low in SMA)."""
+    rec = idyn._load_recorded(E508_DC7_REF)
+    _, v_me, m_me = idyn._rec_state(rec, rec["event_times"]["meco"], 1)
+    rows = {float(r["time_s"]): r for r in rec["raw"]}
+    coast = rows[124.0]
+    assert m_me == pytest.approx(float(coast["mass_kg"]), abs=50.0)
+    assert float(np.linalg.norm(v_me)) > 1765.0            # powered-side speed
+    r_se, v_se, m_se = idyn._rec_state(rec, rec["event_times"]["seco"], 2)
+    row = rows[516.0]
+    r_c = np.array([float(row[c]) for c in idyn._RAW_POS])
+    v_c = np.array([float(row[c]) for c in idyn._RAW_VEL])
+    a_se = idyn._orbit_elements(r_se, v_se)["semi_major_axis_m"]
+    a_c = idyn._orbit_elements(r_c, v_c)["semi_major_axis_m"]
+    assert abs(a_se - a_c) < 3000.0                        # same post-burn orbit
+    assert m_se == pytest.approx(float(row["mass_kg"]), abs=50.0)
