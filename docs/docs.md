@@ -25,5 +25,6 @@ The [repository](https://github.com/zangjiucheng/orbitopt) contains the source,
 schemas and examples.
 
 Recent records: [E5-08 Kourou and Starbase designs](e5-08-new-vehicle-report.md),
-[E7-05 hold-out reliability](benchmarks/e7_05_out_of_sample_reliability.md) and
-[E8-05 independent dynamics](verification.md#independent-dynamics-validation-e8-05-task-294).
+[E7-05 hold-out reliability](benchmarks/e7_05_out_of_sample_reliability.md),
+[E10-05 recovery-planner robust optimization](benchmarks/e10_05_recovery_planner_robust.md)
+and [E8-05 independent dynamics](verification.md#independent-dynamics-validation-e8-05-task-294).

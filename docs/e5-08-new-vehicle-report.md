@@ -53,8 +53,11 @@ recording metadata.
 The DC7 and Starbase experiments each use seeds 8, 9 and 10, with 12 flights
 per seed. Original-design results use seeds 5, 6 and 7, with 10 per seed.
 See [E7-05](benchmarks/e7_05_out_of_sample_reliability.md) for cluster-aware
-statistics. The original independent landing check uses a declared design
-corridor; it does not validate the failed mission's actual arrival state.
+statistics. The DC7 fixed-versus-replanning gap is diagnosed and a robust
+single-script arm is compared on the same hold-out in
+[E10-05](benchmarks/e10_05_recovery_planner_robust.md). The original independent
+landing check uses a declared design corridor; it does not validate the failed
+mission's actual arrival state.
 
 ## Replay and view
 
