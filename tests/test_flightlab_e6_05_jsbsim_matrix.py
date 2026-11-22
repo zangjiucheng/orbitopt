@@ -59,11 +59,17 @@ class TestSpecExtension:
         assert spec.climb_time_to_go_gain == 0.0
         assert spec.cutoff_insertion_box is False
         assert spec.apogee_ceiling_gain == 0.0
+        assert spec.terminal_radius_guidance is False
+        assert spec.command_q_alpha_limit_pa_deg == 0.0
 
     @pytest.mark.parametrize("kwargs", [
         {"climb_time_to_go_gain": -0.5},
         {"cutoff_periapsis_margin_m": -1.0},
         {"apogee_ceiling_gain": -1.0e-4},
+        {"terminal_radius_t_go_floor_s": 0.0},
+        {"command_q_alpha_limit_pa_deg": -1.0},
+        {"vacuum_alpha_limit_deg": 20.0},
+        {"vacuum_alpha_limit_deg": 91.0},
     ])
     def test_new_fields_validate(self, kwargs):
         sc = matrix_scenario(_cell("a220-i28.5-V1-A1"))
@@ -77,6 +83,10 @@ class TestSpecExtension:
         assert ug.cutoff_insertion_box is True
         assert ug.apogee_ceiling_gain > 0.0
         assert ug.command_alpha_limit_deg == 30.0
+        # E10-08 (task #305): the terminal-radius channel and q-alpha limiter
+        assert ug.terminal_radius_guidance is True
+        assert ug.command_q_alpha_limit_pa_deg == 30_000.0
+        assert ug.command_slew_rate_deg_s == 6.0
 
 
 class TestGeneratedAirframe:

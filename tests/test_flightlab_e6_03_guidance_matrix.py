@@ -352,7 +352,8 @@ def test_the_flown_verdicts_are_the_declared_ones(bench):
     unexpected = [cid for cid, rec in recs.items() if rec["unexpected"]]
     assert not unexpected, f"matrix cells that flipped verdict: {unexpected}"
     assert recs[BASELINE]["status"] == "pass"
-    assert recs["a180-i28.5-V1-A1"]["status"] == "miss"
+    assert recs["a180-i28.5-V1-A1"]["status"] == "pass"  # E10-08
+    assert recs["a400-i28.5-V1-A1"]["status"] == "miss"
     assert recs["a220-i28.5-V1-A3"]["status"] == "miss"
     assert recs["a220-i28.5-V0-A0"]["status"] == "miss"
     # the pass set is exactly the declared one, so no cell can drift across the
@@ -400,31 +401,50 @@ def test_the_actuator_axis_moves_the_6dof_result_but_not_the_command(bench):
     assert recs["a220-i28.5-V1-A4"]["status"] == "pass"
 
 
-def test_the_altitude_axis_is_bounded_at_both_ends_and_neither_limit_is_the_tank(bench):
+def test_the_altitude_axis_inserts_180_to_300_km_and_400_km_is_the_profile_limit(bench):
+    # E10-08 (task #305): the terminal-radius radial channel converts the whole
+    # guidance class of E6-03/E6-05 -- both ends of the old envelope.
     recs = _records(bench)
-    assert recs[BASELINE]["status"] == "pass"
-    assert recs["a180-i28.5-V1-A1"]["status"] == "miss"
-    for cell_id in ("a260-i28.5-V1-A1", "a300-i28.5-V1-A1", "a400-i28.5-V1-A1"):
-        assert recs[cell_id]["status"] == "miss"
-    # low end: the box cutoff never armed (the perigee passage put the periapsis
-    # INSIDE the band while the apoapsis had already flown past the ceiling), so
-    # the burn rode to depletion on a terminal orbit WIDER than the target --
-    # the stage had the energy and the law flew past it: the criterion is the
-    # limit, not the tank (E6-05 re-flight signature).
-    low = recs["a180-i28.5-V1-A1"]
-    assert [r["code"] for r in low["reasons"]] == [REASON_GUIDANCE]
-    for data in low["backends"].values():
-        assert data["burn_ended_by"] == "depletion"
-        assert data["energy_margin_vs_target_orbit_m"] > 0.0
-    # high end: 200 kg MORE propellant makes the same missed target WORSE, so the
-    # tank was never the binding limit -- the cutoff criterion is.
+    for cell_id in ("a180-i28.5-V1-A1", "a220-i28.5-V1-A1", "a260-i28.5-V1-A1",
+                    "a300-i28.5-V1-A1", "a300-i28.5-V2-A1", "a260-i45.0-V1-A1",
+                    "a300-i51.6-V1-A1"):
+        rec = recs[cell_id]
+        assert rec["status"] == "pass", cell_id
+        for data in rec["backends"].values():
+            # the law's own cutoff ended the burn, with propellant to spare:
+            # inserted by termination, not by a dry tank landing in the band
+            assert data["burn_ended_by"] == "law-cutoff", cell_id
+            assert data["propellant_remaining_kg"] > 50.0, cell_id
+    # the stretched tank flies the same orbit as the standard one, its extra
+    # 200 kg is margin (it was a tank-limit control in E6-03)
     lean, standard = recs["a300-i28.5-V2-A1"], recs["a300-i28.5-V1-A1"]
-    assert lean["vehicle"]["upper_propellant_mass_kg"] \
-        > standard["vehicle"]["upper_propellant_mass_kg"]
     for backend in BACKEND_PAIR:
-        assert lean["backends"][backend]["insertion"]["d_apoapsis_m"] \
-            > standard["backends"][backend]["insertion"]["d_apoapsis_m"]
-        assert lean["backends"][backend]["burn_ended_by"] == "depletion"
+        assert lean["backends"][backend]["propellant_remaining_kg"] \
+            == pytest.approx(standard["backends"][backend]["propellant_remaining_kg"]
+                             + 200.0, abs=1.0)
+    # 400 km: no continuous full-thrust burn from this handoff arrives level
+    # there; the stage runs dry on an orbit TIGHTER than the target, which the
+    # unchanged attribution rule names a capability limit -- not relaxed into
+    # a pass, and not left labelled a law failure the law no longer has.
+    far = recs["a400-i28.5-V1-A1"]
+    assert far["status"] == "miss"
+    assert [r["code"] for r in far["reasons"]] == [REASON_VEHICLE_CAPABILITY]
+    for data in far["backends"].values():
+        assert data["burn_ended_by"] == "depletion"
+        assert data["energy_margin_vs_target_orbit_m"] < 0.0
+
+
+def test_vehicle_and_actuator_misses_stay_misses(bench):
+    # the acceptance of E10-08: the broader envelope must not "pass" a
+    # vehicle-capability or actuator-constraint cell
+    recs = _records(bench)
+    for cell_id in ("a180-i28.5-V3-A1", "a220-i28.5-V3-A1", "a220-i28.5-V0-A0"):
+        assert recs[cell_id]["status"] == "miss", cell_id
+        assert [r["code"] for r in recs[cell_id]["reasons"]] \
+            == [REASON_VEHICLE_CAPABILITY], cell_id
+    a3 = recs["a220-i28.5-V1-A3"]
+    assert a3["status"] == "miss"
+    assert [r["code"] for r in a3["reasons"]] == [REASON_ACTUATOR_CONSTRAINT]
 
 
 def test_the_inclination_axis_is_inserted_at_every_declared_angle(bench):
