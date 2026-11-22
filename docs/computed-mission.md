@@ -18,7 +18,7 @@ dispersion reliability are separate results.
 | E5-05 cross-environment | Recorded ascent + TudatPy parking propagation + gfold recovery. | The joined run must evidence all five physical checks. |
 | E5-07 replay | Recorded Starship-class computed ascent, no recovery stage. | Physics Qualification Reference; recovery gap reported (`RECOVERY_GAP.md`), `full_mission` not declared. |
 | E5-07 cross-environment | Recorded ascent + TudatPy mission leg with parking propagation. | Propagation evidenced in the foreign environment; joint gate NOT-DECLARED by design. |
-| E5-08 design variants | Powered-entry RTLS, then earlier staging at Kourou and Starbase. | Original recovery fails; DC7 and Starbase nominal landings pass, with independent-model and reliability gaps. [Results](e5-08-new-vehicle-report.md). |
+| E5-08 design variants | Powered-entry RTLS at Kourou and Starbase. | DC7 and Starbase pass the nominal joint physical gate. The original gap remains a negative regression. [Results](e5-08-new-vehicle-report.md). |
 | E8-01 reference check | Compares sealed records with raw backend output and closed forms. | No new flight; validates extraction, continuity and stated reference comparisons. |
 
 ## Replay and view the RTLS mission
@@ -119,7 +119,19 @@ unpowered window. Touchdown limits are **design input**; no historical
 telemetry or independently validated landing is claimed. See
 [verification](verification.md#full-chain-reference-validation-e8-01-task-281).
 
-## Other merged studies
+## E10 recovery and guidance studies
+
+| Study | Recorded result |
+|---|---|
+| E10-01 / E10-02 | The recovery planner supports unpowered entry, and the flight models represent hot staging. The [hot-staging benchmark](benchmarks/e10_02_hot_staging.json) compares the timelines. |
+| E10-03 | In the paired 168-case hold-out, DC7 landed in 44 cases and Starbase in 11. The DC8 arms landed in zero cases. [Closure study](benchmarks/e10_03_robust_rtls_closure.md). |
+| E10-04 | DC7's independent checks pass after correcting event-state extraction. Starbase's debris impact-speed discrepancy remains outside its band. [Discrepancy audit](e5-08-new-vehicle-report.md#e10-04-closing-the-two-open-discrepancies-task-301). |
+| E10-05 / E10-06 | Compare [recovery planning strategies](benchmarks/e10_05_recovery_planner_robust.md) and [graded admission](benchmarks/e10_06_chance_constraint_redesign.md). |
+| E10-07 | An independent model re-flies recovery from the actual DC8 separation handoff and reproduces the corridor failure. [Re-flight report](e10-07-full-recovery-reflight.md). |
+| E10-08 | 12 of 17 scenarios insert on both native backends, up from six. [Guidance matrix](flightlab.md#6-dof-studies). |
+| E10-09 | Cross-environment CI grades the frozen DC7 and Starbase plans and checks that the original E5-08 reproduces its expected failure. [CI evidence rules](verification.md#final-schemes-in-cross-environment-ci-e10-09-task-306). |
+
+## Earlier studies
 
 | Study | Read or reproduce |
 |---|---|

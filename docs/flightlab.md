@@ -4,7 +4,10 @@ Flight Lab simulates ascent and booster recovery from code or the CLI.
 Mission Control's **Runs**, **Vehicles** and **Compare** workspaces display
 saved flights, vehicle definitions and run comparisons.
 
-[![Starbase RTLS replay with the persistent Bodies strip, launch/recovery target and per-stage telemetry](assets/flightlab-runs-tracking.png)](assets/flightlab-runs-tracking.png)
+<figure>
+  <a href="assets/flightlab-runs-starbase.png"><img src="assets/flightlab-runs-starbase.png" alt="Starbase RTLS replay with a detailed coastal map, ascent and recovery tracks, and per-stage telemetry"></a>
+  <figcaption>Sentinel-2 cloudless 2024 by EOX IT Services GmbH, containing modified Copernicus Sentinel data 2024 (CC BY-NC-SA 4.0).</figcaption>
+</figure>
 
 ## Quick start
 

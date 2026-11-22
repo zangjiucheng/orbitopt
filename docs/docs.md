@@ -24,9 +24,4 @@ results and explore them in Mission Control.
 The [repository](https://github.com/zangjiucheng/orbitopt) contains the source,
 schemas and examples.
 
-Recent records: [E5-08 Kourou and Starbase designs](e5-08-new-vehicle-report.md),
-[E7-05 hold-out reliability](benchmarks/e7_05_out_of_sample_reliability.md),
-[E10-05 recovery-planner robust optimization](benchmarks/e10_05_recovery_planner_robust.md),
-[E10-06 graded admission](benchmarks/e10_06_chance_constraint_redesign.md),
-[E8-05 independent dynamics](verification.md#independent-dynamics-validation-e8-05-task-294)
-and [E10-07 full recovery re-flight](e10-07-full-recovery-reflight.md).
+For the latest recovery and guidance results, see the [E10 study index](computed-mission.md#e10-recovery-and-guidance-studies).
