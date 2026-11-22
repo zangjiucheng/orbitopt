@@ -400,3 +400,22 @@ high-probability bin significantly below its own prediction. Wired into
 FL-302 as `plan_boostback_entry(..., joint_admission=...)`; the search
 objective is unchanged and no success-rate improvement is claimed.
 API: `orbitopt.flightlab.recovery.redesign`.
+
+## Counterfactual admission validation (E11-04)
+
+The [counterfactual re-flight report](benchmarks/e11_04_counterfactual_admission.md)
+replaces the E10-06 landing inference with measurement: every newly admitted
+world (15 training, 16 `a_seeds`, 1 `b_bands`) is really re-flown without and
+then with the policy on its recorded world. Measured pooled landing rate
+**24/32 = 0.750** (Wilson 0.579-0.867), far above the 0.208 floor; the paired
+McNemar over the re-flown flips is b/c = 19/0, p = 3.8e-06 -- the calibration
+improvement does translate into landings, and no old-rule landing is undone
+(b = 0 verified offline too). The training-grid measurement (8/15 = 0.533)
+sits below the FL-305 inference of 0.667 without significant difference
+(exact binomial p = 0.28; McNemar vs FL-305 3/5, p = 0.73): FL-305 is an
+inference proxy, not a counterfactual, and the E7-04-era grid predates the
+#287 guidance series (its replays report era drift, while the bit-valid E7-05
+hold-out cells reproduce to 1e-9 and measure 15/16 + 1/1 landed; the one
+admitted hold-out failure is landing accuracy, the seven training admit
+failures are the live gate rejecting on today's physics). No rule update
+required.
