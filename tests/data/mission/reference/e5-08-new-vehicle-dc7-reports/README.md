@@ -11,7 +11,7 @@ cutoff 12 s earlier (DC7). Regenerate with `ORBITOPT_E508_VARIANT=dc7` and
 | joint full-mission gate (cross-env) | **passed**, all five physical checks |
 | ascent limits (3.0 g, max-Q 55 kPa, insertion band) | pass; peak 2.976 g, periapsis 232.0 km -- thin margins |
 | ship propellant kept for deorbit/landing | 101.2 t (the E5-07 reference keeps 118.8 t): the price of DC7 |
-| E8-05 independent dynamics | **27 of 28**; fails `ascent.seco.orbit_semi_major_axis` (27.7 km vs a 15 km band) |
+| E8-05 independent dynamics | **28 of 28**; E10-04 closed the former `ascent.seco.orbit_semi_major_axis` fail (27.7 km) at ~5.9 km, band unchanged |
 | Monte Carlo, pinned script, seeds 8/9/10 | **11 / 36 (31 %)** |
 | Monte Carlo, per-sample refine, seeds 8/9/10 | **3 / 36 (8 %)** |
 
@@ -22,9 +22,13 @@ cutoff 12 s earlier (DC7). Regenerate with `ORBITOPT_E508_VARIANT=dc7` and
   first pick on seeds 5/6/7 read 42 %, the difference being selection on the exam seeds.
 * Optimising the script on an 8-sample dispersed ensemble (seed 101) *overfitted*: 1-4 of 36 on
   the hold-out seeds, worse than the nominal pick. Not used.
-* E8-05: the SMA band (15 km) is stated as "the SECO velocity band seen through vis-viva"
-  (~1.75 km per m/s), which for the 20 m/s velocity band would be ~35 km; this design's SECO
-  velocity discrepancy is 15.1 m/s (inside its band). The band was NOT loosened.
+* E8-05 (E10-04 closure): this design once failed the SMA band at 27.7 km against 15 km. The
+  discrepancy lived in the comparison, not the design: the raw 2-s history was chorded linearly
+  across the MECO (123.0 s) and SECO (514.663 s) mid-segment engine cutoffs, a ~13 m/s / ~22 km
+  artifact at both events. Reconstructed from the left-segment recorded accelerations the SECO
+  discrepancy is ~5.9 km (the velocity discrepancy ~5.2 m/s, inside its 20 m/s band) and every
+  check passes. The band was NOT loosened; the fix is in `orbitopt.verify.independent_dynamics`
+  with regression tests in `tests/test_e805_independent_dynamics.py`.
 * The first DC7 search produced a post-MECO pitch program with a 9 deg bump (11.8 deg between
   5.8 and 2.5 deg). Two independent models disagreed about it (E8-05 failed 2 more checks) and
   it was rejected: the final program never pitches back up after MECO.

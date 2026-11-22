@@ -60,6 +60,9 @@ _E204_EXCEPTION_FILES = {
     # E8-04: reads only the fixture's earth_orientation.json / tolerances.json
     # (the unified EOP pin and the tolerance ledger), never its ascent state
     "tests/test_e804_reference_data.py",
+    # E10-09: grades the CI evidence grader against SYNTHETIC sealed legs built
+    # from the frozen ascent (positive and negative cases); never a real mission path
+    "tests/test_e10_09_starbase_dc7_ci.py",
 }
 
 

@@ -45,6 +45,9 @@ Config document (SI units; required keys ``name``, ``model``; unknown
       booster_model: spike_booster
       upper_model: spike_upper
       step_order: ab
+      # E10-02 hot staging (optional): upper spawned alight, advance s early
+      # upper_ignition_advance_s: 2.0
+      # upper_mated_burn_kg: 400.0
     reference_csv: tests/fixtures/.../trajectory.csv  # pid: 3-DOF reference (optional;
     #     relative paths resolve against the CWD; a missing file = MECO-deviation
     #     checks reported as not-assessed)
@@ -177,7 +180,14 @@ class PidConfig:
 @dataclass(frozen=True)
 class StagingConfig:
     """The FL-402 handoff scenario: freeze at ``at_t_s``, split dry mass /
-    propellant by the declared fractions, coast both children ``coast_s``."""
+    propellant by the declared fractions, coast both children ``coast_s``.
+
+    E10-02 (task #299) hot staging: with ``upper_ignition_advance_s`` > 0 the
+    upper child is spawned **alight** (no coast gap after the split; the ship
+    was already burning ``advance`` seconds before separation -- the mated
+    phase itself is not integrated by the stack instance, which flies its own
+    thrust until the freeze: a declared simplification), its tanks coming up
+    pre-charged by ``upper_mated_burn_kg`` of the mated-phase burn."""
 
     at_t_s: float
     coast_s: float = 61.0
@@ -187,6 +197,24 @@ class StagingConfig:
     booster_model: str = "spike_booster"
     upper_model: str = "spike_upper"
     step_order: str = "ab"
+    upper_ignition_advance_s: float = 0.0
+    upper_mated_burn_kg: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.upper_ignition_advance_s < 0.0:
+            raise ValueError("staging.upper_ignition_advance_s must be >= 0 "
+                             "(E10-02 hot staging: the ship lights this long "
+                             "BEFORE separation; 0 keeps the cold split)")
+        if self.upper_mated_burn_kg < 0.0:
+            raise ValueError("staging.upper_mated_burn_kg must be >= 0")
+        if self.upper_mated_burn_kg > 0.0 and self.upper_ignition_advance_s <= 0.0:
+            raise ValueError("staging.upper_mated_burn_kg needs a positive "
+                             "upper_ignition_advance_s: propellant only goes over "
+                             "the wall while the engine is alight and mated")
+        if self.upper_ignition_advance_s >= self.at_t_s:
+            raise ValueError("staging.upper_ignition_advance_s must be less than "
+                             f"at_t_s={self.at_t_s}: the ship ignition event would "
+                             "land before launch")
 
 
 @dataclass(frozen=True)
@@ -391,6 +419,10 @@ def load_config(source) -> SixDofConfig:
             booster_model=str(st_doc.get("booster_model", "spike_booster")),
             upper_model=str(st_doc.get("upper_model", "spike_upper")),
             step_order=order,
+            upper_ignition_advance_s=_num(st_doc, "upper_ignition_advance_s", 0.0,
+                                          f"{where}: staging"),
+            upper_mated_burn_kg=_num(st_doc, "upper_mated_burn_kg", 0.0,
+                                     f"{where}: staging"),
         )
 
     mass_model: MassModelConfig | None = None
@@ -585,6 +617,22 @@ def _staging_flight(cfg: SixDofConfig, st: StagingConfig):
     j = st.separation_impulse_ns
     masses = {side: sum(alloc[side][k] for k in ("dry_kg", "ox_kg", "fuel_kg"))
               for side in ("booster", "upper")}
+    # E10-02 hot staging: the ship's mated-phase burn is charged to its tanks
+    # BEFORE the split (it was spent while mated, off the stack trace), and the
+    # upper instance is spawned alight -- no coast window after separation.
+    mated_burn = float(st.upper_mated_burn_kg)
+    hot = st.upper_ignition_advance_s > 0.0
+    if mated_burn > 0.0:
+        up = alloc["upper"]
+        load = up["ox_kg"] + up["fuel_kg"]
+        if mated_burn >= load:
+            raise SixDofConfigError(
+                f"staging.upper_mated_burn_kg={mated_burn} exceeds the upper stage's "
+                f"propellant load {load} kg at separation")
+        charge = mated_burn / load
+        up["ox_kg"] *= (1.0 - charge)
+        up["fuel_kg"] *= (1.0 - charge)
+        masses["upper"] -= mated_burn
     booster, hb = _staging.spawn_stage(
         st.booster_model, frozen, alloc["booster"], dt_s=cfg.dt_s,
         impulse_dv_ecef_m_s=tuple(-j * xb[i] / masses["booster"] for i in range(3)),
@@ -593,14 +641,19 @@ def _staging_flight(cfg: SixDofConfig, st: StagingConfig):
         st.upper_model, frozen, alloc["upper"], dt_s=cfg.dt_s,
         impulse_dv_ecef_m_s=tuple(j * xb[i] / masses["upper"] for i in range(3)),
         root=cfg.root)
+    if hot:
+        upper.ignite(float(cfg.ignition_throttle))
 
     b0, u0 = booster.samples[0], upper.samples[0]
-    p0 = tuple(frozen.mass_kg * v for v in frozen.velocity_m_s)
+    m_before = frozen.mass_kg - mated_burn  # the burn left the stack before the freeze
+    p0 = tuple(m_before * v for v in frozen.velocity_m_s)
     p_after = tuple(b0["mass_kg"] * b0[k] + u0["mass_kg"] * u0[k]
                     for k in ("vx_m_s", "vy_m_s", "vz_m_s"))
     bookkeeping = {
-        "mass_before_kg": frozen.mass_kg,
-        "mass_residual_kg": b0["mass_kg"] + u0["mass_kg"] - frozen.mass_kg,
+        "mass_before_kg": m_before,
+        "mated_burn_kg": mated_burn,
+        "ship_ignition_t_s": (st.at_t_s - st.upper_ignition_advance_s if hot else None),
+        "mass_residual_kg": b0["mass_kg"] + u0["mass_kg"] - m_before,
         "momentum_before_kg_m_s": p0,
         "momentum_residual_kg_m_s": math.sqrt(sum((p_after[i] - p0[i]) ** 2
                                                   for i in range(3))),
@@ -758,6 +811,11 @@ def run_ascent(config, out_dir, *, target=None) -> FlightRun:
         )
         events.append(Event(cfg.ignition_t_s, "ignition", "stack",
                             {"throttle": cfg.ignition_throttle}))
+        if bk["ship_ignition_t_s"] is not None:
+            events.append(Event(float(bk["ship_ignition_t_s"]), "ignition", "upper",
+                                {"throttle": cfg.ignition_throttle, "mated": True,
+                                 "advance_s": cfg.staging.upper_ignition_advance_s,
+                                 "mated_burn_kg": bk["mated_burn_kg"]}))
         events.append(Event(frozen.t_s, "separation", "stack",
                             {"impulse_ns": cfg.staging.separation_impulse_ns,
                              "mass_kg": frozen.mass_kg}))
@@ -784,6 +842,15 @@ def run_ascent(config, out_dir, *, target=None) -> FlightRun:
             f"(dry/propellant), children stepped interleaved "
             f"'{cfg.staging.step_order}' for {cfg.staging.coast_s} s.",
         )
+        if cfg.staging.upper_ignition_advance_s > 0.0:
+            assumptions_extra += (
+                "E10-02 hot staging: the upper child spawned ALIGHT "
+                f"{cfg.staging.upper_ignition_advance_s} s before separation (ship "
+                "ignition event recorded there, no coast gap); the mated phase is a "
+                "declared simplification -- the stack instance flies its own thrust "
+                "to the freeze and the ship's tanks came up pre-charged by "
+                f"{bk['mated_burn_kg']:.1f} kg of mated-phase burn.",
+            )
     elif cfg.control_mode == "pid":
         res, reference = _pid_flight(cfg)
         tracks = (res.sim.to_body_track(body_id=cfg.body_id, epoch_utc=cfg.epoch_utc,

@@ -82,6 +82,7 @@ import jsonschema
 import yaml
 
 from orbitopt.flightlab import frames
+from orbitopt.flightlab import hot_staging
 from orbitopt.flightlab import checks as gate_checks
 from orbitopt.flightlab.backends import BACKEND_OPENTSIOLOVSKY
 from orbitopt.flightlab.contract import (
@@ -221,6 +222,11 @@ class Vehicle:
     attitude_program: tuple[AttitudePoint, ...] | None
     assumptions: tuple[str, ...]
     restart: dict | None = None
+    #: E10-02 (task #299): the hot-staging timeline contract of a vehicle with
+    #: a ``staging:`` block (orbitopt.flightlab.hot_staging.HotStaging), folded
+    #: into the OT config by :func:`_apply_hot_staging`; ``None`` = cold
+    #: separation, config passes through untouched.
+    staging: Any = None
 
     @staticmethod
     def load(path) -> "Vehicle":
@@ -254,6 +260,7 @@ class Vehicle:
             attitude_program=points,
             assumptions=tuple(str(a) for a in (doc.get("assumptions") or ())),
             restart=(dict(doc["restart"]) if isinstance(doc.get("restart"), Mapping) else None),
+            staging=hot_staging.load_hot_staging(doc),
         )
 
 
@@ -312,6 +319,8 @@ def build_config(target: FlightTarget, vehicle: Vehicle,
     }
     if vehicle.restart:
         _apply_restart(config, vehicle.restart)
+    if vehicle.staging is not None:
+        _apply_hot_staging(config, vehicle.staging)
     jsonschema.validate(instance=config, schema=pinned_config_schema())
     return config
 
@@ -365,6 +374,40 @@ def _apply_restart(config: dict, restart: Mapping[str, Any]) -> dict:
         pts.append([re_abs + 5.0, value])
         config["attitude"][axis] = pts
     config["simulation"]["end_time_s"] = round(re_abs + 5.0, 6)
+    return config
+
+
+def _apply_hot_staging(config: dict, staging: Any) -> dict:
+    """Fold a vehicle ``staging:`` (hot staging) contract into a freshly
+    built OT config (E10-02). OpenTsiolkovsky's stage model cannot light the
+    upper stage before the lower one separates, so the adapter represents the
+    connected-phase ship thrust where OT *can* see it -- on the stack:
+
+    * stage 1 flies the **composite curve** (booster thrust plus the
+      plume-corrected ship thrust through the overlap window, ending at
+      separation): a powered stack with no coast between the booster's
+      throttle-down and the stage split;
+    * the booster's post-separation floor burn (separation -> ``booster_meco_s``)
+      is a booster-only effect no single-stack OT stage can express; OT's
+      stage-1 burn is cut at separation and the difference is declared (the
+      run's ``backend_assumptions``), never absorbed;
+    * stage 2 keeps the ship's own engine clock, so its curve and burn window
+      shift left by the ignition advance and its initial mass loses the
+      propellant already burnt while mated.
+    """
+    s1 = config["stages"][0]
+    s2 = config["stages"][1]
+    s1["separation_time_s"] = float(staging.separation_s)
+    curve, overlap_burn_kg = staging.composite_stack_curve(
+        s1["engine"]["thrust_vac_n"], s2["engine"]["thrust_vac_n"],
+        float(s2["engine"]["isp_vac_s"]))
+    s1["engine"]["thrust_vac_n"] = curve
+    s1["engine"]["burn_end_s"] = float(staging.separation_s)
+    adv = float(staging.overlap_s)
+    eng2 = s2["engine"]
+    eng2["thrust_vac_n"] = [[max(0.0, float(t) - adv), float(f)] for t, f in eng2["thrust_vac_n"]]
+    eng2["burn_end_s"] = round(float(eng2["burn_end_s"]) - adv, 6)
+    s2["mass_initial_kg"] = round(float(s2["mass_initial_kg"]) - overlap_burn_kg, 1)
     return config
 
 

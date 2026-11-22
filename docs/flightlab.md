@@ -189,8 +189,8 @@ qualified production vehicle:
 | F-05 / E1-02 | Powered attitude error 4.77° peak, alpha 14.42°, max-Q 71.2 kPa. | Powered and coast gates differ; the later 62.6° alpha peak is in near-vacuum coast. [Record](benchmarks/fl605_gravity_turn_ascent.json). |
 | F-07 / E1-03 | Native point mass: 225.3/228.5 km peri/apo; rigid body: 220.5/226.5 km, within ±25 km. | Shared feedback law on a disclosed 1 t dry / 7 t propellant upper stage with 3° gimbal; not original F-06 parity. [Record](benchmarks/fl607_mission_outputs.json). |
 | E6-02 | Guided JSBSim staging: powered error 0.44° peak, alpha 11.7°; upper-powered attitude error 6.13° peak / 5.32° RMS. | Illustrative 70 t stack; upper-stage bounds differ from booster bounds. [ADR 0010](adr/flightlab-0010-guided-jsbsim-ascent.md), [record](benchmarks/e6_02_guided_ascent.json). |
-| E6-03 | Six of 17 points insert on both native backends, reproduced by the generalised cutoff law. | Misses distinguish vehicle, guidance and actuator limits. [ADR 0011](adr/flightlab-0011-guidance-generalisation-envelope.md), [matrix](benchmarks/e6_03_guidance_matrix.json). |
-| E6-05 | JSBSim and native verdicts agree on 16/17 cells; median peri/apo difference 6.7/14.1 km. | Shared frozen separation state. The A3 servo-boundary cell differs, with 6.85% propellant divergence; ballistic-control gaps remain reported. [Record](benchmarks/e6_05_jsbsim_matrix.json). |
+| E6-03 / E10-08 | 12 of 17 points insert on both native backends (6 before E10-08), with no unexpected verdict; 180-300 km at every declared inclination. | The terminal-radius radial channel converts the guidance-class misses. The 400 km, heavy-stage, F-06 and A3-servo cells stay misses with named vehicle/actuator causes. [ADR 0011](adr/flightlab-0011-guidance-generalisation-envelope.md), [matrix](benchmarks/e6_03_guidance_matrix.json). |
+| E6-05 / E10-08 | JSBSim and native verdicts agree on 16/17 cells, and all 130 parity checks pass; median peri/apo difference 12.0/3.1 km. | Shared frozen separation state. Only the A3 servo-boundary cell differs, and that difference is declared as expected (JSBSim inserts it); propellant agrees to <= 0.11% on co-inserted cells. [Record](benchmarks/e6_05_jsbsim_matrix.json). |
 | E6-04 | Stateful guidance/control sampled once per step and held across RK4 stages. | The study justifies `dt_s = dt_c_s = 0.02`; this is not a universal backend step. [Sampled-control ADR](adr/flightlab-0008-sampled-data-control-and-rk4-plant.md), [sweep](benchmarks/e604_step_convergence.json). |
 
 Run the native two-backend mission and open its saved outputs:
@@ -367,3 +367,22 @@ collapse to 2/84 and an independent ~180 t-class RTLS vehicle to 0/48, all
 deep fuel-bound. The probability model generalizes only in shape, not level:
 it stays unskilled out of sample. No success-rate improvement is claimed.
 API: `orbitopt.flightlab.recovery.reliability`.
+
+## Graded admission (E10-06)
+
+The [chance-constraint redesign report](benchmarks/e10_06_chance_constraint_redesign.md)
+replaces the E7-01 binary gate with a graded rule over the same reconstructed
+violations: reject only deep violations (worst > 0.5), a second binding
+channel (> 0.15), or a calibrated landing probability below the recorded
+joint-arm climatology (0.208). The probability is a logistic refit on
+fuel-quantile z and divert violation -- monotone by fit, and the only fit
+that stays short of severe overconfidence when the dispersion bands shift
+x1.5 (skill -0.09, ECE 0.03, against -9.38 / 0.43 for the raw surrogate).
+Regrading the recorded grid row-for-row: 99 -> 84 rejections, false
+rejections (joint-rejected, FL-305 landed) 20 -> 10, all 51 deep violations
+kept, nothing previously accepted re-rejected; on the E7-05 hold-out the
+calibrated model scores Brier skill +0.565 (raw: -0.62) with no
+high-probability bin significantly below its own prediction. Wired into
+FL-302 as `plan_boostback_entry(..., joint_admission=...)`; the search
+objective is unchanged and no success-rate improvement is claimed.
+API: `orbitopt.flightlab.recovery.redesign`.

@@ -24,9 +24,12 @@ which of three things is actually at fault:
 The matrix axes
 ---------------
 * **target altitude** -- 180 / 220 / 260 / 300 / 400 km circular parking orbit
-  (the envelope turns out to be bounded at BOTH ends: too low and the
-  periapsis-only cutoff leaves apoapsis over the band, too high and the cutoff
-  never fires and the stage burns itself empty over-shooting);
+  (E6-03/E6-05 found the velocity-only law bounded at BOTH ends: too low and
+  the perigee passage over-shoots the apoapsis ceiling, too high and the
+  stage never climbs to the target radius, so the cutoff never arms and it
+  burns itself empty over-shooting.  E10-08's terminal-radius radial channel
+  inserts 180-300 km; 400 km stays out of reach of a single continuous burn
+  from this handoff);
 * **inclination** -- 28.5 / 45.0 / 51.6 deg, realised by the pad latitude with
   a due-east launch (see :data:`LAUNCH_HEADING_DEG`: the native plant steers
   with a single TVC axis and no bank, so it cannot dog-leg, and launch
@@ -154,6 +157,29 @@ E605_APOGEE_CEILING_GAIN = 8.0e-4
 #: shared law cannot buy a180 with two other cells; the envelope boundary,
 #: not a wider setting, is the honest result (module docstring, upper_stage).
 E605_COMMAND_ALPHA_LIMIT_DEG = 30.0
+#: E10-08 (task #305): the terminal-radius radial channel (``upper_stage``
+#: module docstring) -- the law now plans ``r(T) = r_target`` and ``v_r(T) =
+#: 0`` together instead of targeting velocity alone, which is what kept the
+#: >= 260 km cells from ever arming the cutoff box.
+E1008_TERMINAL_RADIUS_GUIDANCE = True
+#: E10-08: the q-alpha load limit of the pitch-bias limiter [Pa deg].  30 deg
+#: at 1 kPa: the E6-05 30 deg bound is kept wherever q >= 1 kPa and only
+#: opens where the air can no longer load the airframe (the upper stage
+#: ignites at ~90 km, q ~ 10 Pa, where 30 deg of AoA is a ~3 N/m^2
+#: normal-force question).  A load limit, not a per-cell gain.
+E1008_Q_ALPHA_LIMIT_PA_DEG = 30.0 * 1_000.0
+#: E10-08: the command slew limiter [deg/s].  The E1-03 3 deg/s was sized for
+#: a vanishing-Lambda command that may flip 180 deg; the radial plan's command
+#: is smooth, but its end game swings from the plan's terminal pitch-down
+#: onto the velocity-to-be-gained direction inside a few seconds at ~20 g.
+#: At 3 deg/s the command itself cannot make that swing and the rigid body
+#: (which adds its tracking lag to it) sweeps through the band on a300
+#: between two control samples.  10 deg/s inserts too, but the JSBSim FL-403
+#: PID then lags the commanded slew by 5-8 deg after ignition (over the E6-05
+#: 5 deg arrest allowance on 10 cells); at 6 deg/s that growth is <= 0.4 deg
+#: and every cell still inserts on both native backends.  Still a limiter: a
+#: flip takes 30 s.
+E1008_COMMAND_SLEW_RATE_DEG_S = 6.0
 
 BACKEND_PAIR: tuple[str, str] = BACKENDS
 
@@ -308,29 +334,36 @@ GUIDANCE_MATRIX: tuple[GuidanceMatrixCell, ...] = (
           "insert", "the E1-03 packaged scenario point, restated as a matrix "
           "cell with the inclination now declared"),
     _cell("a180-i28.5-V1-A1", 180, 28.5, "V1-e103-variant", "A1-f04-standard",
-          "miss", "the LOW end of the envelope: the cutoff fires on periapsis "
-          "with propellant to spare and leaves apoapsis over the band -- the "
-          "criterion grades one element, not the orbit"),
+          "insert", "the LOW end of the envelope: a miss until E10-08 (the "
+          "perigee passage over-shot the apoapsis ceiling); the terminal-radius "
+          "plan arrives level at the target radius and the box closes"),
     _cell("a260-i28.5-V1-A1", 260, 28.5, "V1-e103-variant", "A1-f04-standard",
-          "miss", "the cutoff criterion stops closing above ~240 km: the "
-          "stage burns to depletion and over-shoots instead of under-shooting"),
+          "insert", "a miss until E10-08 (the velocity-only law never climbed "
+          "to the target radius, so the cutoff never armed above ~240 km); "
+          "the terminal-radius plan inserts it"),
     _cell("a300-i28.5-V1-A1", 300, 28.5, "V1-e103-variant", "A1-f04-standard",
-          "miss", "the law does not terminate at this target"),
+          "insert", "a miss until E10-08; inserted by the terminal-radius plan "
+          "with ~140 kg of propellant left"),
     _cell("a220-i28.5-V2-A1", 220, 28.5, "V2-stretched-tank", "A1-f04-standard",
           "insert", "the nominal target on the stretched tank"),
     _cell("a300-i28.5-V2-A1", 300, 28.5, "V2-stretched-tank", "A1-f04-standard",
-          "miss", "the same target with 200 kg more propellant: separates a "
-          "guidance failure from a tank limit"),
+          "insert", "the same target with 200 kg more propellant: the miss it "
+          "was declared to separate from a tank limit (E6-03) is gone with the "
+          "law fix, and the extra tank is simply margin"),
     _cell("a400-i28.5-V1-A1", 400, 28.5, "V1-e103-variant", "A1-f04-standard",
-          "miss", "the far end of the altitude axis"),
+          "miss", "the far end of the altitude axis: no continuous full-thrust "
+          "burn from this handoff arrives level at 400 km (the radial plan "
+          "needs |s| > 1, i.e. more than all of the thrust vertical); the "
+          "stage has no coast/relight, so this is the profile's capability"),
     _cell("a220-i45.0-V1-A1", 220, 45.0, "V1-e103-variant", "A1-f04-standard",
           "insert", "inclination axis, mid point"),
     _cell("a220-i51.6-V1-A1", 220, 51.6, "V1-e103-variant", "A1-f04-standard",
           "insert", "inclination axis, high end"),
     _cell("a260-i45.0-V1-A1", 260, 45.0, "V1-e103-variant", "A1-f04-standard",
-          "miss", "altitude x inclination crossing"),
+          "insert", "altitude x inclination crossing (a miss until E10-08)"),
     _cell("a300-i51.6-V1-A1", 300, 51.6, "V1-e103-variant", "A1-f04-standard",
-          "miss", "altitude x inclination crossing at the high end of both"),
+          "insert", "altitude x inclination crossing at the high end of both "
+          "(a miss until E10-08)"),
     _cell("a180-i28.5-V3-A1", 180, 28.5, "V3-heavy-payload", "A1-f04-standard",
           "miss", "payload axis: the heavy stage runs dry with its terminal "
           "orbit still tighter than even the low target"),
@@ -424,7 +457,10 @@ def matrix_scenario(cell: GuidanceMatrixCell, *, dt_s: float = MATRIX_DT_S,
                 cutoff_insertion_box=E605_CUTOFF_INSERTION_BOX,
                 transfer_apogee_bias_m=E605_TRANSFER_APOGEE_BIAS_M,
                 apogee_ceiling_gain=E605_APOGEE_CEILING_GAIN,
-                command_alpha_limit_deg=E605_COMMAND_ALPHA_LIMIT_DEG))
+                command_alpha_limit_deg=E605_COMMAND_ALPHA_LIMIT_DEG,
+                terminal_radius_guidance=E1008_TERMINAL_RADIUS_GUIDANCE,
+                command_q_alpha_limit_pa_deg=E1008_Q_ALPHA_LIMIT_PA_DEG,
+                command_slew_rate_deg_s=E1008_COMMAND_SLEW_RATE_DEG_S))
     return scenario
 
 

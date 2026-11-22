@@ -109,6 +109,77 @@ changing it there (all default off):
   floor while the tank empties, so the box is never armed and their cause
   is the stage's delta-v budget, not the law's terminal conditions.
 
+The E10-08 extension (task #305): the terminal-radius radial channel
+--------------------------------------------------------------------
+E10-08 re-read the E6-05 depletion class on the trace instead of on the
+terminal elements, and the last paragraph above does not survive it: on
+a260 the stage peaks at 227 km with ``v_r`` through zero and then empties
+the tank horizontally -- the periapsis cannot exceed the current radius, and
+the velocity-only law never *flew* to the target radius.  Nothing in
+``Lambda`` asks for a radius: its vertical part is ``-v_r`` (plus feeds that
+are not a position target), so the climb is whatever the handoff's 2 km/s of
+vertical speed and the tangential target leave behind.  The energy rule was
+right (the terminal orbit is thousands of km WIDER than the target), and the
+fault is the law's -- the cutoff could not arm because the state never
+reached the box.  Three optional fields fix that without touching the F-07
+point (all default off):
+
+* ``terminal_radius_guidance``: the steering direction becomes the current
+  point of a **radial plan**.  The plan is the classic PEG radial channel of
+  the linear-tangent family: a vertical thrust fraction ``s(t) = A + B t``
+  that lands ``r(T) = r_target`` *and* ``v_r(T) = 0`` for a constant-thrust
+  stage draining linearly (the closed-form thrust integrals ``L, J, S, Q``)
+  under the net vertical gravity averaged between now and circular arrival;
+  ``T`` is the burn time whose plan buys exactly the horizontal speed still
+  missing (bisection on a Simpson integral of ``sqrt(1 - s^2) a(t)``), or the
+  whole remaining burn when even that falls short.  Below
+  ``terminal_radius_t_go_floor_s`` (12 s) the plan is ill-conditioned (it
+  divides by ``T^2``) and the law latches the terminal velocity-to-be-gained
+  steering ``(v_c - v_t) t_hat - v_r r_hat`` -- the direction that zeroes
+  both residuals together.  12 s rather than a few: in the last seconds the
+  stage accelerates at ~20 g, and a handover that late leaves the command
+  slew no time to swing from the plan's terminal pitch-down onto the
+  velocity-to-be-gained direction (measured: at a 5 s handover the rigid
+  body sweeps through the band on a300 between two control samples).  For
+  the same swing the matrix flies a 6 deg/s command slew instead of the
+  E1-03 3 deg/s, which was sized for a vanishing-Lambda command that can
+  flip; the plan's command is smooth and the limiter still bounds a flip
+  to 30 s (10 deg/s inserts too, but over-runs the JSBSim tracker's E6-05
+  attitude-arrest allowance; see ``guidance_matrix``).
+  With the channel on, the command is also held **prograde until
+  ignition** and the slew limiter is seeded there: the point-mass twin
+  first consults the law at ignition, the rigid body and JSBSim from
+  separation with their trackers frozen through the coast, so a command
+  that jumped (or slewed during the coast) onto the radial plan handed the
+  frozen bodies a ~70 deg step at ignition that the point mass flew for
+  free -- a backend-dependent command history, measured as a 35 kg native
+  / JSBSim propellant split on a180.
+* **settle cutoff** (with ``cutoff_insertion_box`` and the radial channel on):
+  inside the band the burn continues while the apsides error ``max(r_t -
+  r_peri, r_apo - r_t)`` is shrinking by no more than its own size per
+  control sample, i.e. while the next sample is predicted to land closer to
+  the circle and on the same side; otherwise it cuts at once.  At ~20 g the
+  band is crossed in a handful of 0.05 s samples, so "cut at the first inside
+  sample" leaves the orbit on the band edge, and "cut when the error grows"
+  can step clean through the band and never cut.
+* ``command_q_alpha_limit_pa_deg``: the pitch-bias limiter becomes a
+  **q-alpha load limit**: ``clip(q_alpha / q, command_alpha_limit_deg,
+  vacuum_alpha_limit_deg)`` at the live US76 dynamic pressure on the
+  air-relative speed.  The 30 deg bound exists because a slender body at tens
+  of degrees AoA in hypersonic flow lives in a normal-force regime the
+  point-mass twin cannot represent (above); the upper stage ignites at
+  ~90 km, q ~ 10 Pa, where that regime does not exist.  Inside the 30 deg
+  clamp the radial plan cannot point below the steep handoff velocity
+  vector, which is the very authority it needs to kill the vertical speed.
+  Wherever the air can load the airframe the 30 deg bound is unchanged.
+
+With the three on, the matrix's guidance class converts (ADR
+flightlab-0011, E10-08 follow-through).  The plan is also an honest
+feasibility test: at 400 km from this handoff it needs ``|s| > 1`` (more
+than all of the thrust vertical) for the whole burn, so no single
+continuous full-thrust burn arrives level there -- a stage without
+coast/relight cannot fly that profile, and the cell stays a miss.
+
 The command limiter: ``Lambda``'s *direction* is undefined as its
 magnitude vanishes (and its tangential part flips 180 deg when ``v_t``
 overshoots ``V_c``), and between "command nearly spent" and "periapsis
@@ -357,6 +428,20 @@ class UpperStageGuidanceSpec:
     #: the burn bleeds the perigee over-speed instead of amplifying it.
     #: Default 0 = off.
     apogee_ceiling_gain: float = 0.0
+    #: E10-08: terminal-radius (E-guidance) radial channel, see
+    #: :meth:`UpperStageGuidance._terminal_radius_direction`.  Default off.
+    terminal_radius_guidance: bool = False
+    #: E10-08: time-to-go [s] below which the radial plan hands over to the
+    #: terminal velocity-to-be-gained steering (module docstring).
+    terminal_radius_t_go_floor_s: float = 12.0
+    #: E10-08: q-alpha load limit [Pa deg].  When positive, the pitch-bias
+    #: limit becomes ``clip(q_alpha / q, command_alpha_limit_deg,
+    #: vacuum_alpha_limit_deg)`` at the live dynamic pressure ``q``: the
+    #: ``command_alpha_limit_deg`` bound is held wherever the air can load
+    #: the airframe, and opens only where it cannot.  Default 0 = off.
+    command_q_alpha_limit_pa_deg: float = 0.0
+    #: E10-08: the pitch-bias ceiling of the q-alpha limiter [deg].
+    vacuum_alpha_limit_deg: float = 90.0
 
     def __post_init__(self) -> None:
         if self.dry_mass_kg <= 0.0:
@@ -386,6 +471,16 @@ class UpperStageGuidanceSpec:
         if self.apogee_ceiling_gain < 0.0:
             raise ValueError(f"apogee_ceiling_gain must be >= 0, got "
                              f"{self.apogee_ceiling_gain}")
+        if self.terminal_radius_t_go_floor_s <= 0.0:
+            raise ValueError(f"terminal_radius_t_go_floor_s must be > 0, got "
+                             f"{self.terminal_radius_t_go_floor_s}")
+        if self.command_q_alpha_limit_pa_deg < 0.0:
+            raise ValueError(f"command_q_alpha_limit_pa_deg must be >= 0, got "
+                             f"{self.command_q_alpha_limit_pa_deg}")
+        if not self.command_alpha_limit_deg <= self.vacuum_alpha_limit_deg <= 90.0:
+            raise ValueError(f"vacuum_alpha_limit_deg must be in "
+                             f"[command_alpha_limit_deg, 90], got "
+                             f"{self.vacuum_alpha_limit_deg}")
 
     @classmethod
     def from_vehicle(cls, vehicle, *, target: ParkingOrbitTarget,
@@ -420,6 +515,8 @@ class UpperStageGuidance:
         self.cutoff_t_s: float | None = None
         self._cmd_hp: tuple[float, float] | None = None
         self._cmd_t_s: float | None = None
+        self._settle: tuple[float, float] | None = None
+        self._radial_terminal = False
 
     @property
     def cutoff_engaged(self) -> bool:
@@ -462,6 +559,9 @@ class UpperStageGuidance:
                 trim = self.spec.apogee_ceiling_gain * (r_apo - r_ceil)
                 v_t_target = max(v_t_target - trim,
                                  0.85 * math.sqrt(MU_EARTH_M3_S2 / rmag))
+        if self.spec.terminal_radius_guidance:
+            return self._terminal_radius_direction(rmag, r_hat, t_hat, v_radial, vt,
+                                                   float(mass_kg)), v_c
         lam = (v_t_target * t_hat - v_inertial
                + self.spec.gravity_term_gain * g_r * tau * r_hat)
         if self.spec.climb_time_to_go_gain > 0.0 and rmag < r_t:
@@ -470,6 +570,94 @@ class UpperStageGuidance:
                           v_climb_cap)
             lam = lam + v_r_cmd * r_hat
         return lam, v_c
+
+    #: Simpson nodes of the E10-08 time-to-go quadrature (even).
+    _RADIAL_NODES = 16
+
+    def _radial_plan(self, t_go: float, tau: float, ve: float, rmag: float,
+                     v_radial: float, g_net: float) -> tuple[float, float]:
+        """E10-08 radial plan: the coefficients ``(A, B)`` of the vertical
+        thrust fraction ``s(t) = A + B t`` (the sine of the thrust
+        direction's elevation over the local horizontal) that lands ``r(T) =
+        r_target`` with ``v_r(T) = 0`` after a burn of ``T = t_go`` seconds,
+        for a constant-thrust stage draining linearly under a constant net
+        vertical gravity ``g_net`` -- the PEG thrust integrals ``L, J, S,
+        Q`` of the linear-tangent family, closed form."""
+        r_t = self.spec.target.radius_m
+        big_l = -ve * math.log(1.0 - t_go / tau)
+        big_j = big_l * tau - ve * t_go
+        big_s = big_l * t_go - big_j
+        big_q = big_s * tau - 0.5 * ve * t_go * t_go
+        rhs_v = -v_radial - g_net * t_go
+        rhs_r = r_t - rmag - v_radial * t_go - 0.5 * g_net * t_go * t_go
+        det = big_l * big_q - big_j * big_s
+        if abs(det) < 1e-12:
+            return 0.0, 0.0
+        return ((rhs_v * big_q - big_j * rhs_r) / det,
+                (big_l * rhs_r - big_s * rhs_v) / det)
+
+    def _horizontal_gain(self, t_go: float, tau: float, ve: float, rmag: float,
+                         v_radial: float, g_net: float) -> tuple[float, float]:
+        """Horizontal speed the radial plan over ``t_go`` buys (Simpson over
+        ``sqrt(1 - s^2) a(t)``, ``s`` clipped to the realisable [-1, 1]) and
+        the plan's current ``s``."""
+        a_c, b_c = self._radial_plan(t_go, tau, ve, rmag, v_radial, g_net)
+        n = self._RADIAL_NODES
+        h = t_go / n
+        acc = 0.0
+        for k in range(n + 1):
+            t = k * h
+            w = 1.0 if k in (0, n) else (4.0 if k % 2 else 2.0)
+            sk = min(max(a_c + b_c * t, -1.0), 1.0)
+            acc += w * math.sqrt(1.0 - sk * sk) * ve / (tau - t)
+        return acc * h / 3.0, a_c
+
+    def _terminal_radius_direction(self, rmag: float, r_hat: np.ndarray,
+                                   t_hat: np.ndarray, v_radial: float,
+                                   v_tangent: float, mass_kg: float) -> np.ndarray:
+        """E10-08 thrust direction (unit vector, ECEF components): the
+        current point ``s = A`` of the radial plan (:meth:`_radial_plan`),
+        its time-to-go solved (bisection) so that the plan's horizontal
+        thrust integral buys exactly the missing horizontal speed ``v_c -
+        v_t`` (the whole remaining burn when even that falls short).  Below
+        ``terminal_radius_t_go_floor_s`` the plan is ill-conditioned (it
+        divides by ``T^2``) and the law latches the terminal
+        velocity-to-be-gained steering ``(v_c - v_t) t_hat - v_r r_hat``
+        (module docstring)."""
+        mu = MU_EARTH_M3_S2
+        r_t = self.spec.target.radius_m
+        v_c = math.sqrt(mu / r_t)
+        if not self._radial_terminal:
+            ve = self.spec.isp_vacuum_s * G0_M_S2
+            thrust = self.spec.rated_thrust_vacuum_n
+            mass = max(float(mass_kg), self.spec.dry_mass_kg * (1.0 + 1e-9))
+            tau = mass * ve / thrust
+            burn_left = min((mass - self.spec.dry_mass_kg) * ve / thrust,
+                            0.999 * tau)
+            # net vertical gravity averaged between now and a circular
+            # arrival (where gravity and centripetal term cancel)
+            g_net = -0.5 * (mu / (rmag * rmag) - v_tangent * v_tangent / rmag)
+            dv_h = max(v_c - v_tangent, 0.0)
+            lo, hi = 1e-3, max(burn_left, 2e-3)
+            gain_hi, s_hi = self._horizontal_gain(hi, tau, ve, rmag, v_radial, g_net)
+            if gain_hi <= dv_h:
+                t_go, s = hi, s_hi
+            else:
+                for _ in range(40):
+                    mid = 0.5 * (lo + hi)
+                    if self._horizontal_gain(mid, tau, ve, rmag, v_radial, g_net)[0] < dv_h:
+                        lo = mid
+                    else:
+                        hi = mid
+                t_go = hi
+                s = self._horizontal_gain(t_go, tau, ve, rmag, v_radial, g_net)[1]
+            if t_go >= float(self.spec.terminal_radius_t_go_floor_s):
+                s = min(max(s, -1.0), 1.0)
+                return math.sqrt(1.0 - s * s) * t_hat + s * r_hat
+            self._radial_terminal = True
+        lam = (v_c - v_tangent) * t_hat - v_radial * r_hat
+        norm = float(np.linalg.norm(lam))
+        return lam / norm if norm > 1e-9 else t_hat
 
     def _capped_transfer_speed(self, rmag: float, mass_kg: float) -> float:
         """E6-05: the tangential speed of the transfer ellipse whose apogee
@@ -543,6 +731,26 @@ class UpperStageGuidance:
         pitch_deg = math.degrees(math.atan2(-float(d_ned[2]), horiz))
         return heading_deg, pitch_deg
 
+    def _alpha_limit_deg(self, r: np.ndarray, v_ecef: np.ndarray) -> float:
+        """The pitch-bias limit at this state: the fixed
+        ``command_alpha_limit_deg``, or -- with the E10-08 q-alpha limiter
+        on -- ``q_alpha / q`` clipped to ``[command_alpha_limit_deg,
+        vacuum_alpha_limit_deg]`` at the live US76 dynamic pressure on the
+        air-relative (ECEF) speed."""
+        base = float(self.spec.command_alpha_limit_deg)
+        qa = float(self.spec.command_q_alpha_limit_pa_deg)
+        if qa <= 0.0:
+            return base
+        from orbitopt.flightlab.atmosphere import density_us76_kg_m3, dynamic_pressure_pa
+
+        _, _, alt_m = frames.ecef_to_geodetic(r)
+        q = dynamic_pressure_pa(density_us76_kg_m3(max(float(alt_m), 0.0)),
+                                float(np.linalg.norm(v_ecef)))
+        ceiling = float(self.spec.vacuum_alpha_limit_deg)
+        if q <= qa / ceiling:
+            return ceiling
+        return min(max(qa / q, base), ceiling)
+
     def dcm_from_state(self, t_s: float, position_m, velocity_m_s,
                        mass_kg: float) -> np.ndarray:
         """Command ``Tec2b`` at the live state: fly along Lambda, with the
@@ -552,7 +760,14 @@ class UpperStageGuidance:
         r = np.asarray(position_m, dtype=float)
         v_inertial = (np.asarray(velocity_m_s, dtype=float)
                       + np.cross(_OMEGA, r))
-        lam, _ = self._lambda_ecef(r, v_inertial, float(mass_kg))
+        if (self.spec.terminal_radius_guidance
+                and float(t_s) < self.spec.ignition_t_s):
+            # E10-08: nothing to steer through an unpowered coast (the
+            # trackers are frozen through it); hold prograde so every backend
+            # starts the slew-limited command from the same place at ignition.
+            lam = v_inertial
+        else:
+            lam, _ = self._lambda_ecef(r, v_inertial, float(mass_kg))
         if float(np.linalg.norm(lam)) > 1e-9:
             heading_deg, pitch_deg = self._heading_pitch(lam, r)
         else:
@@ -570,12 +785,19 @@ class UpperStageGuidance:
         # neither backend is ever asked to fly a normal-force regime the
         # other cannot represent.
         vel_h, vel_p = self._heading_pitch(v_inertial, r)
-        pitch_deg = vel_p + min(max(pitch_deg - vel_p,
-                                    -self.spec.command_alpha_limit_deg),
-                                self.spec.command_alpha_limit_deg)
+        alpha_lim = self._alpha_limit_deg(r, np.asarray(velocity_m_s, dtype=float))
+        pitch_deg = vel_p + min(max(pitch_deg - vel_p, -alpha_lim), alpha_lim)
         dh = (heading_deg - vel_h + 180.0) % 360.0 - 180.0
         heading_deg = (vel_h + min(max(dh, -self.spec.command_heading_limit_deg),
                                   self.spec.command_heading_limit_deg)) % 360.0
+        if self._cmd_hp is None and self.spec.terminal_radius_guidance:
+            # E10-08: seed the slew limiter on the velocity vector (where a
+            # separated, frozen-tracker body points) instead of letting the
+            # first command jump straight onto the radial plan -- a
+            # tens-of-degrees step a point mass follows for free and a rigid
+            # body does not.
+            self._cmd_hp = (vel_h, vel_p)
+            self._cmd_t_s = float(t_s)
         if self._cmd_hp is not None:
             if float(t_s) <= float(self._cmd_t_s) + _GUIDANCE_T_EPS_S:
                 # E6-04 (task #276): the law already answered this instant --
@@ -613,10 +835,24 @@ class UpperStageGuidance:
         limit = self.spec.target.radius_m - float(self.spec.cutoff_periapsis_margin_m)
         if self.spec.cutoff_insertion_box:
             target = self.spec.target
-            if (self._periapsis_radius(r, v_inertial)
-                        >= target.radius_m - target.periapsis_tolerance_m
-                    and self._apoapsis_radius(r, v_inertial)
-                        <= target.radius_m + target.apoapsis_tolerance_m):
+            r_peri = self._periapsis_radius(r, v_inertial)
+            r_apo = self._apoapsis_radius(r, v_inertial)
+            inside = (r_peri >= target.radius_m - target.periapsis_tolerance_m
+                      and r_apo <= target.radius_m + target.apoapsis_tolerance_m)
+            if self.spec.terminal_radius_guidance:
+                # E10-08 settle (module docstring): inside the band, keep
+                # burning while the next control sample is predicted to land
+                # closer to the target circle than this one.
+                err = max(target.radius_m - r_peri, r_apo - target.radius_m)
+                last = self._settle
+                if last is not None and float(t_s) <= last[0] + _GUIDANCE_T_EPS_S:
+                    return 1.0
+                self._settle = (float(t_s), err)
+                if inside and last is not None:
+                    shrink = last[1] - err
+                    if 0.0 < shrink <= err:
+                        return 1.0
+            if inside:
                 self.cutoff_t_s = float(t_s)
                 return 0.0
             return 1.0

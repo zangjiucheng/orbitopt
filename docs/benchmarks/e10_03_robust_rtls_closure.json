@@ -1,0 +1,1549 @@
+{
+ "schema": "e10-03-robust-rtls-closure-1.0",
+ "provenance": {
+  "python": "3.13.18",
+  "numpy": "2.5.5",
+  "git_head": "f6fa8f2146f1e6a812e80823ae1c28fd3e21c427",
+  "created_utc": "2026-11-22T07:13:56Z"
+ },
+ "elapsed_s": 0.2,
+ "smoke_scale": false,
+ "design": {
+  "scheme": "DC8 hot staging (E10-02) + DC1 powered entry on the DC7 scenario/constraints + E10-05 scenario-robust script + E10-06 graded joint-chance admission",
+  "start_state": "sealed E10-07 DC8 handoff (digest re-verified)",
+  "constraints": "inherited unchanged from E5-08 DC7 (audit below)"
+ },
+ "seed_manifest": {
+  "holdout_seeds": [
+   501,
+   502,
+   503,
+   504,
+   505,
+   506,
+   507,
+   508
+  ],
+  "n_per_seed": 21,
+  "n_per_arm": 168,
+  "required_sample_size": 167,
+  "target_ci_width": 0.15,
+  "train_seeds": [
+   601,
+   602
+  ],
+  "train_per_seed": 5,
+  "excluded_streams": {
+   "e508_mc_seeds": [
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+   ],
+   "e1005_train_seeds": [
+    401,
+    402
+   ],
+   "recorded_search_seed": 287
+  },
+  "es_seed": 43177,
+  "bootstrap_seed": 20261122
+ },
+ "robust_arm": {
+  "method": "(1+lambda)-ES warm-started at the transferred DC7 script; CRN training grid (seeds 601/602 x 5 + nominal); score = training failure fraction - clipped median fuel-margin tiebreak + sub-step corridor-miss guidance (capped below one landing step; the DC7 warm start closes nothing on DC8); the planner grades with joint_chance + the E10-06 graded admission; ties keep the incumbent (smaller trust region)",
+  "train_seed": 43177,
+  "stages": [
+   {
+    "stage": 0,
+    "sigma_frac": 0.04,
+    "lambda": 8,
+    "generations": 4,
+    "candidates_evaluated": 33,
+    "baseline": {
+     "score": 1.0305628735556782,
+     "fail_frac": 1.0,
+     "landed_train": 0,
+     "n_train": 11,
+     "margin_med_kg": -30000.0,
+     "per_scenario": "00000000000"
+    },
+    "best": {
+     "x": [
+      11.312594015282325,
+      1.7253408149673106,
+      0.9220638281751282,
+      7.171365086059226,
+      -3.3039005200845413,
+      22431.01241693615,
+      238.8871848361223,
+      0.8966443208519437
+     ],
+     "score": 1.0304843973614302,
+     "fail_frac": 1.0,
+     "landed_train": 0,
+     "n_train": 11,
+     "margin_med_kg": -30000.0,
+     "miss_med_m": 242.19868071511075,
+     "per_scenario": "00000000000"
+    },
+    "trace": [
+     {
+      "gen": 0,
+      "child": -1,
+      "score": 1.0305628735556782,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0,
+      "miss_med_m": 281.4367778390701
+     },
+     {
+      "gen": 1,
+      "child": 0,
+      "score": 1.0371783416857467,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 1,
+      "child": 1,
+      "score": 1.034690423314436,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 1,
+      "child": 2,
+      "score": 1.033356898005017,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 1,
+      "child": 3,
+      "score": 1.0304843973614302,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 1,
+      "child": 4,
+      "score": 1.0384030996435893,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 1,
+      "child": 5,
+      "score": 1.0339279583236585,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 1,
+      "child": 6,
+      "score": 1.0322085203595777,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 1,
+      "child": 7,
+      "score": 1.0318136174271086,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 2,
+      "child": 0,
+      "score": 1.0332594042288106,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 2,
+      "child": 1,
+      "score": 1.0326988330801492,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 2,
+      "child": 2,
+      "score": 1.0408589522636176,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 2,
+      "child": 3,
+      "score": 1.037132242744126,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 2,
+      "child": 4,
+      "score": 1.033427318684797,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 2,
+      "child": 5,
+      "score": 1.038729250593525,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 2,
+      "child": 6,
+      "score": 1.0343753355396352,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 2,
+      "child": 7,
+      "score": 1.042786978792976,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 3,
+      "child": 0,
+      "score": 1.0345465386331794,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 3,
+      "child": 1,
+      "score": 1.0310495973866878,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 3,
+      "child": 2,
+      "score": 1.0382876584955942,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 3,
+      "child": 3,
+      "score": 1.035798906667218,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 3,
+      "child": 4,
+      "score": 1.0380661512578757,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 3,
+      "child": 5,
+      "score": 1.0331994586683704,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 3,
+      "child": 6,
+      "score": 1.0340603837253688,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 3,
+      "child": 7,
+      "score": 1.0339146596937319,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 4,
+      "child": 0,
+      "score": 1.0327902543843253,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 4,
+      "child": 1,
+      "score": 1.032141201780173,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 4,
+      "child": 2,
+      "score": 1.0437015118780297,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 4,
+      "child": 3,
+      "score": 1.0377512947401146,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 4,
+      "child": 4,
+      "score": 1.0323364225524319,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 4,
+      "child": 5,
+      "score": 1.0381244615295786,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 4,
+      "child": 6,
+      "score": 1.0321017974315634,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 4,
+      "child": 7,
+      "score": 1.0442268521867188,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     }
+    ]
+   },
+   {
+    "stage": 1,
+    "sigma_frac": 0.1,
+    "lambda": 8,
+    "generations": 4,
+    "candidates_evaluated": 33,
+    "baseline": {
+     "score": 1.0305628735556782,
+     "fail_frac": 1.0,
+     "landed_train": 0,
+     "n_train": 11,
+     "margin_med_kg": -30000.0,
+     "per_scenario": "00000000000"
+    },
+    "best": {
+     "x": [
+      0.0,
+      1.7819181372306272,
+      1.0,
+      14.633351859345975,
+      -0.08413387567652653,
+      23136.5319893977,
+      883.9083834522207,
+      0.9888070411058602
+     ],
+     "score": 0.9709314260600092,
+     "fail_frac": 1.0,
+     "landed_train": 0,
+     "n_train": 11,
+     "margin_med_kg": 30000.0,
+     "miss_med_m": 465.71303000458767,
+     "per_scenario": "00000000000"
+    },
+    "trace": [
+     {
+      "gen": 0,
+      "child": -1,
+      "score": 1.0305628735556782,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0,
+      "miss_med_m": 281.4367778390701
+     },
+     {
+      "gen": 1,
+      "child": 0,
+      "score": 1.0484881639157533,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 1,
+      "child": 1,
+      "score": 0.9911898832566939,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 20315.75414676848
+     },
+     {
+      "gen": 1,
+      "child": 2,
+      "score": 1.0427990880325149,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 1,
+      "child": 3,
+      "score": 1.0314138438631484,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 1,
+      "child": 4,
+      "score": 1.051290280246248,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 1,
+      "child": 5,
+      "score": 1.039461093967627,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 1,
+      "child": 6,
+      "score": 1.0369717096747992,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 1,
+      "child": 7,
+      "score": 0.9746207792040316,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 2,
+      "child": 0,
+      "score": 1.042337780807724,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 2,
+      "child": 1,
+      "score": 0.9733469638404385,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 2,
+      "child": 2,
+      "score": 1.0002986555239644,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 2,
+      "child": 3,
+      "score": 1.0602493434490934,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 2,
+      "child": 4,
+      "score": 0.9834878150864629,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 2,
+      "child": 5,
+      "score": 1.0555570499445726,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": -30000.0
+     },
+     {
+      "gen": 2,
+      "child": 6,
+      "score": 0.9773627483652355,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 2,
+      "child": 7,
+      "score": 1.0067183576776582,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 3,
+      "child": 0,
+      "score": 0.9859078301211733,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 3,
+      "child": 1,
+      "score": 0.9709314260600092,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 3,
+      "child": 2,
+      "score": 0.9953302884317283,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 3,
+      "child": 3,
+      "score": 0.9891591091420557,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 3,
+      "child": 4,
+      "score": 0.9942654848466944,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 3,
+      "child": 5,
+      "score": 0.9740422686870348,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 3,
+      "child": 6,
+      "score": 0.9762498172995023,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 3,
+      "child": 7,
+      "score": 0.9762358309775327,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 4,
+      "child": 0,
+      "score": 0.9747184864290115,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 4,
+      "child": 1,
+      "score": 0.9765831639437675,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 4,
+      "child": 2,
+      "score": 1.0035457284339453,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 4,
+      "child": 3,
+      "score": 0.9923489981529089,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 4,
+      "child": 4,
+      "score": 0.978184180101427,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 4,
+      "child": 5,
+      "score": 0.9919326127676513,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 4,
+      "child": 6,
+      "score": 0.9730121541396413,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     },
+     {
+      "gen": 4,
+      "child": 7,
+      "score": 1.0032898929187943,
+      "fail_frac": 1.0,
+      "landed_train": 0,
+      "margin_med_kg": 30000.0
+     }
+    ]
+   }
+  ],
+  "selected": {
+   "x": [
+    0.0,
+    1.7819181372306272,
+    1.0,
+    14.633351859345975,
+    -0.08413387567652653,
+    23136.5319893977,
+    883.9083834522207,
+    0.9888070411058602
+   ],
+   "score": 0.9709314260600092,
+   "fail_frac": 1.0,
+   "landed_train": 0,
+   "n_train": 11,
+   "margin_med_kg": 30000.0,
+   "miss_med_m": 465.71303000458767,
+   "per_scenario": "00000000000",
+   "stage": 1,
+   "sigma_frac": 0.1
+  },
+  "candidates_evaluated": 66,
+  "delta_from_dc7": {
+   "available": true,
+   "delta": [
+    -12.603,
+    -0.442,
+    0.098,
+    7.383,
+    4.324,
+    393.659,
+    650.983,
+    0.074
+   ],
+   "norm_box": 0.5622,
+   "max_param": "entry cutoff speed [m/s]"
+  },
+  "selected_script": [
+   0.0,
+   1.7819,
+   1.0,
+   14.6334,
+   -0.0841,
+   23136.532,
+   883.9084,
+   0.9888
+  ]
+ },
+ "arms": {
+  "dc7_pinned": {
+   "rig": "dc7",
+   "n": 168,
+   "landed": 44,
+   "rate": 0.2619,
+   "wilson_ci95": [
+    0.20127485645342014,
+    0.3331797475227076
+   ],
+   "cluster_ci95": [
+    0.1845,
+    0.3452
+   ],
+   "failure_categories": {
+    "planning_infeasible": 123,
+    "execution_failure": 1,
+    "accuracy": 0,
+    "fuel": 0
+   },
+   "reason_mix": {
+    "CORRIDOR_MISSED": 123,
+    "INSUFFICIENT_PROPELLANT_RESERVE": 1
+   },
+   "per_seed": {
+    "501": {
+     "landed": 4,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 17,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "502": {
+     "landed": 9,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 12,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "503": {
+     "landed": 4,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 17,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "504": {
+     "landed": 3,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 18,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "505": {
+     "landed": 6,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 15,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "506": {
+     "landed": 10,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 10,
+      "execution_failure": 1,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "507": {
+     "landed": 4,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 17,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "508": {
+     "landed": 4,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 17,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    }
+   },
+   "median_fly_s": 2.1
+  },
+  "starbase_pinned": {
+   "rig": "starbase",
+   "n": 168,
+   "landed": 11,
+   "rate": 0.0655,
+   "wilson_ci95": [
+    0.0369508952173935,
+    0.11342875703903946
+   ],
+   "cluster_ci95": [
+    0.0476,
+    0.0893
+   ],
+   "failure_categories": {
+    "planning_infeasible": 154,
+    "execution_failure": 3,
+    "accuracy": 0,
+    "fuel": 0
+   },
+   "reason_mix": {
+    "CORRIDOR_MISSED": 154,
+    "INSUFFICIENT_PROPELLANT_RESERVE": 3
+   },
+   "per_seed": {
+    "501": {
+     "landed": 1,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 20,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "502": {
+     "landed": 1,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 19,
+      "execution_failure": 1,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "503": {
+     "landed": 1,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 20,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "504": {
+     "landed": 2,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 18,
+      "execution_failure": 1,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "505": {
+     "landed": 1,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 20,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "506": {
+     "landed": 3,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 17,
+      "execution_failure": 1,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "507": {
+     "landed": 1,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 20,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "508": {
+     "landed": 1,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 20,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    }
+   },
+   "median_fly_s": 2.1
+  },
+  "dc8_robust": {
+   "rig": "dc8",
+   "n": 168,
+   "landed": 0,
+   "rate": 0.0,
+   "wilson_ci95": [
+    0.0,
+    0.022354668349868045
+   ],
+   "cluster_ci95": [
+    0.0,
+    0.0
+   ],
+   "failure_categories": {
+    "planning_infeasible": 168,
+    "execution_failure": 0,
+    "accuracy": 0,
+    "fuel": 0
+   },
+   "reason_mix": {
+    "CORRIDOR_MISSED": 168
+   },
+   "per_seed": {
+    "501": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "502": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "503": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "504": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "505": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "506": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "507": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "508": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    }
+   },
+   "median_fly_s": 2.1
+  },
+  "dc8_binary": {
+   "rig": "dc8",
+   "n": 168,
+   "landed": 0,
+   "rate": 0.0,
+   "wilson_ci95": [
+    0.0,
+    0.022354668349868045
+   ],
+   "cluster_ci95": [
+    0.0,
+    0.0
+   ],
+   "failure_categories": {
+    "planning_infeasible": 168,
+    "execution_failure": 0,
+    "accuracy": 0,
+    "fuel": 0
+   },
+   "reason_mix": {
+    "CORRIDOR_MISSED": 168
+   },
+   "per_seed": {
+    "501": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "502": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "503": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "504": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "505": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "506": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "507": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    },
+    "508": {
+     "landed": 0,
+     "n": 21,
+     "failure_categories": {
+      "planning_infeasible": 21,
+      "execution_failure": 0,
+      "accuracy": 0,
+      "fuel": 0
+     }
+    }
+   },
+   "median_fly_s": 2.1
+  }
+ },
+ "paired": [
+  {
+   "method": "exact binomial on discordant pairs (McNemar); chi-squared with continuity correction alongside",
+   "n_pairs": 168,
+   "n_discordant": 44,
+   "successes_a_only": 0,
+   "successes_b_only": 44,
+   "paired_rate_difference": -0.2619047619047619,
+   "exact": {
+    "statistic": 0,
+    "p_value": 1.1368683772161603e-13
+   },
+   "chi2_continuity": {
+    "statistic": 42.02272727272727,
+    "p_value": 9.021872818347139e-11
+   },
+   "table": {
+    "both": 0,
+    "a_only": 0,
+    "b_only": 44,
+    "neither": 124
+   },
+   "arms": [
+    "dc8_robust",
+    "dc7_pinned"
+   ],
+   "p_raw": 1.1368683772161603e-13,
+   "paired_ci": {
+    "diff": -0.2619,
+    "ci95": [
+     -0.3452,
+     -0.1845
+    ]
+   },
+   "p_holm": 3.410605131648481e-13,
+   "holm_row": {
+    "rank": 1,
+    "raw_p": 1.1368683772161603e-13,
+    "threshold": 0.016666666666666666,
+    "adjusted_p": 3.410605131648481e-13,
+    "reject": true
+   },
+   "significant": false
+  },
+  {
+   "method": "exact binomial on discordant pairs (McNemar); chi-squared with continuity correction alongside",
+   "n_pairs": 168,
+   "n_discordant": 11,
+   "successes_a_only": 0,
+   "successes_b_only": 11,
+   "paired_rate_difference": -0.06547619047619048,
+   "exact": {
+    "statistic": 0,
+    "p_value": 0.0009765625
+   },
+   "chi2_continuity": {
+    "statistic": 9.090909090909092,
+    "p_value": 0.002568831527022717
+   },
+   "table": {
+    "both": 0,
+    "a_only": 0,
+    "b_only": 11,
+    "neither": 157
+   },
+   "arms": [
+    "dc8_robust",
+    "starbase_pinned"
+   ],
+   "p_raw": 0.0009765625,
+   "paired_ci": {
+    "diff": -0.0655,
+    "ci95": [
+     -0.0893,
+     -0.0476
+    ]
+   },
+   "p_holm": 0.001953125,
+   "holm_row": {
+    "rank": 2,
+    "raw_p": 0.0009765625,
+    "threshold": 0.025,
+    "adjusted_p": 0.001953125,
+    "reject": true
+   },
+   "significant": false
+  },
+  {
+   "method": "exact binomial on discordant pairs (McNemar); chi-squared with continuity correction alongside",
+   "n_pairs": 168,
+   "n_discordant": 0,
+   "successes_a_only": 0,
+   "successes_b_only": 0,
+   "paired_rate_difference": 0.0,
+   "exact": {
+    "statistic": 0,
+    "p_value": 1.0
+   },
+   "chi2_continuity": null,
+   "table": {
+    "both": 0,
+    "a_only": 0,
+    "b_only": 0,
+    "neither": 168
+   },
+   "arms": [
+    "dc8_robust",
+    "dc8_binary"
+   ],
+   "p_raw": 1.0,
+   "paired_ci": {
+    "diff": 0.0,
+    "ci95": [
+     0.0,
+     0.0
+    ]
+   },
+   "p_holm": 1.0,
+   "holm_row": {
+    "rank": 3,
+    "raw_p": 1.0,
+    "threshold": 0.05,
+    "adjusted_p": 1.0,
+    "reject": false
+   },
+   "significant": false
+  }
+ ],
+ "nominals": {
+  "dc8": {
+   "arm": "nominal-dc8",
+   "seed": 0,
+   "idx": 0,
+   "script_tag": "v0",
+   "outcome": "failed",
+   "reason": "CORRIDOR_MISSED",
+   "checks": {
+    "recovery-landing": false,
+    "recovery-propellant-reserve": true,
+    "handoff-separation-boostback": true,
+    "handoff-boostback-entry": true,
+    "handoff-landing-touchdown": true,
+    "handoff-mass-monotonic-boostback": true,
+    "handoff-mass-coast-entry": true,
+    "handoff-mass-terminal": true,
+    "joint-max-q-boostback": true,
+    "joint-max-q-entry": true,
+    "joint-propellant-corridor-budget": true,
+    "joint-touchdown-position": false,
+    "joint-touchdown-vertical-speed": false,
+    "joint-touchdown-lateral-speed": false,
+    "joint-propellant-reserve-touchdown": true
+   },
+   "category": "planning_infeasible",
+   "script": [
+    0.0,
+    1.7819181372306272,
+    1.0,
+    14.633351859345975,
+    -0.08413387567652653,
+    23136.5319893977,
+    883.9083834522207,
+    0.9888070411058602
+   ],
+   "miss_m": 406.43894237171986,
+   "entry_q_pa": 222417.50508422917,
+   "entry_g": 8.469442185226205,
+   "fuel_margin_kg": 90179.75176006212,
+   "handoff": {
+    "handoff-separation-boostback": true,
+    "handoff-boostback-entry": true,
+    "handoff-landing-touchdown": true,
+    "handoff-mass-monotonic-boostback": true,
+    "handoff-mass-coast-entry": true,
+    "handoff-mass-terminal": true,
+    "joint-max-q-boostback": true,
+    "joint-max-q-entry": true,
+    "joint-propellant-corridor-budget": true,
+    "joint-touchdown-position": false,
+    "joint-touchdown-vertical-speed": false,
+    "joint-touchdown-lateral-speed": false,
+    "joint-propellant-reserve-touchdown": true
+   },
+   "dur_s": 2.1
+  },
+  "dc8_binary": {
+   "arm": "nominal-dc8",
+   "seed": 0,
+   "idx": 0,
+   "script_tag": "v0",
+   "outcome": "failed",
+   "reason": "CORRIDOR_MISSED",
+   "checks": {
+    "recovery-landing": false,
+    "recovery-propellant-reserve": true
+   },
+   "category": "planning_infeasible",
+   "script": [
+    0.0,
+    1.7819181372306272,
+    1.0,
+    14.633351859345975,
+    -0.08413387567652653,
+    23136.5319893977,
+    883.9083834522207,
+    0.9888070411058602
+   ],
+   "miss_m": 406.43894237171986,
+   "entry_q_pa": 222417.50508422917,
+   "entry_g": 8.469442185226205,
+   "fuel_margin_kg": 90179.75176006212,
+   "dur_s": 2.1
+  },
+  "dc7": {
+   "arm": "nominal-dc7",
+   "seed": 0,
+   "idx": 0,
+   "script_tag": "v0",
+   "outcome": "landed",
+   "reason": "LANDED",
+   "checks": {
+    "recovery-landing": true,
+    "landing-position": true,
+    "landing-vertical-speed": true,
+    "landing-lateral-speed": true,
+    "landing-tilt": true,
+    "landing-propellant-reserve": true,
+    "landing-max-g": true,
+    "recovery-propellant-reserve": true
+   },
+   "category": "landed",
+   "script": [
+    12.603029379697258,
+    2.224379974065916,
+    0.9022621735815163,
+    7.250849321660938,
+    -4.407638122975939,
+    22742.87307869621,
+    232.9253255233905,
+    0.9152642191683049
+   ],
+   "miss_m": 55.2713670011773,
+   "entry_q_pa": 117789.18815139527,
+   "entry_g": 7.307521524102437,
+   "fuel_margin_kg": 12582.305088366324,
+   "touch_err_m": 0.3392695991303559,
+   "vert_m_s": -1.5000335750721498,
+   "lat_m_s": 0.03156993821535861,
+   "touch_propellant_kg": 113115.60219704232,
+   "dur_s": 2.2
+  },
+  "starbase": {
+   "arm": "nominal-starbase",
+   "seed": 0,
+   "idx": 0,
+   "script_tag": "v0",
+   "outcome": "landed",
+   "reason": "LANDED",
+   "checks": {
+    "recovery-landing": true,
+    "landing-position": true,
+    "landing-vertical-speed": true,
+    "landing-lateral-speed": true,
+    "landing-tilt": true,
+    "landing-propellant-reserve": true,
+    "landing-max-g": true,
+    "recovery-propellant-reserve": true
+   },
+   "category": "landed",
+   "script": [
+    54.327041908511475,
+    3.3912768164526135,
+    0.8430780477848527,
+    11.070997231839547,
+    7.148301332410036,
+    20838.60261613965,
+    218.4,
+    1.0
+   ],
+   "miss_m": 18.476615216965808,
+   "entry_q_pa": 131521.76649409268,
+   "entry_g": 7.994645919022413,
+   "fuel_margin_kg": 6731.473534429679,
+   "touch_err_m": 0.07693548809469798,
+   "vert_m_s": -1.7016541143544281,
+   "lat_m_s": 0.0070088590726587715,
+   "touch_propellant_kg": 107110.90720504522,
+   "dur_s": 2.3
+  }
+ },
+ "constraint_audit": {
+  "dc7": {
+   "min_propellant_reserve_kg": 100000,
+   "landing_vertical_max_m_s": 3.0,
+   "landing_lateral_max_m_s": 1.0,
+   "insertion_periapsis_min_m": null
+  },
+  "starbase": {
+   "min_propellant_reserve_kg": 100000,
+   "landing_vertical_max_m_s": 3.0,
+   "landing_lateral_max_m_s": 1.0,
+   "insertion_periapsis_min_m": null
+  },
+  "dc8": {
+   "min_propellant_reserve_kg": 100000,
+   "landing_vertical_max_m_s": 3.0,
+   "landing_lateral_max_m_s": 1.0,
+   "insertion_periapsis_min_m": null
+  },
+  "dc8_scenario": "leo_starship_class_rtls_e508_dc7.yaml",
+  "dc7_scenario": "leo_starship_class_rtls_e508_dc7.yaml",
+  "starbase_scenario": "leo_starship_class_rtls_e508_starbase.yaml",
+  "recipe_entry_window": {
+   "entry_q_max_pa": 250000.0,
+   "entry_g_max": 12.0
+  },
+  "landing": {
+   "max_thrust_accel_g": 4.0,
+   "tvc_rate_limit_deg_s": 20.0,
+   "tvc_lag_tau_s": 0.2,
+   "tvc_lag_compensation": true
+  },
+  "corridor_aim_margin_m": 7000.0,
+  "dc8_shares_dc7_scenario": true,
+  "dc8_uncertainty_bands": "DC8 uncertainty bands: inherited from the DC7 vehicle file (both files tag no MC dispersion; FL-304 class defaults stand)",
+  "graded_reserve_identical": true,
+  "constraints_unrelaxed": true
+ },
+ "e5_06_joint_gate": {
+  "contract": "E5-06 joint physical gate (five checks, all evidenced)",
+  "recovery_leg_checks_passed": false,
+  "nominal": {
+   "outcome": "failed",
+   "reason": "CORRIDOR_MISSED",
+   "checks": {
+    "recovery-landing": false,
+    "recovery-propellant-reserve": true,
+    "handoff-separation-boostback": true,
+    "handoff-boostback-entry": true,
+    "handoff-landing-touchdown": true,
+    "handoff-mass-monotonic-boostback": true,
+    "handoff-mass-coast-entry": true,
+    "handoff-mass-terminal": true,
+    "joint-max-q-boostback": true,
+    "joint-max-q-entry": true,
+    "joint-propellant-corridor-budget": true,
+    "joint-touchdown-position": false,
+    "joint-touchdown-vertical-speed": false,
+    "joint-touchdown-lateral-speed": false,
+    "joint-propellant-reserve-touchdown": true
+   },
+   "touch_err_m": null,
+   "vert_m_s": null,
+   "lat_m_s": null,
+   "touch_propellant_kg": null
+  },
+  "checks": {
+   "physical_check_landing": {
+    "status": "failed",
+    "evidenced_by": "e10_03 nominal flight (this report)"
+   },
+   "physical_check_mass_conservation": {
+    "status": "not_evidenced",
+    "checks": {
+     "handoff-mass-monotonic-boostback": true,
+     "handoff-mass-coast-entry": true,
+     "handoff-mass-terminal": true
+    }
+   },
+   "physical_check_epoch_frame_continuity": {
+    "status": "not_evidenced",
+    "checks": {
+     "handoff-separation-boostback": true,
+     "handoff-boostback-entry": true,
+     "handoff-landing-touchdown": true
+    }
+   },
+   "physical_check_orbit_insertion": {
+    "status": "passed_sealed",
+    "evidenced_by": "docs/benchmarks/e10_02_hot_staging.json (dc8_insertion_inside_band)"
+   },
+   "physical_check_parking_propagation": {
+    "status": "not_evidenced_single_environment",
+    "note": "tudatpy is not installed in this container; the cross-env leg is part of the E5-06 contract and its command is:",
+    "evidence_command": "orbitopt crossenv run --plan src/orbitopt/data/crossenv_e508_dc8_plan.yaml --env tudat=$TUDAT_PY --env gfold=$GFOLD_PY"
+   }
+  }
+ },
+ "sealed_baselines": {
+  "dc7": {
+   "record": "tests/data/mission/reference/e5-08-new-vehicle-dc7-reports/mc-summary-pinned.json",
+   "successes": 11,
+   "n": 36,
+   "success_rate": 0.3055555555555556,
+   "seeds": [
+    8,
+    9,
+    10
+   ]
+  },
+  "starbase": {
+   "record": "tests/data/mission/reference/e5-08-new-vehicle-starbase-reports/mc-summary-pinned.json",
+   "successes": 4,
+   "n": 36,
+   "success_rate": 0.1111111111111111,
+   "seeds": [
+    8,
+    9,
+    10
+   ]
+  }
+ }
+}

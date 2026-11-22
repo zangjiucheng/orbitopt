@@ -14,7 +14,7 @@ pitch, and the launch azimuth. Regenerate with `ORBITOPT_E508_VARIANT=starbase` 
 | joint full-mission gate (cross-env) | **passed**, all five physical checks (a fresh run: the orchestrator is not re-graded from a stale report) |
 | ascent limits | pass; peak 2.928 g (3.0), periapsis 232.2 km (230), inclination 30.79 deg |
 | ship propellant kept for deorbit/landing | 102.5 t (the E5-07 reference keeps 118.8 t) |
-| E8-05 independent dynamics | **27 of 28**; fails `ascent.debris_impact.speed` (12.8 % against a 12 % band) |
+| E8-05 independent dynamics | **27 of 28**; fails `ascent.debris_impact.speed` (12.8 % against a 12 % band) — E10-04: evidenced genuine aero-model difference, band unchanged |
 | Monte Carlo, pinned script, seeds 8/9/10 | **4 / 36 (11 %)** |
 | Monte Carlo, per-sample refine, seeds 8/9/10 | **0 / 36** |
 
@@ -36,3 +36,10 @@ pitch, and the launch azimuth. Regenerate with `ORBITOPT_E508_VARIANT=starbase` 
   250 kPa / 12 g entry limits the vehicle file declares.
 * Not a Kourou-to-Starbase isolated comparison: the comparison to the E5-07 reference crosses
   sites (launch geometry, target inclination).
+* E10-04 on the one open fail: replaying the twin's own debris integrator from the RECORDED
+  separation state and debris mass reproduces the gap (+12.7 % vs the reported 12.8 %), the
+  descent agrees to within 0.5 % until dynamic pressure passes ~100 kPa and the recorded body
+  then sheds 393 m/s below 22 km against the twin's 190 (~2x), and the declared (illustrative) power-off CA polar scaled x1.1 closes it
+  (+10.8 %). Timing, frame, interpolation and engine lines are ruled out by the identical-state
+  replay: this is a genuine drag-model difference between the two independent models, recorded
+  as such (see `debris-model-difference.json`); the 12 % band is unchanged.

@@ -1,0 +1,1035 @@
+{
+ "acceptance_1_calibration": {
+  "claim": "hold-out Brier skill > 0 and no severe overconfidence in any high-probability bin (edge >= 0.8) with n >= 10 (its interval covers the mean prediction)",
+  "pass": true,
+  "raw_model_same_test": {
+   "severe_overconfident_high_bands": 2,
+   "skill": -0.6186373790229549
+  },
+  "severe_overconfident_high_bands": 0,
+  "skill": 0.5648842209829325,
+  "skill_ci95_cluster": {
+   "ci95": [
+    0.4408,
+    0.6642
+   ],
+   "n_clusters": 4,
+   "trials": 4000
+  }
+ },
+ "acceptance_2_rejection_rules": {
+  "claim": "false rejections fall, impact split by paired FL-305 outcome, deep violations kept",
+  "deep_rejections_kept": [
+   51,
+   99
+  ],
+  "false_rejections": [
+   20,
+   10
+  ],
+  "false_rejections_kept_by_gate": {
+   "deep_violation": 4,
+   "probability_floor": 6,
+   "second_channel": 0
+  },
+  "holdout_regrades": {
+   "a_seeds": {
+    "new_rejections": 77,
+    "newly_admitted": 16,
+    "old_rejections": 93,
+    "rejection_gates": {
+     "admitted": 16,
+     "deep_violation": 47,
+     "probability_floor": 23,
+     "second_channel": 7
+    }
+   },
+   "b_bands": {
+    "new_rejections": 56,
+    "newly_admitted": 1,
+    "old_rejections": 57,
+    "rejection_gates": {
+     "admitted": 1,
+     "deep_violation": 44,
+     "probability_floor": 5,
+     "second_channel": 7
+    }
+   },
+   "c_rtls": {
+    "new_rejections": 38,
+    "newly_admitted": 0,
+    "old_rejections": 38,
+    "rejection_gates": {
+     "deep_violation": 38
+    }
+   }
+  },
+  "newly_admitted": 15,
+  "newly_admitted_by_paired_baseline": {
+   "failed": 5,
+   "landed": 10
+  },
+  "newly_admitted_paired_landing_rate": 0.6666666666666666,
+  "pass": true,
+  "previously_accepted_now_rejected": 0
+ },
+ "acceptance_3_band_shift": {
+  "calibrated": {
+   "ece": 0.03253531140870712,
+   "mce": 0.3396093892201886,
+   "severe_overconfident_high_bands": 0,
+   "skill": -0.09417308223110776
+  },
+  "claim": "under dispersion bands x1.5 the calibrated model is not severely overconfident and its calibration degradation is reported against the raw surrogate",
+  "interpretation": "the skill stays slightly negative because the x1.5 climatology (0.023) is a near-deterministic-failure population every probabilistic forecast must lose to on Brier alone; what the task's criterion measures -- calibration, not ranking -- improved from ECE 0.425 to 0.033, and the raw model's overconfident high band (predicted 0.85 at 0.18 achieved on cell a) is gone: cell b holds no high band the calibrated model dares to claim.",
+  "pass": true,
+  "raw": {
+   "ece": 0.4250573102017869,
+   "mce": 0.959644746931056,
+   "skill": -9.383258345424405
+  }
+ },
+ "admission_regrade": {
+  "deep_rejections_kept": 51,
+  "false_rejections_kept_by_gate": {
+   "deep_violation": 4,
+   "probability_floor": 6,
+   "second_channel": 0
+  },
+  "false_rejections_new": 10,
+  "false_rejections_old": 20,
+  "new_rejection_severity": {
+   "deep": 51,
+   "mid": 30,
+   "near": 18
+  },
+  "new_rejections": 84,
+  "newly_admitted": 15,
+  "newly_admitted_by_paired_baseline": {
+   "failed": 5,
+   "landed": 10
+  },
+  "non_joint_rows": 0,
+  "old_rejections": 99,
+  "previously_accepted_now_rejected": 0,
+  "rejection_gates": {
+   "admitted": 15,
+   "deep_violation": 51,
+   "probability_floor": 18,
+   "second_channel": 15
+  }
+ },
+ "candidate_ranking": {
+  "holdout_a_seeds_auc_recorded": {
+   "calibrated": 0.9493142516398331,
+   "hybrid_rank": 0.9825084476247267,
+   "raw_p_raw": 0.9795269330153051
+  },
+  "holdout_a_seeds_top25_landing_rate": {
+   "e1006_rank_order": 0.88,
+   "raw_p_raw_order": 0.88
+  },
+  "note": "AUC is over the full cell (both classes); the hybrid keeps the raw surrogate's ordering wherever the old rule already flew the burn and substitutes the calibrated probability exactly where E7-05 measured it wrong. The rank puts admissible candidates first, which is the change that matters operationally: 15 of the training grid's 99 rejected rows become flyable.",
+  "training_grid_auc_paired_fl305": {
+   "calibrated": 0.8138211382113821,
+   "raw_p_raw": 0.8287262872628727
+  }
+ },
+ "holdout": {
+  "a_seeds": {
+   "auc": {
+    "calibrated": 0.9493142516398331,
+    "raw_p_raw": 0.9795269330153051
+   },
+   "calibrated": {
+    "bands": [
+     {
+      "bin": [
+       0.0,
+       0.5
+      ],
+      "cluster_ci95": [
+       0.06015037593984962,
+       0.06451612903225806
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.08150008819007168,
+      "n": 128,
+      "observed_rate": 0.0625,
+      "severe_overconfidence": false,
+      "verdict": "consistent",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.03200692569506119,
+       "method": "wilson_score",
+       "n": 128,
+       "point": 0.0625,
+       "standard_error": 0.02139541240254555,
+       "successes": 8,
+       "upper": 0.11848791104425863
+      },
+      "wilson_covers_predicted": true
+     },
+     {
+      "bin": [
+       0.5,
+       0.8
+      ],
+      "cluster_ci95": [
+       0.6956521739130435,
+       1.0
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.5973860731783555,
+      "n": 19,
+      "observed_rate": 0.8421052631578947,
+      "severe_overconfidence": false,
+      "verdict": "underconfident",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.6243452472967093,
+       "method": "wilson_score",
+       "n": 19,
+       "point": 0.8421052631578947,
+       "standard_error": 0.08365467518305542,
+       "successes": 16,
+       "upper": 0.9447952836146585
+      },
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.8,
+       0.9
+      ],
+      "cluster_ci95": [
+       0.85,
+       1.0
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.8485392135000054,
+      "n": 13,
+      "observed_rate": 0.9230769230769231,
+      "severe_overconfidence": false,
+      "verdict": "consistent",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.6668604907890041,
+       "method": "wilson_score",
+       "n": 13,
+       "point": 0.9230769230769231,
+       "standard_error": 0.07390530175619404,
+       "successes": 12,
+       "upper": 0.9862895787574433
+      },
+      "wilson_covers_predicted": true
+     },
+     {
+      "bin": [
+       0.9,
+       0.95
+      ],
+      "cluster_ci95": [
+       0.0,
+       1.0
+      ],
+      "cluster_covers_predicted": true,
+      "mean_predicted": 0.9327047754005058,
+      "n": 5,
+      "observed_rate": 0.6,
+      "severe_overconfidence": false,
+      "verdict": "overconfident",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.23072428127601297,
+       "method": "wilson_score",
+       "n": 5,
+       "point": 0.6,
+       "standard_error": 0.21908902300206645,
+       "successes": 3,
+       "upper": 0.8823792257673521
+      },
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.95,
+       1.0
+      ],
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.9719236905171477,
+      "n": 3,
+      "observed_rate": 0.0,
+      "severe_overconfidence": false,
+      "verdict": "insufficient_data",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.0,
+       "method": "wilson_score",
+       "n": 3,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "successes": 0,
+       "upper": 0.5614970317550454
+      },
+      "wilson_covers_predicted": false
+     }
+    ],
+    "brier": 0.07756049759902447,
+    "climatology_reference": 0.17825255102040816,
+    "ece": 0.07517833970829954,
+    "mce": 0.9719236905171477,
+    "skill": 0.5648842209829325,
+    "skill_ci95_cluster": {
+     "ci95": [
+      0.4408,
+      0.6642
+     ],
+     "n_clusters": 4,
+     "trials": 4000
+    }
+   },
+   "landed": 39,
+   "n": 168,
+   "name": "a_seeds",
+   "raw_p_raw": {
+    "bands": [
+     {
+      "bin": [
+       0.0,
+       0.5
+      ],
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.31127672732346884,
+      "n": 53,
+      "observed_rate": 0.0,
+      "severe_overconfidence": false,
+      "verdict": "overconfident",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.0,
+       "method": "wilson_score",
+       "n": 53,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "successes": 0,
+       "upper": 0.06758198857654184
+      },
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.5,
+       0.8
+      ],
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.6651909714497642,
+      "n": 48,
+      "observed_rate": 0.0,
+      "severe_overconfidence": false,
+      "verdict": "overconfident",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.0,
+       "method": "wilson_score",
+       "n": 48,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "successes": 0,
+       "upper": 0.07410012966611745
+      },
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.8,
+       0.9
+      ],
+      "cluster_ci95": [
+       0.03571428571428571,
+       0.36363636363636365
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.8533581439463641,
+      "n": 27,
+      "observed_rate": 0.18518518518518517,
+      "severe_overconfidence": true,
+      "verdict": "overconfident",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.08180707142976532,
+       "method": "wilson_score",
+       "n": 27,
+       "point": 0.18518518518518517,
+       "standard_error": 0.07475679886660473,
+       "successes": 5,
+       "upper": 0.36698683618548433
+      },
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.9,
+       0.95
+      ],
+      "cluster_ci95": [
+       0.5,
+       1.0
+      ],
+      "cluster_covers_predicted": true,
+      "mean_predicted": 0.9299712696475725,
+      "n": 20,
+      "observed_rate": 0.8,
+      "severe_overconfidence": true,
+      "verdict": "overconfident",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.5839825677481065,
+       "method": "wilson_score",
+       "n": 20,
+       "point": 0.8,
+       "standard_error": 0.08944271909999157,
+       "successes": 16,
+       "upper": 0.9193423374202019
+      },
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.95,
+       1.0
+      ],
+      "cluster_ci95": [
+       0.8333333333333334,
+       1.0
+      ],
+      "cluster_covers_predicted": true,
+      "mean_predicted": 0.969541788868996,
+      "n": 20,
+      "observed_rate": 0.9,
+      "severe_overconfidence": false,
+      "verdict": "consistent",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.6989663547715128,
+       "method": "wilson_score",
+       "n": 20,
+       "point": 0.9,
+       "standard_error": 0.06708203932499368,
+       "successes": 18,
+       "upper": 0.9721335187862319
+      },
+      "wilson_covers_predicted": true
+     }
+    ],
+    "brier": 0.288526241987829,
+    "climatology_reference": 0.17825255102040816,
+    "ece": 0.41939145377747455,
+    "mce": 0.6681729587611789,
+    "skill": -0.6186373790229549,
+    "skill_ci95_cluster": {
+     "ci95": [
+      -1.0314,
+      -0.3268
+     ],
+     "n_clusters": 4,
+     "trials": 4000
+    }
+   }
+  },
+  "b_bands": {
+   "auc": {
+    "calibrated": 0.9634146341463414,
+    "raw_p_raw": 0.975609756097561
+   },
+   "calibrated": {
+    "bands": [
+     {
+      "bin": [
+       0.0,
+       0.5
+      ],
+      "cluster_ci95": [
+       0.0,
+       0.025
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.029681607518133053,
+      "n": 80,
+      "observed_rate": 0.0125,
+      "severe_overconfidence": false,
+      "verdict": "consistent",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.0022099755204522675,
+       "method": "wilson_score",
+       "n": 80,
+       "point": 0.0125,
+       "standard_error": 0.01242162932146987,
+       "successes": 1,
+       "upper": 0.06746270077668665
+      },
+      "wilson_covers_predicted": true
+     },
+     {
+      "bin": [
+       0.5,
+       0.8
+      ],
+      "cluster_ci95": [
+       0.0,
+       0.5
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.5896093892201886,
+      "n": 4,
+      "observed_rate": 0.25,
+      "severe_overconfidence": false,
+      "verdict": "insufficient_data",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.0455872608097006,
+       "method": "wilson_score",
+       "n": 4,
+       "point": 0.25,
+       "standard_error": 0.21650635094610965,
+       "successes": 1,
+       "upper": 0.699358157417598
+      },
+      "wilson_covers_predicted": true
+     },
+     {
+      "bin": [
+       0.8,
+       0.9
+      ],
+      "cluster_ci95": null,
+      "cluster_covers_predicted": false,
+      "mean_predicted": null,
+      "n": 0,
+      "observed_rate": null,
+      "severe_overconfidence": false,
+      "verdict": "insufficient_data",
+      "wilson": null,
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.9,
+       0.95
+      ],
+      "cluster_ci95": null,
+      "cluster_covers_predicted": false,
+      "mean_predicted": null,
+      "n": 0,
+      "observed_rate": null,
+      "severe_overconfidence": false,
+      "verdict": "insufficient_data",
+      "wilson": null,
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.95,
+       1.0
+      ],
+      "cluster_ci95": null,
+      "cluster_covers_predicted": false,
+      "mean_predicted": null,
+      "n": 0,
+      "observed_rate": null,
+      "severe_overconfidence": false,
+      "verdict": "insufficient_data",
+      "wilson": null,
+      "wilson_covers_predicted": false
+     }
+    ],
+    "brier": 0.025431460528047286,
+    "climatology_reference": 0.023242630385487528,
+    "ece": 0.03253531140870712,
+    "mce": 0.3396093892201886,
+    "skill": -0.09417308223110776,
+    "skill_ci95_cluster": {
+     "ci95": [
+      -0.4798,
+      0.2915
+     ],
+     "n_clusters": 2,
+     "trials": 4000
+    }
+   },
+   "landed": 2,
+   "n": 84,
+   "name": "b_bands",
+   "raw_p_raw": {
+    "bands": [
+     {
+      "bin": [
+       0.0,
+       0.5
+      ],
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.2838776592239083,
+      "n": 51,
+      "observed_rate": 0.0,
+      "severe_overconfidence": false,
+      "verdict": "overconfident",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.0,
+       "method": "wilson_score",
+       "n": 51,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "successes": 0,
+       "upper": 0.07004661989853139
+      },
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.5,
+       0.8
+      ],
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.6446737346794135,
+      "n": 25,
+      "observed_rate": 0.0,
+      "severe_overconfidence": false,
+      "verdict": "overconfident",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.0,
+       "method": "wilson_score",
+       "n": 25,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "successes": 0,
+       "upper": 0.13319225093904843
+      },
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.8,
+       0.9
+      ],
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.8479362528872935,
+      "n": 4,
+      "observed_rate": 0.0,
+      "severe_overconfidence": false,
+      "verdict": "insufficient_data",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.0,
+       "method": "wilson_score",
+       "n": 4,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "successes": 0,
+       "upper": 0.4898908364545972
+      },
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.9,
+       0.95
+      ],
+      "cluster_ci95": [
+       0.5,
+       1.0
+      ],
+      "cluster_covers_predicted": true,
+      "mean_predicted": 0.9196067703550695,
+      "n": 3,
+      "observed_rate": 0.6666666666666666,
+      "severe_overconfidence": false,
+      "verdict": "insufficient_data",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.20765960080204782,
+       "method": "wilson_score",
+       "n": 3,
+       "point": 0.6666666666666666,
+       "standard_error": 0.2721655269759087,
+       "successes": 2,
+       "upper": 0.9385080552796038
+      },
+      "wilson_covers_predicted": true
+     },
+     {
+      "bin": [
+       0.95,
+       1.0
+      ],
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.959644746931056,
+      "n": 1,
+      "observed_rate": 0.0,
+      "severe_overconfidence": false,
+      "verdict": "insufficient_data",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.0,
+       "method": "wilson_score",
+       "n": 1,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "successes": 0,
+       "upper": 0.7934506856227626
+      },
+      "wilson_covers_predicted": false
+     }
+    ],
+    "brier": 0.24133423591972822,
+    "climatology_reference": 0.023242630385487528,
+    "ece": 0.4250573102017869,
+    "mce": 0.959644746931056,
+    "skill": -9.383258345424405,
+    "skill_ci95_cluster": {
+     "ci95": [
+      -10.2642,
+      -8.5023
+     ],
+     "n_clusters": 2,
+     "trials": 4000
+    }
+   }
+  },
+  "c_rtls": {
+   "calibrated": {
+    "bands": [
+     {
+      "bin": [
+       0.0,
+       0.5
+      ],
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.02154760106365736,
+      "n": 48,
+      "observed_rate": 0.0,
+      "severe_overconfidence": false,
+      "verdict": "consistent",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.0,
+       "method": "wilson_score",
+       "n": 48,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "successes": 0,
+       "upper": 0.07410012966611745
+      },
+      "wilson_covers_predicted": true
+     },
+     {
+      "bin": [
+       0.5,
+       0.8
+      ],
+      "cluster_ci95": null,
+      "cluster_covers_predicted": false,
+      "mean_predicted": null,
+      "n": 0,
+      "observed_rate": null,
+      "severe_overconfidence": false,
+      "verdict": "insufficient_data",
+      "wilson": null,
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.8,
+       0.9
+      ],
+      "cluster_ci95": null,
+      "cluster_covers_predicted": false,
+      "mean_predicted": null,
+      "n": 0,
+      "observed_rate": null,
+      "severe_overconfidence": false,
+      "verdict": "insufficient_data",
+      "wilson": null,
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.9,
+       0.95
+      ],
+      "cluster_ci95": null,
+      "cluster_covers_predicted": false,
+      "mean_predicted": null,
+      "n": 0,
+      "observed_rate": null,
+      "severe_overconfidence": false,
+      "verdict": "insufficient_data",
+      "wilson": null,
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.95,
+       1.0
+      ],
+      "cluster_ci95": null,
+      "cluster_covers_predicted": false,
+      "mean_predicted": null,
+      "n": 0,
+      "observed_rate": null,
+      "severe_overconfidence": false,
+      "verdict": "insufficient_data",
+      "wilson": null,
+      "wilson_covers_predicted": false
+     }
+    ],
+    "brier": 0.0006901727736530566,
+    "climatology_reference": 0.0,
+    "ece": 0.02154760106365736,
+    "mce": 0.02154760106365736,
+    "skill": null,
+    "skill_ci95_cluster": {
+     "ci95": null,
+     "n_clusters": 2
+    }
+   },
+   "landed": 0,
+   "n": 48,
+   "name": "c_rtls",
+   "raw_p_raw": {
+    "bands": [
+     {
+      "bin": [
+       0.0,
+       0.5
+      ],
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.38811775634825585,
+      "n": 17,
+      "observed_rate": 0.0,
+      "severe_overconfidence": false,
+      "verdict": "overconfident",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.0,
+       "method": "wilson_score",
+       "n": 17,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "successes": 0,
+       "upper": 0.18431813500885175
+      },
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.5,
+       0.8
+      ],
+      "cluster_ci95": [
+       0.0,
+       0.0
+      ],
+      "cluster_covers_predicted": false,
+      "mean_predicted": 0.5818234115620478,
+      "n": 31,
+      "observed_rate": 0.0,
+      "severe_overconfidence": false,
+      "verdict": "overconfident",
+      "wilson": {
+       "confidence_level": 0.95,
+       "lower": 0.0,
+       "method": "wilson_score",
+       "n": 31,
+       "point": 0.0,
+       "standard_error": 0.0,
+       "successes": 0,
+       "upper": 0.1102553954604359
+      },
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.8,
+       0.9
+      ],
+      "cluster_ci95": null,
+      "cluster_covers_predicted": false,
+      "mean_predicted": null,
+      "n": 0,
+      "observed_rate": null,
+      "severe_overconfidence": false,
+      "verdict": "insufficient_data",
+      "wilson": null,
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.9,
+       0.95
+      ],
+      "cluster_ci95": null,
+      "cluster_covers_predicted": false,
+      "mean_predicted": null,
+      "n": 0,
+      "observed_rate": null,
+      "severe_overconfidence": false,
+      "verdict": "insufficient_data",
+      "wilson": null,
+      "wilson_covers_predicted": false
+     },
+     {
+      "bin": [
+       0.95,
+       1.0
+      ],
+      "cluster_ci95": null,
+      "cluster_covers_predicted": false,
+      "mean_predicted": null,
+      "n": 0,
+      "observed_rate": null,
+      "severe_overconfidence": false,
+      "verdict": "insufficient_data",
+      "wilson": null,
+      "wilson_covers_predicted": false
+     }
+    ],
+    "brier": 0.27716054832011,
+    "climatology_reference": 0.0,
+    "ece": 0.5132193253404965,
+    "mce": 0.5818234115620478,
+    "skill": null,
+    "skill_ci95_cluster": {
+     "ci95": null,
+     "n_clusters": 2
+    }
+   }
+  }
+ },
+ "kind": "orbitopt.e10-06.chance-constraint-redesign",
+ "model_selection": {
+  "candidates": {
+   "physical": {
+    "bands_x15": {
+     "ece": 0.03253531140870712,
+     "skill": -0.09417308223110776
+    },
+    "coefficients": [
+     -4.120438063536452,
+     2.733026209007225,
+     -22.256139996971008
+    ],
+    "features": [
+     "fuel_z",
+     "divert_violation"
+    ],
+    "loso_cv_skill": {
+     "mean": 0.49110494061496063,
+     "per_seed": [
+      0.15736567490895104,
+      0.6068298289319196,
+      0.608950063921532,
+      0.5912741946974399
+     ]
+    },
+    "train_fit_skill": 0.5688841661527472
+   },
+   "platt_augmented": {
+    "bands_x15": {
+     "ece": 0.03526824914002566,
+     "skill": -0.24841077599814443
+    },
+    "coefficients": [
+     -6.88842398197559,
+     -0.9068809545491875,
+     -5.227960535247747,
+     3.9470891306106957
+    ],
+    "features": [
+     "fuel_z",
+     "divert_violation",
+     "p_raw_logit"
+    ],
+    "loso_cv_skill": {
+     "mean": 0.6786838432355871,
+     "per_seed": [
+      0.45081197254872907,
+      0.635490331625762,
+      0.7419896262826943,
+      0.886443442485163
+     ]
+    },
+    "train_fit_skill": 0.7460279912595866
+   }
+  },
+  "chosen": "physical",
+  "monotone_by_fit": true,
+  "rule": "the task states the probability model must stay sane when the dispersion bands move and the constraint semantics demand a model no plan can push by spending margin: the physical model is the only candidate monotone in its arguments by fit (positive fuel-z, negative divert weights) AND the best on the band-shifted cell; the Platt-augmented variant leads the in-band CV (+0.679 vs +0.491) but inherits the training band's overconfidence (-0.25 at x1.5 vs -0.09) and its fit weight on the fuel margin is negative -- a plan could 'buy' probability by spending fuel it does not have."
+ },
+ "no_success_claim": "this benchmark re-cuts recorded campaigns; the MC success-rate effect of the new admission rule is bounded above by the paired-FL-305 landing rate of the newly admitted rows (10/15 = 0.67 on the training grid) and is NOT claimed here -- a fresh confirmation campaign (E10-03) owes that number.",
+ "planner_integration": {
+  "option": "plan_boostback_entry(..., joint_admission=policy.to_dict())",
+  "smoke": "tests/test_flightlab_recovery_redesign.py::test_planner_admits_shallow_violation_only_with_policy"
+ },
+ "policy": {
+  "deep_violation": 0.5,
+  "min_admission_probability": 0.208,
+  "min_admission_probability_note": "recorded joint-arm climatology 35/168 (DESIGN ASSUMPTION, redesign module)",
+  "second_violation_max": 0.15
+ },
+ "provenance": {
+  "analysis": "offline re-cut of the recorded campaigns; no new flights",
+  "bootstrap": {
+   "seed": 20261118,
+   "trials": 4000
+  },
+  "holdout_inputs": "docs/benchmarks/e7_05_out_of_sample_reliability.json [holdout a_seeds 168 / b_bands 84 / c_rtls 48 paired_rows]",
+  "min_coverage_n": 10,
+  "pairing_input": "docs/benchmarks/e3_03_robust_montecarlo.json [runs.fl305_baseline paired_rows, same [seed, idx] grid]",
+  "training_input": "docs/benchmarks/e7_04_failure_driven.json [e7_04_joint_base paired_rows, 168 rows, seeds 1-4]"
+ },
+ "verdict": {
+  "acceptance_1": true,
+  "acceptance_2": true,
+  "acceptance_3": true,
+  "overall": true
+ }
+}
