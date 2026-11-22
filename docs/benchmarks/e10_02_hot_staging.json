@@ -1,0 +1,517 @@
+{
+ "schema": "e10-02-hot-staging-1.0",
+ "created_utc": "2026-11-21T23:49:55Z",
+ "elapsed_s": 968.4,
+ "scenario": "leo_starship_class_rtls_e508_dc7.yaml",
+ "assumptions": {
+  "plume_axial_loss_fraction": 0.04,
+  "slew_limit_fraction_per_s": 0.05,
+  "throttle_floor_fraction": 0.4,
+  "note": "DESIGN ASSUMPTIONs recorded in the DC8 vehicle file: no public plume-interference or Raptor throttle-slew coefficients exist; the 40 % floor is the inherited DC1 assumption."
+ },
+ "timeline_dc8": {
+  "throttle_down_s": 100.0,
+  "ship_ignition_s": 124.0,
+  "separation_s": 125.0,
+  "booster_meco_s": 125.5
+ },
+ "timeline_order_ok": true,
+ "event_order_flown_ok": true,
+ "acceptance": {
+  "dc8_throttle_continuous_no_over_gate_step": true,
+  "dc8_ship_ignites_before_separation": true,
+  "dc8_no_unpowered_gap_flown": true,
+  "dc8_timeline_order": true,
+  "dc8_insertion_inside_band": true,
+  "dc8_twin_and_ot_both_represent_timeline": true
+ },
+ "stage1_thrust_steps": {
+  "dc7": {
+   "max_step_fraction": 0.0,
+   "max_slew_fraction_of_peak_per_s": 0.17252240529051804,
+   "cutoff_step_fraction_of_peak": 0.769616969963898,
+   "steps": [],
+   "slews": [
+    {
+     "t_s": 101.0,
+     "slew_fraction_of_peak_per_s": -0.17252240529051804
+    },
+    {
+     "t_s": 123.0,
+     "slew_fraction_of_peak_per_s": -0.0026300283975265464
+    }
+   ]
+  },
+  "dc8": {
+   "max_step_fraction": 0.0,
+   "max_slew_fraction_of_peak_per_s": 0.04499764154836652,
+   "cutoff_step_fraction_of_peak": 0.4,
+   "steps": [],
+   "slews": [
+    {
+     "t_s": 105.0,
+     "slew_fraction_of_peak_per_s": -0.03450448105810361
+    },
+    {
+     "t_s": 125.5,
+     "slew_fraction_of_peak_per_s": -0.04499764154836652
+    }
+   ]
+  },
+  "verdict": "DC7 cuts throttle 74.93->62 MN in one 1 s step at 101 s (17.3 %/s effective slew) and cuts off at 77 % of peak; DC8 throttles continuously at <= 4.5 %/s to the 40 % floor and cuts off AT the floor -- the cutoff discontinuity halves."
+ },
+ "hot_staging_timeline_contract": {
+  "overlap_s": 1.0,
+  "meco_after_separation_s": 0.5,
+  "ot_limitation": "the single-stack OT plant ends all stack power at separation; the booster's 0.5 s floor burn after separation (~2.6 t, ~1 m/s, booster-only) is not representable and is disclosed, not absorbed.",
+  "ship_ignition_event_ot_clock": 125.0
+ },
+ "comparison_cold_vs_hot": {
+  "separation_speed_m_s": {
+   "dc7": 1754.6605604291985,
+   "dc8": 1815.7737213612659
+  },
+  "stage1_propellant_at_separation_kg": {
+   "dc7": 663584.5042610611,
+   "dc8": 625172.4216750283
+  },
+  "insertion_periapsis_altitude_m": {
+   "dc7": 232026.43047139328,
+   "dc8": 232323.54390263185
+  },
+  "insertion_apoapsis_altitude_m": {
+   "dc7": 234780.3162643509,
+   "dc8": 256098.0378021067
+  },
+  "ship_propellant_margin_kg": {
+   "dc7": 101213.52171249627,
+   "dc8": 103548.46198960347
+  },
+  "ascent_checks_pass": {
+   "dc7": true,
+   "dc8": true
+  }
+ },
+ "dc7": {
+  "vehicle": "starship_class_rtls_dc7.yaml",
+  "events_s": {
+   "stage1_ignition": 0.0,
+   "max_q": 58.41238294364207,
+   "stage1_meco": 123.0,
+   "ship_ignition_physical_s": 126.0,
+   "ship_ignition_flown_ot_clock": 126.0,
+   "separation": 126.0,
+   "booster_meco_declared": 123.0,
+   "debris_impact": 394.5894409244943,
+   "seco": 514.663
+  },
+  "events_order_ok": true,
+  "separation": {
+   "time_s": 126.0,
+   "speed_m_s": 1754.6605604291985,
+   "altitude_geod_m": null
+  },
+  "stage1": {
+   "dry_mass_kg": 275000.0,
+   "propellant_loaded_kg": 3250000.0,
+   "body_mass_at_impact_kg": 938584.5042610611,
+   "propellant_at_separation_kg": 663584.5042610611,
+   "thrust_curve": [
+    [
+     0.0,
+     74926500.0
+    ],
+    [
+     100.0,
+     74926500.0
+    ],
+    [
+     101.0,
+     62000000.0
+    ],
+    [
+     123.0,
+     57664705.9
+    ]
+   ],
+   "burn_end_s": 123.0,
+   "curve_analysis": {
+    "max_step_fraction": 0.0,
+    "max_slew_fraction_of_peak_per_s": 0.17252240529051804,
+    "cutoff_step_fraction_of_peak": 0.769616969963898,
+    "steps": [],
+    "slews": [
+     {
+      "t_s": 101.0,
+      "slew_fraction_of_peak_per_s": -0.17252240529051804
+     },
+     {
+      "t_s": 123.0,
+      "slew_fraction_of_peak_per_s": -0.0026300283975265464
+     }
+    ]
+   }
+  },
+  "stage2": {
+   "initial_mass_kg": 1300000.0,
+   "dry_mass_kg": 100000.0,
+   "burn_end_s": 388.663,
+   "curve_analysis": {
+    "max_step_fraction": 0.6,
+    "max_slew_fraction_of_peak_per_s": 0.0,
+    "cutoff_step_fraction_of_peak": 0.4,
+    "steps": [
+     {
+      "t_s": 185.0,
+      "step_fraction_of_prior_level": 0.6
+     }
+    ],
+    "slews": []
+   },
+   "overlap_burn_kg": 0.0
+  },
+  "seco_state": {
+   "epoch_s": 516.0,
+   "speed_m_s": 7766.162439014135,
+   "flight_path_angle_deg": 0.0021912737050953112
+  },
+  "orbit_at_seco": {
+   "semi_major_axis_m": 6611540.373367872,
+   "eccentricity": 0.0002082635541371478,
+   "periapsis_altitude_m": 232026.43047139328,
+   "apoapsis_altitude_m": 234780.3162643509,
+   "inclination_deg": 51.95881913928091
+  },
+  "insertion": {
+   "periapsis_margin_m": 2026.4304713932797,
+   "apoapsis_error_m": -15219.683735649101
+  },
+  "ship_margin_kg": 101213.52171249627,
+  "ascent_checks": {
+   "mass-non-negative": true,
+   "mass-continuity-stage2": true,
+   "max-q-within-limit": true,
+   "max-accel-within-limit": true,
+   "recovery-propellant-reserve": false,
+   "recovery-landing": false,
+   "insertion-above-atmosphere": true,
+   "insertion-periapsis-above-minimum": true,
+   "insertion-periapsis-within-tolerance": true,
+   "insertion-apoapsis-within-tolerance": true,
+   "insertion-inclination-within-tolerance": true
+  },
+  "ascent_checks_all_pass": true,
+  "hot_staging": null
+ },
+ "dc8": {
+  "vehicle": "starship_class_rtls_dc8.yaml",
+  "events_s": {
+   "stage1_ignition": 0.0,
+   "max_q": 58.33293404405048,
+   "stage1_meco": 125.0,
+   "ship_ignition_physical_s": 124.0,
+   "ship_ignition_flown_ot_clock": 125.0,
+   "separation": 125.0,
+   "booster_meco_declared": 125.5,
+   "debris_impact": 403.97435990264626,
+   "seco": 512.663
+  },
+  "events_order_ok": true,
+  "separation": {
+   "time_s": 125.0,
+   "speed_m_s": 1815.7737213612659,
+   "altitude_geod_m": null
+  },
+  "stage1": {
+   "dry_mass_kg": 275000.0,
+   "propellant_loaded_kg": 3250000.0,
+   "body_mass_at_impact_kg": 900172.4216750283,
+   "propellant_at_separation_kg": 625172.4216750283,
+   "thrust_curve": [
+    [
+     0.0,
+     74926500.0
+    ],
+    [
+     100.0,
+     74926500.0
+    ],
+    [
+     105.0,
+     62000000.0
+    ],
+    [
+     116.0,
+     62000000.0
+    ],
+    [
+     125.5,
+     29970600.0
+    ]
+   ],
+   "burn_end_s": 125.5,
+   "curve_analysis": {
+    "max_step_fraction": 0.0,
+    "max_slew_fraction_of_peak_per_s": 0.04499764154836652,
+    "cutoff_step_fraction_of_peak": 0.4,
+    "steps": [],
+    "slews": [
+     {
+      "t_s": 105.0,
+      "slew_fraction_of_peak_per_s": -0.03450448105810361
+     },
+     {
+      "t_s": 125.5,
+      "slew_fraction_of_peak_per_s": -0.04499764154836652
+     }
+    ]
+   }
+  },
+  "stage2": {
+   "initial_mass_kg": 1300000.0,
+   "dry_mass_kg": 100000.0,
+   "burn_end_s": 388.663,
+   "curve_analysis": {
+    "max_step_fraction": 0.6,
+    "max_slew_fraction_of_peak_per_s": 0.0,
+    "cutoff_step_fraction_of_peak": 0.3,
+    "steps": [
+     {
+      "t_s": 185.0,
+      "step_fraction_of_prior_level": 0.6
+     },
+     {
+      "t_s": 383.001,
+      "step_fraction_of_prior_level": 0.25
+     }
+    ],
+    "slews": []
+   },
+   "overlap_burn_kg": 4123.564740699787
+  },
+  "seco_state": {
+   "epoch_s": 514.0,
+   "speed_m_s": 7746.987572420282,
+   "flight_path_angle_deg": 0.06056952366150605
+  },
+  "orbit_at_seco": {
+   "semi_major_axis_m": 6622347.790852369,
+   "eccentricity": 0.0017950200329492209,
+   "periapsis_altitude_m": 232323.54390263185,
+   "apoapsis_altitude_m": 256098.0378021067,
+   "inclination_deg": 51.95763424511434
+  },
+  "insertion": {
+   "periapsis_margin_m": 2323.543902631849,
+   "apoapsis_error_m": 6098.037802106701
+  },
+  "ship_margin_kg": 103548.46198960347,
+  "ascent_checks": {
+   "mass-non-negative": true,
+   "mass-continuity-stage2": true,
+   "max-q-within-limit": true,
+   "max-accel-within-limit": true,
+   "recovery-propellant-reserve": false,
+   "recovery-landing": false,
+   "insertion-above-atmosphere": true,
+   "insertion-periapsis-above-minimum": true,
+   "insertion-periapsis-within-tolerance": true,
+   "insertion-apoapsis-within-tolerance": true,
+   "insertion-inclination-within-tolerance": true
+  },
+  "ascent_checks_all_pass": true,
+  "hot_staging": {
+   "throttle_down_s": 100.0,
+   "ship_ignition_s": 124.0,
+   "separation_s": 125.0,
+   "booster_meco_s": 125.5
+  }
+ },
+ "e805_dc8": {
+  "status": "failed",
+  "n_checks": 28,
+  "checks": [
+   {
+    "id": "ascent.meco.residual_position",
+    "passed": false,
+    "value": 257.68447751289847,
+    "limit": 250.0
+   },
+   {
+    "id": "ascent.meco.residual_velocity",
+    "passed": false,
+    "value": 30.52616276716767,
+    "limit": 18.0
+   },
+   {
+    "id": "ascent.separation.residual_position",
+    "passed": true,
+    "value": 257.68447751289847,
+    "limit": 350.0
+   },
+   {
+    "id": "ascent.seco.residual_position",
+    "passed": false,
+    "value": 11576.908532467916,
+    "limit": 2500.0
+   },
+   {
+    "id": "ascent.meco.state_position",
+    "passed": true,
+    "value": 47.797206870116476,
+    "limit": 400.0
+   },
+   {
+    "id": "ascent.meco.state_velocity",
+    "passed": false,
+    "value": 25.624135235855874,
+    "limit": 25.0
+   },
+   {
+    "id": "ascent.separation.state_position",
+    "passed": true,
+    "value": 47.797206870116476,
+    "limit": 600.0
+   },
+   {
+    "id": "ascent.separation.state_velocity",
+    "passed": false,
+    "value": 25.624135235855874,
+    "limit": 15.0
+   },
+   {
+    "id": "ascent.seco.state_position",
+    "passed": false,
+    "value": 9431.748270571297,
+    "limit": 5000.0
+   },
+   {
+    "id": "ascent.seco.state_velocity",
+    "passed": false,
+    "value": 45.17957262170409,
+    "limit": 20.0
+   },
+   {
+    "id": "ascent.meco.mass",
+    "passed": true,
+    "value": 15086.502668711357,
+    "limit": 20000.0
+   },
+   {
+    "id": "ascent.separation.debris_mass",
+    "passed": false,
+    "value": 14129.076750891283,
+    "limit": 12000.0
+   },
+   {
+    "id": "ascent.seco.mass",
+    "passed": false,
+    "value": -2883.0210050394235,
+    "limit": 2000.0
+   },
+   {
+    "id": "ascent.maxq.value",
+    "passed": true,
+    "value": -67.93906575350411,
+    "limit": 1200.0
+   },
+   {
+    "id": "ascent.maxq.time",
+    "passed": true,
+    "value": -0.8093869150923396,
+    "limit": 2.0
+   },
+   {
+    "id": "ascent.seco.orbit_semi_major_axis",
+    "passed": false,
+    "value": 50729.65461870935,
+    "limit": 15000.0
+   },
+   {
+    "id": "ascent.seco.orbit_eccentricity",
+    "passed": true,
+    "value": 0.00148311754660704,
+    "limit": 0.003
+   },
+   {
+    "id": "ascent.seco.orbit_inclination",
+    "passed": true,
+    "value": 0.014785977515735738,
+    "limit": 0.05
+   },
+   {
+    "id": "ascent.debris_impact.time",
+    "passed": true,
+    "value": -2.636318158665688,
+    "limit": 8.0
+   },
+   {
+    "id": "ascent.debris_impact.position",
+    "passed": true,
+    "value": 7.833536308004581,
+    "limit": 12.0
+   },
+   {
+    "id": "ascent.debris_impact.speed",
+    "passed": true,
+    "value": 8.783387471874375,
+    "limit": 12.0
+   },
+   {
+    "id": "landing.cutoff_position",
+    "passed": true,
+    "value": 6.305811701113743,
+    "limit": 15.0
+   },
+   {
+    "id": "landing.cutoff_velocity",
+    "passed": true,
+    "value": 0.28911668309101757,
+    "limit": 2.5
+   },
+   {
+    "id": "landing.touchdown_position",
+    "passed": true,
+    "value": 0.3274585782366437,
+    "limit": 10.0
+   },
+   {
+    "id": "landing.touchdown_vertical_speed",
+    "passed": true,
+    "value": 9.0181604626843,
+    "limit": 15.0
+   },
+   {
+    "id": "landing.touchdown_lateral_speed",
+    "passed": true,
+    "value": 0.10650735464567718,
+    "limit": 3.0
+   },
+   {
+    "id": "landing.propellant",
+    "passed": true,
+    "value": 6.227872350194957,
+    "limit": 750.0
+   },
+   {
+    "id": "landing.fl301_gates",
+    "passed": true,
+    "value": 0.7357547221868636,
+    "limit": 1.0
+   }
+  ],
+  "failing": [
+   "ascent.meco.residual_position",
+   "ascent.meco.residual_velocity",
+   "ascent.seco.residual_position",
+   "ascent.meco.state_velocity",
+   "ascent.separation.state_velocity",
+   "ascent.seco.state_position",
+   "ascent.seco.state_velocity",
+   "ascent.separation.debris_mass",
+   "ascent.seco.mass",
+   "ascent.seco.orbit_semi_major_axis"
+  ],
+  "note": "the ascent/separation checks compare the point-mass twin against the DC8 OpenTsiolkovsky flight. Every open band traces to the two declared representation splits: the twin burns the mated overlap from the ship's own tank with a flow-blended Isp while the OT single-stack fold charges the composite thrust against the stage-1 tank at stage-1 Isp (hence the stage-1 debris-mass and stage-2 mass/velocity offsets), and OT cannot express the booster's 0.5-s post-separation floor burn (hence part of the separation state offset); the residual bands then apply E8-02's budget accounting to those offsets. The DC7 baseline report itself carries an open band (ascent.seco.orbit_semi_major_axis) for the same family of open-loop-program vs guided-profile differences."
+ }
+}
