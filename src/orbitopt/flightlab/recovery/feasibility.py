@@ -160,6 +160,7 @@ class EnvelopeVerdict:
     governing_reason: str | None
     explanation: str
     probe: Mapping[str, Any] = field(default_factory=dict)
+    violated_codes: tuple[str, ...] = ()
 
     @property
     def worst_severity(self) -> float:
@@ -173,6 +174,7 @@ class EnvelopeVerdict:
                 "governing_condition": self.governing_condition,
                 "governing_reason": self.governing_reason,
                 "worst_severity": round(self.worst_severity, 4),
+                "violated_codes": list(self.violated_codes),
                 "explanation": self.explanation, "probe": dict(self.probe)}
 
     @classmethod
@@ -183,7 +185,8 @@ class EnvelopeVerdict:
                    governing_condition=d.get("governing_condition"),
                    governing_reason=d.get("governing_reason"),
                    explanation=str(d.get("explanation", "")),
-                   probe=dict(d.get("probe", {})))
+                   probe=dict(d.get("probe", {})),
+                   violated_codes=tuple(str(c) for c in d.get("violated_codes", ())))
 
 
 @dataclass(frozen=True)
@@ -368,10 +371,24 @@ def grade_probe(probe: Mapping[str, Any] | None, spec: EnvelopeSpec, *,
 
 
 def _finalize(conds: list[EnvelopeCondition], spec: EnvelopeSpec) -> EnvelopeVerdict:
+    # ``conds`` arrive in the order plan_boostback_entry grades them; the
+    # predicted flight reason is the *first* violated condition's reason, the
+    # way ``_assemble`` returns it -- severity then only picks which corridor
+    # condition (miss / tilt / speed / forecast) drives a shared
+    # CORRIDOR_MISSED, and worst_severity still says how far out it is.
+    first = next((c for c in conds if c.violated), None)
     violated = [c for c in conds if c.violated]
-    gov = max(violated, key=lambda c: c.severity) if violated else None
-    in_env = gov is None
-    if in_env:
+    predicted = None if first is None else CONDITION_REASON[first.name]
+    gov = first
+    if predicted == CORRIDOR_MISSED:
+        gov = max((c for c in violated if CONDITION_REASON[c.name] == CORRIDOR_MISSED),
+                  key=lambda c: c.severity)
+    codes: list[str] = []
+    for c in violated:
+        code = CONDITION_REASON[c.name]
+        if code not in codes:
+            codes.append(code)
+    if predicted is None:
         tight = min(conds, key=lambda c: -c.severity)
         why = (f"E11-02 envelope {spec.name}: IN -- reference script flies the "
                f"corridor physics from this separation state "
@@ -384,14 +401,14 @@ def _finalize(conds: list[EnvelopeCondition], spec: EnvelopeSpec) -> EnvelopeVer
                            if c is not gov) or "no other violation"
         why = (f"E11-02 envelope {spec.name}: OUT -- governing condition "
                f"{gov.name} at {detail}; predicted flight reason "
-               f"{CONDITION_REASON[gov.name]} for the reference script "
+               f"{predicted} for the reference script "
                f"(other violations: {others}); the flight verdict needs no "
                f"search to reach")
-    return EnvelopeVerdict(in_envelope=in_env, conditions=tuple(conds),
+    return EnvelopeVerdict(in_envelope=predicted is None, conditions=tuple(conds),
                            governing_condition=None if gov is None else gov.name,
-                           governing_reason=None if gov is None
-                           else CONDITION_REASON[gov.name],
-                           explanation=why)
+                           governing_reason=predicted,
+                           explanation=why,
+                           violated_codes=tuple(codes))
 
 
 def probe_from_plan(plan: Any) -> dict[str, Any]:
@@ -448,4 +465,5 @@ def envelope_verdict(sep_state: BoosterState, booster: BoosterModel,
                            conditions=verdict.conditions,
                            governing_condition=verdict.governing_condition,
                            governing_reason=verdict.governing_reason,
-                           explanation=verdict.explanation, probe=probe)
+                           explanation=verdict.explanation, probe=probe,
+                           violated_codes=verdict.violated_codes)
