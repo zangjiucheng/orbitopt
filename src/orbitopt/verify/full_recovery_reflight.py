@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import json
 import math
 from pathlib import Path
 from typing import Any, Callable
@@ -53,7 +54,7 @@ from orbitopt.flightlab.recovery.pipeline import (
     landing_reserve_booster,
     separation_state_ecef,
 )
-from orbitopt.flightlab.recovery.propagator import BoosterModel
+from orbitopt.flightlab.recovery.propagator import BoosterModel, BoosterState
 from orbitopt.verify.report import (
     CHECK_MODEL,
     EVIDENCE_INDEPENDENT_MODEL,
@@ -183,6 +184,20 @@ _band("reflight.propellant_remaining", "kg", 1200.0,
       "burn-exposure sampling; measured 453 kg")
 BANDS = dict(_TOL)
 
+#: E11-01 fin-pair bands (measured first, margined second -- basis strings
+#: record the measurement).
+FIN_TOL: dict[str, tuple[str, float, str]] = {
+    "fin.entry_peak_q": ("%", 20.0,
+                         "measured 10.9% (a40) / 13.7% (a40|a60@12k); whole"
+                         " delta is the atmosphere-form line (residual 0.6%)"),
+    "fin.entry_peak_g": ("g", 2.0,
+                         "measured 0.64 g / 0.96 g; whole delta is the"
+                         " atmosphere-form line (residual 0.03 g)"),
+    "fin.speed_at_h0": ("%", 40.0,
+                        "measured 24.1% / 23.7%; whole delta is the"
+                        " atmosphere-form line (residual 0.3%)"),
+}
+
 #: The three headline acceptance quantities the budget is tabulated against.
 _BUDGET_QUANTITIES = ("reflight.entry_peak_q", "reflight.impact_speed",
                       "reflight.impact_position")
@@ -194,6 +209,77 @@ TWIN_DESCRIPTION = (
     "linear-Isp model -- coefficients from the vehicle YAML (design input); "
     "guidance callback shared with the main model by design (the authored "
     "script is the controller, declared zero on the budget)")
+
+
+class _TwinFins:
+    """E11-01: the twin's OWN grid-fin actuator and aero decomposition.
+
+    Deliberately independent of :mod:`orbitopt.flightlab.recovery.grid_fins`
+    (own deploy/stow hysteresis, own slew application, own lift/drag
+    algebra) while reading the same vehicle-YAML coefficient tables -- the
+    coefficients are a shared design input, the *implementation* is the
+    independent cross-check, exactly like the twin's own US76 layers.
+    """
+
+    def __init__(self, gf: Any) -> None:
+        self.gf = gf
+        self.deployed = False
+        self.bank = 0.0
+        self.delta = [0.0, 0.0, 0.0, 0.0]
+        self.cl = 0.0
+        self.cd_inc = 0.0
+
+    # -- own aero tables --------------------------------------------------
+    def _cd0_add(self, mach: float) -> float:
+        pts = np.asarray(self.gf.cd_add_mach, dtype=np.float64)
+        return float(np.interp(mach, pts[:, 0], pts[:, 1]))
+
+    def _fin_slope(self, mach: float) -> float:
+        pts = np.asarray(self.gf.cn_alpha_mach, dtype=np.float64)
+        return (float(np.interp(mach, pts[:, 0], pts[:, 1]))
+                * float(self.gf.fin_area_ratio))
+
+    def cl_cd(self, alpha_deg: float, mach: float) -> tuple[float, float]:
+        a = math.radians(min(max(alpha_deg, 0.0), float(self.gf.alpha_max_deg)))
+        body = float(self.gf.body_cn_alpha_per_rad) * math.sin(a)
+        a_fin = abs(a) * (1.0 - 1.0 / float(self.gf.trim_effectiveness))
+        clip = min(a_fin, math.radians(float(self.gf.stall_alpha_deg)))
+        fin = self._fin_slope(mach) * math.sin(clip) * (1.0 if a >= 0 else -1.0)
+        cn = body + fin
+        cl = cn * math.cos(a)
+        cd = (self._cd0_add(mach) + cn * math.sin(a)
+              + float(self.gf.induced_k) * fin * fin)
+        return cl, cd
+
+    # -- own state machine --------------------------------------------------
+    def step(self, dt: float, cmd: Any, h: float, q: float, mach: float) -> None:
+        gf = self.gf
+        if not self.deployed and h <= float(gf.deploy_altitude_m) \
+                and q >= float(gf.deploy_q_min_pa):
+            self.deployed = True
+        if self.deployed and h <= float(gf.stow_altitude_m):
+            self.deployed = False
+        alpha = 0.0 if cmd is None else min(max(float(cmd.alpha_cmd_deg), 0.0),
+                                           float(gf.alpha_authority_deg))
+        roll = 0.0 if cmd is None else min(max(float(cmd.bank_cmd_deg),
+                                               -float(gf.bank_max_deg)),
+                                           float(gf.bank_max_deg))
+        if not self.deployed:
+            alpha, roll = 0.0, 0.0
+        db = float(gf.bank_rate_max_deg_s) * dt
+        self.bank += max(min(roll - self.bank, db), -db)
+        d_trim = alpha / float(gf.trim_effectiveness)
+        da = self.bank / float(gf.bank_max_deg) \
+            * (float(gf.delta_max_deg) - abs(d_trim))
+        sign = (1.0, -1.0, -1.0, 1.0)
+        dd = float(gf.delta_rate_max_deg_s) * dt
+        dmax = float(gf.delta_max_deg)
+        for i in range(4):
+            want = max(min(d_trim + sign[i] * da, dmax), -dmax)
+            self.delta[i] += max(min(want - self.delta[i], dd), -dd)
+        self.cl, self.cd_inc = (self.cl_cd(alpha, mach) if self.deployed
+                                else (0.0, 0.0))
+        self.alpha = alpha
 
 
 def _twin_mission(plan: Any, sep_state: Any, booster: BoosterModel,
@@ -235,7 +321,8 @@ def _twin_flight(mission_factory: Callable[[], _Mission], sep_state: Any,
                  booster: BoosterModel, *, dt_s: float,
                 gravity: str = "j2", density_fn: Callable[[float], float]
                 | None = None, corridor_h0_m: float,
-                horizon_s: float) -> dict:
+                horizon_s: float,
+                fins_pair: "tuple[_TwinFins, Any] | None" = None) -> dict:
     """Independent point-mass re-flight of the authored recovery script.
 
     Returns the acceptance quantities: boostback cutoff state, entry-window
@@ -253,6 +340,8 @@ def _twin_flight(mission_factory: Callable[[], _Mission], sep_state: Any,
     s_ref = float(booster.reference_area_m2)
     dry = float(booster.dry_mass_kg)
     omega = np.array([0.0, 0.0, _OMEGA_E])
+    fins, law = (fins_pair if fins_pair is not None else (None, None))
+    fsnap = {"cl": 0.0, "cd_inc": 0.0, "bank": 0.0}
 
     def accel(tt: float, y: np.ndarray) -> tuple[np.ndarray, float, float, float, float]:
         r, v, m = y[:3], y[3:6], float(y[6])
@@ -277,6 +366,19 @@ def _twin_flight(mission_factory: Callable[[], _Mission], sep_state: Any,
                 q = 0.5 * rho * spd * spd
                 cd = float(np.interp(mach, cd_tab[:, 0], cd_tab[:, 1]))
                 f_aero = -(q * cd * s_ref / spd) * v
+                if fins is not None and (fsnap["cl"] != 0.0
+                                         or fsnap["cd_inc"] != 0.0):
+                    vh = v / spd
+                    uh = r / rn
+                    l0 = uh - float(uh @ vh) * vh
+                    nl = float(np.linalg.norm(l0))
+                    if nl > 1e-9:
+                        l0 = l0 / nl
+                        m0 = np.cross(vh, l0)
+                        sig = math.radians(fsnap["bank"])
+                        f_aero = f_aero + (q * s_ref * fsnap["cl"]) * (
+                            math.cos(sig) * l0 + math.sin(sig) * m0)
+                    f_aero = f_aero - (q * s_ref * fsnap["cd_inc"] / spd) * v
         a = a + f_aero / m
         cmd = msn(tt, _TwinState(tt, y))
         thr = 0.0
@@ -307,7 +409,16 @@ def _twin_flight(mission_factory: Callable[[], _Mission], sep_state: Any,
     q_max = 0.0
     g_max = 0.0
     h0_t = None
+    h0_v = None
     while t < t_cap:
+        if fins is not None:
+            h_s = _twin_geodetic(y[:3])[2]
+            p_s, rho_s, a_ss = _twin_us76(h_s)
+            spd_s = float(np.linalg.norm(y[3:6]))
+            q_s = 0.5 * rho_s * spd_s * spd_s if rho_s > 1e-14 else 0.0
+            fins.step(dt_s, None if law is None else law.command(
+                h_s, y[:3], y[3:6]), h_s, q_s, spd_s / a_ss)
+            fsnap.update(cl=fins.cl, cd_inc=fins.cd_inc, bank=fins.bank)
         k1, thr1, q1, g1, _p = accel(t, y)
         k2, _, _, _, _ = accel(t + 0.5 * dt_s, y + 0.5 * dt_s * k1)
         k3, _, _, _, _ = accel(t + 0.5 * dt_s, y + 0.5 * dt_s * k2)
@@ -325,7 +436,10 @@ def _twin_flight(mission_factory: Callable[[], _Mission], sep_state: Any,
         h_old = _twin_geodetic(y[:3])[2]
         h_new = _twin_geodetic(y2[:3])[2]
         if cut is not None and h0_t is None and h_new <= corridor_h0_m < h_old:
-            h0_t = t + dt_s * (h_old - corridor_h0_m) / (h_old - h_new)
+            frac0 = (h_old - corridor_h0_m) / (h_old - h_new)
+            h0_t = t + dt_s * frac0
+            h0_v = float(np.linalg.norm(
+                y[3:6] + frac0 * (y2[3:6] - y[3:6])))
         if h_new < 0.0 <= h_old:
             frac = h_old / (h_old - h_new)
             yf = y + dt_s * frac / 6.0 * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
@@ -339,6 +453,7 @@ def _twin_flight(mission_factory: Callable[[], _Mission], sep_state: Any,
                       "mass_kg": float(yf[6])}
             return {"cut": cut, "entry_max_q_pa": q_max,
                     "entry_max_proper_g": g_max, "corridor_h0_cross_t_s": h0_t,
+                    "h0_speed_m_s": h0_v,
                     "impact": impact}
         y = y2
         t += dt_s
@@ -577,3 +692,109 @@ def independent_recovery_reflight(
     }
     report["digest"] = report_digest(report)
     return report
+
+
+def fin_pair_reflight(*, handoff_json: Path, scenario_yaml: Path,
+                      vehicle_yaml: Path, entry_aero: dict,
+                      script: "list[float] | None" = None,
+                      twin_dt_s: float = 0.25,
+                      recipe_overrides: "dict | None" = None) -> dict:
+    """E11-01: main-model vs independent-twin re-flight of a grid-fin entry.
+
+    ``handoff_json`` is the committed E10-07 report (its ``handoff.state``
+    is the separation handoff -- no ascent re-flight needed). The main model
+    flies the authored script through ``plan_boostback_entry`` with
+    ``entry_aero``; the twin rebuilds the same authored script (shared by
+    design) and adds its OWN grid-fin actuator and aero (:class:`_TwinFins`)
+    driven by the shared steering law (guidance is part of the authored
+    script, the same rule as E10-07 -- the guidance budget line is shared
+    and declared zero).
+    """
+    import datetime as _dtm
+    hs = json.loads(Path(handoff_json).read_text())["handoff"]["state"]
+    sep = BoosterState(t_s=hs["t_s"],
+                       epoch_utc=_dtm.datetime.fromisoformat(hs["epoch_utc"]),
+                       frame="ECEF", position_m=np.array(hs["position_m"]),
+                       velocity_m_s=np.array(hs["velocity_m_s"]),
+                       mass_kg=hs["mass_kg"])
+    target = load_target(scenario_yaml)
+    booster = landing_reserve_booster(BoosterModel.load(vehicle_yaml),
+                                      target, "target")
+    rt = RecoveryTarget.from_scenario(target.to_dict())
+    from orbitopt.flightlab.recovery.grid_fins import GridFinGuidance
+    ea = dict(entry_aero)
+    sched = ea.get("schedule")
+    law = GridFinGuidance(
+        model=booster.grid_fins, mode=ea.get("mode", "schedule"),
+        alpha_deg=float(ea.get("alpha_deg", 30.0)),
+        bank_max_deg=float(ea.get("bank_max_deg",
+                                  booster.grid_fins.bank_max_deg)),
+        schedule=None if sched is None else tuple(
+            tuple(float(x) for x in g) for g in sched))
+    plan = plan_boostback_entry(sep, booster, rt,
+                                initial_guess=list(script or E10_07_SCRIPT),
+                                entry_aero=ea,
+                                **(recipe_overrides or E10_07_RECIPE))
+    cr = plan.corridor_report
+    factory = lambda: _twin_mission(plan, sep, booster, rt)  # noqa: E731
+    h0 = float(rt.corridor.h0_m)
+    horizon = float((recipe_overrides or E10_07_RECIPE)["horizon_s"])
+    twin = _twin_flight(factory, sep, booster, dt_s=twin_dt_s,
+                        corridor_h0_m=h0, horizon_s=horizon,
+                        fins_pair=(_TwinFins(booster.grid_fins), law))
+    from orbitopt.entry import density_kg_m3 as _entry_density
+    twin_atm = _twin_flight(factory, sep, booster, dt_s=twin_dt_s,
+                            density_fn=_entry_density, corridor_h0_m=h0,
+                            horizon_s=horizon,
+                            fins_pair=(_TwinFins(booster.grid_fins), law))
+    main = {"entry_max_q_pa": float(cr.entry_max_q_pa or 0.0),
+            "entry_max_proper_g": float(cr.entry_max_proper_g or 0.0),
+            "h0_speed_m_s": float(cr.speed_m_s or 0.0)}
+
+    def _as_dict(t: dict) -> dict:
+        return {"entry_max_q_pa": float(t["entry_max_q_pa"]),
+                "entry_max_proper_g": float(t["entry_max_proper_g"]),
+                "h0_speed_m_s": float(t["h0_speed_m_s"] or 0.0)}
+
+    def _tri(a: dict, b: dict) -> dict:
+        return {
+            "fin.entry_peak_q": 100.0 * abs(a["entry_max_q_pa"]
+                                            - b["entry_max_q_pa"])
+                / max(a["entry_max_q_pa"], 1.0),
+            "fin.entry_peak_g": abs(a["entry_max_proper_g"]
+                                    - b["entry_max_proper_g"]),
+            "fin.speed_at_h0": 100.0 * abs(a["h0_speed_m_s"]
+                                           - b["h0_speed_m_s"])
+                / max(a["h0_speed_m_s"], 1.0),
+        }
+
+    tw = _as_dict(twin)
+    deltas = _tri(main, tw)
+    budget = {"atmosphere_form": _tri(twin, _as_dict(twin_atm)),
+              "implementation_residual": _tri(main, _as_dict(twin_atm))}
+    return {"schedule": [list(map(float, g)) for g in (ea.get("schedule") or [])],
+            "main_model": {**main, "feasible": bool(plan.feasible),
+                           "reason_codes": list(plan.reason_codes),
+                           "tilt_deg": (None if cr.tilt_deg is None
+                                        else float(cr.tilt_deg))},
+            "twin": tw, "twin_main_atmosphere": _as_dict(twin_atm),
+            "deltas": deltas, "budget": budget,
+            "bands": {k: FIN_TOL[k] for k in deltas},
+            "checks": [{"name": k, "main": (main["entry_max_q_pa"]
+                                            if k.endswith("q") else
+                                            main["entry_max_proper_g"]
+                                            if k.endswith("g") else
+                                            main["h0_speed_m_s"]),
+                        "twin": (tw["entry_max_q_pa"] if k.endswith("q")
+                                 else tw["entry_max_proper_g"]
+                                 if k.endswith("g") else tw["h0_speed_m_s"]),
+                        "delta": deltas[k],
+                        "band": FIN_TOL[k][1],
+                        "unit": FIN_TOL[k][0],
+                        "basis": FIN_TOL[k][2],
+                        "line": ("atmosphere_form"
+                                 if budget["atmosphere_form"][k]
+                                 >= 0.7 * abs(deltas[k])
+                                 else "implementation_residual"),
+                        "ok": deltas[k] <= FIN_TOL[k][1]}
+                       for k in deltas]}

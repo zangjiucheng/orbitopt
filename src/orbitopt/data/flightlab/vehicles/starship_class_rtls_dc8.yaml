@@ -227,6 +227,49 @@ booster:
     as_of: "2026-11"
     accuracy: "+/-30% (generic aero, attitude-dependent)"
     uncertainty_pct: 30.0
+  grid_fins:
+    provenance: public_estimate
+    source: four lattice grid fins of the Super Heavy class; planform and
+      hinge geometry from published photos/estimates, stability derivatives
+      from lattice-fin literature scaled to planform (see E11-01 report
+      docs/benchmarks/e11_01_grid_fin_authority.md for the derivation and
+      the DESIGN ASSUMPTIONS with uncertainty ranges)
+    count: 4
+    fin_area_m2: 4.0
+    cd_add_mach: [[0.3, 1.65], [1.0, 2.35], [2.0, 2.10], [5.0, 1.60], [12.0, 1.35]]
+    cn_alpha_mach: [[0.3, 1.55], [1.0, 1.15], [2.0, 0.85], [5.0, 0.60], [12.0, 0.50]]
+    body_cn_alpha_per_rad: 2.0
+    trim_effectiveness: 1.8
+    delta_max_deg: 40.0
+    delta_rate_max_deg_s: 20.0
+    bank_max_deg: 60.0
+    bank_rate_max_deg_s: 30.0
+    alpha_max_deg: 60.0
+    stall_alpha_deg: 45.0
+    deploy_altitude_m: 70000.0
+    stow_altitude_m: 1500.0
+    deploy_q_min_pa: 100.0
+    induced_k: 0.28
+    length_m: 71.0
+    diameter_m: 9.0
+    static_margin: 0.08
+    roll_lever_ratio: 0.5
+    assumptions:
+      - "Grid fin planform 2.0 m x 2.0 m each (4.0 m^2 projected), four fins
+        in an X layout at the forward canard positions -- DESIGN ASSUMPTION
+        from public photos, +/-25% on planform area."
+      - "Delta-CD per deployed fin from lattice-fin drag literature
+        (sub/mach 1 plateau ~2.3, decreasing at hypersonic Mach) and delta-CN
+        slope from lattice/perforated-fin charts -- DESIGN ASSUMPTION,
+        +/-30%, folded into the general entry-aero uncertainty."
+      - "Trim law delta = alpha / trim_effectiveness (1.8): the fin lift
+        channel trims the body's static moment; AoA authority 60 deg
+        bounded by the 40 deg hinge limit / 1.8 -- DESIGN ASSUMPTION."
+      - "Deploy below 70 km once q >= 100 Pa, stow below 1.5 km (landing
+        config is engines-first, fins folded) -- DESIGN ASSUMPTION on the
+        sequence, timing uncertain +/-1 km."
+      - "Hinge rate 20 deg/s, bank rate 30 deg/s -- DESIGN ASSUMPTION,
+        actuator data not public, +/-50% on both rates."
   engines:
     count: 13
     usable_for: [boostback, entry, landing]

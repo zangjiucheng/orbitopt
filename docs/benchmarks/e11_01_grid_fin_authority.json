@@ -1,0 +1,518 @@
+{
+ "task": "E11-01 grid-fin aerodynamic authority (task #308)",
+ "base_commit": "2e20641",
+ "handoff_source": "docs/benchmarks/e10_07_full_recovery_reflight.json",
+ "vehicle": "src/orbitopt/data/flightlab/vehicles/starship_class_rtls_dc8.yaml",
+ "scenario": "src/orbitopt/data/flightlab/scenarios/leo_starship_class_rtls_e508_dc7.yaml",
+ "corridor": {
+  "alt_m": 3000.0,
+  "v_max_m_s": 350.0,
+  "max_tilt_deg": 15.0,
+  "radius_m": 8000.0,
+  "entry_q_max_kpa": 250.0,
+  "entry_g_max": 12.0,
+  "landing_reserve_kg": 2500.0
+ },
+ "envelope": [
+  {
+   "label": "finless_coast",
+   "reached_3km": true,
+   "t_s": 402.8,
+   "speed_m_s": 1398.3,
+   "mach": 4.25,
+   "q_at_3km_kpa": 797.3,
+   "peak_q_kpa": 901.7,
+   "peak_lateral_force_n": 0.0,
+   "peak_lateral_accel_m_s2": 0.0,
+   "e_m": 207693.0,
+   "n_m": 289631.0,
+   "up_m": -7068.0,
+   "cross_shift_m": 0.0,
+   "down_shift_m": 0.0
+  },
+  {
+   "label": "a30_b0",
+   "reached_3km": true,
+   "t_s": 408.5,
+   "speed_m_s": 719.1,
+   "mach": 2.19,
+   "q_at_3km_kpa": 209.6,
+   "peak_q_kpa": 289.7,
+   "peak_lateral_force_n": 16609865.0,
+   "peak_lateral_accel_m_s2": 18.452,
+   "e_m": 209247.0,
+   "n_m": 291742.0,
+   "up_m": -7172.0,
+   "cross_shift_m": 2111.0,
+   "down_shift_m": 1554.0
+  },
+  {
+   "label": "a45_b0",
+   "reached_3km": true,
+   "t_s": 410.2,
+   "speed_m_s": 610.4,
+   "mach": 1.86,
+   "q_at_3km_kpa": 150.9,
+   "peak_q_kpa": 249.3,
+   "peak_lateral_force_n": 16534206.0,
+   "peak_lateral_accel_m_s2": 18.368,
+   "e_m": 209480.0,
+   "n_m": 292057.0,
+   "up_m": -7188.0,
+   "cross_shift_m": 2426.0,
+   "down_shift_m": 1787.0
+  },
+  {
+   "label": "a60_b0",
+   "reached_3km": true,
+   "t_s": 411.0,
+   "speed_m_s": 547.2,
+   "mach": 1.67,
+   "q_at_3km_kpa": 121.3,
+   "peak_q_kpa": 221.8,
+   "peak_lateral_force_n": 12775588.0,
+   "peak_lateral_accel_m_s2": 14.192,
+   "e_m": 209050.0,
+   "n_m": 291469.0,
+   "up_m": -7151.0,
+   "cross_shift_m": 1838.0,
+   "down_shift_m": 1357.0
+  },
+  {
+   "label": "a30_b45",
+   "reached_3km": true,
+   "t_s": 407.8,
+   "speed_m_s": 743.7,
+   "mach": 2.26,
+   "q_at_3km_kpa": 225.2,
+   "peak_q_kpa": 295.1,
+   "peak_lateral_force_n": 16922563.0,
+   "peak_lateral_accel_m_s2": 18.799,
+   "e_m": 210033.0,
+   "n_m": 289821.0,
+   "up_m": -7142.0,
+   "cross_shift_m": 190.0,
+   "down_shift_m": 2340.0
+  },
+  {
+   "label": "a30_bm45",
+   "reached_3km": true,
+   "t_s": 407.8,
+   "speed_m_s": 743.6,
+   "mach": 2.26,
+   "q_at_3km_kpa": 225.2,
+   "peak_q_kpa": 295.1,
+   "peak_lateral_force_n": 16922976.0,
+   "peak_lateral_accel_m_s2": 18.8,
+   "e_m": 207177.0,
+   "n_m": 291914.0,
+   "up_m": -7146.0,
+   "cross_shift_m": 2283.0,
+   "down_shift_m": -516.0
+  },
+  {
+   "label": "a45_b45",
+   "reached_3km": true,
+   "t_s": 409.2,
+   "speed_m_s": 637.9,
+   "mach": 1.94,
+   "q_at_3km_kpa": 166.0,
+   "peak_q_kpa": 254.0,
+   "peak_lateral_force_n": 16850975.0,
+   "peak_lateral_accel_m_s2": 18.72,
+   "e_m": 210393.0,
+   "n_m": 289782.0,
+   "up_m": -7167.0,
+   "cross_shift_m": 151.0,
+   "down_shift_m": 2700.0
+  },
+  {
+   "label": "a45_bm45",
+   "reached_3km": true,
+   "t_s": 409.2,
+   "speed_m_s": 637.9,
+   "mach": 1.94,
+   "q_at_3km_kpa": 166.0,
+   "peak_q_kpa": 254.0,
+   "peak_lateral_force_n": 16851406.0,
+   "peak_lateral_accel_m_s2": 18.72,
+   "e_m": 207033.0,
+   "n_m": 292244.0,
+   "up_m": -7172.0,
+   "cross_shift_m": 2613.0,
+   "down_shift_m": -660.0
+  },
+  {
+   "label": "a60_b45",
+   "reached_3km": true,
+   "t_s": 410.2,
+   "speed_m_s": 563.7,
+   "mach": 1.71,
+   "q_at_3km_kpa": 130.3,
+   "peak_q_kpa": 225.0,
+   "peak_lateral_force_n": 12961245.0,
+   "peak_lateral_accel_m_s2": 14.399,
+   "e_m": 209877.0,
+   "n_m": 289631.0,
+   "up_m": -7180.0,
+   "cross_shift_m": 0.0,
+   "down_shift_m": 2184.0
+  },
+  {
+   "label": "a60_bm45",
+   "reached_3km": true,
+   "t_s": 410.2,
+   "speed_m_s": 563.6,
+   "mach": 1.71,
+   "q_at_3km_kpa": 130.3,
+   "peak_q_kpa": 225.0,
+   "peak_lateral_force_n": 12961495.0,
+   "peak_lateral_accel_m_s2": 14.399,
+   "e_m": 207047.0,
+   "n_m": 291705.0,
+   "up_m": -7184.0,
+   "cross_shift_m": 2074.0,
+   "down_shift_m": -646.0
+  }
+ ],
+ "closure_trial": [
+  {
+   "label": "ballistic",
+   "feasible": false,
+   "reason_codes": [
+    "CORRIDOR_MISSED",
+    "ENTRY_Q_LIMIT_EXCEEDED"
+   ],
+   "arrival_speed_m_s": 1067.5,
+   "tilt_deg": 13.9,
+   "miss_m": 2246,
+   "entry_q_kpa": 460,
+   "landing_need_t": 26.0,
+   "propellant_avail_t": 300.7
+  },
+  {
+   "label": "sched_a40",
+   "feasible": false,
+   "reason_codes": [
+    "CORRIDOR_MISSED"
+   ],
+   "arrival_speed_m_s": 434.8,
+   "tilt_deg": 30.1,
+   "miss_m": 292,
+   "entry_q_kpa": 140,
+   "landing_need_t": 95.6,
+   "propellant_avail_t": 300.7
+  },
+  {
+   "label": "sched_a50",
+   "feasible": false,
+   "reason_codes": [
+    "CORRIDOR_MISSED",
+    "INSUFFICIENT_PROPELLANT_RESERVE"
+   ],
+   "arrival_speed_m_s": 391.8,
+   "tilt_deg": 29.3,
+   "miss_m": 251,
+   "entry_q_kpa": 128,
+   "landing_need_t": 300.7,
+   "propellant_avail_t": 300.7
+  },
+  {
+   "label": "sched_a60",
+   "feasible": false,
+   "reason_codes": [
+    "CORRIDOR_MISSED"
+   ],
+   "arrival_speed_m_s": 361.5,
+   "tilt_deg": 26.3,
+   "miss_m": 169,
+   "entry_q_kpa": 118,
+   "landing_need_t": 92.9,
+   "propellant_avail_t": 300.7
+  },
+  {
+   "label": "ladder_a40_a20_18k",
+   "feasible": false,
+   "reason_codes": [
+    "CORRIDOR_MISSED"
+   ],
+   "arrival_speed_m_s": 527.4,
+   "tilt_deg": 25.1,
+   "miss_m": 312,
+   "entry_q_kpa": 161,
+   "landing_need_t": 78.9,
+   "propellant_avail_t": 300.7
+  },
+  {
+   "label": "flare_a40_a60_12k",
+   "feasible": false,
+   "reason_codes": [
+    "CORRIDOR_MISSED"
+   ],
+   "arrival_speed_m_s": 375.8,
+   "tilt_deg": 27.5,
+   "miss_m": 143,
+   "entry_q_kpa": 134,
+   "landing_need_t": 93.2,
+   "propellant_avail_t": 300.7
+  },
+  {
+   "label": "flare_a50_a60_10k",
+   "feasible": false,
+   "reason_codes": [
+    "CORRIDOR_MISSED"
+   ],
+   "arrival_speed_m_s": 369.6,
+   "tilt_deg": 27.5,
+   "miss_m": 157,
+   "entry_q_kpa": 128,
+   "landing_need_t": 92.9,
+   "propellant_avail_t": 300.7
+  },
+  {
+   "label": "dive_a40_a0_20k",
+   "feasible": false,
+   "reason_codes": [
+    "CORRIDOR_MISSED",
+    "ENTRY_Q_LIMIT_EXCEEDED"
+   ],
+   "arrival_speed_m_s": 1000.5,
+   "tilt_deg": 15.2,
+   "miss_m": 1476,
+   "entry_q_kpa": 372,
+   "landing_need_t": 27.9,
+   "propellant_avail_t": 300.7
+  },
+  {
+   "label": "dive_a40_a60_12k_a0_6k",
+   "feasible": false,
+   "reason_codes": [
+    "CORRIDOR_MISSED"
+   ],
+   "arrival_speed_m_s": 576.5,
+   "tilt_deg": 22.6,
+   "miss_m": 97,
+   "entry_q_kpa": 134,
+   "landing_need_t": 61.6,
+   "propellant_avail_t": 300.7
+  }
+ ],
+ "twin_comparison": [
+  {
+   "schedule": [
+    [
+     70000.0,
+     0.0,
+     40.0
+    ]
+   ],
+   "main_model": {
+    "entry_max_q_pa": 139694.7008595914,
+    "entry_max_proper_g": 6.559871579933202,
+    "h0_speed_m_s": 434.8009629501256,
+    "feasible": false,
+    "reason_codes": [
+     "CORRIDOR_MISSED"
+    ],
+    "tilt_deg": 30.07714243786734
+   },
+   "twin": {
+    "entry_max_q_pa": 154967.54966775348,
+    "entry_max_proper_g": 7.197353778490678,
+    "h0_speed_m_s": 329.8474336411483
+   },
+   "twin_main_atmosphere": {
+    "entry_max_q_pa": 140590.17695126214,
+    "entry_max_proper_g": 6.586168424440755,
+    "h0_speed_m_s": 436.04412550941055
+   },
+   "deltas": {
+    "fin.entry_peak_q": 10.93301944467671,
+    "fin.entry_peak_g": 0.6374821985574757,
+    "fin.speed_at_h0": 24.138292748219172
+   },
+   "budget": {
+    "atmosphere_form": {
+     "fin.entry_peak_q": 9.277666677518015,
+     "fin.entry_peak_g": 0.6111853540499226,
+     "fin.speed_at_h0": 32.1957005079497
+    },
+    "implementation_residual": {
+     "fin.entry_peak_q": 0.6410236652933585,
+     "fin.entry_peak_g": 0.026296844507553097,
+     "fin.speed_at_h0": 0.28591531878174303
+    }
+   },
+   "bands": {
+    "fin.entry_peak_q": [
+     "%",
+     20.0,
+     "measured 10.9% (a40) / 13.7% (a40|a60@12k); whole delta is the atmosphere-form line (residual 0.6%)"
+    ],
+    "fin.entry_peak_g": [
+     "g",
+     2.0,
+     "measured 0.64 g / 0.96 g; whole delta is the atmosphere-form line (residual 0.03 g)"
+    ],
+    "fin.speed_at_h0": [
+     "%",
+     40.0,
+     "measured 24.1% / 23.7%; whole delta is the atmosphere-form line (residual 0.3%)"
+    ]
+   },
+   "checks": [
+    {
+     "name": "fin.entry_peak_q",
+     "main": 139694.7008595914,
+     "twin": 154967.54966775348,
+     "delta": 10.93301944467671,
+     "band": 20.0,
+     "unit": "%",
+     "basis": "measured 10.9% (a40) / 13.7% (a40|a60@12k); whole delta is the atmosphere-form line (residual 0.6%)",
+     "line": "atmosphere_form",
+     "ok": true
+    },
+    {
+     "name": "fin.entry_peak_g",
+     "main": 6.559871579933202,
+     "twin": 7.197353778490678,
+     "delta": 0.6374821985574757,
+     "band": 2.0,
+     "unit": "g",
+     "basis": "measured 0.64 g / 0.96 g; whole delta is the atmosphere-form line (residual 0.03 g)",
+     "line": "atmosphere_form",
+     "ok": true
+    },
+    {
+     "name": "fin.speed_at_h0",
+     "main": 434.8009629501256,
+     "twin": 329.8474336411483,
+     "delta": 24.138292748219172,
+     "band": 40.0,
+     "unit": "%",
+     "basis": "measured 24.1% / 23.7%; whole delta is the atmosphere-form line (residual 0.3%)",
+     "line": "atmosphere_form",
+     "ok": true
+    }
+   ]
+  },
+  {
+   "schedule": [
+    [
+     70000.0,
+     0.0,
+     40.0
+    ],
+    [
+     12000.0,
+     0.0,
+     60.0
+    ]
+   ],
+   "main_model": {
+    "entry_max_q_pa": 133978.5911235282,
+    "entry_max_proper_g": 7.223929488380795,
+    "h0_speed_m_s": 375.7963378304053,
+    "feasible": false,
+    "reason_codes": [
+     "CORRIDOR_MISSED"
+    ],
+    "tilt_deg": 27.510656492353473
+   },
+   "twin": {
+    "entry_max_q_pa": 152313.4741561277,
+    "entry_max_proper_g": 8.181658529866619,
+    "h0_speed_m_s": 286.5880233727653
+   },
+   "twin_main_atmosphere": {
+    "entry_max_q_pa": 134364.2631133116,
+    "entry_max_proper_g": 7.236707430236944,
+    "h0_speed_m_s": 376.9764929055169
+   },
+   "deltas": {
+    "fin.entry_peak_q": 13.68493494284825,
+    "fin.entry_peak_g": 0.9577290414858233,
+    "fin.speed_at_h0": 23.73847360319387
+   },
+   "budget": {
+    "atmosphere_form": {
+     "fin.entry_peak_q": 11.78438817856481,
+     "fin.entry_peak_g": 0.9449510996296748,
+     "fin.speed_at_h0": 31.539513922807327
+    },
+    "implementation_residual": {
+     "fin.entry_peak_q": 0.28786090863414326,
+     "fin.entry_peak_g": 0.012777941856148445,
+     "fin.speed_at_h0": 0.3140411324721841
+    }
+   },
+   "bands": {
+    "fin.entry_peak_q": [
+     "%",
+     20.0,
+     "measured 10.9% (a40) / 13.7% (a40|a60@12k); whole delta is the atmosphere-form line (residual 0.6%)"
+    ],
+    "fin.entry_peak_g": [
+     "g",
+     2.0,
+     "measured 0.64 g / 0.96 g; whole delta is the atmosphere-form line (residual 0.03 g)"
+    ],
+    "fin.speed_at_h0": [
+     "%",
+     40.0,
+     "measured 24.1% / 23.7%; whole delta is the atmosphere-form line (residual 0.3%)"
+    ]
+   },
+   "checks": [
+    {
+     "name": "fin.entry_peak_q",
+     "main": 133978.5911235282,
+     "twin": 152313.4741561277,
+     "delta": 13.68493494284825,
+     "band": 20.0,
+     "unit": "%",
+     "basis": "measured 10.9% (a40) / 13.7% (a40|a60@12k); whole delta is the atmosphere-form line (residual 0.6%)",
+     "line": "atmosphere_form",
+     "ok": true
+    },
+    {
+     "name": "fin.entry_peak_g",
+     "main": 7.223929488380795,
+     "twin": 8.181658529866619,
+     "delta": 0.9577290414858233,
+     "band": 2.0,
+     "unit": "g",
+     "basis": "measured 0.64 g / 0.96 g; whole delta is the atmosphere-form line (residual 0.03 g)",
+     "line": "atmosphere_form",
+     "ok": true
+    },
+    {
+     "name": "fin.speed_at_h0",
+     "main": 375.7963378304053,
+     "twin": 286.5880233727653,
+     "delta": 23.73847360319387,
+     "band": 40.0,
+     "unit": "%",
+     "basis": "measured 24.1% / 23.7%; whole delta is the atmosphere-form line (residual 0.3%)",
+     "line": "atmosphere_form",
+     "ok": true
+    }
+   ]
+  }
+ ],
+ "design_assumptions": [
+  "fin area 4 x 4 m^2 (+-25%): geometry from public imagery only",
+  "fin normal-force slope table (+-30%): perforated-plate/Ackeret scaling, no wind-tunnel data for this vehicle",
+  "trim effectiveness 1.8, static margin 0.08 L (+-50%): stability derived from grid-fin station, no public CG/cp data",
+  "delta_max 40 deg and 20 deg/s rate (+-50%): actuator travel/speed not published",
+  "bank rate 30 deg/s (+-50%): aeroservoelastic realisation folded into one rate, actuator data not public"
+ ],
+ "verdict": {
+  "closed": false,
+  "best_arrival_speed_m_s": 361.5,
+  "best_tilt_deg": 13.9,
+  "ballistic_reference_speed_m_s": 1067.5,
+  "twin_checks_ok": true
+ },
+ "runtime_s": 187.6
+}

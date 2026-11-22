@@ -131,6 +131,12 @@ telemetry or independently validated landing is claimed. See
 | E10-08 | 12 of 17 scenarios insert on both native backends, up from six. [Guidance matrix](flightlab.md#6-dof-studies). |
 | E10-09 | Cross-environment CI grades the frozen DC7 and Starbase plans and checks that the original E5-08 reproduces its expected failure. [CI evidence rules](verification.md#final-schemes-in-cross-environment-ci-e10-09-task-306). |
 
+## E11 aerodynamic RTLS closure
+
+| Study | Recorded result |
+|---|---|
+| E11-01 | A grid-fin model gives the unpowered DC8 entry a 1.9 g lateral envelope, cures the 460 kPa entry-heating violation and cuts arrival speed 1067→362 m/s, but the corridor tilt floor stays ≈25° against a 15° limit: two-burn unpowered closure is a vehicle-capability miss, quantified and dual-verified. [Grid-fin authority](benchmarks/e11_01_grid_fin_authority.md). |
+
 ## Earlier studies
 
 | Study | Read or reproduce |
