@@ -1,0 +1,406 @@
+{
+ "protocol": "e10-07-full-recovery-reflight-1.0",
+ "kind": "full_recovery_reflight",
+ "inputs": {
+  "scenario": "leo_starship_class_rtls_e508_dc7.yaml",
+  "vehicle": "starship_class_rtls_dc8.yaml",
+  "ascent_run": {
+   "run_id": "ot-ec11389b-da42dd33",
+   "backend": "opentsiolkovsky",
+   "git_sha": "654fc93e70c37c7414b9e0606cae47d454802f03",
+   "events": [
+    [
+     "ignition",
+     0.0
+    ],
+    [
+     "liftoff",
+     0.0
+    ],
+    [
+     "max_q",
+     58.33293404405048
+    ],
+    [
+     "ignition",
+     125.0
+    ],
+    [
+     "meco",
+     125.0
+    ],
+    [
+     "separation",
+     125.0
+    ],
+    [
+     "impact",
+     403.97435990264626
+    ],
+    [
+     "seco",
+     512.663
+    ]
+   ]
+  },
+  "script": [
+   21.2,
+   -2.0,
+   1.0,
+   0.0,
+   0.0
+  ],
+  "recipe": {
+   "entry_burns": 0,
+   "search": "keep",
+   "boostback_cutoff": "iip",
+   "landing_need_model": "closed_loop",
+   "corridor_aim_margin_m": 7000.0,
+   "entry_q_max_pa": 250000.0,
+   "entry_g_max": 12.0,
+   "landing_reserve_margin_kg": 2500.0,
+   "horizon_s": 900.0,
+   "dt_opt": 0.5,
+   "dt_final": 0.25
+  }
+ },
+ "handoff": {
+  "digest": "60b3130118befaba86d8806d8f539adb6de4e1099ef129104934d52f768ab99c",
+  "state": {
+   "t_s": 125.0,
+   "epoch_utc": "2026-11-10T12:00:00",
+   "frame": "ECEF",
+   "position_m": [
+    3897664.448555499,
+    -5087170.264667612,
+    619264.707298907
+   ],
+   "velocity_m_s": [
+    1122.4158776230179,
+    -352.89960367232567,
+    1039.2610364943976
+   ],
+   "mass_kg": 900172.4216750283
+  },
+  "separation_speed_m_s": 1569.8468188290676
+ },
+ "main_model": {
+  "quantities": {
+   "cut": {
+    "t_s": 182.25,
+    "position_ecef_m": [
+     3941799.578208682,
+     -5106071.931148617,
+     656421.8197510121
+    ],
+    "velocity_ecef_m_s": [
+     159.3223842462372,
+     -575.2645087759066,
+     -257.33294086140785
+    ],
+    "mass_kg": 575652.2484080505
+   },
+   "entry_max_q_pa": 459813.68785818503,
+   "entry_max_proper_g": 6.313366464598945,
+   "corridor_h0_cross_t_s": 397.0774141981834,
+   "impact": {
+    "t_s": 400.2249397322515,
+    "position_ecef_m": [
+     3843662.1955969697,
+     -5056535.706287665,
+     579728.7406940244
+    ],
+    "velocity_ecef_m_s": [
+     -605.6763702890532,
+     605.156604009008,
+     -250.76592323205094
+    ],
+    "speed_m_s": 892.1557762838621,
+    "vertical_speed_m_s": -867.5794892267846,
+    "mass_kg": 575652.2484080505
+   },
+   "propellant_at_cutoff_kg": 300652.2484080505,
+   "propellant_remaining_kg": 300652.2484080505
+  },
+  "plan_feasible": false,
+  "reason_codes": [
+   "CORRIDOR_MISSED",
+   "ENTRY_Q_LIMIT_EXCEEDED"
+  ],
+  "corridor": {
+   "reached": true,
+   "miss_m": 2246.029667871557,
+   "cross_speed_m_s": 1067.481116636964,
+   "t_s": 397.0774141981834
+  },
+  "ignitions_used": 1
+ },
+ "independent_model": {
+  "description": "own RK4 (0.05/0.1 s), own WGS-84 inverse geodesy, point-mass + J2 written from constants, US76 layers + isothermal stratopause continuation, Mach-interpolated Cd, ambient-corrected thrust with linear-Isp model -- coefficients from the vehicle YAML (design input); guidance callback shared with the main model by design (the authored script is the controller, declared zero on the budget)",
+  "dt_s": 0.1,
+  "quantities": {
+   "cut": {
+    "t_s": 182.49999999999673,
+    "position_ecef_m": [
+     3941820.1624792744,
+     -5106235.555512007,
+     656319.2469056199
+    ],
+    "velocity_ecef_m_s": [
+     158.94353047190216,
+     -572.2906930888099,
+     -255.36088677119622
+    ],
+    "mass_kg": 576104.8558086279
+   },
+   "entry_max_q_pa": 437707.4615279083,
+   "entry_max_proper_g": 6.036650766356416,
+   "corridor_h0_cross_t_s": 397.5453192523928,
+   "impact": {
+    "t_s": 400.9854823030118,
+    "position_ecef_m": [
+     3843883.175632588,
+     -5056315.18476379,
+     580174.0664780495
+    ],
+    "velocity_ecef_m_s": [
+     -551.7896957682467,
+     554.6288664132883,
+     -225.87392978047023
+    ],
+    "speed_m_s": 814.3120286286924,
+    "vertical_speed_m_s": -792.7990060286811,
+    "mass_kg": 576104.8558086279
+   }
+  }
+ },
+ "landing_phase": {
+  "crossed": true,
+  "feasible": false,
+  "landed": false,
+  "reason_codes": [
+   "LANDING_INFEASIBLE"
+  ],
+  "crossed_state": {
+   "t_s": 397.0774141981834,
+   "speed_m_s": 1067.481116636964,
+   "height_m": 3000.8864103369415
+  },
+  "closed_loop_predicted_touchdown_vertical_m_s": 739.924935025972,
+  "note": "the E8-05 corridor-origin landing re-flight stays a design_input check: this probe is the first landing-phase attempt from the handoff state the mission actually reaches"
+ },
+ "comparison": {
+  "deltas": {
+   "reflight.bb_cutoff.time": 0.2499999999967315,
+   "reflight.bb_cutoff.position": 194.21079553595135,
+   "reflight.bb_cutoff.speed": 3.5048919610591156,
+   "reflight.entry_peak_q": 4.807648600729503,
+   "reflight.entry_peak_g": 0.27671569824252895,
+   "reflight.impact_time": 0.7605425707602649,
+   "reflight.impact_position": 543.8538154244641,
+   "reflight.impact_speed": 8.72535376942981,
+   "reflight.propellant_remaining": 452.60740057739895
+  },
+  "checks": {
+   "reflight.bb_cutoff.time": true,
+   "reflight.bb_cutoff.position": true,
+   "reflight.bb_cutoff.speed": true,
+   "reflight.entry_peak_q": true,
+   "reflight.entry_peak_g": true,
+   "reflight.impact_time": true,
+   "reflight.impact_position": true,
+   "reflight.impact_speed": true,
+   "reflight.propellant_remaining": true
+  },
+  "bands": {
+   "reflight.bb_cutoff.time": {
+    "unit": "s",
+    "limit": 0.6,
+    "basis": "event bisection (main) vs 0.05-0.1 s step boundary (twin); measured 0.25 s"
+   },
+   "reflight.bb_cutoff.position": {
+    "unit": "m",
+    "limit": 600.0,
+    "basis": "cutoff sampling boundary + burn-integration difference; measured 194 m"
+   },
+   "reflight.bb_cutoff.speed": {
+    "unit": "m/s",
+    "limit": 6.0,
+    "basis": "burn termination boundary sampling; measured 3.5 m/s"
+   },
+   "reflight.entry_peak_q": {
+    "unit": "%",
+    "limit": 12.0,
+    "basis": "density-profile form line measures 5.1% of the 4.8% delta (the whole discrepancy is the two density profiles, residual 0)"
+   },
+   "reflight.entry_peak_g": {
+    "unit": "g",
+    "limit": 1.0,
+    "basis": "follows the q line; measured 0.28 g"
+   },
+   "reflight.impact_time": {
+    "unit": "s",
+    "limit": 1.0,
+    "basis": "gravity-line dominated (J2 difference alone 0.31 s); measured 0.76 s"
+   },
+   "reflight.impact_position": {
+    "unit": "m",
+    "limit": 1500.0,
+    "basis": "numerical 116 m + gravity 111 m lines dominate; measured 544 m"
+   },
+   "reflight.impact_speed": {
+    "unit": "%",
+    "limit": 12.0,
+    "basis": "terminal descent speed is density-profile sensitive: the atmosphere form line measures 8.7% (the whole delta, residual 0); same relative band as the E8-05 ascent debris-impact speed check"
+   },
+   "reflight.propellant_remaining": {
+    "unit": "kg",
+    "limit": 1200.0,
+    "basis": "burn-exposure sampling; measured 453 kg"
+   }
+  },
+  "budget_shares": {
+   "reflight.entry_peak_q": {
+    "numerical": 0.006345913540302427,
+    "atmosphere": 5.0751067539919354,
+    "gravity": 0.08693382170708125
+   },
+   "reflight.impact_speed": {
+    "numerical": 0.010152693215622148,
+    "atmosphere": 9.590930522164967,
+    "gravity": 0.03748206788655825
+   },
+   "reflight.impact_position": {
+    "numerical": 116.11970880100708,
+    "atmosphere": 17.50069529925724,
+    "gravity": 111.13908826934627
+   }
+  },
+  "residual": {
+   "reflight.entry_peak_q": 0.0,
+   "reflight.impact_speed": 0.0,
+   "reflight.impact_position": 299.0943230548535
+  },
+  "budget_note": "frame line: both models integrate in ECEF at the same epoch with the same Earth-rotation rate -- declared zero; controller line: both fly the identical authored _Mission script -- declared zero; atmosphere line re-runs the twin on the main model's density profile (orbitopt.entry, labelled perturbation experiment); numerical line halves the twin step; gravity line drops J2 from the twin"
+ },
+ "status": {
+  "result": "passed",
+  "passed": true,
+  "checks": {
+   "reflight.bb_cutoff.time": true,
+   "reflight.bb_cutoff.position": true,
+   "reflight.bb_cutoff.speed": true,
+   "reflight.entry_peak_q": true,
+   "reflight.entry_peak_g": true,
+   "reflight.impact_time": true,
+   "reflight.impact_position": true,
+   "reflight.impact_speed": true,
+   "reflight.propellant_remaining": true
+  },
+  "check_categories": {
+   "reflight.bb_cutoff.time": "model_agreement",
+   "reflight.bb_cutoff.position": "model_agreement",
+   "reflight.bb_cutoff.speed": "model_agreement",
+   "reflight.entry_peak_q": "model_agreement",
+   "reflight.entry_peak_g": "model_agreement",
+   "reflight.impact_time": "model_agreement",
+   "reflight.impact_position": "model_agreement",
+   "reflight.impact_speed": "model_agreement",
+   "reflight.propellant_remaining": "model_agreement"
+  },
+  "categories": {
+   "numerical_consistency": {
+    "result": "not_checked",
+    "checks_passed": 0,
+    "checks_total": 0
+   },
+   "model_agreement": {
+    "result": "passed",
+    "checks_passed": 9,
+    "checks_total": 9
+   },
+   "historical_validation": {
+    "result": "not_checked",
+    "checks_passed": 0,
+    "checks_total": 0
+   }
+  },
+  "check_evidence": {
+   "reflight.bb_cutoff.time": "independent_model",
+   "reflight.bb_cutoff.position": "independent_model",
+   "reflight.bb_cutoff.speed": "independent_model",
+   "reflight.entry_peak_q": "independent_model",
+   "reflight.entry_peak_g": "independent_model",
+   "reflight.impact_time": "independent_model",
+   "reflight.impact_position": "independent_model",
+   "reflight.impact_speed": "independent_model",
+   "reflight.propellant_remaining": "independent_model"
+  },
+  "evidence": {
+   "analytical": {
+    "result": "not_checked",
+    "checks_passed": 0,
+    "checks_total": 0,
+    "label": "Analytic solution",
+    "independent": false,
+    "proves": "the numerics reproduce the closed-form solution of the model they integrate (the equations and the integrator, not their agreement with reality).",
+    "cannot_prove": "that the model represents reality -- the closed-form reference shares the model's own assumptions (point mass, impulsive burns, idealised field)."
+   },
+   "independent_model": {
+    "result": "passed",
+    "checks_passed": 9,
+    "checks_total": 9,
+    "label": "Independent model",
+    "independent": true,
+    "proves": "two independently formulated models agree, so neither is trivially mis-implemented.",
+    "cannot_prove": "that either model is right in the real world -- an assumption shared by both stays invisible; the phase and force inventory of the comparison bound its reach."
+   },
+   "historical_telemetry": {
+    "result": "not_checked",
+    "checks_passed": 0,
+    "checks_total": 0,
+    "label": "Historical telemetry",
+    "independent": true,
+    "proves": "the model reproduces a published, observed (flown) value it was not tuned to.",
+    "cannot_prove": "any other vehicle, phase or operating point -- one published event validates that event, not the model as a whole, and the reference's own provenance is only as good as its source."
+   },
+   "design_input": {
+    "result": "not_checked",
+    "checks_passed": 0,
+    "checks_total": 0,
+    "label": "Matches design input",
+    "independent": false,
+    "proves": "the solver reached the aim point, or the plan respects the site/vehicle/corridor envelope it was designed against -- internal consistency only.",
+    "cannot_prove": "anything about fidelity to reality: the reference IS the design input, so this is NOT independent validation and must never be read as historical proof."
+   },
+   "numerical_consistency": {
+    "result": "not_checked",
+    "checks_passed": 0,
+    "checks_total": 0,
+    "label": "Numerical consistency",
+    "independent": false,
+    "proves": "integration error is under tolerance and the model's own invariants / self-consistency hold (step convergence, exact integrals, a same-model re-fly).",
+    "cannot_prove": "agreement with any other model or with reality -- it bounds numerical error only."
+   }
+  },
+  "independent_validation": {
+   "result": "passed",
+   "checks_passed": 9,
+   "checks_total": 9
+  }
+ },
+ "findings": [
+  "re-flight started from the actual DC8 hot-staging separation handoff (OT run ot-ec11389b-da42dd33, separation t=125.0 s, handoff digest 60b3130118befaba86d8806d8f539adb6de4e1099ef129104934d52f768ab99c); no declared-corridor state was used",
+  "two-burn unpowered entry remains NOT CLOSED at the real DC8 separation (main-model verdict ['CORRIDOR_MISSED', 'ENTRY_Q_LIMIT_EXCEEDED']) -- consistent with the E10-01 VEHICLE_CAPABILITY finding; the independent twin agrees on the trajectory, not on closure",
+  "landing burn unplannable from the real crossed handoff (['LANDING_INFEASIBLE']) -- the terminal comparison is ballistic impact, and the E8-05 corridor-start landing check is hereby recorded as design_input, not full-chain independent verification"
+ ],
+ "provenance": {
+  "python": "3.13.18",
+  "numpy": "2.5.5",
+  "orbitopt": "installed (version unknown)",
+  "tudatpy": null,
+  "pykep": null
+ },
+ "digest": "e9aa7a2527556dcb8bf84bde71f131d4c73e5aef716f98cfda6256081189b266",
+ "runtime_s": 327.8
+}
