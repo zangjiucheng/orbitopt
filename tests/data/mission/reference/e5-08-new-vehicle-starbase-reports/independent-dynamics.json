@@ -167,7 +167,7 @@
  },
  "inputs": {
   "reference": {
-   "root": "/Users/jiucheng/Dev/orbitopt-starbase/tests/data/mission/reference/e5-08-new-vehicle-starbase",
+   "root": "/var/lib/context-forge/301/repo/tests/data/mission/reference/e5-08-new-vehicle-starbase",
    "description": "E5-08 new-vehicle qualification mission (Starship-class RTLS-derived design: the E5-07 reference stack with the DC1 powered-entry RTLS scheme; ascent recorded computed, booster recovery FLOWN through the shipped E3 chain, full_mission declared -- the closure E5-07 reported as a gap)",
    "provenance_files_checked": 22,
    "provenance_ok": true,
@@ -326,7 +326,7 @@
     "evidence": "independent_model",
     "unit": "m",
     "limit": 250.0,
-    "value": -6.787130475109933,
+    "value": -6.7871304751099615,
     "passed": true,
     "reference": "nominal discrepancy minus the measured error-budget lines (reported, never zeroed; E8-02 accounting discipline)",
     "basis": "nominal MECO position discrepancy minus the measured engine/aero/numerical budget lines; what remains is interaction terms, engine-model shape differences and throttle-schedule tracking"
@@ -337,7 +337,7 @@
     "evidence": "independent_model",
     "unit": "m/s",
     "limit": 18.0,
-    "value": -0.21137683162167598,
+    "value": -0.2113768316218021,
     "passed": true,
     "reference": "nominal discrepancy minus the measured error-budget lines (reported, never zeroed; E8-02 accounting discipline)",
     "basis": "residual MECO velocity discrepancy after the three measured lines: the part of the engine-model difference invisible from the raw state history (ambient thrust correction and mass-flow shape) coupled through the gravity-turn path; measured 13.2 m/s"
@@ -348,7 +348,7 @@
     "evidence": "independent_model",
     "unit": "m",
     "limit": 350.0,
-    "value": -7.24658986480344,
+    "value": -7.246589864803411,
     "passed": true,
     "reference": "nominal discrepancy minus the measured error-budget lines (reported, never zeroed; E8-02 accounting discipline)",
     "basis": "residual at separation: carries the MECO residual forward through 3 s of coast, plus coast-integration cross terms"
@@ -359,7 +359,7 @@
     "evidence": "independent_model",
     "unit": "m",
     "limit": 2500.0,
-    "value": -62.5692579833335,
+    "value": -65.53008032035018,
     "passed": true,
     "reference": "nominal discrepancy minus the measured error-budget lines (reported, never zeroed; E8-02 accounting discipline)",
     "basis": "residual at SECO after 378 s of stage-2 burn: accumulated path difference not explained by the three measured probe lines"
@@ -381,7 +381,7 @@
     "evidence": "independent_model",
     "unit": "m/s",
     "limit": 25.0,
-    "value": 4.314960139072616,
+    "value": 4.314960139072733,
     "passed": true,
     "reference": "same comparison, velocity",
     "basis": "measured ~15 m/s nominal, engine-Isp line; margin on MECO mass-deficit line (Isp law mismatch ~1.2% of stage-1 burn)"
@@ -403,7 +403,7 @@
     "evidence": "independent_model",
     "unit": "m/s",
     "limit": 15.0,
-    "value": 4.317851481633218,
+    "value": 4.317851481633334,
     "passed": true,
     "reference": "same comparison, velocity",
     "basis": "the MECO velocity offset, coasted 3 s nearly unchanged; measured ~5.4 m/s with the same engine-line origin"
@@ -414,7 +414,7 @@
     "evidence": "independent_model",
     "unit": "m",
     "limit": 5000.0,
-    "value": 1942.8424752853218,
+    "value": 1942.7415258223136,
     "passed": true,
     "reference": "point-mass twin (repo 3-DOF plant, open-loop authored program) vs the raw OpenTsiolkovsky state history interpolated at the declared event epoch",
     "basis": "378 s of stage-2 burn accumulate the (smaller, +0.3 s equivalent) Isp-law offset plus gravity-loss-path drift; measured ~2.7e3 m"
@@ -425,7 +425,7 @@
     "evidence": "independent_model",
     "unit": "m/s",
     "limit": 20.0,
-    "value": 6.406440733395127,
+    "value": 5.049821662701092,
     "passed": true,
     "reference": "same comparison, velocity",
     "basis": "measured ~7 m/s; margin for the stage-2 mass-flow-line offset"
@@ -458,7 +458,7 @@
     "evidence": "independent_model",
     "unit": "kg",
     "limit": 2000.0,
-    "value": -169.60966776960413,
+    "value": 0.3793403880263213,
     "passed": true,
     "reference": "twin stage-2 burnout mass vs raw",
     "basis": "measured ~5e1 kg: the stage-2 Isp line is declared from the recorded vacuum Isp directly, so only integration-path terms remain"
@@ -469,7 +469,7 @@
     "evidence": "independent_model",
     "unit": "Pa",
     "limit": 1200.0,
-    "value": -27.920186352836026,
+    "value": -27.920186348397692,
     "passed": true,
     "reference": "twin max-q vs the recorded maxima (dynamic_pressure_pa)",
     "basis": "max-q agreement of two point-mass models sharing the CA polar: measured ~3e1 Pa (-0.08%); band ~3%"
@@ -480,7 +480,7 @@
     "evidence": "independent_model",
     "unit": "s",
     "limit": 2.0,
-    "value": -0.9024126532840739,
+    "value": -0.9024126532792778,
     "passed": true,
     "reference": "same, epoch of the max",
     "basis": "max-q is a broad maximum; phase offset follows the thrust-rise line; measured -0.9 s"
@@ -491,7 +491,7 @@
     "evidence": "independent_model",
     "unit": "m",
     "limit": 15000.0,
-    "value": 10521.601960924454,
+    "value": 6109.266444769688,
     "passed": true,
     "reference": "closed-form elements of the twin SECO state vs the recorded raw state at the same epoch (same formula both sides)",
     "basis": "osculating elements from both SECO states with the same closed form; the semi-major axis follows the velocity discrepancy, da ~ 2*a*dv/v (about 1.75 km per m/s here), so the band is the SECO velocity band seen through vis-viva; measured 8.5 km"
@@ -502,7 +502,7 @@
     "evidence": "independent_model",
     "unit": "-",
     "limit": 0.003,
-    "value": 0.0014801480403178495,
+    "value": 0.0008466108934643678,
     "passed": true,
     "reference": "same comparison",
     "basis": "tracks the SECO state band; measured ~1e-4"
@@ -513,7 +513,7 @@
     "evidence": "independent_model",
     "unit": "deg",
     "limit": 0.05,
-    "value": -0.001010830486780634,
+    "value": -0.0005059649295020563,
     "passed": true,
     "reference": "same comparison",
     "basis": "the attitude program fixes the azimuth profile; inclination discrepancy is second-order in the state offset"
@@ -546,7 +546,7 @@
     "evidence": "independent_model",
     "unit": "%",
     "limit": 12.0,
-    "value": 12.802461907259376,
+    "value": 12.80246190725939,
     "passed": false,
     "reference": "Earth-relative impact speed difference, percent of recorded",
     "basis": "impact speed vs recorded (both Earth-relative); measured ~8.5%; the power-off CA table is an illustrative blunt-body polar"
@@ -568,7 +568,7 @@
     "evidence": "independent_model",
     "unit": "m/s",
     "limit": 2.5,
-    "value": 0.2922911053630116,
+    "value": 0.29229110536309105,
     "passed": true,
     "reference": "same, velocity",
     "basis": "same comparison at the cutoff node; measured ~0.9 m/s"
@@ -590,7 +590,7 @@
     "evidence": "independent_model",
     "unit": "m/s",
     "limit": 15.0,
-    "value": 8.994200530977517,
+    "value": 8.99420053097743,
     "passed": true,
     "reference": "vertical-speed disagreement at touchdown (cutoff-state offset amplified ballistically; the design limit itself is graded on the FL-301 re-flight, design_input)",
     "basis": "touchdown vertical-speed disagreement: amplifies the cutoff-state offset ballistically (the cutoff is a fixed-clock engine stop, so a cutoff-height error dh enters as sqrt(v^2+2g dh)); the *design limit* 3 m/s is graded on the FL-301 re-flight alone (design_input)"
@@ -601,7 +601,7 @@
     "evidence": "independent_model",
     "unit": "m/s",
     "limit": 3.0,
-    "value": 0.09589654886730714,
+    "value": 0.09589654886730037,
     "passed": true,
     "reference": "lateral-speed disagreement",
     "basis": "measured ~0.25 m/s: the crossrange channels barely diverge between the two re-flights; band leaves 10x margin on the observed disagreement"
@@ -623,7 +623,7 @@
     "evidence": "design_input",
     "unit": "-",
     "limit": 1.0,
-    "value": 0.7561180059338134,
+    "value": 0.7561180059338394,
     "passed": true,
     "reference": "FL-301 landing checks of the re-flown plan",
     "basis": "FL-301 design gates on the shared re-flight (gfold arc, FL-303 re-integration): worst gate utilisation; the corridor and the 3-engine landing configuration are design inputs, so this is the design grading, not independent validation"
@@ -663,23 +663,23 @@
    "meco_pos": {
     "measured_delta": 163.18226952296715,
     "lines": {
-     "engine": 153.01986794144833,
+     "engine": 153.01986794144835,
      "aero": 16.712173389087923,
      "numerical": 0.2373586675408319,
      "frame_time": 0.0,
      "controller": 0.0,
-     "residual": -6.787130475109933
+     "residual": -6.7871304751099615
     }
    },
    "meco_vel": {
-    "measured_delta": 4.314960139072616,
+    "measured_delta": 4.314960139072733,
     "lines": {
-     "engine": 4.192597119702851,
-     "aero": 0.3059995236447479,
-     "numerical": 0.027740327346692517,
+     "engine": 4.19259711970298,
+     "aero": 0.30599952364475147,
+     "numerical": 0.02774032734680354,
      "frame_time": 0.0,
      "controller": 0.0,
-     "residual": -0.21137683162167598
+     "residual": -0.2113768316218021
     }
    },
    "meco_mass": {
@@ -698,21 +698,21 @@
     "lines": {
      "engine": 161.35806808692206,
      "aero": 17.319040741981524,
-     "numerical": 0.2804398338506928,
+     "numerical": 0.2804398338506644,
      "frame_time": 0.0,
      "controller": 0.0,
-     "residual": -7.24658986480344
+     "residual": -7.246589864803411
     }
    },
    "separation_vel": {
-    "measured_delta": 4.317851481633218,
+    "measured_delta": 4.317851481633334,
     "lines": {
-     "engine": 4.1965769225572025,
-     "aero": 0.30635028340590864,
-     "numerical": 0.027757618393652983,
+     "engine": 4.196576922557331,
+     "aero": 0.3063502834061156,
+     "numerical": 0.027757618393764005,
      "frame_time": 0.0,
      "controller": 0.0,
-     "residual": -0.21283334272354626
+     "residual": -0.21283334272387666
     }
    },
    "separation_debris_mass": {
@@ -727,36 +727,36 @@
     }
    },
    "seco_pos": {
-    "measured_delta": 1942.8424752853218,
+    "measured_delta": 1942.7415258223136,
     "lines": {
-     "engine": 1859.1348671346193,
-     "aero": 145.71342213106846,
-     "numerical": 0.5634440029675716,
+     "engine": 1862.1817149785247,
+     "aero": 145.67521261072216,
+     "numerical": 0.41467855341693394,
      "frame_time": 0.0,
      "controller": 0.0,
-     "residual": -62.5692579833335
+     "residual": -65.53008032035018
     }
    },
    "seco_vel": {
-    "measured_delta": 6.406440733395127,
+    "measured_delta": 5.049821662701092,
     "lines": {
-     "engine": 3.5882159326748946,
-     "aero": 0.3086139478923897,
-     "numerical": -0.27638843718802786,
+     "engine": 4.78832702505992,
+     "aero": 0.36900907035390507,
+     "numerical": -0.09853981746533957,
      "frame_time": 0.0,
      "controller": 0.0,
-     "residual": 2.7859992900158703
+     "residual": -0.008974615247393736
     }
    },
    "seco_mass": {
-    "measured_delta": 169.60966776960413,
+    "measured_delta": 0.3793403880263213,
     "lines": {
-     "engine": 0.01119963580276817,
-     "aero": 0.0011035528732463717,
-     "numerical": -24.74124759528786,
+     "engine": -0.01119963580276817,
+     "aero": -0.0011035528732463717,
+     "numerical": -23.982566819235217,
      "frame_time": 0.0,
      "controller": 0.0,
-     "residual": 194.33861217621597
+     "residual": 24.374210395937553
     }
    }
   },
@@ -781,34 +781,34 @@
    "engines": 3,
    "plan_tof_s": 17.444948719721964,
    "fl301_position_error_m": 7.3270180646518535,
-   "fl301_vertical_speed_m_s": -2.2683540178014403,
-   "fl301_lateral_speed_m_s": 0.6020653444469873,
+   "fl301_vertical_speed_m_s": -2.268354017801518,
+   "fl301_lateral_speed_m_s": 0.6020653444469812,
    "fl301_final_mass_kg": 425654.7288990181,
    "independent_touchdown": {
     "t_s": 218.39725338600837,
     "pos_enu_m": [
      7.108247225999897,
-     4.401342732528293e-09,
-     -3.958907861832892e-06
+     4.401342733605295e-09,
+     -3.958907861782476e-06
     ],
     "vel_enu_m": [
-     0.5061687955796802,
-     2.608522144111677e-11,
-     -11.262554548778958
+     0.5061687955796809,
+     2.6072797450408315e-11,
+     -11.26255454877895
     ],
     "mass_kg": 425650.6814699924
    },
    "independent_cutoff": {
     "t_s": 217.44494871972196,
     "pos_enu_m": [
-     6.628635652312222,
-     2.969774670893579e-09,
+     6.628635652312223,
+     2.9697751149827888e-09,
      6.279155591508772
     ],
     "vel_enu_m": [
-     0.506413076637273,
-     2.6089444073905146e-11,
-     -1.9922934368297327
+     0.5064130766372736,
+     2.6076420037405023e-11,
+     -1.9922934368297252
     ],
     "mass_kg": 425650.6814699924
    }
@@ -849,11 +849,11 @@
   "converged": true
  },
  "provenance": {
-  "python": "3.12.13",
-  "numpy": "2.5.4",
-  "orbitopt": "0.1.0",
-  "tudatpy": "1.1.0",
-  "pykep": "2.6.4"
+  "python": "3.13.18",
+  "numpy": "2.5.5",
+  "orbitopt": "installed (version unknown)",
+  "tudatpy": null,
+  "pykep": null
  },
- "digest": "654b750b9088de509ddeaed1f7fe9d80026dc6b282486be66adeeb26ef65059a"
+ "digest": "788493364632ddcda7cb5d7e15eab4cdd76f818ba11324292293ffb94d4d12cc"
 }

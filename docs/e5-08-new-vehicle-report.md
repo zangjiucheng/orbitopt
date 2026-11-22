@@ -21,7 +21,7 @@ ascent. These are modeled designs, not historical flight validation.
 | Peak ascent load | 2.888 g | 2.976 g | 2.928 g |
 | Nominal recovery | Landing failed | Landed; 113.1 t remaining | Landed; 107.1 t remaining |
 | Cross-environment joint gate, recorded summary | Failed: landing | Passed | Passed |
-| Independent-model checks | 27/27 passed | 26/27 passed | 26/27 passed |
+| Independent-model checks | 27/27 passed | 27/27 passed | 26/27 passed |
 | Hold-out recovery, pinned script | Not recorded | 11/36 | 4/36 |
 | Hold-out recovery, per-sample refinement | 0/30 | 3/36 | 0/36 |
 
@@ -42,10 +42,11 @@ recording metadata.
   the landing is refused or fails. Its projected post-landing reserve is
   96.1 t, about 3.9 t below the 100 t requirement. A reserve check on an
   aborted rollout does not evidence a successful landing.
-- **DC7 independent dynamics:** SECO semi-major-axis discrepancy is 27.7 km
-  against a 15 km band. The band was not changed.
+- **DC7 independent dynamics:** closed by E10-04, band unchanged (see below).
 - **Starbase independent dynamics:** debris impact-speed discrepancy is
-  12.80% against a 12% band. The band was not changed.
+  12.80% against a 12% band. E10-04 evidenced it as a genuine drag-model
+  difference, not an implementation artifact (see below). The band was not
+  changed and the check is recorded as failing.
 - **Reliability:** both nominally closing designs have low hold-out success
   under the declared FL-304 dispersions. Pinned and per-sample-refined
   experiments use different planning modes; do not pool their rates.
@@ -55,6 +56,58 @@ per seed. Original-design results use seeds 5, 6 and 7, with 10 per seed.
 See [E7-05](benchmarks/e7_05_out_of_sample_reliability.md) for cluster-aware
 statistics. The original independent landing check uses a declared design
 corridor; it does not validate the failed mission's actual arrival state.
+
+## E10-04: closing the two open discrepancies (task #301)
+
+Neither tolerance was changed. The two open checks closed differently, and the
+difference between the two outcomes is the point of the exercise.
+
+**DC7 SECO semi-major axis — implementation artifact, fixed (27.7 km -> 5.85 km
+against the same 15 km band).** The independent-dynamics twin compares itself
+against the raw OpenTsiolkovsky state history interpolated at each declared
+event epoch. That interpolation was a straight chord across the bracketing 2 s
+segment. On this design MECO (123.0 s) and SECO (514.663 s) fall mid-segment,
+across the engine-cutoff discontinuity: the chord averaged the powered and
+coasting slopes, ~12.4 m/s too low at MECO and ~13 m/s too low at SECO - about
+1.75 km of semi-major axis per m/s, which was ~22 km of the 27.7 km. It also
+over-read the recorded coast mass at MECO by ~8.4 t. The fix reconstructs the
+state inside such a segment from the LEFT raw row and its own recorded
+accelerations (position quadratic, velocity linear, mass from the left row's
+thrust/isp flow), which is exact up to the mid-segment switch; event times that
+land on a grid row or a smooth segment behave exactly as before. After the fix
+all 28 DC7 checks pass, with the measured budget lines (E8-02 discipline)
+accounted in the report: MECO mass discrepancy −6,436 kg with the debris-mass
+line −6,436 kg (one engine-Isp line, ~1.2% of the stage-1 burn), SECO velocity
++5.2 m/s, SECO SMA +5.85 km. Regression tests:
+`tests/test_e805_independent_dynamics.py` (kink reconstruction, ignition mass
+hold, recorded-DC7 SMA invariance).
+
+**Starbase debris impact speed — genuine model difference, kept over-tolerance
+(12.80% against the same 12% band).** Replaying the twin's own power-off debris
+integrator from the RECORDED separation state and RECORDED debris mass
+(identical initial conditions, same US76 atmosphere, no shared code path)
+reproduces the gap: +12.7% at the declared CA polar versus the report's 12.8%,
+so timing, frame convention, interpolation and engine lines are ruled out. The
+twin reproduces the recorded descent to within 0.5 % at every shared altitude down to
+22 km (dynamic pressure ~98 kPa) and from there to impact the recorded body sheds
+393 m/s against the twin's 190 (~2x the deceleration); scaling the
+declared blunt-body power-off polar by x1.1 closes the gap (+10.8%). The two
+independent models disagree on the power-off drag coefficient of a tumbling
+upper stage in dense transonic flow - an illustrative design-table input, not a
+measurement - so this is recorded as a genuine model difference per the E8-05
+evidence rule, the check stays red, and the band stays at 12%. Evidence and
+sweep: `debris-model-difference.json` in the Starbase reports directory.
+
+**E10-02 hot staging (DC8) re-evaluation.** The same fix was applied to the
+DC8 pseudo-reference comparison (`docs/benchmarks/e10_02_hot_staging.json`,
+regenerated). It moves every affected band the right way - SECO velocity
+discrepancy 45.2 -> 37.0 m/s, SECO SMA 50.7 -> 34.5 km, SECO mass −2.9 ->
+−2.3 t, separation position back inside its band - because DC8's MECO (125.5 s)
+and SECO (513.663 s) also sit mid-segment. What still fails is the declared
+hot-timeline representation split itself (OT ends all stack power at
+separation; the twin burns the booster's post-separation floor burn), which is
+larger on this timeline because the stack flies powered through the events, and
+is disclosed in the benchmark, not absorbed.
 
 ## Replay and view
 

@@ -171,7 +171,15 @@ def test_the_mission_replays_green_from_the_sealed_tree(tmp_path):
 
 def test_the_independent_dynamics_result_is_recorded_as_it_is():
     """E8-05 on this design: 27 of 28. The debris-impact speed misses its band by 0.8 points
-    (12.8 % against 12 %); the band is NOT loosened."""
+    (12.8 % against 12 %); the band is NOT loosened. E10-04 evidenced this as a genuine
+    aero-model difference, not an implementation artifact: replaying the twin's own debris
+    integrator from the RECORDED separation state and debris mass reproduces the gap
+    (+12.7 %, debris-model-difference.json), the descent agrees to within 0.5 %
+    until dynamic pressure passes ~100 kPa and then the recorded trajectory sheds 393 m/s
+    below 22 km against the twin's 190 (~2x the deceleration), and scaling the
+    declared illustrative blunt-body CA polar by 1.1 closes it (+10.8 %). Same-state replay
+    rules out timing, frame, interpolation and engine lines; the two models disagree on the
+    power-off drag coefficient in high-q transonic flow."""
     rep = json.loads((REPORTS / "independent-dynamics.json").read_text())
     details = rep["inputs"]["check_details"]
     assert rep["status"]["passed"] is False and len(details) == 28

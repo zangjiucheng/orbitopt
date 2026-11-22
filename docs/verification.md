@@ -242,9 +242,15 @@ No check in this report uses `historical_telemetry` evidence: the reference
 vehicle is a public estimate, not flown hardware.
 
 The [E5-08 variants](e5-08-new-vehicle-report.md) apply these checks to new
-designs. DC7 fails the 15 km SECO semi-major-axis band (27.7 km measured);
-Starbase fails the 12% debris impact-speed band (12.80% measured). Their
-nominal joint physical passes do not clear these independent-model failures.
+designs. E10-04 closed both open discrepancies without touching a band: the DC7
+SECO semi-major-axis fail (27.7 km against 15 km) was an interpolation artifact
+in the comparison itself and now measures 5.85 km; the Starbase debris impact
+speed (12.80% against 12%) was evidenced by identical-state replay to be a
+genuine power-off drag-model difference between the independent models and is
+recorded as still failing. See
+[E10-04](e5-08-new-vehicle-report.md#e10-04-closing-the-two-open-discrepancies-task-301).
+Their nominal joint physical passes do not clear the remaining
+independent-model failure.
 
 ## Benchmarks against public references
 
