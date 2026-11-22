@@ -1,7 +1,7 @@
 {
  "schema": "e10-02-hot-staging-1.0",
- "created_utc": "2026-11-21T23:49:55Z",
- "elapsed_s": 968.4,
+ "created_utc": "2026-11-22T03:39:37Z",
+ "elapsed_s": 2182.9,
  "scenario": "leo_starship_class_rtls_e508_dc7.yaml",
  "assumptions": {
   "plume_axial_loss_fraction": 0.04,
@@ -352,7 +352,7 @@
    {
     "id": "ascent.seco.residual_position",
     "passed": false,
-    "value": 11576.908532467916,
+    "value": 11579.101576613999,
     "limit": 2500.0
    },
    {
@@ -382,13 +382,13 @@
    {
     "id": "ascent.seco.state_position",
     "passed": false,
-    "value": 9431.748270571297,
+    "value": 9433.655806034818,
     "limit": 5000.0
    },
    {
     "id": "ascent.seco.state_velocity",
     "passed": false,
-    "value": 45.17957262170409,
+    "value": 37.01017310739625,
     "limit": 20.0
    },
    {
@@ -406,7 +406,7 @@
    {
     "id": "ascent.seco.mass",
     "passed": false,
-    "value": -2883.0210050394235,
+    "value": -2334.732662539929,
     "limit": 2000.0
    },
    {
@@ -424,19 +424,19 @@
    {
     "id": "ascent.seco.orbit_semi_major_axis",
     "passed": false,
-    "value": 50729.65461870935,
+    "value": 34450.76217699796,
     "limit": 15000.0
    },
    {
     "id": "ascent.seco.orbit_eccentricity",
-    "passed": true,
-    "value": 0.00148311754660704,
+    "passed": false,
+    "value": 0.003754259721568343,
     "limit": 0.003
    },
    {
     "id": "ascent.seco.orbit_inclination",
     "passed": true,
-    "value": 0.014785977515735738,
+    "value": 0.010230845402581679,
     "limit": 0.05
    },
    {
@@ -510,7 +510,8 @@
    "ascent.seco.state_velocity",
    "ascent.separation.debris_mass",
    "ascent.seco.mass",
-   "ascent.seco.orbit_semi_major_axis"
+   "ascent.seco.orbit_semi_major_axis",
+   "ascent.seco.orbit_eccentricity"
   ],
   "note": "the ascent/separation checks compare the point-mass twin against the DC8 OpenTsiolkovsky flight. Every open band traces to the two declared representation splits: the twin burns the mated overlap from the ship's own tank with a flow-blended Isp while the OT single-stack fold charges the composite thrust against the stage-1 tank at stage-1 Isp (hence the stage-1 debris-mass and stage-2 mass/velocity offsets), and OT cannot express the booster's 0.5-s post-separation floor burn (hence part of the separation state offset); the residual bands then apply E8-02's budget accounting to those offsets. The DC7 baseline report itself carries an open band (ascent.seco.orbit_semi_major_axis) for the same family of open-loop-program vs guided-profile differences."
  }
