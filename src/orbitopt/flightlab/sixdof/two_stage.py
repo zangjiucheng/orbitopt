@@ -48,6 +48,16 @@ Scheduling notes
 * A single RK4 step that straddles the ignition instant sees the throttle
   edge inside its stage evaluations -- the ignition transition is spread
   over one plant step, ~dt seconds. That is disclosed, not smoothed.
+* E10-02 (task #299): a scenario carrying ``hot=HotStagingPlan(...)`` lights
+  the upper stage's engine while the stages are still mated -- the overlap
+  leg flies a plume-corrected COMPOSITE engine (ship thrust folded into the
+  stack's, sharing its gimbal travel), the stack phase is two closed-loop
+  legs concatenated at the ignition instant, and there is no coast anywhere:
+  ship ignition -> separation -> child runs, with the child upper stage
+  already alight at spawn (``IgnitionPlan`` delay 0). The split bookkeeping
+  charges the ship's mated burn separately (``connected_upper_burn_kg``),
+  and the composite engine's single-gimbal-pivot / vacuum-Isp bookkeeping is
+  the declared simplification, mirroring ``orbitopt.flightlab.hot_staging``.
 
 Conventions are the reference plant's (body x fwd / y right / z down, ECEF
 states, scalar-first Tec2b quaternion, mission clock continuing across the
@@ -80,6 +90,7 @@ from orbitopt.flightlab.handoff import (
 )
 from orbitopt.flightlab.sixdof.rigidbody import (
     ControlCommand,
+    RigidBodyEngine,
     RigidBodyPhysics,
     RigidBodyState,
     RigidBodyVehicle,
@@ -97,6 +108,7 @@ from orbitopt.flightlab.sixdof.tvc import (
 )
 
 __all__ = [
+    "HotStagingPlan",
     "IgnitionPlan",
     "StagePair",
     "TwoStageScenario",
@@ -177,16 +189,25 @@ class StagePair:
                              f"{self.separation_impulse_ns}")
 
     def resolve(self, stack_mass_at_t0_kg: float,
-                stack_mass_at_separation_kg: float) -> tuple[RigidBodyVehicle,
-                                                             RigidBodyVehicle,
-                                                             dict[str, float]]:
+                stack_mass_at_separation_kg: float, *,
+                connected_upper_burn_kg: float = 0.0) -> tuple[RigidBodyVehicle,
+                                                               RigidBodyVehicle,
+                                                               dict[str, float]]:
         """Child vehicles with their **at-separation** loads, plus the split
         bookkeeping. ``stack_mass_at_separation_kg`` is the frozen (live) mass
         from the flown stack; stage-1 burned propellant is the mass the trace
-        lost since ``t0``, floored by the stage-1 load."""
+        lost since ``t0``, floored by the stage-1 load.
+
+        E10-02 (task #299): with hot staging the upper engine also burns while
+        mated, so ``connected_upper_burn_kg`` (the ship's own mated-phase burn)
+        is carved out of the trace loss before attributing the remainder to
+        stage-1 -- the mass/momentum split itself is unchanged, only the
+        attribution. The stage-1 load remains the floor."""
         burned = min(max(stack_mass_at_t0_kg - stack_mass_at_separation_kg, 0.0),
                      self.booster.propellant_mass_kg)
-        booster_prop = self.booster.propellant_mass_kg - burned
+        connected = min(max(float(connected_upper_burn_kg), 0.0), burned)
+        burned_stage1 = burned - connected
+        booster_prop = self.booster.propellant_mass_kg - burned_stage1
         booster_mass = self.booster.dry_mass_kg + booster_prop
         upper_mass = stack_mass_at_separation_kg - booster_mass
         if upper_mass < self.upper.dry_mass_kg - 1e-9:
@@ -203,7 +224,8 @@ class StagePair:
         bookkeeping = {
             "stack_mass_t0_kg": float(stack_mass_at_t0_kg),
             "stack_mass_separation_kg": float(stack_mass_at_separation_kg),
-            "stage1_propellant_burned_kg": float(burned),
+            "stage1_propellant_burned_kg": float(burned_stage1),
+            "connected_upper_burn_kg": float(connected),
             "booster_propellant_remaining_kg": float(booster_prop),
             "upper_propellant_kg": float(upper_mass - self.upper.dry_mass_kg),
         }
@@ -243,6 +265,82 @@ def delayed_ignition_control(plan: IgnitionPlan) -> Callable:
     return control
 
 
+#: Standard gravity [m/s^2], the mass-flow constant of every engine model here.
+_G0 = 9.80665
+
+
+@dataclass(frozen=True)
+class HotStagingPlan:
+    """E10-02 (task #299): hot staging on the native plant. The upper stage's
+    engine lights at ``ship_ignition_t_s`` **while the stages are still
+    mated**, so there is no unpowered gap before ``separation_t_s`` -- the
+    stack flies one powered trace through the overlap, on a composite engine
+    (:meth:`composite_stack_engine`: plume-corrected ship thrust folded into
+    the stack engine, sharing its gimbal travel), and the child upper stage
+    is already alight when the split spawns it (its ``IgnitionPlan`` delay is
+    0). The contract-level twin of ``orbitopt.flightlab.hot_staging``, which
+    carries the same timeline for the point-mass backends.
+
+    ``plume_axial_loss_fraction`` is the (declared, assumed) axial fraction of
+    the mated ship's thrust lost to the booster's plume/interstage interaction
+    -- the only representation of the ship-on-booster interaction this plant
+    models. The ship's mated-phase propellant use (:meth:`ship_burn_kg`) is
+    charged separately at the split (``connected_upper_burn_kg``).
+    """
+
+    ship_ignition_t_s: float
+    separation_t_s: float
+    throttle: float = 1.0
+    plume_axial_loss_fraction: float = 0.04
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.ship_ignition_t_s) or self.ship_ignition_t_s <= 0.0:
+            raise ValueError(f"ship_ignition_t_s must be finite and > 0, got "
+                             f"{self.ship_ignition_t_s}")
+        if not self.ship_ignition_t_s < self.separation_t_s:
+            raise ValueError(f"hot staging needs ship ignition strictly BEFORE "
+                             f"separation ({self.ship_ignition_t_s} s >= "
+                             f"{self.separation_t_s} s)")
+        if not 0.0 < self.throttle <= 1.0:
+            raise ValueError(f"hot-staging ship throttle must be in (0, 1], got "
+                             f"{self.throttle}")
+        if not 0.0 <= self.plume_axial_loss_fraction < 1.0:
+            raise ValueError(f"plume_axial_loss_fraction must be in [0, 1), got "
+                             f"{self.plume_axial_loss_fraction}")
+
+    @property
+    def overlap_s(self) -> float:
+        """The mated powered overlap [s] between ship ignition and separation."""
+        return float(self.separation_t_s) - float(self.ship_ignition_t_s)
+
+    def ship_burn_kg(self, upper: RigidBodyVehicle) -> float:
+        """Ship propellant [kg] spent during the mated overlap at ``throttle``
+        (vacuum Isp bookkeeping -- the overlap sits above the dense air; the
+        sea-level correction over a one-to-two-second window is negligible)."""
+        eng = upper.engine
+        return (eng.thrust_vacuum_n * self.throttle / (eng.isp_vacuum_s * _G0)
+                * self.overlap_s)
+
+    def composite_stack_engine(self, stack: RigidBodyVehicle,
+                               upper: RigidBodyVehicle) -> RigidBodyEngine:
+        """The stack's engine over the overlap: full stack thrust plus the
+        plume-corrected ship thrust, at the flow-consistent blended Isp. The
+        stack's gimbal, mount and throttle envelope are kept -- the ship is
+        bolted to the booster for the whole overlap (declared simplification,
+        shared with the OT fold in :mod:`orbitopt.flightlab.hot_staging`)."""
+        eta = 1.0 - self.plume_axial_loss_fraction
+        e_b, e_s = stack.engine, upper.engine
+        f_b = float(e_b.thrust_vacuum_n)
+        f_s = float(e_s.thrust_vacuum_n) * self.throttle
+        flow = f_b / float(e_b.isp_vacuum_s) + f_s / float(e_s.isp_vacuum_s)
+        flow_sl = f_b / float(e_b.isp_sea_level_s) + f_s / float(e_s.isp_sea_level_s)
+        f_tot = f_b + eta * f_s
+        return replace(e_b, thrust_vacuum_n=f_tot,
+                       isp_vacuum_s=f_tot / flow, isp_sea_level_s=f_tot / flow_sl,
+                       nozzle_exit_area_m2=float(e_b.nozzle_exit_area_m2)
+                                            + float(e_s.nozzle_exit_area_m2))
+
+
 def _body_x_ecef(quaternion) -> np.ndarray:
     """Body +x expressed in ECEF: row 0 of the Tec2b DCM (the shared thrust
     line at separation, which is the axis a spring/URS impulse acts along)."""
@@ -251,6 +349,7 @@ def _body_x_ecef(quaternion) -> np.ndarray:
 
 def split_stack_state(frozen: RigidBodyState, pair: StagePair, *,
                       stack_mass_at_t0_kg: float,
+                      connected_upper_burn_kg: float = 0.0,
                       impulse_ns: float | None = None) -> tuple[RigidBodyState,
                                                                 RigidBodyState,
                                                                 dict[str, Any]]:
@@ -260,9 +359,13 @@ def split_stack_state(frozen: RigidBodyState, pair: StagePair, *,
 
     Mass closure and momentum are exact by construction (SI arithmetic, no
     property round-trip); the returned bookkeeping measures them anyway --
-    that table is what the acceptance checks read.
+    that table is what the acceptance checks read. ``connected_upper_burn_kg``
+    attributes the mated-phase ship burn (E10-02 hot staging) before the
+    remainder is charged to stage-1; the split arithmetic is unchanged.
     """
-    booster_v, upper_v, bk = pair.resolve(stack_mass_at_t0_kg, float(frozen.mass_kg))
+    booster_v, upper_v, bk = pair.resolve(
+        stack_mass_at_t0_kg, float(frozen.mass_kg),
+        connected_upper_burn_kg=connected_upper_burn_kg)
     j = pair.separation_impulse_ns if impulse_ns is None else float(impulse_ns)
     x_ecef = _body_x_ecef(frozen.quaternion)
     m_b = booster_v.mass_wet_kg
@@ -332,6 +435,10 @@ class TwoStageScenario:
     #: standard servo at the upper engine's own travel limit; the
     #: benchmark's ideal-actuator attribution rung sets it explicitly).
     upper_actuator: TvcActuator | None = None
+    #: E10-02 (task #299): hot staging -- ship ignition while mated, no coast
+    #: window (see :class:`HotStagingPlan`). ``None`` keeps the F-06 cold
+    #: separation with its scheduled delayed ignition.
+    hot: HotStagingPlan | None = None
 
     def __post_init__(self) -> None:
         if not 0.0 < self.separation_t_s < float(self.t_end_s):
@@ -343,6 +450,14 @@ class TwoStageScenario:
         if self.ignition.ignition_t_s > float(self.t_end_s):
             raise ValueError(f"ignition at t={self.ignition.ignition_t_s} s is after the "
                              f"run ends at t_end_s={self.t_end_s} s")
+        if self.hot is not None:
+            if abs(self.hot.separation_t_s - self.separation_t_s) > 1e-9:
+                raise ValueError("the hot-staging plan's separation instant must be the "
+                                 "scenario's separation instant")
+            if self.ignition.ignition_delay_s > 1e-9:
+                raise ValueError("with hot staging the child ignition plan's delay must "
+                                 "be 0: the ship is already alight at the split, so it "
+                                 "ignites (again, in the record) at separation itself")
         if self.dt_s <= 0.0 or int(self.sample_every) < 1:
             raise ValueError("dt_s must be positive and sample_every >= 1")
         if self.upper_guidance is not None and (abs(self.upper_guidance.ignition_t_s
@@ -471,6 +586,19 @@ def _terminal_state(run: SixDofRun) -> RigidBodyState:
         mass_kg=float(s["mass_kg"][-1]))
 
 
+def _concat_runs(a: SixDofRun, b: SixDofRun) -> SixDofRun:
+    """One continuous stack trace out of two consecutive closed-loop legs
+    (E10-02: booster leg + composite overlap leg). Shared sample grid, the
+    seam sample counted once; ``max_q`` and every derived diagnostic then read
+    the whole powered trace like on any single run."""
+    if tuple(a.columns) != tuple(b.columns):
+        raise ValueError("leg runs carry different columns and cannot be joined")
+    samples = {c: np.concatenate([np.asarray(a.samples[c], dtype=float),
+                                  np.asarray(b.samples[c], dtype=float)[1:]])
+               for c in a.columns}
+    return replace(b, samples=samples)
+
+
 def _ignition_onset_err_s(run: SixDofRun, ignition_t_s: float) -> float:
     """Signed delay [s] from the plan instant to the first nonzero-thrust
     sample. Negative = thrust came early (a violation); ``inf`` = the engine
@@ -527,7 +655,10 @@ class TwoStageStudy:
                          "ignition_delay_s": s.ignition.ignition_delay_s,
                          "ignition_t_s": s.ignition.ignition_t_s,
                          "t_end_s": s.t_end_s, "dt_s": s.dt_s,
-                         "impulse_ns": sep["separation_impulse_ns"]},
+                         "impulse_ns": sep["separation_impulse_ns"],
+                         **({} if s.hot is None else
+                            {"hot_ignition_t_s": s.hot.ship_ignition_t_s,
+                             "hot_overlap_s": s.hot.overlap_s})},
             "stack": {"max_q_pa": float(self.stack.max_q.q_pa),
                       "max_q_t_s": float(self.stack.max_q.t_s),
                       "att_err_max_deg": float(self.ascent.metrics.att_err_max_deg)},
@@ -551,7 +682,8 @@ def _speed_vec(velocity_m_s) -> float:
 
 
 def _acceptance_checks(s: TwoStageScenario, sep: Mapping[str, Any],
-                       booster_run: SixDofRun, upper_run: SixDofRun) -> tuple[Check, ...]:
+                       booster_run: SixDofRun, upper_run: SixDofRun,
+                       stack_run: SixDofRun | None = None) -> tuple[Check, ...]:
     p_norm = float(np.linalg.norm(np.asarray(sep["momentum_before_kg_m_s"], float)))
     mom_tol = max(MOMENTUM_RESIDUAL_FLOOR_N_S, MOMENTUM_RESIDUAL_TOL_REL * p_norm)
     mass_err = abs(float(sep["mass_residual_kg"]))
@@ -560,7 +692,7 @@ def _acceptance_checks(s: TwoStageScenario, sep: Mapping[str, Any],
     divergence = math.sqrt(sum((float(booster_run.samples[c][-1])
                                 - float(upper_run.samples[c][-1])) ** 2
                                for c in ("x_m", "y_m", "z_m")))
-    return (
+    checks = [
         Check("staging-mass-closure", mass_err < MASS_CLOSURE_TOL_KG, mass_err,
               MASS_CLOSURE_TOL_KG, "kg", ""),
         Check("staging-momentum-residual",
@@ -573,30 +705,60 @@ def _acceptance_checks(s: TwoStageScenario, sep: Mapping[str, Any],
               IGNITION_ONSET_SLACK_S, "s", ""),
         Check("staging-trajectory-divergence", divergence > TRAJECTORY_DIVERGENCE_MIN_M,
               divergence, TRAJECTORY_DIVERGENCE_MIN_M, "m", ""),
-    )
+    ]
+    if s.hot is not None and stack_run is not None:
+        # E10-02: the whole [ship ignition, separation) window is on the stack's
+        # powered trace -- the engine is never shut between the two events.
+        t = np.asarray(stack_run.samples["t_s"], dtype=float)
+        th = np.asarray(stack_run.samples["throttle"], dtype=float)
+        win = (t >= s.hot.ship_ignition_t_s) & (t <= s.separation_t_s)
+        checks.append(Check("staging-hot-window-powered",
+                            bool(win.any()) and float(np.min(th[win])) > 0.0,
+                            float(np.min(th[win])) if win.any() else float("nan"),
+                            0.0, "", ""))
+    return tuple(checks)
 
 
 def run_two_stage(scenario: TwoStageScenario | None = None, *,
                   epoch_utc: datetime | None = None) -> TwoStageStudy:
     """Fly the scenario (default :func:`f06_two_stage_scenario`): closed-loop
     stack to separation, the analytic split, two independent ``propagate``
-    calls to ``t_end_s``, acceptance checks, booster handoff state."""
+    calls to ``t_end_s``, acceptance checks, booster handoff state.
+
+    With a hot-staging plan (E10-02) the stack phase is two closed-loop legs
+    -- booster engine to ``ship_ignition_t_s``, composite engine to
+    ``separation_t_s`` -- joined into one powered trace; every other step, and
+    every conservation identity, is the cold-separation one."""
     s = scenario or f06_two_stage_scenario()
     epoch = epoch_utc or datetime(2026, 1, 1, tzinfo=timezone.utc)
 
-    ascent = run_closed_loop_ascent(s.state0, s.pair.stack, s.program, s.separation_t_s,
-                                    dt_s=s.dt_s, sample_every=s.sample_every,
-                                    actuator=s.real_actuator(), gains=s.gains,
-                                    throttle=1.0, dt_c_s=s.dt_c_s, physics=s.physics,
-                                    epoch_utc=epoch)
-    if ascent.run.terminal == "ground":
-        raise ValueError(f"the stack hit the ground at t={ascent.run.ground_t_s} s before "
-                         f"the separation instant {s.separation_t_s} s; pick a larger "
-                         f"thrust-to-weight or an earlier separation_t_s")
+    def _closed_loop(state: RigidBodyState, vehicle: RigidBodyVehicle,
+                     t_end_s: float) -> ControlledAscent:
+        asc = run_closed_loop_ascent(state, vehicle, s.program, t_end_s,
+                                     dt_s=s.dt_s, sample_every=s.sample_every,
+                                     actuator=s.real_actuator(), gains=s.gains,
+                                     throttle=1.0, dt_c_s=s.dt_c_s, physics=s.physics,
+                                     epoch_utc=epoch)
+        if asc.run.terminal == "ground":
+            raise ValueError(f"the stack hit the ground at t={asc.run.ground_t_s} s before "
+                             f"the separation instant {s.separation_t_s} s; pick a larger "
+                             f"thrust-to-weight or an earlier separation_t_s")
+        return asc
+
+    if s.hot is None:
+        ascent = _closed_loop(s.state0, s.pair.stack, s.separation_t_s)
+    else:
+        leg_a = _closed_loop(s.state0, s.pair.stack, s.hot.ship_ignition_t_s)
+        hot_stack = replace(s.pair.stack, engine=s.hot.composite_stack_engine(
+            s.pair.stack, s.pair.upper))
+        leg_b = _closed_loop(_terminal_state(leg_a.run), hot_stack, s.separation_t_s)
+        ascent = replace(leg_b, run=_concat_runs(leg_a.run, leg_b.run))
     frozen = _terminal_state(ascent.run)
 
-    booster_s, upper_s, sep = split_stack_state(frozen, s.pair,
-                                                stack_mass_at_t0_kg=s.state0.mass_kg)
+    booster_s, upper_s, sep = split_stack_state(
+        frozen, s.pair, stack_mass_at_t0_kg=s.state0.mass_kg,
+        connected_upper_burn_kg=(s.hot.ship_burn_kg(s.pair.upper)
+                                 if s.hot is not None else 0.0))
     booster_v = replace(s.pair.booster,
                         propellant_mass_kg=sep["booster_propellant_remaining_kg"])
     upper_v = replace(s.pair.upper, propellant_mass_kg=sep["upper_propellant_kg"])
@@ -627,7 +789,7 @@ def run_two_stage(scenario: TwoStageScenario | None = None, *,
         velocity_m_s=tuple(float(c) for c in booster_s.velocity_m_s),
         mass_kg=booster_s.mass_kg, dry_mass_kg=booster_v.dry_mass_kg, ignitions_used=1)
 
-    checks = _acceptance_checks(s, sep, booster_run, upper_run)
+    checks = _acceptance_checks(s, sep, booster_run, upper_run, stack_run=ascent.run)
     return TwoStageStudy(scenario=s, ascent=ascent, frozen_state=frozen, separation=sep,
                          booster_state=booster_s, upper_state=upper_s,
                          booster=booster_run, upper=upper_run,
@@ -647,6 +809,24 @@ def to_flight_run(study: TwoStageStudy, *, run_id: str = "f06-two-stage-native",
     s = study.scenario
     sep = study.separation
     mk = lambda tag: hashlib.sha256(f"f06:{tag}".encode()).hexdigest()
+    assumptions = tuple(s.assumptions) + (
+        (f"Separation at t={s.separation_t_s} s with a "
+         f"{sep['separation_impulse_ns']} N.s body-+x impulse "
+         f"(+{sep['dv_upper_m_s']:.3f} m/s upper / -{sep['dv_booster_m_s']:.3f} m/s "
+         f"booster); upper ignition scheduled at t={s.ignition.ignition_t_s} s "
+         f"(delay {s.ignition.ignition_delay_s} s)."),
+        ("Booster handed to recovery on the M-01 separation->boostback boundary "
+         f"(handoff digest {study.booster_handoff_digest[:12]})."),
+    )
+    if s.hot is not None:
+        assumptions += (
+            (f"Hot staging (E10-02): upper ignition at t={s.hot.ship_ignition_t_s} s "
+             f"while mated -- {s.hot.overlap_s} s of powered overlap, no coast window; "
+             f"the overlap flies a plume-corrected composite engine "
+             f"(axial loss {s.hot.plume_axial_loss_fraction}, declared assumption) on "
+             f"the stack's gimbal, and the ship's mated burn "
+             f"{sep['connected_upper_burn_kg']:.1f} kg is charged to it, not stage-1."),
+        )
     return FlightRun(
         run_id=run_id,
         target_sha256=mk("no-flight-target-two-stage-scenario"),
@@ -656,15 +836,7 @@ def to_flight_run(study: TwoStageStudy, *, run_id: str = "f06-two-stage-native",
         engines={"stage1": "spike_stage engine (vac 1.88 MN / Isp 320 s)",
                  "stage2": "upper engine (vac 220 kN / Isp 340 s)"},
         backend=BACKEND_NATIVE_RIGIDBODY,
-        assumptions=tuple(s.assumptions) + (
-            (f"Separation at t={s.separation_t_s} s with a "
-             f"{sep['separation_impulse_ns']} N.s body-+x impulse "
-             f"(+{sep['dv_upper_m_s']:.3f} m/s upper / -{sep['dv_booster_m_s']:.3f} m/s "
-             f"booster); upper ignition scheduled at t={s.ignition.ignition_t_s} s "
-             f"(delay {s.ignition.ignition_delay_s} s)."),
-            ("Booster handed to recovery on the M-01 separation->boostback boundary "
-             f"(handoff digest {study.booster_handoff_digest[:12]})."),
-        ),
+        assumptions=assumptions,
         tracks=(
             study.stack.to_body_track(body_id="stack"),
             study.booster.to_body_track(body_id="booster", parent_body_id="stack"),
@@ -676,6 +848,10 @@ def to_flight_run(study: TwoStageStudy, *, run_id: str = "f06-two-stage-native",
                   {"dynamic_pressure_pa": float(study.stack.max_q.q_pa),
                    "altitude_m": float(study.stack.max_q.altitude_m),
                    "mach": float(study.stack.max_q.mach)}),
+            *(() if s.hot is None else (
+                Event(s.hot.ship_ignition_t_s, "ignition", "upper",
+                      {"throttle": s.hot.throttle, "mated": True,
+                       "overlap_s": s.hot.overlap_s}),)),
             Event(s.separation_t_s, "separation", "stack",
                   {"impulse_ns": sep["separation_impulse_ns"],
                    "mass_kg": float(sep["stack_mass_separation_kg"])}),
@@ -687,7 +863,8 @@ def to_flight_run(study: TwoStageStudy, *, run_id: str = "f06-two-stage-native",
                    "mass_kg": float(study.upper_state.mass_kg)}),
             Event(s.ignition.ignition_t_s, "ignition", "upper",
                   {"throttle": s.ignition.throttle,
-                   "delay_s": s.ignition.ignition_delay_s}),
+                   "delay_s": s.ignition.ignition_delay_s,
+                   **({} if s.hot is None else {"at_spawn": True})}),
         ),
         verification=Verification(
             optimizer_converged=None,
