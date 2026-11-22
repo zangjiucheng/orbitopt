@@ -1,0 +1,80 @@
+{
+ "kind": "orbitopt.e10-09.tolerance-audit",
+ "schema_version": "1.0",
+ "task": "#306 (E10-09 Starbase / DC7 CI qualification, epic #297)",
+ "purpose": "Freeze record for the final schemes' cross-environment CI regression: the tolerance bands each scheme's reference outputs were graded under, the digests that freeze them and their crossenv plans, the audit trail of every change to date, and the retained expected-fail negative regression. Any change to a listed tolerances.json or crossenv plan must add an entry here in the same diff (scripts/e1009_starbase_dc7.py tag-check enforces this).",
+ "schemes": {
+  "dc7": {
+   "reference": "tests/data/mission/reference/e5-08-new-vehicle-dc7",
+   "tolerances_sha256": "16b44c275898d33a52f0efa46b8fd3d11871891c35201818b6d844b5a60e7667",
+   "crossenv_plan": "src/orbitopt/data/crossenv_e508_dc7_plan.yaml",
+   "crossenv_plan_sha256": "829cd651b485106245ff61200f0f391cbadb49652f1de13d3e18c2b4acb7c611",
+   "values": {
+    "ascent_run_id_stable": true,
+    "maxq_pa": 250.0,
+    "maxg": 0.01,
+    "separation_mass_kg": 250.0,
+    "touchdown_pos_m": 50.0,
+    "touchdown_vert_m_s": 0.1,
+    "touchdown_lateral_m_s": 0.05,
+    "touchdown_propellant_kg": 1500.0,
+    "plan_script_rel": 0.02
+   },
+   "audit_trail": [
+    {
+     "as_of": "E5-08b (task #296)",
+     "change": "bands first recorded with the DC7 design record: mission-constraint-level margins (max-q 250 Pa margin, 0.01 g, 250 kg separation mass, 50 m / 0.1 m s^-1 / 0.05 m s^-1 touchdown, 1500 kg propellant, 2% plan-vs-script relative) chosen from the E5-07 reference dispersion, sealed with the tree (PROVENANCE files list covers tolerances.json)."
+    },
+    {
+     "as_of": "E10-04 (task #301)",
+     "change": "NO band relaxed. DC7's SECO semi-major-axis gap (27.7 km vs the 15 km band) proved to be a comparator artifact: linear interpolation across the raw-history sample gap; fixed on the compare side (orbitopt.verify.independent_dynamics event-aware raw history reconstruction), the sealed band unchanged, 28/28 independent-dynamics checks then passed. Starbase's debris-speed check stayed red at 12.80% against the same unchanged 12% band (real debris-aerodynamics model difference, recorded in debris-model-difference.json)."
+    },
+    {
+     "as_of": "E10-09 (task #306)",
+     "change": "frozen as the CI qualification baseline: digests of tolerances.json and of the crossenv plan recorded here; changing either now requires a new audit_trail entry in the same diff (tag-check), and a re-seal of the tree PROVENANCE for the tolerances file."
+    }
+   ]
+  },
+  "starbase": {
+   "reference": "tests/data/mission/reference/e5-08-new-vehicle-starbase",
+   "tolerances_sha256": "16b44c275898d33a52f0efa46b8fd3d11871891c35201818b6d844b5a60e7667",
+   "crossenv_plan": "src/orbitopt/data/crossenv_e508_starbase_plan.yaml",
+   "crossenv_plan_sha256": "c627f5fcf8e11d880250715d4fefc34a724e68137647b1fd808e7ff893be6f88",
+   "values": {
+    "ascent_run_id_stable": true,
+    "maxq_pa": 250.0,
+    "maxg": 0.01,
+    "separation_mass_kg": 250.0,
+    "touchdown_pos_m": 50.0,
+    "touchdown_vert_m_s": 0.1,
+    "touchdown_lateral_m_s": 0.05,
+    "touchdown_propellant_kg": 1500.0,
+    "plan_script_rel": 0.02
+   },
+   "audit_trail": [
+    {
+     "as_of": "E5-08c (task #296)",
+     "change": "bands first recorded with the Starbase design record; byte-identical to the DC7 band set so the two variants share one tolerance discipline (same launch-site dispersions were judged within the same margins)."
+    },
+    {
+     "as_of": "E10-04 (task #301)",
+     "change": "NO band relaxed (see the DC7 entry; identical file digest). The debris-speed failure is a model difference kept visible, not a tolerance to move."
+    },
+    {
+     "as_of": "E10-08 (task #305)",
+     "change": "the broader upper-stage guidance envelope changed the guidance option set in the vehicle/scenario data, not any tolerance band; the sealed tree and its tolerances digest are unchanged."
+    },
+    {
+     "as_of": "E10-09 (task #306)",
+     "change": "frozen as the CI qualification baseline, same discipline as the DC7 entry."
+    }
+   ]
+  }
+ },
+ "negative_regression": {
+  "reference": "tests/data/mission/reference/e5-08-new-vehicle",
+  "reference_class": "new-vehicle-qualification-gap",
+  "recovery_script_status": "not_closed",
+  "note": "The ORIGINAL E5-08 derived design remains sealed as an honest not-closed gap and keeps its cross-env CI step: the run must still grade a clean joint-gate FAIL (landing red, the other four physical checks green, no reason codes beyond the landing family) and the check must keep accepting exactly that gap shape -- an expected-fail regression that the scheme fixes are not silently re-badged or deleted."
+ }
+}

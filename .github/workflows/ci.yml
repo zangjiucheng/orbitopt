@@ -202,12 +202,14 @@ jobs:
   cross-env:
     name: cross-env e2e (tudatpy 3.10 + gfold 3.12)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     defaults:
       run:
         shell: bash -l {0}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # E10-09 tolerance tag-check diffs the push/PR range
 
       - name: Create locked CPU env (tudatpy, Python 3.10)
         uses: mamba-org/setup-micromamba@v2
@@ -272,12 +274,14 @@ jobs:
           python -m orbitopt crossenv run --plan src/orbitopt/data/crossenv_e505_plan.yaml \
             -o runs/crossenv-e5-05
           python scripts/e505_reference.py crossenv-check runs/crossenv-e5-05
-      # E5-08 (task #296): the NEW vehicle (starship_class_rtls_derived)
-      # through the joint five-check gate: ascent leg propagated in the
-      # tudatpy env, recovery leg DRIVEN from the canonical separation
-      # handoff in the gfold env with the sealed DC1 recipe, the joined
-      # full_mission verdict graded by crossenv-check.
-      - name: E5-08 new vehicle flies the joint gate across the boundary
+      # E5-08 (task #296), RETAINED BY E10-09 (task #306) AS THE EXPECTED-FAIL
+      # NEGATIVE REGRESSION: the ORIGINAL derived design still cannot close, so
+      # the joint gate keeps grading it a clean red and crossenv-check keeps
+      # accepting exactly the sealed gap shape (landing red, the other four
+      # physical checks green, no extra reason codes). The run exits 1 and the
+      # step ends on the check (this job's shell has no -e): the negative
+      # result is the regression assertion, never a silent pass.
+      - name: E5-08 original (expected fail) retained as negative regression
         env:
           ORBITOPT_GFOLD_PYTHON: ${{ github.workspace }}/.venv-landing/bin/python
         run: |
@@ -285,6 +289,54 @@ jobs:
           python -m orbitopt crossenv run --plan src/orbitopt/data/crossenv_e508_plan.yaml \
             -o runs/crossenv-e5-08
           python scripts/e508_new_vehicle.py crossenv-check runs/crossenv-e5-08
+
+      # E10-09 (task #306): the FINAL SCHEMES as the dedicated cross-environment
+      # regression -- the two sealed E5-08 variants fly as two schemes, each on
+      # its own frozen plan: DC7 and Starbase. e1009 crossenv-check re-grades
+      # each joined run in this process from the sealed exchanges: all five
+      # joint physical checks passed with every evidence source pinned to an
+      # envelope digest that re-hashes, physical_mission_verdict passed, the
+      # qualification block (independently_verified verdict and reason) matches
+      # a re-grade, the recovery leg branched from the sealed separation
+      # handoff under the sealed Earth-orientation snapshot, and the flown
+      # touchdown sits inside the frozen tolerances.
+      - name: E10-09 scheme DC7 crosses the environment boundary green
+        env:
+          ORBITOPT_GFOLD_PYTHON: ${{ github.workspace }}/.venv-landing/bin/python
+        run: |
+          export ORBITOPT_TUDAT_PYTHON="${MAMBA_ROOT_PREFIX:?}/envs/orbitopt/bin/python"
+          python -m orbitopt crossenv run --plan src/orbitopt/data/crossenv_e508_dc7_plan.yaml \
+            -o runs/crossenv-e5-08-dc7
+          python scripts/e1009_starbase_dc7.py crossenv-check runs/crossenv-e5-08-dc7 --variant dc7
+
+      - name: E10-09 scheme Starbase crosses the environment boundary green
+        env:
+          ORBITOPT_GFOLD_PYTHON: ${{ github.workspace }}/.venv-landing/bin/python
+        run: |
+          export ORBITOPT_GFOLD_PYTHON="${{ github.workspace }}/.venv-landing/bin/python"
+          export ORBITOPT_TUDAT_PYTHON="${MAMBA_ROOT_PREFIX:?}/envs/orbitopt/bin/python"
+          python -m orbitopt crossenv run --plan src/orbitopt/data/crossenv_e508_starbase_plan.yaml \
+            -o runs/crossenv-e5-08-starbase
+          python scripts/e1009_starbase_dc7.py crossenv-check runs/crossenv-e5-08-starbase --variant starbase
+
+      # E10-09 (task #306): the final schemes' sealed trees and audit record
+      # (G5 pair) -- re-hash both sealed reference trees (tolerances file
+      # included) against PROVENANCE and the tolerance-audit digests, and
+      # refuse any tolerances/crossenv-plan change that carries no new audit
+      # entry in the same diff.
+      - name: E10-09 final schemes match their frozen audit (G5 tamper check)
+        run: python scripts/e1009_starbase_dc7.py verify
+
+      - name: E10-09 tolerance changes require an audit record (G5)
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            BASE=$(git merge-base "origin/${GITHUB_BASE_REF}" HEAD)
+          elif [ "$GITHUB_EVENT_NAME" = push ]; then
+            BASE="${{ github.event.before }}"
+          else
+            BASE=""
+          fi
+          python scripts/e1009_starbase_dc7.py tag-check --base "$BASE"
 
   test-macos:
     # Same locked CPU env on macOS: micromamba picks the osx-arm64 or osx-64
