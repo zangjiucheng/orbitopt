@@ -41,6 +41,23 @@
       }
     },
     "stages": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Stage"}},
+    "staging": {
+      "type": "object",
+      "description": "Optional hot-staging / throttled-MECO timeline, E10-02 (orbitopt.flightlab.hot_staging is the single authority and validates the event order and limits). Times are seconds after liftoff, matching attitude_program.",
+      "required": ["ship_ignition_s", "separation_s", "booster_meco_s"],
+      "additionalProperties": false,
+      "properties": {
+        "schema": {"type": "string", "const": "hot-staging-v1"},
+        "throttle_down_start_s": {"type": "number"},
+        "ship_ignition_s": {"type": "number"},
+        "separation_s": {"type": "number"},
+        "booster_meco_s": {"type": "number"},
+        "plume_axial_loss_fraction": {"type": "number", "minimum": 0, "exclusiveMaximum": 1},
+        "throttle_slew_max_fraction_per_s": {"type": "number", "exclusiveMinimum": 0},
+        "thrust_step_max_fraction": {"type": "number"},
+        "throttle_floor_fraction": {"type": "number", "exclusiveMinimum": 0, "maximum": 1}
+      }
+    },
     "restart": {
       "type": "object",
       "description": "Optional multi-burn (coast + re-ignition) schedule for one stage, E5-05b: the OT adapter synthesises a thrust-curve coast gap and a restart attitude leg from this block so stage 2 can coast ballistically and re-ignite (also the enabler for higher circularisation altitudes). Times are seconds after liftoff, matching attitude_program.",
