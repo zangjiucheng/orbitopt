@@ -343,7 +343,7 @@ def _do_twin(job: dict[str, Any]) -> dict[str, Any]:
     checks = [{k: c[k] for k in ("quantity", "main", "twin", "delta", "band",
                                  "band_unit", "main_side", "twin_side", "ok")}
               for c in r["checks"]]
-    return {"verdict": r["verdict"].to_dict(), "checks": checks,
+    return {"verdict": r["verdict"], "checks": checks,
             "boundary_agreement": bool(r["boundary_agreement"]),
             "main_model": r["main_model"],
             "twin": {k: r["twin"].get(k) for k in
@@ -368,9 +368,9 @@ def _do_budget(job: dict[str, Any]) -> dict[str, Any]:
         def counted(x):
             calls["n"] += 1
             return obj(x)
-        return minimize(counted, x0, method="Nelder-Mead",
-                        options=dict(maxfev=int(job["max_fevals"]), xatol=0.5,
-                                     fatol=1e-4))
+        return np.asarray(minimize(counted, x0, method="Nelder-Mead",
+                                   options=dict(maxfev=int(job["max_fevals"]),
+                                                xatol=0.5, fatol=1e-4)).x)
     kwargs = dict(spec.planner_kwargs())
     t_full = time.time()
     full = plan_boostback_entry(sep, vehicle, rt,
@@ -518,10 +518,14 @@ def _jobs_D(bands: dict[str, float],
 
 
 def _jobs_E(bands: dict[str, float]) -> list[dict[str, Any]]:
-    return [{"part": "E", "key": "E|dc7|out", "kind": "budget", "rig": "dc7",
-             "spec": _spec_for("dc7"), "max_fevals": 132},
-            {"part": "E", "key": "E|dc8_fins|out", "kind": "budget", "rig": "dc8_fins",
-             "spec": _spec_for("dc8_fins"), "max_fevals": 132}]
+    return [{"part": "E", "key": "E|dc7|out-corner", "kind": "budget", "rig": "dc7",
+             "spec": _spec_for("dc7"), "max_fevals": 132,
+             "offsets": {"sep_downrange_m": 9000.0, "sep_speed_m_s": -60.0}},
+            {"part": "E", "key": "E|dc8_fins|out", "kind": "budget",
+             "rig": "dc8_fins",
+             "spec": _spec_for("dc8_fins"), "max_fevals": 132},
+            {"part": "E", "key": "E|dc7|in-nominal", "kind": "budget", "rig": "dc7",
+             "spec": _spec_for("dc7"), "max_fevals": 132}]
 
 
 # --------------------------------------------------------------------------
@@ -544,7 +548,8 @@ def _fig_boundary(rig: str, cells: list[dict[str, Any]], path: Path) -> None:
                          vmin=math.log10(0.4), vmax=math.log10(2.5))
     cs = ax.contour(np.array(vv), np.array(dr), np.log10(sev).T, levels=[0.0],
                     colors="k", linewidths=1.6)
-    ax.clabel(cs, fmt="in | out", fontsize=8)
+    if any(len(seg) for seg in cs.allsegs):
+        ax.clabel(cs, fmt=lambda v: "in | out", fontsize=8)
     fig.colorbar(mesh, ax=ax, label="log10 worst severity")
     ax.set_xlabel("speed offset [m/s]")
     ax.set_ylabel("downrange offset [m]")
