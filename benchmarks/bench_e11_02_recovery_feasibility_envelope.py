@@ -509,8 +509,12 @@ def _jobs_D(bands: dict[str, float],
             "spec": _spec_for(name), "bands": bands}
            for name in ("dc7", "dc8_fins")]
     if pair is not None:
+        # the cache is keyed by job key, so the calibrated re-run needs a
+        # distinct key or it silently replays the raw-band result
+        suffix = "" if bands == TWIN_BASE_BANDS else "|cal"
         for tag, rec in (("in", pair[0]), ("out", pair[1])):
-            out.append({"part": "D", "key": f"D|pair|{tag}|{rec['arm']}|{rec['seed']}|{rec['idx']}",
+            out.append({"part": "D",
+                        "key": f"D|pair|{tag}|{rec['arm']}|{rec['seed']}|{rec['idx']}{suffix}",
                         "kind": "twin", "rig": RIG_OF_ARM[rec["arm"]],
                         "draw": [rec["seed"], rec["idx"]],
                         "spec": _spec_for(RIG_OF_ARM[rec["arm"]]), "bands": bands})

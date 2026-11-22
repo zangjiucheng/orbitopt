@@ -904,8 +904,9 @@ def twin_envelope_reflight(sep_state: BoosterState, booster: BoosterModel,
                    for k in band_of}
     lim = float(booster.landing_propellant_reserve_kg)
     if cr.landing_need_kg is not None:
-        prop_lim = float(cr.landing_need_kg) + lim \
-            + float(spec.landing_reserve_margin_kg)
+        # match the verdict gate (boostback _assemble): need + reserve, no
+        # planner headroom margin -- same semantics as grade_probe
+        prop_lim = float(cr.landing_need_kg) + lim
     else:
         prop_lim = None
     rows = [
