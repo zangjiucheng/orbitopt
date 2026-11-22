@@ -32,6 +32,7 @@ condition               statement                                               
 ``arrival_speed``       speed at ``h0`` ``<=`` corridor ``v_max``                ``CORRIDOR_MISSED``
 ``landing_forecast``    the closed-loop landing forecast (when modelled)         ``CORRIDOR_MISSED``
                         closes inside the landing limits
+``handoff_overlap``     the entry burn is over at ``h0`` (engine-off handoff)    ``CORRIDOR_MISSED``
 ``entry_q``             peak entry-window q ``<=`` ``entry_q_max_pa``            ``ENTRY_Q_LIMIT_EXCEEDED``
 ``entry_g``             peak entry-window load ``<=`` ``entry_g_max``            ``ENTRY_G_LIMIT_EXCEEDED``
 ``fuel_margin``         propellant at ``h0`` ``>=`` landing need + reserve       ``INSUFFICIENT_PROPELLANT_RESERVE``
@@ -70,6 +71,7 @@ from orbitopt.flightlab.recovery.boostback import (
     CORRIDOR_NOT_REACHED,
     DEFAULT_ENTRY_G_MAX,
     DEFAULT_ENTRY_Q_MAX_PA,
+    DEFAULT_LANDING_DIVERT_BUDGET_M,
     DEFAULT_LANDING_RESERVE_MARGIN_KG,
     ENTRY_CUT_SPEED_MAX_M_S,
     ENTRY_G_LIMIT_EXCEEDED,
@@ -90,7 +92,7 @@ from orbitopt.flightlab.recovery.propagator import BoosterModel, BoosterState
 ENVELOPE_CONDITIONS = (
     "fuel_floor", "boostback_exhausted", "entry_exhausted", "corridor_reached",
     "corridor_miss", "corridor_tilt", "arrival_speed", "landing_forecast",
-    "entry_q", "entry_g", "fuel_margin",
+    "handoff_overlap", "entry_q", "entry_g", "fuel_margin",
 )
 
 #: condition -> the flight reason code the envelope predicts for it
@@ -103,6 +105,7 @@ CONDITION_REASON = {
     "corridor_tilt": CORRIDOR_MISSED,
     "arrival_speed": CORRIDOR_MISSED,
     "landing_forecast": CORRIDOR_MISSED,
+    "handoff_overlap": CORRIDOR_MISSED,
     "entry_q": ENTRY_Q_LIMIT_EXCEEDED,
     "entry_g": ENTRY_G_LIMIT_EXCEEDED,
     "fuel_margin": INSUFFICIENT_PROPELLANT_RESERVE,
@@ -111,6 +114,7 @@ CONDITION_REASON = {
 #: severity used when a condition is violated but exposes no finite
 #: normalized ratio (never crossed / no measurable window / forecast reject)
 _NO_RATIO_SEVERITY = {"corridor_reached": 1.0, "landing_forecast": 1.05,
+                      "handoff_overlap": 1.02,
                       "boostback_exhausted": 1.5, "entry_exhausted": 1.5}
 
 
@@ -210,28 +214,58 @@ class EnvelopeSpec:
     entry_g_max: float = DEFAULT_ENTRY_G_MAX
     landing_reserve_margin_kg: float = DEFAULT_LANDING_RESERVE_MARGIN_KG
     landing_need_model: str = "momentum"
+    #: the FL-303/FL-305 grading the closed-loop landing forecast must match
+    #: the flight's: ``landing_limits`` (``LandingLimits`` or a mapping),
+    #: ``landing_guidance`` (``TerminalGuidance`` / recipe ``landing`` dict)
+    #: and the R-01 divert budget (``None`` = divert off).
+    landing_limits: Any = None
+    landing_guidance: Any = None
+    landing_divert_budget_m: float | None = DEFAULT_LANDING_DIVERT_BUDGET_M
     entry_aero: Mapping[str, Any] | None = None
     horizon_s: float = 900.0
     dt_opt: float = 0.5
+    #: integration step of the probe's final segment: a sealed recipe pins
+    #: its own ``dt_final`` and the closed-loop landing forecast is
+    #: step-sensitive, so the probe must integrate the way the flight does
+    dt_final: float = 0.5
 
     #: the planner kwargs the spec carries (everything but the script)
     _PLAN_KWARGS = ("entry_burns", "entry_throttle", "boostback_cutoff",
                     "entry_cutoff", "entry_cut_speed_max_m_s",
                     "corridor_aim_margin_m", "entry_q_max_pa", "entry_g_max",
                     "landing_reserve_margin_kg", "landing_need_model",
-                    "entry_aero", "horizon_s")
+                    "entry_aero", "horizon_s", "landing_limits",
+                    "landing_guidance", "landing_divert_budget_m")
 
     def planner_kwargs(self) -> dict[str, Any]:
         """Keyword arguments reproducing the reference mission on
         ``plan_boostback_entry`` (combine with ``initial_guess=
         spec.reference_script, search="keep"``; the probe step is
-        ``dt_opt``)."""
-        return {k: getattr(self, k) for k in self._PLAN_KWARGS}
+        ``dt_opt``). Mapping-valued landing grading is rebuilt as the
+        planner's own dataclasses so a spec that crossed a serialisation
+        boundary flies identically."""
+        out = {k: getattr(self, k) for k in self._PLAN_KWARGS}
+        lim = out.get("landing_limits")
+        if isinstance(lim, Mapping):
+            from orbitopt.flightlab.recovery.landing import LandingLimits
+            out["landing_limits"] = LandingLimits(**dict(lim))
+        gui = out.get("landing_guidance")
+        if isinstance(gui, Mapping):
+            from orbitopt.flightlab.recovery.landing import TerminalGuidance
+            out["landing_guidance"] = TerminalGuidance(
+                **{k: v for k, v in dict(gui).items()
+                   if k not in ("mode", "mismatch")})
+        return out
 
     def to_dict(self) -> dict[str, Any]:
+        import dataclasses
         d = {"name": self.name, "reference_script": list(self.reference_script),
              **{k: getattr(self, k) for k in self._PLAN_KWARGS},
-             "dt_opt": self.dt_opt}
+             "dt_opt": self.dt_opt, "dt_final": self.dt_final}
+        for k in ("landing_limits", "landing_guidance"):
+            v = d.get(k)
+            if dataclasses.is_dataclass(v) and not isinstance(v, type):
+                d[k] = dataclasses.asdict(v)
         return d
 
     @classmethod
@@ -243,7 +277,9 @@ class EnvelopeSpec:
         script = d.get("reference_script", d.get("initial_guess"))
         return cls(name=str(d.get("name", "reference")),
                    reference_script=tuple(float(x) for x in (script or ())),
-                   dt_opt=float(d.get("dt_opt", 0.5)), **kwargs)
+                   dt_opt=float(d.get("dt_opt", 0.5)),
+                   dt_final=float(d.get("dt_final", d.get("dt_opt", 0.5))),
+                   **kwargs)
 
     @classmethod
     def from_recipe(cls, recipe: Mapping[str, Any], *, name: str = "recipe",
@@ -251,9 +287,15 @@ class EnvelopeSpec:
         """The spec of a sealed recovery recipe file (the E5-08
         ``recovery-script.json`` shape): the recipe's plan kwargs and its
         pinned ``initial_guess``, overridden by ``script`` when given (e.g.
-        a trained selection). ``landing`` dicts and reserve *strings* are
-        recipe plumbing for the MC layer and are not envelope physics."""
+        a trained selection). The recipe's ``landing`` block becomes the
+        closed-loop forecast's guidance (exactly as ``fly_recovery`` does
+        it); the reserve *string* is MC-layer plumbing and is not envelope
+        physics."""
         d = {**dict(recipe), "name": name}
+        landing = d.get("landing")
+        if isinstance(landing, Mapping):
+            d["landing_guidance"] = dict(landing)
+            d.pop("landing", None)
         if script is not None:
             d["reference_script"] = [float(x) for x in script]
         return cls.from_mapping(d)
@@ -294,9 +336,9 @@ def grade_probe(probe: Mapping[str, Any] | None, spec: EnvelopeSpec, *,
     measured). ``None``/``{}`` grades the analytic conditions only -- the
     state fails no matter which script is flown from it. The grading mirrors
     ``plan_boostback_entry``'s own feasibility order so the predicted reason
-    is the reason the flight verdict would carry; the joint-chance and
-    two-burn handoff-overlap checks are planner policy, not corridor
-    physics, and are deliberately not envelope conditions."""
+    is the reason the flight verdict would carry; the joint-chance check is
+    planner policy, not corridor physics, and is deliberately not an
+    envelope condition."""
     conds: list[EnvelopeCondition] = []
 
     def add(name: str, violated: bool, severity: float, value: float | None,
@@ -338,6 +380,7 @@ def grade_probe(probe: Mapping[str, Any] | None, spec: EnvelopeSpec, *,
                 corridor.max_tilt_deg, "deg", "descent angle at the crossing")
         speed = probe.get("speed_m_s")
         ok = probe.get("landing_forecast_ok")
+        bad = False
         if speed is not None:
             bad = (float(speed) > corridor.v_max_m_s) if ok is None else (not ok)
             add("arrival_speed", bad, float(speed) / corridor.v_max_m_s,
@@ -349,6 +392,18 @@ def grade_probe(probe: Mapping[str, Any] | None, spec: EnvelopeSpec, *,
                     _NO_RATIO_SEVERITY["landing_forecast"], None, None, "",
                     "closed-loop landing forecast from this handoff does not "
                     "close inside the landing limits")
+        # the planner grades the handoff as an elif after miss/tilt/speed,
+        # and the envelope mirrors that order (boostback.py _assemble): the
+        # engine-on-at-crossing violation only governs when the corridor
+        # conditions above it are clean.
+        ov = probe.get("handoff_overlap_s")
+        if (ov is not None and float(ov) > 0.0 and not bad and ok is not False
+                and (miss is None or float(miss) <= corridor.radius_m)
+                and (tilt is None or float(tilt) <= corridor.max_tilt_deg)):
+            add("handoff_overlap", True, _NO_RATIO_SEVERITY["handoff_overlap"],
+                float(ov), 0.0, "s",
+                "entry burn still burning at the corridor crossing -- the "
+                "handoff state is not an engine-off landing-burn start")
         prop = probe.get("prop_kg")
         need = probe.get("landing_need_kg")
         if prop is not None and need is not None:
@@ -425,6 +480,16 @@ def probe_from_plan(plan: Any) -> dict[str, Any]:
                  if INSUFFICIENT_PROPELLANT_BOOSTBACK in codes else
                  "entry" if INSUFFICIENT_PROPELLANT_ENTRY_BURN in codes
                  else None)
+    overlap = float(getattr(plan, "handoff_burn_overlap_s", 0.0) or 0.0)
+    corridor = plan.corridor
+    # a CORRIDOR_MISSED that the handoff overlap alone explains (the
+    # corridor miss/tilt/speed numbers are inside their limits) is not a
+    # forecast rejection:
+    explained = (overlap > 0.0
+                 and rep.miss_m is not None and rep.miss_m <= corridor.radius_m
+                 and rep.tilt_deg is not None and rep.tilt_deg <= corridor.max_tilt_deg
+                 and rep.speed_m_s is not None
+                 and rep.speed_m_s <= corridor.v_max_m_s)
     return {"reached": bool(rep.reached), "miss_m": rep.miss_m,
             "tilt_deg": rep.tilt_deg, "speed_m_s": rep.speed_m_s,
             "prop_kg": rep.propellant_available_kg,
@@ -432,8 +497,10 @@ def probe_from_plan(plan: Any) -> dict[str, Any]:
             "entry_q_pa": rep.entry_max_q_pa or 0.0,
             "entry_g": rep.entry_max_proper_g or 0.0,
             "exhausted": exhausted,
+            "handoff_overlap_s": overlap,
             "landing_forecast_ok": (None if rep.landing_touchdown_miss_m is None
-                                    else CORRIDOR_MISSED not in codes)}
+                                    else (CORRIDOR_MISSED not in codes
+                                          or explained))}
 
 
 def envelope_verdict(sep_state: BoosterState, booster: BoosterModel,
@@ -447,7 +514,7 @@ def envelope_verdict(sep_state: BoosterState, booster: BoosterModel,
     plan = plan_boostback_entry(sep_state, booster, recovery_target,
                                 initial_guess=list(spec.reference_script),
                                 search="keep", dt_opt=spec.dt_opt,
-                                dt_final=spec.dt_opt,
+                                dt_final=spec.dt_final,
                                 verdict_physics=physics,
                                 **spec.planner_kwargs())
     sep_prop, floor = fuel_floor_kg(sep_state, booster)

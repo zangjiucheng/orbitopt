@@ -456,6 +456,11 @@ class ReturnPlan:
     #: rejected the state, ``reason_codes[0]`` is the flight reason the
     #: envelope predicted and no search was run.
     screen: "Mapping[str, Any] | None" = None
+    #: E11-02 (task #309): seconds the entry burn was still burning at the
+    #: corridor crossing (0 = clean engine-off handoff). A positive value is
+    #: the planner's CORRIDOR_MISSED handoff condition, exposed so the
+    #: envelope can grade it (``feasibility.handoff_overlap``).
+    handoff_burn_overlap_s: float = 0.0
 
 
 # --------------------------------------------------------------------------
@@ -1509,18 +1514,29 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                         entry_q_max_pa=entry_q_max_pa, entry_g_max=entry_g_max,
                         landing_reserve_margin_kg=landing_reserve_margin_kg,
                         landing_need_model=landing_need_model,
+                        landing_limits=pred_limits,
+                        landing_guidance=landing_guidance,
+                        landing_divert_budget_m=landing_divert_budget_m,
                         entry_aero=entry_aero, horizon_s=horizon_s,
-                        dt_opt=dt_opt)
+                        dt_opt=dt_opt, dt_final=dt_final)
                     if isinstance(feasibility_envelope, bool)
                     else EnvelopeSpec.from_mapping(feasibility_envelope))
+        # The verdict the flight reports is the dt_final re-integration
+        # (_assemble's `final`), and the closed-loop landing forecast is
+        # integrator-step sensitive, so the screen grades the same numbers:
+        # one extra re-roll at `dt_final`/verdict physics, still zero search.
+        probe_roll = (best if dt_final == dt_opt and verdict_physics is None
+                      else rollout(best_x, dt_final, physics=verdict_physics))
         env = grade_probe(
             None if sep_prop < prop_floor else {
-                "reached": bool(best.crossed), "miss_m": best.miss_m,
-                "tilt_deg": best.tilt_deg, "speed_m_s": best.speed_m_s,
-                "prop_kg": best.prop_kg, "landing_need_kg": best.landing_need_kg,
-                "entry_q_pa": best.entry_q_pa, "entry_g": best.entry_g,
-                "exhausted": best.exhausted,
-                "landing_forecast_ok": best.landing_ok},
+                "reached": bool(probe_roll.crossed), "miss_m": probe_roll.miss_m,
+                "tilt_deg": probe_roll.tilt_deg, "speed_m_s": probe_roll.speed_m_s,
+                "prop_kg": probe_roll.prop_kg,
+                "landing_need_kg": probe_roll.landing_need_kg,
+                "entry_q_pa": probe_roll.entry_q_pa, "entry_g": probe_roll.entry_g,
+                "exhausted": probe_roll.exhausted,
+                "landing_forecast_ok": probe_roll.landing_ok,
+                "handoff_overlap_s": probe_roll.handoff_burn_overlap_s},
             env_spec, corridor=corridor, landing_reserve_kg=reserve,
             sep_propellant_kg=sep_prop, prop_floor_kg=prop_floor)
         screen_detail = env.to_dict()
@@ -1795,7 +1811,8 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
         ignitions_used=int(track.ignitions_used),
         assumptions=tuple(assumptions), entry_burn_2=eb2,
         entry_aero=dict(entry_aero) if entry_aero is not None else None,
-        screen=dict(screen) if screen is not None else None)
+        screen=dict(screen) if screen is not None else None,
+        handoff_burn_overlap_s=float(final.handoff_burn_overlap_s))
 
 
 def mission_command(return_plan: ReturnPlan,
