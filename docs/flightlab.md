@@ -32,7 +32,7 @@ lists all options.
 - **Run list:** scans `./runs`, `ORBITOPT_FLIGHT_RUNS` (platform path separator)
   and remembered **Add folder…** locations. **Refresh** finds new runs;
   `orbitopt launch -o DIR` produces the listed `DIR/ascent` run.
-- **Shared view:** selecting a run loads the 3D scene, timeline, Inspector and
+- **Shared view:** selecting a run loads the 3D scene, timeline, Flight and
   Verification tab. Returning to **Missions** restores the previous mission.
 - **Flight tab:** launch inputs, target/achieved orbit, verdicts, seekable
   events, failure explanations and recovery details.
@@ -40,7 +40,7 @@ lists all options.
   clicking a chart seeks the timeline. **Compare** opens two saved runs side by side.
 
 The **Bodies** strip stays above the plots: click Earth, a stage, the booster
-or a site to focus and follow it without opening the Inspector. Stage buttons
+or a site to focus and follow it. Stage buttons
 are enabled during their recorded lifespans. When a matching target definition
 is available, launch/recovery markers stay fixed on the rotating Earth; RTLS
 uses one shared marker. An unresolved offshore target is not replaced by the pad.
@@ -57,8 +57,12 @@ interpolated per-series values, and use **Reset view** to restore the full range
 Left-click or drag still seeks the shared mission clock. The same controls
 work on the inline plots and comparison telemetry.
 
-Drag the divider above **Bodies** to resize the plot pane. In a short window,
+Drag the horizontal divider above **Bodies** to resize the plot pane. In a short window,
 use the telemetry scrollbar or **Shift + scroll** to reach lower plots.
+
+In **Distance**, scroll vertically to zoom, then swipe horizontally or
+right-drag to move through time. Left-click or drag to seek. Double-click
+to fit the full time range.
 
 [![Expanded propellant plot showing stage and booster estimates with a precise time readout](assets/flightlab-telemetry-detail.png)](assets/flightlab-telemetry-detail.png)
 

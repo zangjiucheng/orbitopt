@@ -31,8 +31,9 @@ single-scene viewer.
 - **3D view:** select a body; use **CENTER** to change the reference body.
 - **Charts:** click or drag the distance chart to change time; the launch-window
   chart shows screened candidates when available.
-- **Inspector:** inspect bodies, maneuvers and the selected candidate. Its
-  Verification tab shows checks and their tolerances.
+- **Inspector:** in Missions, inspect bodies, maneuvers and the selected
+  candidate. Runs uses **Flight** for flight data. **Verification** shows
+  checks and tolerances in both workspaces.
 - **Timeline:** play, scrub and zoom through the mission.
 - **Bodies strip above the plots:** focus and follow a body or site without
   changing Inspector tabs. In Runs, double-click a telemetry plot to expand it;

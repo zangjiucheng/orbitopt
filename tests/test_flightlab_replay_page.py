@@ -232,6 +232,8 @@ def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypat
         pump(lambda: not window._loading and window.flight_panel.bundle is not None)
         assert window.center_stack.currentIndex() == 0          # the mission view itself
         assert window.right_tabs.currentWidget() is window.flight_panel
+        assert window.right_tabs.indexOf(window.inspector) == -1
+        assert window.right_tabs.indexOf(window.verification_panel) >= 0
         assert window.chart_panel.currentWidget() is window.telemetry_panel
         assert window.state.timeline is not None and window.timeline_bar.isVisible()
         assert window.body_strip.isVisible()
@@ -246,6 +248,23 @@ def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypat
         telemetry.ensureWidgetVisible(last_chart)
         assert telemetry.verticalScrollBar().value() > 0
         assert last_chart.mapTo(telemetry.viewport(), last_chart.rect().center()).y() < telemetry.viewport().height()
+        from PySide6.QtCore import QPointF, Qt
+        from PySide6.QtGui import QMouseEvent
+        splitter = window.center_splitter
+        handle = splitter.handle(1)
+        splitter.setSizes([1000, 1])
+        grip = QPointF(handle.rect().center())
+        global_grip = handle.mapToGlobal(grip)
+        plot_height = splitter.sizes()[1]
+        for event_type, offset, button, buttons in (
+            (QMouseEvent.Type.MouseButtonPress, 0, Qt.LeftButton, Qt.LeftButton),
+            (QMouseEvent.Type.MouseMove, -35, Qt.NoButton, Qt.LeftButton),
+            (QMouseEvent.Type.MouseButtonRelease, -35, Qt.LeftButton, Qt.NoButton),
+        ):
+            delta = QPointF(0, offset)
+            app.sendEvent(handle, QMouseEvent(event_type, grip + delta, global_grip + delta,
+                                              button, buttons, Qt.NoModifier))
+        assert splitter.sizes()[1] > plot_height
         assert set(window.body_strip.buttons) == {b["id"] for b in window.state.scene["bodies"]}
         window.body_strip.buttons["earth"].click()
         app.processEvents()  # queued initial framing must not override the click
@@ -259,6 +278,7 @@ def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypat
         window.sidebar.set_mode(window.sidebar.MISSIONS)
         pump(lambda: not window._loading)
         assert window.right_tabs.indexOf(window.flight_panel) < 0
+        assert window.right_tabs.indexOf(window.inspector) >= 0
         assert window.chart_panel.indexOf(window.telemetry_panel) < 0
     finally:
         window.close()

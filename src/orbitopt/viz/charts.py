@@ -392,6 +392,10 @@ class DistanceChart(_CachedChart):
         self._lo, self._hi = 1.0, 10.0
         self._hover: QPointF | None = None
         self._dragging = False
+        self._pan_x: float | None = None
+        self._full_time = self._view_time = (0.0, 1.0)
+        self.setMinimumHeight(110)
+        self.setToolTip("Scroll to zoom. Swipe horizontally or right-drag to pan. Double-click to fit.")
 
     def set_data(self, scene: dict | None, time: float):
         self._times, self._series = (np.empty(0), []) if not scene else distance_series(scene)
@@ -399,11 +403,17 @@ class DistanceChart(_CachedChart):
         self._events = timeline.get("events", [])
         self._unit = timeline.get("unitLabel", "")
         self._time = time
+        if self._times.size:
+            self._full_time = (float(self._times[0]), float(self._times[-1]))
+        else:
+            self._full_time = (0.0, 1.0)
+        self._view_time = self._full_time
+        self._pan_x, self._dragging, self._hover = None, False, None
         if self._series:
             all_km = np.concatenate([s["km"] for s in self._series])
             positive = all_km[all_km > 0]
-            self._lo = 10 ** math.floor(math.log10(max(positive.min(), 1.0)))
-            self._hi = 10 ** math.ceil(math.log10(positive.max()))
+            self._lo = 10 ** math.floor(math.log10(max(positive.min(), 1.0))) if positive.size else 1.0
+            self._hi = max(self._lo * 10, 10 ** math.ceil(math.log10(positive.max()))) if positive.size else 10.0
         self.invalidate()
 
     def set_time(self, t: float):
@@ -415,8 +425,8 @@ class DistanceChart(_CachedChart):
 
     def _x(self, t: float) -> float:
         r = self.plot_rect()
-        span = (self._times[-1] - self._times[0]) or 1.0
-        return r.left() + (t - self._times[0]) / span * r.width()
+        lo, hi = self._view_time
+        return r.left() + (t - lo) / ((hi - lo) or 1.0) * r.width()
 
     def _y(self, km: float) -> float:
         r = self.plot_rect()
@@ -426,7 +436,40 @@ class DistanceChart(_CachedChart):
     def time_at(self, x: float) -> float:
         r = self.plot_rect()
         f = min(1.0, max(0.0, (x - r.left()) / r.width()))
-        return float(self._times[0] + f * (self._times[-1] - self._times[0]))
+        lo, hi = self._view_time
+        return lo + f * (hi - lo)
+
+    def _set_time_view(self, lo: float, span: float) -> None:
+        start, end = self._full_time
+        full_span = end - start
+        span = min(full_span, max(full_span * 1e-5, span))
+        lo = min(max(start, lo), end - span)
+        self._view_time = lo, lo + span
+        self.invalidate()
+
+    def _pan_time(self, dx: float) -> None:
+        lo, hi = self._view_time
+        span = hi - lo
+        self._set_time_view(lo - dx * span / self.plot_rect().width(), span)
+
+    def wheelEvent(self, event):  # noqa: N802
+        if not self._series or not self.plot_rect().contains(event.position()):
+            event.ignore()
+            return
+        pixel = event.pixelDelta()
+        angle = event.angleDelta()
+        dx = pixel.x() if not pixel.isNull() else angle.x() / 3
+        dy = pixel.y() if not pixel.isNull() else angle.y() / 3
+        if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            self._pan_time(dx or dy)
+        elif dx and abs(dx) >= abs(dy):
+            self._pan_time(dx)
+        elif dy:
+            lo, hi = self._view_time
+            anchor = self.time_at(event.position().x())
+            scale = math.exp(max(-3, min(3, -dy / 160)))
+            self._set_time_view(anchor + (lo - anchor) * scale, (hi - lo) * scale)
+        event.accept()
 
     def paint_static(self, p: QPainter):
         if not self._series:
@@ -442,7 +485,7 @@ class DistanceChart(_CachedChart):
             p.setPen(QColor(INK_MUTED))
             p.drawText(QRectF(2, y - 7, r.left() - 8, 14), Qt.AlignRight | Qt.AlignVCenter, format_km(decade))
             decade *= 10
-        for t in nice_ticks(self._times[0], self._times[-1], 6):
+        for t in nice_ticks(*self._view_time, 6):
             x = self._x(t)
             p.drawLine(QPointF(x, r.bottom()), QPointF(x, r.bottom() + 4))
             p.drawText(QRectF(x - 30, r.bottom() + 5, 60, 14), Qt.AlignHCenter, f"{t:g}")
@@ -461,18 +504,25 @@ class DistanceChart(_CachedChart):
         # One 2 px line per body in its scene color; legend in ink text.
         # Pixel coordinates in numpy (the per-point _x/_y calls cost ~60 ms
         # a paint for a 4,000-sample trail); same mapping as _x / _y.
-        step = max(1, len(self._times) // int(max(1.0, r.width() * 2)))
-        times = self._times[::step]
-        span = (self._times[-1] - self._times[0]) or 1.0
-        xs = (r.left() + (times - self._times[0]) / span * r.width()).tolist()
+        lo, hi = self._view_time
+        first = max(0, int(np.searchsorted(self._times, lo)) - 1)
+        last = min(len(self._times), int(np.searchsorted(self._times, hi, side="right")) + 1)
+        step = max(1, (last - first) // int(max(1.0, r.width() * 2)))
+        indices = np.arange(first, last, step)
+        if indices[-1] != last - 1:
+            indices = np.append(indices, last - 1)
+        xs = (r.left() + (self._times[indices] - lo) / ((hi - lo) or 1.0) * r.width()).tolist()
         log_lo, log_hi = math.log10(self._lo), math.log10(self._hi)
         legend_x = r.left()
         for s in self._series:
-            km = np.maximum(np.asarray(s["km"][::step], dtype=float), self._lo)
+            km = np.maximum(np.asarray(s["km"][indices], dtype=float), self._lo)
             ys = (r.bottom() - (np.log10(km) - log_lo) / (log_hi - log_lo) * r.height()).tolist()
             poly = QPolygonF([QPointF(x, y) for x, y in zip(xs, ys)])
             p.setPen(QPen(QColor(s["color"]), 2.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            p.save()
+            p.setClipRect(r)
             p.drawPolyline(poly)
+            p.restore()
             p.setBrush(QColor(s["color"]))
             p.setPen(Qt.NoPen)
             p.drawRoundedRect(QRectF(legend_x, 7, 10, 10), 2, 2)
@@ -503,9 +553,14 @@ class DistanceChart(_CachedChart):
         i = int(np.clip(np.searchsorted(self._times, t), 0, len(self._times) - 1))
         lines = [f"T+{self._times[i]:.2f} {self._unit}"]
         lines += [f"{s.get('label', 'to ' + s['name'])}: {format_km(float(s['km'][i]))}" for s in self._series]
-        return "\n".join(lines + ["Click or drag to move the mission time"])
+        return "\n".join(lines + ["Scroll to zoom · horizontal swipe or right-drag to pan"])
 
     def mouseMoveEvent(self, event):  # noqa: N802
+        if self._pan_x is not None:
+            x = event.position().x()
+            self._pan_time(x - self._pan_x)
+            self._pan_x = x
+            return
         self._hover = event.position()
         if self._series and self.plot_rect().contains(self._hover):
             t = self.time_at(self._hover.x())
@@ -522,11 +577,22 @@ class DistanceChart(_CachedChart):
 
     def mousePressEvent(self, event):  # noqa: N802
         if self._series and self.plot_rect().contains(event.position()):
-            self._dragging = True
-            self.time_requested.emit(self.time_at(event.position().x()))
+            if event.button() == Qt.MouseButton.RightButton:
+                self._pan_x = event.position().x()
+                self._hover = None
+                QToolTip.hideText()
+            elif event.button() == Qt.MouseButton.LeftButton:
+                self._dragging = True
+                self.time_requested.emit(self.time_at(event.position().x()))
 
     def mouseReleaseEvent(self, _event):  # noqa: N802
         self._dragging = False
+        self._pan_x = None
+
+    def mouseDoubleClickEvent(self, event):  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton and self.plot_rect().contains(event.position()):
+            self._view_time = self._full_time
+            self.invalidate()
 
 
 # ------------------------------------------------------------------ panel

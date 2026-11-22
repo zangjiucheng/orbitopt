@@ -92,7 +92,7 @@ from orbitopt.viz.state import (
     nearest_maneuver,
     timeline_span,
 )
-from orbitopt.viz.theme import BG_VOID, DANGER, SUCCESS, stylesheet
+from orbitopt.viz.theme import BG_VOID, DANGER, HAIRLINE, INK_MUTED, SUCCESS, stylesheet
 from orbitopt.viz.timeline_bar import TimelineBar, timeline_unit_seconds
 from orbitopt.viz.ui_kit import MetricRow, StatusBadge
 from orbitopt.viz.verification_panel import (
@@ -443,10 +443,16 @@ class MissionControlWindow(QMainWindow):
         plots.addWidget(self.chart_panel, 1)
         self.center_splitter = QSplitter(Qt.Vertical)
         self.center_splitter.setObjectName("centerSplitter")
-        self.center_splitter.setHandleWidth(4)
+        self.center_splitter.setHandleWidth(10)
+        self.center_splitter.setStyleSheet(
+            f"QSplitter#centerSplitter::handle:vertical {{ background: {HAIRLINE}; }}"
+            f"QSplitter#centerSplitter::handle:vertical:hover {{ background: {INK_MUTED}; }}"
+        )
         self.center_splitter.addWidget(self.center_stack)
         self.center_splitter.addWidget(self.plot_area)
         self.center_splitter.setCollapsible(0, False)
+        self.center_splitter.setCollapsible(1, False)
+        self.center_splitter.handle(1).setToolTip("Drag up or down to resize the graphs")
         self.center_splitter.setStretchFactor(0, 3)
         self.center_splitter.setStretchFactor(1, 1)
         self.center_splitter.setSizes([560, 210])
@@ -1336,13 +1342,19 @@ class MissionControlWindow(QMainWindow):
         """Show the Flight / Telemetry tabs for a flight run, remove them otherwise."""
         data = self._flight_data.get(self._active_key) if self._active_key else None
         index = self.right_tabs.indexOf(self.flight_panel)
+        inspector_index = self.right_tabs.indexOf(self.inspector)
         if data is None:
             if index >= 0:
                 self.right_tabs.removeTab(index)
+            if inspector_index < 0:
+                self.right_tabs.insertTab(0, self.inspector, "Inspector")
+                self.right_tabs.setCurrentWidget(self.inspector)
             self.flight_panel.clear()
             return
         bundle, target, channels, _mtime = data
         self.flight_panel.set_run(bundle, target, channels)
+        if inspector_index >= 0:
+            self.right_tabs.removeTab(inspector_index)
         if index < 0:
             self.right_tabs.insertTab(0, self.flight_panel, "Flight")
             # The launch summary and event table need more than the body

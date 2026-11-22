@@ -168,6 +168,48 @@ def test_planet_centered_scene_reads_as_altitude(app):
     assert altitude_reference(sun_centered) is None
 
 
+def test_distance_zoom_and_horizontal_pan_preserve_mission_time(app):
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtGui import QWheelEvent
+    from PySide6.QtTest import QTest
+
+    state = MissionState()
+    panel = ChartPanel(state)
+    panel.resize(800, 260)
+    panel.show()
+    state.set_scene(_scene())
+    chart = panel.distance
+    panel.setCurrentWidget(chart)
+    app.processEvents()
+    center = chart.plot_rect().center()
+    state.set_time(2.0)
+
+    def wheel(dx, dy):
+        event = QWheelEvent(center, chart.mapToGlobal(center), QPoint(), QPoint(dx, dy),
+                            Qt.NoButton, Qt.NoModifier, Qt.NoScrollPhase, False)
+        app.sendEvent(chart, event)
+
+    wheel(0, 240)
+    lo, hi = chart._view_time
+    assert 0.0 < lo < hi < 10.0
+    assert chart.time_at(center.x()) == pytest.approx(5.0)
+    wheel(-120, 0)
+    assert chart._view_time[0] > lo
+    panned_start = chart._view_time[0]
+    pos = center.toPoint()
+    QTest.mousePress(chart, Qt.RightButton, pos=pos)
+    QTest.mouseMove(chart, pos + QPoint(30, 0))
+    QTest.mouseRelease(chart, Qt.RightButton, pos=pos + QPoint(30, 0))
+    assert chart._view_time[0] < panned_start
+    assert state.time == 2.0
+    assert not chart.grab().isNull()
+    QTest.mouseClick(chart, Qt.LeftButton, pos=pos)
+    assert state.time == pytest.approx(chart.time_at(pos.x()))
+    QTest.mouseDClick(chart, Qt.LeftButton, pos=pos)
+    assert chart._view_time == (0.0, 10.0)
+    panel.close()
+
+
 def test_altitude_is_measured_from_the_ellipsoid():
     from orbitopt.viz.state import altitude_reference
 
