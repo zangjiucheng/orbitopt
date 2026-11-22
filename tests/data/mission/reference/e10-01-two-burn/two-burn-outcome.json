@@ -1,0 +1,90 @@
+{
+  "generated_by": "E10-01 (task #298) closure probes, 2026-11",
+  "capability": {
+    "entry_burns_0_supported": true,
+    "script_layout": "5 parameters (boostback delay, iip aim, throttle, pitch, yaw); no entry-burn vector; ignitions = boostback + landing",
+    "recipe_shared_with_sealed_3_burn_record": {
+      "boostback_cutoff": "iip",
+      "landing_need_model": "closed_loop",
+      "corridor_aim_margin_m": 7000.0,
+      "entry_q_max_pa": 250000.0,
+      "entry_g_max": 12.0,
+      "landing_reserve": "target",
+      "landing_reserve_margin_kg": 2500.0,
+      "landing": {"max_thrust_accel_g": 4.0, "tvc_rate_limit_deg_s": 20.0,
+                  "tvc_lag_tau_s": 0.2, "tvc_lag_compensation": true}
+    }
+  },
+  "verdict": "NOT CLOSED -- classified VEHICLE_CAPABILITY (guidance secondary)",
+  "classification": {
+    "category": ["vehicle-capability", "guidance"],
+    "reasoning": [
+      "The booster aero is an attitude-independent Cd(M) table ('grid fins stowed' blunt-cylinder configuration) flown through a point-mass propagator with drag along -v: the unpowered phase has ZERO lift/flap/bank authority, so the only entry-deceleration lever is how the boostback cutoff state is placed.",
+      "The graded 100 t landing reserve plus the predicted landing need pin the corridor mass to >= ~400 t; at that ballistic coefficient (Cd ~ 1.1-1.3 above Mach 1, A = 63.617 m2) the terminal velocity near 3 km is ~330-490 m/s and a ballistic arrival overshoots it -- probes arrive at 1053-1150 m/s for every 5-parameter script tried.",
+      "The 250 kPa planning cap cannot be honoured by diving earlier: q exceeds 250 kPa at ~10 km while the vehicle still travels ~1100 m/s, and no shallower unpowered trim exists without lift -- probes peak at 439-809 kPa.",
+      "The closed-loop landing forecast (4.0 g law, h0 = 3 km) grades the arrival infeasible: predicted touchdown 745-833 m/s against the 3/1 m/s limits, i.e. CORRIDOR_MISSED.",
+      "Even the lightest state legal under the reserve gate (dry + 100 t reserve) arrives above the closed-loop landing envelope, so a lighter derived variant does not close it either; the E5-07 gap (restart-2 aerodynamic entry) is a MODELLED-AERO capability gap, not a planner representation gap -- the representation now exists and the flight verdict is honest.",
+      "Guidance is the secondary category: with lift/bank steering the unpowered phase could trade the 12 g / 250 kPa budget across a long skip glide; the model provides no such control to plan."
+    ]
+  },
+  "probes": {
+    "note": "all on the sealed separation states; closed-loop need model, 250 kPa / 12 g graded, reserve 'target' + 2.5 t margin; search=keep single-eval unless noted; dt_opt 0.5 s, dt_final 0.25 s",
+    "dc7_keep_script": {
+      "vehicle": "starship_class_rtls_dc7 (restarts_max lowered to 2)",
+      "ascent": "tests/data/mission/reference/e5-08-new-vehicle-dc7",
+      "script": [21.2, -2.0, 1.0, 0.0, 0.0],
+      "feasible": false,
+      "reason_codes": ["CORRIDOR_MISSED", "ENTRY_Q_LIMIT_EXCEEDED"],
+      "corridor_reached": true,
+      "miss_m": 2439.0, "tilt_deg": 14.3, "speed_m_s": 1065.0,
+      "propellant_at_corridor_kg": 332700.0, "landing_need_kg": 27500.0,
+      "entry_max_q_pa": 454000.0, "entry_max_proper_g": 5.9,
+      "predicted_touchdown_vertical_m_s": 744.8
+    },
+    "dc7_nelder_mead_from_sealed_seed": {
+      "script": [82.706, 1.592, 0.695, 0.0, 15.331],
+      "feasible": false,
+      "reason_codes": ["CORRIDOR_MISSED", "ENTRY_Q_LIMIT_EXCEEDED"],
+      "miss_m": 2184.0, "tilt_deg": 39.5, "speed_m_s": 1053.0,
+      "entry_max_q_pa": 454000.0, "entry_max_proper_g": 7.79,
+      "propellant_at_corridor_kg": 184000.0
+    },
+    "dc7_differential_evolution_box": {
+      "bounds": [[0, 150], [-20000, 80000], [0.4, 1.0], [0, 30], [-45, 45]],
+      "popsize": 12, "maxiter": 60, "seed": 287,
+      "best_script": [115.519, 8.04, 0.4, 0.261, -4.171],
+      "best_penalty": 58.99,
+      "best_reason_codes": ["CORRIDOR_MISSED", "INSUFFICIENT_PROPELLANT_RESERVE"],
+      "conclusion": "the global search maps the whole boostback-placement box and never finds a feasible unpowered entry: the whole box misses the closed-loop corridor"
+    },
+    "starbase_keep_script": {
+      "vehicle": "starship_class_rtls_starbase (restarts_max lowered to 2)",
+      "ascent": "tests/data/mission/reference/e5-08-new-vehicle-starbase",
+      "script": [12.0, 2000.0, 0.90, 7.0, -4.0],
+      "feasible": false,
+      "reason_codes": ["CORRIDOR_MISSED", "ENTRY_Q_LIMIT_EXCEEDED"],
+      "corridor_reached": true,
+      "miss_m": 2292.0, "tilt_deg": 10.7, "speed_m_s": 1123.0,
+      "propellant_at_corridor_kg": 389700.0,
+      "entry_max_q_pa": 494000.0, "entry_max_proper_g": 5.8,
+      "predicted_touchdown_vertical_m_s": 833.2
+    }
+  },
+  "comparison_vs_sealed_three_burn_dc7": {
+    "sealed_record": "tests/data/mission/reference/e5-08-new-vehicle-dc7/recovery-script.json (entry_burns=1, search=keep, all checks pass)",
+    "rows": [
+      {"metric": "ignitions", "three_burn": 3, "two_burn_best": 2},
+      {"metric": "entry-phase propellant at corridor, t", "three_burn": 160.1, "two_burn_best": 332.7,
+       "note": "the unpowered profile keeps +172.6 t in the tanks that the 1-burn entry burn would spend"},
+      {"metric": "corridor propellant margin over need+100 t reserve+2.5 t recipe, t", "three_burn": 10.1, "two_burn_best": 202.7},
+      {"metric": "corridor speed, m/s", "three_burn": 257.2, "two_burn_best": 1065.0,
+       "note": "corridor v_max 350 m/s; the closed-loop need model rejects the unpowered arrival"},
+      {"metric": "corridor miss, m", "three_burn": 55.2, "two_burn_best": 2439.0},
+      {"metric": "entry peak q, kPa (limit 250)", "three_burn": 117.8, "two_burn_best": 454.0},
+      {"metric": "entry peak proper g (limit 12)", "three_burn": 7.31, "two_burn_best": 5.9},
+      {"metric": "flown touchdown vertical, m/s", "three_burn": 1.5, "two_burn_best": null,
+       "note": "two-burn landing never ignites: the corridor verdict rejects the handover"}
+    ],
+    "summary": "the two-burn profile saves ~173 t of entry propellant and ~193 t of reserve margin, but the modelled aero cannot trade that mass for a corridor-legal arrival: with no lift authority the saved propellant stays as ballast (heavier vehicle, faster arrival, higher q), and the corridor is missed. The three-burn design pays the entry burn precisely to decelerate above the q-limited atmosphere."
+  }
+}

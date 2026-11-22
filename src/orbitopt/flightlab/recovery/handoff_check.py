@@ -520,8 +520,13 @@ def build_handoff_report(sep_state: BoosterState, plan: ReturnPlan,
                      reason_code="" if abs(dm) <= COAST_MASS_TOL_KG
                      else HANDOFF_MASS_NOT_CONSERVED))
     else:
-        missing("handoff-mass-coast-entry", "entry burn never ignited (no second "
-                "ignition to compare the coast mass against)")
+        missing("handoff-mass-coast-entry",
+                "no entry burn in the script (entry_burns=0): the coast is "
+                "the whole entry phase and is graded by the phase-boundary "
+                "and window checks"
+                if getattr(plan, "entry_burn", "x") is None
+                else "entry burn never ignited (no second "
+                     "ignition to compare the coast mass against)")
 
     final_track = landing_track if landing_track is not None else plan.track
     prop_final = float(final_track.mass_kg[-1]) - float(booster.dry_mass_kg)
