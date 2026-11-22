@@ -36,7 +36,6 @@ condition               statement                                               
 ``entry_q``             peak entry-window q ``<=`` ``entry_q_max_pa``            ``ENTRY_Q_LIMIT_EXCEEDED``
 ``entry_g``             peak entry-window load ``<=`` ``entry_g_max``            ``ENTRY_G_LIMIT_EXCEEDED``
 ``fuel_margin``         propellant at ``h0`` ``>=`` landing need + reserve       ``INSUFFICIENT_PROPELLANT_RESERVE``
-                        + planner margin
 ======================  =======================================================  ========
 
 ``m_p(s)`` is the separation propellant load, ``v_h`` the horizontal speed
@@ -407,7 +406,12 @@ def grade_probe(probe: Mapping[str, Any] | None, spec: EnvelopeSpec, *,
         prop = probe.get("prop_kg")
         need = probe.get("landing_need_kg")
         if prop is not None and need is not None:
-            lim = float(need) + landing_reserve_kg + spec.landing_reserve_margin_kg
+            # the flight verdict is ``prop < need + reserve`` (boostback
+            # _assemble); the R-01 reserve *margin* is search headroom in the
+            # objective penalty, not a hard feasibility term -- the envelope
+            # must not gate on it or it false-rejects flights the verdict
+            # passes (E10-03 seeds 502/1, 504/16, 505/9 ...)
+            lim = float(need) + landing_reserve_kg
             add("fuel_margin", float(prop) < lim,
                 lim / max(float(prop), 1e-9),
                 float(prop), lim, "kg",
