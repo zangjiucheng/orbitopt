@@ -749,7 +749,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             rig.run(c_jobs)
         c_recs = [r for r in rig.fly.values() if str(r.get("key", "")).startswith("C|")]
         bands = dict(TWIN_BASE_BANDS)
-        pair = _select_boundary_pair([r for r in c_recs if r.get("arm") == "dc7_pinned"])
+        pair = _select_boundary_pair(sorted(
+            (r for r in c_recs if r.get("arm") == "dc7_pinned"),
+            key=lambda r: (r.get("seed", -1), r.get("idx", -1))))
         if "D" in parts:
             rig.run(_jobs_D(bands, pair))
             # calibrate bands from the baselines (1.5x measured delta, floored)
