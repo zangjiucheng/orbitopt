@@ -1,7 +1,7 @@
 {
  "benchmark": "e11_02_recovery_feasibility_envelope",
- "created_utc": "2026-11-23T00:19:20+00:00",
- "runtime_s": 33.6,
+ "created_utc": "2026-11-23T00:25:56+00:00",
+ "runtime_s": 34.1,
  "framing": "E11-02 screens the separation state against a recovery feasibility envelope (orbitopt.flightlab.recovery.feasibility) BEFORE the planner searches: one reference rollout plus an analytic fuel floor decides IN/OUT and predicts the flight reason with zero search fevals. Envelope conditions: fuel floor (rocket equation on the separation velocity), corridor reach/miss/tilt/arrival-speed, closed-loop landing forecast, entry q and g, landing propellant reserve margin \u2014 every one measured on the planner's own physics. Era note: the DC8 hold-out arms are the E10-03 era (the DC7 sealed POWERED recipe flown on the DC8 vehicle, no grid fins); the envelope that applies to DC8 as authored (E11-01 grid-fin mission) is graded in parts A/B/E.",
  "holdout_stream": {
   "seeds": [
@@ -28307,7 +28307,7 @@
      "mass_kg": 612872.2028889316
     }
    },
-   "dur_s": 2.4,
+   "dur_s": 2.8,
    "pair": "IN"
   },
   "D|pair|out|dc7_pinned|501|3|cal": {
@@ -28534,7 +28534,7 @@
      "mass_kg": 616247.1531848834
     }
    },
-   "dur_s": 2.4,
+   "dur_s": 2.7,
    "pair": "OUT"
   }
  },
@@ -28600,5 +28600,5 @@
    "dur_s": 41.0
   }
  ],
- "E_notes": "The screened calls spend zero search fevals on an OUT state and return the predicted flight reason; the full search spends its budget (counted through the planner's own search hook, same options as the default path). The DC8-era arm's real budget was the 300+-flight ES training (see the committed E10-03 report), which the screen retires for states outside the envelope."
+ "E_notes": "The screened calls spend zero search fevals on an OUT state and return the predicted flight reason; the full search spends its budget (counted through the planner's own search hook, same options as the default path). Below the propellant floor the planner's own guard also skips the search, so there the saving is wall-clock -- one cheap reference rollout against the full-dt grading integrations (40x on the corner cell) -- while inside the floor the screen retires the entire full-budget pass. The DC8-era arm's real budget was the 300+-flight ES training (see the committed E10-03 report), which the screen retires for states outside the envelope."
 }

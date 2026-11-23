@@ -50,5 +50,5 @@ Baselines carry the band calibration (1.5x the measured twin-vs-planner delta, f
 | `E|dc7|out-corner` | 59.9 s / 0 fevals / `CORRIDOR_MISSED` | 1.5 s / 0 fevals / `CORRIDOR_MISSED` |
 | `E|dc8_fins|out` | 40.1 s / 0 fevals / `CORRIDOR_MISSED` | 0.8 s / 0 fevals / `CORRIDOR_MISSED` |
 
-The screened calls spend zero search fevals on an OUT state and return the predicted flight reason; the full search spends its budget (counted through the planner's own search hook, same options as the default path). The DC8-era arm's real budget was the 300+-flight ES training (see the committed E10-03 report), which the screen retires for states outside the envelope.
+The screened calls spend zero search fevals on an OUT state and return the predicted flight reason; the full search spends its budget (counted through the planner's own search hook, same options as the default path). Below the propellant floor the planner's own guard also skips the search, so there the saving is wall-clock -- one cheap reference rollout against the full-dt grading integrations (40x on the corner cell) -- while inside the floor the screen retires the entire full-budget pass. The DC8-era arm's real budget was the 300+-flight ES training (see the committed E10-03 report), which the screen retires for states outside the envelope.
 
