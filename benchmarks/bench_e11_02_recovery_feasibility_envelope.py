@@ -849,7 +849,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "screen's only unforgivable error is zero." if total_fr == 0 else
         f"**{total_fr} false rejects found — acceptance fails**, see "
         "false_reject_detail.")
-    doc["D"] = {k: v for k, v in sorted(rig.fly.items()) if k.startswith("D|")}
+    # the raw-band pair pass is an intermediate (the calibration re-runs it
+    # under the |cal key); keep only the calibrated pair rows in the report
+    doc["D"] = {k: v for k, v in sorted(rig.fly.items())
+                if k.startswith("D|") and ("|pair|" not in k or "|cal" in k)}
     for v in doc["D"].values():
         v["pair"] = ("IN" if "|in|" in str(v.get("key", ""))
                      else "OUT" if "|out|" in str(v.get("key", "")) else None)
