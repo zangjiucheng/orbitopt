@@ -754,24 +754,26 @@ def main(argv: Sequence[str] | None = None) -> int:
             key=lambda r: (r.get("seed", -1), r.get("idx", -1))))
         if "D" in parts:
             rig.run(_jobs_D(bands, pair))
-            # calibrate bands from the baselines (1.5x measured delta, floored)
+            # calibrate bands from the baselines (1.5x measured delta,
+            # floored): accumulate the MAXIMUM over both baselines, else the
+            # second (dc8) baseline silently undoes the first (dc7) one
             for base_key in ("D|base|dc7", "D|base|dc8_fins"):
                 r = rig.fly.get(base_key, {})
                 for c in r.get("checks", []):
                     d = abs(float(c["delta"]))
                     q = c["quantity"]
                     if q == "q":
-                        bands["q"] = max(20.0, 5.0 * math.ceil(1.5 * d / 5))
+                        bands["q"] = max(bands["q"], 5.0 * math.ceil(1.5 * d / 5))
                     elif q == "g":
-                        bands["g"] = max(0.5, 0.25 * math.ceil(1.5 * d / 0.25))
+                        bands["g"] = max(bands["g"], 0.25 * math.ceil(1.5 * d / 0.25))
                     elif q == "speed":
-                        bands["speed"] = max(40.0, 5.0 * math.ceil(1.5 * d / 5))
+                        bands["speed"] = max(bands["speed"], 5.0 * math.ceil(1.5 * d / 5))
                     elif q == "tilt":
-                        bands["tilt"] = max(0.5, 0.5 * math.ceil(1.5 * d / 0.5))
+                        bands["tilt"] = max(bands["tilt"], 0.5 * math.ceil(1.5 * d / 0.5))
                     elif q == "miss":
-                        bands["miss"] = max(25.0, 25.0 * math.ceil(1.5 * d / 25))
+                        bands["miss"] = max(bands["miss"], 25.0 * math.ceil(1.5 * d / 25))
                     elif q == "prop":
-                        bands["prop"] = max(3.0, 0.5 * math.ceil(1.5 * d / 0.5))
+                        bands["prop"] = max(bands["prop"], 0.5 * math.ceil(1.5 * d / 0.5))
             if pair is not None:  # re-run the pair with calibrated bands
                 for j in _jobs_D(bands, pair):
                     if "|pair|" in j["key"]:
