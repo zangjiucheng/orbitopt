@@ -196,6 +196,17 @@ from orbitopt.flightlab.recovery.envelope import (  # noqa: F401
     track_rows,
     write_nominal_report,
 )
+from orbitopt.flightlab.recovery.feasibility import (  # noqa: F401
+    CONDITION_REASON,
+    ENVELOPE_CONDITIONS,
+    EnvelopeCondition,
+    EnvelopeSpec,
+    EnvelopeVerdict,
+    envelope_verdict,
+    fuel_floor_kg,
+    grade_probe,
+    probe_from_plan,
+)
 
 __all__ = [
     "ActuatorMargin",
@@ -208,6 +219,7 @@ __all__ = [
     "BoosterState",
     "BoosterTrack",
     "CLASS_COLORS",
+    "CONDITION_REASON",
     "ComponentScale",
     "FAILURE_CLASSES",
     "HANDOFF_MASS_NOT_CONSERVED",
@@ -219,6 +231,10 @@ __all__ = [
     "DEFAULT_ENTRY_G_MAX",
     "DEFAULT_ENTRY_Q_MAX_PA",
     "DEFAULT_FUEL_QUANTILE",
+    "ENVELOPE_CONDITIONS",
+    "EnvelopeCondition",
+    "EnvelopeSpec",
+    "EnvelopeVerdict",
     "DEFAULT_JOINT_VIOLATION_TOLERANCE",
     "DEFAULT_LANDING_DIVERT_BUDGET_M",
     "DEFAULT_LANDING_LIMITS",
@@ -285,6 +301,10 @@ __all__ = [
     "density_us76_kg_m3",
     "dispersed_separation_state",
     "envelope_dataset",
+    "envelope_verdict",
+    "fuel_floor_kg",
+    "grade_probe",
+    "probe_from_plan",
     "evaluate_joint_chance",
     "failure_breakdown",
     "failure_class_title",

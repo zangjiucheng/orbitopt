@@ -42,11 +42,13 @@ import numpy as np
 from orbitopt.flightlab.contract import load_target, read_run
 from orbitopt.flightlab.handoff import HandoffState, handoff_digest
 from orbitopt.flightlab.recovery.boostback import (
+    ENTRY_CUTOFF_CAP_S,
     IIP_BOOSTBACK_CAP_S,
     BoostbackPlan,
     RecoveryTarget,
     _Mission,
     _bearing_of_target,
+    _unpack_script,
     plan_boostback_entry,
 )
 from orbitopt.flightlab.recovery.landing import fly_landing_burn
@@ -410,6 +412,9 @@ def _twin_flight(mission_factory: Callable[[], _Mission], sep_state: Any,
     g_max = 0.0
     h0_t = None
     h0_v = None
+    h0_pos: list[float] | None = None
+    h0_mass = None
+    h0_tilt = None
     while t < t_cap:
         if fins is not None:
             h_s = _twin_geodetic(y[:3])[2]
@@ -438,8 +443,14 @@ def _twin_flight(mission_factory: Callable[[], _Mission], sep_state: Any,
         if cut is not None and h0_t is None and h_new <= corridor_h0_m < h_old:
             frac0 = (h_old - corridor_h0_m) / (h_old - h_new)
             h0_t = t + dt_s * frac0
-            h0_v = float(np.linalg.norm(
-                y[3:6] + frac0 * (y2[3:6] - y[3:6])))
+            r0 = y[:3] + frac0 * (y2[:3] - y[:3])
+            v0 = y[3:6] + frac0 * (y2[3:6] - y[3:6])
+            h0_v = float(np.linalg.norm(v0))
+            h0_pos = [float(c) for c in r0]
+            h0_mass = float(y[6] + frac0 * (y2[6] - y[6]))
+            up0 = r0 / max(float(np.linalg.norm(r0)), 1e-9)
+            h0_tilt = math.degrees(math.acos(max(
+                -1.0, min(1.0, -float(v0 @ up0) / max(h0_v, 1e-9)))))
         if h_new < 0.0 <= h_old:
             frac = h_old / (h_old - h_new)
             yf = y + dt_s * frac / 6.0 * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
@@ -453,7 +464,8 @@ def _twin_flight(mission_factory: Callable[[], _Mission], sep_state: Any,
                       "mass_kg": float(yf[6])}
             return {"cut": cut, "entry_max_q_pa": q_max,
                     "entry_max_proper_g": g_max, "corridor_h0_cross_t_s": h0_t,
-                    "h0_speed_m_s": h0_v,
+                    "h0_speed_m_s": h0_v, "h0_position_ecef_m": h0_pos,
+                    "h0_mass_kg": h0_mass, "h0_tilt_deg": h0_tilt,
                     "impact": impact}
         y = y2
         t += dt_s
@@ -798,3 +810,160 @@ def fin_pair_reflight(*, handoff_json: Path, scenario_yaml: Path,
                                  else "implementation_residual"),
                         "ok": deltas[k] <= FIN_TOL[k][1]}
                        for k in deltas]}
+
+
+def twin_envelope_reflight(sep_state: BoosterState, booster: BoosterModel,
+                           rt: RecoveryTarget, spec: Any, *,
+                           twin_dt_s: float = 0.25,
+                           main_dt_final: float = 0.25,
+                           bands: "dict | None" = None) -> dict:
+    """E11-02 (task #309): independent-twin re-flight of an envelope probe.
+
+    ``spec`` is an ``orbitopt.flightlab.recovery.feasibility.EnvelopeSpec``.
+    The main model flies the reference script (``search="keep"``) and grades
+    the envelope; the twin (this module's independent point-mass integrator,
+    its own atmosphere table and, when ``spec.entry_aero`` says so, its own
+    grid-fin actuator) replays the *same authored script* -- the controller
+    budget line is shared-by-design, as in E10-07/E11-01 -- and its
+    measurements are compared to the main model's on every envelope quantity
+    the probe measures: the twin must fall on the SAME SIDE of each envelope
+    limit, within a declared band, for the boundary to be reproduced.
+    ``bands`` overrides the comparison bands (percent for the ratio
+    quantities, absolute for the others); the defaults are placeholders for
+    the not-yet-measured quantities and every committed report records the
+    measured deltas next to the band it chose.
+    """
+    from dataclasses import replace
+
+    from orbitopt.flightlab.recovery.feasibility import (
+        fuel_floor_kg, grade_probe, probe_from_plan)
+    from orbitopt.flightlab.recovery.grid_fins import GridFinGuidance
+
+    plan = plan_boostback_entry(
+        sep_state, booster, rt, initial_guess=list(spec.reference_script),
+        dt_opt=spec.dt_opt, dt_final=main_dt_final, search="keep",
+        **spec.planner_kwargs())
+    x = np.asarray(spec.reference_script, dtype=np.float64)
+    bb, eb, eb2 = _unpack_script(x, int(spec.entry_burns),
+                                 bool(spec.entry_throttle))
+    pad = np.asarray(rt.position_ecef_m, dtype=np.float64)
+    lat, lon, _ = _twin_geodetic(pad)
+    e_ = np.array([-math.sin(lon), math.cos(lon), 0.0])
+    n_ = np.array([-math.sin(lat) * math.cos(lon), -math.sin(lat)
+                   * math.sin(lon), math.cos(lat)])
+    d = np.asarray(sep_state.position_m, dtype=np.float64) - pad
+    horiz = float(d @ e_) * e_ + float(d @ n_) * n_
+    return_dir = -horiz / max(float(np.linalg.norm(horiz)), 1e-9)
+    eng = booster.engine
+    kw: dict = {}
+    fins_pair = None
+    if spec.entry_aero is not None and getattr(booster, "grid_fins",
+                                              None) is not None:
+        ea = dict(spec.entry_aero)
+        sched = ea.get("schedule")
+        law = GridFinGuidance(
+            model=booster.grid_fins, mode=ea.get("mode", "schedule"),
+            alpha_deg=float(ea.get("alpha_deg", 30.0)),
+            bank_max_deg=float(ea.get("bank_max_deg",
+                                      booster.grid_fins.bank_max_deg)),
+            schedule=None if sched is None else tuple(
+                tuple(float(v) for v in g) for g in sched))
+        fins_pair = (_TwinFins(booster.grid_fins), law)
+    if str(spec.boostback_cutoff) == "iip":
+        bb = replace(bb, duration_s=IIP_BOOSTBACK_CAP_S)
+        kw.update(iip_aim_m=1000.0 * float(x[1]), pad_ecef=pad,
+                  return_dir=return_dir, vernier_throttle=eng.throttle_min,
+                  bb_floor_mass_kg=float(booster.dry_mass_kg)
+                  + float(booster.landing_propellant_reserve_kg))
+    if str(spec.entry_cutoff) == "speed" and eb is not None:
+        eb = replace(eb, duration_s=ENTRY_CUTOFF_CAP_S)
+        kw["entry_cut_speed_m_s"] = float(x[6])
+    factory = lambda: _Mission(float(sep_state.t_s), bb, eb,  # noqa: E731
+                               _bearing_of_target(pad), eb2, **kw)
+    twin = _twin_flight(factory, sep_state, booster, dt_s=twin_dt_s,
+                        corridor_h0_m=float(rt.corridor.h0_m),
+                        horizon_s=float(spec.horizon_s),
+                        fins_pair=fins_pair)
+    tmiss = None
+    if twin.get("h0_position_ecef_m") is not None:
+        r0 = np.asarray(twin["h0_position_ecef_m"], dtype=np.float64)
+        d0 = r0 - pad
+        tmiss = math.hypot(float(d0 @ e_), float(d0 @ n_))
+    cr = plan.corridor_report
+    sep_prop, floor = fuel_floor_kg(sep_state, booster)
+    verdict = grade_probe(probe_from_plan(plan), spec,
+                          corridor=rt.corridor,
+                          landing_reserve_kg=float(
+                              booster.landing_propellant_reserve_kg),
+                          sep_propellant_kg=sep_prop, prop_floor_kg=floor)
+    band_of = {"q": ("%", 20.0), "g": ("g", 2.0), "speed": ("%", 40.0),
+               "tilt": ("deg", 3.0), "miss": ("m", 1500.0),
+               "prop": ("%", 3.0)}
+    if bands:
+        band_of = {k: (band_of[k][0], float(bands.get(k, band_of[k][1])))
+                   for k in band_of}
+    lim = float(booster.landing_propellant_reserve_kg)
+    if cr.landing_need_kg is not None:
+        # match the verdict gate (boostback _assemble): need + reserve, no
+        # planner headroom margin -- same semantics as grade_probe
+        prop_lim = float(cr.landing_need_kg) + lim
+    else:
+        prop_lim = None
+    rows = [
+        ("q", float(cr.entry_max_q_pa or 0.0), float(twin["entry_max_q_pa"]),
+         float(spec.entry_q_max_pa)),
+        ("g", float(cr.entry_max_proper_g or 0.0),
+         float(twin["entry_max_proper_g"]), float(spec.entry_g_max)),
+        ("speed", float(cr.speed_m_s or 0.0), float(twin["h0_speed_m_s"] or 0.0),
+         float(rt.corridor.v_max_m_s)),
+        ("tilt", float(cr.tilt_deg or 0.0),
+         float(twin["h0_tilt_deg"] or 0.0), float(rt.corridor.max_tilt_deg)),
+    ]
+    checks = []
+    for name, mv, tv, limit in rows:
+        unit, bnd = band_of[name]
+        delta = (100.0 * abs(mv - tv) / max(abs(mv), 1e-9) if unit == "%"
+                 else abs(mv - tv))
+        checks.append({"quantity": name, "limit": limit, "main": mv,
+                       "twin": tv, "main_side": "out" if mv > limit else "in",
+                       "twin_side": "out" if tv > limit else "in",
+                       "delta": delta, "band_unit": unit, "band": bnd,
+                       "ok": (mv > limit) == (tv > limit) and delta <= bnd})
+    if tmiss is not None and cr.miss_m is not None:
+        unit, bnd = band_of["miss"]
+        checks.append({"quantity": "miss",
+                       "limit": float(rt.corridor.radius_m),
+                       "main": float(cr.miss_m), "twin": float(tmiss),
+                       "main_side": "out" if cr.miss_m > rt.corridor.radius_m
+                       else "in",
+                       "twin_side": "out" if tmiss > rt.corridor.radius_m
+                       else "in",
+                       "delta": abs(float(cr.miss_m) - tmiss),
+                       "band_unit": unit, "band": bnd,
+                       "ok": (float(cr.miss_m) > rt.corridor.radius_m)
+                       == (tmiss > rt.corridor.radius_m)
+                       and abs(float(cr.miss_m) - tmiss) <= bnd})
+    tprop = (None if twin.get("h0_mass_kg") is None else
+             float(twin["h0_mass_kg"]) - float(booster.dry_mass_kg))
+    if (tprop is not None and prop_lim is not None
+            and cr.propellant_available_kg is not None):
+        unit, bnd = band_of["prop"]
+        mv, tv = float(cr.propellant_available_kg), tprop
+        delta = 100.0 * abs(mv - tv) / max(mv, 1.0)
+        checks.append({"quantity": "prop", "limit": prop_lim, "main": mv,
+                       "twin": tv,
+                       "main_side": "out" if mv < prop_lim else "in",
+                       "twin_side": "out" if tv < prop_lim else "in",
+                       "delta": delta, "band_unit": unit, "band": bnd,
+                       "ok": (mv < prop_lim) == (tv < prop_lim)
+                       and delta <= bnd})
+    return {"spec": dict(spec.to_dict()), "verdict": verdict.to_dict(),
+            "main_model": {"feasible": bool(plan.feasible),
+                           "reason_codes": list(plan.reason_codes)},
+            "twin": {**{k: twin.get(k) for k in
+                        ("entry_max_q_pa", "entry_max_proper_g", "h0_speed_m_s",
+                         "h0_tilt_deg", "h0_mass_kg")},
+                     "h0_cross_t_s": twin.get("corridor_h0_cross_t_s"),
+                     "cut": twin.get("cut")},
+            "checks": checks,
+            "boundary_agreement": bool(all(c["ok"] for c in checks))}

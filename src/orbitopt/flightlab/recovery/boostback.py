@@ -448,6 +448,19 @@ class ReturnPlan:
     #: flew (``plan_boostback_entry(entry_aero=...)``); ``None`` = fins not
     #: flown. Kept for ``mission_command``/``mission_aero_command`` replay.
     entry_aero: "Mapping[str, Any] | None" = None
+    #: E11-02 (task #309): the recovery feasibility envelope verdict
+    #: (``EnvelopeVerdict.to_dict()`` of :mod:`~orbitopt.flightlab.recovery.
+    #: feasibility`) for this separation state and the reference probe;
+    #: ``None`` unless the caller asked for the screen
+    #: (``plan_boostback_entry(feasibility_envelope=...)``). When the screen
+    #: rejected the state, ``reason_codes[0]`` is the flight reason the
+    #: envelope predicted and no search was run.
+    screen: "Mapping[str, Any] | None" = None
+    #: E11-02 (task #309): seconds the entry burn was still burning at the
+    #: corridor crossing (0 = clean engine-off handoff). A positive value is
+    #: the planner's CORRIDOR_MISSED handoff condition, exposed so the
+    #: envelope can grade it (``feasibility.handoff_overlap``).
+    handoff_burn_overlap_s: float = 0.0
 
 
 # --------------------------------------------------------------------------
@@ -1138,7 +1151,8 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                            boostback_cutoff: str = "duration",
                            entry_cutoff: str = "duration",
                            entry_cut_speed_max_m_s: float = ENTRY_CUT_SPEED_MAX_M_S,
-                           entry_aero: Mapping[str, Any] | None = None) -> ReturnPlan:
+                           entry_aero: Mapping[str, Any] | None = None,
+                           feasibility_envelope: bool | Mapping[str, Any] = False) -> ReturnPlan:
     """Optimize the boostback/entry-burn script so the FL-301-propagated
     booster reaches ``recovery_target.corridor``; returns the corridor
     insertion state, its pad-ENU mirror, and the flown track.
@@ -1276,7 +1290,19 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     steered at the pad, flown through the vehicle's fin actuator in every
     rollout; requires ``entry_burns=0`` and a vehicle with a ``grid_fins``
     block. The corridor q/g verdicts then grade the *flown* aerodynamic force
-    (lift included), not drag alone."""
+    (lift included), not drag alone.
+    ``feasibility_envelope`` (E11-02, task #309) screens the separation
+    state against the recovery feasibility envelope of the reference mission
+    before any search runs (:mod:`~orbitopt.flightlab.recovery.feasibility`):
+    ``True`` grades the clamped ``initial_guess`` rollout (already flown as
+    the search start) against the envelope this call's own limits define; a
+    mapping is taken as an explicit :class:`~orbitopt.flightlab.recovery.
+    feasibility.EnvelopeSpec`. An outside-the-envelope state returns
+    immediately, ``feasible=False``, with the envelope's *predicted flight
+    reason* as the governing code, the verdict detail in
+    ``ReturnPlan.screen`` and its explanation in ``assumptions`` -- zero
+    optimizer evaluations spent. ``False`` (default) is bit-for-bit the
+    pre-E11-02 planner."""
     corridor = recovery_target.corridor
     eng = booster.engine
     if boostback_cutoff not in ("duration", "iip"):
@@ -1465,6 +1491,66 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     best_x = clamp(x0)
     best = rollout(best_x, dt_opt)
 
+    # ---- E11-02 (task #309): the recovery feasibility envelope screen
+    # (feasibility.py; OFF by default, every existing caller unchanged). The
+    # reference probe is already flown -- `best` is the clamped start script
+    # at the planning step -- so the verdict costs zero extra rollouts: it
+    # grades the corridor physics of this one probe (plus the analytic fuel
+    # floor) and, when the separation state is outside the envelope, the
+    # plan comes back with the predicted flight reason WITHOUT spending the
+    # search. A mapping argument is taken as an explicit EnvelopeSpec (its
+    # limits grade this probe; the probe is still the start script).
+    screen_detail: dict[str, Any] | None = None
+    if feasibility_envelope:
+        from orbitopt.flightlab.recovery.feasibility import (
+            EnvelopeSpec, grade_probe)
+        env_spec = (EnvelopeSpec.from_planner_kwargs(
+                        best_x, entry_burns=entry_burns,
+                        entry_throttle=entry_throttle,
+                        boostback_cutoff=boostback_cutoff,
+                        entry_cutoff=entry_cutoff,
+                        entry_cut_speed_max_m_s=entry_cut_speed_max_m_s,
+                        corridor_aim_margin_m=corridor_aim_margin_m,
+                        entry_q_max_pa=entry_q_max_pa, entry_g_max=entry_g_max,
+                        landing_reserve_margin_kg=landing_reserve_margin_kg,
+                        landing_need_model=landing_need_model,
+                        landing_limits=pred_limits,
+                        landing_guidance=landing_guidance,
+                        landing_divert_budget_m=landing_divert_budget_m,
+                        entry_aero=entry_aero, horizon_s=horizon_s,
+                        dt_opt=dt_opt, dt_final=dt_final)
+                    if isinstance(feasibility_envelope, bool)
+                    else EnvelopeSpec.from_mapping(feasibility_envelope))
+        # The verdict the flight reports is the dt_final re-integration
+        # (_assemble's `final`), and the closed-loop landing forecast is
+        # integrator-step sensitive, so the screen grades the same numbers:
+        # one extra re-roll at `dt_final`/verdict physics, still zero search.
+        probe_roll = (best if dt_final == dt_opt and verdict_physics is None
+                      else rollout(best_x, dt_final, physics=verdict_physics))
+        env = grade_probe(
+            None if sep_prop < prop_floor else {
+                "reached": bool(probe_roll.crossed), "miss_m": probe_roll.miss_m,
+                "tilt_deg": probe_roll.tilt_deg, "speed_m_s": probe_roll.speed_m_s,
+                "prop_kg": probe_roll.prop_kg,
+                "landing_need_kg": probe_roll.landing_need_kg,
+                "entry_q_pa": probe_roll.entry_q_pa, "entry_g": probe_roll.entry_g,
+                "exhausted": probe_roll.exhausted,
+                "landing_forecast_ok": probe_roll.landing_ok,
+                "handoff_overlap_s": probe_roll.handoff_burn_overlap_s},
+            env_spec, corridor=corridor, landing_reserve_kg=reserve,
+            sep_propellant_kg=sep_prop, prop_floor_kg=prop_floor)
+        screen_detail = env.to_dict()
+        if not env.in_envelope and sep_prop >= prop_floor:
+            return _assemble(best, best_x, sep_state, booster, recovery_target,
+                             corridor, (env.governing_reason,),
+                             assumption=env.explanation,
+                             q_lim=entry_q_max_pa, g_lim=entry_g_max,
+                             reserve=reserve, divert_budget=divert_budget,
+                             reserve_margin=reserve_margin, chance=chance,
+                             admission=admission,
+                             layout=(entry_burns, entry_throttle),
+                             entry_aero=entry_aero, screen=screen_detail)
+
     if sep_prop >= prop_floor:
         scale = np.array([10.0, 12.0, 0.1, 8.0, 18.0,
                           *([4000.0, 10.0] if entry_burns >= 1 else []),
@@ -1517,7 +1603,7 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                           divert_budget=divert_budget, reserve_margin=reserve_margin,
                           chance=chance, admission=admission,
                           layout=(entry_burns, entry_throttle),
-                          entry_aero=entry_aero)
+                          entry_aero=entry_aero, screen=screen_detail)
 
     final = rollout(best_x, dt_final, physics=verdict_physics)
     return _assemble(final, best_x, sep_state, booster, recovery_target, corridor,
@@ -1525,7 +1611,7 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                      divert_budget=divert_budget, reserve_margin=reserve_margin,
                      chance=chance, admission=admission,
                      layout=(entry_burns, entry_throttle),
-                     entry_aero=entry_aero)
+                     entry_aero=entry_aero, screen=screen_detail)
 
 
 #: E5-05c ``boostback_cutoff="iip"``: burn-time safety cap [s] of the
@@ -1577,7 +1663,8 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
                chance: JointChanceSpec | None = None,
                 admission: AdmissionPolicy | None = None,
                 layout: tuple[int, bool] = (1, False),
-                entry_aero: Mapping[str, Any] | None = None) -> ReturnPlan:
+                entry_aero: Mapping[str, Any] | None = None,
+                screen: Mapping[str, Any] | None = None) -> ReturnPlan:
     """Turn the final re-integrated rollout into the ReturnPlan: feasibility
     checks in physical order (first violation governs), corridor report,
     insertion state + ENU mirror."""
@@ -1723,7 +1810,9 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
         track=track, corridor_report=report,
         ignitions_used=int(track.ignitions_used),
         assumptions=tuple(assumptions), entry_burn_2=eb2,
-        entry_aero=dict(entry_aero) if entry_aero is not None else None)
+        entry_aero=dict(entry_aero) if entry_aero is not None else None,
+        screen=dict(screen) if screen is not None else None,
+        handoff_burn_overlap_s=float(final.handoff_burn_overlap_s))
 
 
 def mission_command(return_plan: ReturnPlan,
