@@ -871,9 +871,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         "The screened calls spend zero search fevals on an OUT state and return "
         "the predicted flight reason; the full search spends its budget (counted "
         "through the planner's own search hook, same options as the default "
-        "path). The DC8-era arm's real budget was the 300+-flight ES training "
-        "(see the committed E10-03 report), which the screen retires for "
-        "states outside the envelope.")
+        "path). Below the propellant floor the planner's own guard also skips "
+        "the search, so there the saving is wall-clock -- one cheap reference "
+        "rollout against the full-dt grading integrations (40x on the corner "
+        "cell) -- while inside the floor the screen retires the entire "
+        "full-budget pass. The DC8-era arm's real budget was the 300+-flight "
+        "ES training (see the committed E10-03 report), which the screen "
+        "retires for states outside the envelope.")
     Path(args.report).parent.mkdir(parents=True, exist_ok=True)
     Path(args.report).write_text(json.dumps(doc, indent=1) + "\n")
     OUT_MD.write_text(_md(doc))

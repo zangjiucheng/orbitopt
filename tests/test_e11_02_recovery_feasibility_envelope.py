@@ -201,8 +201,11 @@ class TestSearchBudget:
                 seen += 1
                 assert r["screen_rejected"], r["key"]
                 assert r["screen_fevals"] == 0, r["key"]
-                assert r["full_fevals"] > 0, r["key"]
-                assert r["screen_wall_s"] < r["full_wall_s"], r["key"]
+                # below the propellant floor the planner's own guard also
+                # skips the search, so the budget saving is in the wall: the
+                # screen pays one cheap reference rollout where the unscreened
+                # planner pays its full-dt grading integrations
+                assert r["screen_wall_s"] < 0.25 * r["full_wall_s"], r["key"]
         assert seen >= 2
 
     def test_in_sample_still_gets_its_search(self, rep):
