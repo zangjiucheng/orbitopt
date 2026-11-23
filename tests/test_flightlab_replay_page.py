@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import os
 import shutil
+from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
-from orbitopt.flightlab.contract import read_run
+from orbitopt.flightlab.contract import read_run, write_run
 from orbitopt.flightlab.ui.telemetry import (
     build_telemetry_channels,
     channel_values_at,
@@ -26,7 +28,7 @@ OT_FIX = Path(__file__).parent / "fixtures" / "flightlab" / "opentsiolkovsky"
 VEHICLE = REPO / "src" / "orbitopt" / "data" / "flightlab" / "vehicles" / "synthetic_two_stage.yaml"
 TARGET = REPO / "src" / "orbitopt" / "data" / "flightlab" / "scenarios" / "leo_two_stage.yaml"
 REQUIRED_CHANNELS = {"altitude", "speed", "dynamic_pressure", "g_load", "mass", "throttle",
-                     "propellant", "vertical_speed", "downrange"}
+                     "propellant", "vertical_speed", "downrange", "grid_fins"}
 
 
 def _copy_run(tmp_path):
@@ -67,6 +69,36 @@ def test_replay_telemetry_interpolates_channel_values_at_time():
     series = channels["altitude"].series[0]
     mid = series.points[len(series.points) // 2]
     assert interpolated_value(series.points, mid[0]) == pytest.approx(mid[1])
+
+
+def test_grid_fin_angles_survive_recovery_track_join_and_run_roundtrip(tmp_path):
+    from orbitopt.flightlab.recovery.grid_fins import GridFinCommand, GridFinModel
+    from orbitopt.flightlab.recovery.pipeline import _cut_at, _stack_tracks
+    from orbitopt.flightlab.recovery.propagator import BoosterModel, BoosterState, propagate
+
+    booster = BoosterModel.load(VEHICLE)
+    booster = replace(booster, grid_fins=GridFinModel.from_mapping(
+        {}, reference_area_m2=booster.reference_area_m2))
+    state = BoosterState(t_s=0.0, epoch_utc=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                         frame="ECEF", position_m=(6_398_137.0, 0.0, 0.0),
+                         velocity_m_s=(-150.0, 500.0, 0.0), mass_kg=65_000.0)
+    entry = propagate(state, booster, None, 4.0, dt_s=0.25, sample_s=0.5,
+                      aero_cmd=lambda _t, _state: GridFinCommand(30.0, -10.0))
+    # Cut at an actual sample, then join a phase without fin telemetry.
+    entry = _cut_at(entry, 2.0)
+    handoff = replace(state, t_s=2.0, position_m=entry.position_ecef_m[-1],
+                      velocity_m_s=entry.velocity_ecef_m_s[-1])
+    terminal = propagate(handoff, booster, None, 4.0, dt_s=0.25, sample_s=0.5)
+    merged = _stack_tracks(entry, terminal).to_body_track("ECEF")
+    path = tmp_path / "fins-run"
+    write_run(path, replace(read_run(RUN_FIXTURE), tracks=(merged,), events=()))
+    channel = next(c for c in build_telemetry_channels(read_run(path)) if c.id == "grid_fins")
+    assert len(channel.series) == 3
+    for series, values in zip(channel.series, (entry.fin_delta_deg, entry.alpha_deg, entry.bank_deg),
+                              strict=True):
+        assert tuple(t for t, _ in series.points) == tuple(entry.times_s)
+        assert tuple(value for _, value in series.points) == pytest.approx(values)
+    assert max(entry.fin_delta_deg) > 0
 
 
 def test_load_run_scene_uses_cached_scene_and_invalidates_on_touch(tmp_path, monkeypatch):
@@ -191,6 +223,45 @@ def test_telemetry_panel_follows_time_and_requests_seeks():
     assert seen == [42.0]
 
 
+def test_telemetry_plot_selection_compacts_and_persists(tmp_path):
+    _qt_app()
+    from PySide6.QtCore import QSettings
+
+    from orbitopt.flightlab.ui.flight_panel import TelemetryPanel
+    from orbitopt.flightlab.ui.telemetry import TelemetryChannel, TelemetrySeries
+
+    path = str(tmp_path / "plots.ini")
+    settings = QSettings(path, QSettings.IniFormat)
+    panel = TelemetryPanel(settings=settings)
+    assert not panel._plot_actions["grid_fins"].isEnabled()
+    assert panel.charts["grid_fins"].isHidden()
+    fin = TelemetrySeries("grid_fins", "Bank", "deg", "#4cc9f0", "booster", ((0.0, 1.0),))
+    panel.set_channels((TelemetryChannel("grid_fins", "Grid Fins", "deg", series=(fin,)),), 0.0, 1.0)
+    assert panel._plot_actions["grid_fins"].isEnabled()
+    assert not panel.charts["grid_fins"].isHidden()
+    actions = {action.text(): action for action in panel.plots_button.menu().actions()}
+    assert actions["Altitude"].isChecked()
+    actions["Altitude"].trigger()
+    assert panel.charts["altitude"].isHidden()
+    grid = panel.widget().layout()
+    assert grid.itemAtPosition(0, 0).widget() is panel.charts["speed"]
+    settings.sync()
+
+    restored = TelemetryPanel(settings=QSettings(path, QSettings.IniFormat))
+    assert restored.charts["altitude"].isHidden()
+    restored.set_time(42.0)
+    for action in restored.plots_button.menu().actions():
+        if action.isChecked():
+            action.trigger()
+    assert all(chart.isHidden() for chart in restored.charts.values())
+    assert not restored._empty.isHidden()
+    restored.plots_button.menu().actions()[-1].trigger()
+    assert all(chart.isHidden() == (channel_id == "grid_fins")
+               for channel_id, chart in restored.charts.items())
+    assert restored.charts["altitude"]._time == 42.0
+    assert restored._empty.isHidden()
+
+
 @pytest.mark.slow
 def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypatch):
     """Flight Lab mode: a run found on disk loads into the main 3D view and
@@ -213,8 +284,10 @@ def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypat
     monkeypatch.chdir(tmp_path / "cwd")  # a ./runs of the checkout is not ours
     # the nav's saved folders: a scratch file, never the user's real settings
     import orbitopt.flightlab.ui.nav as nav_mod
+    import orbitopt.flightlab.ui.flight_panel as flight_panel_mod
     ini = str(tmp_path / "settings.ini")
     monkeypatch.setattr(nav_mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.IniFormat))
+    monkeypatch.setattr(flight_panel_mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.IniFormat))
 
     def pump(cond, timeout=60.0):
         end = _time.monotonic() + timeout
@@ -235,6 +308,8 @@ def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypat
         assert window.right_tabs.indexOf(window.inspector) == -1
         assert window.right_tabs.indexOf(window.verification_panel) >= 0
         assert window.chart_panel.currentWidget() is window.telemetry_panel
+        assert window.telemetry_panel.plots_button.isVisible()
+        assert window.telemetry_panel.plots_button.parentWidget().layout().contentsMargins().right() == 8
         assert window.state.timeline is not None and window.timeline_bar.isVisible()
         assert window.body_strip.isVisible()
         # Leave room for native macOS widget metrics while still exercising a
@@ -252,23 +327,21 @@ def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypat
         telemetry.ensureWidgetVisible(last_chart)
         assert telemetry.verticalScrollBar().value() > 0
         assert last_chart.mapTo(telemetry.viewport(), last_chart.rect().center()).y() < telemetry.viewport().height()
-        from PySide6.QtCore import QPointF, Qt
-        from PySide6.QtGui import QMouseEvent
+        from PySide6.QtCore import QPoint, Qt
+        from PySide6.QtTest import QTest
         splitter = window.center_splitter
         handle = splitter.handle(1)
         splitter.setSizes([1000, 1])
-        grip = QPointF(handle.rect().center())
-        global_grip = handle.mapToGlobal(grip)
-        plot_height = splitter.sizes()[1]
-        for event_type, offset, button, buttons in (
-            (QMouseEvent.Type.MouseButtonPress, 0, Qt.LeftButton, Qt.LeftButton),
-            (QMouseEvent.Type.MouseMove, -35, Qt.NoButton, Qt.LeftButton),
-            (QMouseEvent.Type.MouseButtonRelease, -35, Qt.LeftButton, Qt.NoButton),
-        ):
-            delta = QPointF(0, offset)
-            app.sendEvent(handle, QMouseEvent(event_type, grip + delta, global_grip + delta,
-                                              button, buttons, Qt.NoModifier))
-        assert splitter.sizes()[1] > plot_height
+        assert splitter.sizes()[1] < window.body_strip.height() + 140
+        for offset in (-35, 20):
+            grip = handle.mapTo(window, handle.rect().center())
+            assert window.childAt(grip) is handle
+            plot_height = splitter.sizes()[1]
+            QTest.mousePress(window.windowHandle(), Qt.LeftButton, pos=grip)
+            QTest.mouseMove(window.windowHandle(), grip + QPoint(0, offset))
+            QTest.mouseRelease(window.windowHandle(), Qt.LeftButton, pos=grip + QPoint(0, offset))
+            app.processEvents()
+            assert splitter.sizes()[1] == plot_height - offset
         assert set(window.body_strip.buttons) == {b["id"] for b in window.state.scene["bodies"]}
         window.body_strip.buttons["earth"].click()
         app.processEvents()  # queued initial framing must not override the click
@@ -284,6 +357,7 @@ def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypat
         assert window.right_tabs.indexOf(window.flight_panel) < 0
         assert window.right_tabs.indexOf(window.inspector) >= 0
         assert window.chart_panel.indexOf(window.telemetry_panel) < 0
+        assert not window.telemetry_panel.plots_button.isVisible()
     finally:
         window.close()
         app.processEvents()

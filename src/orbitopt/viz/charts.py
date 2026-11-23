@@ -21,7 +21,7 @@ import math
 import numpy as np
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
-from PySide6.QtWidgets import QTabWidget, QToolTip, QWidget
+from PySide6.QtWidgets import QScrollArea, QTabWidget, QToolTip, QWidget
 
 from orbitopt.timescales import mjd2000_to_utc_datetime
 from orbitopt.viz.state import MissionState, altitude_reference
@@ -607,6 +607,7 @@ class ChartPanel(QTabWidget):
         self.setDocumentMode(True)
         self.tabBar().setDrawBase(False)
         self.setAttribute(Qt.WA_StyledBackground, True)
+        self.currentChanged.connect(self.updateGeometry)
         self.porkchop = PorkchopChart()
         self.distance = DistanceChart()
         self.porkchop.candidate_clicked.connect(state.select_candidate)
@@ -614,6 +615,19 @@ class ChartPanel(QTabWidget):
         state.scene_changed.connect(self._on_scene_changed)
         state.candidate_changed.connect(self.porkchop.set_selected)
         state.time_changed.connect(self.distance.set_time)
+
+    def minimumSizeHint(self):  # noqa: N802 -- Qt override
+        size = super().minimumSizeHint()
+        page = self.currentWidget()
+        if isinstance(page, QScrollArea):
+            # A scrollable plot grid can shrink below the neighboring chart's
+            # fixed minimum height. Keep room for the tabs and scroll viewport.
+            controls = self.cornerWidget(Qt.TopRightCorner)
+            header = self.tabBar().minimumSizeHint().height()
+            if controls is not None:
+                header = max(header, controls.sizeHint().height())
+            size.setHeight(min(size.height(), header + page.minimumSizeHint().height() + 4))
+        return size
 
     def _on_scene_changed(self, scene):
         self.clear()

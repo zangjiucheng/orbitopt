@@ -503,6 +503,7 @@ class BoosterTrack:
     alpha_deg: "np.ndarray | None" = None         # realised angle of attack
     bank_deg: "np.ndarray | None" = None          # realised bank angle
     fin_delta_deg: "np.ndarray | None" = None     # mean |fin deflection|
+    fin_telemetry_valid: "np.ndarray | None" = None  # sampled arc mask on joined tracks
 
     @property
     def propellant_remaining_kg(self) -> float:
@@ -531,6 +532,9 @@ class BoosterTrack:
         ``altitude_m`` / ``latitude_deg`` / ``longitude_deg`` the ascent
         tracks carry (OpenTsiolkovsky's columns) and, given the launch site
         as ``downrange_origin_deg`` (lat, lon), ``downrange_m`` from it.
+        Fin-enabled tracks export ``fin_delta_deg``, ``fin_alpha_deg`` and
+        ``fin_bank_deg``. On joined arcs, ``fin_telemetry_valid`` marks the
+        samples that carry recorded fin data.
 
         Without them, profile charts fell back to inertial great-circle
         downrange and spherical altitude for the booster only: on the same
@@ -552,6 +556,12 @@ class BoosterTrack:
         if downrange_origin_deg is not None:
             extra["downrange_m"] = tuple(float(x) for x in surface_distance_m(
                 downrange_origin_deg[0], downrange_origin_deg[1], lat, lon))
+        for name, values in (("fin_delta_deg", self.fin_delta_deg),
+                             ("fin_alpha_deg", self.alpha_deg),
+                             ("fin_bank_deg", self.bank_deg),
+                             ("fin_telemetry_valid", self.fin_telemetry_valid)):
+            if values is not None:
+                extra[name] = tuple(float(x) for x in values)
         if frame != "ECEF":
             r, v = frames.to_gcrs(r, v, "ECEF", _naive_utc(self.epoch_utc), t)
             if frame == "LAUNCH_ECI":

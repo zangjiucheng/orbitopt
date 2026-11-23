@@ -160,11 +160,18 @@ def _cut_at(track: BoosterTrack, t_cut_s: float) -> BoosterTrack:
     on the FL-302 rollout so the corridor state is the join point, not a
     ballistic segment that kept flying past the burn handover."""
     t = np.asarray(track.times_s, dtype=np.float64)
-    keep = t <= t_cut_s + 1e-9
-    if bool(keep[-1]):
+    if t_cut_s >= t[-1] - 1e-9:
         return track
-    n = int(np.count_nonzero(keep))
+    n = int(np.searchsorted(t, t_cut_s))
     interp = lambda a: float(np.interp(t_cut_s, t, np.asarray(a, dtype=np.float64)))  # noqa: E731
+
+    def cut_angle(values: np.ndarray | None) -> np.ndarray | None:
+        return None if values is None else np.append(values[:n], interp(values))
+
+    valid = track.fin_telemetry_valid
+    if valid is not None:
+        last_sample = max(0, int(np.searchsorted(t, t_cut_s, side="right")) - 1)
+        valid = np.append(valid[:n], valid[last_sample])
     return BoosterTrack(
         epoch_utc=track.epoch_utc,
         times_s=np.concatenate((t[:n], [t_cut_s])),
@@ -188,6 +195,10 @@ def _cut_at(track: BoosterTrack, t_cut_s: float) -> BoosterTrack:
         ignitions_used=track.ignitions_used,
         dry_mass_kg=track.dry_mass_kg,
         landing_reserve=track.landing_reserve,
+        alpha_deg=cut_angle(track.alpha_deg),
+        bank_deg=cut_angle(track.bank_deg),
+        fin_delta_deg=cut_angle(track.fin_delta_deg),
+        fin_telemetry_valid=valid,
     )
 
 
@@ -200,6 +211,19 @@ def _stack_tracks(first: BoosterTrack, second: BoosterTrack) -> BoosterTrack:
     drop = 1 if len(t2) > 1 and abs(float(t2[0]) - float(t1[-1])) <= 1e-6 else 0
     cat = lambda a, b: np.concatenate((np.asarray(a), np.asarray(b)[drop:]))  # noqa: E731
     stack = lambda a, b: np.vstack((np.asarray(a), np.asarray(b)[drop:, :]))  # noqa: E731
+
+    def join_angle(a: np.ndarray | None, b: np.ndarray | None) -> np.ndarray | None:
+        if a is None and b is None:
+            return None
+        return cat(np.zeros(len(t1)) if a is None else a,
+                   np.zeros(len(t2)) if b is None else b)
+
+    def valid_samples(track: BoosterTrack) -> np.ndarray:
+        if track.fin_telemetry_valid is not None:
+            return track.fin_telemetry_valid
+        return np.full(len(track.times_s), track.fin_delta_deg is not None)
+
+    has_fins = first.fin_delta_deg is not None or second.fin_delta_deg is not None
     return BoosterTrack(
         epoch_utc=first.epoch_utc,
         times_s=cat(t1, t2),
@@ -219,6 +243,10 @@ def _stack_tracks(first: BoosterTrack, second: BoosterTrack) -> BoosterTrack:
         ignitions_used=int(first.ignitions_used) + int(second.ignitions_used),
         dry_mass_kg=first.dry_mass_kg or second.dry_mass_kg,
         landing_reserve=first.landing_reserve,
+        alpha_deg=join_angle(first.alpha_deg, second.alpha_deg),
+        bank_deg=join_angle(first.bank_deg, second.bank_deg),
+        fin_delta_deg=join_angle(first.fin_delta_deg, second.fin_delta_deg),
+        fin_telemetry_valid=cat(valid_samples(first), valid_samples(second)) if has_fins else None,
     )
 
 

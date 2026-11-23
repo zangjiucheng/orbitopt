@@ -200,6 +200,16 @@ QTabWidget#rightTabs > QTabBar::tab:selected, QTabWidget#chartTabs > QTabBar::ta
     color: {INK_PRIMARY};
     border-bottom: 2px solid {ACCENT};
 }}
+QPushButton#telemetryPlots {{
+    margin: 2px 4px;
+    padding: 2px 17px 2px 8px;
+    font-size: 10.5px;
+}}
+QPushButton#telemetryPlots::menu-indicator {{
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    right: 5px;
+}}
 QWidget#viewStrip {{
     background: {PANEL};
     border-bottom: 1px solid {BORDER_SOFT};

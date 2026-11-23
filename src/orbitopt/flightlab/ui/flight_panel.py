@@ -21,13 +21,15 @@ import html
 from pathlib import Path
 from typing import Sequence
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSettings, Qt, Signal
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QGridLayout,
     QHeaderView,
     QLabel,
+    QMenu,
+    QPushButton,
     QScrollArea,
     QSplitter,
     QTabWidget,
@@ -65,7 +67,9 @@ TELEMETRY_CHARTS = (
     ("propellant", "Propellant remaining", "t"),
     ("vertical_speed", "Vertical speed (radial)", "m/s"),
     ("downrange", "Downrange", "km"),
+    ("grid_fins", "Grid Fins", "deg"),
 )
+_HIDDEN_PLOTS_SETTING = "flightlab/hiddenTelemetryPlots"
 
 
 #: Colour of a verdict value in the summary (the verdict rows read PASS / FAIL / N/A).
@@ -253,9 +257,10 @@ class TelemetryPanel(QScrollArea):
 
     time_requested = Signal(float)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, settings: QSettings | None = None):
         super().__init__(parent)
         self.setObjectName("flightTelemetry")
+        self._settings = settings if settings is not None else QSettings("orbitopt", "Mission Control")
         self.setWidgetResizable(True)
         self.setFrameShape(QScrollArea.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -264,20 +269,70 @@ class TelemetryPanel(QScrollArea):
         )
         chart_host = QWidget()
         chart_host.setObjectName("telemetryGrid")
-        grid = QGridLayout(chart_host)
-        grid.setContentsMargins(4, 4, 4, 4)
-        grid.setSpacing(6)
+        self._grid = QGridLayout(chart_host)
+        self._grid.setContentsMargins(4, 4, 4, 4)
+        self._grid.setSpacing(6)
+        self._empty = QLabel("No plots selected. Use Plots to show a chart.", chart_host)
+        self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.plots_button = QPushButton("Plots")
+        self.plots_button.setObjectName("telemetryPlots")
+        self.plots_button.setToolTip("Choose which telemetry plots to display")
+        menu = QMenu(self.plots_button)
+        self.plots_button.setMenu(menu)
+        hidden = self._settings.value(_HIDDEN_PLOTS_SETTING, "", type=str).split(",")
+        self._plot_actions = {}
         self.charts: dict[str, _TelemetryChart] = {}
-        for index, (channel_id, label, unit) in enumerate(TELEMETRY_CHARTS):
+        for channel_id, label, unit in TELEMETRY_CHARTS:
             chart = _TelemetryChart(channel_id, label, unit, chart_host)
             chart.time_requested.connect(self.time_requested)
             self.charts[channel_id] = chart
-            grid.addWidget(chart, index // 3, index % 3)
+            action = menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(channel_id not in hidden)
+            action.triggered.connect(self._save_plot_selection)
+            self._plot_actions[channel_id] = action
+        self._set_fin_plot_available(False)
+        menu.addSeparator()
+        menu.addAction("Show all plots", self._show_all_plots)
         for column in range(3):
-            grid.setColumnStretch(column, 1)
-        for row in range(3):
-            grid.setRowStretch(row, 1)
+            self._grid.setColumnStretch(column, 1)
+        self._layout_plots()
         self.setWidget(chart_host)
+
+    def _layout_plots(self) -> None:
+        self._grid.removeWidget(self._empty)
+        index = 0
+        for channel_id, chart in self.charts.items():
+            action = self._plot_actions[channel_id]
+            visible = action.isEnabled() and action.isChecked()
+            self._grid.removeWidget(chart)
+            chart.setVisible(visible)
+            if visible:
+                row, column = divmod(index, 3)
+                self._grid.addWidget(chart, row, column)
+                index += 1
+        if index == 0:
+            self._grid.addWidget(self._empty, 0, 0, 1, 3)
+        self._empty.setVisible(index == 0)
+        for row in range(self._grid.rowCount()):
+            self._grid.setRowStretch(row, int(row == 0 or row * 3 < index))
+
+    def _save_plot_selection(self) -> None:
+        hidden = [channel_id for channel_id, action in self._plot_actions.items()
+                  if not action.isChecked()]
+        self._settings.setValue(_HIDDEN_PLOTS_SETTING, ",".join(hidden))
+        self._layout_plots()
+
+    def _show_all_plots(self) -> None:
+        for action in self._plot_actions.values():
+            action.setChecked(True)
+        self._save_plot_selection()
+
+    def _set_fin_plot_available(self, available: bool) -> None:
+        action = self._plot_actions["grid_fins"]
+        action.setEnabled(available)
+        action.setText("Grid Fins" if available else "Grid Fins (no data)")
 
     def set_channels(self, channels: Sequence[TelemetryChannel], t_min: float, t_max: float) -> None:
         for chart in self.charts.values():
@@ -287,6 +342,9 @@ class TelemetryPanel(QScrollArea):
             if chart is not None:
                 chart.set_channel(channel)
                 chart.set_time_range(t_min, t_max)
+        self._set_fin_plot_available(any(channel.id == "grid_fins" and channel.has_data
+                                         for channel in channels))
+        self._layout_plots()
 
     def set_time(self, t: float) -> None:
         for chart in self.charts.values():

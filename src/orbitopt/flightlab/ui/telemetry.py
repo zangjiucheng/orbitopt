@@ -256,6 +256,22 @@ def build_telemetry_channels(
                                             _finite_pairs(track.t_s, (v / 1000 for v in extra[1]))))
     channels.extend((TelemetryChannel("vertical_speed", "Vertical speed (radial)", "m/s", "no state samples", tuple(vertical)),
                      TelemetryChannel("downrange", "Downrange", "km", "no recorded downrange", tuple(downrange))))
+    fins = []
+    for track in run.tracks:
+        valid = _extra_values(track, ("fin_telemetry_valid",))
+        for column, label, color in (("fin_delta_deg", "Fin deflection (mean abs.)", "#35c48b"),
+                                     ("fin_alpha_deg", "Angle of attack", "#4cc9f0"),
+                                     ("fin_bank_deg", "Bank", "#b58cf0")):
+            extra = _extra_values(track, (column,))
+            if extra is None:
+                continue
+            values = extra[1] if valid is None else (
+                value if recorded else math.nan for value, recorded in zip(extra[1], valid[1]))
+            points = _finite_pairs(track.t_s, values)
+            if points:
+                fins.append(TelemetrySeries("grid_fins", label, "deg", color, track.body_id, points))
+    channels.append(TelemetryChannel("grid_fins", "Grid Fins", "deg",
+                                     "no recorded grid-fin telemetry" if not fins else "", tuple(fins)))
     return tuple(channels)
 
 

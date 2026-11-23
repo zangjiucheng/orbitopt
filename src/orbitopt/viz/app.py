@@ -432,6 +432,15 @@ class MissionControlWindow(QMainWindow):
         # The 3D view over the linked 2D charts; the splitter lets the charts
         # be dragged smaller, never the 3D view away.
         self.chart_panel = ChartPanel(self.state)
+        plot_controls = QWidget(self.chart_panel)
+        plot_controls_layout = QHBoxLayout(plot_controls)
+        plot_controls_layout.setContentsMargins(0, 0, 8, 0)
+        plot_controls_layout.addWidget(self.telemetry_panel.plots_button)
+        self.chart_panel.setCornerWidget(plot_controls, Qt.TopRightCorner)
+        plot_controls.hide()
+        self.chart_panel.currentChanged.connect(
+            lambda _index: plot_controls.setVisible(
+                self.chart_panel.currentWidget() is self.telemetry_panel))
         from orbitopt.viz.body_strip import BodyStrip
         self.body_strip = BodyStrip(self.state)
         self.body_strip.focus_requested.connect(self._focus_from_strip)
@@ -443,7 +452,7 @@ class MissionControlWindow(QMainWindow):
         plots.addWidget(self.chart_panel, 1)
         self.center_splitter = QSplitter(Qt.Vertical)
         self.center_splitter.setObjectName("centerSplitter")
-        self.center_splitter.setHandleWidth(10)
+        self.center_splitter.setHandleWidth(14)
         self.center_splitter.setStyleSheet(
             f"QSplitter#centerSplitter::handle:vertical {{ background: {HAIRLINE}; }}"
             f"QSplitter#centerSplitter::handle:vertical:hover {{ background: {INK_MUTED}; }}"
@@ -452,10 +461,18 @@ class MissionControlWindow(QMainWindow):
         self.center_splitter.addWidget(self.plot_area)
         self.center_splitter.setCollapsible(0, False)
         self.center_splitter.setCollapsible(1, False)
-        self.center_splitter.handle(1).setToolTip("Drag up or down to resize the graphs")
-        self.center_splitter.setStretchFactor(0, 3)
+        plot_handle = self.center_splitter.handle(1)
+        plot_handle.setToolTip("Drag up or down to resize the plots")
+        grip_layout = QHBoxLayout(plot_handle)
+        grip_layout.setContentsMargins(0, 0, 0, 0)
+        grip = QFrame(plot_handle)
+        grip.setFixedSize(36, 3)
+        grip.setAttribute(Qt.WA_TransparentForMouseEvents)
+        grip.setStyleSheet(f"background: {INK_MUTED}; border-radius: 1px;")
+        grip_layout.addWidget(grip, 0, Qt.AlignCenter)
+        self.center_splitter.setStretchFactor(0, 1)
         self.center_splitter.setStretchFactor(1, 1)
-        self.center_splitter.setSizes([560, 210])
+        self.center_splitter.setSizes([440, 250])
         center_layout.addWidget(self.center_splitter, stretch=1)
 
         self.timeline_bar = TimelineBar(self.state)

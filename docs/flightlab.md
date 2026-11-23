@@ -57,8 +57,17 @@ interpolated per-series values, and use **Reset view** to restore the full range
 Left-click or drag still seeks the shared mission clock. The same controls
 work on the inline plots and comparison telemetry.
 
-Drag the horizontal divider above **Bodies** to resize the plot pane. In a short window,
-use the telemetry scrollbar or **Shift + scroll** to reach lower plots.
+In **Runs → Telemetry**, open **Plots** next to the tabs to choose which
+charts to display. Mission Control remembers your selection across runs and
+restarts. Choose **Show all plots** to restore the full grid.
+
+**Grid Fins** shows mean absolute fin deflection, angle of attack and bank
+angle for runs with recorded fin telemetry. In older runs or runs flown
+without fins, **Grid Fins (no data)** is disabled in the menu.
+
+Drag the centered grip on the divider above **Bodies** to resize the plot
+pane. In a short window, use the telemetry scrollbar or **Shift + scroll**
+to reach lower plots.
 
 In **Distance**, scroll vertically to zoom, then swipe horizontally or
 right-drag to move through time. Left-click or drag to seek. Double-click
