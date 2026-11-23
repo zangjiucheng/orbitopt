@@ -157,6 +157,8 @@ from orbitopt.flightlab.recovery.propagator import (
     pressure_pa,
     propagate,
 )
+from orbitopt.flightlab.recovery.grid_fins import GridFinGuidance
+
 
 __all__ = [
     "CORRIDOR_MISSED",
@@ -442,6 +444,23 @@ class ReturnPlan:
     #: planned with ``entry_burns=2``; ``None`` for the 7-parameter one-burn
     #: script (every pre-E5-05c plan and caller).
     entry_burn_2: "EntryBurnPlan | None" = None
+    #: E11-01 (task #308): the grid-fin steering options the unpowered entry
+    #: flew (``plan_boostback_entry(entry_aero=...)``); ``None`` = fins not
+    #: flown. Kept for ``mission_command``/``mission_aero_command`` replay.
+    entry_aero: "Mapping[str, Any] | None" = None
+    #: E11-02 (task #309): the recovery feasibility envelope verdict
+    #: (``EnvelopeVerdict.to_dict()`` of :mod:`~orbitopt.flightlab.recovery.
+    #: feasibility`) for this separation state and the reference probe;
+    #: ``None`` unless the caller asked for the screen
+    #: (``plan_boostback_entry(feasibility_envelope=...)``). When the screen
+    #: rejected the state, ``reason_codes[0]`` is the flight reason the
+    #: envelope predicted and no search was run.
+    screen: "Mapping[str, Any] | None" = None
+    #: E11-02 (task #309): seconds the entry burn was still burning at the
+    #: corridor crossing (0 = clean engine-off handoff). A positive value is
+    #: the planner's CORRIDOR_MISSED handoff condition, exposed so the
+    #: envelope can grade it (``feasibility.handoff_overlap``).
+    handoff_burn_overlap_s: float = 0.0
 
 
 # --------------------------------------------------------------------------
@@ -633,10 +652,15 @@ class _Mission:
                  iip_aim_m: float | None = None, pad_ecef: np.ndarray | None = None,
                  return_dir: np.ndarray | None = None, vernier_throttle: float = 0.0,
                  entry_cut_speed_m_s: float | None = None,
-                 bb_floor_mass_kg: float | None = None):
+                 bb_floor_mass_kg: float | None = None,
+                 aero: "GridFinGuidance | None" = None):
         self.t_sep = float(t_sep)
         self.bb = bb
         self.eb = eb
+        #: E11-01 (task #308): the grid-fin steering law for the unpowered
+        #: entry (entry_burns=0 with a grid_fins vehicle); None = fins not
+        #: flown, the mission is the pre-E11-01 ballistic-coast script.
+        self.aero = aero
         #: IIP boostback: the burn also ends when the stage is down to this
         #: mass (dry + the planner's reserve) -- a burn that cannot reach its
         #: aim stops where no landing would be possible anyway
@@ -738,6 +762,16 @@ class _Mission:
             return ThrustCmd(self.eb2.throttle, _retro_lead_direction(v, up))
         return None
 
+    def aero_cmd(self, t: float, state: BoosterState):
+        """E11-01 grid-fin steering sample for the propagator's ``aero_cmd``
+        hook (``None`` when the mission flies no fins -- the deploy/stow
+        state machine itself lives in the actuator, not the law)."""
+        if self.aero is None:
+            return None
+        r = np.asarray(state.position_m, dtype=np.float64)
+        v = np.asarray(state.velocity_m_s, dtype=np.float64)
+        return self.aero.command(_geodetic_fast(r)[2], r, v)
+
 
 def _bearing_of_target(pad_ecef: np.ndarray) -> Callable[[np.ndarray], float]:
     """Bearing-guidance function: bearing [rad, ENU convention from north] of
@@ -797,6 +831,7 @@ def _entry_window_loads(track: BoosterTrack, vehicle: BoosterModel,
     eng = vehicle.engine
     q_max = 0.0
     g_max = 0.0
+    f_rec = getattr(track, "aero_force_n", None)  # E11-01: flown aero force vector
     for i in range(len(track.times_s)):
         t = track.times_s[i]
         if t < t_lo or t > t_hi:
@@ -804,7 +839,10 @@ def _entry_window_loads(track: BoosterTrack, vehicle: BoosterModel,
         q = float(track.dynamic_pressure_pa[i])
         q_max = max(q_max, q)
         m = float(track.mass_kg[i])
-        f_aero = q * vehicle.cd(float(track.mach[i])) * vehicle.reference_area_m2
+        if f_rec is not None:
+            f_aero = float(np.linalg.norm(f_rec[i]))
+        else:
+            f_aero = q * vehicle.cd(float(track.mach[i])) * vehicle.reference_area_m2
         thr = float(track.throttle[i])
         f_thrust = (eng.count * thr
                     * max(eng.thrust_vacuum_n
@@ -849,11 +887,13 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
     (``None`` = the momentum need and ``v_max_m_s``, bit-for-bit)."""
     out = _Rollout()
     h0_name = "fl302_corridor_h0"
+    kwargs: dict[str, Any] = {} if physics is None else {"physics": physics}
+    if getattr(mission, "aero", None) is not None:
+        kwargs["aero_cmd"] = mission.aero_cmd  # E11-01: grid-fin steering
     try:
         tr = propagate(sep_state, vehicle, mission, sep_state.t_s + horizon_s,
                        events=("burn", "ground", AltitudeThreshold(corridor.h0_m, h0_name, "down")),
-                       dt_s=dt, sample_s=max(2.0 * dt, 2.0),
-                       **({} if physics is None else {"physics": physics}))
+                       dt_s=dt, sample_s=max(2.0 * dt, 2.0), **kwargs)
     except RecoveryError:
         out.penalty = 60.0
         return out
@@ -1108,9 +1148,11 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                           landing_limits: Any = None,
                           landing_guidance: Any = None,
                           verdict_physics: Any = None,
-                          boostback_cutoff: str = "duration",
-                          entry_cutoff: str = "duration",
-                          entry_cut_speed_max_m_s: float = ENTRY_CUT_SPEED_MAX_M_S) -> ReturnPlan:
+                           boostback_cutoff: str = "duration",
+                           entry_cutoff: str = "duration",
+                           entry_cut_speed_max_m_s: float = ENTRY_CUT_SPEED_MAX_M_S,
+                           entry_aero: Mapping[str, Any] | None = None,
+                           feasibility_envelope: bool | Mapping[str, Any] = False) -> ReturnPlan:
     """Optimize the boostback/entry-burn script so the FL-301-propagated
     booster reaches ``recovery_target.corridor``; returns the corridor
     insertion state, its pad-ENU mirror, and the flown track.
@@ -1241,7 +1283,26 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     cutoff speed (default :data:`ENTRY_CUT_SPEED_MAX_M_S`, the E5-05c clamp,
     bit-for-bit): a planning-domain bound of the guidance search, not a graded
     constraint (E5-08 RECOVERY_GAP_E508.md names raising it as a declared
-    design iteration)."""
+    design iteration).
+    ``entry_aero`` (E11-01, task #308) flies the unpowered entry on its grid
+    fins: a mapping of :class:`~orbitopt.flightlab.recovery.grid_fins.GridFinGuidance`
+    fields (``alpha_deg``, ``bank_max_deg``, ``mode``/``schedule``, ...)
+    steered at the pad, flown through the vehicle's fin actuator in every
+    rollout; requires ``entry_burns=0`` and a vehicle with a ``grid_fins``
+    block. The corridor q/g verdicts then grade the *flown* aerodynamic force
+    (lift included), not drag alone.
+    ``feasibility_envelope`` (E11-02, task #309) screens the separation
+    state against the recovery feasibility envelope of the reference mission
+    before any search runs (:mod:`~orbitopt.flightlab.recovery.feasibility`):
+    ``True`` grades the clamped ``initial_guess`` rollout (already flown as
+    the search start) against the envelope this call's own limits define; a
+    mapping is taken as an explicit :class:`~orbitopt.flightlab.recovery.
+    feasibility.EnvelopeSpec`. An outside-the-envelope state returns
+    immediately, ``feasible=False``, with the envelope's *predicted flight
+    reason* as the governing code, the verdict detail in
+    ``ReturnPlan.screen`` and its explanation in ``assumptions`` -- zero
+    optimizer evaluations spent. ``False`` (default) is bit-for-bit the
+    pre-E11-02 planner."""
     corridor = recovery_target.corridor
     eng = booster.engine
     if boostback_cutoff not in ("duration", "iip"):
@@ -1272,6 +1333,13 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     if entry_throttle and entry_burns == 0:
         raise ValueError("entry_throttle throttles the entry burns; the "
                          "entry_burns=0 script flies none (nothing to throttle)")
+    if entry_aero is not None:
+        if entry_burns != 0:
+            raise ValueError("entry_aero steers the unpowered entry: it is the "
+                             "entry_burns=0 script of E11-01 (entry burns steer "
+                             "themselves)")
+        if booster.grid_fins is None:
+            raise ValueError("entry_aero needs a vehicle with a grid_fins block")
     ignitions_needed = 1 + int(entry_burns)
     if eng.restarts_max < ignitions_needed:
         raise RecoveryError(
@@ -1328,6 +1396,14 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     horiz = float(d_sep @ pe) * pe + float(d_sep @ pn) * pn
     return_dir = -horiz / max(float(np.linalg.norm(horiz)), 1e-9)
 
+    #: E11-01: the grid-fin steering law (shared by main model and twin,
+    #: rebuilt by mission_command/mission_aero_command from the plan record)
+    grid_guidance: GridFinGuidance | None = None
+    if entry_aero is not None:
+        grid_guidance = GridFinGuidance(model=booster.grid_fins,
+                                       pad_lat_deg=p_lat, pad_lon_deg=p_lon,
+                                       **entry_aero)
+
     n_base = 5 if entry_burns == 0 else 7 + (2 if entry_burns == 2 else 0)
     n_x = n_base + (int(entry_burns) if entry_throttle else 0)
 
@@ -1365,9 +1441,11 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
 
     def to_mission(x: np.ndarray) -> _Mission:
         bb, eb, eb2 = _unpack_script(x, entry_burns, entry_throttle)
-        if not iip_mode and not speed_mode:
-            return _Mission(sep_state.t_s, bb, eb, bearing_of, eb2)
         kw: dict[str, Any] = {}
+        if grid_guidance is not None:
+            kw["aero"] = grid_guidance
+        if not iip_mode and not speed_mode:
+            return _Mission(sep_state.t_s, bb, eb, bearing_of, eb2, **kw)
         if iip_mode:
             bb = replace(bb, duration_s=IIP_BOOSTBACK_CAP_S)
             kw.update(iip_aim_m=1000.0 * float(x[1]), pad_ecef=pad_ecef,
@@ -1408,6 +1486,66 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
             f"entry_throttle={entry_throttle} script has {n_x}")
     best_x = clamp(x0)
     best = rollout(best_x, dt_opt)
+
+    # ---- E11-02 (task #309): the recovery feasibility envelope screen
+    # (feasibility.py; OFF by default, every existing caller unchanged). The
+    # reference probe is already flown -- `best` is the clamped start script
+    # at the planning step -- so the verdict costs zero extra rollouts: it
+    # grades the corridor physics of this one probe (plus the analytic fuel
+    # floor) and, when the separation state is outside the envelope, the
+    # plan comes back with the predicted flight reason WITHOUT spending the
+    # search. A mapping argument is taken as an explicit EnvelopeSpec (its
+    # limits grade this probe; the probe is still the start script).
+    screen_detail: dict[str, Any] | None = None
+    if feasibility_envelope:
+        from orbitopt.flightlab.recovery.feasibility import (
+            EnvelopeSpec, grade_probe)
+        env_spec = (EnvelopeSpec.from_planner_kwargs(
+                        best_x, entry_burns=entry_burns,
+                        entry_throttle=entry_throttle,
+                        boostback_cutoff=boostback_cutoff,
+                        entry_cutoff=entry_cutoff,
+                        entry_cut_speed_max_m_s=entry_cut_speed_max_m_s,
+                        corridor_aim_margin_m=corridor_aim_margin_m,
+                        entry_q_max_pa=entry_q_max_pa, entry_g_max=entry_g_max,
+                        landing_reserve_margin_kg=landing_reserve_margin_kg,
+                        landing_need_model=landing_need_model,
+                        landing_limits=pred_limits,
+                        landing_guidance=landing_guidance,
+                        landing_divert_budget_m=landing_divert_budget_m,
+                        entry_aero=entry_aero, horizon_s=horizon_s,
+                        dt_opt=dt_opt, dt_final=dt_final)
+                    if isinstance(feasibility_envelope, bool)
+                    else EnvelopeSpec.from_mapping(feasibility_envelope))
+        # The verdict the flight reports is the dt_final re-integration
+        # (_assemble's `final`), and the closed-loop landing forecast is
+        # integrator-step sensitive, so the screen grades the same numbers:
+        # one extra re-roll at `dt_final`/verdict physics, still zero search.
+        probe_roll = (best if dt_final == dt_opt and verdict_physics is None
+                      else rollout(best_x, dt_final, physics=verdict_physics))
+        env = grade_probe(
+            None if sep_prop < prop_floor else {
+                "reached": bool(probe_roll.crossed), "miss_m": probe_roll.miss_m,
+                "tilt_deg": probe_roll.tilt_deg, "speed_m_s": probe_roll.speed_m_s,
+                "prop_kg": probe_roll.prop_kg,
+                "landing_need_kg": probe_roll.landing_need_kg,
+                "entry_q_pa": probe_roll.entry_q_pa, "entry_g": probe_roll.entry_g,
+                "exhausted": probe_roll.exhausted,
+                "landing_forecast_ok": probe_roll.landing_ok,
+                "handoff_overlap_s": probe_roll.handoff_burn_overlap_s},
+            env_spec, corridor=corridor, landing_reserve_kg=reserve,
+            sep_propellant_kg=sep_prop, prop_floor_kg=prop_floor)
+        screen_detail = env.to_dict()
+        if not env.in_envelope and sep_prop >= prop_floor:
+            return _assemble(best, best_x, sep_state, booster, recovery_target,
+                             corridor, (env.governing_reason,),
+                             assumption=env.explanation,
+                             q_lim=entry_q_max_pa, g_lim=entry_g_max,
+                             reserve=reserve, divert_budget=divert_budget,
+                             reserve_margin=reserve_margin, chance=chance,
+                             admission=admission,
+                             layout=(entry_burns, entry_throttle),
+                             entry_aero=entry_aero, screen=screen_detail)
 
     if sep_prop >= prop_floor:
         scale = np.array([10.0, 12.0, 0.1, 8.0, 18.0,
@@ -1457,17 +1595,19 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                          assumption=(f"separation propellant {sep_prop:.0f} kg is below the "
                                      f"{prop_floor:.0f} kg analytic floor to null the "
                                      f"{horiz_speed:.0f} m/s horizontal separation velocity"),
-                         q_lim=entry_q_max_pa, g_lim=entry_g_max, reserve=reserve,
-                         divert_budget=divert_budget, reserve_margin=reserve_margin,
-                         chance=chance, admission=admission,
-                         layout=(entry_burns, entry_throttle))
+                          q_lim=entry_q_max_pa, g_lim=entry_g_max, reserve=reserve,
+                          divert_budget=divert_budget, reserve_margin=reserve_margin,
+                          chance=chance, admission=admission,
+                          layout=(entry_burns, entry_throttle),
+                          entry_aero=entry_aero, screen=screen_detail)
 
     final = rollout(best_x, dt_final, physics=verdict_physics)
     return _assemble(final, best_x, sep_state, booster, recovery_target, corridor,
                      None, q_lim=entry_q_max_pa, g_lim=entry_g_max, reserve=reserve,
                      divert_budget=divert_budget, reserve_margin=reserve_margin,
                      chance=chance, admission=admission,
-                     layout=(entry_burns, entry_throttle))
+                     layout=(entry_burns, entry_throttle),
+                     entry_aero=entry_aero, screen=screen_detail)
 
 
 #: E5-05c ``boostback_cutoff="iip"``: burn-time safety cap [s] of the
@@ -1517,8 +1657,10 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
                divert_budget: float = float("inf"),
                reserve_margin: float = 0.0,
                chance: JointChanceSpec | None = None,
-               admission: AdmissionPolicy | None = None,
-               layout: tuple[int, bool] = (1, False)) -> ReturnPlan:
+                admission: AdmissionPolicy | None = None,
+                layout: tuple[int, bool] = (1, False),
+                entry_aero: Mapping[str, Any] | None = None,
+                screen: Mapping[str, Any] | None = None) -> ReturnPlan:
     """Turn the final re-integrated rollout into the ReturnPlan: feasibility
     checks in physical order (first violation governs), corridor report,
     insertion state + ENU mirror."""
@@ -1647,6 +1789,15 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
             "burn flies at its optimized throttle within the engine's "
             "throttle range instead of full throttle (DESIGN ASSUMPTION "
             "unless overridden)")
+    if entry_aero is not None:
+        from orbitopt.flightlab.recovery.grid_fins import DESIGN_ASSUMPTIONS
+
+        assumptions.append(
+            "E11-01 grid-fin unpowered entry steering (entry_aero): the "
+            "post-boostback descent flies the grid fins under the shared "
+            "AoA/bank law " + str(dict(entry_aero)) + "; lateral correction "
+            "is entirely aerodynamic, no entry burn "
+            "(DESIGN ASSUMPTIONs: " + "; ".join(DESIGN_ASSUMPTIONS) + ")")
 
     return ReturnPlan(
         feasible=not reasons, reason_codes=tuple(reasons),
@@ -1654,11 +1805,16 @@ def _assemble(final: _Rollout, x: np.ndarray, sep_state: BoosterState,
         landing_burn_initial_state=state, landing_burn_initial_state_enu=enu,
         track=track, corridor_report=report,
         ignitions_used=int(track.ignitions_used),
-        assumptions=tuple(assumptions), entry_burn_2=eb2)
+        assumptions=tuple(assumptions), entry_burn_2=eb2,
+        entry_aero=dict(entry_aero) if entry_aero is not None else None,
+        screen=dict(screen) if screen is not None else None,
+        handoff_burn_overlap_s=float(final.handoff_burn_overlap_s))
 
 
 def mission_command(return_plan: ReturnPlan,
-                    sep_state: BoosterState) -> Callable[[float, BoosterState], ThrustCmd | None]:
+                    sep_state: BoosterState, *,
+                    booster: BoosterModel | None = None,
+                    ) -> Callable[[float, BoosterState], ThrustCmd | None]:
     """The scripted guidance behind ``return_plan`` as an FL-301
     ``thrust_cmd`` callback: re-fly it through ``propagate`` to reproduce the
     plan's track (the acceptance "no kinematic shortcuts" check). The
@@ -1666,4 +1822,39 @@ def mission_command(return_plan: ReturnPlan,
     re-fly sees the identical script."""
     pad = np.asarray(return_plan.target.position_ecef_m, dtype=np.float64)
     return _Mission(float(sep_state.t_s), return_plan.boostback, return_plan.entry_burn,
-                    _bearing_of_target(pad), return_plan.entry_burn_2)
+                    _bearing_of_target(pad), return_plan.entry_burn_2,
+                    aero=_guidance_of(return_plan, booster))
+
+
+def mission_aero_command(return_plan: ReturnPlan, sep_state: BoosterState, *,
+                         booster: BoosterModel | None = None,
+                         ) -> Callable[[float, BoosterState], Any] | None:
+    """E11-01: the grid-fin steering law behind ``return_plan`` as an FL-301
+    ``aero_cmd`` callback (``None`` when the plan flew no fins). Pass it
+    beside :func:`mission_command` to re-fly the plan's track."""
+    guidance = _guidance_of(return_plan, booster)
+    if guidance is None:
+        return None
+    pad = np.asarray(return_plan.target.position_ecef_m, dtype=np.float64)
+    mission = _Mission(float(sep_state.t_s), return_plan.boostback,
+                       return_plan.entry_burn, _bearing_of_target(pad),
+                       return_plan.entry_burn_2, aero=guidance)
+    return mission.aero_cmd
+
+
+def _guidance_of(return_plan: ReturnPlan, booster: BoosterModel | None
+                 ) -> "GridFinGuidance | None":
+    """Rebuild the E11-01 steering law from the plan's recorded options (the
+    E10-07 "shared authored controller" rule: replay sees the identical law,
+    not a track playback). Needs the vehicle's fin aerodynamics -- pass the
+    same ``booster`` the plan was made with."""
+    if return_plan.entry_aero is None:
+        return None
+    if booster is None or booster.grid_fins is None:
+        raise ValueError(
+            "this plan flew grid fins: mission_command/mission_aero_command "
+            "need the booster with the grid_fins block to rebuild the law")
+    lat, lon, _h = _geodetic_fast(
+        np.asarray(return_plan.target.position_ecef_m, dtype=np.float64))
+    return GridFinGuidance(model=booster.grid_fins, pad_lat_deg=lat,
+                           pad_lon_deg=lon, **return_plan.entry_aero)

@@ -400,3 +400,27 @@ high-probability bin significantly below its own prediction. Wired into
 FL-302 as `plan_boostback_entry(..., joint_admission=...)`; the search
 objective is unchanged and no success-rate improvement is claimed.
 API: `orbitopt.flightlab.recovery.redesign`.
+
+## Grid-fin planning and replay (E11-01)
+
+A vehicle may declare an optional `booster.grid_fins` block in the
+[vehicle schema]({{ site.baseurl }}/api/schemas/flight-vehicle-1.0/). Use
+`plan_boostback_entry(entry_burns=0, entry_aero=...)` to plan an unpowered
+entry with fins. List schedule gates in descending altitude as
+`(altitude_m, bank_deg[, alpha_deg])`. A two-value gate uses the guidance’s
+default angle of attack. A three-value gate sets its own.
+
+To re-fly the plan with `propagate`, pass `mission_command` as `thrust_cmd`
+and `mission_aero_command` as `aero_cmd`. Build both callbacks from the
+same plan, separation state and booster model. See the
+[grid-fin study](benchmarks/e11_01_grid_fin_authority.md) for the model
+assumptions and DC8 results.
+
+## Counterfactual admission validation (E11-04)
+
+The graded policy landed 24 of 32 newly admitted cases (75%, Wilson 95%
+interval 58–87%). Paired re-flights found 19 gains and zero losses
+(exact McNemar p = 3.8 × 10⁻⁶). The older training grid landed 8 of 15
+cases and showed guidance-era drift. The
+[benchmark report](benchmarks/e11_04_counterfactual_admission.md) separates
+these results from the earlier FL-305 estimates.

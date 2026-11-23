@@ -97,6 +97,8 @@ from orbitopt.flightlab.atmosphere import (
     temperature_k,
 )
 from orbitopt.flightlab.contract import FLIGHT_PROVENANCE_TAGS, BodyTrack
+from orbitopt.flightlab.recovery.grid_fins import (
+    STOWED, GridFinActuator, GridFinCommand, GridFinModel, GridFinState)
 
 __all__ = [
     "AltitudeThreshold",
@@ -309,6 +311,10 @@ class BoosterModel:
     reference_area_m2: float
     cd_mach: tuple[tuple[float, float], ...]
     engine: BoosterEngine
+    #: E11-01 (task #308): the ``booster.grid_fins:`` block when the vehicle
+    #: has grid fins; ``None`` = fins not modelled, and every number in the
+    #: propagator stays bit-for-bit the pre-E11-01 one.
+    grid_fins: "GridFinModel | None" = None
     assumptions: tuple[str, ...] = ()
     provenance_by_field: Mapping[str, str] = field(default_factory=dict)
     sources_by_field: Mapping[str, str] = field(default_factory=dict)
@@ -405,15 +411,26 @@ class BoosterModel:
             throttle_max=float(eng.get("throttle_max", 1.0)),
             restarts_max=int(eng.get("restarts_max", 2)),
         )
+        s_ref = tagged("reference_area_m2", sec.get("reference_area_m2"))
+        grid_fins: GridFinModel | None = None
+        grid_node = sec.get("grid_fins")
+        if grid_node is not None:
+            if not isinstance(grid_node, dict):
+                raise ValueError(f"{path}: booster.grid_fins must be a mapping")
+            grid_fins = GridFinModel.from_mapping(grid_node, reference_area_m2=s_ref)
+            prov_by_field["grid_fins"] = grid_fins.provenance
+            if grid_fins.source:
+                sources["grid_fins"] = grid_fins.source
         return BoosterModel(
             name=str(doc.get("name", "booster")),
             provenance=section_prov,
             dry_mass_kg=tagged("dry_mass_kg", sec.get("dry_mass_kg")),
             landing_propellant_reserve_kg=tagged(
                 "landing_propellant_reserve_kg", sec.get("landing_propellant_reserve_kg")),
-            reference_area_m2=tagged("reference_area_m2", sec.get("reference_area_m2")),
+            reference_area_m2=s_ref,
             cd_mach=cd_mach,
             engine=engine,
+            grid_fins=grid_fins,
             assumptions=tuple(str(a) for a in (sec.get("assumptions") or ())),
             provenance_by_field=prov_by_field,
             sources_by_field=sources,
@@ -481,6 +498,11 @@ class BoosterTrack:
     ignitions_used: int = 0
     dry_mass_kg: float = 0.0
     landing_reserve: float = 0.0
+    #: E11-01: flown grid-fin state (None columns on every track without fins)
+    aero_force_n: "np.ndarray | None" = None      # total aerodynamic force
+    alpha_deg: "np.ndarray | None" = None         # realised angle of attack
+    bank_deg: "np.ndarray | None" = None          # realised bank angle
+    fin_delta_deg: "np.ndarray | None" = None     # mean |fin deflection|
 
     @property
     def propellant_remaining_kg(self) -> float:
@@ -617,12 +639,16 @@ def _wind_ecef(r: np.ndarray, physics: BoosterPhysics) -> np.ndarray:
 
 
 def _aero_ecef(r: np.ndarray, v: np.ndarray, vehicle: BoosterModel,
-               physics: BoosterPhysics) -> tuple[np.ndarray, float, float, float]:
-    """(drag force vector [N], air-relative speed, Mach, dynamic pressure).
-    The force is mass-independent; the equation of motion divides by the
-    flown mass at the use site. With ``physics.wind_*`` set the air-relative
-    velocity subtracts the wind (R-04); the zero default leaves every number
-    bit-for-bit what it was."""
+               physics: BoosterPhysics,
+               grid: GridFinState | None = None
+               ) -> tuple[np.ndarray, float, float, float]:
+    """(aerodynamic force vector [N], air-relative speed, Mach, dynamic
+    pressure). The force is mass-independent; the equation of motion divides
+    by the flown mass at the use site. With ``physics.wind_*`` set the
+    air-relative velocity subtracts the wind (R-04); the zero default leaves
+    every number bit-for-bit what it was. E11-01: a deployed ``grid``
+    snapshot adds the trimmed lift (banked right of the velocity for bank >
+    0) and the deployed drag increment to the stowed Cd."""
     if not physics.atmosphere:
         return np.zeros(3), 0.0, 0.0, 0.0
     h = height_m(r)
@@ -638,8 +664,22 @@ def _aero_ecef(r: np.ndarray, v: np.ndarray, vehicle: BoosterModel,
         return np.zeros(3), 0.0, 0.0, 0.0
     mach = speed / speed_of_sound_m_s(h)
     q = 0.5 * rho * speed * speed
-    force_mag = q * vehicle.cd(mach) * vehicle.reference_area_m2
-    return -(force_mag / speed) * v_air, speed, mach, q
+    s_ref = vehicle.reference_area_m2
+    cd = vehicle.cd(mach)
+    force = -(q * cd * s_ref / speed) * v_air
+    if grid is not None and grid.deployed and grid.cl != 0.0:
+        v_hat = v_air / speed
+        up_hat = r / float(np.linalg.norm(r))
+        l0 = up_hat - float(up_hat @ v_hat) * v_hat          # lift "wings level"
+        n0 = float(np.linalg.norm(l0))
+        if n0 > 1e-9:
+            l0 = l0 / n0
+            m0 = np.cross(v_hat, l0)                          # right of velocity
+            sig = grid.bank_deg * math.pi / 180.0
+            lift_dir = math.cos(sig) * l0 + math.sin(sig) * m0
+            force = force + (q * s_ref * grid.cl) * lift_dir
+        force = force - (q * s_ref * grid.cd_increment / speed) * v_air
+    return force, speed, mach, q
 
 
 def _thrust_ecef(throttle: float, dir_ecef: np.ndarray | None, p_pa: float,
@@ -722,12 +762,20 @@ def propagate(state0: BoosterState, vehicle: BoosterModel,
               t_end_s: float, *,
               events: Iterable[str | AltitudeThreshold] = (),
               dt_s: float = 0.5, sample_s: float = 2.0, ground_height_m: float = 0.0,
-              physics: BoosterPhysics | None = None) -> BoosterTrack:
+              physics: BoosterPhysics | None = None,
+              aero_cmd: Callable[[float, BoosterState], GridFinCommand | None]
+              | None = None) -> BoosterTrack:
     """Fly the booster from ``state0`` to ``t_end_s`` (mission clock) -- or
     to the ground, whichever comes first -- with the ECEF 3-DOF model of
     this module. ``thrust_cmd(t, state)`` is sampled once per integration
     step (piecewise-constant command, like a flight computer's loop);
     ``None`` (or a callback returning ``None``) keeps the engines shut.
+
+    ``aero_cmd(t, state)`` (E11-01) is the grid-fin steering command,
+    sampled on the same schedule through the vehicle's fin actuator (deploy
+    logic, deflection slew/saturation, bank rate); it requires a vehicle
+    with a ``grid_fins`` block. Without fins -- or without this callback --
+    the flight is the drag-only ballistic model, bit-for-bit unchanged.
 
     ``events`` selects recorded events (``"burn"``, ``"apogee"``,
     ``"ground"``, ``AltitudeThreshold`` instances); ``dt_s`` is the fixed
@@ -736,6 +784,8 @@ def propagate(state0: BoosterState, vehicle: BoosterModel,
     ``RecoveryError`` when a burn is commanded beyond the vehicle's restart
     count or the start mass is below the dry mass."""
     physics = physics or BoosterPhysics()
+    if aero_cmd is not None and vehicle.grid_fins is None:
+        raise ValueError("aero_cmd given but the vehicle has no grid_fins block")
     if physics.gravity not in ("j2", "point_mass", "off"):
         raise ValueError(f"physics.gravity must be j2/point_mass/off, got {physics.gravity!r}")
     if physics.density_model not in ("entry", "ussa1976"):
@@ -768,6 +818,12 @@ def propagate(state0: BoosterState, vehicle: BoosterModel,
     mach_s: list[float] = [0.0]
     q_s: list[float] = [0.0]
     hgt_s: list[float] = [height_m(y[:3])]
+    act = GridFinActuator(vehicle.grid_fins) if aero_cmd is not None else None
+    snap: GridFinState = STOWED
+    aero_s: list[np.ndarray] = [np.zeros(3)]
+    alpha_s: list[float] = [0.0]
+    bank_s: list[float] = [0.0]
+    delta_s: list[float] = [0.0]
 
     def cmd_at(tt: float, yy: np.ndarray) -> ThrustCmd | None:
         if thrust_cmd is None:
@@ -777,9 +833,17 @@ def propagate(state0: BoosterState, vehicle: BoosterModel,
                          mass_kg=float(yy[6]))
         return thrust_cmd(tt, st)
 
+    def aero_cmd_at(tt: float, yy: np.ndarray) -> GridFinCommand | None:
+        if aero_cmd is None:
+            return None
+        st = BoosterState(t_s=tt, epoch_utc=epoch, frame="ECEF",
+                         position_m=tuple(yy[:3]), velocity_m_s=tuple(yy[3:6]),
+                         mass_kg=float(yy[6]))
+        return aero_cmd(tt, st)
+
     def sample(tt: float, yy: np.ndarray, throttle_eff: float) -> None:
         h = height_m(yy[:3])
-        _f, speed, mach, q = _aero_ecef(yy[:3], yy[3:6], vehicle, physics)
+        f_aero, speed, mach, q = _aero_ecef(yy[:3], yy[3:6], vehicle, physics, snap)
         if tt <= times[-1] + 1e-9:  # strictly increasing (the contract says so)
             return
         times.append(tt)
@@ -790,6 +854,10 @@ def propagate(state0: BoosterState, vehicle: BoosterModel,
         mach_s.append(mach)
         q_s.append(q)
         hgt_s.append(h)
+        aero_s.append(f_aero.copy())
+        alpha_s.append(snap.alpha_deg)
+        bank_s.append(snap.bank_deg)
+        delta_s.append(snap.fin_delta_deg)
 
     def event(tt: float, kind: str, yy: np.ndarray, extra: Mapping[str, Any] | None = None) -> None:
         h = height_m(yy[:3])
@@ -812,7 +880,7 @@ def propagate(state0: BoosterState, vehicle: BoosterModel,
         if physics.rotation:
             a = (a - 2.0 * np.cross(_OMEGA_ECEF, yy[3:6])
                  - np.cross(_OMEGA_ECEF, np.cross(_OMEGA_ECEF, yy[:3])))
-        f_aero, _s, _m, _q = _aero_ecef(yy[:3], yy[3:6], vehicle, physics)
+        f_aero, _s, _m, _q = _aero_ecef(yy[:3], yy[3:6], vehicle, physics, snap)
         a = a + f_aero / m
         prop = 0.0
         if on and m > dry:
@@ -849,7 +917,7 @@ def propagate(state0: BoosterState, vehicle: BoosterModel,
 
     def proper_g(throttle: float, dirv: np.ndarray | None, yy: np.ndarray) -> float:
         """Non-gravitational load [g]: aerodynamic + thrust force over g0."""
-        f_aero, _s, _m, _q = _aero_ecef(yy[:3], yy[3:6], vehicle, physics)
+        f_aero, _s, _m, _q = _aero_ecef(yy[:3], yy[3:6], vehicle, physics, snap)
         f = f_aero
         if throttle > 0.0:
             p = pressure_pa(height_m(yy[:3])) if physics.atmosphere else 0.0
@@ -903,6 +971,12 @@ def propagate(state0: BoosterState, vehicle: BoosterModel,
             if want_burn:
                 event(t, "burn_end", y, {"throttle": 0.0, "reason": "COMMANDED_CUTOFF"})
         burning = on
+
+        # ---- grid fins: one actuator sample per step (piecewise constant)
+        if act is not None:
+            _f0, _s0, mach0, q0 = _aero_ecef(y[:3], y[3:6], vehicle, physics)
+            snap = act.step(span, aero_cmd_at(t, y), height_m=height_m(y[:3]),
+                            dynamic_pressure_pa=q0, mach=mach0)
 
         pending: list[tuple[float, str, np.ndarray, Mapping[str, Any] | None]] = []
         grounded_at: tuple[float, np.ndarray] | None = None
@@ -1006,6 +1080,10 @@ def propagate(state0: BoosterState, vehicle: BoosterModel,
         ignitions_used=ignitions,
         dry_mass_kg=dry,
         landing_reserve=float(vehicle.landing_propellant_reserve_kg),
+        aero_force_n=np.asarray(aero_s, dtype=np.float64) if act is not None else None,
+        alpha_deg=np.asarray(alpha_s, dtype=np.float64) if act is not None else None,
+        bank_deg=np.asarray(bank_s, dtype=np.float64) if act is not None else None,
+        fin_delta_deg=np.asarray(delta_s, dtype=np.float64) if act is not None else None,
     )
 
 

@@ -66,8 +66,10 @@ from orbitopt.flightlab.recovery.boostback import (
     _evaluate,
     _Mission,
     landing_burn_propellant_need_kg,
+    mission_aero_command,
     mission_command,
 )
+from orbitopt.flightlab.recovery.grid_fins import GridFinCommand, GridFinModel
 from orbitopt.flightlab.recovery.propagator import AltitudeThreshold, propagate
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -124,6 +126,25 @@ def nominal_plan(vehicle, pad_target):
                     mass=65_000.0)
     return st, plan_boostback_entry(st, vehicle, pad_target,
                                     initial_guess=_SEED_PLAN, max_fevals=18)
+
+
+def test_mission_aero_replay_preserves_optional_gate_alpha(vehicle, pad_target):
+    fins = GridFinModel.from_mapping({}, reference_area_m2=vehicle.reference_area_m2)
+    booster = replace(vehicle, grid_fins=fins)
+    sep = _sep_state(alt=40_000.0, speed=250.0, fpa_deg=2.0, down_m=8_000.0,
+                     mass=65_000.0)
+    plan = plan_boostback_entry(
+        sep, booster, pad_target, entry_burns=0, search="keep", horizon_s=30.0,
+        initial_guess=_SEED_PLAN[:5],
+        entry_aero={"mode": "schedule", "alpha_deg": 40.0,
+                    "schedule": [[70_000.0, 5.0], [12_000.0, -5.0, 60.0]]},
+    )
+
+    replay = mission_aero_command(plan, sep, booster=booster)
+    assert replay is not None
+    assert replay(sep.t_s, sep) == GridFinCommand(40.0, 5.0)
+    lower = replace(sep, position_m=tuple(geodetic_to_ecef(*PAD[:2], 10_000.0)))
+    assert replay(lower.t_s, lower) == GridFinCommand(60.0, -5.0)
 
 
 # ---------------------------------------------------------------------------

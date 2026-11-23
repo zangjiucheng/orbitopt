@@ -163,6 +163,42 @@
                 "items": {"type": "number"}}
     },
     "NumberOrNode": {"anyOf": [{"type": "number"}, {"$ref": "#/$defs/ProvenanceNode"}]},
+    "MachTableOrNode": {
+      "anyOf": [
+        {"$ref": "#/$defs/CdTable"},
+        {"allOf": [{"$ref": "#/$defs/ProvenanceNode"},
+                   {"properties": {"value": {"$ref": "#/$defs/CdTable"}}}]}
+      ]
+    },
+    "GridFins": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provenance": {"$ref": "#/$defs/ProvenanceTag"},
+        "source": {"type": "string"},
+        "assumptions": {"type": "array", "items": {"type": "string"}},
+        "count": {"type": "integer", "minimum": 2},
+        "fin_area_m2": {"type": "number", "exclusiveMinimum": 0},
+        "cd_add_mach": {"$ref": "#/$defs/MachTableOrNode"},
+        "cn_alpha_mach": {"$ref": "#/$defs/MachTableOrNode"},
+        "body_cn_alpha_per_rad": {"type": "number"},
+        "trim_effectiveness": {"type": "number", "exclusiveMinimum": 1},
+        "delta_max_deg": {"type": "number", "exclusiveMinimum": 0},
+        "delta_rate_max_deg_s": {"type": "number", "exclusiveMinimum": 0},
+        "bank_max_deg": {"type": "number", "exclusiveMinimum": 0},
+        "bank_rate_max_deg_s": {"type": "number", "exclusiveMinimum": 0},
+        "alpha_max_deg": {"type": "number", "exclusiveMinimum": 0},
+        "stall_alpha_deg": {"type": "number", "exclusiveMinimum": 0},
+        "deploy_altitude_m": {"type": "number"},
+        "stow_altitude_m": {"type": "number"},
+        "deploy_q_min_pa": {"type": "number"},
+        "induced_k": {"type": "number"},
+        "length_m": {"type": "number"},
+        "diameter_m": {"type": "number"},
+        "static_margin": {"type": "number"},
+        "roll_lever_ratio": {"type": "number"}
+      }
+    },
     "Booster": {
       "type": "object",
       "required": ["provenance", "dry_mass_kg", "landing_propellant_reserve_kg",
@@ -174,13 +210,8 @@
         "dry_mass_kg": {"$ref": "#/$defs/NumberOrNode"},
         "landing_propellant_reserve_kg": {"$ref": "#/$defs/NumberOrNode"},
         "reference_area_m2": {"$ref": "#/$defs/NumberOrNode"},
-        "cd_mach": {
-          "anyOf": [
-            {"$ref": "#/$defs/CdTable"},
-            {"allOf": [{"$ref": "#/$defs/ProvenanceNode"},
-                       {"properties": {"value": {"$ref": "#/$defs/CdTable"}}}]}
-          ]
-        },
+        "cd_mach": {"$ref": "#/$defs/MachTableOrNode"},
+        "grid_fins": {"$ref": "#/$defs/GridFins"},
         "engines": {
           "type": "object",
           "required": ["thrust_vacuum_n", "isp_sea_level_s", "isp_vacuum_s",

@@ -131,6 +131,16 @@ telemetry or independently validated landing is claimed. See
 | E10-08 | 12 of 17 scenarios insert on both native backends, up from six. [Guidance matrix](flightlab.md#6-dof-studies). |
 | E10-09 | Cross-environment CI grades the frozen DC7 and Starbase plans and checks that the original E5-08 reproduces its expected failure. [CI evidence rules](verification.md#final-schemes-in-cross-environment-ci-e10-09-task-306). |
 
+## E11 aerodynamic RTLS closure
+
+| Study | Recorded result |
+|---|---|
+| E11-01 | Grid fins reduced DC8 peak dynamic pressure and cut the best arrival speed from 1,068 to 362 m/s. The two-burn design still missed the 350 m/s speed and 15° tilt limits. [Grid-fin authority](benchmarks/e11_01_grid_fin_authority.md). |
+| E11-02 | The separation-state screen made zero false rejects across 672 recorded hold-out cases. [Feasibility envelope](benchmarks/e11_02_recovery_feasibility_envelope.md). |
+| E11-03 | Co-design landed in 0 of 168 paired hold-out cases, versus 44 for DC7 and 11 for Starbase. [Recovery co-design](benchmarks/e11_03_robust_recovery_co_design.md). |
+| E11-04 | 24 of 32 newly admitted cases landed in counterfactual re-flights. [Admission validation](benchmarks/e11_04_counterfactual_admission.md). |
+| E11-05 | Starbase’s independent debris impact-speed discrepancy remained +12.70% against a 12% tolerance. [Aero qualification](benchmarks/e11_05_starbase_aero_qualification.md). |
+
 ## Earlier studies
 
 | Study | Read or reproduce |

@@ -1,0 +1,1495 @@
+{
+ "schema": "e11-03-robust-recovery-co-design-v1",
+ "task": {
+  "id": 310,
+  "epic": 307,
+  "title": "E11-03 Robust Recovery Co-Design"
+ },
+ "provenance": {
+  "python": "3.12.3",
+  "numpy": "2.5.5",
+  "git_head": "",
+  "created_utc": "2026-11-23T02:14:29Z"
+ },
+ "seed_manifest": {
+  "holdout_seeds": [
+   501,
+   502,
+   503,
+   504,
+   505,
+   506,
+   507,
+   508
+  ],
+  "n_per_seed": 21,
+  "train_seeds": [
+   701,
+   702
+  ],
+  "train_per_seed": 5,
+  "es_seed": 49127,
+  "bootstrap_seed": 20261123,
+  "required_sample_size_for_ci_width": {
+   "target_ci_width": 0.15,
+   "required": 167,
+   "actual": 168
+  },
+  "disjoint_streams_note": "hold-out disjoint from every sealed E5-08 grid, E10-05/E10-03 training and this campaign's training streams; training CRN seeds fixed for every scored candidate (E7-04/E10-05)"
+ },
+ "ascent_grid": {
+  "n_cells": 72,
+  "n_pass": 1,
+  "knob_axes": {
+   "meco_shift_s": [
+    0.0,
+    -0.5,
+    -1.0,
+    -2.0
+   ],
+   "pitch_trim_deg": [
+    -2.0,
+    0.0,
+    2.0
+   ],
+   "dburn_s": [
+    0.0,
+    8.0
+   ],
+   "node_trim_deg": [
+    0.0,
+    -0.75,
+    0.75
+   ]
+  },
+  "rows": [
+   {
+    "vkey": "m+0_p-2_b+0_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1568.001517143759,
+    "ship_margin_kg": 103548.46198960254
+   },
+   {
+    "vkey": "m+0_p-2_b+0_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1568.001517143759,
+    "ship_margin_kg": 103548.46198960254
+   },
+   {
+    "vkey": "m+0_p-2_b+0_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1568.001517143759,
+    "ship_margin_kg": 103548.46198960254
+   },
+   {
+    "vkey": "m+0_p-2_b+8_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1568.001517143759,
+    "ship_margin_kg": 93651.90661192301
+   },
+   {
+    "vkey": "m+0_p-2_b+8_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1568.001517143759,
+    "ship_margin_kg": 93651.90661192301
+   },
+   {
+    "vkey": "m+0_p-2_b+8_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1568.001517143759,
+    "ship_margin_kg": 93651.90661192301
+   },
+   {
+    "vkey": "m+0_p+0_b+0_n+0",
+    "ascent_pass": true,
+    "failed_checks": [],
+    "sep_speed_m_s": 1554.7784685809388,
+    "ship_margin_kg": 103548.46198960347
+   },
+   {
+    "vkey": "m+0_p+0_b+0_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1554.7784685809388,
+    "ship_margin_kg": 103548.46198960347
+   },
+   {
+    "vkey": "m+0_p+0_b+0_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1554.7784685809388,
+    "ship_margin_kg": 103548.46198960347
+   },
+   {
+    "vkey": "m+0_p+0_b+8_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1554.7784685809388,
+    "ship_margin_kg": 93651.90661192394
+   },
+   {
+    "vkey": "m+0_p+0_b+8_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1554.7784685809388,
+    "ship_margin_kg": 93651.90661192394
+   },
+   {
+    "vkey": "m+0_p+0_b+8_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1554.7784685809388,
+    "ship_margin_kg": 93651.90661192394
+   },
+   {
+    "vkey": "m+0_p+2_b+0_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-above-atmosphere",
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1541.8426499865666,
+    "ship_margin_kg": 103548.461989603
+   },
+   {
+    "vkey": "m+0_p+2_b+0_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-above-atmosphere",
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1541.8426499865666,
+    "ship_margin_kg": 103548.461989603
+   },
+   {
+    "vkey": "m+0_p+2_b+0_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-above-atmosphere",
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1541.8426499865666,
+    "ship_margin_kg": 103548.461989603
+   },
+   {
+    "vkey": "m+0_p+2_b+8_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1541.8426499865666,
+    "ship_margin_kg": 93651.90661192348
+   },
+   {
+    "vkey": "m+0_p+2_b+8_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1541.8426499865666,
+    "ship_margin_kg": 93651.90661192348
+   },
+   {
+    "vkey": "m+0_p+2_b+8_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1541.8426499865666,
+    "ship_margin_kg": 93651.90661192348
+   },
+   {
+    "vkey": "m-0.5_p-2_b+0_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1565.2123909458448,
+    "ship_margin_kg": 103548.42862036492
+   },
+   {
+    "vkey": "m-0.5_p-2_b+0_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance",
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1565.2123909458448,
+    "ship_margin_kg": 103548.42862036487
+   },
+   {
+    "vkey": "m-0.5_p-2_b+0_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1565.2123909458448,
+    "ship_margin_kg": 103548.42862036501
+   },
+   {
+    "vkey": "m-0.5_p-2_b+8_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1565.2123909458448,
+    "ship_margin_kg": 93651.8732426854
+   },
+   {
+    "vkey": "m-0.5_p-2_b+8_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1565.2123909458448,
+    "ship_margin_kg": 93651.87324268534
+   },
+   {
+    "vkey": "m-0.5_p-2_b+8_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1565.2123909458448,
+    "ship_margin_kg": 93651.87324268548
+   },
+   {
+    "vkey": "m-0.5_p+0_b+0_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1551.7523646440607,
+    "ship_margin_kg": 103548.42862036533
+   },
+   {
+    "vkey": "m-0.5_p+0_b+0_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1551.7523646440607,
+    "ship_margin_kg": 103548.42862036536
+   },
+   {
+    "vkey": "m-0.5_p+0_b+0_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1551.7523646440607,
+    "ship_margin_kg": 103548.42862036519
+   },
+   {
+    "vkey": "m-0.5_p+0_b+8_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1551.7523646440607,
+    "ship_margin_kg": 93651.8732426858
+   },
+   {
+    "vkey": "m-0.5_p+0_b+8_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1551.7523646440607,
+    "ship_margin_kg": 93651.87324268583
+   },
+   {
+    "vkey": "m-0.5_p+0_b+8_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1551.7523646440607,
+    "ship_margin_kg": 93651.87324268566
+   },
+   {
+    "vkey": "m-0.5_p+2_b+0_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-above-atmosphere",
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1538.578406911047,
+    "ship_margin_kg": 103548.4286203655
+   },
+   {
+    "vkey": "m-0.5_p+2_b+0_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-above-atmosphere",
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1538.578406911047,
+    "ship_margin_kg": 103548.4286203656
+   },
+   {
+    "vkey": "m-0.5_p+2_b+0_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-above-atmosphere",
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1538.578406911047,
+    "ship_margin_kg": 103548.42862036565
+   },
+   {
+    "vkey": "m-0.5_p+2_b+8_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1538.578406911047,
+    "ship_margin_kg": 93651.87324268598
+   },
+   {
+    "vkey": "m-0.5_p+2_b+8_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1538.578406911047,
+    "ship_margin_kg": 93651.87324268607
+   },
+   {
+    "vkey": "m-0.5_p+2_b+8_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1538.578406911047,
+    "ship_margin_kg": 93651.87324268612
+   },
+   {
+    "vkey": "m-1_p-2_b+0_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance",
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1530.8548456578244,
+    "ship_margin_kg": 103548.4302197702
+   },
+   {
+    "vkey": "m-1_p-2_b+0_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance",
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1530.8548456578244,
+    "ship_margin_kg": 103548.43021977015
+   },
+   {
+    "vkey": "m-1_p-2_b+0_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1530.8548456578244,
+    "ship_margin_kg": 103548.43021977018
+   },
+   {
+    "vkey": "m-1_p-2_b+8_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance",
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1530.8548456578244,
+    "ship_margin_kg": 93651.87484209068
+   },
+   {
+    "vkey": "m-1_p-2_b+8_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance",
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1530.8548456578244,
+    "ship_margin_kg": 93651.87484209062
+   },
+   {
+    "vkey": "m-1_p-2_b+8_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1530.8548456578244,
+    "ship_margin_kg": 93651.87484209065
+   },
+   {
+    "vkey": "m-1_p+0_b+0_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1517.6499403627672,
+    "ship_margin_kg": 103548.43021977006
+   },
+   {
+    "vkey": "m-1_p+0_b+0_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1517.6499403627672,
+    "ship_margin_kg": 103548.43021977006
+   },
+   {
+    "vkey": "m-1_p+0_b+0_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1517.6499403627672,
+    "ship_margin_kg": 103548.43021977003
+   },
+   {
+    "vkey": "m-1_p+0_b+8_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1517.6499403627672,
+    "ship_margin_kg": 93651.87484209053
+   },
+   {
+    "vkey": "m-1_p+0_b+8_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1517.6499403627672,
+    "ship_margin_kg": 93651.87484209053
+   },
+   {
+    "vkey": "m-1_p+0_b+8_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1517.6499403627672,
+    "ship_margin_kg": 93651.8748420905
+   },
+   {
+    "vkey": "m-1_p+2_b+0_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-above-atmosphere",
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1504.7414010140456,
+    "ship_margin_kg": 103548.43021977053
+   },
+   {
+    "vkey": "m-1_p+2_b+0_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-above-atmosphere",
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1504.7414010140456,
+    "ship_margin_kg": 103548.43021977047
+   },
+   {
+    "vkey": "m-1_p+2_b+0_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-above-atmosphere",
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1504.7414010140456,
+    "ship_margin_kg": 103548.4302197705
+   },
+   {
+    "vkey": "m-1_p+2_b+8_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1504.7414010140456,
+    "ship_margin_kg": 93651.874842091
+   },
+   {
+    "vkey": "m-1_p+2_b+8_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1504.7414010140456,
+    "ship_margin_kg": 93651.87484209094
+   },
+   {
+    "vkey": "m-1_p+2_b+8_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1504.7414010140456,
+    "ship_margin_kg": 93651.87484209097
+   },
+   {
+    "vkey": "m-2_p-2_b+0_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance",
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1526.1979191667344,
+    "ship_margin_kg": 103548.46198960324
+   },
+   {
+    "vkey": "m-2_p-2_b+0_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance",
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1526.1979191667344,
+    "ship_margin_kg": 103548.46198960324
+   },
+   {
+    "vkey": "m-2_p-2_b+0_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1526.1979191667344,
+    "ship_margin_kg": 103548.46198960324
+   },
+   {
+    "vkey": "m-2_p-2_b+8_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance",
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1526.1979191667344,
+    "ship_margin_kg": 93651.90661192371
+   },
+   {
+    "vkey": "m-2_p-2_b+8_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance",
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1526.1979191667344,
+    "ship_margin_kg": 93651.90661192371
+   },
+   {
+    "vkey": "m-2_p-2_b+8_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance",
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1526.1979191667344,
+    "ship_margin_kg": 93651.90661192371
+   },
+   {
+    "vkey": "m-2_p+0_b+0_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1512.521185455456,
+    "ship_margin_kg": 103548.46198960324
+   },
+   {
+    "vkey": "m-2_p+0_b+0_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-above-atmosphere",
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1512.521185455456,
+    "ship_margin_kg": 103548.46198960324
+   },
+   {
+    "vkey": "m-2_p+0_b+0_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1512.521185455456,
+    "ship_margin_kg": 103548.46198960324
+   },
+   {
+    "vkey": "m-2_p+0_b+8_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance",
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1512.521185455456,
+    "ship_margin_kg": 93651.90661192371
+   },
+   {
+    "vkey": "m-2_p+0_b+8_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance",
+     "insertion-periapsis-above-minimum"
+    ],
+    "sep_speed_m_s": 1512.521185455456,
+    "ship_margin_kg": 93651.90661192371
+   },
+   {
+    "vkey": "m-2_p+0_b+8_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1512.521185455456,
+    "ship_margin_kg": 93651.90661192371
+   },
+   {
+    "vkey": "m-2_p+2_b+0_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-above-atmosphere",
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1499.1384957903344,
+    "ship_margin_kg": 103548.46198960324
+   },
+   {
+    "vkey": "m-2_p+2_b+0_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-above-atmosphere",
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1499.1384957903344,
+    "ship_margin_kg": 103548.46198960324
+   },
+   {
+    "vkey": "m-2_p+2_b+0_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-above-atmosphere",
+     "insertion-periapsis-above-minimum",
+     "insertion-periapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1499.1384957903344,
+    "ship_margin_kg": 103548.46198960324
+   },
+   {
+    "vkey": "m-2_p+2_b+8_n+0",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1499.1384957903344,
+    "ship_margin_kg": 93651.90661192371
+   },
+   {
+    "vkey": "m-2_p+2_b+8_n-0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1499.1384957903344,
+    "ship_margin_kg": 93651.90661192371
+   },
+   {
+    "vkey": "m-2_p+2_b+8_n+0.75",
+    "ascent_pass": false,
+    "failed_checks": [
+     "insertion-apoapsis-within-tolerance"
+    ],
+    "sep_speed_m_s": 1499.1384957903344,
+    "ship_margin_kg": 93651.90661192371
+   }
+  ]
+ },
+ "screen_surrogate": {
+  "family": "powered (sealed DC7 recipe + candidate script, E11-02 screen)",
+  "grading": "envelope verdict under the E10-03 dispersion draws; one rollout per training scenario, reserve floor and divert exactly as the codesign flights grade them",
+  "fins_family": {
+   "spec": "dc8_fins_a60 (E11-01 winner schedule, unpowered entry)",
+   "in_cells": 0,
+   "n_cells": 1,
+   "rows": [
+    {
+     "vkey": "m+0_p+0_b+0_n+0",
+     "in_frac": 0.0,
+     "mean_sev": 1.7258,
+     "score": 1.03452,
+     "nominal_in": false,
+     "govs": {
+      "corridor_tilt": 11
+     }
+    }
+   ]
+  }
+ },
+ "codesign": {
+  "vkey": "m+0_p+0_b+0_n+0",
+  "knobs": {
+   "meco_shift": 0.0,
+   "pitch_trim": 0.0,
+   "dburn_s": 0.0,
+   "node_trim": 0.0
+  },
+  "vehicle_yaml": "/tmp/e1103-tasqlrjw/veh-m+0_p+0_b+0_n+0.yaml",
+  "ascent": {
+   "events": {
+    "ignition": 125.0,
+    "liftoff": 0.0,
+    "max_q": 58.33293404405048,
+    "meco": 125.0,
+    "separation": 125.0,
+    "impact": 403.97435990264626,
+    "seco": 512.663
+   },
+   "checks": {
+    "mass-non-negative": true,
+    "mass-continuity-stage2": true,
+    "max-q-within-limit": true,
+    "max-accel-within-limit": true,
+    "recovery-propellant-reserve": false,
+    "recovery-landing": false,
+    "insertion-above-atmosphere": true,
+    "insertion-periapsis-above-minimum": true,
+    "insertion-periapsis-within-tolerance": true,
+    "insertion-apoapsis-within-tolerance": true,
+    "insertion-inclination-within-tolerance": true
+   },
+   "ascent_pass": true,
+   "sep": {
+    "t_s": 124.0,
+    "epoch_utc": "2026-11-10T12:00:00",
+    "position_m": [
+     3896546.801204591,
+     -5086816.289976301,
+     618231.87634473
+    ],
+    "velocity_m_s": [
+     1112.710889636539,
+     -354.9928245283663,
+     1026.250776847708
+    ],
+    "mass_kg": 900172.4216750283,
+    "speed_m_s": 1554.7784685809388,
+    "altitude_m": 66467.48301494028
+   },
+   "ship_margin_kg": 103548.46198960347
+  },
+  "es": [
+   {
+    "vkey": "m+0_p+0_b+0_n+0",
+    "knobs": {
+     "meco_shift": 0.0,
+     "pitch_trim": 0.0,
+     "dburn_s": 0.0,
+     "node_trim": 0.0
+    },
+    "stages": [
+     {
+      "stage": 0,
+      "sigma_frac": 0.05,
+      "baseline": {
+       "score": 0.9409,
+       "in_frac": 0.0909,
+       "mean_sev": 1.5903
+      },
+      "best": {
+       "score": 0.93939,
+       "in_frac": 0.0909,
+       "mean_sev": 1.5147
+      },
+      "trace_tail": [
+       {
+        "gen": 4,
+        "child": 3,
+        "score": 1.03271,
+        "in_frac": 0.0
+       },
+       {
+        "gen": 4,
+        "child": 4,
+        "score": 1.03152,
+        "in_frac": 0.0
+       },
+       {
+        "gen": 4,
+        "child": 5,
+        "score": 1.0323,
+        "in_frac": 0.0
+       }
+      ]
+     },
+     {
+      "stage": 1,
+      "sigma_frac": 0.1,
+      "baseline": {
+       "score": 0.9409,
+       "in_frac": 0.0909,
+       "mean_sev": 1.5903
+      },
+      "best": {
+       "score": 0.9409,
+       "in_frac": 0.0909,
+       "mean_sev": 1.5903
+      },
+      "trace_tail": [
+       {
+        "gen": 4,
+        "child": 3,
+        "score": 1.03055,
+        "in_frac": 0.0
+       },
+       {
+        "gen": 4,
+        "child": 4,
+        "score": 1.03461,
+        "in_frac": 0.0
+       },
+       {
+        "gen": 4,
+        "child": 5,
+        "score": 1.04228,
+        "in_frac": 0.0
+       }
+      ]
+     }
+    ],
+    "selected": {
+     "x": [
+      13.54220817920764,
+      2.118681187012216,
+      0.9202268881543656,
+      5.797834157197599,
+      -3.413631172324937,
+      20692.97226755705,
+      259.69516016773764,
+      0.917744794993462
+     ],
+     "in_frac": 0.0909,
+     "mean_sev": 1.5147,
+     "score": 0.93939,
+     "nominal_in": false,
+     "govs": {
+      "None": 1,
+      "arrival_speed": 1,
+      "handoff_overlap": 2,
+      "landing_forecast": 7
+     },
+     "stage": 0
+    },
+    "selected_recs": {
+     "nominal": {
+      "vkey": "m+0_p+0_b+0_n+0",
+      "sh": "f68bd2fdd637",
+      "seed": null,
+      "idx": null,
+      "family": "pow",
+      "tag": "nominal",
+      "in_envelope": false,
+      "governing_condition": "landing_forecast",
+      "worst_severity": 1.6750896031947846,
+      "dur_s": 2.3
+     },
+     "701|0": {
+      "vkey": "m+0_p+0_b+0_n+0",
+      "sh": "f68bd2fdd637",
+      "seed": 701,
+      "idx": 0,
+      "family": "pow",
+      "tag": "701|0",
+      "in_envelope": false,
+      "governing_condition": "landing_forecast",
+      "worst_severity": 1.6086285459964669,
+      "dur_s": 2.3
+     },
+     "701|1": {
+      "vkey": "m+0_p+0_b+0_n+0",
+      "sh": "f68bd2fdd637",
+      "seed": 701,
+      "idx": 1,
+      "family": "pow",
+      "tag": "701|1",
+      "in_envelope": false,
+      "governing_condition": "landing_forecast",
+      "worst_severity": 1.6730845673477142,
+      "dur_s": 2.3
+     },
+     "701|2": {
+      "vkey": "m+0_p+0_b+0_n+0",
+      "sh": "f68bd2fdd637",
+      "seed": 701,
+      "idx": 2,
+      "family": "pow",
+      "tag": "701|2",
+      "in_envelope": false,
+      "governing_condition": "landing_forecast",
+      "worst_severity": 1.6760975624457286,
+      "dur_s": 2.3
+     },
+     "701|3": {
+      "vkey": "m+0_p+0_b+0_n+0",
+      "sh": "f68bd2fdd637",
+      "seed": 701,
+      "idx": 3,
+      "family": "pow",
+      "tag": "701|3",
+      "in_envelope": false,
+      "governing_condition": "landing_forecast",
+      "worst_severity": 1.6618530488340242,
+      "dur_s": 2.3
+     },
+     "701|4": {
+      "vkey": "m+0_p+0_b+0_n+0",
+      "sh": "f68bd2fdd637",
+      "seed": 701,
+      "idx": 4,
+      "family": "pow",
+      "tag": "701|4",
+      "in_envelope": false,
+      "governing_condition": "handoff_overlap",
+      "worst_severity": 1.6672199816205666,
+      "dur_s": 2.3
+     },
+     "702|0": {
+      "vkey": "m+0_p+0_b+0_n+0",
+      "sh": "f68bd2fdd637",
+      "seed": 702,
+      "idx": 0,
+      "family": "pow",
+      "tag": "702|0",
+      "in_envelope": true,
+      "governing_condition": "None",
+      "worst_severity": 0.995678758108911,
+      "dur_s": 2.3
+     },
+     "702|1": {
+      "vkey": "m+0_p+0_b+0_n+0",
+      "sh": "f68bd2fdd637",
+      "seed": 702,
+      "idx": 1,
+      "family": "pow",
+      "tag": "702|1",
+      "in_envelope": false,
+      "governing_condition": "landing_forecast",
+      "worst_severity": 1.6935289082758442,
+      "dur_s": 2.3
+     },
+     "702|2": {
+      "vkey": "m+0_p+0_b+0_n+0",
+      "sh": "f68bd2fdd637",
+      "seed": 702,
+      "idx": 2,
+      "family": "pow",
+      "tag": "702|2",
+      "in_envelope": false,
+      "governing_condition": "landing_forecast",
+      "worst_severity": 1.6899413975555002,
+      "dur_s": 2.3
+     },
+     "702|3": {
+      "vkey": "m+0_p+0_b+0_n+0",
+      "sh": "f68bd2fdd637",
+      "seed": 702,
+      "idx": 3,
+      "family": "pow",
+      "tag": "702|3",
+      "in_envelope": false,
+      "governing_condition": "arrival_speed",
+      "worst_severity": 1.3008474391866482,
+      "dur_s": 2.2
+     },
+     "702|4": {
+      "vkey": "m+0_p+0_b+0_n+0",
+      "sh": "f68bd2fdd637",
+      "seed": 702,
+      "idx": 4,
+      "family": "pow",
+      "tag": "702|4",
+      "in_envelope": false,
+      "governing_condition": "handoff_overlap",
+      "worst_severity": 1.02,
+      "dur_s": 2.3
+     }
+    }
+   }
+  ],
+  "es_selected": {
+   "x": [
+    13.54220817920764,
+    2.118681187012216,
+    0.9202268881543656,
+    5.797834157197599,
+    -3.413631172324937,
+    20692.97226755705,
+    259.69516016773764,
+    0.917744794993462
+   ],
+   "in_frac": 0.0909,
+   "mean_sev": 1.5147,
+   "score": 0.93939,
+   "nominal_in": false,
+   "govs": {
+    "None": 1,
+    "arrival_speed": 1,
+    "handoff_overlap": 2,
+    "landing_forecast": 7
+   },
+   "stage": 0
+  },
+  "script": [
+   13.54220817920764,
+   2.118681187012216,
+   0.9202268881543656,
+   5.797834157197599,
+   -3.413631172324937,
+   20692.97226755705,
+   259.69516016773764,
+   0.917744794993462
+  ],
+  "script_param_names": [
+   "boostback delay [s]",
+   "boostback aim past pad [km]",
+   "boostback throttle",
+   "boostback pitch [deg]",
+   "boostback yaw trim [deg]",
+   "entry trigger alt [m]",
+   "entry cutoff speed [m/s]",
+   "entry throttle"
+  ],
+  "script_bounds": [
+   [
+    0.0,
+    150.0
+   ],
+   [
+    -20.0,
+    80.0
+   ],
+   [
+    0.4,
+    1.0
+   ],
+   [
+    0.0,
+    30.0
+   ],
+   [
+    -45.0,
+    45.0
+   ],
+   [
+    5000.0,
+    35000.0
+   ],
+   [
+    60.0,
+    1500.0
+   ],
+   [
+    0.4,
+    1.0
+   ]
+  ],
+  "train_agreement": {
+   "n_train": 10,
+   "screen_on": 1,
+   "planned": 1,
+   "landed": 0,
+   "concordance": 0.0,
+   "false_on_not_planned": 0,
+   "note": "flown-truth calibration of the ES surrogate: a screen-ON training scenario that the flight planner could not even plan for is a false-ON charged against the surrogate"
+  },
+  "flight_options": {
+   "entry_burns": 1,
+   "entry_throttle": true,
+   "boostback_cutoff": "iip",
+   "entry_cutoff": "speed",
+   "landing_need_model": "closed_loop",
+   "corridor_aim_margin_m": 7000.0,
+   "entry_q_max_pa": 250000.0,
+   "entry_g_max": 12.0,
+   "horizon_s": 900.0,
+   "dt_opt": 0.25,
+   "dt_final": 0.1,
+   "landing_reserve": "target",
+   "landing_reserve_margin_kg": 0.0,
+   "landing": {
+    "max_thrust_accel_g": 4.0,
+    "tvc_rate_limit_deg_s": 20.0,
+    "tvc_lag_tau_s": 0.2,
+    "tvc_lag_compensation": true
+   },
+   "search": "keep",
+   "landing_divert_budget_m": null,
+   "joint_chance": {},
+   "joint_admission": {
+    "min_admission_probability": 0.208
+   }
+  }
+ },
+ "constraint_audit": {
+  "dc7": {
+   "min_propellant_reserve_kg": 100000,
+   "landing_vertical_max_m_s": 3.0,
+   "landing_lateral_max_m_s": 1.0
+  },
+  "starbase": {
+   "min_propellant_reserve_kg": 100000,
+   "landing_vertical_max_m_s": 3.0,
+   "landing_lateral_max_m_s": 1.0
+  },
+  "dc7_scenario": "leo_starship_class_rtls_e508_dc7.yaml",
+  "recipe_entry_window": {
+   "entry_q_max_pa": 250000.0,
+   "entry_g_max": 12.0
+  },
+  "g_max_ascent": 3.0,
+  "insertion_band_m": [
+   230000.0,
+   250000.0
+  ],
+  "ascent_checks": {
+   "max-q-within-limit": true,
+   "max-accel-within-limit": true,
+   "insertion-above-atmosphere": true,
+   "insertion-periapsis-above-minimum": true,
+   "insertion-periapsis-within-tolerance": true,
+   "insertion-apoapsis-within-tolerance": true,
+   "insertion-inclination-within-tolerance": true,
+   "mass-non-negative": true,
+   "mass-continuity-stage2": true
+  },
+  "dc7_uncertainty_bands": "codesign uncertainty bands: inherited from the DC7 vehicle file (the co-designed DC8-family file tags no MC dispersion; FL-304 class defaults stand -- identical to the E10-03 DC8 treatment)",
+  "graded_reserve_identical": true,
+  "ascent_all_pass": true,
+  "soft_reserve_note": "the codesign planner grades its reserve floor at 0 kg soft + the target's hard 100000 kg (a superset of admitted plans that the SAME target check grades; the sealed-recipe arms keep their own recipe floors -- E10-03/E10-06 semantics, no relaxation anywhere)",
+  "constraints_unrelaxed": true
+ },
+ "e5_06_joint_gate": {
+  "contract": "E5-06 joint physical gate (five checks; one honestly not_evidenced without the tudatpy environment)",
+  "recovery_leg_checks_passed": false,
+  "ascent_leg_checks_passed": true,
+  "nominal": {
+   "outcome": "failed",
+   "reason": "CORRIDOR_MISSED",
+   "checks": {
+    "recovery-landing": false,
+    "recovery-propellant-reserve": true,
+    "handoff-separation-boostback": true,
+    "handoff-boostback-entry": true,
+    "handoff-landing-touchdown": true,
+    "handoff-mass-monotonic-boostback": true,
+    "handoff-mass-coast-entry": true,
+    "handoff-mass-terminal": true,
+    "joint-max-q-boostback": true,
+    "joint-max-q-entry": true,
+    "joint-propellant-corridor-budget": false,
+    "joint-touchdown-position": false,
+    "joint-touchdown-vertical-speed": false,
+    "joint-touchdown-lateral-speed": true,
+    "joint-propellant-reserve-touchdown": true
+   },
+   "touch_err_m": null,
+   "vert_m_s": null,
+   "lat_m_s": null,
+   "touch_propellant_kg": null
+  },
+  "checks": {
+   "physical_check_landing": {
+    "status": "failed",
+    "evidenced_by": "e11_03 codesign nominal flight (this report)"
+   },
+   "physical_check_mass_conservation": {
+    "status": "passed",
+    "checks": {
+     "handoff-mass-monotonic-boostback": true,
+     "handoff-mass-coast-entry": true,
+     "handoff-mass-terminal": true
+    }
+   },
+   "physical_check_epoch_frame_continuity": {
+    "status": "passed",
+    "checks": {
+     "handoff-separation-boostback": true,
+     "handoff-boostback-entry": true,
+     "handoff-landing-touchdown": true
+    }
+   },
+   "physical_check_orbit_insertion": {
+    "status": "passed",
+    "evidenced_by": "this report: the co-designed variant's own OT ascent verification checks (constraint_audit.ascent_checks)"
+   },
+   "physical_check_parking_propagation": {
+    "status": "not_evidenced_single_environment",
+    "note": "tudatpy is not installed in this container; the cross-env leg is part of the E5-06 contract and its command is:",
+    "evidence_command": "orbitopt crossenv run --plan src/orbitopt/data/crossenv_e508_dc8_plan.yaml --env tudat=$TUDAT_PY --env gfold=$GFOLD_PY"
+   }
+  }
+ },
+ "insertion_margin": {
+  "baseline_dc8_sealed": {
+   "ship_margin_kg": 103548.46198960347,
+   "record": "docs/benchmarks/e10_02_hot_staging.json"
+  },
+  "codesign": {
+   "ship_margin_kg": 103548.5,
+   "vkey": "m+0_p+0_b+0_n+0",
+   "sep_speed_m_s": 1554.8,
+   "sep_t_s": 124.0,
+   "sep_mass_kg": 900172.4
+  },
+  "delta_ship_margin_kg": 0.0,
+  "burn_extension_s": 0.0,
+  "note": "the margin is stage-2 (ship) propellant above dry mass at SECO, from the re-flown OT tracks; a positive burn extension buys insertion re-trim by SPENDING ship propellant, so the honest direction of the delta is downward as dburn grows -- reported, never hidden"
+ },
+ "sealed_baselines_e508": {
+  "dc7": {
+   "record": "tests/data/mission/reference/e5-08-new-vehicle-dc7-reports/mc-summary-pinned.json",
+   "successes": 11,
+   "n": 36,
+   "success_rate": 0.3055555555555556
+  },
+  "starbase": {
+   "record": "tests/data/mission/reference/e5-08-new-vehicle-starbase-reports/mc-summary-pinned.json",
+   "successes": 4,
+   "n": 36,
+   "success_rate": 0.1111111111111111
+  }
+ },
+ "baseline_dc8_e10_03": {
+  "holdout_successes": 0,
+  "holdout_n": 168,
+  "record": "docs/benchmarks/e10_03_robust_rtls_closure.json",
+  "note": "the E10-03 DC8 robust arm, script-only co-design: 0/168 -- this campaign moves the STATE itself"
+ },
+ "codesign_uncertainty": "codesign uncertainty bands: inherited from the DC7 vehicle file (the co-designed DC8-family file tags no MC dispersion; FL-304 class defaults stand -- identical to the E10-03 DC8 treatment)",
+ "arms": [
+  {
+   "arm": "codesign",
+   "successes": 0,
+   "n": 168,
+   "success_rate": 0.0,
+   "wilson95": [
+    0.0,
+    0.0224
+   ],
+   "cluster_ci95": [
+    0.0,
+    0.0
+   ],
+   "failure_categories": {
+    "planning_infeasible": 163,
+    "execution_failure": 0,
+    "accuracy": 0,
+    "fuel": 5
+   },
+   "reason_mix": {
+    "CORRIDOR_MISSED": 157,
+    "JOINT_CHANCE_VIOLATED": 6,
+    "INSUFFICIENT_PROPELLANT_RESERVE": 5
+   }
+  },
+  {
+   "arm": "dc7_pinned",
+   "successes": 44,
+   "n": 168,
+   "success_rate": 0.2619,
+   "wilson95": [
+    0.2013,
+    0.3332
+   ],
+   "cluster_ci95": [
+    0.1905,
+    0.3512
+   ],
+   "failure_categories": {
+    "planning_infeasible": 123,
+    "execution_failure": 0,
+    "accuracy": 0,
+    "fuel": 1
+   },
+   "reason_mix": {
+    "CORRIDOR_MISSED": 123,
+    "INSUFFICIENT_PROPELLANT_RESERVE": 1
+   }
+  },
+  {
+   "arm": "starbase_pinned",
+   "successes": 11,
+   "n": 168,
+   "success_rate": 0.0655,
+   "wilson95": [
+    0.037,
+    0.1134
+   ],
+   "cluster_ci95": [
+    0.0476,
+    0.0893
+   ],
+   "failure_categories": {
+    "planning_infeasible": 154,
+    "execution_failure": 0,
+    "accuracy": 0,
+    "fuel": 3
+   },
+   "reason_mix": {
+    "CORRIDOR_MISSED": 154,
+    "INSUFFICIENT_PROPELLANT_RESERVE": 3
+   }
+  }
+ ],
+ "comparisons": [
+  {
+   "method": "exact binomial on discordant pairs (McNemar); chi-squared with continuity correction alongside",
+   "n_pairs": 168,
+   "n_discordant": 44,
+   "successes_a_only": 0,
+   "successes_b_only": 44,
+   "paired_rate_difference": -0.2619047619047619,
+   "exact": {
+    "statistic": 0,
+    "p_value": 1.1368683772161603e-13
+   },
+   "chi2_continuity": {
+    "statistic": 42.02272727272727,
+    "p_value": 9.021872818347139e-11
+   },
+   "table": {
+    "both": 0,
+    "a_only": 0,
+    "b_only": 44,
+    "neither": 124
+   },
+   "arms": [
+    "codesign",
+    "dc7_pinned"
+   ],
+   "p_raw": 1.1368683772161603e-13,
+   "paired_ci": {
+    "diff": -0.2619,
+    "ci95": [
+     -0.3512,
+     -0.1905
+    ]
+   },
+   "p_holm": 2.2737367544323206e-13,
+   "significant": true
+  },
+  {
+   "method": "exact binomial on discordant pairs (McNemar); chi-squared with continuity correction alongside",
+   "n_pairs": 168,
+   "n_discordant": 11,
+   "successes_a_only": 0,
+   "successes_b_only": 11,
+   "paired_rate_difference": -0.06547619047619048,
+   "exact": {
+    "statistic": 0,
+    "p_value": 0.0009765625
+   },
+   "chi2_continuity": {
+    "statistic": 9.090909090909092,
+    "p_value": 0.002568831527022717
+   },
+   "table": {
+    "both": 0,
+    "a_only": 0,
+    "b_only": 11,
+    "neither": 157
+   },
+   "arms": [
+    "codesign",
+    "starbase_pinned"
+   ],
+   "p_raw": 0.0009765625,
+   "paired_ci": {
+    "diff": -0.0655,
+    "ci95": [
+     -0.0893,
+     -0.0476
+    ]
+   },
+   "p_holm": 0.0009765625,
+   "significant": true
+  }
+ ],
+ "train_agreement": {
+  "n_train": 10,
+  "screen_on": 1,
+  "planned": 1,
+  "landed": 0,
+  "concordance": 0.0,
+  "false_on_not_planned": 0,
+  "note": "flown-truth calibration of the ES surrogate: a screen-ON training scenario that the flight planner could not even plan for is a false-ON charged against the surrogate"
+ },
+ "arm_reason_mix": {
+  "codesign": {
+   "CORRIDOR_MISSED": 157,
+   "JOINT_CHANCE_VIOLATED": 6,
+   "INSUFFICIENT_PROPELLANT_RESERVE": 5
+  },
+  "dc7_pinned": {
+   "CORRIDOR_MISSED": 123,
+   "INSUFFICIENT_PROPELLANT_RESERVE": 1
+  },
+  "starbase_pinned": {
+   "CORRIDOR_MISSED": 154,
+   "INSUFFICIENT_PROPELLANT_RESERVE": 3
+  }
+ },
+ "runtime_s": 55.7,
+ "smoke_scale": false
+}
