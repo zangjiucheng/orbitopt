@@ -136,6 +136,7 @@ telemetry or independently validated landing is claimed. See
 | Study | Recorded result |
 |---|---|
 | E11-01 | A grid-fin model gives the unpowered DC8 entry a 1.9 g lateral envelope, cures the 460 kPa entry-heating violation and cuts arrival speed 1067→362 m/s, but the corridor tilt floor stays ≈25° against a 15° limit: two-burn unpowered closure is a vehicle-capability miss, quantified and dual-verified. [Grid-fin authority](benchmarks/e11_01_grid_fin_authority.md). |
+| E11-05 | The Starbase debris discrepancy survives qualification: build-up, recorded-flight Cd inversion (flights run 4-7% below the declared polar) and grid-fin states leave the replay at +12.70% against the unchanged 12% band - a genuine model difference, now localized to the OT/twin aero-atmosphere line; the qualified tables sync main and independent models to 0.0 interpolation difference. [Aero qualification](benchmarks/e11_05_starbase_aero_qualification.md). |
 
 ## Earlier studies
 
