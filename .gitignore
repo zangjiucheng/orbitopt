@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 *.png
 !docs/assets/*.png
+!docs/benchmarks/figures/*.png
 .ipynb_checkpoints/
 .claude/
 /scenes/
