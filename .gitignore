@@ -25,3 +25,4 @@ docs/.bundle/
 # Local/CI documentation translation model data
 /.translation-data/
 /.translation-cache/
+e1102-full-cache.json
