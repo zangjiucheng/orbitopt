@@ -401,21 +401,26 @@ FL-302 as `plan_boostback_entry(..., joint_admission=...)`; the search
 objective is unchanged and no success-rate improvement is claimed.
 API: `orbitopt.flightlab.recovery.redesign`.
 
+## Grid-fin planning and replay (E11-01)
+
+A vehicle may declare an optional `booster.grid_fins` block in the
+[vehicle schema]({{ site.baseurl }}/api/schemas/flight-vehicle-1.0/). Use
+`plan_boostback_entry(entry_burns=0, entry_aero=...)` to plan an unpowered
+entry with fins. List schedule gates in descending altitude as
+`(altitude_m, bank_deg[, alpha_deg])`. A two-value gate uses the guidance’s
+default angle of attack. A three-value gate sets its own.
+
+To re-fly the plan with `propagate`, pass `mission_command` as `thrust_cmd`
+and `mission_aero_command` as `aero_cmd`. Build both callbacks from the
+same plan, separation state and booster model. See the
+[grid-fin study](benchmarks/e11_01_grid_fin_authority.md) for the model
+assumptions and DC8 results.
+
 ## Counterfactual admission validation (E11-04)
 
-The [counterfactual re-flight report](benchmarks/e11_04_counterfactual_admission.md)
-replaces the E10-06 landing inference with measurement: every newly admitted
-world (15 training, 16 `a_seeds`, 1 `b_bands`) is really re-flown without and
-then with the policy on its recorded world. Measured pooled landing rate
-**24/32 = 0.750** (Wilson 0.579-0.867), far above the 0.208 floor; the paired
-McNemar over the re-flown flips is b/c = 19/0, p = 3.8e-06 -- the calibration
-improvement does translate into landings, and no old-rule landing is undone
-(b = 0 verified offline too). The training-grid measurement (8/15 = 0.533)
-sits below the FL-305 inference of 0.667 without significant difference
-(exact binomial p = 0.28; McNemar vs FL-305 3/5, p = 0.73): FL-305 is an
-inference proxy, not a counterfactual, and the E7-04-era grid predates the
-#287 guidance series (its replays report era drift, while the bit-valid E7-05
-hold-out cells reproduce to 1e-9 and measure 15/16 + 1/1 landed; the one
-admitted hold-out failure is landing accuracy, the seven training admit
-failures are the live gate rejecting on today's physics). No rule update
-required.
+The graded policy landed 24 of 32 newly admitted cases (75%, Wilson 95%
+interval 58–87%). Paired re-flights found 19 gains and zero losses
+(exact McNemar p = 3.8 × 10⁻⁶). The older training grid landed 8 of 15
+cases and showed guidance-era drift. The
+[benchmark report](benchmarks/e11_04_counterfactual_admission.md) separates
+these results from the earlier FL-305 estimates.

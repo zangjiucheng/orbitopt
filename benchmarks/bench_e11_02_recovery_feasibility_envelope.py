@@ -676,7 +676,9 @@ def _md(doc: dict[str, Any]) -> str:
              "separation state on its own atmosphere line, wind, and fin model; "
              "bands are calibrated on the baseline runs and then applied to the "
              "boundary pair C selects.\n")
-    L.append("| run | boundary condition side | agreement | q | g | speed | tilt | miss | prop |")
+    L.append("| run | boundary side | agreement | q (kPa) | load (g) | speed (m/s) | "
+             "tilt (deg) | miss (m) | propellant (t) |")
+    scales = {"q": 1000.0, "prop": 1000.0}
     L.append("|---|---|---|---|---|---|---|---|---|")
     for r in doc["D"].values():
         if "error" in r:
@@ -688,7 +690,7 @@ def _md(doc: dict[str, Any]) -> str:
             c = chk.get(name)
             if not c:
                 return "—"
-            return (f"{c['twin']:.3g}{c['band_unit']} "
+            return (f"{c['twin'] / scales.get(name, 1.0):.3g} "
                     f"({c['twin_side']}, ±{c['band']:g}{c['band_unit']})"
                     f"{' ✓' if c['ok'] else ' ✗'}")
         side = ("—" if r.get("pair") is None else r["pair"])
@@ -709,7 +711,7 @@ def _md(doc: dict[str, Any]) -> str:
                  f"{'accepted' if not r['screen_rejected'] else '`' + (r['screen_codes'] or ['-'])[0] + '`'} |")
     L.append("")
     L.append(doc["E_notes"] + "\n")
-    return "\n".join(L) + "\n"
+    return "\n".join(L).rstrip() + "\n"
 
 
 # --------------------------------------------------------------------------

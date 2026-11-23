@@ -1400,13 +1400,9 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
     #: rebuilt by mission_command/mission_aero_command from the plan record)
     grid_guidance: GridFinGuidance | None = None
     if entry_aero is not None:
-        opts = dict(entry_aero)
-        if opts.get("schedule") is not None:
-            opts["schedule"] = tuple(tuple(float(x) for x in g)
-                                     for g in opts["schedule"])
         grid_guidance = GridFinGuidance(model=booster.grid_fins,
-                                        pad_lat_deg=p_lat, pad_lon_deg=p_lon,
-                                        **opts)
+                                       pad_lat_deg=p_lat, pad_lon_deg=p_lon,
+                                       **entry_aero)
 
     n_base = 5 if entry_burns == 0 else 7 + (2 if entry_burns == 2 else 0)
     n_x = n_base + (int(entry_burns) if entry_throttle else 0)
@@ -1858,10 +1854,7 @@ def _guidance_of(return_plan: ReturnPlan, booster: BoosterModel | None
         raise ValueError(
             "this plan flew grid fins: mission_command/mission_aero_command "
             "need the booster with the grid_fins block to rebuild the law")
-    opts = dict(return_plan.entry_aero)
-    if opts.get("schedule") is not None:
-        opts["schedule"] = tuple((float(g[0]), float(g[1])) for g in opts["schedule"])
     lat, lon, _h = _geodetic_fast(
         np.asarray(return_plan.target.position_ecef_m, dtype=np.float64))
     return GridFinGuidance(model=booster.grid_fins, pad_lat_deg=lat,
-                           pad_lon_deg=lon, **opts)
+                           pad_lon_deg=lon, **return_plan.entry_aero)

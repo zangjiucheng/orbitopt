@@ -33,12 +33,12 @@ Total false rejects (screen OUT, flight landed): **0** — the screen's only unf
 
 E10-07's independent twin re-flies the sealed script from the same separation state on its own atmosphere line, wind, and fin model; bands are calibrated on the baseline runs and then applied to the boundary pair C selects.
 
-| run | boundary condition side | agreement | q | g | speed | tilt | miss | prop |
+| run | boundary side | agreement | q (kPa) | load (g) | speed (m/s) | tilt (deg) | miss (m) | propellant (t) |
 |---|---|---|---|---|---|---|---|---|
-| `D|base|dc7` | — | no | 1.47e+05% (in, ±20%) ✗ | 7.6g (in, ±2g) ✓ | 277% (in, ±40%) ✓ | 0.0712deg (in, ±3deg) ✓ | 122m (in, ±1500m) ✓ | 1.66e+05% (in, ±3%) ✗ |
-| `D|base|dc8_fins` | — | no | 1.31e+05% (in, ±20%) ✓ | 7.09g (in, ±2g) ✓ | 279% (in, ±40%) ✗ | 26.1deg (out, ±3deg) ✓ | 823m (in, ±1500m) ✓ | 3.01e+05% (in, ±3%) ✓ |
-| `D|pair|in|dc7_pinned|502|1|cal` | IN | yes | 1.6e+05% (in, ±40%) ✓ | 7.47g (in, ±2g) ✓ | 270% (in, ±40%) ✓ | 0.0444deg (in, ±3deg) ✓ | 65.8m (in, ±1500m) ✓ | 1.54e+05% (in, ±6%) ✓ |
-| `D|pair|out|dc7_pinned|501|3|cal` | OUT | yes | 1.66e+05% (in, ±40%) ✓ | 7.32g (in, ±2g) ✓ | 256% (in, ±40%) ✓ | 0.0326deg (in, ±3deg) ✓ | 315m (in, ±1500m) ✓ | 1.62e+05% (in, ±6%) ✓ |
+| `D|base|dc7` | — | no | 147 (in, ±20%) ✗ | 7.6 (in, ±2g) ✓ | 277 (in, ±40%) ✓ | 0.0712 (in, ±3deg) ✓ | 122 (in, ±1500m) ✓ | 166 (in, ±3%) ✗ |
+| `D|base|dc8_fins` | — | no | 131 (in, ±20%) ✓ | 7.09 (in, ±2g) ✓ | 279 (in, ±40%) ✗ | 26.1 (out, ±3deg) ✓ | 823 (in, ±1500m) ✓ | 301 (in, ±3%) ✓ |
+| `D|pair|in|dc7_pinned|502|1|cal` | IN | yes | 160 (in, ±40%) ✓ | 7.47 (in, ±2g) ✓ | 270 (in, ±40%) ✓ | 0.0444 (in, ±3deg) ✓ | 65.8 (in, ±1500m) ✓ | 154 (in, ±6%) ✓ |
+| `D|pair|out|dc7_pinned|501|3|cal` | OUT | yes | 166 (in, ±40%) ✓ | 7.32 (in, ±2g) ✓ | 256 (in, ±40%) ✓ | 0.0326 (in, ±3deg) ✓ | 315 (in, ±1500m) ✓ | 162 (in, ±6%) ✓ |
 
 Baselines carry the band calibration (1.5x the measured twin-vs-planner delta, floored at the E11-01 FIN_TOL values); twin disagreement is reported, never hidden. The twin's arrival-speed channel is the known atmosphere-line quantity (E11-01 measured 24%): when that quantity alone disagrees, the boundary verdict rests on q/g/tilt/miss/prop.
 
@@ -51,4 +51,3 @@ Baselines carry the band calibration (1.5x the measured twin-vs-planner delta, f
 | `E|dc8_fins|out` | 40.1 s / 0 fevals / `CORRIDOR_MISSED` | 0.8 s / 0 fevals / `CORRIDOR_MISSED` |
 
 The screened calls spend zero search fevals on an OUT state and return the predicted flight reason; the full search spends its budget (counted through the planner's own search hook, same options as the default path). Below the propellant floor the planner's own guard also skips the search, so there the saving is wall-clock -- one cheap reference rollout against the full-dt grading integrations (40x on the corner cell) -- while inside the floor the screen retires the entire full-budget pass. The DC8-era arm's real budget was the 300+-flight ES training (see the committed E10-03 report), which the screen retires for states outside the envelope.
-
