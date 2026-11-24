@@ -1,0 +1,56 @@
+# E12-03 (task #393): LEO-RDV-001, the reference two-impulse LEO rendezvous.
+#
+# Target + Chaser on a common 51.6 deg near-circular LEO plane, 20 km apart at
+# the shared epoch t0. The chaser flies 10 km below, so it drifts forward along
+# V-bar; at the departure gate (8 km behind the target) the planner solves a
+# two-pulse Lambert transfer (explicit Earth mu -- never the Lambert solver's
+# solar-system default) that arrives hovering at the 1 km V-bar-aft Hold Point
+# with zero relative velocity. The fuel budget and both time windows are fixed
+# here, before any optimization runs.
+#
+# Drive it through orbitopt.rendezvous:
+#
+#   from orbitopt.rendezvous import load_reference_config, plan_rendezvous, verify_plan
+#   cfg = load_reference_config()
+#   plan = plan_rendezvous(cfg)
+#   result = verify_plan(cfg, plan)   # re-propagates the plan; passed == all checks
+#
+# The numbers below are the task's acceptance numbers (50 m / 0.2 m/s / two
+# pulses), not planner tunables discovered at runtime -- see
+# docs/adr/rendezvous-0001-two-impulse-j2-targeted-lambert.md.
+schemaVersion: "1.0"
+mission:
+  id: leo-rdv-001
+  title: LEO rendezvous reference mission -- 500 km target, 1 km V-bar Hold Point
+  kind: rendezvous-two-impulse
+dynamics:
+  frame: GCRS
+  mu: 3.9860044150e+14         # exact packaged Earth value; loader demands equality
+  j2: true                     # plan and verify against the same model, J2 on
+target:                        # chief
+  altitude_m: 500000.0
+  inclination_deg: 51.6
+  raan_deg: 45.0
+  argument_of_latitude_deg: 0.0
+chaser:                        # deputy, coplanar (v1), phased behind so |rho(t0)| matches
+  altitude_m: 490000.0         # 10 km below -> drifts forward along V-bar
+  initial_separation_m: 20000.0
+hold_point:
+  rel_lvlh: [0.0, -1000.0, 0.0]   # 1 km V-bar aft of the target, arrival = hover there
+budget:
+  delta_v_budget_m_s: 25.0       # fixed before optimization; reference plan spends ~10-11
+tolerances:
+  max_position_error_m: 50.0     # task acceptance: <= 50 m at the Hold Point
+  max_relative_speed_m_s: 0.2    # task acceptance: <= 0.2 m/s relative speed
+windows:
+  drift_max_s: 5400.0            # gate must be crossed within one drift phase
+  transfer_tof_min_s: 1400.0     # time-of-flight window, fixed before optimization
+  transfer_tof_max_s: 3600.0
+phasing:
+  departure_gate_y_m: -8000.0    # transfer departs 8 km aft of the target, on V-bar
+  gate_scan_step_s: 10.0
+optimizer:
+  newton_tol_m: 1.0e-3           # landing residual that closes burn-1 targeting
+  newton_max_iter: 10
+  jacobian_eps_m_s: 0.05
+  golden_max_iter: 16
