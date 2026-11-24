@@ -1,0 +1,32 @@
+{
+ "mode": "refine",
+ "successes": 36,
+ "n": 36,
+ "rate": 1.0,
+ "cluster_ci95": [
+  1.0,
+  1.0
+ ],
+ "per_seed": {
+  "8": {
+   "successes": 12,
+   "n": 12,
+   "reasons": {}
+  },
+  "9": {
+   "successes": 12,
+   "n": 12,
+   "reasons": {}
+  },
+  "10": {
+   "successes": 12,
+   "n": 12,
+   "reasons": {}
+  }
+ },
+ "seeds": [
+  8,
+  9,
+  10
+ ]
+}

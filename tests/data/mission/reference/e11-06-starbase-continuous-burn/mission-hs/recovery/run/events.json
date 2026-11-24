@@ -1,0 +1,222 @@
+[
+  {
+    "t_s": 0.0,
+    "kind": "ignition",
+    "body_id": "stage1",
+    "data": {
+      "ot_event": "ignition",
+      "stage": 1
+    }
+  },
+  {
+    "t_s": 0.0,
+    "kind": "liftoff",
+    "body_id": "stage1",
+    "data": {
+      "ot_event": "liftoff",
+      "stage": 1
+    }
+  },
+  {
+    "t_s": 58.38959794076072,
+    "kind": "max_q",
+    "body_id": "stage1",
+    "data": {
+      "ot_event": "max_q",
+      "stage": 1
+    }
+  },
+  {
+    "t_s": 122.0,
+    "kind": "meco",
+    "body_id": "stage1",
+    "data": {
+      "ot_event": "burnout",
+      "stage": 1
+    }
+  },
+  {
+    "t_s": 122.0,
+    "kind": "ignition",
+    "body_id": "stage2",
+    "data": {
+      "ot_event": "ignition",
+      "stage": 2
+    }
+  },
+  {
+    "t_s": 122.0,
+    "kind": "separation",
+    "body_id": "stage2",
+    "data": {
+      "ot_event": "separation",
+      "stage": 1,
+      "separated_from": "stage1_debris"
+    }
+  },
+  {
+    "t_s": 122.5,
+    "kind": "ignition",
+    "body_id": "booster",
+    "data": {
+      "height_m": 57583.11733844783,
+      "mach": 4.6624058952836,
+      "dynamic_pressure_pa": 471.22435539853814,
+      "speed_earth_m_s": 1484.3709804950838,
+      "position_ecef_m": [
+        -684256.824742331,
+        -5753686.985556375,
+        2791689.551997139
+      ],
+      "velocity_ecef_m_s": [
+        887.1813349807602,
+        -1185.1764496644194,
+        107.81126916298899
+      ],
+      "mass_kg": 965661.4096794142,
+      "throttle": 0.47341244580846
+    }
+  },
+  {
+    "t_s": 200.0,
+    "kind": "meco",
+    "body_id": "booster",
+    "data": {
+      "height_m": 111864.7507404983,
+      "mach": 1.9521086034792308,
+      "dynamic_pressure_pa": 0.010693648615571398,
+      "speed_earth_m_s": 534.9568252434981,
+      "position_ecef_m": [
+        -661523.7824635347,
+        -5811014.361504641,
+        2804060.860373098
+      ],
+      "velocity_ecef_m_s": [
+        -369.0679689262551,
+        -259.18983183298496,
+        287.72950884752913
+      ],
+      "mass_kg": 634040.5938089747,
+      "throttle": 0.0,
+      "reason": "COMMANDED_CUTOFF"
+    }
+  },
+  {
+    "t_s": 387.25,
+    "kind": "ignition",
+    "body_id": "booster",
+    "data": {
+      "height_m": 19866.79835336283,
+      "mach": 4.588434061057546,
+      "dynamic_pressure_pa": 72451.09071240517,
+      "speed_earth_m_s": 1353.906914396022,
+      "position_ecef_m": [
+        -712516.5527289251,
+        -5710877.932001599,
+        2785806.481846567
+      ],
+      "velocity_ecef_m_s": [
+        -161.53228999067105,
+        1263.5602757784193,
+        -458.67927968733466
+      ],
+      "mass_kg": 634040.5938089747,
+      "throttle": 0.5924294706583382
+    }
+  },
+  {
+    "t_s": 409.4168135135137,
+    "kind": "ignition",
+    "body_id": "booster",
+    "data": {
+      "height_m": 3000.0,
+      "mach": 0.6426325864026179,
+      "dynamic_pressure_pa": 18054.085815905943,
+      "speed_earth_m_s": 211.15488386869083,
+      "position_ecef_m": [
+        -714279.3494700571,
+        -5694702.661358951,
+        2779790.452526036
+      ],
+      "velocity_ecef_m_s": [
+        -11.340996698755989,
+        195.96359296426127,
+        -77.82054361167398
+      ],
+      "mass_kg": 514753.40041241003,
+      "throttle": 0.2929592888991002
+    }
+  },
+  {
+    "t_s": 409.4168135135137,
+    "kind": "landing_start",
+    "body_id": "booster",
+    "data": {
+      "solver": "gfold",
+      "status": "Solved",
+      "tof_flying_s": 16.330365653573836,
+      "fuel_planned_kg": 69637.43417247216,
+      "gravity_m_s2": 8.040143885719932
+    }
+  },
+  {
+    "t_s": 441.5554739648633,
+    "kind": "impact",
+    "body_id": "booster",
+    "data": {
+      "height_m": -11.611679649911821,
+      "mach": 0.0044091370988889505,
+      "dynamic_pressure_pa": 1.3788653310100747,
+      "speed_earth_m_s": 1.5004028471347013,
+      "position_ecef_m": [
+        -714699.388624876,
+        -5691776.824032603,
+        2778765.4643145273
+      ],
+      "velocity_ecef_m_s": [
+        0.1818784574284994,
+        1.3336644234083685,
+        -0.6629239293826791
+      ],
+      "mass_kg": 440702.4284089888,
+      "latitude_deg": 25.99700057089048,
+      "longitude_deg": -97.15700150232152,
+      "speed_m_s": 1.5004028471347013
+    }
+  },
+  {
+    "t_s": 441.5554739648633,
+    "kind": "touchdown",
+    "body_id": "booster",
+    "data": {
+      "position_error_m": 0.16316966540215272,
+      "vertical_speed_m_s": -1.5003231112832343,
+      "lateral_speed_m_s": 0.015468207372352497,
+      "reason_codes": [],
+      "control_margin": {
+        "burn_time_s": 32.1,
+        "throttle_headroom_min": 0.238306,
+        "throttle_headroom_at_ignition": 0.238306,
+        "throttle_floor_room_min": 0.182181,
+        "tilt_margin_deg_min": 19.4248,
+        "slew_deg_s_max": 18.3121,
+        "tvc_rate_limit_deg_s": 20.0,
+        "saturated_high_s": 0,
+        "saturated_low_s": 0,
+        "tvc_lag_tau_s": 0.2,
+        "throttle_rate_limit_per_s": 0.0,
+        "throttle_slew_max_per_s": 0.0,
+        "tvc_lag_compensation": true
+      }
+    }
+  },
+  {
+    "t_s": 507.924485,
+    "kind": "seco",
+    "body_id": "stage2",
+    "data": {
+      "ot_event": "burnout",
+      "stage": 2
+    }
+  }
+]

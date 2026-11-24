@@ -1,0 +1,104 @@
+{
+  "optimizer_converged": null,
+  "physics_verified": null,
+  "backend_self_check": true,
+  "mission_constraints_passed": false,
+  "checks": [
+    {
+      "id": "mass-non-negative",
+      "passed": true,
+      "value": 204081.01547886708,
+      "limit": 0.0,
+      "unit": "kg",
+      "reason_code": ""
+    },
+    {
+      "id": "mass-continuity-stage2",
+      "passed": true,
+      "value": 0.012406002851734982,
+      "limit": 0.02,
+      "unit": "fraction",
+      "reason_code": ""
+    },
+    {
+      "id": "max-q-within-limit",
+      "passed": true,
+      "value": 37540.79167762903,
+      "limit": 55000.0,
+      "unit": "Pa",
+      "reason_code": ""
+    },
+    {
+      "id": "max-accel-within-limit",
+      "passed": true,
+      "value": 2.904825192257301,
+      "limit": 3.0,
+      "unit": "g",
+      "reason_code": ""
+    },
+    {
+      "id": "recovery-propellant-reserve",
+      "passed": false,
+      "value": null,
+      "limit": 100000.0,
+      "unit": "kg",
+      "reason_code": "RECOVERY_PROPELLANT_RESERVE_DATA_MISSING"
+    },
+    {
+      "id": "recovery-landing",
+      "passed": false,
+      "value": null,
+      "limit": null,
+      "unit": "",
+      "reason_code": "RECOVERY_LANDING_NOT_ASSESSED"
+    },
+    {
+      "id": "orbit-refly-not-assessed",
+      "passed": false,
+      "value": null,
+      "limit": null,
+      "unit": "",
+      "reason_code": "REFLY_BACKEND_MISSING"
+    },
+    {
+      "id": "insertion-above-atmosphere",
+      "passed": true,
+      "value": 237024.78642250225,
+      "limit": 120000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-periapsis-above-minimum",
+      "passed": true,
+      "value": 237024.78642250225,
+      "limit": 230000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-periapsis-within-tolerance",
+      "passed": true,
+      "value": 237024.78642250225,
+      "limit": 250000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-apoapsis-within-tolerance",
+      "passed": true,
+      "value": 251181.60720827803,
+      "limit": 250000.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "insertion-inclination-within-tolerance",
+      "passed": true,
+      "value": 30.18647519863462,
+      "limit": 30.5,
+      "unit": "deg",
+      "reason_code": ""
+    }
+  ]
+}

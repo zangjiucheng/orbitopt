@@ -1,0 +1,99 @@
+{
+ "kind": "run",
+ "physics_verified": true,
+ "mission_constraints_passed": false,
+ "checks": {
+  "mass-non-negative": true,
+  "mass-continuity-stage2": true,
+  "max-q-within-limit": true,
+  "max-accel-within-limit": true,
+  "recovery-propellant-reserve": false,
+  "recovery-landing": false,
+  "orbit-refly-semimajor-axis": true,
+  "orbit-refly-eccentricity": true,
+  "orbit-refly-inclination": true,
+  "orbit-refly-raan": true,
+  "insertion-above-atmosphere": true,
+  "insertion-periapsis-above-minimum": true,
+  "insertion-periapsis-within-tolerance": true,
+  "insertion-apoapsis-within-tolerance": true,
+  "insertion-inclination-within-tolerance": true
+ },
+ "detail": {
+  "mass-non-negative": {
+   "value": 204081.01547886708,
+   "limit": 0.0,
+   "unit": "kg"
+  },
+  "mass-continuity-stage2": {
+   "value": 0.012406002851734982,
+   "limit": 0.02,
+   "unit": "fraction"
+  },
+  "max-q-within-limit": {
+   "value": 37540.79167762903,
+   "limit": 55000.0,
+   "unit": "Pa"
+  },
+  "max-accel-within-limit": {
+   "value": 2.904825192257301,
+   "limit": 3.0,
+   "unit": "g"
+  },
+  "recovery-propellant-reserve": {
+   "value": null,
+   "limit": 100000.0,
+   "unit": "kg"
+  },
+  "recovery-landing": {
+   "value": null,
+   "limit": null,
+   "unit": ""
+  },
+  "orbit-refly-semimajor-axis": {
+   "value": 5.642883479595184e-06,
+   "limit": 100.0,
+   "unit": "m"
+  },
+  "orbit-refly-eccentricity": {
+   "value": 6.461216110753565e-14,
+   "limit": 1e-06,
+   "unit": ""
+  },
+  "orbit-refly-inclination": {
+   "value": 0.0,
+   "limit": 0.005,
+   "unit": "deg"
+  },
+  "orbit-refly-raan": {
+   "value": 0.0,
+   "limit": 0.02,
+   "unit": "deg"
+  },
+  "insertion-above-atmosphere": {
+   "value": 237024.78642250225,
+   "limit": 120000.0,
+   "unit": "m"
+  },
+  "insertion-periapsis-above-minimum": {
+   "value": 237024.78642250225,
+   "limit": 230000.0,
+   "unit": "m"
+  },
+  "insertion-periapsis-within-tolerance": {
+   "value": 237024.78642250225,
+   "limit": 250000.0,
+   "unit": "m"
+  },
+  "insertion-apoapsis-within-tolerance": {
+   "value": 251181.60720827803,
+   "limit": 250000.0,
+   "unit": "m"
+  },
+  "insertion-inclination-within-tolerance": {
+   "value": 30.18647519863462,
+   "limit": 30.5,
+   "unit": "deg"
+  }
+ }
+}

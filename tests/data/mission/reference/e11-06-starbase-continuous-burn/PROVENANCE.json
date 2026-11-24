@@ -1,0 +1,20 @@
+{
+ "task": "#390 E12-00 E11-06 release gate",
+ "git_sha_recorded_on": "2c4a83c",
+ "date_utc": "2026-11-24",
+ "stack": {
+  "python": "3.12",
+  "numpy": "1.26.4",
+  "gfold": "0.3.2",
+  "env": "envs/flightlab-landing-ci.txt"
+ },
+ "env": {
+  "E11_ENGINE_STAGES": "1",
+  "ORBITOPT_E508_VARIANT": "starbase (hot-staging chain only)"
+ },
+ "champion": "recovery search seed 5, fins v3_pp",
+ "host": "linux.student.cs.uwaterloo.ca",
+ "design_assumptions": [
+  "v3_pp grid-fin absolute drag (no public Super Heavy data) \u2014 all checks inherit it"
+ ]
+}

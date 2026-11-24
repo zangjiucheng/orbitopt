@@ -1,0 +1,52 @@
+{
+ "protocol": "FL-304 pinned script, 3 seeds x 12 (8/9/10), gfold 0.3.2 py3.12, sealed ascent",
+ "note": "search stops at first feasible design; stop point and corridor margin are seed dependent",
+ "champion": "cand-s5 (pinned 33/36 reproduces commit 31edace)",
+ "candidates": [
+  {
+   "search_seed": 1,
+   "file": "candidate.json",
+   "arrival_speed_m_s": null,
+   "arrival_tilt_deg": null,
+   "engine_cutoff_s": null,
+   "pinned_script_successes": 24,
+   "n": 36
+  },
+  {
+   "search_seed": 2,
+   "file": "cand-s2.json",
+   "arrival_speed_m_s": null,
+   "arrival_tilt_deg": null,
+   "engine_cutoff_s": null,
+   "pinned_script_successes": 6,
+   "n": 36
+  },
+  {
+   "search_seed": 3,
+   "file": "cand-s3.json",
+   "arrival_speed_m_s": null,
+   "arrival_tilt_deg": null,
+   "engine_cutoff_s": null,
+   "pinned_script_successes": 16,
+   "n": 36
+  },
+  {
+   "search_seed": 4,
+   "file": "cand-s4.json",
+   "arrival_speed_m_s": null,
+   "arrival_tilt_deg": null,
+   "engine_cutoff_s": null,
+   "pinned_script_successes": 17,
+   "n": 36
+  },
+  {
+   "search_seed": 5,
+   "file": "cand-s5.json",
+   "arrival_speed_m_s": null,
+   "arrival_tilt_deg": null,
+   "engine_cutoff_s": null,
+   "pinned_script_successes": 33,
+   "n": 36
+  }
+ ]
+}
