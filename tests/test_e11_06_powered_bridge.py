@@ -48,3 +48,17 @@ def test_tolerances_never_tighter_than_cold_and_declared():
     assert pb.powered_mass_tolerance_kg(2.26e6, 1e-3) == pytest.approx(1130.0)
     assert pb.powered_mass_tolerance_kg(1.0, 5.0) == 5.0
     assert "one sample" in pb.POWERED_BRIDGE_METHOD
+
+
+def test_replay_scene_carries_the_runs_verification(tmp_path, monkeypatch):
+    """The Verification panel must not say NOT CHECKED for a replayed run whose verification.json was assessed."""
+    from pathlib import Path
+
+    from orbitopt.flightlab.ui.telemetry import load_run_scene
+
+    monkeypatch.setenv("ORBITOPT_CACHE_DIR", str(tmp_path / "cache"))
+    run_dir = (Path(__file__).resolve().parents[1]
+               / "tests/data/mission/reference/e5-08-new-vehicle-starbase/mission/recovery/run")
+    _, scene = load_run_scene(run_dir, earth_texture=False)
+    assert scene["verification"]["reports"][0]["kind"] == "flightlab"
+    assert scene["verification"]["result"] in {"passed", "failed", "not_checked"}

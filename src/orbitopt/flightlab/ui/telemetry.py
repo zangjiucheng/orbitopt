@@ -369,7 +369,7 @@ def channel_values_at(channel: TelemetryChannel, t: float) -> tuple[tuple[str, f
 def _run_scene_cache_id(run_dir: Path, run: FlightRun, *, earth_texture: bool, scenario) -> str:
     digest = hashlib.sha256()
     staging = (scenario.handoff, scenario.staging_velocity_m_s) if scenario else None
-    digest.update(f"replay-staging-v2:{earth_texture}:{staging!r}\0".encode())
+    digest.update(f"replay-staging-v3-verification:{earth_texture}:{staging!r}\0".encode())
     digest.update(str(run_dir.resolve()).encode("utf-8"))
     digest.update(b"\0")
     for path in sorted(run_dir.rglob("*")):
@@ -402,8 +402,15 @@ def load_run_scene(run_dir: Path | str, *, earth_texture: bool = True) -> tuple[
     scenario = replay_mission_scenario(run)
 
     def compute() -> dict:
-        return run_to_scene(run, earth_texture=earth_texture, target=target,
-                            mission_scenario=scenario)
+        from orbitopt.flightlab.segment import flight_run_report
+        from orbitopt.verify.report import publish_to_scene
+
+        scene = run_to_scene(run, earth_texture=earth_texture, target=target,
+                             mission_scenario=scenario)
+        # The run's own verification (checks recorded in verification.json, incl. the orbit re-fly) as a
+        # verification-report-1.0 on the scene: without it the Verification panel says NOT CHECKED for a run
+        # that was in fact verified. A run with no assessed verdict still reports not_checked.
+        return publish_to_scene(scene, [flight_run_report(run, target)])
 
     return run, cached_scene(_run_scene_cache_id(path, run, earth_texture=earth_texture,
                                                 scenario=scenario), compute)
