@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zangjiucheng/orbitopt/schemas/multi-spacecraft-mission-1.0.json",
+  "title": "orbitopt multi-spacecraft mission contract v1.0",
+  "description": "Mission-level contract for two or more spacecraft flying one coordinated scenario (E12-01, task #391): a mission-wide shared reference (one frame + one epoch counted on one timescale, the same Epoch/FRAMES vocabulary as handoff-state-1.0), the spacecraft roster with mandatory Target/Chaser roles, optional named zones, and the multi-body event vocabulary (maneuver / hold_point_arrival / zone_entry / zone_exit). Trajectory data is NOT in this document: each spacecraft's track reuses the FlightResult v1 BodyTrack format (orbitopt.flightlab.contract.BodyTrack) and is bound to this mission by orbitopt.mission.multispacecraft.validate_mission, which fails the shared-frame / shared-epoch / unit-coherence gates. Structural rules JSON Schema can express live here; cross-references (unique ids, exactly one TARGET, event/zone references) are checked by orbitopt.mission.multispacecraft. Compatibility policy: adding optional fields is not a breaking change; removing/renaming/narrowing is and gets multi-spacecraft-mission-2.0.json.",
+  "type": "object",
+  "required": ["schema_version", "mission_id", "title", "frame", "epoch", "spacecraft"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "mission_id": {"type": "string", "minLength": 1},
+    "title": {"type": "string", "minLength": 1},
+    "frame": {
+      "enum": ["GCRS", "ECEF", "LAUNCH_ECI"],
+      "description": "The ONE frame every spacecraft state, track and event of this mission is expressed in (GCRS recommended). Mixing frames across spacecraft is a validation failure, not a conversion hint."
+    },
+    "epoch": {"$ref": "#/$defs/epoch"},
+    "spacecraft": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"$ref": "#/$defs/spacecraft"},
+      "description": "The roster: at least two distinct spacecraft. Exactly one must carry role TARGET and at least one role CHASER (checked by validate_mission; the schema cannot count)."
+    },
+    "zones": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/zone"},
+      "description": "Named spherical regions the event vocabulary refers to (keep-out spheres, approach corridors, hold-point volumes). Optional; zone_entry/zone_exit events may only name a declared zone."
+    },
+    "events": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/event"},
+      "description": "Multi-body events scheduled/observed on the mission timeline, ordered by nothing here (the reader sorts). Optional."
+    },
+    "metadata": {
+      "type": "object",
+      "propertyNames": {"type": "string"},
+      "description": "Free-form producer annotations. Optional; readers must not depend on any particular key."
+    }
+  },
+  "$defs": {
+    "epoch": {
+      "type": "object",
+      "description": "Mission epoch: the shared time origin every spacecraft's tracks are aligned to. MJD2000 day-labels plus the mandatory timescale (orbitopt.timescales convention; comparisons via Epoch.to_tdb_seconds).",
+      "required": ["mjd2000", "timescale"],
+      "additionalProperties": false,
+      "properties": {
+        "mjd2000": {"type": "number"},
+        "timescale": {"enum": ["UTC", "TT", "TDB"]}
+      }
+    },
+    "vec3": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {"type": "number"},
+      "description": "Three finite numbers (finiteness enforced by orbitopt.mission.multispacecraft)."
+    },
+    "spacecraft": {
+      "type": "object",
+      "required": ["spacecraft_id", "role"],
+      "additionalProperties": false,
+      "properties": {
+        "spacecraft_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique within the mission; matches BodyTrack.body_id of this spacecraft's trajectory."
+        },
+        "role": {
+          "enum": ["TARGET", "CHASER"],
+          "description": "Mandatory -- a spacecraft without a role (or with any other role) is a validation failure. Exactly one TARGET per mission; at least one CHASER."
+        },
+        "metadata": {"type": "object", "propertyNames": {"type": "string"}}
+      }
+    },
+    "zone": {
+      "type": "object",
+      "required": ["name", "center_m", "radius_m"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "description": "Unique within the mission; referenced by zone_entry/zone_exit events."},
+        "center_m": {
+          "$ref": "#/$defs/vec3",
+          "description": "Zone centre in the mission frame, metres -- same frame/origin as every track."
+        },
+        "radius_m": {"type": "number", "exclusiveMinimum": 0, "description": "Sphere radius, metres."}
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": ["spacecraft_id", "kind", "epoch"],
+      "additionalProperties": false,
+      "properties": {
+        "spacecraft_id": {"type": "string", "minLength": 1, "description": "The acting spacecraft; must be on the roster (validate_mission)."},
+        "counterpart_id": {"type": "string", "minLength": 1, "description": "Optional second member for two-body events (e.g. which hold point / which counterpart the maneuver closes on)."},
+        "kind": {
+          "enum": ["maneuver", "hold_point_arrival", "zone_entry", "zone_exit"],
+          "description": "The multi-body event vocabulary. Single-spacecraft ascent kinds (meco, separation, ...) stay in the Flight Lab vocabulary; these are the rendezvous-mission ones."
+        },
+        "epoch": {"$ref": "#/$defs/epoch"},
+        "zone": {"type": "string", "minLength": 1, "description": "Mandatory for kind zone_entry/zone_exit; must name a declared zone."},
+        "hold_point_id": {"type": "string", "minLength": 1, "description": "Mandatory for kind hold_point_arrival."},
+        "data": {"type": "object", "propertyNames": {"type": "string"}, "description": "Free-form event payload (delta-v magnitude, corridor axis, ...)."}
+      }
+    }
+  }
+}

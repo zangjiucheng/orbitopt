@@ -18,6 +18,11 @@ actually needs converting. The one exception is the opt-in M-04 unified
 runner :mod:`orbitopt.mission.launch_pipeline` (import it directly, never
 through this package): it drives the real ascent optimizer and therefore
 needs the compute stack.
+
+E12-01 (:mod:`orbitopt.mission.multispacecraft`) builds on this contract
+for rendezvous missions: two or more spacecraft share one frame/epoch, fly
+Target/Chaser roles, and replay on one unified TDB-seconds timeline --
+without changing the single-spacecraft ``HandoffState`` interface at all.
 """
 from orbitopt.mission.ascent import (
     AscentHandoffReport,
@@ -50,21 +55,49 @@ from orbitopt.mission.contract import (
     state_to_dict,
     validate_state,
 )
+from orbitopt.mission.multispacecraft import (
+    MISSION_EVENT_KINDS,
+    ROLES,
+    MissionEvent,
+    MissionTolerances,
+    MissionValidationReport,
+    MultiSpacecraftMission,
+    RelativeState,
+    SpacecraftSpec,
+    Zone,
+    build_unified_replay,
+    mission_from_dict,
+    mission_to_dict,
+    relative_state_from_dict,
+    relative_state_from_tracks,
+    relative_state_to_dict,
+    validate_mission,
+)
 
 __all__ = [
     "AscentHandoffReport",
     "EPOCH_TIMESCALES",
     "ElementTolerances",
+    "MISSION_EVENT_KINDS",
     "MISSION_FRAMES",
+    "ROLES",
     "SCHEMA_VERSION",
     "Epoch",
     "HandoffCheck",
     "HandoffReport",
     "HandoffState",
     "HandoffTolerances",
+    "MissionEvent",
     "MissionSegment",
+    "MissionTolerances",
+    "MissionValidationReport",
+    "MultiSpacecraftMission",
+    "RelativeState",
     "SegmentResult",
+    "SpacecraftSpec",
+    "Zone",
     "ascent_handoff_state",
+    "build_unified_replay",
     "check_ascent_to_parking_orbit",
     "check_epoch_continuity",
     "check_handoff",
@@ -74,9 +107,15 @@ __all__ = [
     "check_velocity_continuity",
     "epoch_at_ascent_time",
     "is_valid_state_document",
+    "mission_from_dict",
+    "mission_to_dict",
     "parking_orbit_elements",
+    "relative_state_from_dict",
+    "relative_state_from_tracks",
+    "relative_state_to_dict",
     "run_checked",
     "state_from_dict",
     "state_to_dict",
+    "validate_mission",
     "validate_state",
 ]

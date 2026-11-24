@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zangjiucheng/orbitopt/schemas/multispacecraft-replay-1.0.json",
+  "title": "orbitopt multi-spacecraft unified replay document v1.0",
+  "description": "Two or more spacecraft trajectories sampled onto ONE shared time axis, ready to replay together (E12-01, task #391). Produced by orbitopt.mission.multispacecraft.build_unified_replay from a validated MultiSpacecraftMission plus per-spacecraft BodyTracks. All times are SI seconds (the 's' suffix on every time field is the unit contract) counted on the shared TDB seconds since J2000 axis -- absolute, leap-second- and TDB-TT-aware via Epoch.to_tdb_seconds, so two tracks authored on different declared timescales land on the same number. Every sample carries its own 't_tdb_s' and every spacecraft carries its frame, so a reader never has to assume alignment. Structural rules JSON Schema can express live here; axis ordering, per-track bracketing and event placement are checked by orbitopt.mission.multispacecraft.",
+  "type": "object",
+  "required": ["schema_version", "mission_id", "frame", "time_axis_tdb_s", "spacecraft"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "mission_id": {"type": "string", "minLength": 1},
+    "frame": {
+      "enum": ["GCRS", "ECEF", "LAUNCH_ECI"],
+      "description": "The mission's single frame; every position/velocity in this document (samples and relative states) is in it."
+    },
+    "time_axis_tdb_s": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"type": "number"},
+      "description": "The shared, strictly increasing TDB-seconds axis. Per-spacecraft samples land on the overlap window of the tracks; events may fall anywhere on the axis."
+    },
+    "spacecraft": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"$ref": "#/$defs/sampled"},
+      "description": "One entry per roster spacecraft: its role and its resampled state."
+    },
+    "relative_states": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/relative"},
+      "description": "Target-referenced relative state at every axis sample (one per CHASER, at every axis time inside its overlap window). Optional for readers, but build_unified_replay always fills it when there is exactly one TARGET."
+    },
+    "events": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/event"},
+      "description": "The mission events placed on the shared axis (t_tdb_s), in ascending time order."
+    },
+    "metadata": {"type": "object", "propertyNames": {"type": "string"}}
+  },
+  "$defs": {
+    "sampled": {
+      "type": "object",
+      "required": ["spacecraft_id", "role", "frame", "samples"],
+      "additionalProperties": false,
+      "properties": {
+        "spacecraft_id": {"type": "string", "minLength": 1},
+        "role": {"enum": ["TARGET", "CHASER"]},
+        "frame": {"enum": ["GCRS", "ECEF", "LAUNCH_ECI"], "description": "Always the mission frame (the validator rejected any other)."},
+        "samples": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/sample"}}
+      }
+    },
+    "sample": {
+      "type": "object",
+      "required": ["t_tdb_s", "position_m", "velocity_m_s"],
+      "additionalProperties": false,
+      "properties": {
+        "t_tdb_s": {"type": "number", "description": "Absolute TDB seconds since J2000 -- an axis time inside this spacecraft's own track coverage."},
+        "position_m": {"$ref": "#/$defs/vec3"},
+        "velocity_m_s": {"$ref": "#/$defs/vec3"}
+      }
+    },
+    "relative": {
+      "type": "object",
+      "required": ["t_tdb_s", "target_id", "chaser_id", "frame", "position_m", "velocity_m_s"],
+      "additionalProperties": false,
+      "properties": {
+        "t_tdb_s": {"type": "number"},
+        "target_id": {"type": "string", "minLength": 1},
+        "chaser_id": {"type": "string", "minLength": 1},
+        "frame": {"enum": ["GCRS", "ECEF", "LAUNCH_ECI"]},
+        "position_m": {"$ref": "#/$defs/vec3"},
+        "velocity_m_s": {"$ref": "#/$defs/vec3"}
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": ["t_tdb_s", "spacecraft_id", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "t_tdb_s": {"type": "number", "description": "Event epoch placed on the shared axis."},
+        "spacecraft_id": {"type": "string", "minLength": 1},
+        "counterpart_id": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["maneuver", "hold_point_arrival", "zone_entry", "zone_exit"]},
+        "zone": {"type": "string", "minLength": 1},
+        "hold_point_id": {"type": "string", "minLength": 1},
+        "data": {"type": "object", "propertyNames": {"type": "string"}}
+      }
+    },
+    "vec3": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {"type": "number"}
+    }
+  }
+}

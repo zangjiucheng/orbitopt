@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zangjiucheng/orbitopt/schemas/relative-state-1.0.json",
+  "title": "orbitopt multi-spacecraft relative state (RelativeState v1)",
+  "description": "The state of one spacecraft relative to another (E12-01, task #391): the chaser's position/velocity minus the target's, expressed at one shared epoch in one shared frame. Both vectors are SI (metres, m/s) exactly like HandoffState's position_m/velocity_m_s -- the unit is carried by the field name, and orbitopt.mission.multispacecraft.RelativeState.from_states refuses two HandoffStates whose frames differ or whose epochs disagree beyond the alignment tolerance, so a relative state is only ever formed from same-frame, same-epoch (within tolerance) states. Epochs are MJD2000 day-labels counted on the declared timescale (orbitopt.timescales convention); comparisons go through Epoch.to_tdb_seconds(). Structural rules JSON Schema can express live here; finiteness and epoch representability are checked by orbitopt.mission.multispacecraft. Compatibility policy: adding optional fields is not a breaking change; removing/renaming/narrowing is and gets relative-state-2.0.json.",
+  "type": "object",
+  "required": ["schema_version", "target_id", "chaser_id", "epoch", "frame", "position_m", "velocity_m_s"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "target_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "spacecraft_id of the reference member of the pair (role TARGET in the mission)."
+    },
+    "chaser_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "spacecraft_id of the relative member of the pair (role CHASER). Must differ from target_id."
+    },
+    "epoch": {"$ref": "#/$defs/epoch"},
+    "frame": {
+      "enum": ["GCRS", "ECEF", "LAUNCH_ECI"],
+      "description": "The single frame both member states were expressed in when the difference was taken. Mixing frames (a GCRS r minus an ECEF r) is meaningless and is rejected at construction, not here."
+    },
+    "position_m": {"$ref": "#/$defs/vec3"},
+    "velocity_m_s": {"$ref": "#/$defs/vec3"},
+    "metadata": {
+      "type": "object",
+      "propertyNames": {"type": "string"},
+      "description": "Free-form producer annotations. Optional; readers must not depend on any particular key."
+    }
+  },
+  "$defs": {
+    "epoch": {
+      "type": "object",
+      "description": "Mission instant: MJD2000 day-labels plus the timescale they are counted on. The timescale is mandatory -- a TT epoch is never treated as UTC.",
+      "required": ["mjd2000", "timescale"],
+      "additionalProperties": false,
+      "properties": {
+        "mjd2000": {"type": "number"},
+        "timescale": {"enum": ["UTC", "TT", "TDB"]}
+      }
+    },
+    "vec3": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {"type": "number"},
+      "description": "Three finite numbers (finiteness enforced by orbitopt.mission.multispacecraft, matching orbitopt.mission.contract)."
+    }
+  }
+}
