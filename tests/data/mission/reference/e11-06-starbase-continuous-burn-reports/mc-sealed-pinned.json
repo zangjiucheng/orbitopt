@@ -1,0 +1,36 @@
+{
+ "mode": "pinned",
+ "successes": 33,
+ "n": 36,
+ "rate": 0.9166666666666666,
+ "cluster_ci95": [
+  0.8333333333333334,
+  1.0
+ ],
+ "per_seed": {
+  "8": {
+   "successes": 10,
+   "n": 12,
+   "reasons": {
+    "CORRIDOR_MISSED": 2
+   }
+  },
+  "9": {
+   "successes": 12,
+   "n": 12,
+   "reasons": {}
+  },
+  "10": {
+   "successes": 11,
+   "n": 12,
+   "reasons": {
+    "CORRIDOR_MISSED": 1
+   }
+  }
+ },
+ "seeds": [
+  8,
+  9,
+  10
+ ]
+}

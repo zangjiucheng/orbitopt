@@ -1,0 +1,233 @@
+{
+  "name": "leo-starship-class-rtls-e5-08-starbase (orbitopt FL-004 / starship-class-rtls-starbase-v1)",
+  "flight_time_s": 700.0,
+  "impact": null,
+  "maxima": {
+    "altitude_m": {
+      "value": 235991.8590661697,
+      "time_s": 464.74501466669557
+    },
+    "speed_earth_mps": {
+      "value": 7362.044845912701,
+      "time_s": 622.0
+    },
+    "speed_inertial_mps": {
+      "value": 7773.958334351789,
+      "time_s": 510.0
+    },
+    "mach": {
+      "value": 12.133474929942043,
+      "time_s": 602.0
+    },
+    "dynamic_pressure_pa": {
+      "value": 37500.142052148054,
+      "time_s": 58.46941543568346
+    },
+    "acceleration_g": {
+      "value": 2.928127656784605,
+      "time_s": 508.0
+    }
+  },
+  "final_state": {
+    "time_s": 700.0,
+    "mass_kg": 202486.87850442465,
+    "altitude_m": 235538.70923049934,
+    "latitude_deg": 15.195659770800315,
+    "longitude_deg": -72.40786300761368,
+    "speed_earth_mps": 7361.980941452909,
+    "speed_inertial_mps": 7773.172588077942,
+    "position_eci_m": [2237424.687636571, -5978922.62452256, 1722741.0041940128],
+    "velocity_eci_mps": [6804.7757614035845, 1552.2843690088723, -3421.6446570021444],
+    "orbit": {
+      "semi_major_axis_m": 6627587.267341585,
+      "eccentricity": 0.002511649836392871,
+      "inclination_deg": 30.779038432302467,
+      "raan_deg": 7.118899617377584,
+      "argument_of_perigee_deg": 126.75408568408635,
+      "true_anomaly_deg": 22.639666968547726,
+      "perigee_altitude_m": 232804.08886588458,
+      "apogee_altitude_m": 266096.44581728056,
+      "period_s": 5369.627547791696,
+      "specific_energy_j_kg": -30071308.4355873
+    }
+  },
+  "events": [
+    {
+      "kind": "ignition",
+      "stage": 1,
+      "time_s": 0.0,
+      "altitude_m": 4.999999999068677,
+      "latitude_deg": 25.997,
+      "longitude_deg": -97.157,
+      "downrange_m": 0.0,
+      "speed_earth_mps": 0.0,
+      "speed_inertial_mps": 418.3102372896089,
+      "mach": 0.0,
+      "dynamic_pressure_pa": 0.0,
+      "mass_kg": 4825000.0
+    },
+    {
+      "kind": "liftoff",
+      "stage": 1,
+      "time_s": 0.0,
+      "altitude_m": 4.999999999068677,
+      "latitude_deg": 25.997,
+      "longitude_deg": -97.157,
+      "downrange_m": 0.0,
+      "speed_earth_mps": 0.0,
+      "speed_inertial_mps": 418.3102372896089,
+      "mach": 0.0,
+      "dynamic_pressure_pa": 0.0,
+      "mass_kg": 4825000.0
+    },
+    {
+      "kind": "mach1",
+      "stage": 1,
+      "time_s": 45.967738954774866,
+      "altitude_m": 6326.9939190894365,
+      "latitude_deg": 25.994136287705313,
+      "longitude_deg": -97.1487870469709,
+      "downrange_m": 876.0700336842905,
+      "speed_earth_mps": 315.0931702786077,
+      "speed_inertial_mps": 585.8578244212862,
+      "mach": 0.9999724448582455,
+      "dynamic_pressure_pa": 31598.251642899333,
+      "mass_kg": 3821540.4546055323
+    },
+    {
+      "kind": "max_q",
+      "stage": 1,
+      "time_s": 58.46941543568346,
+      "altitude_m": 10772.617347786203,
+      "latitude_deg": 25.98887060257429,
+      "longitude_deg": -97.13361836014047,
+      "downrange_m": 2499.8706884658327,
+      "speed_earth_mps": 446.93561898054355,
+      "speed_inertial_mps": 717.7186272346661,
+      "mach": 1.5091291513244358,
+      "dynamic_pressure_pa": 37500.142052148054,
+      "mass_kg": 3548633.261790512
+    },
+    {
+      "kind": "burnout",
+      "stage": 1,
+      "time_s": 120.0,
+      "altitude_m": 54974.53003963549,
+      "latitude_deg": 25.876046809375765,
+      "longitude_deg": -96.80989785502415,
+      "downrange_m": 37234.68092839274,
+      "speed_earth_mps": 1461.7723347202952,
+      "speed_inertial_mps": 1774.7040938973387,
+      "mach": 4.514885662977561,
+      "dynamic_pressure_pa": 608.7822472942272,
+      "mass_kg": 2289244.2345206137,
+      "orbit": {
+        "semi_major_axis_m": 3298309.668587939,
+        "eccentricity": 0.9658926937339231,
+        "inclination_deg": 29.552291217303306,
+        "raan_deg": 11.546516147875955,
+        "argument_of_perigee_deg": 299.7557881574248,
+        "true_anomaly_deg": 178.59090513832578,
+        "perigee_altitude_m": -6265640.541973108,
+        "apogee_altitude_m": 105985.87914898898,
+        "period_s": 1885.1595924272567,
+        "specific_energy_j_kg": -60424957.304061666
+      }
+    },
+    {
+      "kind": "separation",
+      "stage": 1,
+      "time_s": 122.0,
+      "altitude_m": 56970.651541551575,
+      "latitude_deg": 25.869204929074886,
+      "longitude_deg": -96.79036353151913,
+      "downrange_m": 39333.58382861121,
+      "speed_earth_mps": 1448.565376438585,
+      "speed_inertial_mps": 1763.8026871297818,
+      "mach": 4.521952155077942,
+      "dynamic_pressure_pa": 471.0436687235978,
+      "mass_kg": 1300000.0,
+      "orbit": {
+        "semi_major_axis_m": 3298308.3453434804,
+        "eccentricity": 0.9658927918706007,
+        "inclination_deg": 29.55270388935913,
+        "raan_deg": 11.54496616581187,
+        "argument_of_perigee_deg": 299.75710500059625,
+        "true_anomaly_deg": 178.6169585501699,
+        "perigee_altitude_m": -6265640.910790435,
+        "apogee_altitude_m": 105983.60147739854,
+        "period_s": 1885.158457970375,
+        "specific_energy_j_kg": -60424981.54587945
+      }
+    },
+    {
+      "kind": "ignition",
+      "stage": 2,
+      "time_s": 122.0,
+      "altitude_m": 56970.651541551575,
+      "latitude_deg": 25.869204929074886,
+      "longitude_deg": -96.79036353151913,
+      "downrange_m": 39333.58382861121,
+      "speed_earth_mps": 1448.565376438585,
+      "speed_inertial_mps": 1763.8026871297818,
+      "mach": 4.521952155077942,
+      "dynamic_pressure_pa": 471.0436687235978,
+      "mass_kg": 1300000.0
+    },
+    {
+      "kind": "apogee",
+      "stage": 2,
+      "time_s": 464.74501466669557,
+      "altitude_m": 235991.8590661697,
+      "latitude_deg": 21.81922029173558,
+      "longitude_deg": -86.36293029679705,
+      "downrange_m": 1192356.2587881195,
+      "speed_earth_mps": 6244.290471640231,
+      "speed_inertial_mps": 6655.033752656979,
+      "mach": 10.286050792782426,
+      "dynamic_pressure_pa": 0.0017680277451078365,
+      "mass_kg": 276951.8358262505
+    },
+    {
+      "kind": "burnout",
+      "stage": 2,
+      "time_s": 509.891,
+      "altitude_m": 235510.23161896504,
+      "latitude_deg": 20.71204474973923,
+      "longitude_deg": -83.77841304440325,
+      "downrange_m": 1487373.7666068722,
+      "speed_earth_mps": 7361.924840931062,
+      "speed_inertial_mps": 7773.958623212842,
+      "mach": 12.132630049551393,
+      "dynamic_pressure_pa": 0.002491685619558278,
+      "mass_kg": 202486.87850442465,
+      "orbit": {
+        "semi_major_axis_m": 6626469.847566081,
+        "eccentricity": 0.0024341774735952126,
+        "inclination_deg": 30.77094519982809,
+        "raan_deg": 7.130963304496718,
+        "argument_of_perigee_deg": 120.19673895743945,
+        "true_anomaly_deg": 16.379764632712018,
+        "perigee_altitude_m": 232202.84393367823,
+        "apogee_altitude_m": 264462.8511984842,
+        "period_s": 5368.269615820559,
+        "specific_energy_j_kg": -30076379.35200195
+      }
+    }
+  ],
+  "bodies": [
+    {
+      "id": "stage1",
+      "kind": "stage",
+      "stage": 1,
+      "release_time_s": 122.0,
+      "mass_kg": 989244.2345206137,
+      "impact": {
+        "time_s": 384.5191186294185,
+        "latitude_deg": 24.940279900462983,
+        "longitude_deg": -94.29045800514378,
+        "speed_mps": 1545.013872689264
+      }
+    }
+  ]
+}
