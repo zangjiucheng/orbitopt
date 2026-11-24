@@ -315,7 +315,9 @@ def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypat
         # Leave room for native macOS widget metrics while still exercising a
         # genuinely short window. Flush the workspace's queued layout first.
         app.processEvents()
-        compact_height = 680
+        # a CI display is shorter than a desktop (the macOS runner clamps the window to 656 px): never ask for
+        # more height than the screen offers
+        compact_height = min(680, window.screen().availableGeometry().height() - 24)
         window.resize(1200, compact_height)
         window.center_splitter.setSizes([300, 220])
         app.processEvents()
