@@ -947,6 +947,8 @@ def _evaluate(sep_state: BoosterState, mission: _Mission, vehicle: BoosterModel,
         if crossings:
             out.handoff_burn_overlap_s = max(
                 float(mission.entry_end()) - float(crossings[0].t_s), 1e-3)
+            if getattr(landing_guidance, "lit_at_start", False):
+                out.handoff_burn_overlap_s = 0.0   # E11-06: the entry burn runs on into the landing burn
     if (not crossings and getattr(mission, "eb2", None) is not None
             and entry_t0 is not None):
         # E5-05c: the braking burn was still scheduled when the booster fell
@@ -1152,6 +1154,7 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
                            entry_cutoff: str = "duration",
                            entry_cut_speed_max_m_s: float = ENTRY_CUT_SPEED_MAX_M_S,
                            entry_aero: Mapping[str, Any] | None = None,
+                           entry_aero_with_burn: bool = False,
                            feasibility_envelope: bool | Mapping[str, Any] = False) -> ReturnPlan:
     """Optimize the boostback/entry-burn script so the FL-301-propagated
     booster reaches ``recovery_target.corridor``; returns the corridor
@@ -1334,10 +1337,11 @@ def plan_boostback_entry(sep_state: BoosterState, booster: BoosterModel,
         raise ValueError("entry_throttle throttles the entry burns; the "
                          "entry_burns=0 script flies none (nothing to throttle)")
     if entry_aero is not None:
-        if entry_burns != 0:
+        if entry_burns != 0 and not entry_aero_with_burn:
             raise ValueError("entry_aero steers the unpowered entry: it is the "
                              "entry_burns=0 script of E11-01 (entry burns steer "
-                             "themselves)")
+                             "themselves); pass entry_aero_with_burn=True to fly the fins "
+                             "through the coast of a burn script (E11-06)")
         if booster.grid_fins is None:
             raise ValueError("entry_aero needs a vehicle with a grid_fins block")
     ignitions_needed = 1 + int(entry_burns)

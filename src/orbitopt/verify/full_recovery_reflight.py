@@ -225,7 +225,7 @@ class _TwinFins:
 
     def __init__(self, gf: Any) -> None:
         self.gf = gf
-        self.deployed = False
+        self.deployed = not bool(getattr(gf, "stowable", True))       # a fixed fin is out from the start
         self.bank = 0.0
         self.delta = [0.0, 0.0, 0.0, 0.0]
         self.cl = 0.0
@@ -234,7 +234,10 @@ class _TwinFins:
     # -- own aero tables --------------------------------------------------
     def _cd0_add(self, mach: float) -> float:
         pts = np.asarray(self.gf.cd_add_mach, dtype=np.float64)
-        return float(np.interp(mach, pts[:, 0], pts[:, 1]))
+        ref = getattr(self.gf, "cd_add_reference_fin_area_m2", None)
+        scale = 1.0 if ref is None else (float(self.gf.count) * float(self.gf.fin_area_m2)
+                                         / float(ref))
+        return float(np.interp(mach, pts[:, 0], pts[:, 1])) * scale
 
     def _fin_slope(self, mach: float) -> float:
         pts = np.asarray(self.gf.cn_alpha_mach, dtype=np.float64)
@@ -256,11 +259,14 @@ class _TwinFins:
     # -- own state machine --------------------------------------------------
     def step(self, dt: float, cmd: Any, h: float, q: float, mach: float) -> None:
         gf = self.gf
-        if not self.deployed and h <= float(gf.deploy_altitude_m) \
-                and q >= float(gf.deploy_q_min_pa):
-            self.deployed = True
-        if self.deployed and h <= float(gf.stow_altitude_m):
-            self.deployed = False
+        if not getattr(gf, "stowable", True):
+            self.deployed = True                                       # fixed fins: never folded
+        else:
+            if not self.deployed and h <= float(gf.deploy_altitude_m) \
+                    and q >= float(gf.deploy_q_min_pa):
+                self.deployed = True
+            if self.deployed and h <= float(gf.stow_altitude_m):
+                self.deployed = False
         alpha = 0.0 if cmd is None else min(max(float(cmd.alpha_cmd_deg), 0.0),
                                            float(gf.alpha_authority_deg))
         roll = 0.0 if cmd is None else min(max(float(cmd.bank_cmd_deg),

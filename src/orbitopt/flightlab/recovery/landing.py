@@ -1100,6 +1100,16 @@ class TerminalGuidance:
     :func:`landing_touchdown_checks` on the propagated track, unchanged."""
 
     design_throttle: float = 0.9
+    #: E11-06: the engine is ALREADY LIT when the law takes over (the entry burn runs on into the
+    #: landing burn without a shutdown: one continuous burn, one ignition). False = the FL-305
+    #: hoverslam, which keeps the engine shut until the required deceleration reaches the design
+    #: throttle's. A guidance-law option; no graded limit depends on it.
+    lit_at_start: bool = False
+    #: E11-06: engine-by-engine shutdown during the landing burn. Fractions of the full engine set the
+    #: law may fly on, e.g. (1, 5/13, 3/13) for the real booster's 13 -> 5 -> 3 (Wikipedia, SpaceX
+    #: Super Heavy). The law runs on the largest fraction whose minimum thrust is below the demand and
+    #: never relights an engine it shut. () = the whole set only (every old caller, bit for bit).
+    engine_stage_fractions: tuple = ()
     touchdown_speed_m_s: float = 1.5
     tilt_limit_deg: float = 30.0
     max_thrust_accel_g: float = 4.5
@@ -1474,6 +1484,23 @@ def _divert_needs_ignition(r: np.ndarray, v: np.ndarray, a_design: float,
     return need > g.divert_ignition_fraction * cap
 
 
+def engine_stage_fraction(fractions, prev: float, demand_n: float, thrust_min_full_n: float,
+                          thrust_max_full_n: float | None = None, headroom: float = 0.85) -> float:
+    """Engine fraction to fly on: the SMALLEST allowed fraction (never above ``prev`` -- an engine that
+    was shut down is not relit) that still delivers the demanded thrust with ``1 - headroom`` to spare;
+    the largest allowed one if none does. () -> 1.0 (the whole set)."""
+    if not fractions:
+        return 1.0
+    allowed = sorted((float(f) for f in fractions if float(f) <= prev + 1e-12))
+    if not allowed:
+        return float(prev)
+    t_max = thrust_max_full_n if thrust_max_full_n is not None else thrust_min_full_n / 0.4
+    for f in allowed:
+        if f * t_max * headroom >= demand_n:
+            return f
+    return allowed[-1]
+
+
 def terminal_guidance_command(position_enu_m: Sequence[float],
                               velocity_enu_m_s: Sequence[float],
                               mass_kg: float, *,
@@ -1607,7 +1634,10 @@ def predict_closed_loop_landing(position_enu_m: Sequence[float],
     v = np.asarray(velocity_enu_m_s, dtype=np.float64).copy()
     m0 = m = float(mass_kg)
     t_max_pad, _ = _ambient_thrust_envelope(vehicle, pad_altitude_m)
-    ignited, cut, ign_h = False, False, None
+    ignited, cut, ign_h = bool(guidance.lit_at_start), False, (
+        float(r[2]) if guidance.lit_at_start else None)
+    f_stage = 1.0                                   # fraction of the engine set still lit
+    f_min = min([float(x) for x in guidance.engine_stage_fractions] or [1.0])
     max_g = 0.0
     for _ in range(int(400.0 / dt_s)):
         alt = float(r[2]) + float(pad_altitude_m)
@@ -1616,7 +1646,7 @@ def predict_closed_loop_landing(position_enu_m: Sequence[float],
         if not cut:
             cmd = terminal_guidance_command(
                 r, v, m, gravity_m_s2=gravity_m_s2,
-                thrust_max_n=min(t_max, t_max_pad), thrust_min_n=t_min,
+                thrust_max_n=min(t_max, t_max_pad), thrust_min_n=t_min * f_min,
                 ignited=ignited, guidance=guidance)
             if cmd.phase == "cutoff":
                 cut = True
@@ -1625,7 +1655,8 @@ def predict_closed_loop_landing(position_enu_m: Sequence[float],
                     ignited, ign_h = True, float(r[2])
                 f = np.asarray(cmd.thrust_enu_n, dtype=np.float64)
                 f_mag = float(np.linalg.norm(f))
-                throttle = min(max(f_mag / t_max, eng.throttle_min), eng.throttle_max)
+                f_stage = engine_stage_fraction(guidance.engine_stage_fractions, f_stage, f_mag, t_min, t_max)
+                throttle = f_stage * min(max(f_mag / (t_max * f_stage), eng.throttle_min), eng.throttle_max)
                 p_pa = pressure_pa(max(alt, 0.0))
                 force = eng.count * throttle * (eng.thrust_vacuum_n
                                                 - eng.nozzle_exit_area_m2 * p_pa)
@@ -1716,6 +1747,8 @@ class _ClosedLoopLanding:
         self._prev_t: float | None = None
         self._prev_throttle: float | None = None
         self._throttle_slew_max = 0.0
+        self._f_stage = 1.0
+        self._f_min = min([float(x) for x in guidance.engine_stage_fractions] or [1.0])
 
     def __call__(self, t_s: float, st: BoosterState) -> ThrustCmd | None:
         if self.cutoff_t_s is not None:
@@ -1738,8 +1771,9 @@ class _ClosedLoopLanding:
         cmd = terminal_guidance_command(
             r, v, m_guided, gravity_m_s2=self.gravity,
             thrust_max_n=min(t_max * scale, self.thrust_max_pad),
-            thrust_min_n=t_min * scale,
-            ignited=self.ignition_t_s is not None, guidance=self.guidance,
+            thrust_min_n=t_min * scale * self._f_min,
+            ignited=self.ignition_t_s is not None or bool(self.guidance.lit_at_start),
+            guidance=self.guidance,
             # with an actuator chain to model, the slew limit is applied to
             # the (compensated) command below, so the law reports its raw
             # demand and never pre-clips against a stale gimbal state
@@ -1790,7 +1824,10 @@ class _ClosedLoopLanding:
         # The throttle is what the guidance *believes* achieves f_mag: under
         # a thrust-scale mismatch that differs from what the truth engine
         # delivers -- which is the point of the mismatch.
-        throttle = min(max(f_mag / (t_max * scale), eng.throttle_min),
+        self._f_stage = engine_stage_fraction(self.guidance.engine_stage_fractions, self._f_stage, f_mag,
+                                              t_min * scale, t_max * scale)
+        fs = self._f_stage
+        throttle = min(max(f_mag / (t_max * scale * fs), eng.throttle_min),
                        eng.throttle_max)
         # E3-01: the throttle servo cannot step faster than its slew limit
         # (0 = instantaneous, the FL-305/R-05 flow). The range clamp is
@@ -1806,7 +1843,8 @@ class _ClosedLoopLanding:
             thr_slew = abs(throttled - self._prev_throttle) / float(dt)
             throttle = throttled
         throttle = min(max(throttle, eng.throttle_min), eng.throttle_max)
-        eff = eng.effective_throttle(throttle)
+        eff = eng.effective_throttle(throttle)                     # of the lit set (staged)
+        throttle_full = throttle * fs                               # of the FULL set, what the engine model flies
         tilt = math.degrees(math.acos(min(1.0, max(-1.0, float(d_enu[2])))))
         slew = 0.0
         if dt is not None and dt > 0.0:
@@ -1814,8 +1852,8 @@ class _ClosedLoopLanding:
             slew = math.degrees(math.acos(cosang)) / dt
         step_s = float(dt) if dt is not None and dt > 0.0 else 0.0
         # raw demand vs the actuator range (1 N slack for float noise)
-        sat_high = f_mag > t_max * scale * eng.throttle_max + 1.0
-        sat_low = f_mag < t_min * scale - 1.0
+        sat_high = f_mag > t_max * scale * fs * eng.throttle_max + 1.0
+        sat_low = f_mag < t_min * scale * fs - 1.0
         self.margin_trace.append((step_s, f_mag, t_max, t_min, eff, tilt, slew,
                                   sat_high, sat_low, thr_slew))
         self._prev_dir = d_enu
@@ -1825,8 +1863,8 @@ class _ClosedLoopLanding:
         d_ecef = d_enu[0] * e_ + d_enu[1] * n_ + d_enu[2] * u_
         self.samples.append((float(t_s), tuple(float(c) for c in d_enu),
                              float(throttle), float(eff)))
-        return ThrustCmd(throttle=float(throttle),
-                         dir_ecef=tuple(float(c) for c in d_ecef))
+        return ThrustCmd(throttle=float(throttle_full),
+                         dir_ecef=tuple(float(c) for c in d_ecef), min_throttle_scale=float(fs))
 
     def margin(self) -> ActuatorMargin | None:
         """Aggregate the R-05 control-margin trace (``None`` if the engine

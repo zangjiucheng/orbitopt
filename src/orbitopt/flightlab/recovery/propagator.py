@@ -168,6 +168,10 @@ class ThrustCmd:
 
     throttle: float
     dir_ecef: Sequence[float]
+    #: E11-06: fraction of the engine set still lit (engine-by-engine shutdown during the landing burn,
+    #: 13 -> 5 -> 3 on the real booster). ``throttle`` stays a fraction of the FULL set, and the
+    #: set's minimum-throttle floor scales with this fraction. 1.0 = the whole set (every old caller).
+    min_throttle_scale: float = 1.0
 
     def normalized_dir(self) -> np.ndarray:
         d = np.asarray(self.dir_ecef, dtype=np.float64).reshape(3)
@@ -290,11 +294,12 @@ class BoosterEngine:
         if self.isp_vacuum_s < self.isp_sea_level_s:
             raise ValueError("sea-level Isp cannot exceed vacuum Isp")
 
-    def effective_throttle(self, commanded: float) -> float:
-        """0 = shutdown; anything else clamped into [min, max]."""
+    def effective_throttle(self, commanded: float, floor_scale: float = 1.0) -> float:
+        """0 = shutdown; anything else clamped into [min * floor_scale, max] (``floor_scale`` < 1 =
+        part of the engine set shut down, so the set's floor falls with it)."""
         if commanded <= 0.0:
             return 0.0
-        return min(max(commanded, self.throttle_min), self.throttle_max)
+        return min(max(commanded, self.throttle_min * floor_scale), self.throttle_max)
 
 
 @dataclass(frozen=True)
@@ -504,6 +509,13 @@ class BoosterTrack:
     bank_deg: "np.ndarray | None" = None          # realised bank angle
     fin_delta_deg: "np.ndarray | None" = None     # mean |fin deflection|
     fin_telemetry_valid: "np.ndarray | None" = None  # sampled arc mask on joined tracks
+    #: E11-06: fraction of the engine set lit at each sample (0 = shut down, 1 = the whole set; the landing
+    #: burn can run on fewer engines). ``engine_count`` is the full set, so engines lit = count * fraction.
+    engine_fraction: "np.ndarray | None" = None
+    engine_count: int = 0
+    #: E11-06: unit thrust direction (ECEF) at each sample, zeros while no engine is lit -- the vehicle's real
+    #: pointing under power (thrust acts along the nose), which the engine HUD draws instead of a path guess
+    thrust_dir_ecef: "np.ndarray | None" = None
 
     @property
     def propellant_remaining_kg(self) -> float:
@@ -553,6 +565,20 @@ class BoosterTrack:
             "latitude_deg": tuple(float(x) for x in np.atleast_1d(lat)),
             "longitude_deg": tuple(float(x) for x in np.atleast_1d(lon)),
         }
+        # only when the engine set was actually staged (part of it shut down in flight): every other run
+        # carries exactly the columns it always did, so frozen references stay byte-identical
+        if (self.engine_fraction is not None and self.engine_count
+                and bool(np.any((self.engine_fraction > 1e-9) & (self.engine_fraction < 1.0 - 1e-9)))):
+            extra["engines_lit"] = tuple(float(x) * self.engine_count for x in self.engine_fraction)
+            if self.thrust_dir_ecef is not None:
+                lat_a, lon_a = np.atleast_1d(np.radians(lat)), np.atleast_1d(np.radians(lon))
+                d = np.asarray(self.thrust_dir_ecef, dtype=np.float64)
+                up = np.stack((np.cos(lat_a) * np.cos(lon_a), np.cos(lat_a) * np.sin(lon_a), np.sin(lat_a)), axis=1)
+                east = np.stack((-np.sin(lon_a), np.cos(lon_a), np.zeros_like(lon_a)), axis=1)
+                north = np.cross(up, east)
+                de, dn, du = (d * east).sum(1), (d * north).sum(1), (d * up).sum(1)
+                extra["thrust_elev_deg"] = tuple(float(x) for x in np.degrees(np.arctan2(du, np.hypot(de, dn))))
+                extra["thrust_heading_deg"] = tuple(float(x) for x in np.degrees(np.arctan2(de, dn)) % 360.0)
         if downrange_origin_deg is not None:
             extra["downrange_m"] = tuple(float(x) for x in surface_distance_m(
                 downrange_origin_deg[0], downrange_origin_deg[1], lat, lon))
@@ -851,6 +877,11 @@ def propagate(state0: BoosterState, vehicle: BoosterModel,
                          mass_kg=float(yy[6]))
         return aero_cmd(tt, st)
 
+    lit_now = [1.0]          # fraction of the engine set the current command keeps lit
+    lit_s: list[float] = [0.0]     # seeded like the other columns: the first sample is taken before any command
+    dir_now: list = [None]   # unit thrust direction of the current command (None while off)
+    dir_s: list = [np.zeros(3)]
+
     def sample(tt: float, yy: np.ndarray, throttle_eff: float) -> None:
         h = height_m(yy[:3])
         f_aero, speed, mach, q = _aero_ecef(yy[:3], yy[3:6], vehicle, physics, snap)
@@ -861,6 +892,9 @@ def propagate(state0: BoosterState, vehicle: BoosterModel,
         vel.append(yy[3:6].copy())
         mass_s.append(float(yy[6]))
         thr_s.append(throttle_eff)
+        lit_s.append(lit_now[0] if throttle_eff > 0.0 else 0.0)
+        dir_s.append(np.asarray(dir_now[0], dtype=np.float64) if (throttle_eff > 0.0 and dir_now[0] is not None)
+                     else np.zeros(3))
         mach_s.append(mach)
         q_s.append(q)
         hgt_s.append(h)
@@ -951,7 +985,10 @@ def propagate(state0: BoosterState, vehicle: BoosterModel,
 
         # ---- command + mode transitions (piecewise-constant over the step)
         cmd = cmd_at(t, y)
-        throttle_eff = vehicle.engine.effective_throttle(cmd.throttle) if cmd is not None else 0.0
+        throttle_eff = (vehicle.engine.effective_throttle(cmd.throttle, getattr(cmd, "min_throttle_scale", 1.0))
+                        if cmd is not None else 0.0)
+        lit_now[0] = float(getattr(cmd, "min_throttle_scale", 1.0)) if cmd is not None else 0.0
+        dir_now[0] = cmd.normalized_dir() if cmd is not None else None
         on = throttle_eff > 0.0
         no_prop_fired = False
         if on:
@@ -1094,6 +1131,9 @@ def propagate(state0: BoosterState, vehicle: BoosterModel,
         alpha_deg=np.asarray(alpha_s, dtype=np.float64) if act is not None else None,
         bank_deg=np.asarray(bank_s, dtype=np.float64) if act is not None else None,
         fin_delta_deg=np.asarray(delta_s, dtype=np.float64) if act is not None else None,
+        engine_fraction=np.asarray(lit_s, dtype=np.float64),
+        engine_count=int(vehicle.engine.count),
+        thrust_dir_ecef=np.asarray(dir_s, dtype=np.float64),
     )
 
 

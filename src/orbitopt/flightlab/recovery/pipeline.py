@@ -199,6 +199,13 @@ def _cut_at(track: BoosterTrack, t_cut_s: float) -> BoosterTrack:
         bank_deg=cut_angle(track.bank_deg),
         fin_delta_deg=cut_angle(track.fin_delta_deg),
         fin_telemetry_valid=valid,
+        engine_fraction=(None if track.engine_fraction is None else
+                         np.append(track.engine_fraction[:n],
+                                   track.engine_fraction[max(0, min(n, len(track.engine_fraction)) - 1)])),
+        engine_count=track.engine_count,
+        thrust_dir_ecef=(None if track.thrust_dir_ecef is None else
+                         np.vstack((track.thrust_dir_ecef[:n],
+                                    track.thrust_dir_ecef[max(0, min(n, len(track.thrust_dir_ecef)) - 1)]))),
     )
 
 
@@ -247,6 +254,14 @@ def _stack_tracks(first: BoosterTrack, second: BoosterTrack) -> BoosterTrack:
         bank_deg=join_angle(first.bank_deg, second.bank_deg),
         fin_delta_deg=join_angle(first.fin_delta_deg, second.fin_delta_deg),
         fin_telemetry_valid=cat(valid_samples(first), valid_samples(second)) if has_fins else None,
+        engine_fraction=(None if first.engine_fraction is None and second.engine_fraction is None else
+                         cat(np.zeros(len(t1)) if first.engine_fraction is None else first.engine_fraction,
+                             np.zeros(len(t2)) if second.engine_fraction is None else second.engine_fraction)),
+        engine_count=first.engine_count or second.engine_count,
+        thrust_dir_ecef=(None if first.thrust_dir_ecef is None and second.thrust_dir_ecef is None else
+                         np.vstack((np.zeros((len(t1), 3)) if first.thrust_dir_ecef is None else first.thrust_dir_ecef,
+                                    (np.zeros((len(t2), 3)) if second.thrust_dir_ecef is None
+                                     else second.thrust_dir_ecef)[drop:, :]))),
     )
 
 

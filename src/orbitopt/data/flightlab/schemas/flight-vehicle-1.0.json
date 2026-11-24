@@ -180,6 +180,8 @@
         "count": {"type": "integer", "minimum": 2},
         "fin_area_m2": {"type": "number", "exclusiveMinimum": 0},
         "cd_add_mach": {"$ref": "#/$defs/MachTableOrNode"},
+        "cd_add_reference_fin_area_m2": {"type": "number", "exclusiveMinimum": 0},
+        "stowable": {"type": "boolean", "description": "true (default): a fold-away fin that deploys for entry and stows before the landing burn (Falcon 9). false: a fixed fin, always out and controlled by continuous deflection only (Super Heavy)."},
         "cn_alpha_mach": {"$ref": "#/$defs/MachTableOrNode"},
         "body_cn_alpha_per_rad": {"type": "number"},
         "trim_effectiveness": {"type": "number", "exclusiveMinimum": 1},
