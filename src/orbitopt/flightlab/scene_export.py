@@ -429,6 +429,10 @@ def _fork_handoff(run: FlightRun, epoch: datetime, mjd2000: float, gcrs: dict,
                       if b["body_id"] in by_id)
     residual = branch_mass - float(fork["parent_mass_kg"])
     limit = (mission_scenario.handoff if mission_scenario else HandoffTolerances()).mass_kg
+    if fork.get("powered_gap"):
+        from orbitopt.mission.powered_bridge import powered_mass_tolerance_kg
+
+        limit = powered_mass_tolerance_kg(fork["parent_mass_kg"], limit)
     check = {"id": "mass.separation_fork", "passed": bool(abs(residual) <= limit),
              "value": float(residual), "limit": float(limit), "unit": "kg",
              "reason_code": "" if abs(residual) <= limit else "mass_not_conserved_across_fork"}

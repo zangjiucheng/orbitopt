@@ -78,7 +78,13 @@ def separation_fork(run) -> dict | None:
                                         else BRANCH_BOOSTER],
                  "t_start_s": float(t.t_start_s),
                  "t_end_s": float(t.t_end_s)} for t in children]
-    return {"t_s": t_s, "parent_body": root, "parent_mass_kg": float(parent.mass_kg[-1]),
+    from orbitopt.mission.powered_bridge import powered_parent_state
+
+    powered = powered_parent_state(run, root, t_s)
+    return {"t_s": t_s, "parent_body": root,
+            "parent_mass_kg": float(powered["mass_kg"] if powered else parent.mass_kg[-1]),
+            "powered_gap": (None if powered is None else
+                            {k: powered[k] for k in ("gap_s", "method", "tolerances")}),
             "branches": branches}
 
 
@@ -116,6 +122,10 @@ def branch_handoffs(run, tolerances, staging_velocity_m_s: float,
         return None
     tol = (tolerances.mass_kg if isinstance(tolerances, HandoffTolerances)
            else float(getattr(tolerances, "mass_kg", 1e-3)))
+    if fork.get("powered_gap"):
+        from orbitopt.mission.powered_bridge import powered_mass_tolerance_kg
+
+        tol = powered_mass_tolerance_kg(fork["parent_mass_kg"], tol)
     docs = {d["child_body"]: d for d in staging_docs}
     branches: list[dict] = []
     missing: list[str] = []
@@ -142,5 +152,6 @@ def branch_handoffs(run, tolerances, staging_velocity_m_s: float,
         "mass_residual_kg": float(residual),
         "branches": branches, "checks": _checks_doc([check]),
         "passed": bool(passed) if graded else None,
+        **({"powered_gap": fork["powered_gap"]} if fork.get("powered_gap") else {}),
         **({"reason": f"no staging handoff document for {', '.join(missing)}"} if missing else {}),
     }
