@@ -370,6 +370,7 @@ def test_specs_are_registered_and_serialisable():
         "orbitopt.dynamics.nbody_gpu.propagate_kepler_batch",
         "orbitopt.flightlab.frames", "orbitopt.injection",
         "orbitopt.ground_track", "orbitopt.lambert",
+        "orbitopt.relative", "orbitopt.relative.propagation",
     }
     assert spec_for("orbitopt.dynamics.nbody_gpu") is NBODY_SCREENING
     with pytest.raises(KeyError) as exc:
