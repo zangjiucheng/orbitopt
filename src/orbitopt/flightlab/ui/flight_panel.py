@@ -45,6 +45,7 @@ from orbitopt.flightlab.contract import Verification
 from orbitopt.flightlab.reasons import explain_all
 from orbitopt.flightlab.run_index import KeyEvent, SummaryRow, key_events, launch_summary
 from orbitopt.flightlab.ui.charts import _fmt_clock, _TelemetryChart
+from orbitopt.flightlab.ui.engine_hud import EngineHud
 from orbitopt.flightlab.ui.recovery_panel import (
     FLIGHTLAB_PANEL_QSS,
     ReasonPanel,
@@ -64,6 +65,7 @@ TELEMETRY_CHARTS = (
     ("g_load", "G-load", "g"),
     ("mass", "Mass", "kg"),
     ("throttle", "Throttle", "%"),
+    ("engines_lit", "Engines lit", "engines"),
     ("propellant", "Propellant remaining", "t"),
     ("vertical_speed", "Vertical speed (radial)", "m/s"),
     ("downrange", "Downrange", "km"),
@@ -166,6 +168,9 @@ class FlightRunPanel(QWidget):
         self.detail_tabs.addTab(self.check_table, "Checks")
         self.detail_tabs.addTab(self.reason_panel, "Why")
         self.detail_tabs.addTab(self.recovery_panel, "Recovery")
+        self.engine_hud = EngineHud()                      # SpaceX-webcast-style: both vehicles, engines + propellant
+        self.detail_tabs.addTab(self.engine_hud, "Engines")
+        self._time = 0.0
         splitter.addWidget(self.detail_tabs)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
@@ -182,6 +187,7 @@ class FlightRunPanel(QWidget):
         self.check_table.setRowCount(0)
         self.reason_panel.clear_entries()
         self.recovery_panel.clear()
+        self.engine_hud.clear()
 
     def set_run(self, bundle: RunBundle, target=None,
                 channels: Sequence[TelemetryChannel] | None = None) -> None:
@@ -193,10 +199,21 @@ class FlightRunPanel(QWidget):
         self.events = tuple(key_events(run, channels))
         self._populate_events()
         self._populate_checks(run.verification)
-        self.recovery_panel.set_summary(recovery_summary(bundle))
+        summary = recovery_summary(bundle)
+        self.recovery_panel.set_summary(summary)
+        # the engine HUD: Super Heavy (stage 1, then the recovering booster) and Starship, each with its engines,
+        # speed and propellant -- the telemetry channels carry the speed and the propellant series
+        fins = ((bundle.vehicle or {}).get("booster") or {}).get("grid_fins") or {}
+        # fixed (never folded) unless the vehicle's grid_fins block says it can stow: Super Heavy's fins are always out
+        fixed = (not fins) or not bool(fins.get("stowable", True))
+        self.engine_hud.set_run(run.tracks, channels if channels is not None else build_telemetry_channels(run),
+                                summary.engine_burns, fin_count=fins.get("count"), fins_fixed=fixed)
+        self.engine_hud.set_time(self._time)
 
     def set_time(self, t: float) -> None:
-        """Highlight the latest event at or before ``t``."""
+        """Highlight the latest event at or before ``t``; the engine HUD follows the same clock."""
+        self._time = float(t)
+        self.engine_hud.set_time(self._time)
         current = -1
         for row, event in enumerate(self.events):
             if event.t_s <= t + 1e-6:

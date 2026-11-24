@@ -149,6 +149,13 @@ class DispersionPlot(QWidget):
         self._points: tuple[tuple[float, float, bool], ...] = ()
         self._ellipse: dict = {}
         self._message = "no Monte Carlo"
+        from orbitopt.flightlab.ui.plot_export import ExportButton, rows_to_csv
+
+        self.export_button = ExportButton(
+            self, lambda: "touchdown-dispersion",
+            csv=lambda: rows_to_csv(("east_m", "north_m", "landed"),
+                                    [(f"{e:.6g}", f"{n:.6g}", int(bool(ok))) for e, n, ok in self._points])
+            if self._points else None)
 
     def set_data(self, points: Sequence[tuple[float, float, bool]], ellipse: dict | None,
                  message: str = "") -> None:
@@ -156,6 +163,10 @@ class DispersionPlot(QWidget):
         self._ellipse = dict(ellipse or {})
         self._message = message
         self.update()
+
+    def resizeEvent(self, event):  # noqa: N802
+        super().resizeEvent(event)
+        self.export_button.reposition()
 
     def paintEvent(self, _event):  # noqa: N802
         p = QPainter(self)
@@ -235,6 +246,16 @@ class RecoveryPanel(QWidget):
         self.check_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.check_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.check_table.horizontalHeader().setStretchLastSection(True)
+        self.engine_label = QLabel("")
+        self.engine_label.setObjectName("flightLabEngineSequenceTitle")
+        self.engine_label.setWordWrap(True)
+        self.engine_table = QTableWidget(0, 6)
+        self.engine_table.setObjectName("flightLabEngineSequence")
+        self.engine_table.setHorizontalHeaderLabels(("Burn", "Start", "End", "Engines lit", "Throttle", "Propellant"))
+        self.engine_table.verticalHeader().setVisible(False)
+        self.engine_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.engine_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.engine_table.horizontalHeader().setStretchLastSection(True)
         self.mc_label = QLabel("")
         self.mc_label.setWordWrap(True)
         self.mc_label.setObjectName("flightLabMonteCarloSummary")
@@ -242,6 +263,8 @@ class RecoveryPanel(QWidget):
         self.reasons = ReasonPanel()
         layout.addWidget(self.verdict_label)
         layout.addWidget(self.check_table, stretch=2)
+        layout.addWidget(self.engine_label)
+        layout.addWidget(self.engine_table, stretch=1)
         layout.addWidget(self.mc_label)
         layout.addWidget(self.dispersion, stretch=3)
         layout.addWidget(self.reasons, stretch=2)
@@ -254,12 +277,41 @@ class RecoveryPanel(QWidget):
         self.verdict_label.setStyleSheet(f"color: {INK_MUTED};")
         self.check_table.setRowCount(0)
         self.check_table.setVisible(False)
+        self.engine_label.setText("")
+        self.engine_label.setVisible(False)
+        self.engine_table.setRowCount(0)
+        self.engine_table.setVisible(False)
         self.mc_label.setText("")
         self.mc_label.setVisible(False)
         self.dispersion.set_data((), None, "no Monte Carlo")
         self.dispersion.setVisible(False)
         self.reasons.clear_entries("")
         self.reasons.setVisible(False)
+
+    def _set_engine_sequence(self, burns) -> None:
+        """The booster's burns: ignition count, engines lit (13 -> 5 -> 3 shutdown steps), throttle of the
+        lit engines and the propellant each burn spent. A burn that runs on without a shutdown is one row."""
+        self.engine_table.setRowCount(len(burns))
+        self.engine_table.setVisible(bool(burns))
+        self.engine_label.setVisible(bool(burns))
+        if not burns:
+            return
+        n = len(burns)
+        self.engine_label.setText(f"Engine sequence — {n} ignition{'s' if n != 1 else ''}, "
+                                  "no relight within a burn")
+        self.engine_label.setStyleSheet(f"color: {INK_SECONDARY}; font-weight: 600;")
+        for row, b in enumerate(burns):
+            throttle = (f"{b.throttle_min:.0%}–{b.throttle_max:.0%}"
+                        if abs(b.throttle_max - b.throttle_min) > 5e-3 else f"{b.throttle_max:.0%}")
+            fuel = "—" if b.propellant_kg is None else f"{b.propellant_kg / 1000.0:.1f} t"
+            cells = (f"#{b.index}", f"T+{b.t_start_s:.1f} s", f"T+{b.t_end_s:.1f} s ({b.duration_s:.1f} s)",
+                     b.engines_text, throttle, fuel)
+            for col, text in enumerate(cells):
+                self.engine_table.setItem(row, col, QTableWidgetItem(text))
+            if len(b.stages) > 1:                     # engines were shut down inside the burn
+                steps = ", ".join(f"{engines} at T+{t:.1f} s" for t, engines in b.stages)
+                self.engine_table.item(row, 3).setToolTip("Engines lit over the burn: " + steps)
+        self.engine_table.resizeRowsToContents()
 
     def set_summary(self, summary: RecoverySummary) -> None:
         self.clear()
@@ -300,6 +352,7 @@ class RecoveryPanel(QWidget):
                     item.setToolTip(reason_tooltip(check))
                 self.check_table.setItem(row, col, item)
         self.check_table.resizeRowsToContents()
+        self._set_engine_sequence(summary.engine_burns)
         if summary.explanations:
             self.reasons.set_entries(summary.explanations, title="Why the recovery failed")
             self.reasons.setVisible(True)

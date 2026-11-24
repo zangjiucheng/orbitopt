@@ -50,6 +50,10 @@ DEG = math.pi / 180.0
 _DEFAULTS: dict[str, Any] = {
     "count": 4,
     "fin_area_m2": 4.0,               # public_estimate: SH grid fin ~2 x 2 m
+    # E11-06: None = the cd_add table is a fixed vehicle-referred (S_ref) increment that does NOT
+    # change with the fin planform (every pre-E11-06 vehicle). A number = the TOTAL fin planform
+    # [m^2] the table was derived for: the increment then scales with count * fin_area_m2 / that.
+    "cd_add_reference_fin_area_m2": None,
     "cd_add_mach": ((0.1, 0.50), (0.8, 0.52), (1.2, 0.58),
                     (2.0, 0.50), (4.0, 0.36), (8.0, 0.25)),
     "cn_alpha_mach": ((0.1, 2.4), (0.8, 2.2), (1.2, 1.6),
@@ -62,6 +66,10 @@ _DEFAULTS: dict[str, Any] = {
     "bank_rate_max_deg_s": 30.0,      # DESIGN ASSUMPTION: roll authority
     "alpha_max_deg": 60.0,            # vehicle/geometric alpha limit
     "stall_alpha_deg": 45.0,          # lattice fin local stall (lit. ~45-50 deg)
+    # E11-06: True = a fold-away fin (Falcon 9: stowed on ascent, deployed for entry, stowed again before the
+    # landing burn). False = a FIXED fin like Super Heavy's: always out, never folded, controlled only by its
+    # continuous deflection; the deploy / stow altitudes below are then not used.
+    "stowable": True,
     "deploy_altitude_m": 70000.0,     # entry interface for the fins (public: ~70 km)
     "stow_altitude_m": 1500.0,        # stow before the landing burn
     "deploy_q_min_pa": 100.0,         # DESIGN ASSUMPTION: deploy when fins do work
@@ -128,6 +136,8 @@ class GridFinModel:
     diameter_m: float
     static_margin: float
     roll_lever_ratio: float
+    cd_add_reference_fin_area_m2: float | None = None
+    stowable: bool = True
     provenance: str = "illustrative"
     source: str = ""
     assumptions: tuple[str, ...] = DESIGN_ASSUMPTIONS
@@ -187,6 +197,10 @@ class GridFinModel:
             diameter_m=float(merged["diameter_m"]),
             static_margin=float(merged["static_margin"]),
             roll_lever_ratio=float(merged["roll_lever_ratio"]),
+            cd_add_reference_fin_area_m2=(
+                None if merged["cd_add_reference_fin_area_m2"] is None
+                else float(merged["cd_add_reference_fin_area_m2"])),
+            stowable=bool(merged["stowable"]),
             provenance=prov,
             source=str(node.get("source", "")),
             assumptions=tuple(str(a) for a in (node.get("assumptions")
@@ -210,7 +224,15 @@ class GridFinModel:
     def cd_add(self, mach: float) -> float:
         """Zero-alpha deployed drag increment on the vehicle Cd (S_ref)."""
         pts = np.asarray(self.cd_add_mach, dtype=np.float64)
-        return float(np.interp(mach, pts[:, 0], pts[:, 1]))
+        return float(np.interp(mach, pts[:, 0], pts[:, 1])) * self.cd_area_scale
+
+    @property
+    def cd_area_scale(self) -> float:
+        """Fin-planform scaling of the drag table (1.0 unless
+        ``cd_add_reference_fin_area_m2`` is declared)."""
+        if self.cd_add_reference_fin_area_m2 is None:
+            return 1.0
+        return self.count * self.fin_area_m2 / self.cd_add_reference_fin_area_m2
 
     def fin_cn_alpha(self, mach: float) -> float:
         """Deployed fin normal-force slope, VEHICLE-area referred [1/rad]."""
@@ -324,7 +346,7 @@ class GridFinActuator:
 
     def __init__(self, model: GridFinModel, *, deployed: bool = False) -> None:
         self.model = model
-        self.deployed = bool(deployed)
+        self.deployed = bool(deployed) or not model.stowable      # a fixed fin is out from the start
         self.bank_deg = 0.0
         self.alpha_deg = 0.0
         self.delta_deg = np.zeros(model.count, dtype=np.float64)
@@ -342,11 +364,14 @@ class GridFinActuator:
         stow below the stow altitude -- the altitude gap is the hysteresis."""
         m = self.model
         dt = float(dt_s)
-        if not self.deployed and height_m <= m.deploy_altitude_m \
-                and dynamic_pressure_pa >= m.deploy_q_min_pa:
-            self.deployed = True
-        if self.deployed and height_m <= m.stow_altitude_m:
-            self.deployed = False
+        if not m.stowable:
+            self.deployed = True                          # fixed fins: out for the whole flight, never folded
+        else:
+            if not self.deployed and height_m <= m.deploy_altitude_m \
+                    and dynamic_pressure_pa >= m.deploy_q_min_pa:
+                self.deployed = True
+            if self.deployed and height_m <= m.stow_altitude_m:
+                self.deployed = False
         if not self.deployed:
             self.bank_deg = _slew(self.bank_deg, 0.0, m.bank_rate_max_deg_s * dt)
             self.alpha_deg = 0.0
@@ -406,8 +431,21 @@ class GridFinGuidance:
     gain_per_deg: float = 6.0
     alpha_floor_altitude_m: float = 8000.0
     schedule: tuple[tuple[float, float], ...] = ()
+    #: E11-06: optional speed feedback on the schedule's angle of attack. ``speed_ref`` is a profile
+    #: ((h_m, v_ref_m_s), ...) with DESCENDING h; the commanded alpha becomes
+    #: ``alpha_schedule + speed_gain_deg_per_mps * (|v| - v_ref(h))`` clipped to [0, fin authority].
+    #: Gain 0 (default) = the open-loop schedule, bit for bit. Shared by the main model and the twin.
+    speed_ref: tuple[tuple[float, float], ...] = ()
+    speed_gain_deg_per_mps: float = 0.0
 
     def __post_init__(self) -> None:
+        if self.speed_ref:
+            ref = tuple((float(h), float(v)) for h, v in self.speed_ref)
+            if any(a[0] <= b[0] for a, b in zip(ref, ref[1:])):
+                raise ValueError("speed_ref altitudes must DESCEND")
+            object.__setattr__(self, "speed_ref", ref)
+        if self.speed_gain_deg_per_mps and not self.speed_ref:
+            raise ValueError("speed feedback needs a speed_ref profile")
         if self.mode not in ("steer", "schedule"):
             raise ValueError(f"unknown grid-fin guidance mode {self.mode!r}")
         if self.mode == "schedule" and not self.schedule:
@@ -440,13 +478,20 @@ class GridFinGuidance:
                 vel_ecef_m_s: Sequence[float]) -> GridFinCommand | None:
         """One guidance sample (``None`` = no command, fins glide stowed)."""
         if self.mode == "schedule":
-            if height_m > self.model.deploy_altitude_m or height_m < \
-                    self.model.stow_altitude_m:
-                return None
+            if self.model.stowable and (height_m > self.model.deploy_altitude_m or height_m <
+                                        self.model.stow_altitude_m):
+                return None                              # a fold-away fin is not commanded while stowed
             bank, alpha = 0.0, self.alpha_deg
             for h_gate, b, a in self.schedule:   # gates in DESCENDING order
                 if height_m <= h_gate:
                     bank, alpha = b, a
+            if self.speed_gain_deg_per_mps and self.speed_ref:
+                hs = [h for h, _ in self.speed_ref][::-1]            # ascending for interp
+                vs = [v for _, v in self.speed_ref][::-1]
+                v_ref = float(np.interp(height_m, hs, vs))
+                speed = float(np.linalg.norm(np.asarray(vel_ecef_m_s, dtype=np.float64)))
+                alpha = min(max(alpha + self.speed_gain_deg_per_mps * (speed - v_ref), 0.0),
+                            self.model.alpha_authority_deg)
             return GridFinCommand(alpha, bank)
         if height_m > self.model.deploy_altitude_m or height_m < \
                 self.alpha_floor_altitude_m:

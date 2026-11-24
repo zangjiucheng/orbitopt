@@ -42,6 +42,17 @@ def _nice_ticks(lo: float, hi: float, target: int = 4) -> list[float]:
     return [start + k * step for k in range(int((hi - start) / step + 1e-9) + 1)]
 
 
+def _integer_ticks(lo: float, hi: float, target: int = 4) -> list[float]:
+    """Whole-number ticks for a count (engines lit): steps of 1, 2, 5, 10 ... never 2.5."""
+    if hi <= lo:
+        return [float(round(lo))]
+    raw = (hi - lo) / max(1, target)
+    mag = 10 ** math.floor(math.log10(max(raw, 1e-9)))
+    step = max(1.0, next(m * mag for m in (1, 2, 5, 10) if m * mag >= raw))
+    start = math.ceil(lo / step) * step
+    return [start + k * step for k in range(int((hi - start) / step + 1e-9) + 1)]
+
+
 def _fmt_number(value: float) -> str:
     if not math.isfinite(value):
         return "—"
@@ -115,6 +126,10 @@ class _TelemetryChart(QWidget):
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setMouseTracking(True)
         self.setMinimumSize(120, 110)
+        from orbitopt.flightlab.ui.plot_export import ExportButton, channel_to_csv
+
+        # download: the picture as shown, and the data behind it (the right margin is kept clear of the legend)
+        self.export_button = ExportButton(self, self._label, csv=lambda: channel_to_csv(self._channel))
 
     def set_channel(self, channel: TelemetryChannel) -> None:
         self._channel = channel
@@ -154,6 +169,7 @@ class _TelemetryChart(QWidget):
     def resizeEvent(self, event):  # noqa: N802
         self._cache = None
         super().resizeEvent(event)
+        self.export_button.reposition()
 
     def plot_rect(self) -> QRectF:
         left, top, right, bottom = self.MARGINS
@@ -241,13 +257,15 @@ class _TelemetryChart(QWidget):
             p.drawText(rect, Qt.AlignCenter, self._channel.missing_reason or "no telemetry")
             return
 
-        for yv in _nice_ticks(self._ymin, self._ymax):
+        counts = self._channel.unit == "engines"          # a whole-number quantity: whole-number axis
+        for yv in (_integer_ticks(self._ymin, self._ymax) if counts else _nice_ticks(self._ymin, self._ymax)):
             py = self._y(yv)
             p.setPen(QPen(QColor(HAIRLINE), 1, Qt.DotLine))
             p.drawLine(QPointF(rect.left(), py), QPointF(rect.right(), py))
             p.setPen(QColor(INK_MUTED))
             p.setFont(_font(8.5))
-            p.drawText(QRectF(0, py - 8, self.MARGINS[0] - 6, 16), Qt.AlignRight | Qt.AlignVCenter, _fmt_number(yv))
+            p.drawText(QRectF(0, py - 8, self.MARGINS[0] - 6, 16), Qt.AlignRight | Qt.AlignVCenter,
+                       f"{yv:.0f}" if counts else _fmt_number(yv))
 
         for tv in _nice_ticks(self._xmin, self._xmax):
             px = self._x(tv)

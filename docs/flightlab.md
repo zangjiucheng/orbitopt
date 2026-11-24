@@ -34,10 +34,14 @@ lists all options.
   `orbitopt launch -o DIR` produces the listed `DIR/ascent` run.
 - **Shared view:** selecting a run loads the 3D scene, timeline, Flight and
   Verification tab. Returning to **Missions** restores the previous mission.
-- **Flight tab:** launch inputs, target/achieved orbit, verdicts, seekable
-  events, failure explanations and recovery details.
-- **Telemetry:** altitude, speed, dynamic pressure, load, mass and throttle;
-  clicking a chart seeks the timeline. **Compare** opens two saved runs side by side.
+- **Flight tab:** launch inputs, target and achieved orbit, and seekable events.
+  **Recovery** lists each booster burn, its throttle range, propellant used
+  and recorded engine staging. **Engines** follows the replay clock with
+  engine, throttle, propellant and orientation displays for both stages.
+- **Verification:** shows the checks saved with the run, including orbit
+  re-flight when present. A run without an assessed verdict shows **Not checked**.
+- **Telemetry:** click a chart to seek the timeline. **Compare** opens two
+  saved runs side by side.
 
 The **Bodies** strip stays above the plots: click Earth, a stage, the booster
 or a site to focus and follow it. Stage buttons
@@ -45,11 +49,10 @@ are enabled during their recorded lifespans. When a matching target definition
 is available, launch/recovery markers stay fixed on the rotating Earth; RTLS
 uses one shared marker. An unresolved offshore target is not replaced by the pad.
 
-Plots also show **propellant remaining**, **radial vertical speed** and
-recorded **downrange**. Fuel curves use recorded propellant where present;
-otherwise `(est.)` means track mass minus dry mass and any attached upper
-stages, using the vehicle file matched by the run's digest. Payload already
-included in dry mass is not subtracted twice. Unknown dry masses remain missing.
+**Engines lit** uses recorded engine counts. Throttle marked `(est.)` is
+mass flow relative to the track's peak burn rate. Propellant marked `(est.)`
+uses track mass minus dry mass and any attached upper stages, from the
+vehicle file matched by the run's digest. Unknown dry masses remain missing.
 
 **Double-click a telemetry plot** to open a larger, live-linked window.
 Scroll to zoom around the pointer, right-drag to pan, hover for time and
@@ -61,9 +64,13 @@ In **Runs → Telemetry**, open **Plots** next to the tabs to choose which
 charts to display. Mission Control remembers your selection across runs and
 restarts. Choose **Show all plots** to restore the full grid.
 
-**Grid Fins** shows mean absolute fin deflection, angle of attack and bank
-angle for runs with recorded fin telemetry. In older runs or runs flown
-without fins, **Grid Fins (no data)** is disabled in the menu.
+**Grid Fins** plots mean absolute fin deflection, angle of attack and bank
+angle. The **Engines** tab illustrates the fin layout and airflow. Both use
+recorded fin telemetry. In runs without it, **Grid Fins (no data)** is disabled.
+
+Use the **Download this plot** button to save a PNG or, when data is
+available, a CSV. Telemetry CSVs flag estimated series. The engine and grid-fin
+illustrations export as images.
 
 Drag the centered grip on the divider above **Bodies** to resize the plot
 pane. In a short window, use the telemetry scrollbar or **Shift + scroll**

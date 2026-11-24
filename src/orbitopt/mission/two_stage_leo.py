@@ -935,6 +935,7 @@ def staging_handoffs(run, tolerances: HandoffTolerances,
     handoff. Returns one document per boundary, mission order first; empty for
     a single-body run."""
     from orbitopt.mission.branches import separation_fork
+    from orbitopt.mission.powered_bridge import powered_parent_state, powered_tolerances
 
     boundary_tol = HandoffTolerances(
         position_m=tolerances.position_m, velocity_m_s=float(staging_velocity_m_s),
@@ -970,13 +971,22 @@ def staging_handoffs(run, tolerances: HandoffTolerances,
                                 "parent_body_id": parent.parent_body_id or ""})
         after = _sample_state(track, 0, {"body_id": track.body_id,
                                          "parent_body_id": track.parent_body_id or ""})
+        pg = (powered_parent_state(run, parent.body_id, separation)
+              if (fork is not None and separation is not None
+                  and parent.body_id == fork["parent_body"]) else None)
+        if pg is not None:
+            before = pg["state"]
         bridge = _bridge_across_gap(before, after)
         if bridge is not None:
             before = bridge["state"]
+        if pg is not None:
+            bridge = {**(bridge or {"gap_s": 0.0, "pole": "n/a"}), "method": pg["method"],
+                      "powered_gap_s": pg["gap_s"], "tolerances": pg["tolerances"]}
         doc: dict = {"parent_body": parent.body_id, "child_body": track.body_id,
                      "separation_t_s": separation, "graded": graded,
                      "bridge": (None if bridge is None else
-                                {k: bridge[k] for k in ("gap_s", "method", "pole")}),
+                                {k: bridge[k] for k in ("gap_s", "method", "pole",
+                                                        "powered_gap_s", "tolerances") if k in bridge}),
                      "before": _state_doc(before), "after": _state_doc(after)}
         if not graded:
             doc["checks"] = []
@@ -986,7 +996,12 @@ def staging_handoffs(run, tolerances: HandoffTolerances,
                              "not graded -- its divergence is physics, not a lost handoff")
             docs.append(doc)
             continue
-        report = check_handoff(before, after, boundary_tol)
+        tol_here = boundary_tol
+        if pg is not None:
+            pos, vel = powered_tolerances(boundary_tol.position_m, boundary_tol.velocity_m_s)
+            tol_here = HandoffTolerances(position_m=pos, velocity_m_s=vel, epoch_s=boundary_tol.epoch_s,
+                                         max_epoch_gap_s=boundary_tol.max_epoch_gap_s, mass_kg=boundary_tol.mass_kg)
+        report = check_handoff(before, after, tol_here)
         checks = [HandoffCheck(id=f"handoff.{track.body_id}.{c.id.split('.', 1)[1]}",
                                passed=c.passed, value=c.value, limit=c.limit, unit=c.unit,
                                reason_code=c.reason_code) for c in report.checks]

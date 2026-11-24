@@ -136,8 +136,12 @@ def separation_handoff(run) -> SeparationHandoff | None:
     if parent is None:
         return None
     last = len(parent.t_s) - 1
-    state = _sample_state(parent, last, {"body_id": parent.body_id,
-                                         "parent_body_id": parent.parent_body_id or ""})
+    from orbitopt.mission.powered_bridge import powered_parent_state
+
+    powered = powered_parent_state(run, fork["parent_body"], fork["t_s"])
+    state = (powered["state"] if powered else
+             _sample_state(parent, last, {"body_id": parent.body_id,
+                                          "parent_body_id": parent.parent_body_id or ""}))
     # Only the separation facts go into the hashed state: the digest must pin
     # the physics of the split, so it stays stable under child relabeling
     # (debris -> booster) and under the merge's fresh run id.
@@ -146,7 +150,7 @@ def separation_handoff(run) -> SeparationHandoff | None:
     epoch_utc = mjd2000_to_utc_datetime(state.epoch.to_utc_mjd2000())
     return SeparationHandoff(
         handoff_id=state_digest(state), state=state,
-        t_s=float(parent.t_s[last]), epoch_utc=epoch_utc,
+        t_s=float(fork["t_s"] if powered else parent.t_s[last]), epoch_utc=epoch_utc,
         parent_body=str(fork["parent_body"]),
         parent_mass_kg=float(fork["parent_mass_kg"]),
         separation_event_t_s=float(fork["t_s"]),
@@ -247,6 +251,12 @@ def coupled_branches(run, tolerances: HandoffTolerances,
         position_m=tolerances.position_m, velocity_m_s=float(staging_velocity_m_s),
         epoch_s=tolerances.epoch_s, max_epoch_gap_s=tolerances.max_epoch_gap_s,
         mass_kg=tolerances.mass_kg)
+    powered_gap = fork.get("powered_gap")
+    if powered_gap:
+        from orbitopt.mission.powered_bridge import powered_tolerances
+
+        pos, vel = powered_tolerances(boundary_tol.position_m, boundary_tol.velocity_m_s)
+        boundary_tol = replace(boundary_tol, position_m=pos, velocity_m_s=vel)
     docs = {str(d["child_body"]): d for d in staging_docs}
 
     branches: list[dict] = []
@@ -289,6 +299,10 @@ def coupled_branches(run, tolerances: HandoffTolerances,
 
     residual = mass_sum - handoff.parent_mass_kg
     tol_mass = float(tolerances.mass_kg)
+    if powered_gap:
+        from orbitopt.mission.powered_bridge import powered_mass_tolerance_kg
+
+        tol_mass = powered_mass_tolerance_kg(handoff.parent_mass_kg, tol_mass)
     split = _check("mass.coupled.branch_mass_split", abs(residual) <= tol_mass,
                    value=residual, limit=tol_mass, unit="kg",
                    reason_code="mass_not_conserved_across_fork")
@@ -301,6 +315,7 @@ def coupled_branches(run, tolerances: HandoffTolerances,
             "separation_event_t_s": handoff.separation_event_t_s,
             "mass_sum_kg": float(mass_sum), "mass_residual_kg": float(residual),
             "driven_from_separation": False,
+            **({"powered_gap": powered_gap} if powered_gap else {}),
             "branches": branches,
             "checks": _checks_doc(all_checks),
             "passed": all(c.passed for c in all_checks)}

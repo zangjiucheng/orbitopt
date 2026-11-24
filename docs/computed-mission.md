@@ -140,6 +140,17 @@ telemetry or independently validated landing is claimed. See
 | E11-03 | Co-design landed in 0 of 168 paired hold-out cases, versus 44 for DC7 and 11 for Starbase. [Recovery co-design](benchmarks/e11_03_robust_recovery_co_design.md). |
 | E11-04 | 24 of 32 newly admitted cases landed in counterfactual re-flights. [Admission validation](benchmarks/e11_04_counterfactual_admission.md). |
 | E11-05 | Starbase’s independent debris impact-speed discrepancy remained +12.70% against a 12% tolerance. [Aero qualification](benchmarks/e11_05_starbase_aero_qualification.md). |
+| E11-06 | The experimental Starbase replay records two booster ignitions, one for boostback and one for continuous entry and landing. Its saved landing and orbit re-flight checks pass. [Inspect the run](flightlab.md#viewing-runs-in-mission-control). |
+
+If you have the E11-06 run locally, open **Runs → e11-06-starbase-continuous-burn**
+to inspect the burn sequence and fin telemetry.
+
+At hot staging, the mission chain can bridge the gap between sampled tracks
+using observed acceleration and mass flow while the parent is still firing.
+The handoff report records the bridge method and tolerances. The powered
+limits were calibrated on one Starbase separation. Separations after cutoff
+use the existing coast bridge. E11-06 fin drag uses an assumed calibration,
+and the saved replay shows a nominal simulation.
 
 ## Earlier studies
 

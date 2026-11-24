@@ -27,7 +27,7 @@ REPO = Path(__file__).resolve().parents[1]
 OT_FIX = Path(__file__).parent / "fixtures" / "flightlab" / "opentsiolkovsky"
 VEHICLE = REPO / "src" / "orbitopt" / "data" / "flightlab" / "vehicles" / "synthetic_two_stage.yaml"
 TARGET = REPO / "src" / "orbitopt" / "data" / "flightlab" / "scenarios" / "leo_two_stage.yaml"
-REQUIRED_CHANNELS = {"altitude", "speed", "dynamic_pressure", "g_load", "mass", "throttle",
+REQUIRED_CHANNELS = {"altitude", "speed", "dynamic_pressure", "g_load", "mass", "throttle", "engines_lit",
                      "propellant", "vertical_speed", "downrange", "grid_fins"}
 
 
@@ -315,11 +315,14 @@ def test_mission_control_renders_a_flight_run_like_a_mission(tmp_path, monkeypat
         # Leave room for native macOS widget metrics while still exercising a
         # genuinely short window. Flush the workspace's queued layout first.
         app.processEvents()
+        # a CI display is shorter than a desktop (the macOS runner clamps the window to 656 px, whatever the
+        # screen's reported geometry): ask for 680 and take whatever short height the platform gives, never taller
         compact_height = 680
         window.resize(1200, compact_height)
         window.center_splitter.setSizes([300, 220])
         app.processEvents()
-        assert window.height() == compact_height
+        assert window.height() <= compact_height
+        compact_height = window.height()
         assert window.timeline_bar.mapTo(window, window.timeline_bar.rect().bottomLeft()).y() < window.height()
         telemetry = window.telemetry_panel
         assert telemetry.verticalScrollBar().maximum() > 0
