@@ -22,6 +22,7 @@ GRAVITY_M_S2 = 9.80665
 ALTITUDE_ALIASES = ("altitude_m", "altitude", "alt_m", "altitude_km")
 DYNAMIC_PRESSURE_ALIASES = ("dynamic_pressure_pa", "q_pa", "q")
 G_LOAD_ALIASES = ("axial_accel_g", "accel_g", "g_load", "gload", "acceleration_g")
+ENGINES_LIT_ALIASES = ("engines_lit", "engines_on", "n_engines")
 THROTTLE_ALIASES = ("throttle", "throttle_pct", "throttle_level", "engine_throttle",
                     "thrust_level", "thrust_fraction")
 
@@ -157,10 +158,31 @@ def _mass_series(track: BodyTrack, color: str) -> TelemetrySeries | None:
                            color, track.body_id, pairs)
 
 
+def _estimated_throttle_series(track: BodyTrack, color: str) -> TelemetrySeries | None:
+    """A track that records no throttle (OpenTsiolkovsky stage tracks) still burns propellant: the throttle is
+    estimated from the mass flow, as a percentage of the track's peak burn rate -- which is the full-throttle
+    rate whenever the stage reaches full throttle (a stage that never does reads high). Labelled "(est.)"."""
+    t, m = [float(x) for x in track.t_s], [float(x) for x in track.mass_kg]
+    if len(t) < 2:
+        return None
+    flow = [0.0] + [max(0.0, (m[k - 1] - m[k]) / (t[k] - t[k - 1])) if t[k] > t[k - 1] else 0.0
+                    for k in range(1, len(t))]
+    top = max(flow)
+    if top <= 0.0:
+        return None                                              # never burned: nothing to show
+    # the flow at sample k is the burn over the interval ENDING at k; plot it at the interval's start so a burn
+    # starts where the mass starts to fall (and a coast starts where it stops)
+    pairs = _finite_pairs(t[:-1], (100.0 * flow[k + 1] / top for k in range(len(t) - 1)))
+    if not pairs:
+        return None
+    return TelemetrySeries("throttle", _body_label(track.body_id) + " (est.)", "%", color, track.body_id, pairs,
+                           derived=True)
+
+
 def _throttle_series(track: BodyTrack, color: str) -> TelemetrySeries | None:
     extra = _extra_values(track, THROTTLE_ALIASES)
     if extra is None:
-        return None
+        return _estimated_throttle_series(track, color)
     _, values = extra
     numeric = [float(v) for v in values if math.isfinite(float(v))]
     factor = 100.0 if numeric and max(abs(v) for v in numeric) <= 1.05 else 1.0
@@ -168,6 +190,18 @@ def _throttle_series(track: BodyTrack, color: str) -> TelemetrySeries | None:
     if not pairs:
         return None
     return TelemetrySeries("throttle", track.body_id.replace("_", " ").capitalize(), "%",
+                           color, track.body_id, pairs)
+
+
+def _engines_series(track: BodyTrack, color: str) -> TelemetrySeries | None:
+    extra = _extra_values(track, ENGINES_LIT_ALIASES)
+    if extra is None:
+        return None
+    _, values = extra
+    pairs = _finite_pairs(track.t_s, (float(v) for v in values))
+    if not pairs:
+        return None
+    return TelemetrySeries("engines_lit", track.body_id.replace("_", " ").capitalize(), "engines",
                            color, track.body_id, pairs)
 
 
@@ -194,6 +228,7 @@ def build_telemetry_channels(
         "g_load": _g_load_series,
         "mass": _mass_series,
         "throttle": _throttle_series,
+        "engines_lit": _engines_series,
     }
     specs = (
         ("altitude", "Altitude", "km", "no altitude column or launch position"),
@@ -202,6 +237,7 @@ def build_telemetry_channels(
         ("g_load", "G-load", "g", "no acceleration column"),
         ("mass", "Mass", "kg", "no mass samples"),
         ("throttle", "Throttle", "%", "no throttle column"),
+        ("engines_lit", "Engines lit", "engines", "no engine-count column"),
     )
     channels: list[TelemetryChannel] = []
     for index, (channel_id, label, unit, missing_reason) in enumerate(specs):

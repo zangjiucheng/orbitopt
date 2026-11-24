@@ -628,6 +628,8 @@ class RecoverySummary:
     montecarlo: Mapping[str, Any] | None = None
     mc_reasons: tuple[tuple[str, int, ReasonEntry], ...] = ()
     touchdown_points: tuple[tuple[float, float, bool], ...] = ()
+    #: the booster's burns (E11-06): which ignitions, on how many engines, at what throttle
+    engine_burns: tuple = ()
 
     @property
     def success_rate(self) -> float | None:
@@ -664,9 +666,15 @@ def recovery_summary(bundle: RunBundle) -> RecoverySummary:
             e, n = _fnum(s.get("touchdown_east_m")), _fnum(s.get("touchdown_north_m"))
             if e is not None and n is not None:
                 points.append((e, n, s.get("outcome") == "landed"))
+    from orbitopt.flightlab.engine_status import burns_from_extra_columns
+
+    burns: tuple = ()
+    booster = next((t for t in run.tracks if t.body_id == "booster"), None)
+    if booster is not None:
+        burns = burns_from_extra_columns(booster.t_s, booster.extra_columns, booster.mass_kg)
     return RecoverySummary(state=state, kind=kind, gate=gate, checks=checks, touchdown=touchdown,
                            explanations=explanations, montecarlo=mc, mc_reasons=tuple(mc_reasons),
-                           touchdown_points=tuple(points))
+                           touchdown_points=tuple(points), engine_burns=burns)
 
 
 def ellipse_polygon(ellipse: Mapping[str, Any], k: float = 1.0,

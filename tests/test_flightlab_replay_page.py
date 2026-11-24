@@ -27,7 +27,7 @@ REPO = Path(__file__).resolve().parents[1]
 OT_FIX = Path(__file__).parent / "fixtures" / "flightlab" / "opentsiolkovsky"
 VEHICLE = REPO / "src" / "orbitopt" / "data" / "flightlab" / "vehicles" / "synthetic_two_stage.yaml"
 TARGET = REPO / "src" / "orbitopt" / "data" / "flightlab" / "scenarios" / "leo_two_stage.yaml"
-REQUIRED_CHANNELS = {"altitude", "speed", "dynamic_pressure", "g_load", "mass", "throttle",
+REQUIRED_CHANNELS = {"altitude", "speed", "dynamic_pressure", "g_load", "mass", "throttle", "engines_lit",
                      "propellant", "vertical_speed", "downrange", "grid_fins"}
 
 
