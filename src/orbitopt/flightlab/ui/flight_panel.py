@@ -370,7 +370,7 @@ class TelemetryPanel(QScrollArea):
     def _set_plot_available(self, channel_id: str, available: bool) -> None:
         action = self._plot_actions[channel_id]
         action.setEnabled(available)
-        base = dict(TELEMETRY_CHARTS)[channel_id]
+        base = {cid: label for cid, label, _unit in TELEMETRY_CHARTS}[channel_id]
         action.setText(base if available else base + " (no data)")
 
     def set_channels(self, channels: Sequence[TelemetryChannel], t_min: float, t_max: float) -> None:
