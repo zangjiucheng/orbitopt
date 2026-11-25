@@ -1,0 +1,49 @@
+{
+ "kind": "orbitopt.crossenv.exchange",
+ "schema_version": "1.0",
+ "stage": "refly",
+ "runner": "rendezvous_refly",
+ "created_utc": "2026-11-25T16:28:32.355951Z",
+ "environment": {
+  "env": "tudat",
+  "python_executable": "/u9/j7zang/envs/tudatpy/bin/python",
+  "python": "3.10.22",
+  "platform": "Linux-6.8.0-149-generic-x86_64-with-glibc2.39",
+  "toolchain": {
+   "python": "3.10.22",
+   "orbitopt": "unknown (source tree; see git_sha)",
+   "numpy": "2.0.0",
+   "scipy": "1.13.1",
+   "astropy": "6.1.7",
+   "tudatpy": "1.0.0",
+   "gfold": "absent",
+   "jsbsim": "absent",
+   "cvxpy": "absent",
+   "jsonschema": "4.26.0",
+   "pyyaml": "6.0.1",
+   "opentsiolkovsky": "1.0.0",
+   "opentsiolkovsky_sha256": "8041a9b5806136eb0e9d2a7b2c9ebed58ccc1876198cbf5c6373c440cb182c4c"
+  },
+  "argv": [
+   "/u9/j7zang/cf-compute/395/src/orbitopt/crossenv/__main__.py",
+   "stage",
+   "--plan",
+   "docs/benchmarks/e12-05-refly-run/plan.resolved.json",
+   "--stage",
+   "refly",
+   "--out",
+   "docs/benchmarks/e12-05-refly-run"
+  ]
+ },
+ "payloads": [
+  {
+   "name": "refly-evidence",
+   "type": "report",
+   "schema_version": "1.0",
+   "path": "reports/rendezvous-refly-evidence.json",
+   "digest_kind": "file",
+   "digest": "sha256:ea885a93f2c2961d7b48b77083fc85cb01ae8923c170961f10348ad1c28ca13d",
+   "report_kind": "orbitopt.verify.rendezvous-refly"
+  }
+ ]
+}

@@ -15,7 +15,7 @@
       "description": "The plan stage id that produced this exchange."
     },
     "runner": {
-      "enum": ["ascent", "recovery"],
+      "enum": ["ascent", "recovery", "rendezvous_refly"],
       "description": "The stage runner that produced it; a reader dispatches behaviour on the payload types, never on this."
     },
     "created_utc": {

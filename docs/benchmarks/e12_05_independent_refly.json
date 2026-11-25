@@ -1,0 +1,268 @@
+{
+ "kind": "orbitopt.bench.e12-05-independent-refly",
+ "schema_version": "1.0",
+ "generated_utc": "2026-11-25T16:28:32+00:00",
+ "provenance": {
+  "python": "3.12.13",
+  "numpy": "2.5.5",
+  "orbitopt": "installed (version unknown)",
+  "tudatpy": "1.1.0",
+  "pykep": "2.6.4"
+ },
+ "mission_id": "leo-rdv-001",
+ "backend": "present",
+ "not_checked_reasons": [],
+ "reference_plan": {
+  "drift_end_s": 560.5949924589561,
+  "tof_s": 3388.958224162859,
+  "total_delta_v_m_s": 10.3436725483533,
+  "delta_v_budget_m_s": 25.0,
+  "maneuvers": [
+   {
+    "kind": "transfer_injection",
+    "epoch_s": 560.5949924589561,
+    "delta_v_eci_m_s": [
+     -1.8859091836247899,
+     1.7467849481182611,
+     3.241093494684719
+    ],
+    "magnitude_m_s": 4.136737621017369
+   },
+   {
+    "kind": "hold_point_insertion",
+    "epoch_s": 3949.5532166218154,
+    "delta_v_eci_m_s": [
+     2.7899575671572165,
+     -2.6397475814383142,
+     -4.875849738449233
+    ],
+    "magnitude_m_s": 6.206934927335931
+   }
+  ]
+ },
+ "error_sources": {
+  "numerical_propagation": {
+   "question": "how much of any difference is integration error",
+   "tolerances": {
+    "tolerance_axis_position_m": 0.5,
+    "step_axis_60s_position_m": 50.0
+   },
+   "checks": [
+    "numerical.point_mass_kepler_position",
+    "numerical.point_mass_kepler_velocity",
+    "numerical.tudat_step_axis_60s",
+    "numerical.tudat_tolerance_axis"
+   ],
+   "result": "passed",
+   "measured": {
+    "numerical.point_mass_kepler_position": 1.0596587066205948e-07,
+    "numerical.point_mass_kepler_velocity": 6.170639437434709e-11,
+    "numerical.tudat_step_axis_60s": 15.245439206888284,
+    "numerical.tudat_tolerance_axis": 0.0
+   }
+  },
+  "approximate_model_cw": {
+   "question": "what does the CW planning approximation cost on this mission",
+   "tolerances": {
+    "hold_point_position_error_m": 600.0,
+    "relative_speed_m_s": 0.5,
+    "min_approach_distance_m": 600.0
+   },
+   "checks": [
+    "cw.hold_point_position_error",
+    "cw.min_approach_distance",
+    "cw.relative_speed"
+   ],
+   "result": "passed",
+   "measured": {
+    "cw.hold_point_position_error": 252.68621861032688,
+    "cw.min_approach_distance": 240.04683223283826,
+    "cw.relative_speed": 0.1976060045311883
+   }
+  },
+  "optimizer_nonconvergence": {
+   "question": "how much could leftover optimizer error explain",
+   "tolerances": {
+    "landing_residual_m": 0.001,
+    "delta_v_stationarity_m_s": 0.01
+   },
+   "checks": [
+    "optimizer.delta_v_stationarity",
+    "optimizer.landing_residual"
+   ],
+   "result": "passed",
+   "measured": {
+    "optimizer.delta_v_stationarity": 3.5279366983331784e-08,
+    "optimizer.landing_residual": 4.924672239437107e-07
+   }
+  },
+  "independent_model_agreement": {
+   "question": "do the two independently formulated pair models agree on the four acceptance quantities",
+   "tolerances": {
+    "hold_point_position_error_m": 1.0,
+    "relative_speed_m_s": 0.01,
+    "min_approach_distance_m": 1.0,
+    "total_delta_v_m_s": 1e-09,
+    "maneuver_sequence_m_s": 1e-09
+   },
+   "checks": [
+    "refly.hold_point_position_error",
+    "refly.maneuver_sequence_identity",
+    "refly.min_approach_distance",
+    "refly.relative_speed",
+    "refly.total_delta_v"
+   ],
+   "result": "passed",
+   "measured": {
+    "refly.hold_point_position_error": 0.0001612846971288549,
+    "refly.maneuver_sequence_identity": 0.0,
+    "refly.min_approach_distance": 3.1683474958299485e-05,
+    "refly.relative_speed": 5.87803192710694e-08,
+    "refly.total_delta_v": 0.0
+   }
+  }
+ },
+ "margins": {
+  "cw_vs_nonlinear": {},
+  "refly_vs_main": {}
+ },
+ "acceptance_quantities": {
+  "main_model": {
+   "position_error_m": 4.924672239437107e-07,
+   "relative_speed_m_s": 5.446294010855733e-10,
+   "min_approach_distance_m": 908.9076340092689,
+   "total_delta_v_m_s": 10.3436725483533,
+   "min_approach_epoch_s": 3868.594992458956
+  },
+  "cw_replay": {
+   "position_error_m": 252.6862191027941,
+   "relative_speed_m_s": 0.1976060050758177,
+   "min_approach_distance_m": 668.8608017764307,
+   "total_delta_v_m_s": 10.3436725483533
+  },
+  "refly_j2": {
+   "position_error_m": 0.00016177716435279862,
+   "relative_speed_m_s": 5.9324948672154975e-08,
+   "min_approach_distance_m": 908.9076656927439,
+   "min_approach_epoch_s": 3868.594992458956,
+   "total_delta_v_m_s": 10.3436725483533
+  }
+ },
+ "convergence": {
+  "scenario": "transfer leg [t1, t2], point mass, both crafts, error against the tightest run of the same axis at the latest common sample epoch (see compare_epoch_s per axis)",
+  "tolerance_axis": {
+   "runs": [
+    {
+     "integrator": "dop853",
+     "rtol_factor": 1000.0,
+     "rtol": 1e-08,
+     "atol": 0.001,
+     "position_error_m": 0.0,
+     "velocity_error_m_s": 0.0
+    },
+    {
+     "integrator": "dop853",
+     "rtol_factor": 100.0,
+     "rtol": 9.999999999999999e-10,
+     "atol": 9.999999999999999e-05,
+     "position_error_m": 0.0,
+     "velocity_error_m_s": 0.0
+    },
+    {
+     "integrator": "dop853",
+     "rtol_factor": 10.0,
+     "rtol": 9.999999999999999e-11,
+     "atol": 9.999999999999999e-06,
+     "position_error_m": 0.0,
+     "velocity_error_m_s": 0.0
+    },
+    {
+     "integrator": "dop853",
+     "rtol_factor": 1.0,
+     "rtol": 1e-11,
+     "atol": 1e-06,
+     "position_error_m": 0.0,
+     "velocity_error_m_s": 0.0
+    }
+   ],
+   "compare_epoch_s": 3949.5532166218154,
+   "reference_rtol": 1e-12,
+   "reference_atol": 1e-07,
+   "bound_at_default_m": 0.0,
+   "bound_at_default_m_s": 0.0,
+   "observed_order": null
+  },
+  "step_axis": {
+   "runs": [
+    {
+     "integrator": "rk4",
+     "step_size": 180.0,
+     "position_error_m": 1519.2090158649705,
+     "velocity_error_m_s": 1531.2497340420039
+    },
+    {
+     "integrator": "rk4",
+     "step_size": 60.0,
+     "position_error_m": 15.245439206888284,
+     "velocity_error_m_s": 15.3528120733782
+    },
+    {
+     "integrator": "rk4",
+     "step_size": 30.0,
+     "position_error_m": 0.8952876049403916,
+     "velocity_error_m_s": 0.9013594258232086
+    },
+    {
+     "integrator": "rk4",
+     "step_size": 15.0,
+     "position_error_m": 0.05394516498079427,
+     "velocity_error_m_s": 0.05430338984352829
+    },
+    {
+     "integrator": "rk4",
+     "step_size": 7.5,
+     "position_error_m": 0.0031211305006327637,
+     "velocity_error_m_s": 0.0031414902008044627
+    }
+   ],
+   "compare_epoch_s": 3800.594992458956,
+   "reference_step_s": 3.75,
+   "bound_at_60s_m": 15.245439206888284,
+   "bound_at_60s_m_s": 15.3528120733782,
+   "observed_order": 4.100617882143959
+  }
+ },
+ "declared_tolerances": {
+  "refly_vs_main": {
+   "hold_point_position_error_m": 1.0,
+   "relative_speed_m_s": 0.01,
+   "min_approach_distance_m": 1.0,
+   "total_delta_v_m_s": 1e-09,
+   "maneuver_sequence_m_s": 1e-09
+  },
+  "kepler_vs_refly": {
+   "position_m": 1.0,
+   "velocity_m_s": 0.02
+  },
+  "sweep_bounds": {
+   "tolerance_axis_position_m": 0.5,
+   "step_axis_60s_position_m": 50.0
+  },
+  "cw_vs_nonlinear": {
+   "hold_point_position_error_m": 600.0,
+   "relative_speed_m_s": 0.5,
+   "min_approach_distance_m": 600.0
+  },
+  "optimizer_landing_m": 0.001,
+  "optimizer_stationarity_m_s": 0.01
+ },
+ "verdicts": {
+  "headline_acceptance": "passed",
+  "overall": "passed",
+  "independent_validation": {
+   "result": "passed",
+   "checks_passed": 3,
+   "checks_total": 3
+  }
+ }
+}
