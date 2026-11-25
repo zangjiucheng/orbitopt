@@ -7,6 +7,8 @@ Point (E12-03, reference mission LEO-RDV-001).
   burn-1 Newton-targeted on the configured nonlinear pair propagation.
 * :mod:`orbitopt.rendezvous.verify` -- replays a plan on that propagation
   and grades it; the acceptance verdict lives here.
+* :mod:`orbitopt.rendezvous.studio` -- replays the verified mission as a
+  Flight Lab run directory for the Mission Studio (E12-06).
 
 The whole pipeline on the reference mission:
 
@@ -31,6 +33,7 @@ from orbitopt.rendezvous.planner import (
     initial_states,
     plan_rendezvous,
 )
+from orbitopt.rendezvous.studio import StudioRun, build_studio_run, write_studio_run
 from orbitopt.rendezvous.verify import RendezvousVerification, verify_plan
 
 __all__ = [
@@ -47,4 +50,7 @@ __all__ = [
     "plan_rendezvous",
     "RendezvousVerification",
     "verify_plan",
+    "StudioRun",
+    "build_studio_run",
+    "write_studio_run",
 ]
