@@ -301,6 +301,40 @@ def run_recovery_stage(plan: CrossEnvPlan, stage: CrossEnvStage, out_dir: Path) 
     return report
 
 
+@_register("rendezvous_refly")
+def run_rendezvous_refly_stage(plan: CrossEnvPlan, stage: CrossEnvStage, out_dir: Path) -> dict:
+    """E12-05 (task #395): re-fly a rendezvous mission's plan as a TudatPy
+    two-spacecraft pulse-sequence replay in *this* environment and seal the
+    evidence document. The plan's ``scenario`` is the rendezvous mission
+    config (``leo_rdv_001.yaml`` and kin); the worker re-verifies the plan in
+    this environment (env-parity recheck) so the sealed evidence carries its
+    own verdict, not the orchestrator's say-so."""
+    from orbitopt.rendezvous.config import load_rendezvous_config
+    from orbitopt.verify.rendezvous_refly import refly_stage_impl
+
+    stage_dir = Path(out_dir) / stage.id
+    exchange = stage_dir / EXCHANGE_DIRNAME
+    exchange.mkdir(parents=True, exist_ok=True)
+    cfg = load_rendezvous_config(plan.scenario)
+    payloads, doc = refly_stage_impl(cfg, plan.scenario, exchange)
+    write_envelope(exchange, stage=stage.id, runner=stage.runner, env_label=stage.env,
+                   payloads=payloads)
+    j2 = doc["refly"]["j2"]
+    return {
+        "kind": STAGE_REPORT_KIND, "schema_version": STAGE_REPORT_SCHEMA_VERSION,
+        "stage": stage.id, "runner": stage.runner, "env": stage.env,
+        "environment": environment_record(stage.env),
+        "status": "completed", "mission_ok": bool(doc["ok"]),
+        "summary": (f"mission_id={doc['mission_id']} frame={doc['frame']} "
+                    f"pos_err_m={j2['position_error_m']:.3f} "
+                    f"rel_speed_m_s={j2['relative_speed_m_s']:.4f} "
+                    f"min_app_m={j2['min_approach_distance_m']:.1f} "
+                    f"dv_m_s={doc['plan']['total_delta_v_m_s']:.3f}"),
+        "failed_checks": list(doc["failed_checks"]),
+        "payloads": [p["name"] for p in payloads],
+    }
+
+
 def execute_stage(plan: CrossEnvPlan, stage: CrossEnvStage, out_dir) -> int:
     """Run one stage and write its ``stage-report.json`` next to its exchange
     dir. Returns a process exit code: 0 = the stage completed (its *mission
