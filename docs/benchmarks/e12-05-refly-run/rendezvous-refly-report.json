@@ -1,0 +1,675 @@
+{
+  "digest": "82eee3b7aa31ee5198fa3c466f0e069dc0185d28603001e897c77b906b9b6ce5",
+  "inputs": {
+    "crossenv": {
+      "envelope_digest": "sha256:dec9f54a71f3300e9db490e3255aac96cb3a98752de579a75bdc18641b45b1a2",
+      "stage_report": {
+        "env": "tudat",
+        "environment": {
+          "argv": [
+            "/u9/j7zang/cf-compute/395/src/orbitopt/crossenv/__main__.py",
+            "stage",
+            "--plan",
+            "docs/benchmarks/e12-05-refly-run/plan.resolved.json",
+            "--stage",
+            "refly",
+            "--out",
+            "docs/benchmarks/e12-05-refly-run"
+          ],
+          "env": "tudat",
+          "platform": "Linux-6.8.0-149-generic-x86_64-with-glibc2.39",
+          "python": "3.10.22",
+          "python_executable": "/u9/j7zang/envs/tudatpy/bin/python",
+          "toolchain": {
+            "astropy": "6.1.7",
+            "cvxpy": "absent",
+            "gfold": "absent",
+            "jsbsim": "absent",
+            "jsonschema": "4.26.0",
+            "numpy": "2.0.0",
+            "opentsiolkovsky": "1.0.0",
+            "opentsiolkovsky_sha256": "8041a9b5806136eb0e9d2a7b2c9ebed58ccc1876198cbf5c6373c440cb182c4c",
+            "orbitopt": "unknown (source tree; see git_sha)",
+            "python": "3.10.22",
+            "pyyaml": "6.0.1",
+            "scipy": "1.13.1",
+            "tudatpy": "1.0.0"
+          }
+        },
+        "failed_checks": [],
+        "kind": "orbitopt.crossenv.stage-report",
+        "mission_ok": true,
+        "payloads": [
+          "refly-evidence"
+        ],
+        "runner": "rendezvous_refly",
+        "schema_version": "1.0",
+        "stage": "refly",
+        "status": "completed",
+        "summary": "mission_id=leo-rdv-001 frame=GCRS pos_err_m=0.000 rel_speed_m_s=0.0000 min_app_m=908.9 dv_m_s=10.344"
+      }
+    },
+    "cw_replay": {
+      "arrival_rel_lvlh_m": [
+        -77.70321819283208,
+        -759.557634367422,
+        -0.06337153986978979
+      ],
+      "arrival_rel_lvlh_rate_m_s": [
+        0.0333521921779516,
+        0.19375939999271274,
+        -0.019825726554480207
+      ],
+      "chief_mean_motion_rad_s": 0.0011067834459184394,
+      "min_approach_distance_m": 668.8608017764307,
+      "min_approach_epoch_s": 3880.594992458956,
+      "position_error_m": 252.6862191027941,
+      "relative_speed_m_s": 0.1976060050758177,
+      "total_delta_v_m_s": 10.3436725483533
+    },
+    "declared_tolerances": {
+      "cw_vs_nonlinear": {
+        "hold_point_position_error_m": 600.0,
+        "min_approach_distance_m": 600.0,
+        "relative_speed_m_s": 0.5
+      },
+      "kepler_vs_refly": {
+        "position_m": 1.0,
+        "velocity_m_s": 0.02
+      },
+      "optimizer_landing_m": 0.001,
+      "optimizer_stationarity_m_s": 0.01,
+      "refly_vs_main": {
+        "hold_point_position_error_m": 1.0,
+        "maneuver_sequence_m_s": 1e-09,
+        "min_approach_distance_m": 1.0,
+        "relative_speed_m_s": 0.01,
+        "total_delta_v_m_s": 1e-09
+      },
+      "sweep_bounds": {
+        "step_axis_60s_position_m": 50.0,
+        "tolerance_axis_position_m": 0.5
+      }
+    },
+    "error_sources": {
+      "approximate_model_cw": {
+        "checks": [
+          "cw.hold_point_position_error",
+          "cw.min_approach_distance",
+          "cw.relative_speed"
+        ],
+        "measured": {
+          "cw.hold_point_position_error": 252.68621861032688,
+          "cw.min_approach_distance": 240.04683223283826,
+          "cw.relative_speed": 0.1976060045311883
+        },
+        "question": "what does the CW planning approximation cost on this mission",
+        "result": "passed",
+        "tolerances": {
+          "hold_point_position_error_m": 600.0,
+          "min_approach_distance_m": 600.0,
+          "relative_speed_m_s": 0.5
+        }
+      },
+      "independent_model_agreement": {
+        "checks": [
+          "refly.hold_point_position_error",
+          "refly.maneuver_sequence_identity",
+          "refly.min_approach_distance",
+          "refly.relative_speed",
+          "refly.total_delta_v"
+        ],
+        "measured": {
+          "refly.hold_point_position_error": 0.0001612846971288549,
+          "refly.maneuver_sequence_identity": 0.0,
+          "refly.min_approach_distance": 3.1683474958299485e-05,
+          "refly.relative_speed": 5.87803192710694e-08,
+          "refly.total_delta_v": 0.0
+        },
+        "question": "do the two independently formulated pair models agree on the four acceptance quantities",
+        "result": "passed",
+        "tolerances": {
+          "hold_point_position_error_m": 1.0,
+          "maneuver_sequence_m_s": 1e-09,
+          "min_approach_distance_m": 1.0,
+          "relative_speed_m_s": 0.01,
+          "total_delta_v_m_s": 1e-09
+        }
+      },
+      "numerical_propagation": {
+        "checks": [
+          "numerical.point_mass_kepler_position",
+          "numerical.point_mass_kepler_velocity",
+          "numerical.tudat_step_axis_60s",
+          "numerical.tudat_tolerance_axis"
+        ],
+        "measured": {
+          "numerical.point_mass_kepler_position": 1.0596587066205948e-07,
+          "numerical.point_mass_kepler_velocity": 6.170639437434709e-11,
+          "numerical.tudat_step_axis_60s": 15.245439206888284,
+          "numerical.tudat_tolerance_axis": 0.0
+        },
+        "note": "TudatPy tolerance/step sweeps + Kepler closed-form compare of the same point-mass model",
+        "question": "how much of any difference is integration error",
+        "result": "passed",
+        "tolerances": {
+          "step_axis_60s_position_m": 50.0,
+          "tolerance_axis_position_m": 0.5
+        }
+      },
+      "optimizer_nonconvergence": {
+        "checks": [
+          "optimizer.delta_v_stationarity",
+          "optimizer.landing_residual"
+        ],
+        "measured": {
+          "optimizer.delta_v_stationarity": 3.5279366983331784e-08,
+          "optimizer.landing_residual": 4.924672239437107e-07
+        },
+        "question": "how much could leftover optimizer error explain",
+        "result": "passed",
+        "tolerances": {
+          "delta_v_stationarity_m_s": 0.01,
+          "landing_residual_m": 0.001
+        }
+      }
+    },
+    "frame": "GCRS",
+    "headline_acceptance": "passed",
+    "historical_telemetry": "absent by construction -- this report grades independent-model, analytical, numerical-consistency and design-input evidence only",
+    "main_model": {
+      "arrival_rel_lvlh_m": [
+        -4.583870918395405e-07,
+        -1000.0000001771358,
+        -3.206474730177433e-08
+      ],
+      "arrival_rel_lvlh_rate_m_s": [
+        -1.9629489844924073e-10,
+        5.080250934271652e-10,
+        -4.2637454761151086e-14
+      ],
+      "dv_stationarity_m_s": -3.5279366983331784e-08,
+      "maneuver_identity_m_s": 0.0,
+      "maneuvers_sha256": "1d2b192629c27633a2d651259683d167fc7209decfe4f4fbffc219f165c04612",
+      "min_approach_distance_m": 908.9076340092689,
+      "min_approach_epoch_s": 3868.594992458956,
+      "position_error_m": 4.924672239437107e-07,
+      "relative_speed_m_s": 5.446294010855733e-10,
+      "total_delta_v_m_s": 10.3436725483533,
+      "verification_checks": {
+        "delta_v_within_budget": true,
+        "gate_within_drift_window": true,
+        "position_error_within_tolerance": true,
+        "relative_speed_within_tolerance": true,
+        "tof_within_transfer_window": true
+      },
+      "verification_passed": true
+    },
+    "mission_id": "leo-rdv-001",
+    "not_checked_reasons": [],
+    "refly_environment": {
+      "convergence": {
+        "scenario": "transfer leg [t1, t2], point mass, both crafts, error against the tightest run of the same axis at the latest common sample epoch (see compare_epoch_s per axis)",
+        "step_axis": {
+          "bound_at_60s_m": 15.245439206888284,
+          "bound_at_60s_m_s": 15.3528120733782,
+          "compare_epoch_s": 3800.594992458956,
+          "observed_order": 4.100617882143959,
+          "reference_step_s": 3.75,
+          "runs": [
+            {
+              "integrator": "rk4",
+              "position_error_m": 1519.2090158649705,
+              "step_size": 180.0,
+              "velocity_error_m_s": 1531.2497340420039
+            },
+            {
+              "integrator": "rk4",
+              "position_error_m": 15.245439206888284,
+              "step_size": 60.0,
+              "velocity_error_m_s": 15.3528120733782
+            },
+            {
+              "integrator": "rk4",
+              "position_error_m": 0.8952876049403916,
+              "step_size": 30.0,
+              "velocity_error_m_s": 0.9013594258232086
+            },
+            {
+              "integrator": "rk4",
+              "position_error_m": 0.05394516498079427,
+              "step_size": 15.0,
+              "velocity_error_m_s": 0.05430338984352829
+            },
+            {
+              "integrator": "rk4",
+              "position_error_m": 0.0031211305006327637,
+              "step_size": 7.5,
+              "velocity_error_m_s": 0.0031414902008044627
+            }
+          ]
+        },
+        "tolerance_axis": {
+          "bound_at_default_m": 0.0,
+          "bound_at_default_m_s": 0.0,
+          "compare_epoch_s": 3949.5532166218154,
+          "observed_order": null,
+          "reference_atol": 1e-07,
+          "reference_rtol": 1e-12,
+          "runs": [
+            {
+              "atol": 0.001,
+              "integrator": "dop853",
+              "position_error_m": 0.0,
+              "rtol": 1e-08,
+              "rtol_factor": 1000.0,
+              "velocity_error_m_s": 0.0
+            },
+            {
+              "atol": 9.999999999999999e-05,
+              "integrator": "dop853",
+              "position_error_m": 0.0,
+              "rtol": 9.999999999999999e-10,
+              "rtol_factor": 100.0,
+              "velocity_error_m_s": 0.0
+            },
+            {
+              "atol": 9.999999999999999e-06,
+              "integrator": "dop853",
+              "position_error_m": 0.0,
+              "rtol": 9.999999999999999e-11,
+              "rtol_factor": 10.0,
+              "velocity_error_m_s": 0.0
+            },
+            {
+              "atol": 1e-06,
+              "integrator": "dop853",
+              "position_error_m": 0.0,
+              "rtol": 1e-11,
+              "rtol_factor": 1.0,
+              "velocity_error_m_s": 0.0
+            }
+          ]
+        }
+      },
+      "env": {
+        "argv": [
+          "/u9/j7zang/cf-compute/395/src/orbitopt/crossenv/__main__.py",
+          "stage",
+          "--plan",
+          "docs/benchmarks/e12-05-refly-run/plan.resolved.json",
+          "--stage",
+          "refly",
+          "--out",
+          "docs/benchmarks/e12-05-refly-run"
+        ],
+        "env": "tudat",
+        "platform": "Linux-6.8.0-149-generic-x86_64-with-glibc2.39",
+        "python": "3.10.22",
+        "python_executable": "/u9/j7zang/envs/tudatpy/bin/python",
+        "toolchain": {
+          "astropy": "6.1.7",
+          "cvxpy": "absent",
+          "gfold": "absent",
+          "jsbsim": "absent",
+          "jsonschema": "4.26.0",
+          "numpy": "2.0.0",
+          "opentsiolkovsky": "1.0.0",
+          "opentsiolkovsky_sha256": "8041a9b5806136eb0e9d2a7b2c9ebed58ccc1876198cbf5c6373c440cb182c4c",
+          "orbitopt": "unknown (source tree; see git_sha)",
+          "python": "3.10.22",
+          "pyyaml": "6.0.1",
+          "scipy": "1.13.1",
+          "tudatpy": "1.0.0"
+        }
+      },
+      "mission_in_refly_env": {
+        "checks": {
+          "delta_v_within_budget": true,
+          "gate_within_drift_window": true,
+          "position_error_within_tolerance": true,
+          "relative_speed_within_tolerance": true,
+          "tof_within_transfer_window": true
+        },
+        "passed": true,
+        "position_error_m": 4.924672239437107e-07,
+        "relative_speed_m_s": 5.446294010855733e-10,
+        "total_delta_v_m_s": 10.3436725483533
+      }
+    },
+    "refly_mission_failed_checks": []
+  },
+  "kind": "rendezvous-refly",
+  "label": "E12-05 independent re-flight of leo-rdv-001 (TudatPy two-spacecraft re-fly)",
+  "propagations": [],
+  "provenance": {
+    "numpy": "2.5.5",
+    "orbitopt": "installed (version unknown)",
+    "pykep": "2.6.4",
+    "python": "3.12.13",
+    "tudatpy": "1.1.0"
+  },
+  "residuals": [
+    {
+      "category": "numerical_consistency",
+      "evidence": "design_input",
+      "name": "optimizer.landing_residual",
+      "note": "the plan's own arrival residual against the config's newton_tol_m -- how much of any discrepancy the optimizer's leftover non-convergence could explain",
+      "position_residual_m": 4.924672239437107e-07,
+      "reference": "planner Newton targeting (burn-1 aim at the Hold Point)",
+      "tolerance": {
+        "position_m": 0.001
+      },
+      "unit": "m",
+      "velocity_residual_m_s": null,
+      "within_tolerance": true
+    },
+    {
+      "category": "numerical_consistency",
+      "evidence": "numerical_consistency",
+      "name": "optimizer.delta_v_stationarity",
+      "note": "re-optimizing inside a window half the planner's golden-section stop criterion must not move the objective: the search converged, not stalled",
+      "position_residual_m": null,
+      "reference": "plan total delta-v, golden window closed to +-0.5 s",
+      "tolerance": {
+        "velocity_m_s": 0.01
+      },
+      "unit": "m_s",
+      "velocity_residual_m_s": 3.5279366983331784e-08,
+      "within_tolerance": true
+    },
+    {
+      "category": "numerical_consistency",
+      "evidence": "numerical_consistency",
+      "name": "numerical.tudat_tolerance_axis",
+      "note": "transfer-leg final-state position error of the production tolerances (rtol/atol 1e-11/1e-06) vs the reference at epoch 3949.6 s (adaptive runs terminate on the leg end); observed convergence order n/a; velocity bound 0.000e+00 m/s",
+      "position_residual_m": 0.0,
+      "reference": "DOP853 reference run, one decade tighter than production",
+      "tolerance": {
+        "position_m": 0.5
+      },
+      "unit": "m",
+      "velocity_residual_m_s": null,
+      "within_tolerance": true
+    },
+    {
+      "category": "numerical_consistency",
+      "evidence": "numerical_consistency",
+      "name": "numerical.tudat_step_axis_60s",
+      "note": "legacy fixed-step RK4 at 60 s vs the 3.75 s reference at their latest common sample epoch 3800.6 s (fixed-step grids straddle the leg end; comparing last samples would measure a time offset, not integration error); observed order 4.10, expected ~4)",
+      "position_residual_m": 15.245439206888284,
+      "reference": "RK4 reference at step 3.75 s",
+      "tolerance": {
+        "position_m": 50.0
+      },
+      "unit": "m",
+      "velocity_residual_m_s": null,
+      "within_tolerance": true
+    },
+    {
+      "category": "numerical_consistency",
+      "evidence": "analytical",
+      "name": "numerical.point_mass_kepler_position",
+      "note": "point-mass pair re-flight vs the closed-form two-body replay at the transfer end. Compared in the chief's LVLH frame: the ECLIPJ2000/GCRS anchor rotation is common-mode on the pair and cancels, so the number is pure numerical-integration error, not frame bookkeeping",
+      "position_residual_m": 1.0596587066205948e-07,
+      "reference": "Kepler closed form at the transfer end, chief LVLH",
+      "tolerance": {
+        "position_m": 1.0
+      },
+      "unit": "m",
+      "velocity_residual_m_s": null,
+      "within_tolerance": true
+    },
+    {
+      "category": "numerical_consistency",
+      "evidence": "analytical",
+      "name": "numerical.point_mass_kepler_velocity",
+      "note": "same closed-form pair compare on the relative rate",
+      "position_residual_m": null,
+      "reference": "Kepler closed form at the transfer end, chief LVLH",
+      "tolerance": {
+        "velocity_m_s": 0.02
+      },
+      "unit": "m_s",
+      "velocity_residual_m_s": 6.170639437434709e-11,
+      "within_tolerance": true
+    },
+    {
+      "category": "model_agreement",
+      "evidence": "independent_model",
+      "name": "refly.hold_point_position_error",
+      "note": "TudatPy (spherical-harmonic(2,0) gravity, adaptive integration) re-flight vs orbitopt's own pair propagator, on the config's exact GM/J2/frame",
+      "position_residual_m": 0.0001612846971288549,
+      "reference": "main model (verify_plan, RK4 + analytic J2)",
+      "tolerance": {
+        "position_m": 1.0
+      },
+      "unit": "m",
+      "velocity_residual_m_s": null,
+      "within_tolerance": true
+    },
+    {
+      "category": "model_agreement",
+      "evidence": "independent_model",
+      "name": "refly.relative_speed",
+      "position_residual_m": null,
+      "reference": "main model (verify_plan)",
+      "tolerance": {
+        "velocity_m_s": 0.01
+      },
+      "unit": "m_s",
+      "velocity_residual_m_s": 5.87803192710694e-08,
+      "within_tolerance": true
+    },
+    {
+      "category": "model_agreement",
+      "evidence": "independent_model",
+      "name": "refly.min_approach_distance",
+      "position_residual_m": 3.1683474958299485e-05,
+      "reference": "main model (propagate_pair, 2 s scan)",
+      "tolerance": {
+        "position_m": 1.0
+      },
+      "unit": "m",
+      "velocity_residual_m_s": null,
+      "within_tolerance": true
+    },
+    {
+      "category": "numerical_consistency",
+      "evidence": "numerical_consistency",
+      "name": "refly.total_delta_v",
+      "note": "the re-flight applies the plan's own pulses; the worker recomputed the plan in its own environment -- equality bounds the float reproducibility across environments (digests: worker 1d2b192629c2..., main 1d2b192629c2...)",
+      "position_residual_m": null,
+      "reference": "plan pulse sequence (same plan re-flown)",
+      "tolerance": {
+        "velocity_m_s": 1e-09
+      },
+      "unit": "m_s",
+      "velocity_residual_m_s": 0.0,
+      "within_tolerance": true
+    },
+    {
+      "category": "numerical_consistency",
+      "evidence": "numerical_consistency",
+      "name": "refly.maneuver_sequence_identity",
+      "note": "max |element| difference of the two burn epochs and delta-v vectors between the environments -- the headline comparison is only meaningful if both flew the same plan",
+      "position_residual_m": null,
+      "reference": "main-environment plan (epochs + inertial dv)",
+      "tolerance": {
+        "velocity_m_s": 1e-09
+      },
+      "unit": "m_s",
+      "velocity_residual_m_s": 0.0,
+      "within_tolerance": true
+    },
+    {
+      "category": "model_agreement",
+      "evidence": "analytical",
+      "name": "cw.hold_point_position_error",
+      "note": "CW linearization + J2 omission measured at the mission's own acceptance quantity -- the planning model is expected to differ; this bounds how much",
+      "position_residual_m": 252.68621861032688,
+      "reference": "nonlinear main model (verify_plan)",
+      "tolerance": {
+        "position_m": 600.0
+      },
+      "unit": "m",
+      "velocity_residual_m_s": null,
+      "within_tolerance": true
+    },
+    {
+      "category": "model_agreement",
+      "evidence": "analytical",
+      "name": "cw.relative_speed",
+      "position_residual_m": null,
+      "reference": "nonlinear main model (verify_plan)",
+      "tolerance": {
+        "velocity_m_s": 0.5
+      },
+      "unit": "m_s",
+      "velocity_residual_m_s": 0.1976060045311883,
+      "within_tolerance": true
+    },
+    {
+      "category": "model_agreement",
+      "evidence": "analytical",
+      "name": "cw.min_approach_distance",
+      "position_residual_m": 240.04683223283826,
+      "reference": "nonlinear main model (2 s scan)",
+      "tolerance": {
+        "position_m": 600.0
+      },
+      "unit": "m",
+      "velocity_residual_m_s": null,
+      "within_tolerance": true
+    }
+  ],
+  "schemaVersion": "1.0",
+  "status": {
+    "categories": {
+      "historical_validation": {
+        "checks_passed": 0,
+        "checks_total": 0,
+        "result": "not_checked"
+      },
+      "model_agreement": {
+        "checks_passed": 6,
+        "checks_total": 6,
+        "result": "passed"
+      },
+      "numerical_consistency": {
+        "checks_passed": 9,
+        "checks_total": 9,
+        "result": "passed"
+      }
+    },
+    "check_categories": {
+      "residual.cw.hold_point_position_error": "model_agreement",
+      "residual.cw.min_approach_distance": "model_agreement",
+      "residual.cw.relative_speed": "model_agreement",
+      "residual.numerical.point_mass_kepler_position": "numerical_consistency",
+      "residual.numerical.point_mass_kepler_velocity": "numerical_consistency",
+      "residual.numerical.tudat_step_axis_60s": "numerical_consistency",
+      "residual.numerical.tudat_tolerance_axis": "numerical_consistency",
+      "residual.optimizer.delta_v_stationarity": "numerical_consistency",
+      "residual.optimizer.landing_residual": "numerical_consistency",
+      "residual.refly.hold_point_position_error": "model_agreement",
+      "residual.refly.maneuver_sequence_identity": "numerical_consistency",
+      "residual.refly.min_approach_distance": "model_agreement",
+      "residual.refly.relative_speed": "model_agreement",
+      "residual.refly.total_delta_v": "numerical_consistency",
+      "targeting.converged": "numerical_consistency"
+    },
+    "check_evidence": {
+      "residual.cw.hold_point_position_error": "analytical",
+      "residual.cw.min_approach_distance": "analytical",
+      "residual.cw.relative_speed": "analytical",
+      "residual.numerical.point_mass_kepler_position": "analytical",
+      "residual.numerical.point_mass_kepler_velocity": "analytical",
+      "residual.numerical.tudat_step_axis_60s": "numerical_consistency",
+      "residual.numerical.tudat_tolerance_axis": "numerical_consistency",
+      "residual.optimizer.delta_v_stationarity": "numerical_consistency",
+      "residual.optimizer.landing_residual": "design_input",
+      "residual.refly.hold_point_position_error": "independent_model",
+      "residual.refly.maneuver_sequence_identity": "numerical_consistency",
+      "residual.refly.min_approach_distance": "independent_model",
+      "residual.refly.relative_speed": "independent_model",
+      "residual.refly.total_delta_v": "numerical_consistency",
+      "targeting.converged": "numerical_consistency"
+    },
+    "checks": {
+      "residual.cw.hold_point_position_error": true,
+      "residual.cw.min_approach_distance": true,
+      "residual.cw.relative_speed": true,
+      "residual.numerical.point_mass_kepler_position": true,
+      "residual.numerical.point_mass_kepler_velocity": true,
+      "residual.numerical.tudat_step_axis_60s": true,
+      "residual.numerical.tudat_tolerance_axis": true,
+      "residual.optimizer.delta_v_stationarity": true,
+      "residual.optimizer.landing_residual": true,
+      "residual.refly.hold_point_position_error": true,
+      "residual.refly.maneuver_sequence_identity": true,
+      "residual.refly.min_approach_distance": true,
+      "residual.refly.relative_speed": true,
+      "residual.refly.total_delta_v": true,
+      "targeting.converged": true
+    },
+    "evidence": {
+      "analytical": {
+        "cannot_prove": "that the model represents reality -- the closed-form reference shares the model's own assumptions (point mass, impulsive burns, idealised field).",
+        "checks_passed": 5,
+        "checks_total": 5,
+        "independent": false,
+        "label": "Analytic solution",
+        "proves": "the numerics reproduce the closed-form solution of the model they integrate (the equations and the integrator, not their agreement with reality).",
+        "result": "passed"
+      },
+      "design_input": {
+        "cannot_prove": "anything about fidelity to reality: the reference IS the design input, so this is NOT independent validation and must never be read as historical proof.",
+        "checks_passed": 1,
+        "checks_total": 1,
+        "independent": false,
+        "label": "Matches design input",
+        "proves": "the solver reached the aim point, or the plan respects the site/vehicle/corridor envelope it was designed against -- internal consistency only.",
+        "result": "passed"
+      },
+      "historical_telemetry": {
+        "cannot_prove": "any other vehicle, phase or operating point -- one published event validates that event, not the model as a whole, and the reference's own provenance is only as good as its source.",
+        "checks_passed": 0,
+        "checks_total": 0,
+        "independent": true,
+        "label": "Historical telemetry",
+        "proves": "the model reproduces a published, observed (flown) value it was not tuned to.",
+        "result": "not_checked"
+      },
+      "independent_model": {
+        "cannot_prove": "that either model is right in the real world -- an assumption shared by both stays invisible; the phase and force inventory of the comparison bound its reach.",
+        "checks_passed": 3,
+        "checks_total": 3,
+        "independent": true,
+        "label": "Independent model",
+        "proves": "two independently formulated models agree, so neither is trivially mis-implemented.",
+        "result": "passed"
+      },
+      "numerical_consistency": {
+        "cannot_prove": "agreement with any other model or with reality -- it bounds numerical error only.",
+        "checks_passed": 6,
+        "checks_total": 6,
+        "independent": false,
+        "label": "Numerical consistency",
+        "proves": "integration error is under tolerance and the model's own invariants / self-consistency hold (step convergence, exact integrals, a same-model re-fly).",
+        "result": "passed"
+      }
+    },
+    "independent_validation": {
+      "checks_passed": 3,
+      "checks_total": 3,
+      "result": "passed"
+    },
+    "passed": true,
+    "result": "passed"
+  },
+  "targets": {
+    "converged": true,
+    "note": "plan targeting convergence (verify_plan); the optimizer line of error_sources carries the residual detail"
+  }
+}
