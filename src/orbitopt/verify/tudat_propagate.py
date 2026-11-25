@@ -33,10 +33,12 @@ from tudatpy.numerical_simulation import environment_setup, propagation_setup
 from orbitopt.verify import events as _events
 from orbitopt.verify import report as _report
 
-# Verification-layer integrator defaults (see module docstring).
+# Verification-layer integrator defaults (see module docstring). The tolerance
+# pair lives in orbitopt.verify.tolerances so a tolerance does not require
+# importing tudatpy; these names remain the propagator's defaults.
+from .tolerances import VERIFY_ATOL, VERIFY_RTOL
+
 DEFAULT_INTEGRATOR = "dop853"
-VERIFY_RTOL = 1e-11
-VERIFY_ATOL = 1e-6  # m and m/s (element-wise on the Cartesian state)
 VERIFY_MIN_STEP = 1e-3  # s
 
 _SPICE_LOADED = False
