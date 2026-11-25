@@ -14,6 +14,9 @@ constraints (E12-04).
   planner that screens unsafe candidates out of the search.
 * :mod:`orbitopt.rendezvous.studio` -- replays the verified mission as a
   Flight Lab run directory for the Mission Studio (E12-06).
+* :mod:`orbitopt.rendezvous.robustness` -- the Monte Carlo dispersion campaign:
+  train and hold-out arms, success-rate intervals, failure taxonomy,
+  sensitivity, and the independent spot check (E12-07).
 
 The whole pipeline on the reference mission:
 
@@ -38,6 +41,15 @@ from orbitopt.rendezvous.planner import (
     initial_states,
     plan_rendezvous,
 )
+from orbitopt.rendezvous.robustness import (
+    ArmResult,
+    CampaignResult,
+    DisturbanceModel,
+    RobustnessCampaign,
+    load_campaign,
+    load_reference_campaign,
+    run_campaign,
+)
 from orbitopt.rendezvous.safety import (
     PassiveRelease,
     SafetyCheck,
@@ -51,28 +63,35 @@ from orbitopt.rendezvous.studio import StudioRun, build_studio_run, write_studio
 from orbitopt.rendezvous.verify import RendezvousVerification, verify_plan
 
 __all__ = [
+    "ArmResult",
+    "CampaignResult",
+    "DisturbanceModel",
+    "Maneuver",
+    "PassiveRelease",
     "RendezvousConfigError",
     "RendezvousMissionConfig",
-    "SafetyCfg",
-    "load_reference_config",
-    "load_rendezvous_config",
-    "parse_rendezvous_config",
-    "validate_rendezvous_config",
-    "Maneuver",
     "RendezvousPlan",
     "RendezvousPlanError",
-    "initial_states",
-    "plan_rendezvous",
     "RendezvousVerification",
-    "verify_plan",
-    "PassiveRelease",
+    "RobustnessCampaign",
+    "SafetyCfg",
     "SafetyCheck",
     "SafetyPlanResult",
     "SafetyReport",
-    "evaluate_trajectory_safety",
-    "plan_rendezvous_safe",
-    "verify_plan_safety",
     "StudioRun",
     "build_studio_run",
+    "evaluate_trajectory_safety",
+    "initial_states",
+    "load_campaign",
+    "load_reference_campaign",
+    "load_reference_config",
+    "load_rendezvous_config",
+    "parse_rendezvous_config",
+    "plan_rendezvous",
+    "plan_rendezvous_safe",
+    "run_campaign",
+    "validate_rendezvous_config",
+    "verify_plan",
+    "verify_plan_safety",
     "write_studio_run",
 ]

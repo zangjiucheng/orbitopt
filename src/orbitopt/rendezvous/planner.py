@@ -41,7 +41,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from orbitopt.lambert.cpu import solve_lambert_single
-from orbitopt.relative.frames import eci_to_lvlh, lvlh_to_eci
+from orbitopt.relative.frames import lvlh_to_eci
 from orbitopt.relative.propagation import EARTH_J2, EARTH_RE, propagate_pair
 
 from .config import RendezvousMissionConfig
@@ -155,16 +155,18 @@ def initial_states(cfg: RendezvousMissionConfig) -> tuple[np.ndarray, ...]:
     return r0_chief, v0_chief, r0_chaser, v0_chaser
 
 
-def _gate_crossing(cfg: RendezvousMissionConfig):
-    """Drift phase: propagate the pair on a coarse grid, bracket the first
-    along-track crossing of the departure gate, refine it linearly, then
-    re-propagate exactly to that epoch. Returns ``(t1, states at t1)``."""
+def _gate_crossing_at(cfg: RendezvousMissionConfig, r0_chief, v0_chief, r0_chaser, v0_chaser):
+    """Drift phase from *explicit* t0 states: propagate the pair on a coarse
+    grid, bracket the first along-track crossing of the departure gate, refine
+    it linearly, then re-propagate exactly to that epoch. Returns
+    ``(t1, states at t1)``. Split out of :func:`_gate_crossing` so a caller
+    that flies the mission from a state other than the config's nominal one
+    (the E12-07 dispersion campaign, where the onboard navigation estimate is
+    perturbed) can open the transfer window the same way the planner does."""
     j2 = EARTH_J2 if cfg.dynamics.j2 else 0.0
-    r0_chief, v0_chief, r0_chaser, v0_chaser = initial_states(cfg)
     step = cfg.phasing.gate_scan_step_s
     ts = np.arange(0.0, cfg.windows.drift_max_s + step, step, dtype=float)
-    if ts[-1] > cfg.windows.drift_max_s:
-        ts[-1] = cfg.windows.drift_max_s
+    ts[-1] = min(ts[-1], cfg.windows.drift_max_s)
     traj = propagate_pair(
         r0_chief, v0_chief, r0_chaser, v0_chaser, ts,
         frame=cfg.dynamics.frame, mu=cfg.dynamics.mu, j2=j2, where="plan_rendezvous: drift scan",
@@ -184,6 +186,11 @@ def _gate_crossing(cfg: RendezvousMissionConfig):
         frame=cfg.dynamics.frame, mu=cfg.dynamics.mu, j2=j2, where="plan_rendezvous: gate epoch",
     )
     return t1, fine.chief_r[0, 1], fine.chief_v[0, 1], fine.deputy_r[0, 1], fine.deputy_v[0, 1]
+
+
+def _gate_crossing(cfg: RendezvousMissionConfig):
+    """:func:`_gate_crossing_at` on the config's nominal t0 states."""
+    return _gate_crossing_at(cfg, *initial_states(cfg))
 
 
 def _hold_aim(cfg: RendezvousMissionConfig, chief_r_t2, chief_v_t2):

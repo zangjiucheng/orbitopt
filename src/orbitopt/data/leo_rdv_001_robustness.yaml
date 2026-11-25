@@ -1,0 +1,81 @@
+# E12-07 robustness campaign for LEO-RDV-001 (`leo_rdv_001.yaml`).
+# Declares what the truth model adds to the plan, not how to fly it: the plan
+# under test is the constrained optimum from `plan_rendezvous_safe`, priced at
+# its own time-of-flight on every sample.
+#
+# Levels are stress levels, not nominal RSS: each is the edge of what the
+# mission analysis can bound for that error source, chosen so the campaign can
+# show where the design breaks rather than only where it holds.
+schemaVersion: "1.0"
+mission:
+  id: LEO-RDV-001
+  config: leo_rdv_001.yaml
+
+disturbances:
+  initial_state:
+    # Relative-navigation error of the chaser state at t0, chief-LVLH. A
+    # dual-constellation GNSS plus angles solution at a 20 km separation
+    # resolves position to a few metres (worst along-track, where the geometry
+    # is weakest) and relative velocity to a few millimetres per second. The
+    # velocity sigma is the one that prices: an open-loop design carries the
+    # pre-burn velocity error through the drift leg, and 4 mm/s over the hours
+    # before the gate is tens of metres of position the burn cannot see.
+    sigma_pos_lvlh_m: [1.0, 3.0, 1.0]
+    sigma_vel_lvlh_m_s: [0.002, 0.004, 0.002]
+  execution:
+    # Per-burn magnitude error and isotropic pointing error, drawn independently
+    # for each burn. 1% magnitude is a monopropellant valve repeatability band;
+    # 0.5 deg total misalignment RMS is on the order of an IMU-aligned burn
+    # after GNC alignment error, and the 7 m/s burn 1 at 0.5 deg injects
+    # 0.06 m/s of cross-track -- enough to matter against the 50 m arrival
+    # tolerance.
+    sigma_magnitude_rel: 0.01
+    sigma_pointing_deg: 0.5
+  j2:
+    # Gravity-model error as a multiplicative uncertainty on the zonal the
+    # truth feels. The published J2 is known to far better than 3%; the 3% is
+    # a stand-in for the unmodelled field (higher zonals, tides, the local
+    # field) projected onto the coefficient the truth model does carry.
+    sigma_rel: 0.03
+  drag:
+    # The plan ignores the atmosphere, so the truth has to carry it: the
+    # density is an exponential profile anchored at the target altitude and
+    # scaled by a log-normal solar-activity factor (median 1, so a sigma_ln of
+    # 0.6 spans the x1.8 / /1.8 band between quiet and disturbed). 5e-12
+    # kg/m^3 at 490 km is high-activity; the profile, not this single value,
+    # is what the campaign integrates. The ballistic coefficients differ
+    # between the vehicles -- a chaser with stowed panels against a target
+    # with an open bay -- which is what bends the relative trajectory.
+    sigma_ln: 0.6
+    reference_density_kg_m3: 5.0e-12
+    reference_altitude_m: 490000.0
+    scale_height_m: 50000.0
+    ballistic_coefficient_m2_per_kg: 0.025
+    chief_ballistic_coefficient_m2_per_kg: 0.045
+
+campaign:
+  # Two arms on disjoint seed streams: the train arm is the one anyone reads
+  # while tuning the design, the holdout arm is the one that prices the claim.
+  # n_clusters is derived: ceil(n_required / samples_per_cluster), where
+  # n_required is the smallest n whose Wilson interval is within
+  # target_ci_width wide at the planning rate (worst-case p = 0.5 here, so the
+  # width holds whatever the true rate turns out to be).
+  ci_level: 0.95
+  target_ci_width: 0.12
+  planning_rate: 0.5
+  train:
+    seed_base: 100000
+    samples_per_cluster: 12
+  holdout:
+    seed_base: 20000000
+    samples_per_cluster: 12
+  # The truth grid is coarser than the config's check_sample_dt_s by design (a
+  # Monte Carlo cannot afford 1 s sampling on every sample); the convergence
+  # check re-flies the marginal samples at the fine grid to show whether the
+  # interval can move a verdict.
+  sample_dt_s: 5.0
+  grid_convergence_dt_s: 1.0
+  grid_convergence_samples: 5
+  cluster_bootstrap_trials: 4000
+  spot_check:
+    n_samples: 6

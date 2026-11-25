@@ -1,0 +1,1836 @@
+{
+  "kind": "orbitopt.bench.e12-07-rendezvous-robustness",
+  "schema_version": "1.0",
+  "generated_utc": "2026-11-25T19:53:37+00:00",
+  "quick_layout": false,
+  "provenance": {
+    "python": "3.12.3",
+    "numpy": "2.5.5",
+    "orbitopt": "installed (version unknown)",
+    "tudatpy": null,
+    "pykep": "3.1.0"
+  },
+  "mission_id": "leo-rdv-001",
+  "headline": {
+    "holdout_success_rate": 0.05303030303030303,
+    "wilson": {
+      "method": "wilson_score",
+      "confidence_level": 0.95,
+      "successes": 14,
+      "n": 264,
+      "point": 0.05303030303030303,
+      "standard_error": 0.013792028054060969,
+      "lower": 0.03184852380021542,
+      "upper": 0.08703321676710399
+    },
+    "cluster_bootstrap": {
+      "method": "whole-cluster percentile bootstrap",
+      "lower": 0.026515151515151516,
+      "upper": 0.07954545454545454,
+      "width": 0.053030303030303025,
+      "trials": 4000,
+      "resample_unit": "cluster (one gravity-field / space-weather realization)"
+    },
+    "per_cluster_rate": {
+      "min": 0.0,
+      "median": 0.0,
+      "max": 0.16666666666666666
+    },
+    "meets_declared_ci_width": true,
+    "failure_classes": {
+      "planning_infeasible": 0,
+      "safety_violation": 69,
+      "fuel_over_budget": 0,
+      "arrival_accuracy": 181,
+      "other": 0
+    },
+    "n_samples": 264,
+    "n_clusters": 22,
+    "train_success_rate": 0.05303030303030303,
+    "sensitivity_ranking": [
+      "drag",
+      "execution",
+      "j2",
+      "initial_state"
+    ],
+    "independent_integration": "within_bands",
+    "independent_formulation": "within_declared_validity",
+    "independent_model": "not_checked",
+    "grid_convergence": "grid_independent"
+  },
+  "ground_plan": {
+    "mission_id": "leo-rdv-001",
+    "drift_end_s": 560.5949924589561,
+    "transfer_tof_s": 3416.666666666667,
+    "total_delta_v_m_s": 10.345425677045064,
+    "delta_v_budget_m_s": 25.0,
+    "budget_margin_m_s": 14.654574322954936,
+    "planner": "orbitopt.rendezvous.plan_rendezvous_safe (constrained optimum)"
+  },
+  "campaign": {
+    "schema_version": "1.0",
+    "mission_id": "LEO-RDV-001",
+    "disturbances": {
+      "initial_state": {
+        "enabled": true,
+        "sigma_pos_lvlh_m": [
+          1.0,
+          3.0,
+          1.0
+        ],
+        "sigma_vel_lvlh_m_s": [
+          0.002,
+          0.004,
+          0.002
+        ],
+        "n_components": 6
+      },
+      "execution": {
+        "enabled": true,
+        "sigma_magnitude_rel": 0.01,
+        "sigma_pointing_deg": 0.5,
+        "n_components": 8
+      },
+      "j2": {
+        "enabled": true,
+        "sigma_rel": 0.03,
+        "n_components": 1
+      },
+      "drag": {
+        "enabled": true,
+        "sigma_ln": 0.6,
+        "reference_density_kg_m3": 5e-12,
+        "reference_altitude_m": 490000.0,
+        "scale_height_m": 50000.0,
+        "ballistic_coefficient_m2_per_kg": 0.025,
+        "chief_ballistic_coefficient_m2_per_kg": 0.045,
+        "n_components": 1
+      }
+    },
+    "arms": {
+      "train": {
+        "seed_base": 100000,
+        "n_clusters": 22,
+        "samples_per_cluster": 12,
+        "n": 264
+      },
+      "holdout": {
+        "seed_base": 20000000,
+        "n_clusters": 22,
+        "samples_per_cluster": 12,
+        "n": 264
+      }
+    },
+    "statistics": {
+      "ci_level": 0.95,
+      "target_ci_width": 0.12,
+      "planning_rate": 0.5,
+      "derived_n_per_arm": 263,
+      "cluster_bootstrap_trials": 4000
+    },
+    "truth_grid": {
+      "sample_dt_s": 5.0,
+      "grid_convergence_dt_s": 1.0,
+      "grid_convergence_samples": 5
+    },
+    "spot_check_samples": 6
+  },
+  "arms": {
+    "train": {
+      "arm": "train",
+      "seed_base": 100000,
+      "n_clusters": 22,
+      "samples_per_cluster": 12,
+      "n": 264,
+      "summary": {
+        "n": 264,
+        "successes": 14,
+        "success_rate": 0.05303030303030303,
+        "ci_level": 0.95,
+        "wilson": {
+          "method": "wilson_score",
+          "confidence_level": 0.95,
+          "successes": 14,
+          "n": 264,
+          "point": 0.05303030303030303,
+          "standard_error": 0.013792028054060969,
+          "lower": 0.03184852380021542,
+          "upper": 0.08703321676710399
+        },
+        "wilson_width": 0.05518469296688857,
+        "cluster_bootstrap": {
+          "method": "whole-cluster percentile bootstrap",
+          "lower": 0.030303030303030304,
+          "upper": 0.07575757575757576,
+          "width": 0.045454545454545456,
+          "trials": 4000,
+          "resample_unit": "cluster (one gravity-field / space-weather realization)"
+        },
+        "per_cluster_rate": {
+          "min": 0.0,
+          "median": 0.08333333333333333,
+          "max": 0.16666666666666666
+        },
+        "target_ci_width": 0.12,
+        "meets_target_ci_width": true
+      },
+      "failure": {
+        "n_samples": 264,
+        "n_failures": 250,
+        "classes": {
+          "planning_infeasible": 0,
+          "safety_violation": 71,
+          "fuel_over_budget": 0,
+          "arrival_accuracy": 179,
+          "other": 0
+        },
+        "reasons_by_class": {
+          "planning_infeasible": [],
+          "safety_violation": [
+            "keep_out margin -10.953 m; terminal_cone margin -8.941 deg",
+            "keep_out margin -104.488 m; terminal_cone margin -13.258 deg",
+            "keep_out margin -108.579 m; terminal_cone margin -87.886 deg",
+            "keep_out margin -143.491 m; terminal_cone margin -15.103 deg",
+            "keep_out margin -153.820 m; terminal_cone margin -16.159 deg",
+            "keep_out margin -16.890 m; terminal_cone margin -8.686 deg",
+            "keep_out margin -160.948 m; terminal_cone margin -16.340 deg",
+            "keep_out margin -169.360 m; terminal_cone margin -16.733 deg",
+            "keep_out margin -17.349 m; terminal_cone margin -8.913 deg",
+            "keep_out margin -171.881 m; terminal_cone margin -16.456 deg",
+            "keep_out margin -173.965 m; terminal_cone margin -17.188 deg",
+            "keep_out margin -177.094 m; terminal_cone margin -16.699 deg"
+          ],
+          "fuel_over_budget": [],
+          "arrival_accuracy": [
+            "arrival 100.6 m / 0.098 m/s against 50 m / 0.2 m/s",
+            "arrival 1001.3 m / 0.521 m/s against 50 m / 0.2 m/s",
+            "arrival 1008.2 m / 0.424 m/s against 50 m / 0.2 m/s",
+            "arrival 102.4 m / 0.055 m/s against 50 m / 0.2 m/s",
+            "arrival 102.9 m / 0.122 m/s against 50 m / 0.2 m/s",
+            "arrival 1025.0 m / 0.538 m/s against 50 m / 0.2 m/s",
+            "arrival 1035.9 m / 0.347 m/s against 50 m / 0.2 m/s",
+            "arrival 1040.0 m / 0.475 m/s against 50 m / 0.2 m/s",
+            "arrival 106.6 m / 0.109 m/s against 50 m / 0.2 m/s",
+            "arrival 111.0 m / 0.037 m/s against 50 m / 0.2 m/s",
+            "arrival 111.2 m / 0.132 m/s against 50 m / 0.2 m/s",
+            "arrival 112.0 m / 0.073 m/s against 50 m / 0.2 m/s"
+          ],
+          "other": []
+        }
+      },
+      "sensitivity": {
+        "method": "Spearman rank correlation of each sample's |z| (sigma-equivalents of its own declared distribution) against failure, under joint dispersion; tail split at the declared threshold",
+        "tail_threshold_sigma": 1.0,
+        "sources": {
+          "initial_state": {
+            "n": 264,
+            "components": 6,
+            "failure_rate": 0.946969696969697,
+            "mean_abs_z": 0.9387903420908399,
+            "mean_abs_z_failed": 0.9324797466344293,
+            "mean_abs_z_passed": 1.0514795466695996,
+            "tail": {
+              "high": {
+                "n": 102,
+                "failure_rate": 0.9313725490196079
+              },
+              "low": {
+                "n": 162,
+                "failure_rate": 0.9567901234567902
+              }
+            },
+            "rank_correlation": -0.09271117204363655,
+            "state": "assessed"
+          },
+          "execution": {
+            "n": 264,
+            "components": 8,
+            "failure_rate": 0.946969696969697,
+            "mean_abs_z": 0.9615557378198303,
+            "mean_abs_z_failed": 0.968526012691001,
+            "mean_abs_z_passed": 0.8370865436917799,
+            "tail": {
+              "high": {
+                "n": 115,
+                "failure_rate": 0.9739130434782609
+              },
+              "low": {
+                "n": 149,
+                "failure_rate": 0.9261744966442953
+              }
+            },
+            "rank_correlation": 0.1324128461962943,
+            "state": "assessed"
+          },
+          "j2": {
+            "n": 264,
+            "components": 1,
+            "failure_rate": 0.946969696969697,
+            "mean_abs_z": 0.738811873688793,
+            "mean_abs_z_failed": 0.7402052692089444,
+            "mean_abs_z_passed": 0.7139298108289422,
+            "tail": {
+              "high": {
+                "n": 84,
+                "failure_rate": 0.9642857142857143
+              },
+              "low": {
+                "n": 180,
+                "failure_rate": 0.9388888888888889
+              }
+            },
+            "rank_correlation": -0.0053285989042303646,
+            "state": "assessed"
+          },
+          "drag": {
+            "n": 264,
+            "components": 1,
+            "failure_rate": 0.946969696969697,
+            "mean_abs_z": 0.6311661827847916,
+            "mean_abs_z_failed": 0.6261823825314303,
+            "mean_abs_z_passed": 0.7201626158805293,
+            "tail": {
+              "high": {
+                "n": 60,
+                "failure_rate": 0.9333333333333333
+              },
+              "low": {
+                "n": 204,
+                "failure_rate": 0.9509803921568627
+              }
+            },
+            "rank_correlation": -0.010657197808460729,
+            "state": "assessed"
+          }
+        },
+        "ranking": [
+          "execution",
+          "j2",
+          "drag",
+          "initial_state"
+        ],
+        "state": "assessed"
+      },
+      "cluster_counts": [
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          2,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          2,
+          12
+        ],
+        [
+          0,
+          12
+        ]
+      ],
+      "per_check_min_margin_m": {
+        "keep_out": -489.9065443837738,
+        "terminal_cone": -88.24162356105771,
+        "cross_track": 35.39998305672725,
+        "approach_speed": 2.5079999312087153
+      }
+    },
+    "holdout": {
+      "arm": "holdout",
+      "seed_base": 20000000,
+      "n_clusters": 22,
+      "samples_per_cluster": 12,
+      "n": 264,
+      "summary": {
+        "n": 264,
+        "successes": 14,
+        "success_rate": 0.05303030303030303,
+        "ci_level": 0.95,
+        "wilson": {
+          "method": "wilson_score",
+          "confidence_level": 0.95,
+          "successes": 14,
+          "n": 264,
+          "point": 0.05303030303030303,
+          "standard_error": 0.013792028054060969,
+          "lower": 0.03184852380021542,
+          "upper": 0.08703321676710399
+        },
+        "wilson_width": 0.05518469296688857,
+        "cluster_bootstrap": {
+          "method": "whole-cluster percentile bootstrap",
+          "lower": 0.026515151515151516,
+          "upper": 0.07954545454545454,
+          "width": 0.053030303030303025,
+          "trials": 4000,
+          "resample_unit": "cluster (one gravity-field / space-weather realization)"
+        },
+        "per_cluster_rate": {
+          "min": 0.0,
+          "median": 0.0,
+          "max": 0.16666666666666666
+        },
+        "target_ci_width": 0.12,
+        "meets_target_ci_width": true
+      },
+      "failure": {
+        "n_samples": 264,
+        "n_failures": 250,
+        "classes": {
+          "planning_infeasible": 0,
+          "safety_violation": 69,
+          "fuel_over_budget": 0,
+          "arrival_accuracy": 181,
+          "other": 0
+        },
+        "reasons_by_class": {
+          "planning_infeasible": [],
+          "safety_violation": [
+            "keep_out margin -101.962 m; terminal_cone margin -88.414 deg",
+            "keep_out margin -11.108 m; terminal_cone margin -8.718 deg",
+            "keep_out margin -110.587 m; terminal_cone margin -13.155 deg",
+            "keep_out margin -122.755 m; terminal_cone margin -13.830 deg",
+            "keep_out margin -123.744 m; terminal_cone margin -14.647 deg",
+            "keep_out margin -125.335 m; terminal_cone margin -14.460 deg",
+            "keep_out margin -127.679 m; terminal_cone margin -15.044 deg",
+            "keep_out margin -138.875 m; terminal_cone margin -14.774 deg",
+            "keep_out margin -141.126 m; terminal_cone margin -15.040 deg",
+            "keep_out margin -163.078 m; terminal_cone margin -16.155 deg",
+            "keep_out margin -164.935 m; terminal_cone margin -16.603 deg",
+            "keep_out margin -174.374 m; terminal_cone margin -16.868 deg"
+          ],
+          "fuel_over_budget": [],
+          "arrival_accuracy": [
+            "arrival 100.6 m / 0.074 m/s against 50 m / 0.2 m/s",
+            "arrival 1003.1 m / 0.454 m/s against 50 m / 0.2 m/s",
+            "arrival 1018.6 m / 0.348 m/s against 50 m / 0.2 m/s",
+            "arrival 102.6 m / 0.103 m/s against 50 m / 0.2 m/s",
+            "arrival 1029.1 m / 0.312 m/s against 50 m / 0.2 m/s",
+            "arrival 103.7 m / 0.195 m/s against 50 m / 0.2 m/s",
+            "arrival 105.3 m / 0.221 m/s against 50 m / 0.2 m/s",
+            "arrival 106.9 m / 0.105 m/s against 50 m / 0.2 m/s",
+            "arrival 1078.5 m / 0.450 m/s against 50 m / 0.2 m/s",
+            "arrival 108.1 m / 0.136 m/s against 50 m / 0.2 m/s",
+            "arrival 113.4 m / 0.156 m/s against 50 m / 0.2 m/s",
+            "arrival 119.2 m / 0.201 m/s against 50 m / 0.2 m/s"
+          ],
+          "other": []
+        }
+      },
+      "sensitivity": {
+        "method": "Spearman rank correlation of each sample's |z| (sigma-equivalents of its own declared distribution) against failure, under joint dispersion; tail split at the declared threshold",
+        "tail_threshold_sigma": 1.0,
+        "sources": {
+          "initial_state": {
+            "n": 264,
+            "components": 6,
+            "failure_rate": 0.946969696969697,
+            "mean_abs_z": 0.9427512363977062,
+            "mean_abs_z_failed": 0.9437392805452361,
+            "mean_abs_z_passed": 0.9251075909060997,
+            "tail": {
+              "high": {
+                "n": 106,
+                "failure_rate": 0.9433962264150944
+              },
+              "low": {
+                "n": 158,
+                "failure_rate": 0.9493670886075949
+              }
+            },
+            "rank_correlation": 0.005766723619939115,
+            "state": "assessed"
+          },
+          "execution": {
+            "n": 264,
+            "components": 8,
+            "failure_rate": 0.946969696969697,
+            "mean_abs_z": 0.9840514782401559,
+            "mean_abs_z_failed": 0.9882227211142531,
+            "mean_abs_z_passed": 0.9095649983455626,
+            "tail": {
+              "high": {
+                "n": 117,
+                "failure_rate": 0.9572649572649573
+              },
+              "low": {
+                "n": 147,
+                "failure_rate": 0.9387755102040817
+              }
+            },
+            "rank_correlation": 0.06742630694082656,
+            "state": "assessed"
+          },
+          "j2": {
+            "n": 264,
+            "components": 1,
+            "failure_rate": 0.946969696969697,
+            "mean_abs_z": 0.9259224046312087,
+            "mean_abs_z_failed": 0.9314833734823731,
+            "mean_abs_z_passed": 0.8266193894318469,
+            "tail": {
+              "high": {
+                "n": 96,
+                "failure_rate": 0.9375
+              },
+              "low": {
+                "n": 168,
+                "failure_rate": 0.9523809523809523
+              }
+            },
+            "rank_correlation": 0.02664299452115182,
+            "state": "assessed"
+          },
+          "drag": {
+            "n": 264,
+            "components": 1,
+            "failure_rate": 0.946969696969697,
+            "mean_abs_z": 0.7706181306001452,
+            "mean_abs_z_failed": 0.787589745505737,
+            "mean_abs_z_passed": 0.46755357871457637,
+            "tail": {
+              "high": {
+                "n": 48,
+                "failure_rate": 0.9791666666666666
+              },
+              "low": {
+                "n": 216,
+                "failure_rate": 0.9398148148148148
+              }
+            },
+            "rank_correlation": 0.146536469866335,
+            "state": "assessed"
+          }
+        },
+        "ranking": [
+          "drag",
+          "execution",
+          "j2",
+          "initial_state"
+        ],
+        "state": "assessed"
+      },
+      "cluster_counts": [
+        [
+          2,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          2,
+          12
+        ],
+        [
+          2,
+          12
+        ],
+        [
+          2,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          1,
+          12
+        ]
+      ],
+      "per_check_min_margin_m": {
+        "keep_out": -491.7250692284107,
+        "terminal_cone": -88.41387440921267,
+        "cross_track": 17.232945769821526,
+        "approach_speed": 2.507348835194862
+      }
+    }
+  },
+  "solo": {
+    "initial_state": {
+      "arm": "holdout",
+      "seed_base": 20000000,
+      "n_clusters": 22,
+      "samples_per_cluster": 12,
+      "n": 264,
+      "summary": {
+        "n": 264,
+        "successes": 134,
+        "success_rate": 0.5075757575757576,
+        "ci_level": 0.95,
+        "wilson": {
+          "method": "wilson_score",
+          "confidence_level": 0.95,
+          "successes": 134,
+          "n": 264,
+          "point": 0.5075757575757576,
+          "standard_error": 0.030769340302332325,
+          "lower": 0.44759423703165846,
+          "upper": 0.567339970755336
+        },
+        "wilson_width": 0.11974573372367758,
+        "cluster_bootstrap": {
+          "method": "whole-cluster percentile bootstrap",
+          "lower": 0.4583333333333333,
+          "upper": 0.5568181818181818,
+          "width": 0.09848484848484845,
+          "trials": 4000,
+          "resample_unit": "cluster (one gravity-field / space-weather realization)"
+        },
+        "per_cluster_rate": {
+          "min": 0.25,
+          "median": 0.5,
+          "max": 0.75
+        },
+        "target_ci_width": 0.12,
+        "meets_target_ci_width": true
+      },
+      "failure": {
+        "n_samples": 264,
+        "n_failures": 130,
+        "classes": {
+          "planning_infeasible": 0,
+          "safety_violation": 0,
+          "fuel_over_budget": 0,
+          "arrival_accuracy": 130,
+          "other": 0
+        },
+        "reasons_by_class": {
+          "planning_infeasible": [],
+          "safety_violation": [],
+          "fuel_over_budget": [],
+          "arrival_accuracy": [
+            "arrival 102.5 m / 0.034 m/s against 50 m / 0.2 m/s",
+            "arrival 104.1 m / 0.023 m/s against 50 m / 0.2 m/s",
+            "arrival 104.1 m / 0.032 m/s against 50 m / 0.2 m/s",
+            "arrival 105.8 m / 0.030 m/s against 50 m / 0.2 m/s",
+            "arrival 106.3 m / 0.026 m/s against 50 m / 0.2 m/s",
+            "arrival 109.9 m / 0.036 m/s against 50 m / 0.2 m/s",
+            "arrival 111.7 m / 0.039 m/s against 50 m / 0.2 m/s",
+            "arrival 112.1 m / 0.028 m/s against 50 m / 0.2 m/s",
+            "arrival 114.3 m / 0.038 m/s against 50 m / 0.2 m/s",
+            "arrival 115.3 m / 0.039 m/s against 50 m / 0.2 m/s",
+            "arrival 117.6 m / 0.035 m/s against 50 m / 0.2 m/s",
+            "arrival 118.3 m / 0.039 m/s against 50 m / 0.2 m/s"
+          ],
+          "other": []
+        }
+      },
+      "sensitivity": {
+        "method": "Spearman rank correlation of each sample's |z| (sigma-equivalents of its own declared distribution) against failure, under joint dispersion; tail split at the declared threshold",
+        "tail_threshold_sigma": 1.0,
+        "sources": {
+          "initial_state": {
+            "n": 264,
+            "components": 6,
+            "failure_rate": 0.49242424242424243,
+            "mean_abs_z": 0.9427512363977062,
+            "mean_abs_z_failed": 1.0234736257910029,
+            "mean_abs_z_passed": 0.8644384705683883,
+            "tail": {
+              "high": {
+                "n": 106,
+                "failure_rate": 0.6132075471698113
+              },
+              "low": {
+                "n": 158,
+                "failure_rate": 0.41139240506329117
+              }
+            },
+            "rank_correlation": 0.2707156592688452,
+            "state": "assessed"
+          },
+          "execution": {
+            "state": "inactive_or_bias_only",
+            "n": 0
+          },
+          "j2": {
+            "state": "inactive_or_bias_only",
+            "n": 0
+          },
+          "drag": {
+            "state": "inactive_or_bias_only",
+            "n": 0
+          }
+        },
+        "ranking": [
+          "initial_state"
+        ],
+        "state": "assessed"
+      },
+      "cluster_counts": [
+        [
+          5,
+          12
+        ],
+        [
+          5,
+          12
+        ],
+        [
+          6,
+          12
+        ],
+        [
+          5,
+          12
+        ],
+        [
+          6,
+          12
+        ],
+        [
+          7,
+          12
+        ],
+        [
+          7,
+          12
+        ],
+        [
+          5,
+          12
+        ],
+        [
+          6,
+          12
+        ],
+        [
+          6,
+          12
+        ],
+        [
+          8,
+          12
+        ],
+        [
+          8,
+          12
+        ],
+        [
+          7,
+          12
+        ],
+        [
+          6,
+          12
+        ],
+        [
+          5,
+          12
+        ],
+        [
+          3,
+          12
+        ],
+        [
+          6,
+          12
+        ],
+        [
+          9,
+          12
+        ],
+        [
+          4,
+          12
+        ],
+        [
+          6,
+          12
+        ],
+        [
+          5,
+          12
+        ],
+        [
+          9,
+          12
+        ]
+      ],
+      "per_check_min_margin_m": {
+        "keep_out": 235.30570942794213,
+        "terminal_cone": 5.553315295633851,
+        "cross_track": 74.36497108689537,
+        "approach_speed": 2.5105582902584462
+      }
+    },
+    "execution": {
+      "arm": "holdout",
+      "seed_base": 20000000,
+      "n_clusters": 22,
+      "samples_per_cluster": 12,
+      "n": 264,
+      "summary": {
+        "n": 264,
+        "successes": 17,
+        "success_rate": 0.06439393939393939,
+        "ci_level": 0.95,
+        "wilson": {
+          "method": "wilson_score",
+          "confidence_level": 0.95,
+          "successes": 17,
+          "n": 264,
+          "point": 0.06439393939393939,
+          "standard_error": 0.015106611030623798,
+          "lower": 0.04058961751891886,
+          "upper": 0.1006934347288924
+        },
+        "wilson_width": 0.06010381720997354,
+        "cluster_bootstrap": {
+          "method": "whole-cluster percentile bootstrap",
+          "lower": 0.041666666666666664,
+          "upper": 0.08712121212121213,
+          "width": 0.04545454545454546,
+          "trials": 4000,
+          "resample_unit": "cluster (one gravity-field / space-weather realization)"
+        },
+        "per_cluster_rate": {
+          "min": 0.0,
+          "median": 0.08333333333333333,
+          "max": 0.16666666666666666
+        },
+        "target_ci_width": 0.12,
+        "meets_target_ci_width": true
+      },
+      "failure": {
+        "n_samples": 264,
+        "n_failures": 247,
+        "classes": {
+          "planning_infeasible": 0,
+          "safety_violation": 84,
+          "fuel_over_budget": 0,
+          "arrival_accuracy": 163,
+          "other": 0
+        },
+        "reasons_by_class": {
+          "planning_infeasible": [],
+          "safety_violation": [
+            "keep_out margin -1.080 m; terminal_cone margin -7.850 deg",
+            "keep_out margin -100.935 m; terminal_cone margin -13.422 deg",
+            "keep_out margin -11.424 m; terminal_cone margin -8.511 deg",
+            "keep_out margin -11.974 m; terminal_cone margin -8.858 deg",
+            "keep_out margin -116.311 m; terminal_cone margin -13.627 deg",
+            "keep_out margin -124.916 m; terminal_cone margin -14.859 deg",
+            "keep_out margin -125.298 m; terminal_cone margin -14.335 deg",
+            "keep_out margin -130.848 m; terminal_cone margin -14.678 deg",
+            "keep_out margin -136.161 m; terminal_cone margin -15.091 deg",
+            "keep_out margin -15.034 m; terminal_cone margin -9.018 deg",
+            "keep_out margin -154.930 m; terminal_cone margin -16.259 deg",
+            "keep_out margin -158.135 m; terminal_cone margin -16.095 deg"
+          ],
+          "fuel_over_budget": [],
+          "arrival_accuracy": [
+            "arrival 1008.2 m / 0.399 m/s against 50 m / 0.2 m/s",
+            "arrival 101.1 m / 0.106 m/s against 50 m / 0.2 m/s",
+            "arrival 102.7 m / 0.097 m/s against 50 m / 0.2 m/s",
+            "arrival 1033.5 m / 0.401 m/s against 50 m / 0.2 m/s",
+            "arrival 106.0 m / 0.098 m/s against 50 m / 0.2 m/s",
+            "arrival 1065.1 m / 0.476 m/s against 50 m / 0.2 m/s",
+            "arrival 119.5 m / 0.104 m/s against 50 m / 0.2 m/s",
+            "arrival 123.9 m / 0.237 m/s against 50 m / 0.2 m/s",
+            "arrival 125.1 m / 0.100 m/s against 50 m / 0.2 m/s",
+            "arrival 125.2 m / 0.064 m/s against 50 m / 0.2 m/s",
+            "arrival 125.9 m / 0.104 m/s against 50 m / 0.2 m/s",
+            "arrival 126.4 m / 0.101 m/s against 50 m / 0.2 m/s"
+          ],
+          "other": []
+        }
+      },
+      "sensitivity": {
+        "method": "Spearman rank correlation of each sample's |z| (sigma-equivalents of its own declared distribution) against failure, under joint dispersion; tail split at the declared threshold",
+        "tail_threshold_sigma": 1.0,
+        "sources": {
+          "initial_state": {
+            "state": "inactive_or_bias_only",
+            "n": 0
+          },
+          "execution": {
+            "n": 264,
+            "components": 8,
+            "failure_rate": 0.9356060606060606,
+            "mean_abs_z": 0.9606530525312426,
+            "mean_abs_z_failed": 0.970310061358458,
+            "mean_abs_z_passed": 0.8203423948652302,
+            "tail": {
+              "high": {
+                "n": 113,
+                "failure_rate": 0.9823008849557522
+              },
+              "low": {
+                "n": 151,
+                "failure_rate": 0.9006622516556292
+              }
+            },
+            "rank_correlation": 0.14103860224161277,
+            "state": "assessed"
+          },
+          "j2": {
+            "state": "inactive_or_bias_only",
+            "n": 0
+          },
+          "drag": {
+            "state": "inactive_or_bias_only",
+            "n": 0
+          }
+        },
+        "ranking": [
+          "execution"
+        ],
+        "state": "assessed"
+      },
+      "cluster_counts": [
+        [
+          1,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          2,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          2,
+          12
+        ],
+        [
+          2,
+          12
+        ],
+        [
+          1,
+          12
+        ],
+        [
+          1,
+          12
+        ]
+      ],
+      "per_check_min_margin_m": {
+        "keep_out": -486.81275601031894,
+        "terminal_cone": -88.3422369413212,
+        "cross_track": 35.22616310039484,
+        "approach_speed": 2.505105207935638
+      }
+    },
+    "j2": {
+      "arm": "holdout",
+      "seed_base": 20000000,
+      "n_clusters": 22,
+      "samples_per_cluster": 12,
+      "n": 264,
+      "summary": {
+        "n": 264,
+        "successes": 264,
+        "success_rate": 1.0,
+        "ci_level": 0.95,
+        "wilson": {
+          "method": "wilson_score",
+          "confidence_level": 0.95,
+          "successes": 264,
+          "n": 264,
+          "point": 1.0,
+          "standard_error": 0.0,
+          "lower": 0.9856577139416427,
+          "upper": 1.0
+        },
+        "wilson_width": 0.0143422860583573,
+        "cluster_bootstrap": {
+          "method": "whole-cluster percentile bootstrap",
+          "lower": 1.0,
+          "upper": 1.0,
+          "width": 0.0,
+          "trials": 4000,
+          "resample_unit": "cluster (one gravity-field / space-weather realization)"
+        },
+        "per_cluster_rate": {
+          "min": 1.0,
+          "median": 1.0,
+          "max": 1.0
+        },
+        "target_ci_width": 0.12,
+        "meets_target_ci_width": true
+      },
+      "failure": {
+        "n_samples": 264,
+        "n_failures": 0,
+        "classes": {
+          "planning_infeasible": 0,
+          "safety_violation": 0,
+          "fuel_over_budget": 0,
+          "arrival_accuracy": 0,
+          "other": 0
+        },
+        "reasons_by_class": {
+          "planning_infeasible": [],
+          "safety_violation": [],
+          "fuel_over_budget": [],
+          "arrival_accuracy": [],
+          "other": []
+        }
+      },
+      "sensitivity": {
+        "method": "Spearman rank correlation of each sample's |z| (sigma-equivalents of its own declared distribution) against failure, under joint dispersion; tail split at the declared threshold",
+        "tail_threshold_sigma": 1.0,
+        "sources": {
+          "initial_state": {
+            "state": "inactive_or_bias_only",
+            "n": 0
+          },
+          "execution": {
+            "state": "inactive_or_bias_only",
+            "n": 0
+          },
+          "j2": {
+            "n": 264,
+            "components": 1,
+            "state": "uninformative"
+          },
+          "drag": {
+            "state": "inactive_or_bias_only",
+            "n": 0
+          }
+        },
+        "ranking": [],
+        "state": "all_passed"
+      },
+      "cluster_counts": [
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ]
+      ],
+      "per_check_min_margin_m": {
+        "keep_out": 388.0429411874553,
+        "terminal_cone": 18.530819235510194,
+        "cross_track": 77.62769184291938,
+        "approach_speed": 2.523687056600396
+      }
+    },
+    "drag": {
+      "arm": "holdout",
+      "seed_base": 20000000,
+      "n_clusters": 22,
+      "samples_per_cluster": 12,
+      "n": 264,
+      "summary": {
+        "n": 264,
+        "successes": 156,
+        "success_rate": 0.5909090909090909,
+        "ci_level": 0.95,
+        "wilson": {
+          "method": "wilson_score",
+          "confidence_level": 0.95,
+          "successes": 156,
+          "n": 264,
+          "point": 0.5909090909090909,
+          "standard_error": 0.030259955611315722,
+          "lower": 0.5307092346794265,
+          "upper": 0.6485012587645086
+        },
+        "wilson_width": 0.11779202408508205,
+        "cluster_bootstrap": {
+          "method": "whole-cluster percentile bootstrap",
+          "lower": 0.36363636363636365,
+          "upper": 0.7727272727272727,
+          "width": 0.40909090909090906,
+          "trials": 4000,
+          "resample_unit": "cluster (one gravity-field / space-weather realization)"
+        },
+        "per_cluster_rate": {
+          "min": 0.0,
+          "median": 1.0,
+          "max": 1.0
+        },
+        "target_ci_width": 0.12,
+        "meets_target_ci_width": true
+      },
+      "failure": {
+        "n_samples": 264,
+        "n_failures": 108,
+        "classes": {
+          "planning_infeasible": 0,
+          "safety_violation": 0,
+          "fuel_over_budget": 0,
+          "arrival_accuracy": 108,
+          "other": 0
+        },
+        "reasons_by_class": {
+          "planning_infeasible": [],
+          "safety_violation": [],
+          "fuel_over_budget": [],
+          "arrival_accuracy": [
+            "arrival 113.0 m / 0.093 m/s against 50 m / 0.2 m/s",
+            "arrival 58.2 m / 0.048 m/s against 50 m / 0.2 m/s",
+            "arrival 60.4 m / 0.050 m/s against 50 m / 0.2 m/s",
+            "arrival 61.9 m / 0.051 m/s against 50 m / 0.2 m/s",
+            "arrival 63.7 m / 0.052 m/s against 50 m / 0.2 m/s",
+            "arrival 66.0 m / 0.054 m/s against 50 m / 0.2 m/s",
+            "arrival 72.6 m / 0.060 m/s against 50 m / 0.2 m/s",
+            "arrival 75.0 m / 0.062 m/s against 50 m / 0.2 m/s",
+            "arrival 98.2 m / 0.081 m/s against 50 m / 0.2 m/s"
+          ],
+          "other": []
+        }
+      },
+      "sensitivity": {
+        "method": "Spearman rank correlation of each sample's |z| (sigma-equivalents of its own declared distribution) against failure, under joint dispersion; tail split at the declared threshold",
+        "tail_threshold_sigma": 1.0,
+        "sources": {
+          "initial_state": {
+            "state": "inactive_or_bias_only",
+            "n": 0
+          },
+          "execution": {
+            "state": "inactive_or_bias_only",
+            "n": 0
+          },
+          "j2": {
+            "state": "inactive_or_bias_only",
+            "n": 0
+          },
+          "drag": {
+            "n": 264,
+            "components": 1,
+            "failure_rate": 0.4090909090909091,
+            "mean_abs_z": 0.7706181306001452,
+            "mean_abs_z_failed": 0.973442012308041,
+            "mean_abs_z_passed": 0.6302015971100635,
+            "tail": {
+              "high": {
+                "n": 48,
+                "failure_rate": 0.75
+              },
+              "low": {
+                "n": 216,
+                "failure_rate": 0.3333333333333333
+              }
+            },
+            "rank_correlation": 0.34244591430724647,
+            "state": "assessed"
+          }
+        },
+        "ranking": [
+          "drag"
+        ],
+        "state": "assessed"
+      },
+      "cluster_counts": [
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          0,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ],
+        [
+          12,
+          12
+        ]
+      ],
+      "per_check_min_margin_m": {
+        "keep_out": 425.6182996389174,
+        "terminal_cone": 21.588498731922115,
+        "cross_track": 79.92680434477552,
+        "approach_speed": 2.5475279064460734
+      }
+    }
+  },
+  "grid_convergence": {
+    "state": "grid_independent",
+    "n_samples": 5,
+    "verdicts_agree": true,
+    "max_abs_delta_position_error_m": 4.2880323576355295e-06,
+    "max_abs_delta_min_range_m": 0.13616031153151198,
+    "max_abs_delta_margin": 1.0306415731173217,
+    "note": "coarser grid than the config's check_sample_dt_s by design; this measures whether that interval can change a verdict",
+    "rows": [
+      {
+        "cluster": 5,
+        "index": 0,
+        "seed": 25000015,
+        "dt_coarse_s": 5.0,
+        "dt_fine_s": 1.0,
+        "verdict_coarse": "safety_violation",
+        "verdict_fine": "safety_violation",
+        "verdict_agrees": true,
+        "delta_position_error_m": 3.7133069099581917e-06,
+        "delta_min_range_m": 2.143675327914707e-06,
+        "delta_margins": {
+          "keep_out": 2.1436753740999848e-06,
+          "terminal_cone": 1.6752085230109515e-07,
+          "cross_track": 3.429249773034826e-09,
+          "approach_speed": 0.00813217179197423
+        }
+      },
+      {
+        "cluster": 10,
+        "index": 3,
+        "seed": 30000033,
+        "dt_coarse_s": 5.0,
+        "dt_fine_s": 1.0,
+        "verdict_coarse": "safety_violation",
+        "verdict_fine": "safety_violation",
+        "verdict_agrees": true,
+        "delta_position_error_m": 5.297363259160193e-07,
+        "delta_min_range_m": 8.800567457001307e-07,
+        "delta_margins": {
+          "keep_out": 8.800567457001307e-07,
+          "terminal_cone": 1.0306415731173217,
+          "cross_track": 8.786101352598052e-05,
+          "approach_speed": 0.004192214054354437
+        }
+      },
+      {
+        "cluster": 12,
+        "index": 2,
+        "seed": 32000038,
+        "dt_coarse_s": 5.0,
+        "dt_fine_s": 1.0,
+        "verdict_coarse": "safety_violation",
+        "verdict_fine": "safety_violation",
+        "verdict_agrees": true,
+        "delta_position_error_m": 7.840014291105035e-07,
+        "delta_min_range_m": 0.13616031153151198,
+        "delta_margins": {
+          "keep_out": 0.13616031153151198,
+          "terminal_cone": 0.44125227604567385,
+          "cross_track": 4.9449845391791314e-05,
+          "approach_speed": 0.0027347206410608393
+        }
+      },
+      {
+        "cluster": 1,
+        "index": 2,
+        "seed": 21000005,
+        "dt_coarse_s": 5.0,
+        "dt_fine_s": 1.0,
+        "verdict_coarse": "arrival_accuracy",
+        "verdict_fine": "arrival_accuracy",
+        "verdict_agrees": true,
+        "delta_position_error_m": 3.898741653074467e-06,
+        "delta_min_range_m": 2.9631257802975597e-06,
+        "delta_margins": {
+          "keep_out": 2.9631257802975597e-06,
+          "terminal_cone": 0.5041799671634521,
+          "cross_track": 1.527416770841228e-08,
+          "approach_speed": 0.0029003124876041397
+        }
+      },
+      {
+        "cluster": 15,
+        "index": 10,
+        "seed": 35000055,
+        "dt_coarse_s": 5.0,
+        "dt_fine_s": 1.0,
+        "verdict_coarse": "success",
+        "verdict_fine": "success",
+        "verdict_agrees": true,
+        "delta_position_error_m": 4.2880323576355295e-06,
+        "delta_min_range_m": 0.000865597698179954,
+        "delta_margins": {
+          "keep_out": 0.000865597698179954,
+          "terminal_cone": 0.3115796988062982,
+          "cross_track": 8.83868437995261e-07,
+          "approach_speed": 3.5720759683499637e-10
+        }
+      }
+    ]
+  },
+  "cross_check": {
+    "n_samples": 6,
+    "selected_by": "tightest sample of each trajectory constraint, worst-arrival successes, one representative per failure class",
+    "independent_integration": {
+      "method": "DOP853 at the production VERIFY tolerances vs the campaign's fixed-step RK4, same force law",
+      "tolerances": {
+        "position_error_m": 0.1,
+        "relative_speed_m_s": 0.001,
+        "min_approach_distance_m": 0.5,
+        "realized_delta_v_m_s": 0.0
+      },
+      "rows": [
+        {
+          "cluster": 5,
+          "index": 0,
+          "seed": 25000015,
+          "stored_verdict": "safety_violation",
+          "reproduces_record": true,
+          "integration_residuals": {
+            "position_error_m": {
+              "observed": 5.369355335460568e-06,
+              "tolerance": 0.1,
+              "within": true
+            },
+            "relative_speed_m_s": {
+              "observed": 1.4589806585085796e-09,
+              "tolerance": 0.001,
+              "within": true
+            },
+            "min_approach_distance_m": {
+              "observed": 2.7773491506621895e-06,
+              "tolerance": 0.5,
+              "within": true
+            },
+            "realized_delta_v_m_s": {
+              "observed": 0.0,
+              "tolerance": 0.0,
+              "within": true
+            }
+          },
+          "verdict_agrees": true,
+          "state": "within_bands"
+        },
+        {
+          "cluster": 10,
+          "index": 3,
+          "seed": 30000033,
+          "stored_verdict": "safety_violation",
+          "reproduces_record": true,
+          "integration_residuals": {
+            "position_error_m": {
+              "observed": 9.938592029357096e-07,
+              "tolerance": 0.1,
+              "within": true
+            },
+            "relative_speed_m_s": {
+              "observed": 4.767645278569432e-09,
+              "tolerance": 0.001,
+              "within": true
+            },
+            "min_approach_distance_m": {
+              "observed": 6.410216997210227e-07,
+              "tolerance": 0.5,
+              "within": true
+            },
+            "realized_delta_v_m_s": {
+              "observed": 0.0,
+              "tolerance": 0.0,
+              "within": true
+            }
+          },
+          "verdict_agrees": true,
+          "state": "within_bands"
+        },
+        {
+          "cluster": 12,
+          "index": 2,
+          "seed": 32000038,
+          "stored_verdict": "safety_violation",
+          "reproduces_record": true,
+          "integration_residuals": {
+            "position_error_m": {
+              "observed": 2.0324919205449987e-06,
+              "tolerance": 0.1,
+              "within": true
+            },
+            "relative_speed_m_s": {
+              "observed": 1.3785660668563793e-09,
+              "tolerance": 0.001,
+              "within": true
+            },
+            "min_approach_distance_m": {
+              "observed": 1.2759433047904167e-06,
+              "tolerance": 0.5,
+              "within": true
+            },
+            "realized_delta_v_m_s": {
+              "observed": 0.0,
+              "tolerance": 0.0,
+              "within": true
+            }
+          },
+          "verdict_agrees": true,
+          "state": "within_bands"
+        },
+        {
+          "cluster": 1,
+          "index": 2,
+          "seed": 21000005,
+          "stored_verdict": "arrival_accuracy",
+          "reproduces_record": true,
+          "integration_residuals": {
+            "position_error_m": {
+              "observed": 5.375709207555701e-06,
+              "tolerance": 0.1,
+              "within": true
+            },
+            "relative_speed_m_s": {
+              "observed": 1.506254954097841e-09,
+              "tolerance": 0.001,
+              "within": true
+            },
+            "min_approach_distance_m": {
+              "observed": 4.538890721050848e-06,
+              "tolerance": 0.5,
+              "within": true
+            },
+            "realized_delta_v_m_s": {
+              "observed": 0.0,
+              "tolerance": 0.0,
+              "within": true
+            }
+          },
+          "verdict_agrees": true,
+          "state": "within_bands"
+        },
+        {
+          "cluster": 15,
+          "index": 10,
+          "seed": 35000055,
+          "stored_verdict": "success",
+          "reproduces_record": true,
+          "integration_residuals": {
+            "position_error_m": {
+              "observed": 5.179927327958467e-06,
+              "tolerance": 0.1,
+              "within": true
+            },
+            "relative_speed_m_s": {
+              "observed": 8.372612048113126e-10,
+              "tolerance": 0.001,
+              "within": true
+            },
+            "min_approach_distance_m": {
+              "observed": 4.600439183377603e-06,
+              "tolerance": 0.5,
+              "within": true
+            },
+            "realized_delta_v_m_s": {
+              "observed": 0.0,
+              "tolerance": 0.0,
+              "within": true
+            }
+          },
+          "verdict_agrees": true,
+          "state": "within_bands"
+        },
+        {
+          "cluster": 16,
+          "index": 10,
+          "seed": 36000058,
+          "stored_verdict": "success",
+          "reproduces_record": true,
+          "integration_residuals": {
+            "position_error_m": {
+              "observed": 2.939200392404473e-06,
+              "tolerance": 0.1,
+              "within": true
+            },
+            "relative_speed_m_s": {
+              "observed": 5.004300585031984e-10,
+              "tolerance": 0.001,
+              "within": true
+            },
+            "min_approach_distance_m": {
+              "observed": 2.90049626983091e-06,
+              "tolerance": 0.5,
+              "within": true
+            },
+            "realized_delta_v_m_s": {
+              "observed": 0.0,
+              "tolerance": 0.0,
+              "within": true
+            }
+          },
+          "verdict_agrees": true,
+          "state": "within_bands"
+        }
+      ],
+      "state": "within_bands"
+    },
+    "independent_formulation": {
+      "method": "linear CW replay of the ground plan (shares only the pulse sequence)",
+      "residuals": {
+        "hold_point_position_error_m": {
+          "observed": 257.72137948449586,
+          "tolerance": 600.0,
+          "within": true
+        },
+        "relative_speed_m_s": {
+          "observed": 0.1956108949017566,
+          "tolerance": 0.5,
+          "within": true
+        },
+        "min_approach_distance_m": {
+          "observed": 245.43934289726405,
+          "tolerance": 600.0,
+          "within": true
+        }
+      },
+      "state": "within_declared_validity",
+      "note": "CW is an approximation by design; these are E12-05's declared validity bands, so this line bounds what an approximate model could explain"
+    },
+    "independent_model": {
+      "backend": null,
+      "interpreter": null,
+      "stage": "orbitopt.verify.rendezvous_refly",
+      "result": "not_checked",
+      "reason": "REFLY_BACKEND_MISSING: no ORBITOPT_TUDAT_PYTHON and no importable tudatpy in this environment -- the independent-model line is recorded as NOT_CHECKED, never passed (the same rule E12-05 applies)"
+    }
+  },
+  "notes": [
+    "time-of-flight held at the ground plan's: this prices a locked mission design, not a per-sample re-optimisation (the latter costs ~9 s/sample for a delta-v change E12-05 measured as flat across the window)",
+    "the truth grid is campaign.sample_dt_s, coarser than the config's check_sample_dt_s by design; grid_convergence measures whether it can move a verdict",
+    "drag is present in the truth model whenever the source is enabled: the plan ignores the atmosphere, and the lognormal factor prices what is unknown about it",
+    "the independent-model line is the E12-05 TudatPy re-flight and is recorded not_checked wherever no backend is available (REFLY_BACKEND_MISSING)"
+  ]
+}
