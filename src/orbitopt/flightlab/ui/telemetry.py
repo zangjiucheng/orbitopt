@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import bisect
 import hashlib
+import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +21,15 @@ EARTH_RADIUS_KM = 6378.137
 GRAVITY_M_S2 = 9.80665
 
 ALTITUDE_ALIASES = ("altitude_m", "altitude", "alt_m", "altitude_km")
+#: E12-06: (channel id, CSV aliases, label, unit) of the rendezvous
+#: relative-state series a studio run carries as chaser extra columns.
+RENDEZVOUS_SERIES = (
+    ("rel_range", ("rel_range_m",), "Range to target", "m"),
+    ("rel_speed", ("rel_speed_m_s",), "Relative speed", "m/s"),
+    ("rel_x_lvlh", ("rel_x_lvlh_m",), "LVLH x (radial)", "m"),
+    ("rel_y_lvlh", ("rel_y_lvlh_m",), "LVLH y (along-track)", "m"),
+    ("rel_z_lvlh", ("rel_z_lvlh_m",), "LVLH z (cross-track)", "m"),
+)
 DYNAMIC_PRESSURE_ALIASES = ("dynamic_pressure_pa", "q_pa", "q")
 G_LOAD_ALIASES = ("axial_accel_g", "accel_g", "g_load", "gload", "acceleration_g")
 ENGINES_LIT_ALIASES = ("engines_lit", "engines_on", "n_engines")
@@ -308,6 +318,16 @@ def build_telemetry_channels(
                 fins.append(TelemetrySeries("grid_fins", label, "deg", color, track.body_id, points))
     channels.append(TelemetryChannel("grid_fins", "Grid Fins", "deg",
                                      "no recorded grid-fin telemetry" if not fins else "", tuple(fins)))
+    for channel_id, aliases, label, unit in RENDEZVOUS_SERIES:
+        series = []
+        for index, track in enumerate(run.tracks):
+            extra = _extra_values(track, aliases)
+            if extra is not None:
+                series.append(TelemetrySeries(channel_id, _body_label(track.body_id), unit,
+                                              _track_color(track_colors, track, index),
+                                              track.body_id, _finite_pairs(track.t_s, extra[1])))
+        if series:
+            channels.append(TelemetryChannel(channel_id, label, unit, "", tuple(series)))
     return tuple(channels)
 
 
@@ -405,8 +425,17 @@ def load_run_scene(run_dir: Path | str, *, earth_texture: bool = True) -> tuple[
         from orbitopt.flightlab.segment import flight_run_report
         from orbitopt.verify.report import publish_to_scene
 
+        rendezvous = None
+        side = path / "rendezvous.json"
+        if side.is_file():
+            try:
+                doc = json.loads(side.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                doc = None
+            if isinstance(doc, dict) and doc.get("schema_version") == "rendezvous-studio-1.0":
+                rendezvous = doc
         scene = run_to_scene(run, earth_texture=earth_texture, target=target,
-                             mission_scenario=scenario)
+                             mission_scenario=scenario, rendezvous=rendezvous)
         # The run's own verification (checks recorded in verification.json, incl. the orbit re-fly) as a
         # verification-report-1.0 on the scene: without it the Verification panel says NOT CHECKED for a run
         # that was in fact verified. A run with no assessed verdict still reports not_checked.

@@ -213,7 +213,8 @@ def test_telemetry_panel_follows_time_and_requests_seeks():
 
     run = read_run(RUN_FIXTURE)
     panel = TelemetryPanel()
-    assert set(panel.charts) == {cid for cid, _l, _u in TELEMETRY_CHARTS} == REQUIRED_CHANNELS
+    assert set(panel.charts) == {cid for cid, _l, _u in TELEMETRY_CHARTS}
+    assert REQUIRED_CHANNELS <= set(panel.charts)
     panel.set_channels(build_telemetry_channels(run), 0.0, 500.0)
     panel.set_time(123.0)
     assert all(chart._time == 123.0 for chart in panel.charts.values())

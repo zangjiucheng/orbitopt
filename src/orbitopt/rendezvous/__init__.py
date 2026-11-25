@@ -12,6 +12,8 @@ constraints (E12-04).
 * :mod:`orbitopt.rendezvous.safety` -- keep-out / corridor / approach-speed
   / passive-safety checks on the WHOLE trajectory, and the safety-constrained
   planner that screens unsafe candidates out of the search.
+* :mod:`orbitopt.rendezvous.studio` -- replays the verified mission as a
+  Flight Lab run directory for the Mission Studio (E12-06).
 
 The whole pipeline on the reference mission:
 
@@ -45,6 +47,7 @@ from orbitopt.rendezvous.safety import (
     plan_rendezvous_safe,
     verify_plan_safety,
 )
+from orbitopt.rendezvous.studio import StudioRun, build_studio_run, write_studio_run
 from orbitopt.rendezvous.verify import RendezvousVerification, verify_plan
 
 __all__ = [
@@ -69,4 +72,7 @@ __all__ = [
     "evaluate_trajectory_safety",
     "plan_rendezvous_safe",
     "verify_plan_safety",
+    "StudioRun",
+    "build_studio_run",
+    "write_studio_run",
 ]

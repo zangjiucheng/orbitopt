@@ -624,7 +624,8 @@ def _earth_body(earth_texture: bool, orientation_basis: list | None) -> dict:
 
 def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
                  coast_orbits: float = 0.0, coast_samples: int = 120, target=None,
-                 mission_scenario: TwoStageLeoScenario | None = None) -> dict:
+                 mission_scenario: TwoStageLeoScenario | None = None,
+                 rendezvous: dict | None = None) -> dict:
     """Convert a FlightResult v1 run into a scene-1.0 document (Earth scene,
     one trailed body per track, contract events as timeline markers, a
     continuous phase row and a per-boundary ``handoffs`` verdict block).
@@ -645,6 +646,11 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
     ``target`` optionally supplies launch/recovery coordinates for Earth-fixed
     markers. Replay resolves it by the run's target digest; unavailable named
     recovery coordinates are not replaced with an assumed launch-site target.
+
+    ``rendezvous`` optionally is a ``rendezvous-studio-1.0`` sidecar document
+    (E12-06): its events join the timeline and its markers become Earth-orbit
+    site-kind bodies (keep-out centre, hold point). Sidecar data is display
+    metadata only; it never alters tracks or verification.
     """
     if coast_orbits < 0.0:
         raise ValueError(f"coast_orbits must be >= 0, got {coast_orbits!r}")
@@ -704,12 +710,25 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
         elif event.kind == "seco" and seco is not None:
             entry["note"] += f" \u00b7 handoff {seco['status'].upper()} ({seco['detail']})"
         events.append(entry)
+    if rendezvous:
+        for sidecar_event in rendezvous.get("events", ()):
+            try:
+                t_s = float(sidecar_event["t_s"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            events.append({"label": str(sidecar_event.get("title")
+                                             or sidecar_event.get("kind") or "rendezvous"),
+                           "time": t_s,
+                           "note": "E12-06 mission studio sidecar",
+                           "bodyId": str(sidecar_event.get("body_id", ""))})
 
     t_max = max([float(track.t_end_s) for track in run.tracks]
                 + [float(event.t_s) for event in run.events]
                 + ([coast["t0"] + coast["duration"]] if coast else []))
     if target is not None:
         bodies.extend(_site_bodies(target, epoch, t_max))
+    if rendezvous:
+        bodies.extend(_rendezvous_marker_bodies(rendezvous))
     timeline = {
         "unitLabel": "seconds",
         "min": 0.0,
@@ -815,4 +834,45 @@ def _site_bodies(target, epoch, end: float) -> list[dict]:
                        "trail": {"times": times, "positions": points},
                        "info": [{"label": "Coordinates", "value": f"{lat:.4f}°, {lon:.4f}°"},
                                 {"label": "Marker", "value": "Earth-fixed target; display lift 300 m"}]})
+    return bodies
+
+
+def _rendezvous_marker_bodies(rendezvous: dict) -> list[dict]:
+    """Keep-out centre and hold point markers from a ``rendezvous-studio-1.0``
+    sidecar (E12-06), as static site-kind bodies in the scene's position unit.
+
+    The sidecar is producer-computed display metadata: malformed markers are
+    skipped, and the run's tracks and verification block are untouched.
+    """
+    keepout = rendezvous.get("keepout") or {}
+    hold = rendezvous.get("hold_point") or {}
+    bodies = []
+    for marker in rendezvous.get("markers", ()):
+        try:
+            times = [float(t) for t in marker["times_s"]]
+            positions_m = [[float(c) for c in row] for row in marker["positions_m"]]
+            body_id = str(marker["id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if len(times) < 2 or len(positions_m) != len(times):
+            continue
+        info = [{"label": "Marker", "value": str(marker.get("name", body_id))}]
+        if body_id == "keepout_center" and keepout:
+            info.append({"label": "Keep-out sphere",
+                         "value": f"radius {float(keepout['radius_m']):.0f} m"})
+            info.append({"label": "Closest approach",
+                         "value": f"{float(keepout['min_range_m']):.0f} m — "
+                                  + ("clear" if keepout.get("respected") else "INTRUSION")})
+        if body_id == "hold_point" and hold:
+            info.append({"label": "Hold point (LVLH)",
+                         "value": "(" + ", ".join(f"{v:+.0f}" for v in hold["rel_lvlh_m"]) + ") m"})
+            info.append({"label": "Position error",
+                         "value": f"{float(hold['position_error_m']):.2e} m "
+                                  f"(tol {float(hold['tolerance_m']):.0f} m)"})
+        bodies.append({"id": body_id, "name": str(marker.get("name", body_id)),
+                       "color": str(marker.get("color", "#e05d5d")), "kind": "site",
+                       "radiusDisplay": 4.0, "hideTrail": True,
+                       "trail": {"times": times,
+                                 "positions": [[_km(x), _km(y), _km(z)] for x, y, z in positions_m]},
+                       "info": info})
     return bodies

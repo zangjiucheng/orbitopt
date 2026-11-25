@@ -264,6 +264,34 @@ def _cmd_launch(args):
     print(f"OK [{result.status}]: {result.message}")
 
 
+def _cmd_rendezvous_studio(args):
+    """E12-06: plan, verify and replay a rendezvous mission as a Flight Lab run."""
+    from orbitopt.rendezvous.config import load_rendezvous_config, load_reference_config
+    from orbitopt.rendezvous.studio import build_studio_run, write_studio_run
+
+    cfg = load_rendezvous_config(args.config) if args.config else load_reference_config()
+    studio = build_studio_run(cfg, sample_dt_s=args.dt)
+    root = write_studio_run(args.output, studio)
+    ver = studio.sidecar["verification"]
+    keepout = studio.sidecar["keepout"]
+    if args.json:
+        import json
+        print(json.dumps({"run_dir": str(root), "run_id": studio.run.run_id,
+                          "passed": ver["passed"],
+                          "total_delta_v_m_s": ver["total_delta_v_m_s"],
+                          "position_error_m": ver["position_error_m"],
+                          "relative_speed_m_s": ver["relative_speed_m_s"],
+                          "keepout_respected": keepout["respected"]}, indent=2))
+        return
+    verdict = "PASS" if ver["passed"] else "FAIL"
+    print(f"Rendezvous studio run: {root}")
+    print(f"  verdict      {verdict}  (Δv {ver['total_delta_v_m_s']:.3f} m/s, "
+          f"pos err {ver['position_error_m']:.3e} m, rel speed {ver['relative_speed_m_s']:.3e} m/s, "
+          f"keep-out {'clear' if keepout['respected'] else 'INTRUSION'}"
+          f" @ {keepout['min_range_m']:.0f} m)")
+    print("  open in Flight Lab with `orbitopt view` or pass the dir to the UI")
+
+
 def _cmd_flight(args):
     """`orbitopt flight ...`: the Flight Lab tools (orbitopt.flightlab) --
     readable pass/fail or a written scene JSON, no compute stack, no GUI
@@ -799,6 +827,24 @@ def build_parser() -> argparse.ArgumentParser:
     launch.add_argument("--json", action="store_true",
                         help="also print the pipeline result as JSON")
 
+    rendezvous = sub.add_parser(
+        "rendezvous", help="E12-06 orbital rendezvous tools (Mission Studio replay runs)")
+    rendezvous_sub = rendezvous.add_subparsers(dest="rendezvous_command", required=True)
+    rendezvous_studio = rendezvous_sub.add_parser(
+        "studio",
+        help="replay a rendezvous mission as a Flight Lab run dir: target/chaser tracks, "
+             "relative-state telemetry, maneuver timeline and the graded verification "
+             "(config in, Mission-Studio replay out; opens with `orbitopt view`)")
+    rendezvous_studio.add_argument("--config", default=None, metavar="PATH",
+                                   help="rendezvous mission config YAML (default: packaged "
+                                        "LEO-RDV-001 reference)")
+    rendezvous_studio.add_argument("-o", "--output", required=True, metavar="DIR",
+                                   help="output run dir (manifest.json + trajectories/ + "
+                                        "mission.json/replay.json/rendezvous.json)")
+    rendezvous_studio.add_argument("--dt", type=float, default=5.0, metavar="S",
+                                   help="track sample interval [s] (default 5)")
+    rendezvous_studio.add_argument("--json", action="store_true", help="print the verdict as JSON")
+
     flight = sub.add_parser("flight", help="Flight Lab contract tools (FlightTarget / FlightResult)")
     flight_sub = flight.add_subparsers(dest="flight_command", required=True)
     flight_validate = flight_sub.add_parser(
@@ -1009,6 +1055,9 @@ def main(argv=None):
         _cmd_launch_window(args)
     elif args.command == "launch":
         _cmd_launch(args)
+    elif args.command == "rendezvous":
+        if args.rendezvous_command == "studio":
+            _cmd_rendezvous_studio(args)
     elif args.command == "flight":
         _cmd_flight(args)
     elif args.command == "crossenv":
