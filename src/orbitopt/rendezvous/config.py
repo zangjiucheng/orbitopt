@@ -87,6 +87,27 @@ class OptimizerCfg:
 
 
 @dataclass(frozen=True)
+class SafetyCfg:
+    """E12-04 hard safety constraints, fixed in the mission config before
+    optimization -- the planner treats a violation as infeasibility and
+    never relaxes a bound at runtime. Checked on the whole trajectory
+    (drift, transfer coast between burns, post-insertion hover) by
+    :func:`orbitopt.rendezvous.verify_plan_safety`. ``speed_range_knots_m``
+    / ``speed_cap_m_s`` give the range-dependent relative-speed ceiling as
+    a piecewise-linear profile, constant below the first knot and above the
+    last."""
+
+    keep_out_radius_m: float
+    cross_track_max_m: float
+    cone_half_angle_deg: float
+    cone_range_m: float
+    speed_range_knots_m: tuple[float, ...]
+    speed_cap_m_s: tuple[float, ...]
+    passive_contingency_s: float
+    check_sample_dt_s: float
+
+
+@dataclass(frozen=True)
 class RendezvousMissionConfig:
     """Parsed, cross-checked LEO-RDV-001-family mission config. Times
     throughout the package are elapsed seconds from the shared epoch t0 at
@@ -105,6 +126,7 @@ class RendezvousMissionConfig:
     windows: WindowsCfg
     phasing: PhasingCfg
     optimizer: OptimizerCfg
+    safety: SafetyCfg | None = None
 
     @property
     def orbital_plane_deg(self) -> tuple[float, float]:
@@ -138,6 +160,44 @@ def validate_rendezvous_config(doc: dict, *, where: str = "rendezvous config") -
         raise RendezvousConfigError(f"{where}: {exc.message}") from exc
 
 
+def _parse_safety(doc: dict, hold: tuple[float, float, float], where: str) -> SafetyCfg:
+    """Build :class:`SafetyCfg` from the optional v1.0 ``safety`` block,
+    applying the cross-checks the schema cannot express (knot monotonicity,
+    keep-out must exclude the Hold Point)."""
+    s = doc["safety"]
+    knots = tuple(float(v) for v in s["approach_speed"]["range_knots_m"])
+    caps = tuple(float(v) for v in s["approach_speed"]["cap_m_s"])
+    if len(knots) != len(caps):
+        raise RendezvousConfigError(
+            f"{where}: safety.approach_speed needs one cap per range knot, "
+            f"got {len(knots)} knots and {len(caps)} caps"
+        )
+    if any(b <= a for a, b in zip(knots, knots[1:])):
+        raise RendezvousConfigError(f"{where}: safety.approach_speed.range_knots_m must strictly increase")
+    if any(b < a for a, b in zip(caps, caps[1:])):
+        raise RendezvousConfigError(
+            f"{where}: safety.approach_speed.cap_m_s must be non-decreasing with range "
+            f"(a slower approach closer in is the whole idea)"
+        )
+    hold_range = math.sqrt(sum(v * v for v in hold))
+    if s["keep_out_radius_m"] >= hold_range:
+        raise RendezvousConfigError(
+            f"{where}: safety.keep_out_radius_m {s['keep_out_radius_m']:.0f} m swallows the Hold Point "
+            f"at |hold| = {hold_range:.0f} m -- a mission that forbids its own arrival point is "
+            f"self-contradictory"
+        )
+    return SafetyCfg(
+        keep_out_radius_m=float(s["keep_out_radius_m"]),
+        cross_track_max_m=float(s["cross_track_max_m"]),
+        cone_half_angle_deg=float(s["cone_half_angle_deg"]),
+        cone_range_m=float(s["cone_range_m"]),
+        speed_range_knots_m=knots,
+        speed_cap_m_s=caps,
+        passive_contingency_s=float(s["passive_contingency_s"]),
+        check_sample_dt_s=float(s["check_sample_dt_s"]),
+    )
+
+
 def parse_rendezvous_config(doc: dict, *, where: str = "rendezvous config") -> RendezvousMissionConfig:
     """Schema-validate and cross-check a document, then build the config.
     Cross-checks (schema can't express these):
@@ -148,7 +208,10 @@ def parse_rendezvous_config(doc: dict, *, where: str = "rendezvous config") -> R
     * the gate ordering ``initial along-track < gate < hold-point y < 0``,
       so the V-bar drift actually reaches the departure gate before the
       hold point;
-    * ``|radial gap| < initial_separation`` so the phasing geometry solves.
+    * ``|radial gap| < initial_separation`` so the phasing geometry solves;
+    * with the optional E12-04 ``safety`` block: speed knots strictly
+      increase, speed caps are non-decreasing with range, and the keep-out
+      sphere must exclude the Hold Point.
     """
     validate_rendezvous_config(doc, where=where)
     dyn, tgt, chs = doc["dynamics"], doc["target"], doc["chaser"]
@@ -202,6 +265,7 @@ def parse_rendezvous_config(doc: dict, *, where: str = "rendezvous config") -> R
             jacobian_eps_m_s=float(opt["jacobian_eps_m_s"]),
             golden_max_iter=int(opt["golden_max_iter"]),
         ),
+        safety=_parse_safety(doc, hold, where) if "safety" in doc else None,
     )
     if cfg.windows.transfer_tof_max_s <= cfg.windows.transfer_tof_min_s:
         raise RendezvousConfigError(f"{where}: transfer_tof_max_s must exceed transfer_tof_min_s")

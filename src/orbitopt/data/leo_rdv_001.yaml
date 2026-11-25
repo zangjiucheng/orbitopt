@@ -54,3 +54,13 @@ optimizer:
   newton_max_iter: 10
   jacobian_eps_m_s: 0.05
   golden_max_iter: 16
+safety:                          # E12-04 (task #394): hard constraints, fixed before optimization
+  keep_out_radius_m: 500.0       # 500 m Keep-out Zone around the target, every sample
+  cross_track_max_m: 100.0       # corridor: |z| containment, full trajectory
+  cone_half_angle_deg: 90.0      # corridor: no forward excursion within the cone...
+  cone_range_m: 1100.0           # ...terminal cone, 100 m beyond the Hold Point (ADR rendezvous-0002)
+  approach_speed:                # range-dependent relative-speed ceiling, piecewise-linear
+    range_knots_m: [500.0, 1000.0, 2500.0, 9500.0, 13000.0]
+    cap_m_s: [9.0, 9.0, 12.0, 22.0, 26.0]
+  passive_contingency_s: 5400.0  # one-orbit no-thrust coast at t0 / gate / Hold Point stays clear
+  check_sample_dt_s: 2.0         # dense full-trajectory check grid (burn epochs always sampled)

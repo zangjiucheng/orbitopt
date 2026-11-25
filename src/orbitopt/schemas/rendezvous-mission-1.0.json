@@ -6,6 +6,7 @@
   "type": "object",
   "required": ["schemaVersion", "mission", "dynamics", "target", "chaser", "hold_point", "budget", "tolerances", "windows", "phasing", "optimizer"],
   "additionalProperties": false,
+  "$comment": "v1.0 stays the one accepted schemaVersion: the E12-04 'safety' block below is OPTIONAL, so every pre-E12-04 document validates unchanged and every v1.0 consumer that ignores unknown-but-absent keys is unaffected. A document that DOES carry 'safety' is fully cross-checked by the loader.",
   "properties": {
     "schemaVersion": {
       "const": "1.0",
@@ -108,6 +109,30 @@
         "newton_max_iter": { "type": "integer", "minimum": 1, "maximum": 30 },
         "jacobian_eps_m_s": { "type": "number", "exclusiveMinimum": 0, "description": "Finite-difference step on the departure delta-v for the Newton Jacobian." },
         "golden_max_iter": { "type": "integer", "minimum": 4, "maximum": 40, "description": "Golden-section iterations over the time-of-flight window minimizing total delta-v." }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "description": "OPTIONAL (E12-04, additive to v1.0): hard safety constraints the plan must satisfy on the WHOLE trajectory -- drift leg, transfer leg with coast between the burns, and the post-insertion hover sample -- plus passive-safety coast checks. Fixed here, before any optimization runs; the safety-constrained planner treats a violated constraint as making a candidate infeasible and never relaxes a bound at runtime. Loader cross-checks: speed knots strictly increase, speed caps non-decrease with range, and the keep-out sphere must exclude the Hold Point.",
+      "required": ["keep_out_radius_m", "cross_track_max_m", "cone_half_angle_deg", "cone_range_m", "approach_speed", "passive_contingency_s", "check_sample_dt_s"],
+      "additionalProperties": false,
+      "properties": {
+        "keep_out_radius_m": { "type": "number", "exclusiveMinimum": 0, "description": "Keep-out sphere around the target: |rho(t)| must stay >= this on every sample of the full trajectory." },
+        "cross_track_max_m": { "type": "number", "exclusiveMinimum": 0, "description": "Corridor: |z| (out-of-plane LVLH) containment over the full trajectory." },
+        "cone_half_angle_deg": { "type": "number", "exclusiveMinimum": 0, "maximum": 90.0, "description": "Corridor: within cone_range_m the line of sight from the target to the deputy must stay within this half-angle of the -V-bar direction (90 deg = never in front). Enforced only on samples closer than cone_range_m." },
+        "cone_range_m": { "type": "number", "exclusiveMinimum": 0, "description": "Range from the target within which the approach cone applies (terminal corridor)." },
+        "approach_speed": {
+          "type": "object",
+          "description": "Range-dependent relative-speed ceiling: piecewise-linear in |rho| through the knots, constant below the first and above the last; max |rho_dot| must stay at or under it on every sample.",
+          "required": ["range_knots_m", "cap_m_s"],
+          "additionalProperties": false,
+          "properties": {
+            "range_knots_m": { "type": "array", "minItems": 2, "items": { "type": "number", "exclusiveMinimum": 0 } },
+            "cap_m_s": { "type": "array", "minItems": 2, "items": { "type": "number", "exclusiveMinimum": 0 } }
+          }
+        },
+        "passive_contingency_s": { "type": "number", "exclusiveMinimum": 0, "description": "Passive safety: after each contingency release (no burn at t0, abort at the gate, coast from the Hold Point) the pair coasts uncontrolled for this long; the keep-out sphere must stay clear for the whole coast." },
+        "check_sample_dt_s": { "type": "number", "exclusiveMinimum": 0, "description": "Step of the dense re-propagated grid the full-trajectory checks run on (leg endpoints and burn epochs are always samples)." }
       }
     }
   }
