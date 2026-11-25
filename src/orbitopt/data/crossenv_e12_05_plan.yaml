@@ -1,0 +1,37 @@
+# Cross-environment re-flight plan (task #395, E12-05) -- orbitopt.crossenv.plan v1.
+#
+# E12-05 independent verification of LEO-RDV-001: the rendezvous plan is
+# re-flown as a two-spacecraft pulse sequence (coast / burn / coast) inside
+# the tudatpy environment -- an independently formulated propagator -- and the
+# evidence is sealed into a digest-pinned exchange envelope the orchestrating
+# report re-validates on read (orbitopt/schemas/crossenv-exchange-1.0.json).
+#
+# The one stage needs tudatpy, so the interpreter comes from the environment;
+# the orchestrating report (orbitopt.verify.rendezvous_refly) drives this same
+# stage machinery directly, so this file exists to run the leg standalone:
+#   orbitopt crossenv run --plan src/orbitopt/data/crossenv_e12_05_plan.yaml
+#   python -m orbitopt.crossenv stage --plan <resolved> --stage refly --out runs/e12-05-refly
+kind: orbitopt.crossenv.plan
+schema_version: "1.0"
+
+mission:
+  id: e12-05-independent-refly-leo-rdv-001
+
+# The rendezvous mission config doubles as this plan's scenario: the worker
+# loads it with orbitopt.rendezvous.config.load_rendezvous_config and
+# recomputes (and re-verifies) the plan in its own environment.
+scenario: src/orbitopt/data/leo_rdv_001.yaml
+
+out: runs/crossenv-e12-05
+
+environments:
+  tudat: ${ORBITOPT_TUDAT_PYTHON:-python}
+
+stages:
+  # Independent re-flight in the tudatpy environment: matched-physics (config
+  # GM + J2, GCRS) key run, point-mass run with Kepler-checkable leg states,
+  # DOP853 tolerance / RK4 step convergence sweeps, and the plan's own verdict
+  # recomputed here (env-parity recheck). Seals the evidence document.
+  - id: refly
+    runner: rendezvous_refly
+    env: tudat

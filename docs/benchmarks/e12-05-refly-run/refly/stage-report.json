@@ -1,0 +1,45 @@
+{
+ "kind": "orbitopt.crossenv.stage-report",
+ "schema_version": "1.0",
+ "stage": "refly",
+ "runner": "rendezvous_refly",
+ "env": "tudat",
+ "environment": {
+  "env": "tudat",
+  "python_executable": "/u9/j7zang/envs/tudatpy/bin/python",
+  "python": "3.10.22",
+  "platform": "Linux-6.8.0-149-generic-x86_64-with-glibc2.39",
+  "toolchain": {
+   "python": "3.10.22",
+   "orbitopt": "unknown (source tree; see git_sha)",
+   "numpy": "2.0.0",
+   "scipy": "1.13.1",
+   "astropy": "6.1.7",
+   "tudatpy": "1.0.0",
+   "gfold": "absent",
+   "jsbsim": "absent",
+   "cvxpy": "absent",
+   "jsonschema": "4.26.0",
+   "pyyaml": "6.0.1",
+   "opentsiolkovsky": "1.0.0",
+   "opentsiolkovsky_sha256": "8041a9b5806136eb0e9d2a7b2c9ebed58ccc1876198cbf5c6373c440cb182c4c"
+  },
+  "argv": [
+   "/u9/j7zang/cf-compute/395/src/orbitopt/crossenv/__main__.py",
+   "stage",
+   "--plan",
+   "docs/benchmarks/e12-05-refly-run/plan.resolved.json",
+   "--stage",
+   "refly",
+   "--out",
+   "docs/benchmarks/e12-05-refly-run"
+  ]
+ },
+ "status": "completed",
+ "mission_ok": true,
+ "summary": "mission_id=leo-rdv-001 frame=GCRS pos_err_m=0.000 rel_speed_m_s=0.0000 min_app_m=908.9 dv_m_s=10.344",
+ "failed_checks": [],
+ "payloads": [
+  "refly-evidence"
+ ]
+}

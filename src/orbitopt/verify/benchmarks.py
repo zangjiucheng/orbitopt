@@ -138,22 +138,44 @@ def ic_to_coe(state, mu: float = MU_EARTH_M3_S2) -> dict:
         argp = math.degrees(math.acos(np.clip(node @ evec / (nn * e), -1.0, 1.0)))
         if evec[2] < 0.0:
             argp = 360.0 - argp
+        nu = math.acos(np.clip(evec @ r / (e * rn), -1.0, 1.0))
+        if (r @ v) < 0.0:
+            nu = 2.0 * math.pi - nu
+        E = 2.0 * math.atan2(math.sqrt(1.0 - e) * math.sin(nu / 2.0),
+                             math.sqrt(1.0 + e) * math.cos(nu / 2.0))
+        M_deg = math.degrees(E - e * math.sin(E)) % 360.0
     else:
+        # Circular: argp and M are individually undefined. Take argp = 0 so
+        # M carries the argument of latitude (dividing by e below would make
+        # nu -- and every state rebuilt from it -- garbage by e-amplitude).
         argp = 0.0
-    nu = math.acos(np.clip(evec @ r / (e * rn), -1.0, 1.0))
-    if (r @ v) < 0.0:
-        nu = 2.0 * math.pi - nu
-    E = 2.0 * math.atan2(math.sqrt(1.0 - e) * math.sin(nu / 2.0),
-                         math.sqrt(1.0 + e) * math.cos(nu / 2.0))
+        if nn > 1e-9:
+            u = math.acos(np.clip(node @ r / (nn * rn), -1.0, 1.0))
+            if r[2] < 0.0:
+                u = 2.0 * math.pi - u
+        else:
+            u = math.atan2(r[1], r[0]) % (2.0 * math.pi)
+        M_deg = math.degrees(u) % 360.0
     return {"a": a, "e": e, "i_deg": inc, "raan_deg": raan % 360.0,
-            "argp_deg": argp % 360.0, "M_deg": math.degrees(E - e * math.sin(E)) % 360.0}
+            "argp_deg": argp % 360.0, "M_deg": M_deg}
 
 
 def propagate_kepler_analytic(state0, dt: float, mu: float = MU_EARTH_M3_S2) -> np.ndarray:
     """The two-body state after ``dt`` s, exactly: elements propagated by
-    M += n dt and rebuilt (the analytic reference, not an approximation)."""
+    M += n dt and rebuilt (the analytic reference, not an approximation).
+
+    Near-circular orbits (e < 1e-9, position error of the shortcut < 6 mm)
+    propagate as the exact rotation about the angular-momentum axis instead
+    of the element round-trip."""
     c = ic_to_coe(state0, mu)
     n = math.sqrt(mu / c["a"] ** 3)
+    if c["e"] < 1e-9:
+        s = np.asarray(state0, dtype=float)
+        hhat = np.cross(s[:3], s[3:])
+        hhat = hhat / np.linalg.norm(hhat)
+        th = n * dt
+        rot = lambda x: x * math.cos(th) + np.cross(hhat, x) * math.sin(th)
+        return np.concatenate([rot(s[:3]), rot(s[3:])])
     M0 = (c["M_deg"] + math.degrees(n * dt)) % 360.0
     return coe_to_ic(c["a"], c["e"], c["i_deg"], c["raan_deg"], c["argp_deg"], M0, mu)
 

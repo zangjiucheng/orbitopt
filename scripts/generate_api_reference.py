@@ -28,6 +28,7 @@ GROUPS = {
     "mission": "Mission integration",
     "optimize": "Optimization",
     "problems": "Optimization problems",
+    "relative": "Relative orbital dynamics",
     "verify": "Verification",
     "viz": "Visualization and Mission Control",
 }

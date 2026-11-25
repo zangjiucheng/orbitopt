@@ -213,7 +213,8 @@ def test_telemetry_panel_follows_time_and_requests_seeks():
 
     run = read_run(RUN_FIXTURE)
     panel = TelemetryPanel()
-    assert set(panel.charts) == {cid for cid, _l, _u in TELEMETRY_CHARTS} == REQUIRED_CHANNELS
+    assert set(panel.charts) == {cid for cid, _l, _u in TELEMETRY_CHARTS}
+    assert REQUIRED_CHANNELS <= set(panel.charts)
     panel.set_channels(build_telemetry_channels(run), 0.0, 500.0)
     panel.set_time(123.0)
     assert all(chart._time == 123.0 for chart in panel.charts.values())
@@ -256,7 +257,10 @@ def test_telemetry_plot_selection_compacts_and_persists(tmp_path):
     assert all(chart.isHidden() for chart in restored.charts.values())
     assert not restored._empty.isHidden()
     restored.plots_button.menu().actions()[-1].trigger()
-    assert all(chart.isHidden() == (channel_id == "grid_fins")
+    # plots that need data the run does not carry (grid fins, the rendezvous relative-state series) stay hidden
+    from orbitopt.flightlab.ui.flight_panel import _DATA_GATED_PLOTS
+
+    assert all(chart.isHidden() == (channel_id in _DATA_GATED_PLOTS)
                for channel_id, chart in restored.charts.items())
     assert restored.charts["altitude"]._time == 42.0
     assert restored._empty.isHidden()

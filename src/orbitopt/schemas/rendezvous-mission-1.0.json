@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zangjiucheng/orbitopt/schemas/rendezvous-mission-1.0.json",
+  "title": "orbitopt two-impulse rendezvous mission config v1.0",
+  "description": "A user-editable YAML/JSON config for a two-impulse, phasing-then-transfer LEO rendezvous like the LEO-RDV-001 reference mission of task #393 (E12-03): a chaser starts on a slightly lower near-circular orbit behind a target on the same plane, drifts forward along V-bar to a departure gate, and flies a two-pulse Lambert transfer to arrive hovering at a Hold Point expressed in the target's LVLH frame (x=radial, y=along-track, z=cross-track, per the E12-02 frame family). Everything the optimizer must not move -- the fuel budget, the drift and transfer time windows, the departure gate, the arrival tolerances and the fixed Earth gravity parameter -- is declared here and fixed before `orbitopt.rendezvous.plan_rendezvous` runs; the planner never edits its own budget. Strict by convention: `additionalProperties: false` everywhere, every key documented, numeric cross-checks the schema cannot express (mu == the exact packaged Earth value, gate/hold ordering, coplanar pair) are re-validated by the loader in `orbitopt.rendezvous.config`.",
+  "type": "object",
+  "required": ["schemaVersion", "mission", "dynamics", "target", "chaser", "hold_point", "budget", "tolerances", "windows", "phasing", "optimizer"],
+  "additionalProperties": false,
+  "$comment": "v1.0 stays the one accepted schemaVersion: the E12-04 'safety' block below is OPTIONAL, so every pre-E12-04 document validates unchanged and every v1.0 consumer that ignores unknown-but-absent keys is unaffected. A document that DOES carry 'safety' is fully cross-checked by the loader.",
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0",
+      "description": "Which version of this mission-config schema the document was written against."
+    },
+    "mission": {
+      "type": "object",
+      "required": ["id", "title", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Stable slug, e.g. 'leo-rdv-001'." },
+        "title": { "type": "string", "minLength": 1 },
+        "kind": { "const": "rendezvous-two-impulse", "description": "Selects orbitopt.rendezvous (drift phase + two-pulse Lambert transfer to a LVLH Hold Point)." }
+      }
+    },
+    "dynamics": {
+      "type": "object",
+      "required": ["frame", "mu", "j2"],
+      "additionalProperties": false,
+      "properties": {
+        "frame": { "enum": ["GCRS", "EME2000"], "description": "Inertial frame of every absolute state (RELATIVE_PAIR's two labels, E12-02 contract)." },
+        "mu": { "type": "number", "exclusiveMinimum": 0, "description": "Central-body gravitational parameter, m^3/s^2. The loader demands it equals the exact packaged Earth value (3.9860044150e14): this config family is Earth-orbit rendezvous, and passing an explicit mu is how the planner keeps the Lambert solver off its solar-system default." },
+        "j2": { "type": "boolean", "description": "Propagate with J2 (packaged EARTH_J2) or pure two-body. The plan targets the model it is verified against." }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": ["altitude_m", "inclination_deg", "raan_deg", "argument_of_latitude_deg"],
+      "additionalProperties": false,
+      "properties": {
+        "altitude_m": { "type": "number", "minimum": 300e3, "maximum": 800e3, "description": "Circular altitude of the target (chief) orbit; LEO band only in v1." },
+        "inclination_deg": { "type": "number", "minimum": 0, "maximum": 180 },
+        "raan_deg": { "type": "number", "minimum": 0, "exclusiveMaximum": 360 },
+        "argument_of_latitude_deg": { "type": "number", "minimum": 0, "exclusiveMaximum": 360, "description": "Target phase at the shared epoch t0; times in plans/verifications are elapsed seconds from t0." }
+      }
+    },
+    "chaser": {
+      "type": "object",
+      "required": ["altitude_m", "initial_separation_m"],
+      "additionalProperties": false,
+      "properties": {
+        "altitude_m": { "type": "number", "minimum": 300e3, "maximum": 800e3, "description": "Circular altitude of the chaser (deputy) orbit at t0. Below the target altitude so it drifts forward along V-bar (lower/faster phasing)." },
+        "initial_separation_m": { "type": "number", "exclusiveMinimum": 0, "description": "|rho(t0)| between the two spacecraft at t0. The chaser is coplanar with the target (v1), below it radially by the altitude difference, and phased behind it so the resulting separation equals this value; the loader rejects a separation the radial gap alone already exceeds." }
+      }
+    },
+    "hold_point": {
+      "type": "object",
+      "required": ["rel_lvlh"],
+      "additionalProperties": false,
+      "properties": {
+        "rel_lvlh": {
+          "type": "array", "minItems": 3, "maxItems": 3,
+          "items": { "type": "number" },
+          "description": "Hold Point as [x, y, z] metres in the target's LVLH frame (x radial, y along-track, z cross-track). Arrival means reaching this offset with zero relative velocity at the transfer end."
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "required": ["delta_v_budget_m_s"],
+      "additionalProperties": false,
+      "properties": {
+        "delta_v_budget_m_s": { "type": "number", "exclusiveMinimum": 0, "description": "Total two-pulse delta-v budget, fixed before optimization. The planner optimizes against it, never relaxes it; verification reports the remaining margin." }
+      }
+    },
+    "tolerances": {
+      "type": "object",
+      "required": ["max_position_error_m", "max_relative_speed_m_s"],
+      "additionalProperties": false,
+      "properties": {
+        "max_position_error_m": { "type": "number", "exclusiveMinimum": 0, "description": "||rho(arrival) - hold_point.rel_lvlh|| ceiling after the insertion burn, on the verifying propagation." },
+        "max_relative_speed_m_s": { "type": "number", "exclusiveMinimum": 0, "description": "||rho_dot(arrival)|| ceiling after the insertion burn." }
+      }
+    },
+    "windows": {
+      "type": "object",
+      "required": ["drift_max_s", "transfer_tof_min_s", "transfer_tof_max_s"],
+      "additionalProperties": false,
+      "properties": {
+        "drift_max_s": { "type": "number", "exclusiveMinimum": 0, "description": "Latest allowed departure-gate crossing (elapsed seconds from t0)." },
+        "transfer_tof_min_s": { "type": "number", "exclusiveMinimum": 0, "description": "Lower bound of the time-of-flight window the optimizer searches. Fixed before optimization." },
+        "transfer_tof_max_s": { "type": "number", "exclusiveMinimum": 0, "description": "Upper bound of the time-of-flight window; must exceed the minimum." }
+      }
+    },
+    "phasing": {
+      "type": "object",
+      "required": ["departure_gate_y_m", "gate_scan_step_s"],
+      "additionalProperties": false,
+      "properties": {
+        "departure_gate_y_m": { "type": "number", "description": "Along-track (V-bar) LVLH y at which the transfer departs; negative = behind the target. Must be between the initial along-track offset and the hold point's y." },
+        "gate_scan_step_s": { "type": "number", "exclusiveMinimum": 0, "description": "Step of the coarse drift-propagation scan that brackets the gate crossing; the crossing epoch is then refined by linear interpolation and one exact re-propagation." }
+      }
+    },
+    "optimizer": {
+      "type": "object",
+      "required": ["newton_tol_m", "newton_max_iter", "jacobian_eps_m_s", "golden_max_iter"],
+      "additionalProperties": false,
+      "properties": {
+        "newton_tol_m": { "type": "number", "exclusiveMinimum": 0, "description": "Residual (landing-position error under the configured dynamics) that closes the burn-1 Newton solve." },
+        "newton_max_iter": { "type": "integer", "minimum": 1, "maximum": 30 },
+        "jacobian_eps_m_s": { "type": "number", "exclusiveMinimum": 0, "description": "Finite-difference step on the departure delta-v for the Newton Jacobian." },
+        "golden_max_iter": { "type": "integer", "minimum": 4, "maximum": 40, "description": "Golden-section iterations over the time-of-flight window minimizing total delta-v." }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "description": "OPTIONAL (E12-04, additive to v1.0): hard safety constraints the plan must satisfy on the WHOLE trajectory -- drift leg, transfer leg with coast between the burns, and the post-insertion hover sample -- plus passive-safety coast checks. Fixed here, before any optimization runs; the safety-constrained planner treats a violated constraint as making a candidate infeasible and never relaxes a bound at runtime. Loader cross-checks: speed knots strictly increase, speed caps non-decrease with range, and the keep-out sphere must exclude the Hold Point.",
+      "required": ["keep_out_radius_m", "cross_track_max_m", "cone_half_angle_deg", "cone_range_m", "approach_speed", "passive_contingency_s", "check_sample_dt_s"],
+      "additionalProperties": false,
+      "properties": {
+        "keep_out_radius_m": { "type": "number", "exclusiveMinimum": 0, "description": "Keep-out sphere around the target: |rho(t)| must stay >= this on every sample of the full trajectory." },
+        "cross_track_max_m": { "type": "number", "exclusiveMinimum": 0, "description": "Corridor: |z| (out-of-plane LVLH) containment over the full trajectory." },
+        "cone_half_angle_deg": { "type": "number", "exclusiveMinimum": 0, "maximum": 90.0, "description": "Corridor: within cone_range_m the line of sight from the target to the deputy must stay within this half-angle of the -V-bar direction (90 deg = never in front). Enforced only on samples closer than cone_range_m." },
+        "cone_range_m": { "type": "number", "exclusiveMinimum": 0, "description": "Range from the target within which the approach cone applies (terminal corridor)." },
+        "approach_speed": {
+          "type": "object",
+          "description": "Range-dependent relative-speed ceiling: piecewise-linear in |rho| through the knots, constant below the first and above the last; max |rho_dot| must stay at or under it on every sample.",
+          "required": ["range_knots_m", "cap_m_s"],
+          "additionalProperties": false,
+          "properties": {
+            "range_knots_m": { "type": "array", "minItems": 2, "items": { "type": "number", "exclusiveMinimum": 0 } },
+            "cap_m_s": { "type": "array", "minItems": 2, "items": { "type": "number", "exclusiveMinimum": 0 } }
+          }
+        },
+        "passive_contingency_s": { "type": "number", "exclusiveMinimum": 0, "description": "Passive safety: after each contingency release (no burn at t0, abort at the gate, coast from the Hold Point) the pair coasts uncontrolled for this long; the keep-out sphere must stay clear for the whole coast." },
+        "check_sample_dt_s": { "type": "number", "exclusiveMinimum": 0, "description": "Step of the dense re-propagated grid the full-trajectory checks run on (leg endpoints and burn epochs are always samples)." }
+      }
+    }
+  }
+}

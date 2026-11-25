@@ -33,10 +33,12 @@ from tudatpy.numerical_simulation import environment_setup, propagation_setup
 from orbitopt.verify import events as _events
 from orbitopt.verify import report as _report
 
-# Verification-layer integrator defaults (see module docstring).
+# Verification-layer integrator defaults (see module docstring). The tolerance
+# pair lives in orbitopt.verify.tolerances so a tolerance does not require
+# importing tudatpy; these names remain the propagator's defaults.
+from .tolerances import VERIFY_ATOL, VERIFY_RTOL
+
 DEFAULT_INTEGRATOR = "dop853"
-VERIFY_RTOL = 1e-11
-VERIFY_ATOL = 1e-6  # m and m/s (element-wise on the Cartesian state)
 VERIFY_MIN_STEP = 1e-3  # s
 
 _SPICE_LOADED = False
@@ -331,6 +333,18 @@ class ReusableCoastPropagator:
     It is also the re-propagation hook used by event location: :meth:`coast`
     accepts a per-call ``max_step`` so a bracketing interval can be
     re-integrated at a fine output spacing with identical dynamics.
+
+    ``frame`` (E12-05, task #395) names the propagation frame handed to
+    tudat's default body settings; it defaults to ``"ECLIPJ2000"`` (the
+    historical behaviour) and accepts any frame the loaded SPICE kernels
+    define. Caveat measured on tudatpy 1.0 with the standard kernel set:
+    ``"GCRS"``/``"ICRS"`` are NOT defined there, and a frame SPICE rejects
+    makes the propagation terminate at t=0 while returning a one-sample
+    history *without raising* -- callers must verify the history advanced.
+    A GCRS-mission re-fly therefore propagates in ``"ECLIPJ2000"`` after
+    rotating its states into that frame (the frames differ by the obliquity
+    of the ecliptic -- see ``orbitopt.verify.rendezvous_refly``), and grades
+    rotation-invariant quantities.
     """
 
     def __init__(
@@ -343,10 +357,11 @@ class ReusableCoastPropagator:
         rtol=VERIFY_RTOL,
         atol=VERIFY_ATOL,
         central_gravity=None,
+        frame="ECLIPJ2000",
     ):
         _ensure_spice_loaded()
         body_settings = environment_setup.get_default_body_settings(
-            list(perturbing_bodies), central_body, "ECLIPJ2000",
+            list(perturbing_bodies), central_body, str(frame),
         )
         self._central_gravity = None
         if central_gravity is not None:
@@ -372,6 +387,7 @@ class ReusableCoastPropagator:
         self._rtol = float(rtol)
         self._atol = float(atol)
         self._perturbing_bodies = tuple(perturbing_bodies)
+        self._frame = str(frame)
         self._earth_spherical_harmonic = (
             None if earth_spherical_harmonic is None else tuple(int(x) for x in earth_spherical_harmonic)
         )
@@ -380,6 +396,7 @@ class ReusableCoastPropagator:
         """Dynamics + integrator description for verification reports."""
         return {
             "central_body": self._central_body,
+            "frame": self._frame,
             "perturbing_bodies": list(self._perturbing_bodies),
             "earth_spherical_harmonic": None if self._earth_spherical_harmonic is None
             else list(self._earth_spherical_harmonic),
@@ -424,6 +441,7 @@ def propagate_multi_arc(
     rtol=VERIFY_RTOL,
     atol=VERIFY_ATOL,
     central_gravity=None,
+    frame="ECLIPJ2000",
 ) -> PropagationResult:
     """Propagate a spacecraft through a sequence of ``arcs`` -- coasts and
     instantaneous impulsive burns -- meant for a multi-phase mission like
@@ -456,6 +474,7 @@ def propagate_multi_arc(
         central_body=central_body, perturbing_bodies=perturbing_bodies,
         step_size=step_size, earth_spherical_harmonic=earth_spherical_harmonic,
         integrator=integrator, rtol=rtol, atol=atol, central_gravity=central_gravity,
+        frame=frame,
     )
 
     current_state = np.concatenate([np.asarray(r0, dtype=float), np.asarray(v0, dtype=float)])
@@ -505,7 +524,7 @@ def propagate_multi_arc(
     def rerun(**overrides):
         kw = dict(central_body=central_body, perturbing_bodies=perturbing_bodies, step_size=step_size,
                   earth_spherical_harmonic=earth_spherical_harmonic, integrator=integrator,
-                  rtol=rtol, atol=atol, central_gravity=central_gravity)
+                  rtol=rtol, atol=atol, central_gravity=central_gravity, frame=frame)
         kw.update(overrides)
         return propagate_multi_arc(r0, v0, initial_epoch, arcs, **kw)
 

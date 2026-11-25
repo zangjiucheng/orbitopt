@@ -134,6 +134,7 @@ class RunBundle:
     optimization: Mapping[str, Any] | None = None
     montecarlo: Mapping[str, Any] | None = None
     montecarlo_path: Path | None = None
+    rendezvous: Mapping[str, Any] | None = None
 
     @property
     def label(self) -> str:
@@ -191,6 +192,9 @@ def load_side_files(run_dir: Path | str) -> dict[str, Any]:
     if mc is not None:
         side["montecarlo"] = mc
         side["montecarlo_path"] = mc_path
+    rdv = _read_json(run_dir / "rendezvous.json")
+    if rdv is not None and rdv.get("schema_version") == "rendezvous-studio-1.0":
+        side["rendezvous"] = rdv
     return side
 
 

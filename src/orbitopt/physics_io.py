@@ -19,7 +19,11 @@ What is checked, and how
   ``J2000``/``ITRF``/``TEME`` name a *family*, and the members of a family
   differ by arcminutes to degrees, so :data:`AMBIGUOUS_FRAMES` turns them into
   an actionable error instead of a guess. :func:`check_frame_family` further
-  rejects a rotating frame where an inertial one is required.
+  rejects a rotating frame where an inertial one is required. Relative
+  (chief-centred) frames ``LVLH``/``RTN`` are known in their own ``orbital``
+  family (E12-02): an interface that declares them accepts them, and an
+  Earth-centred interface still rejects them -- the orbital family is neither
+  inertial nor rotating, so the geocentric-frame checks are untouched.
 * **Timescale** (:func:`check_timescale`): ``utc`` / ``tai`` / ``tt`` / ``tdb``.
   A UTC label reaching an interface that wants ephemeris time is a
   leap-second-sized error (69.184 s since 2017 -- ~17 km of light-time along a
@@ -120,14 +124,20 @@ class UnitMismatchError(PhysicsIOError):
 #: ``pseudo-inertial`` means "aligned with the Earth-fixed frame at one epoch,
 #: then held fixed" (no precession/nutation), so it may be rotated into an
 #: inertial frame by a *constant* matrix -- see
-#: :mod:`orbitopt.flightlab.frames`.
-FRAME_FAMILIES = ("inertial", "pseudo-inertial", "rotating")
+#: :mod:`orbitopt.flightlab.frames`. ``orbital`` frames are chief-centred and
+#: ride with an orbit (LVLH/RTN): their axes rotate with the chief, so they
+#: belong to neither the inertial nor the Earth-fixed check -- an interface
+#: that wants a geocentric vector must not accept them, and
+#: :func:`check_frame_family` is what enforces that split.
+FRAME_FAMILIES = ("inertial", "pseudo-inertial", "rotating", "orbital")
 
 
 @dataclass(frozen=True)
 class FrameSpec:
     """One known frame: its label, its rotation family and the plane it is
-    defined by (``equatorial``, ``ecliptic`` or ``earth-fixed``)."""
+    defined by (``equatorial``, ``ecliptic``, ``earth-fixed`` or ``orbital``
+    -- the last meaning "defined by a chief orbit", not by the central
+    body)."""
 
     name: str
     family: str
@@ -153,6 +163,13 @@ FRAMES: dict[str, FrameSpec] = {
                   "OpenTsiolkovsky's launch-aligned frame: ECEF axes at the launch epoch, then fixed."),
         FrameSpec("ECEF", "rotating", "earth-fixed",
                   "Earth-fixed (WGS84/ITRF axes); velocity is relative to the rotating Earth."),
+        FrameSpec("LVLH", "orbital", "orbital",
+                  "Local vertical local horizontal (the Hill/CW frame): x radially outward "
+                  "through the chief, y along-track in the orbital plane, z the orbit normal; "
+                  "centred on the chief spacecraft, not the Earth. See orbitopt.relative."),
+        FrameSpec("RTN", "orbital", "orbital",
+                  "Radial-Tangential-Normal: the same axes orbitopt labels 'LVLH' (R=x, T=y, "
+                  "N=z); the name relative-navigation literature uses for it. See orbitopt.relative."),
     )
 }
 
@@ -172,8 +189,8 @@ AMBIGUOUS_FRAMES: dict[str, str] = {
     "WGS84": "'WGS84' is the ellipsoid, not a frame; the Earth-fixed frame is 'ECEF'.",
     "TEME": "'TEME' (SGP4's true-of-date frame) is not 'GCRS'/'EME2000'; convert before mixing them.",
     "NED": "'NED' is a local topographic frame; orbitopt physics I/O is Earth-centred.",
-    "VVLH": "'VVLH'/'LVLH' is a body-fixed orbital frame, not an Earth-centred one.",
-    "LVLH": "'VVLH'/'LVLH' is a body-fixed orbital frame, not an Earth-centred one.",
+    "VVLH": "'VVLH' is the same chief-centred orbital frame orbitopt labels 'LVLH' "
+            "(same axes, same orbit normal); say 'LVLH'.",
     "MOD": "'MOD' (mean-of-date) needs a precession/nutation conversion to 'GCRS'/'EME2000'.",
     "TDME": "'TDME' (true-of-date) needs a nutation conversion to 'GCRS'/'EME2000'.",
     "ECEF(0)": "'ECEF(0)' (fixed at one epoch) is what 'LAUNCH_ECI' means; say 'LAUNCH_ECI'.",
@@ -223,10 +240,11 @@ def check_frame(frame, allowed: Sequence[str], *, where: str = "") -> str:
 
 
 def check_frame_family(frame, family: str, *, where: str = "") -> str:
-    """Like :func:`check_frame` but against a rotation *family*
-    (``"inertial"``, ``"pseudo-inertial"`` or ``"rotating"``): the check an API
+    """Like :func:`check_frame` but against a rotation *family* (``"inertial"``,
+    ``"pseudo-inertial"``, ``"rotating"`` or ``"orbital"``): the check an API
     needs when it converts between frames and must not be handed an Earth-fixed
-    vector where it expects an inertial one (or vice versa)."""
+    vector where it expects an inertial one (or vice versa) -- nor a
+    chief-centred LVLH vector where it expects a geocentric one."""
     if family not in FRAME_FAMILIES:  # pragma: no cover - developer error
         raise ValueError(f"unknown frame family {family!r}; expected one of {FRAME_FAMILIES}")
     allowed = tuple(name for name, spec in FRAMES.items() if spec.family == family)
@@ -942,11 +960,47 @@ LAMBERT = PhysicsIOSpec(
     velocity_range=(1.0e-4, 1.0e3),
 )
 
+#: :mod:`orbitopt.relative` -- chief-centred relative states (E12-02). The
+#: band is on the *separation* |rho|, not an orbit radius: zero is
+#: legitimate (contact is the terminal state of a rendezvous), and a freely
+#: drifting pair can transiently reach thousands of km of along-track
+#: separation and the closing rates that go with them, so the band runs from
+#: contact to a lunar distance and to twice LEO orbit speed -- beyond that
+#: the number is not a pair state. The bands exist to catch unit-system
+#: mix-ups and states past the two-body pair regime, not to police plausible
+#: free-drift trajectories inside it.
+RELATIVE_STATE = PhysicsIOSpec(
+    name="orbitopt.relative",
+    frames=("LVLH", "RTN"),
+    epoch_format="tdb_s_j2000",
+    units=UnitSystem("m", "s"),
+    centre="chief",
+    position_range=(0.0, 4.0e8),
+    velocity_range=(0.0, 2.0e4),
+)
+
+#: :func:`orbitopt.relative.propagation.propagate_pair` -- the two absolute
+#: spacecraft states the nonlinear pair propagator integrates: Earth-centred
+#: SI metres, epochs TDB seconds since J2000. The vocabulary is deliberately
+#: the two *equatorial* inertial frames: the optional J2 term is defined
+#: about the Earth's equator, and an ecliptic-frame state vector would
+#: silently mis-orient it.
+RELATIVE_PAIR = PhysicsIOSpec(
+    name="orbitopt.relative.propagation",
+    frames=("GCRS", "EME2000"),
+    epoch_format="tdb_s_j2000",
+    units=UnitSystem("m", "s"),
+    centre="earth",
+    position_range=(1.0e5, 2.0e9),
+    velocity_range=(0.0, 3.0e5),
+    mu=3.9860044150e14,
+)
+
 #: The spec a caller can look up by module name (the physics-layer registry).
 PHYSICS_IO: dict[str, PhysicsIOSpec] = {
     spec.name: spec for spec in (
         NBODY_SCREENING, KEPLER_BATCH, FLIGHT_TRACK, EARTH_CENTRED_METRES,
-        GROUND_TRACK, LAMBERT,
+        GROUND_TRACK, LAMBERT, RELATIVE_STATE, RELATIVE_PAIR,
     )
 }
 

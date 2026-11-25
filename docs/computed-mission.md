@@ -140,7 +140,7 @@ telemetry or independently validated landing is claimed. See
 | E11-03 | Co-design landed in 0 of 168 paired hold-out cases, versus 44 for DC7 and 11 for Starbase. [Recovery co-design](benchmarks/e11_03_robust_recovery_co_design.md). |
 | E11-04 | 24 of 32 newly admitted cases landed in counterfactual re-flights. [Admission validation](benchmarks/e11_04_counterfactual_admission.md). |
 | E11-05 | Starbase’s independent debris impact-speed discrepancy remained +12.70% against a 12% tolerance. [Aero qualification](benchmarks/e11_05_starbase_aero_qualification.md). |
-| E11-06 | The experimental Starbase replay records two booster ignitions, one for boostback and one for continuous entry and landing. Its saved landing and orbit re-flight checks pass. [Inspect the run](flightlab.md#viewing-runs-in-mission-control). |
+| E11-06 | The experimental Starbase replay records two booster ignitions, one for boostback and one for continuous entry and landing. Its saved landing and orbit re-flight checks pass. [Inspect the run](flightlab.md#viewing-runs-in-mission-control). [Gate record: missions, re-flights, FL-304 rates with CIs](#e11-06-gate-record-task-390). |
 
 If you have the E11-06 run locally, open **Runs → e11-06-starbase-continuous-burn**
 to inspect the burn sequence and fin telemetry.
@@ -151,6 +151,20 @@ The handoff report records the bridge method and tolerances. The powered
 limits were calibrated on one Starbase separation. Separations after cutoff
 use the existing coast bridge. E11-06 fin drag uses an assumed calibration,
 and the saved replay shows a nominal simulation.
+
+### E11-06 gate record (task #390)
+
+The release gate re-derived the continuous-burn design on the pinned landing
+stack and archived the evidence under
+`tests/data/mission/reference/e11-06-starbase-continuous-burn{,-reports}`:
+both mission chains (sealed-ascent and hot-staging) grade all 72 checks green;
+the independent SECO orbit re-flights pass; the FL-304 Monte Carlo (36 samples,
+seeds 8/9/10) records 33/36 pinned-script, 36/36 per-sample re-planning, with
+cluster-bootstrap 95% CIs; and the two ignitions are checked in the flown track
+itself (`tests/test_e11_06_gate_record.py`). The README there records what
+stays red or assumed: the DESIGN ASSUMPTION fin drag, the twin speed/q delta,
+the E5-08-era unassessed placeholders, and the search's first-feasible-stops
+reproduction variance (6/36 to 33/36 by seed) — nothing relaxed to pass.
 
 ## Earlier studies
 

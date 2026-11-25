@@ -1,0 +1,28 @@
+{
+ "plan_feasible": true,
+ "plan_reason_codes": [],
+ "ignitions_used": 2,
+ "checks": {
+  "recovery-landing": true,
+  "landing-position": true,
+  "landing-vertical-speed": true,
+  "landing-lateral-speed": true,
+  "landing-tilt": true,
+  "landing-propellant-reserve": true,
+  "landing-max-g": true,
+  "recovery-propellant-reserve": true
+ },
+ "touchdown": {
+  "landed": true,
+  "reason_codes": [],
+  "vertical_speed_m_s": -1.5005556541302132,
+  "lateral_speed_m_s": 0.009985151690384515,
+  "miss_m": null,
+  "propellant_remaining_kg": null,
+  "max_proper_g": 2.502806303955318,
+  "t_burn_s": null,
+  "ignition_altitude_m": null
+ },
+ "ascent": "/u9/j7zang/cf-compute/390/tests/data/mission/reference/e5-08-new-vehicle-starbase/mission-optimized/launch/ascent",
+ "vehicle_fins": "v3_pp"
+}

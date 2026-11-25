@@ -1,0 +1,19 @@
+{
+ "kind": "orbitopt.crossenv.plan",
+ "schema_version": "1.0",
+ "mission": {
+  "id": "e12-05-refly-leo-rdv-001"
+ },
+ "scenario": "/u9/j7zang/cf-compute/395/src/orbitopt/data/leo_rdv_001.yaml",
+ "out": "docs/benchmarks/e12-05-refly-run",
+ "environments": {
+  "tudat": "/u9/j7zang/envs/tudatpy/bin/python"
+ },
+ "stages": [
+  {
+   "id": "refly",
+   "runner": "rendezvous_refly",
+   "env": "tudat"
+  }
+ ]
+}
