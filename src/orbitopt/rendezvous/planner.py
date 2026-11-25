@@ -269,32 +269,47 @@ def _solve_transfer(cfg: RendezvousMissionConfig, t1, rt1, vt1, rc1, vc1, tof: f
         "t1": t1, "tof": tof, "v1_abs": v1, "dv1": dv1, "dv2": dv2,
         "chief_t2": leg.chief_r[0, 1], "chief_t2_v": leg.chief_v[0, 1],
         "chief_t1_r": rt1, "chief_t1_v": vt1,
+        "deputy_t1_r": rc1, "deputy_t1_v": vc1,
         "total_m_s": float(np.linalg.norm(dv1) + np.linalg.norm(dv2)),
     }
 
 
-def _cost(cfg: RendezvousMissionConfig, gate, tof: float) -> tuple[float, dict | None]:
+def _cost(
+    cfg: RendezvousMissionConfig,
+    gate,
+    tof: float,
+    feasible=None,
+) -> tuple[float, dict | None]:
     try:
         sol = _solve_transfer(cfg, *gate, tof)
     except (RendezvousPlanError, ValueError, np.linalg.LinAlgError) as exc:
         return math.inf, {"reason": str(exc)[:200]}
+    if feasible is not None:
+        reason = feasible(sol)
+        if reason:
+            return math.inf, {"reason": str(reason)[:300]}
     return sol["total_m_s"], sol
 
 
-def plan_rendezvous(cfg: RendezvousMissionConfig) -> RendezvousPlan:
-    """Optimize and return the two-impulse plan for ``cfg``. The golden-
-    section search runs inside the config's fixed time-of-flight window;
-    the delta-v budget is never consulted as a constraint here -- it is
-    reported against, in :func:`orbitopt.rendezvous.verify.verify_plan`."""
-    t1, rt1, vt1, rc1, vc1 = _gate_crossing(cfg)
-    gate = (t1, rt1, vt1, rc1, vc1)
-
-    lo, hi = cfg.windows.transfer_tof_min_s, cfg.windows.transfer_tof_max_s
+def _golden_bracket(
+    cfg: RendezvousMissionConfig,
+    gate,
+    lo: float,
+    hi: float,
+    feasible=None,
+) -> tuple[float | None, dict | None, list[str]]:
+    """Golden-section minimization of total delta-v on [lo, hi]. Returns
+    ``(best_tof, best_sol, failure_reasons)``; the best pair is (None, None)
+    when no evaluated candidate was solvable-and-feasible. Assumes a
+    unimodal-ish cost curve -- the caller picks a bracket where that holds
+    (plain ``plan_rendezvous``: dv-vs-tof is convex-ish with no feasibility
+    hook; ``plan_rendezvous_safe``: one feasible basin from a coarse scan).
+    """
     phi = (math.sqrt(5.0) - 1.0) / 2.0
     a, b = lo, hi
     c, d = b - phi * (b - a), a + phi * (b - a)
-    fc, sol_c = _cost(cfg, gate, c)
-    fd, sol_d = _cost(cfg, gate, d)
+    fc, sol_c = _cost(cfg, gate, c, feasible)
+    fd, sol_d = _cost(cfg, gate, d, feasible)
     best_tof, best_sol = (c, sol_c) if fc <= fd else (d, sol_d)
     failures: list[str] = []
     for sol in (sol_c, sol_d):
@@ -306,11 +321,11 @@ def plan_rendezvous(cfg: RendezvousMissionConfig) -> RendezvousPlan:
         if fc <= fd:
             b, d, fd, sol_d = d, c, fc, sol_c
             c = b - phi * (b - a)
-            fc, sol_c = _cost(cfg, gate, c)
+            fc, sol_c = _cost(cfg, gate, c, feasible)
         else:
             a, c, fc, sol_c = c, d, fd, sol_d
             d = a + phi * (b - a)
-            fd, sol_d = _cost(cfg, gate, d)
+            fd, sol_d = _cost(cfg, gate, d, feasible)
         if fc <= fd:
             best_tof, best_sol = c, sol_c
         else:
@@ -319,26 +334,51 @@ def plan_rendezvous(cfg: RendezvousMissionConfig) -> RendezvousPlan:
             failures.append(sol_c["reason"])
         if sol_d is not None and "reason" in sol_d:
             failures.append(sol_d["reason"])
-
     if best_sol is None or "reason" in best_sol:
-        raise RendezvousPlanError(
-            f"{cfg.mission_id}: no feasible transfer in the window [{lo:.0f}, {hi:.0f}] s; "
-            f"first failures: {' | '.join(failures[:3])}"
-        )
+        return None, None, failures
+    return float(best_tof), best_sol, failures
 
-    m1 = Maneuver("transfer_injection", best_sol["t1"], tuple(float(x) for x in best_sol["dv1"]))
-    m2 = Maneuver("hold_point_insertion", best_sol["t1"] + best_sol["tof"], tuple(float(x) for x in best_sol["dv2"]))
+
+def _plan_from_solution(cfg: RendezvousMissionConfig, t1: float, tof: float, sol: dict) -> RendezvousPlan:
+    m1 = Maneuver("transfer_injection", sol["t1"], tuple(float(x) for x in sol["dv1"]))
+    m2 = Maneuver("hold_point_insertion", sol["t1"] + sol["tof"], tuple(float(x) for x in sol["dv2"]))
     return RendezvousPlan(
         mission_id=cfg.mission_id,
         frame=cfg.dynamics.frame,
         drift_end_s=t1,
-        tof_s=float(best_tof),
+        tof_s=float(tof),
         maneuvers=(m1, m2),
-        total_delta_v_m_s=best_sol["total_m_s"],
+        total_delta_v_m_s=sol["total_m_s"],
         delta_v_budget_m_s=cfg.delta_v_budget_m_s,
-        chief_at_gate_r_m=tuple(float(x) for x in best_sol["chief_t1_r"]),
-        chief_at_gate_v_m_s=tuple(float(x) for x in best_sol["chief_t1_v"]),
-        chief_at_arrival_r_m=tuple(float(x) for x in best_sol["chief_t2"]),
-        chief_at_arrival_v_m_s=tuple(float(x) for x in best_sol["chief_t2_v"]),
+        chief_at_gate_r_m=tuple(float(x) for x in sol["chief_t1_r"]),
+        chief_at_gate_v_m_s=tuple(float(x) for x in sol["chief_t1_v"]),
+        chief_at_arrival_r_m=tuple(float(x) for x in sol["chief_t2"]),
+        chief_at_arrival_v_m_s=tuple(float(x) for x in sol["chief_t2_v"]),
         hold_point_rel_lvlh_m=tuple(cfg.hold_point_rel_lvlh),
     )
+
+
+def plan_rendezvous(cfg: RendezvousMissionConfig, *, feasible=None) -> RendezvousPlan:
+    """Optimize and return the two-impulse plan for ``cfg``. The golden-
+    section search runs inside the config's fixed time-of-flight window;
+    the delta-v budget is never consulted as a constraint here -- it is
+    reported against, in :func:`orbitopt.rendezvous.verify.verify_plan`.
+
+    ``feasible(sol) -> str | None`` (E12-04) is an optional hard-feasibility
+    screen on a solved candidate transfer: a returned reason string makes
+    that time-of-flight infeasible (cost +inf) and joins the failure list
+    raised when the whole window screens out. Note golden-section search
+    alone is not safe with a feasibility screen -- the feasible set can be
+    two islands -- so safety-constrained planning goes through
+    :func:`orbitopt.rendezvous.plan_rendezvous_safe`, which coarse-scans
+    the window first."""
+    t1, rt1, vt1, rc1, vc1 = _gate_crossing(cfg)
+    gate = (t1, rt1, vt1, rc1, vc1)
+    lo, hi = cfg.windows.transfer_tof_min_s, cfg.windows.transfer_tof_max_s
+    best_tof, best_sol, failures = _golden_bracket(cfg, gate, lo, hi, feasible)
+    if best_sol is None:
+        raise RendezvousPlanError(
+            f"{cfg.mission_id}: no feasible transfer in the window [{lo:.0f}, {hi:.0f}] s; "
+            f"first failures: {' | '.join(failures[:3])}"
+        )
+    return _plan_from_solution(cfg, t1, best_tof, best_sol)
