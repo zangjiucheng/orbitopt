@@ -46,6 +46,7 @@ from orbitopt.flightlab.reasons import explain_all
 from orbitopt.flightlab.run_index import KeyEvent, SummaryRow, key_events, launch_summary
 from orbitopt.flightlab.ui.charts import _fmt_clock, _TelemetryChart
 from orbitopt.flightlab.ui.engine_hud import EngineHud
+from orbitopt.flightlab.ui.rendezvous_panel import RendezvousPanel
 from orbitopt.flightlab.ui.recovery_panel import (
     FLIGHTLAB_PANEL_QSS,
     ReasonPanel,
@@ -70,7 +71,15 @@ TELEMETRY_CHARTS = (
     ("vertical_speed", "Vertical speed (radial)", "m/s"),
     ("downrange", "Downrange", "km"),
     ("grid_fins", "Grid Fins", "deg"),
+    ("rel_range", "Range to target", "m"),
+    ("rel_speed", "Relative speed", "m/s"),
+    ("rel_x_lvlh", "LVLH x (radial)", "m"),
+    ("rel_y_lvlh", "LVLH y (along-track)", "m"),
+    ("rel_z_lvlh", "LVLH z (cross-track)", "m"),
 )
+#: Plots that only make sense when the run carries the matching data.
+_DATA_GATED_PLOTS = ("grid_fins",) + tuple(
+    channel_id for channel_id, _label, _unit in TELEMETRY_CHARTS if channel_id.startswith("rel_"))
 _HIDDEN_PLOTS_SETTING = "flightlab/hiddenTelemetryPlots"
 
 
@@ -162,12 +171,14 @@ class FlightRunPanel(QWidget):
         self.reason_panel = ReasonPanel()
         self.reason_panel.clear_entries()
         self.recovery_panel = RecoveryPanel()
+        self.rendezvous_panel = RendezvousPanel()
         self.detail_tabs = QTabWidget()
         self.detail_tabs.setObjectName("flightLabDetailTabs")
         self.detail_tabs.setStyleSheet(FLIGHTLAB_PANEL_QSS)
         self.detail_tabs.addTab(self.check_table, "Checks")
         self.detail_tabs.addTab(self.reason_panel, "Why")
         self.detail_tabs.addTab(self.recovery_panel, "Recovery")
+        self.detail_tabs.addTab(self.rendezvous_panel, "Rendezvous")
         self.engine_hud = EngineHud()                      # SpaceX-webcast-style: both vehicles, engines + propellant
         self.detail_tabs.addTab(self.engine_hud, "Engines")
         self._time = 0.0
@@ -187,6 +198,7 @@ class FlightRunPanel(QWidget):
         self.check_table.setRowCount(0)
         self.reason_panel.clear_entries()
         self.recovery_panel.clear()
+        self.rendezvous_panel.clear()
         self.engine_hud.clear()
 
     def set_run(self, bundle: RunBundle, target=None,
@@ -197,7 +209,15 @@ class FlightRunPanel(QWidget):
         run = bundle.run
         self.summary.setHtml(summary_html(launch_summary(bundle, target)))
         self.events = tuple(key_events(run, channels))
+        if bundle.rendezvous:
+            sidecar_events = tuple(
+                KeyEvent(t_s=float(ev["t_s"]), kind=str(ev.get("kind", "maneuver")),
+                         title=str(ev.get("title", "rendezvous maneuver")),
+                         body_id=str(ev.get("body_id", "")), altitude_km=None, speed_km_s=None)
+                for ev in bundle.rendezvous.get("events", ()) if "t_s" in ev)
+            self.events = tuple(sorted(self.events + sidecar_events, key=lambda e: e.t_s))
         self._populate_events()
+        self.rendezvous_panel.set_doc(bundle.rendezvous)
         self._populate_checks(run.verification)
         summary = recovery_summary(bundle)
         self.recovery_panel.set_summary(summary)
@@ -309,7 +329,8 @@ class TelemetryPanel(QScrollArea):
             action.setChecked(channel_id not in hidden)
             action.triggered.connect(self._save_plot_selection)
             self._plot_actions[channel_id] = action
-        self._set_fin_plot_available(False)
+        for gated in _DATA_GATED_PLOTS:
+            self._set_plot_available(gated, False)
         menu.addSeparator()
         menu.addAction("Show all plots", self._show_all_plots)
         for column in range(3):
@@ -346,10 +367,11 @@ class TelemetryPanel(QScrollArea):
             action.setChecked(True)
         self._save_plot_selection()
 
-    def _set_fin_plot_available(self, available: bool) -> None:
-        action = self._plot_actions["grid_fins"]
+    def _set_plot_available(self, channel_id: str, available: bool) -> None:
+        action = self._plot_actions[channel_id]
         action.setEnabled(available)
-        action.setText("Grid Fins" if available else "Grid Fins (no data)")
+        base = dict(TELEMETRY_CHARTS)[channel_id]
+        action.setText(base if available else base + " (no data)")
 
     def set_channels(self, channels: Sequence[TelemetryChannel], t_min: float, t_max: float) -> None:
         for chart in self.charts.values():
@@ -359,8 +381,9 @@ class TelemetryPanel(QScrollArea):
             if chart is not None:
                 chart.set_channel(channel)
                 chart.set_time_range(t_min, t_max)
-        self._set_fin_plot_available(any(channel.id == "grid_fins" and channel.has_data
-                                         for channel in channels))
+        available = {channel.id: channel.has_data for channel in channels}
+        for gated in _DATA_GATED_PLOTS:
+            self._set_plot_available(gated, bool(available.get(gated)))
         self._layout_plots()
 
     def set_time(self, t: float) -> None:
