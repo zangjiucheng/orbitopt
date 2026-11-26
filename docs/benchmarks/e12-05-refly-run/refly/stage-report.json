@@ -25,19 +25,19 @@
    "opentsiolkovsky_sha256": "8041a9b5806136eb0e9d2a7b2c9ebed58ccc1876198cbf5c6373c440cb182c4c"
   },
   "argv": [
-   "/u9/j7zang/cf-compute/395/src/orbitopt/crossenv/__main__.py",
+   "/u9/j7zang/orbitopt-408/src/orbitopt/crossenv/__main__.py",
    "stage",
    "--plan",
-   "docs/benchmarks/e12-05-refly-run/plan.resolved.json",
+   "/u9/j7zang/e1205_out/e12-05-refly-run/plan.resolved.json",
    "--stage",
    "refly",
    "--out",
-   "docs/benchmarks/e12-05-refly-run"
+   "/u9/j7zang/e1205_out/e12-05-refly-run"
   ]
  },
  "status": "completed",
  "mission_ok": true,
- "summary": "mission_id=leo-rdv-001 frame=GCRS pos_err_m=0.000 rel_speed_m_s=0.0000 min_app_m=908.9 dv_m_s=10.344",
+ "summary": "mission_id=leo-rdv-001 frame=GCRS pos_err_m=0.000 rel_speed_m_s=0.0000 min_app_m=913.0 dv_m_s=10.345",
  "failed_checks": [],
  "payloads": [
   "refly-evidence"

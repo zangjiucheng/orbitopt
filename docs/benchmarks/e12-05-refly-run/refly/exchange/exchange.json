@@ -3,7 +3,7 @@
  "schema_version": "1.0",
  "stage": "refly",
  "runner": "rendezvous_refly",
- "created_utc": "2026-11-25T16:28:32.355951Z",
+ "created_utc": "2026-11-26T18:19:08.145071Z",
  "environment": {
   "env": "tudat",
   "python_executable": "/u9/j7zang/envs/tudatpy/bin/python",
@@ -25,14 +25,14 @@
    "opentsiolkovsky_sha256": "8041a9b5806136eb0e9d2a7b2c9ebed58ccc1876198cbf5c6373c440cb182c4c"
   },
   "argv": [
-   "/u9/j7zang/cf-compute/395/src/orbitopt/crossenv/__main__.py",
+   "/u9/j7zang/orbitopt-408/src/orbitopt/crossenv/__main__.py",
    "stage",
    "--plan",
-   "docs/benchmarks/e12-05-refly-run/plan.resolved.json",
+   "/u9/j7zang/e1205_out/e12-05-refly-run/plan.resolved.json",
    "--stage",
    "refly",
    "--out",
-   "docs/benchmarks/e12-05-refly-run"
+   "/u9/j7zang/e1205_out/e12-05-refly-run"
   ]
  },
  "payloads": [
@@ -42,7 +42,7 @@
    "schema_version": "1.0",
    "path": "reports/rendezvous-refly-evidence.json",
    "digest_kind": "file",
-   "digest": "sha256:ea885a93f2c2961d7b48b77083fc85cb01ae8923c170961f10348ad1c28ca13d",
+   "digest": "sha256:d77874abff95b058f5804d3300827b7948ba6977662b79de37b9b0bcd424bf9c",
    "report_kind": "orbitopt.verify.rendezvous-refly"
   }
  ]

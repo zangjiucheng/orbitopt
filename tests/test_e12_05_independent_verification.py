@@ -125,6 +125,59 @@ class TestStageWiring:
             rr.run_refly_in_current_environment(load_rendezvous_config(cfg_path))
 
 
+class TestSweepSlicing:
+    """E12-09 (task #411): a sweep history row is the concatenated pair state
+    ``[r_c, v_c, r_d, v_d]``, so the graded position error is the norm over
+    BOTH crafts' position columns and the velocity error over both crafts'
+    velocity columns. The original slicing took ``d[:6]`` / ``d[6:]``, mixing
+    position with velocity in one norm and reporting the deputy position
+    difference as a velocity in m/s."""
+
+    EPOCHS = (0.0, 100.0)
+    REF = (7.0e6, 0.0, 0.0, 0.0, 7546.0, 0.0, 7.0e6 + 100.0, 0.0, 0.0, 0.0, 7556.0, 0.0)
+
+    @staticmethod
+    def _run(offset):
+        import numpy as np
+
+        hist = np.tile(np.array(TestSweepSlicing.REF) + np.array(offset), (2, 1))
+        return {"tag": "coarse"}, np.array(TestSweepSlicing.EPOCHS), hist
+
+    @staticmethod
+    def _ref_run():
+        import numpy as np
+
+        return {"tag": "ref"}, np.array(TestSweepSlicing.EPOCHS), np.tile(
+            np.array(TestSweepSlicing.REF), (2, 1))
+
+    def _table(self, offset):
+        table, epoch = rr.sweep_table([self._run(offset), self._ref_run()],
+                                      leg_end_epoch=100.0, epoch_anchor=0.0)
+        assert epoch == 100.0
+        return table[0]
+
+    def test_known_position_and_velocity_offsets(self):
+        # chief position (3, 4, 0) and deputy position (12, 0, 0) m: the one
+        # position metric is the joint norm, sqrt(9 + 16 + 144) = 13 m; chief
+        # velocity (0, 0.03, 0) and deputy velocity (0, 0, -0.09) m/s: joint
+        # norm sqrt(0.009) = 0.09487 m/s. The old slicing reported
+        # sqrt(9+16+0.09+0.0009) and sqrt(144+0.0081) -- position mixed with
+        # velocity, deputy position dressed as velocity.
+        row = self._table((3.0, 4.0, 0.0, 0.0, 0.03, 0.0, 12.0, 0.0, 0.0, 0.0, 0.0, -0.09))
+        assert row["position_error_m"] == pytest.approx(13.0)
+        assert row["velocity_error_m_s"] == pytest.approx(0.09486832980505138)
+
+    def test_velocity_only_offset_is_not_a_position_error(self):
+        row = self._table((0.0, 0.0, 0.0, 0.03, 0.04, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+        assert row["position_error_m"] == pytest.approx(0.0)
+        assert row["velocity_error_m_s"] == pytest.approx(0.05)
+
+    def test_position_only_offset_is_not_a_velocity_error(self):
+        row = self._table((0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 30.0, 40.0, 0.0, 0.0, 0.0, 0.0))
+        assert row["position_error_m"] == pytest.approx(50.0)
+        assert row["velocity_error_m_s"] == pytest.approx(0.0)
+
+
 class TestCwReplay:
     """The CW replay applies the plan's own pulses: its delta-v total is the
     plan's, and the residual that remains is model error, not plan error."""

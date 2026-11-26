@@ -345,6 +345,10 @@ class ReusableCoastPropagator:
     rotating its states into that frame (the frames differ by the obliquity
     of the ecliptic -- see ``orbitopt.verify.rendezvous_refly``), and grades
     rotation-invariant quantities.
+
+    ``drag`` (E12-10, task #412) flies the caller's exponential-atmosphere
+    ballistic model alongside gravity: see :meth:`_install_drag` for the dict
+    and the sign convention; ``None`` leaves the propagator exactly as before.
     """
 
     def __init__(
@@ -358,6 +362,7 @@ class ReusableCoastPropagator:
         atol=VERIFY_ATOL,
         central_gravity=None,
         frame="ECLIPJ2000",
+        drag=None,
     ):
         _ensure_spice_loaded()
         body_settings = environment_setup.get_default_body_settings(
@@ -366,8 +371,12 @@ class ReusableCoastPropagator:
         self._central_gravity = None
         if central_gravity is not None:
             self._central_gravity = _override_central_gravity(body_settings, central_body, central_gravity)
+        self._drag = None
+        if drag is not None:
+            self._drag = self._install_drag(body_settings, central_body, drag)
         bodies = environment_setup.create_system_of_bodies(body_settings)
-        bodies.create_empty_body("Spacecraft")
+        if drag is None:
+            bodies.create_empty_body("Spacecraft")
         self._central_mu = _central_gravitational_parameter(bodies, central_body)
 
         def _gravity_for(body):
@@ -376,7 +385,13 @@ class ReusableCoastPropagator:
                 return propagation_setup.acceleration.spherical_harmonic_gravity(int(degree), int(order))
             return propagation_setup.acceleration.point_mass_gravity()
 
-        acceleration_settings = {"Spacecraft": {body: [_gravity_for(body)] for body in perturbing_bodies}}
+        def _accelerations_for(body):
+            out = [_gravity_for(body)]
+            if drag is not None and body == central_body:
+                out.append(propagation_setup.acceleration.aerodynamic())
+            return out
+
+        acceleration_settings = {"Spacecraft": {body: _accelerations_for(body) for body in perturbing_bodies}}
         self._bodies = bodies
         self._acceleration_models = propagation_setup.create_acceleration_models(
             bodies, acceleration_settings, ["Spacecraft"], [central_body],
@@ -392,6 +407,61 @@ class ReusableCoastPropagator:
             None if earth_spherical_harmonic is None else tuple(int(x) for x in earth_spherical_harmonic)
         )
 
+    @staticmethod
+    def _install_drag(body_settings, central_body, drag) -> dict:
+        """Attach a caller-declared drag model to ``body_settings`` (E12-10,
+        task #412): an exponential atmosphere on ``central_body`` and constant
+        aerodynamic coefficients on the propagated ``Spacecraft``, so the tudat
+        acceleration is the same ballistic-coefficient force the analytic truth
+        model in :mod:`orbitopt.rendezvous.robustness` flies --
+        ``-0.5 * rho * |v| * (Cd*A/m) * v`` -- not a restatement of it. The
+        force coefficient is therefore ``Cd = bc * mass / area``, which makes
+        ``ballistic_coefficient_m2_per_kg`` the physical ``Cd*A/m`` whatever
+        reference area and mass the body is created with (defaults 1 m^2 / 1 kg,
+        i.e. ``Cd = bc``). ``drag`` is the dict::
+
+            {"atmosphere": {"surface_density_kg_m3": rho0, "scale_height_m": H,
+                            "body_radius_m": R},
+             "ballistic_coefficient_m2_per_kg": bc}          # optional mass_kg, reference_area_m2
+
+        ``body_radius_m`` is the sphere the altitude is measured from, and the
+        central body's shape is pinned to it: tudat's default Earth is a sphere
+        of the *mean* radius (6371.0 km), the main model measures altitude from
+        the equatorial ``EARTH_RE`` (6378.137 km), and that 7.1 km offset alone
+        is a 13 % density difference at H = 50 km (measured: 11 m of false
+        cross-model arrival disagreement on a drag-dispersed sample).
+
+        Returns the description recorded in :meth:`model_description`. Both
+        models fly drag on the velocity relative to the *co-rotating*
+        atmosphere (the main model's ``_drag_accel`` uses ``v - omega x r``;
+        tudat derives it from the body's SPICE rotation), so no rotation-model
+        override is applied and the comparison measures the implementation, not
+        a convention.
+        """
+        atm = dict(drag.get("atmosphere") or {})
+        rho0, scale_height = float(atm["surface_density_kg_m3"]), float(atm["scale_height_m"])
+        radius = float(atm["body_radius_m"])
+        bc = float(drag["ballistic_coefficient_m2_per_kg"])
+        area, mass = float(drag.get("reference_area_m2", 1.0)), float(drag.get("mass_kg", 1.0))
+        if min(rho0, scale_height, radius, bc, area, mass) <= 0.0:
+            raise ValueError(
+                "drag needs a positive surface_density_kg_m3, scale_height_m, body_radius_m, "
+                f"ballistic_coefficient_m2_per_kg, area and mass, got {rho0} / {scale_height} "
+                f"/ {radius} / {bc} / {area} / {mass}")
+        central = body_settings.get(central_body)
+        central.atmosphere_settings = environment_setup.atmosphere.exponential(scale_height, rho0)
+        central.shape_settings = environment_setup.shape.spherical(radius)
+        body_settings.add_empty_settings("Spacecraft")
+        settings = body_settings.get("Spacecraft")
+        settings.constant_mass = mass
+        settings.aerodynamic_coefficient_settings = (
+            environment_setup.aerodynamic_coefficients.constant(area, [bc * mass / area, 0.0, 0.0]))
+        return {"atmosphere": {"type": "exponential",
+                               "surface_density_kg_m3": rho0, "scale_height_m": scale_height,
+                               "body_radius_m": radius},
+                "ballistic_coefficient_m2_per_kg": bc,
+                "reference_area_m2": area, "mass_kg": mass}
+
     def model_description(self) -> dict:
         """Dynamics + integrator description for verification reports."""
         return {
@@ -403,6 +473,7 @@ class ReusableCoastPropagator:
             "integrator": integrator_description(self._integrator, self._step_size, self._rtol, self._atol),
             "central_gravity": None if self._central_gravity is None else dict(self._central_gravity),
             "central_gravitational_parameter": self._central_mu,
+            "drag": None if self._drag is None else dict(self._drag),
         }
 
     def coast(self, spacecraft_state, epoch_start, duration, max_step=None):

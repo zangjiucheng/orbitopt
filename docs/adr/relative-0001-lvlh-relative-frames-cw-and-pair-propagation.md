@@ -39,8 +39,11 @@ does not apply.
 3. **CW is a planning model, and the boundary is measured, not asserted.**
    The companion benchmark sweeps separation 10 m … 100 km, duration up to
    5 orbits, chief eccentricity 0 … 0.2, with and without J2. Result: the
-   linearisation error is linear in separation (~1 % of ρ per orbit, at any
-   scale), grows ~t², and is dwarfed by any chief eccentricity ≥ 0.01
+   linearisation error grows quadratically with separation — absolute
+   error ∝ ρ², ≈ 10⁻⁴·ρ² per orbit: 0.01 m at 10 m, 1.05 m at 100 m,
+   105 m at 1 km, so the *relative* error is ~1 % per orbit only at
+   ρ ≈ 100 m and scales with ρ (no "1 % at any scale") — grows ~t²,
+   and is dwarfed by any chief eccentricity ≥ 0.01
    (129 % of a 100 m separation at one orbit). The envelope gate
    (`test_e12_02_cw_validity.py`) pins the claim: circular chief, ≤ 1 km,
    ≤ 1 orbit, error < 25 % of separation — and acceptance runs on

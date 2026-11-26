@@ -64,6 +64,7 @@ def main() -> int:
     rep = res["report"]
     src = rep["inputs"]["error_sources"]
     plan = res["plan"]
+    sealed = res["sealed"]
     mq, cw, refly = res["main_quantities"], res["cw"], res["refly"]
 
     doc = {
@@ -74,6 +75,12 @@ def main() -> int:
         "backend": "absent (REFLY_BACKEND_MISSING)" if refly is None else "present",
         "not_checked_reasons": rep["inputs"]["not_checked_reasons"],
         "reference_plan": {
+            "planner": "orbitopt.rendezvous.canonical_plan "
+                       "(E12-04 plan_rendezvous_safe, constrained optimum)",
+            "plan_digest": sealed.plan_digest,
+            "config_sha256": sealed.config_sha256,
+            "initial_states_sha256": sealed.initial_states_sha256,
+            "maneuvers_sha256": sealed.maneuvers_sha256,
             "drift_end_s": plan.drift_end_s, "tof_s": plan.tof_s,
             "total_delta_v_m_s": plan.total_delta_v_m_s,
             "delta_v_budget_m_s": plan.delta_v_budget_m_s,

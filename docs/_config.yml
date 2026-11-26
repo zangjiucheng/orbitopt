@@ -132,6 +132,30 @@ defaults:
   - scope: { path: "verification.md" }
     values: { title: "Verification", nav_order: 4.5 }
 
+  # Rendezvous: between Verification and Missions in the sidebar
+  - scope: { path: "rendezvous.md" }
+    values: { title: "Rendezvous", nav_order: 4.7, has_children: true, has_toc: false }
+  - scope: { path: "rendezvous-quickstart.md" }
+    values: { title: "Quickstart", parent: "Rendezvous", nav_order: 1 }
+  - scope: { path: "rendezvous-theory.md" }
+    values: { title: "Theory", parent: "Rendezvous", nav_order: 2 }
+  - scope: { path: "rendezvous-mission-config.md" }
+    values: { title: "Mission configuration", parent: "Rendezvous", nav_order: 3 }
+  - scope: { path: "rendezvous-verification-report.md" }
+    values: { title: "Verification report", parent: "Rendezvous", nav_order: 4 }
+  - scope: { path: "adr/relative-0001-lvlh-relative-frames-cw-and-pair-propagation.md" }
+    values: { title: "ADR relative-0001 · LVLH frames & CW", parent: "Rendezvous", nav_order: 5 }
+  - scope: { path: "adr/rendezvous-0001-two-impulse-j2-targeted-lambert.md" }
+    values: { title: "ADR rendezvous-0001 · Planner", parent: "Rendezvous", nav_order: 6 }
+  - scope: { path: "adr/rendezvous-0002-safety-constraints-whole-trajectory.md" }
+    values: { title: "ADR rendezvous-0002 · Safety", parent: "Rendezvous", nav_order: 7 }
+  - scope: { path: "adr/rendezvous-0003-independent-refly-tudatpy.md" }
+    values: { title: "ADR rendezvous-0003 · Independent re-flight", parent: "Rendezvous", nav_order: 8 }
+  - scope: { path: "adr/rendezvous-0004-mission-studio-flightlab-replay.md" }
+    values: { title: "ADR rendezvous-0004 · Studio replay", parent: "Rendezvous", nav_order: 9 }
+  - scope: { path: "adr/rendezvous-0005-dispersion-campaign-not-a-safety-factor.md" }
+    values: { title: "ADR rendezvous-0005 · Dispersion", parent: "Rendezvous", nav_order: 10 }
+
   # Missions
   - scope: { path: "mars_mission_plan.md" }
     values: { title: "Mars mission plan", parent: "Missions and examples", nav_order: 2 }

@@ -1,0 +1,112 @@
+{
+  "optimizer_converged": true,
+  "physics_verified": true,
+  "backend_self_check": null,
+  "mission_constraints_passed": true,
+  "checks": [
+    {
+      "id": "gate-within-drift-window",
+      "passed": true,
+      "value": 560.5949924589561,
+      "limit": 5400.0,
+      "unit": "s",
+      "reason_code": ""
+    },
+    {
+      "id": "tof-within-transfer-window",
+      "passed": true,
+      "value": 3416.666666666667,
+      "limit": 3600.0,
+      "unit": "s",
+      "reason_code": ""
+    },
+    {
+      "id": "position-error-within-tolerance",
+      "passed": true,
+      "value": 4.70254114036288e-07,
+      "limit": 50.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "relative-speed-within-tolerance",
+      "passed": true,
+      "value": 5.210720852818356e-10,
+      "limit": 0.2,
+      "unit": "m/s",
+      "reason_code": ""
+    },
+    {
+      "id": "delta-v-within-budget",
+      "passed": true,
+      "value": 10.345425677029876,
+      "limit": 25.0,
+      "unit": "m/s",
+      "reason_code": ""
+    },
+    {
+      "id": "keepout-respected",
+      "passed": true,
+      "value": 1000.0000002840826,
+      "limit": 500.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "safety-keep-out",
+      "passed": true,
+      "value": 413.0346602762987,
+      "limit": 0.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "safety-terminal-cone",
+      "passed": true,
+      "value": 19.992923976882636,
+      "limit": 0.0,
+      "unit": "deg",
+      "reason_code": ""
+    },
+    {
+      "id": "safety-cross-track",
+      "passed": true,
+      "value": 79.91693593883247,
+      "limit": 0.0,
+      "unit": "m",
+      "reason_code": ""
+    },
+    {
+      "id": "safety-approach-speed",
+      "passed": true,
+      "value": 2.5364097518371276,
+      "limit": 0.0,
+      "unit": "m/s",
+      "reason_code": ""
+    },
+    {
+      "id": "safety-fuel-budget",
+      "passed": true,
+      "value": 14.65457432297012,
+      "limit": 0.0,
+      "unit": "m/s",
+      "reason_code": ""
+    },
+    {
+      "id": "safety-time-window",
+      "passed": true,
+      "value": 183.33333333333303,
+      "limit": 0.0,
+      "unit": "s",
+      "reason_code": ""
+    },
+    {
+      "id": "safety-passive-releases",
+      "passed": true,
+      "value": 500.0001607553386,
+      "limit": 0.0,
+      "unit": "m",
+      "reason_code": ""
+    }
+  ]
+}

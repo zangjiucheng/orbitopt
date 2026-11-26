@@ -265,30 +265,50 @@ def _cmd_launch(args):
 
 
 def _cmd_rendezvous_studio(args):
-    """E12-06: plan, verify and replay a rendezvous mission as a Flight Lab run."""
+    """E12-06/E12-08: replay the canonical sealed plan of a rendezvous mission
+    as a Flight Lab run."""
     from orbitopt.rendezvous.config import load_rendezvous_config, load_reference_config
     from orbitopt.rendezvous.studio import build_studio_run, write_studio_run
 
     cfg = load_rendezvous_config(args.config) if args.config else load_reference_config()
-    studio = build_studio_run(cfg, sample_dt_s=args.dt)
+    sealed = None
+    if getattr(args, "sealed_plan", None):
+        from orbitopt.rendezvous.canonical import read_sealed_plan
+        sealed = read_sealed_plan(args.sealed_plan, cfg)
+    elif getattr(args, "write_sealed_plan", None):
+        from orbitopt.rendezvous.canonical import canonical_plan
+        sealed = canonical_plan(cfg)
+    studio = build_studio_run(cfg, sample_dt_s=args.dt, sealed=sealed,
+                              refly_report=args.refly_report)
+    if getattr(args, "write_sealed_plan", None):
+        from orbitopt.rendezvous.canonical import write_sealed_plan
+        write_sealed_plan(sealed, args.write_sealed_plan)
     root = write_studio_run(args.output, studio)
     ver = studio.sidecar["verification"]
     keepout = studio.sidecar["keepout"]
     if args.json:
         import json
         print(json.dumps({"run_dir": str(root), "run_id": studio.run.run_id,
+                          "plan_digest": studio.sidecar["plan_digest"],
                           "passed": ver["passed"],
+                          "physics_verified": studio.run.verification.physics_verified,
+                          "safety_passed": (studio.sidecar["safety"] or {}).get("passed"),
                           "total_delta_v_m_s": ver["total_delta_v_m_s"],
                           "position_error_m": ver["position_error_m"],
                           "relative_speed_m_s": ver["relative_speed_m_s"],
                           "keepout_respected": keepout["respected"]}, indent=2))
         return
     verdict = "PASS" if ver["passed"] else "FAIL"
+    physics = studio.run.verification.physics_verified
+    physics_word = ("not assessed (no --refly-report matching this plan)"
+                    if physics is None else str(physics))
     print(f"Rendezvous studio run: {root}")
+    print(f"  plan digest  {studio.sidecar['plan_digest']}")
     print(f"  verdict      {verdict}  (Δv {ver['total_delta_v_m_s']:.3f} m/s, "
           f"pos err {ver['position_error_m']:.3e} m, rel speed {ver['relative_speed_m_s']:.3e} m/s, "
           f"keep-out {'clear' if keepout['respected'] else 'INTRUSION'}"
           f" @ {keepout['min_range_m']:.0f} m)")
+    print(f"  physics      verified={physics_word}")
     print("  open in Flight Lab with `orbitopt view` or pass the dir to the UI")
 
 
@@ -382,8 +402,16 @@ def _cmd_flight_to_scene(args):
 
     try:
         run = read_run(args.run_dir)
+        sidecar = Path(args.run_dir) / "rendezvous.json"
+        rendezvous = None
+        if sidecar.exists():  # E12-06 studio run: sidecar events/markers into the scene
+            try:
+                rendezvous = json.loads(sidecar.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                rendezvous = None
         scene = run_to_scene(run, earth_texture=not args.no_earth_texture,
-                             mission_scenario=replay_mission_scenario(run))
+                             mission_scenario=replay_mission_scenario(run),
+                             rendezvous=rendezvous)
     except (jsonschema.ValidationError, ValueError) as exc:
         print(f"REJECTED: {args.run_dir}\n  {exc}")
         raise SystemExit(1) from None
@@ -843,6 +871,17 @@ def build_parser() -> argparse.ArgumentParser:
                                         "mission.json/replay.json/rendezvous.json)")
     rendezvous_studio.add_argument("--dt", type=float, default=5.0, metavar="S",
                                    help="track sample interval [s] (default 5)")
+    rendezvous_studio.add_argument("--sealed-plan", default=None, metavar="PATH",
+                                   help="sealed canonical plan document to replay "
+                                        "(E12-08; digest-verified against the config; "
+                                        "default: seal the config here)")
+    rendezvous_studio.add_argument("--write-sealed-plan", default=None, metavar="PATH",
+                                   help="also write the consumed sealed plan document here")
+    rendezvous_studio.add_argument("--refly-report", default=None, metavar="PATH",
+                                   help="rendezvous-refly report JSON (from "
+                                        "`python -m orbitopt.verify.rendezvous_refly`): the "
+                                        "independent re-flight evidence that sets "
+                                        "physics_verified (same plan digest required)")
     rendezvous_studio.add_argument("--json", action="store_true", help="print the verdict as JSON")
 
     flight = sub.add_parser("flight", help="Flight Lab contract tools (FlightTarget / FlightResult)")

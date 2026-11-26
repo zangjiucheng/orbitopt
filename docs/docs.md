@@ -17,6 +17,7 @@ results and explore them in Mission Control.
 | [Flight Lab](flightlab.md) | Simulate ascent and recovery, compare runs and inspect vehicle definitions against flown data. |
 | [Computed missions](computed-mission.md) | Replay the RTLS references and choose the right evidence checks. |
 | [Verification](verification.md) | Reports, kinds of evidence, benchmarks and convergence studies. |
+| [Rendezvous](rendezvous.md) | Two-impulse rendezvous: quickstart, theory, configuration and verification. |
 | [Missions and examples](missions.md) | Explore modeled missions, validation and source data. |
 | [API reference](api.md) | Look up Python interfaces, commands and schemas. |
 | [Engineering](engineering.md) | Review implementation notes, benchmarks and tests. |

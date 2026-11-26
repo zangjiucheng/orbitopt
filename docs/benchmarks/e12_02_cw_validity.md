@@ -29,11 +29,12 @@ error reported, so the data measures the model, not the integrator.
 
 ## What the numbers say
 
-* **Separation: linear, as the Taylor remainder promises.** J2 off,
+* **Separation: quadratic, as the Taylor remainder promises.** J2 off,
   e = 0, 1 orbit: 0.01 m at 10 m, 1.05 m at 100 m, 105 m at 1 km,
-  10 512 m at 10 km — the *normalised* error is one percent of the
-  separation per orbit at any scale, so small formations do not buy
-  accuracy, they buy proportionally less error.
+  10 512 m at 10 km — the *absolute* error is ∝ ρ² (10× the separation,
+  100× the error), so the normalised error is ~1 % per orbit only near
+  ρ = 100 m and scales with the separation: smaller formations buy
+  accuracy, larger ones lose it quadratically.
 * **Duration: ~ t².** Same cell, 1 orbit → 5 orbits: 1.1 m → 25 m (24×).
   The along-track linearisation error accumulates as drift × time; a CW
   plan must be short, not merely small.
