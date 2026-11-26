@@ -12,6 +12,9 @@ constraints (E12-04).
 * :mod:`orbitopt.rendezvous.safety` -- keep-out / corridor / approach-speed
   / passive-safety checks on the WHOLE trajectory, and the safety-constrained
   planner that screens unsafe candidates out of the search.
+* :mod:`orbitopt.rendezvous.canonical` -- the canonical SEALED plan (E12-08):
+  one safety-constrained plan per config, pinned by four digests, that every
+  downstream component consumes so their reports describe one trajectory.
 * :mod:`orbitopt.rendezvous.studio` -- replays the verified mission as a
   Flight Lab run directory for the Mission Studio (E12-06).
 * :mod:`orbitopt.rendezvous.robustness` -- the Monte Carlo dispersion campaign:
@@ -20,11 +23,26 @@ constraints (E12-04).
 
 The whole pipeline on the reference mission:
 
-    from orbitopt.rendezvous import load_reference_config, plan_rendezvous_safe
+    from orbitopt.rendezvous import canonical_plan, load_reference_config
     cfg = load_reference_config()
-    result = plan_rendezvous_safe(cfg)   # plans, verifies, grades safety
-    assert result.passed
+    sealed = canonical_plan(cfg)          # plans, verifies, grades, seals
+    assert sealed.passed
 """
+from orbitopt.rendezvous.canonical import (
+    PlanSealError,
+    SealedRendezvousPlan,
+    canonical_config_sha256,
+    canonical_plan,
+    consume_sealed_plan,
+    initial_states_sha256,
+    maneuvers_sha256,
+    read_sealed_plan,
+    rendezvous_plan_digest,
+    sealed_from_document,
+    seal_plan,
+    verify_seal,
+    write_sealed_plan,
+)
 from orbitopt.rendezvous.config import (
     RendezvousConfigError,
     RendezvousMissionConfig,
@@ -68,6 +86,7 @@ __all__ = [
     "DisturbanceModel",
     "Maneuver",
     "PassiveRelease",
+    "PlanSealError",
     "RendezvousConfigError",
     "RendezvousMissionConfig",
     "RendezvousPlan",
@@ -78,20 +97,32 @@ __all__ = [
     "SafetyCheck",
     "SafetyPlanResult",
     "SafetyReport",
+    "SealedRendezvousPlan",
     "StudioRun",
     "build_studio_run",
+    "canonical_config_sha256",
+    "canonical_plan",
+    "consume_sealed_plan",
     "evaluate_trajectory_safety",
     "initial_states",
+    "initial_states_sha256",
     "load_campaign",
     "load_reference_campaign",
     "load_reference_config",
     "load_rendezvous_config",
+    "maneuvers_sha256",
     "parse_rendezvous_config",
     "plan_rendezvous",
     "plan_rendezvous_safe",
+    "read_sealed_plan",
+    "rendezvous_plan_digest",
     "run_campaign",
+    "sealed_from_document",
+    "seal_plan",
     "validate_rendezvous_config",
     "verify_plan",
     "verify_plan_safety",
+    "verify_seal",
+    "write_sealed_plan",
     "write_studio_run",
 ]
