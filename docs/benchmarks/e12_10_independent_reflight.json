@@ -1,0 +1,3618 @@
+{
+  "kind": "orbitopt.bench.e12-10-independent-reflight",
+  "schema_version": "1.0",
+  "generated_utc": "2026-11-26T16:57:17+00:00",
+  "quick_layout": false,
+  "provenance": {
+    "python": "3.10.22",
+    "numpy": "1.26.4",
+    "orbitopt": "installed (version unknown)",
+    "tudatpy": "1.0.0",
+    "pykep": "2.6.2"
+  },
+  "mission_id": "leo-rdv-001",
+  "classification": {
+    "label": "Robust Safety Qualification",
+    "independent_reflight": "checked",
+    "coverage": "covered",
+    "wording_rule": "this campaign may be reported as Robustness Characterization; the wording Robust Safety Qualification is only earned once the independent per-sample re-flight is CHECKED, covers the samples the verdicts rest on, and every sample agrees with the main model within the declared bands (task #412 acceptance)",
+    "outcome": "the qualification evidence is independent; the design it qualifies succeeds on 13/264 hold-out samples (4.9%, cluster CI 2.7%-7.6%) under these criteria. No success-rate requirement is declared, so this records the rate; it does NOT show the design robust to the declared dispersions"
+  },
+  "grading": {
+    "passive_contingency_in_success": true,
+    "definition": "success = arrival inside tolerances, no safety violation on the flown trajectory, AND every passive contingency release (no-burn at t0, gate abort at t1, hold-point coast) stays outside the keep-out corridor for its whole duration"
+  },
+  "baseline_e12_07": {
+    "artifact": "docs/benchmarks/e12_07_rendezvous_robustness.json",
+    "n_samples": 264,
+    "success_rate": 0.05303030303030303,
+    "wilson": {
+      "method": "wilson_score",
+      "confidence_level": 0.95,
+      "successes": 14,
+      "n": 264,
+      "point": 0.05303030303030303,
+      "standard_error": 0.013792028054060969,
+      "lower": 0.03184852380021542,
+      "upper": 0.08703321676710399
+    },
+    "cluster_bootstrap": {
+      "method": "whole-cluster percentile bootstrap",
+      "lower": 0.026515151515151516,
+      "upper": 0.07954545454545454,
+      "width": 0.053030303030303025,
+      "trials": 4000,
+      "resample_unit": "cluster (one gravity-field / space-weather realization)"
+    },
+    "failure_classes": {
+      "planning_infeasible": 0,
+      "safety_violation": 69,
+      "fuel_over_budget": 0,
+      "arrival_accuracy": 181,
+      "other": 0
+    },
+    "grading": "arrival + safety checks, passive contingencies NOT in success"
+  },
+  "regraded": {
+    "n_samples": 264,
+    "n_clusters": 22,
+    "success_rate": 0.04924242424242424,
+    "wilson": {
+      "method": "wilson_score",
+      "confidence_level": 0.95,
+      "successes": 13,
+      "n": 264,
+      "point": 0.04924242424242424,
+      "standard_error": 0.01331688491550684,
+      "lower": 0.029000270939605752,
+      "upper": 0.08241436573421636
+    },
+    "cluster_bootstrap": {
+      "method": "whole-cluster percentile bootstrap",
+      "lower": 0.026515151515151516,
+      "upper": 0.07575757575757576,
+      "width": 0.04924242424242424,
+      "trials": 4000,
+      "resample_unit": "cluster (one gravity-field / space-weather realization)"
+    },
+    "per_cluster_rate": {
+      "min": 0.0,
+      "median": 0.0,
+      "max": 0.16666666666666666
+    },
+    "meets_declared_ci_width": true,
+    "failure_classes": {
+      "planning_infeasible": 0,
+      "safety_violation": 87,
+      "fuel_over_budget": 0,
+      "arrival_accuracy": 164,
+      "other": 0
+    },
+    "passive_view": {
+      "n_safety_violations": 87,
+      "n_passive_involved": 74,
+      "n_passive_only": 18,
+      "by_passive_check": {
+        "passive_hold_point_coast": 74
+      }
+    }
+  },
+  "selection": {
+    "description": "every success (cap 16); passive-contingency failures, passive-only first (cap 8); one boundary sample per failure class (smallest distance to its governing threshold); one planning_infeasible representative recorded as skipped; cap 32; deterministic by (cluster, index)",
+    "max_total": 32,
+    "max_successes": 16,
+    "max_passive_caused": 8,
+    "counts_by_reason": {
+      "success": 13,
+      "passive_contingency_failure": 8,
+      "boundary_safety_violation": 1,
+      "boundary_arrival_accuracy": 1
+    },
+    "n_selected": 23,
+    "n_flyable": 23,
+    "n_skipped": 0,
+    "spec_digest": "a5ffe60c3c1c88be01b806ec69996588b1449dbf314e75bd1cfcbfe88d49a54f",
+    "n_holdout_successes": 13,
+    "all_successes_reflown": true
+  },
+  "independent": {
+    "status": "checked",
+    "backend": "in_process",
+    "reason": null,
+    "spec_digest": "a5ffe60c3c1c88be01b806ec69996588b1449dbf314e75bd1cfcbfe88d49a54f",
+    "plan_digest": "4db16503e0b00373e4b0efbc5078347ca06fe74893b1b5f8c4def48b9b2733a4",
+    "evidence_kind": "orbitopt.verify.rendezvous-sample-reflight",
+    "tolerances": {
+      "position_error_m": 0.01,
+      "relative_speed_m_s": 1e-05,
+      "min_approach_distance_m": 0.01,
+      "realized_delta_v_m_s": 1e-09,
+      "passive_keep_out_margin_m": 0.01
+    },
+    "measured_residuals": {
+      "position_error_m": {
+        "max_abs_difference": 4.533799284445195e-06,
+        "tolerance": 0.01,
+        "n_within": 23
+      },
+      "relative_speed_m_s": {
+        "max_abs_difference": 5.774757283472098e-09,
+        "tolerance": 1e-05,
+        "n_within": 23
+      },
+      "min_approach_distance_m": {
+        "max_abs_difference": 9.180890856441692e-07,
+        "tolerance": 0.01,
+        "n_within": 23
+      },
+      "realized_delta_v_m_s": {
+        "max_abs_difference": 1.7763568394002505e-15,
+        "tolerance": 1e-09,
+        "n_within": 23
+      },
+      "passive_keep_out_margin_m": {
+        "max_abs_difference": 2.2942841155781935e-06,
+        "tolerance": 0.01,
+        "n_within": 69,
+        "n_releases": 69
+      }
+    },
+    "n_reflied": 23,
+    "n_verdict_within_bands": 23,
+    "n_verdict_flips": 0,
+    "verdict_flips": [],
+    "band_violations": []
+  },
+  "per_sample": [
+    {
+      "cluster": 0,
+      "index": 6,
+      "seed": 20000006,
+      "selection": "success",
+      "main_failure_class": null,
+      "main_reason": "arrival 29.7 m / 0.077 m/s; worst safety margin +2.6",
+      "independent_failure_class": null,
+      "independent_reason": "arrival 29.7 m / 0.077 m/s; worst safety margin +2.6",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 29.70349364782427,
+          "independent_model": 29.703496604219257,
+          "difference": 2.956394986597388e-06,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.07689326992200336,
+          "independent_model": 0.07689327443104206,
+          "difference": 4.509038697975143e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 939.2658714395526,
+          "independent_model": 939.2658718087628,
+          "difference": 3.6921016999258427e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.308273224304667,
+          "independent_model": 10.308273224304669,
+          "difference": 1.7763568394002505e-15,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 439.26587180876277,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 22.698482758143555,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 75.81623628511443,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.560304961505799,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.799546271142,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10028.788828749859,
+            -13.376366141983908,
+            -6.003370647944394
+          ],
+          "keep_out_margin_m": 9528.799546271142,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.867564846059,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.821876333981,
+          "worst_epoch_s": 479.9999999999999,
+          "worst_rel_lvlh_m": [
+            -10028.82001206252,
+            1.0893458809650838,
+            -6.017160035611141
+          ],
+          "keep_out_margin_m": 9528.821876333981,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.534231512726,
+          "duration_s": 5400.0,
+          "min_range_m": 956.7777515077523,
+          "worst_epoch_s": 1224.9999999999995,
+          "worst_rel_lvlh_m": [
+            22.26123163443745,
+            -956.4766955067147,
+            -8.968517096129943
+          ],
+          "keep_out_margin_m": 456.7777515077523,
+          "passed": true
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9528.799546279852,
+          "independent_margin_m": 9528.799546271142,
+          "difference_m": -8.70932126417756e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9528.821876343069,
+          "independent_margin_m": 9528.821876333981,
+          "difference_m": -9.087671060115099e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": 456.7777506958454,
+          "independent_margin_m": 456.7777515077523,
+          "difference_m": 8.119069434542325e-07,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        }
+      ],
+      "main_margins": {
+        "keep_out": 439.2658714395526,
+        "terminal_cone": 22.698482745292083,
+        "cross_track": 75.81623634228254,
+        "approach_speed": 2.5603049610107362
+      }
+    },
+    {
+      "cluster": 6,
+      "index": 7,
+      "seed": 26000025,
+      "selection": "success",
+      "main_failure_class": null,
+      "main_reason": "arrival 22.9 m / 0.055 m/s; worst safety margin +2.6",
+      "independent_failure_class": null,
+      "independent_reason": "arrival 22.9 m / 0.055 m/s; worst safety margin +2.6",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 22.86025439127973,
+          "independent_model": 22.8602543304131,
+          "difference": -6.086663262294678e-08,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.05452026887212364,
+          "independent_model": 0.05452026575591886,
+          "difference": -3.116204780329035e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 895.5721639849787,
+          "independent_model": 895.5721649030678,
+          "difference": 9.180890856441692e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.35337559142978,
+          "independent_model": 10.35337559142978,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 395.5721649030678,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 18.663641138954787,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 85.52368478312633,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.5540283902501413,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10026.348874890866,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10026.336744505468,
+            -14.54749006208931,
+            -5.622929640093844
+          ],
+          "keep_out_margin_m": 9526.348874890866,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.6408551728846,
+          "duration_s": 5400.0,
+          "min_range_m": 10026.359267007025,
+          "worst_epoch_s": 480.0,
+          "worst_rel_lvlh_m": [
+            -10026.356940390073,
+            -3.8639171663053276,
+            -5.6325068651185575
+          ],
+          "keep_out_margin_m": 9526.359267007025,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.3075218395516,
+          "duration_s": 5400.0,
+          "min_range_m": 978.1737226657693,
+          "worst_epoch_s": 0.0,
+          "worst_rel_lvlh_m": [
+            4.841857612337037,
+            -978.1506202587805,
+            -4.663927104316301
+          ],
+          "keep_out_margin_m": 478.17372266576933,
+          "passed": true
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9526.348874917167,
+          "independent_margin_m": 9526.348874890866,
+          "difference_m": -2.630076778586954e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9526.359267032645,
+          "independent_margin_m": 9526.359267007025,
+          "difference_m": -2.562046574894339e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": 478.17372179729705,
+          "independent_margin_m": 478.17372266576933,
+          "difference_m": 8.684722843099735e-07,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        }
+      ],
+      "main_margins": {
+        "keep_out": 395.5721639849787,
+        "terminal_cone": 18.66364110913176,
+        "cross_track": 85.52368483218697,
+        "approach_speed": 2.554028390566404
+      }
+    },
+    {
+      "cluster": 7,
+      "index": 4,
+      "seed": 27000025,
+      "selection": "success",
+      "main_failure_class": null,
+      "main_reason": "arrival 48.6 m / 0.060 m/s; worst safety margin +2.5",
+      "independent_failure_class": null,
+      "independent_reason": "arrival 48.6 m / 0.060 m/s; worst safety margin +2.5",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 48.61902348698956,
+          "independent_model": 48.619021252488125,
+          "difference": -2.2345014372149308e-06,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.05958797827617324,
+          "independent_model": 0.0595879755197891,
+          "difference": -2.756384134827705e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 874.636598102888,
+          "independent_model": 874.6365987624557,
+          "difference": 6.595677177756443e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.373292451042214,
+          "independent_model": 10.373292451042214,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 374.6365987624557,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 17.163679610599985,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 74.08275547019548,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.532784912609965,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10027.839192610289,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10027.827924343152,
+            -13.846659479545906,
+            -5.853429418143605
+          ],
+          "keep_out_margin_m": 9527.839192610289,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.7209424322749,
+          "duration_s": 5400.0,
+          "min_range_m": 10027.854473233878,
+          "worst_epoch_s": 480.0000000000001,
+          "worst_rel_lvlh_m": [
+            -10027.852591961315,
+            -1.826612373174612,
+            -5.864617522762728
+          ],
+          "keep_out_margin_m": 9527.854473233878,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.387609098942,
+          "duration_s": 5400.0,
+          "min_range_m": 952.6260767290075,
+          "worst_epoch_s": 0.0,
+          "worst_rel_lvlh_m": [
+            9.830830218894278,
+            -952.5663163356373,
+            4.148472497513325
+          ],
+          "keep_out_margin_m": 452.62607672900754,
+          "passed": true
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9527.839192614176,
+          "independent_margin_m": 9527.839192610289,
+          "difference_m": -3.887180355377495e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9527.854473239655,
+          "independent_margin_m": 9527.854473233878,
+          "difference_m": -5.77711034566164e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": 452.6260761074841,
+          "independent_margin_m": 452.62607672900754,
+          "difference_m": 6.21523440713645e-07,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        }
+      ],
+      "main_margins": {
+        "keep_out": 374.636598102888,
+        "terminal_cone": 17.1636795885467,
+        "cross_track": 74.0827555441765,
+        "approach_speed": 2.5327849128391557
+      }
+    },
+    {
+      "cluster": 8,
+      "index": 6,
+      "seed": 28000030,
+      "selection": "success",
+      "main_failure_class": null,
+      "main_reason": "arrival 35.8 m / 0.066 m/s; worst safety margin +2.6",
+      "independent_failure_class": null,
+      "independent_reason": "arrival 35.8 m / 0.066 m/s; worst safety margin +2.6",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 35.848704520994595,
+          "independent_model": 35.84870533143763,
+          "difference": 8.104430335720281e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.06568403068095907,
+          "independent_model": 0.06568403242119852,
+          "difference": 1.7402394525412035e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 946.2877354724403,
+          "independent_model": 946.2877356576213,
+          "difference": 1.8518096567277098e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.343648641883657,
+          "independent_model": 10.343648641883657,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 446.2877356576213,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 24.271138936928324,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 75.22721844092348,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.57012630488052,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10027.226867521404,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10027.214511624505,
+            -14.665328319384116,
+            -5.720031060167003
+          ],
+          "keep_out_margin_m": 9527.226867521404,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.3451634720512,
+          "duration_s": 5400.0,
+          "min_range_m": 10027.231669039287,
+          "worst_epoch_s": 480.0000000000001,
+          "worst_rel_lvlh_m": [
+            -10027.226074997297,
+            -8.911051548308023,
+            -5.725263225068375
+          ],
+          "keep_out_margin_m": 9527.231669039287,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.0118301387183,
+          "duration_s": 5400.0,
+          "min_range_m": 1028.3859277415706,
+          "worst_epoch_s": 505.0,
+          "worst_rel_lvlh_m": [
+            15.872175085903791,
+            -1027.7048119300002,
+            33.88967351357073
+          ],
+          "keep_out_margin_m": 528.3859277415706,
+          "passed": true
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9527.226867533725,
+          "independent_margin_m": 9527.226867521404,
+          "difference_m": -1.2321834219619632e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9527.231669044671,
+          "independent_margin_m": 9527.231669039287,
+          "difference_m": -5.384208634495735e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": 528.3859273773307,
+          "independent_margin_m": 528.3859277415706,
+          "difference_m": 3.6423989513423294e-07,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        }
+      ],
+      "main_margins": {
+        "keep_out": 446.2877354724403,
+        "terminal_cone": 24.2711389324823,
+        "cross_track": 75.22721851517599,
+        "approach_speed": 2.5701263049363847
+      }
+    },
+    {
+      "cluster": 14,
+      "index": 3,
+      "seed": 34000045,
+      "selection": "success",
+      "main_failure_class": null,
+      "main_reason": "arrival 40.6 m / 0.095 m/s; worst safety margin +2.6",
+      "independent_failure_class": null,
+      "independent_reason": "arrival 40.6 m / 0.095 m/s; worst safety margin +2.6",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 40.55830749220816,
+          "independent_model": 40.55830737242957,
+          "difference": -1.1977859060152696e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.09500610488424567,
+          "independent_model": 0.09500610677604106,
+          "difference": 1.89179538701012e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 932.2222426498804,
+          "independent_model": 932.222242826156,
+          "difference": 1.7627564830036135e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.388816539402129,
+          "independent_model": 10.388816539402129,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 432.22224282615605,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 22.68399537165199,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 30.26637169015521,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.552882773848377,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.410654008547,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10028.399390103246,
+            -13.813630963074502,
+            -5.924661052164993
+          ],
+          "keep_out_margin_m": 9528.410654008547,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.8411875583358,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.430952369858,
+          "worst_epoch_s": 480.0,
+          "worst_rel_lvlh_m": [
+            -10028.429192229167,
+            0.21155724658092367,
+            -5.937856448016191
+          ],
+          "keep_out_margin_m": 9528.430952369858,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.507854225003,
+          "duration_s": 5400.0,
+          "min_range_m": 1002.8275921516106,
+          "worst_epoch_s": 350.0,
+          "worst_rel_lvlh_m": [
+            43.52259283629894,
+            -1000.4039006725634,
+            54.415062368086126
+          ],
+          "keep_out_margin_m": 502.8275921516106,
+          "passed": true
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9528.410654014027,
+          "independent_margin_m": 9528.410654008547,
+          "difference_m": -5.4806150728836656e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9528.430952379613,
+          "independent_margin_m": 9528.430952369858,
+          "difference_m": -9.755240171216428e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": 502.82759185312443,
+          "independent_margin_m": 502.8275921516106,
+          "difference_m": 2.9848615668015555e-07,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        }
+      ],
+      "main_margins": {
+        "keep_out": 432.2222426498804,
+        "terminal_cone": 22.683995366587894,
+        "cross_track": 30.266371771164813,
+        "approach_speed": 2.5528827736220405
+      }
+    },
+    {
+      "cluster": 14,
+      "index": 11,
+      "seed": 34000053,
+      "selection": "success",
+      "main_failure_class": null,
+      "main_reason": "arrival 13.1 m / 0.069 m/s; worst safety margin +2.6",
+      "independent_failure_class": null,
+      "independent_reason": "arrival 13.1 m / 0.069 m/s; worst safety margin +2.6",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 13.082042127504584,
+          "independent_model": 13.08204568230686,
+          "difference": 3.5548022765397036e-06,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.06909413694286504,
+          "independent_model": 0.06909413970582393,
+          "difference": 2.762958889457323e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 920.8368233919529,
+          "independent_model": 920.8368237693967,
+          "difference": 3.774438255277346e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.30527041090124,
+          "independent_model": 10.30527041090124,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 420.8368237693967,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 20.52939387436497,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 83.16917571458862,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.5549550271410757,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.410654008547,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10028.399390103246,
+            -13.813630963074502,
+            -5.924661052164993
+          ],
+          "keep_out_margin_m": 9528.410654008547,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.8828636258605,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.43246816111,
+          "worst_epoch_s": 479.9999999999999,
+          "worst_rel_lvlh_m": [
+            -10028.43066890078,
+            0.9064268915562934,
+            -5.938510627845062
+          ],
+          "keep_out_margin_m": 9528.43246816111,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.5495302925274,
+          "duration_s": 5400.0,
+          "min_range_m": 904.5363604661086,
+          "worst_epoch_s": 2110.0,
+          "worst_rel_lvlh_m": [
+            6.708060000929834,
+            -903.8302403468351,
+            35.09880298357659
+          ],
+          "keep_out_margin_m": 404.5363604661086,
+          "passed": true
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9528.410654014027,
+          "independent_margin_m": 9528.410654008547,
+          "difference_m": -5.4806150728836656e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9528.43246817389,
+          "independent_margin_m": 9528.43246816111,
+          "difference_m": -1.2780219549313188e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": 404.53635966743843,
+          "independent_margin_m": 404.5363604661086,
+          "difference_m": 7.986701575646293e-07,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        }
+      ],
+      "main_margins": {
+        "keep_out": 420.83682339195286,
+        "terminal_cone": 20.529393862605346,
+        "cross_track": 83.16917575707657,
+        "approach_speed": 2.5549550272752883
+      }
+    },
+    {
+      "cluster": 15,
+      "index": 9,
+      "seed": 35000054,
+      "selection": "success",
+      "main_failure_class": null,
+      "main_reason": "arrival 8.2 m / 0.058 m/s; worst safety margin +2.5",
+      "independent_failure_class": null,
+      "independent_reason": "arrival 8.2 m / 0.058 m/s; worst safety margin +2.5",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 8.212448723532804,
+          "independent_model": 8.212452373921012,
+          "difference": 3.6503882085980877e-06,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.05776711926393199,
+          "independent_model": 0.05776712034996976,
+          "difference": 1.0860377666621623e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 920.1556004374833,
+          "independent_model": 920.1556005618676,
+          "difference": 1.243843144038692e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.314345180894614,
+          "independent_model": 10.314345180894612,
+          "difference": -1.7763568394002505e-15,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 420.1556005618676,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 21.603397638592014,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 74.89440277742597,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.5452900753720122,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10030.315607641418,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10030.3063093863,
+            -12.129695873778473,
+            -6.276882858777299
+          ],
+          "keep_out_margin_m": 9530.315607641418,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.488423772113,
+          "duration_s": 5400.0,
+          "min_range_m": 10030.327772295523,
+          "worst_epoch_s": 480.0,
+          "worst_rel_lvlh_m": [
+            -10030.325011815068,
+            -3.9844653707100406,
+            -6.284988117811736
+          ],
+          "keep_out_margin_m": 9530.327772295523,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.15509043878,
+          "duration_s": 5400.0,
+          "min_range_m": 916.3727786674424,
+          "worst_epoch_s": 2565.0000000000005,
+          "worst_rel_lvlh_m": [
+            3.3869978166486447,
+            -916.3048026638261,
+            10.635146622687806
+          ],
+          "keep_out_margin_m": 416.3727786674424,
+          "passed": true
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9530.315607635734,
+          "independent_margin_m": 9530.315607641418,
+          "difference_m": 5.6843418860808015e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9530.327772301143,
+          "independent_margin_m": 9530.327772295523,
+          "difference_m": -5.6206772569566965e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": 416.37277931395147,
+          "independent_margin_m": 416.3727786674424,
+          "difference_m": -6.465090791607508e-07,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        }
+      ],
+      "main_margins": {
+        "keep_out": 420.15560043748326,
+        "terminal_cone": 21.603397633421366,
+        "cross_track": 74.89440286172385,
+        "approach_speed": 2.545290075430046
+      }
+    },
+    {
+      "cluster": 15,
+      "index": 10,
+      "seed": 35000055,
+      "selection": "success",
+      "main_failure_class": null,
+      "main_reason": "arrival 49.1 m / 0.058 m/s; worst safety margin +2.6",
+      "independent_failure_class": null,
+      "independent_reason": "arrival 49.1 m / 0.058 m/s; worst safety margin +2.6",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 49.07034436868502,
+          "independent_model": 49.070348116848244,
+          "difference": 3.7481632233493656e-06,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.05820382427968955,
+          "independent_model": 0.05820382500276739,
+          "difference": 7.230778406586147e-10,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 957.3007325898509,
+          "independent_model": 957.3007326413117,
+          "difference": 5.146080184204038e-08,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.316130224150218,
+          "independent_model": 10.316130224150218,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 457.3007326413117,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 24.725345411382406,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 86.60355901825722,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.568469573741467,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10030.315607641418,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10030.3063093863,
+            -12.129695873778473,
+            -6.276882858777299
+          ],
+          "keep_out_margin_m": 9530.315607641418,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.2398673877105,
+          "duration_s": 5400.0,
+          "min_range_m": 10030.320754990104,
+          "worst_epoch_s": 480.0,
+          "worst_rel_lvlh_m": [
+            -10030.31549401245,
+            -8.129534007174243,
+            -6.280862668323607
+          ],
+          "keep_out_margin_m": 9530.320754990104,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3976.9065340543775,
+          "duration_s": 5400.0,
+          "min_range_m": 979.4711425111636,
+          "worst_epoch_s": 2280.0,
+          "worst_rel_lvlh_m": [
+            6.215487776877836,
+            -979.3769818207442,
+            -12.07535521255398
+          ],
+          "keep_out_margin_m": 479.47114251116363,
+          "passed": true
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9530.315607635734,
+          "independent_margin_m": 9530.315607641418,
+          "difference_m": 5.6843418860808015e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9530.32075498003,
+          "independent_margin_m": 9530.320754990104,
+          "difference_m": 1.0073563316836953e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": 479.47114303668013,
+          "independent_margin_m": 479.47114251116363,
+          "difference_m": -5.255164978734683e-07,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        }
+      ],
+      "main_margins": {
+        "keep_out": 457.3007325898509,
+        "terminal_cone": 24.72534540900172,
+        "cross_track": 86.60355901623859,
+        "approach_speed": 2.5684695737837107
+      }
+    },
+    {
+      "cluster": 16,
+      "index": 4,
+      "seed": 36000052,
+      "selection": "success",
+      "main_failure_class": null,
+      "main_reason": "arrival 27.2 m / 0.081 m/s; worst safety margin +2.5",
+      "independent_failure_class": null,
+      "independent_reason": "arrival 27.2 m / 0.081 m/s; worst safety margin +2.5",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 27.241814247944298,
+          "independent_model": 27.24181106916391,
+          "difference": -3.178780389134772e-06,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.08082995811808559,
+          "independent_model": 0.08082995558340743,
+          "difference": -2.5346781618029723e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 890.9647259206306,
+          "independent_model": 890.9647260593005,
+          "difference": 1.3866986137145432e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.402937989747109,
+          "independent_model": 10.402937989747109,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 390.96472605930046,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 18.33883628521407,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 83.95887562452799,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.5392162739381385,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.644555216073,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10028.633629682217,
+            -13.544990271425377,
+            -5.972412444456495
+          ],
+          "keep_out_margin_m": 9528.644555216073,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.8062835149141,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.664227828664,
+          "worst_epoch_s": 479.9999999999999,
+          "worst_rel_lvlh_m": [
+            -10028.662441327859,
+            -0.10134517423739453,
+            -5.9851616010000726
+          ],
+          "keep_out_margin_m": 9528.664227828664,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.472950181581,
+          "duration_s": 5400.0,
+          "min_range_m": 973.3049032429636,
+          "worst_epoch_s": 0.0,
+          "worst_rel_lvlh_m": [
+            3.902617532009117,
+            -973.2901591190289,
+            -3.67020643139891
+          ],
+          "keep_out_margin_m": 473.30490324296363,
+          "passed": true
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9528.644555205912,
+          "independent_margin_m": 9528.644555216073,
+          "difference_m": 1.0160874808207154e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9528.664227814124,
+          "independent_margin_m": 9528.664227828664,
+          "difference_m": 1.453918230254203e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": 473.30490314525014,
+          "independent_margin_m": 473.30490324296363,
+          "difference_m": 9.771349596121581e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        }
+      ],
+      "main_margins": {
+        "keep_out": 390.9647259206306,
+        "terminal_cone": 18.338836283916578,
+        "cross_track": 83.95887566860983,
+        "approach_speed": 2.539216273721438
+      }
+    },
+    {
+      "cluster": 16,
+      "index": 10,
+      "seed": 36000058,
+      "selection": "success",
+      "main_failure_class": null,
+      "main_reason": "arrival 47.2 m / 0.123 m/s; worst safety margin +2.5",
+      "independent_failure_class": null,
+      "independent_reason": "arrival 47.2 m / 0.123 m/s; worst safety margin +2.5",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 47.19036289889328,
+          "independent_model": 47.190361021383126,
+          "difference": -1.8775101509049819e-06,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.12269823793925172,
+          "independent_model": 0.12269823883370633,
+          "difference": 8.944546076028459e-10,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 871.6245277418064,
+          "independent_model": 871.6245279625377,
+          "difference": 2.207312945756712e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.430043832747439,
+          "independent_model": 10.430043832747439,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 371.62452796253774,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 16.7420312585554,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 54.14387248786761,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.534241781490639,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.644555216073,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10028.633629682217,
+            -13.544990271425377,
+            -5.972412444456495
+          ],
+          "keep_out_margin_m": 9528.644555216073,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.4601750569283,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.65357484697,
+          "worst_epoch_s": 479.9999999999999,
+          "worst_rel_lvlh_m": [
+            -10028.650072897844,
+            -5.8722227864891465,
+            -5.979686993352516
+          ],
+          "keep_out_margin_m": 9528.65357484697,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.126841723595,
+          "duration_s": 5400.0,
+          "min_range_m": 947.4254927724705,
+          "worst_epoch_s": 300.0,
+          "worst_rel_lvlh_m": [
+            16.750690137778292,
+            -946.8436957796966,
+            28.661725302433666
+          ],
+          "keep_out_margin_m": 447.42549277247053,
+          "passed": true
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9528.644555205912,
+          "independent_margin_m": 9528.644555216073,
+          "difference_m": 1.0160874808207154e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9528.653574841686,
+          "independent_margin_m": 9528.65357484697,
+          "difference_m": 5.284164217300713e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": 447.4254924347583,
+          "independent_margin_m": 447.42549277247053,
+          "difference_m": 3.3771220842027105e-07,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        }
+      ],
+      "main_margins": {
+        "keep_out": 371.62452774180645,
+        "terminal_cone": 16.742031252526942,
+        "cross_track": 54.14387258766237,
+        "approach_speed": 2.534241781598311
+      }
+    },
+    {
+      "cluster": 19,
+      "index": 7,
+      "seed": 39000064,
+      "selection": "success",
+      "main_failure_class": null,
+      "main_reason": "arrival 26.8 m / 0.084 m/s; worst safety margin +2.5",
+      "independent_failure_class": null,
+      "independent_reason": "arrival 26.8 m / 0.084 m/s; worst safety margin +2.5",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 26.781518953880802,
+          "independent_model": 26.78151739074222,
+          "difference": -1.5631385821279764e-06,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.08412486064449255,
+          "independent_model": 0.08412485890753313,
+          "difference": -1.7369594235150387e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 918.6733355748222,
+          "independent_model": 918.6733361047485,
+          "difference": 5.299262966218521e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.42272114347336,
+          "independent_model": 10.42272114347336,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 418.6733361047485,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 20.408756362371278,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 55.31445976530358,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.5440316760835033,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10030.082487179834,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10030.073098087456,
+            -12.22225691301901,
+            -6.242042122294606
+          ],
+          "keep_out_margin_m": 9530.082487179834,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.4951501504863,
+          "duration_s": 5400.0,
+          "min_range_m": 10030.09457358942,
+          "worst_epoch_s": 480.0,
+          "worst_rel_lvlh_m": [
+            -10030.09184249188,
+            -3.9649867013699804,
+            -6.250216494982851
+          ],
+          "keep_out_margin_m": 9530.09457358942,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.1618168171535,
+          "duration_s": 5400.0,
+          "min_range_m": 998.0820249654148,
+          "worst_epoch_s": 30.0,
+          "worst_rel_lvlh_m": [
+            24.037684306382914,
+            -997.6738294836589,
+            15.389875102175935
+          ],
+          "keep_out_margin_m": 498.0820249654148,
+          "passed": true
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9530.082487199756,
+          "independent_margin_m": 9530.082487179834,
+          "difference_m": -1.992157194763422e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9530.094573622064,
+          "independent_margin_m": 9530.09457358942,
+          "difference_m": -3.264358383603394e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": 498.0820244190661,
+          "independent_margin_m": 498.0820249654148,
+          "difference_m": 5.463487013912527e-07,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        }
+      ],
+      "main_margins": {
+        "keep_out": 418.6733355748222,
+        "terminal_cone": 20.408756342527724,
+        "cross_track": 55.31445983578669,
+        "approach_speed": 2.544031676271267
+      }
+    },
+    {
+      "cluster": 20,
+      "index": 8,
+      "seed": 40000068,
+      "selection": "success",
+      "main_failure_class": null,
+      "main_reason": "arrival 23.7 m / 0.045 m/s; worst safety margin +2.6",
+      "independent_failure_class": null,
+      "independent_reason": "arrival 23.7 m / 0.045 m/s; worst safety margin +2.6",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 23.682360867264777,
+          "independent_model": 23.682364156116325,
+          "difference": 3.2888515484330583e-06,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.044550253836094914,
+          "independent_model": 0.04455025135738936,
+          "difference": -2.478705553310423e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 932.8921403656874,
+          "independent_model": 932.8921407488065,
+          "difference": 3.8311907246679766e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.325712927894234,
+          "independent_model": 10.325712927894234,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 432.89214074880647,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 21.988718417739307,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 86.52470749710756,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.550524957954667,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10030.701182661873,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10030.692375793402,
+            -11.673554944892658,
+            -6.356584724261211
+          ],
+          "keep_out_margin_m": 9530.701182661873,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.4777925808172,
+          "duration_s": 5400.0,
+          "min_range_m": 10030.713610395807,
+          "worst_epoch_s": 479.9999999999999,
+          "worst_rel_lvlh_m": [
+            -10030.710906857337,
+            -3.7052015683075297,
+            -6.364614228906248
+          ],
+          "keep_out_margin_m": 9530.713610395807,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.144459247484,
+          "duration_s": 5400.0,
+          "min_range_m": 581.790170889599,
+          "worst_epoch_s": 4545.0,
+          "worst_rel_lvlh_m": [
+            -8.78841774713618,
+            -581.4505403723663,
+            -17.82794878649659
+          ],
+          "keep_out_margin_m": 81.79017088959904,
+          "passed": true
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9530.701182666293,
+          "independent_margin_m": 9530.701182661873,
+          "difference_m": -4.420144250616431e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9530.713610412666,
+          "independent_margin_m": 9530.713610395807,
+          "difference_m": -1.6858393792062998e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": 81.79017271397572,
+          "independent_margin_m": 81.79017088959904,
+          "difference_m": -1.8243766817249707e-06,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        }
+      ],
+      "main_margins": {
+        "keep_out": 432.8921403656874,
+        "terminal_cone": 21.988718401896563,
+        "cross_track": 86.5247074938843,
+        "approach_speed": 2.550524958108631
+      }
+    },
+    {
+      "cluster": 21,
+      "index": 9,
+      "seed": 41000072,
+      "selection": "success",
+      "main_failure_class": null,
+      "main_reason": "arrival 40.2 m / 0.098 m/s; worst safety margin +2.5",
+      "independent_failure_class": null,
+      "independent_reason": "arrival 40.2 m / 0.098 m/s; worst safety margin +2.5",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 40.23600327864466,
+          "independent_model": 40.23600091735308,
+          "difference": -2.36129157826781e-06,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.09752063563604728,
+          "independent_model": 0.09752063220061478,
+          "difference": -3.435432494036661e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 906.060701239974,
+          "independent_model": 906.0607012866648,
+          "difference": 4.669072950491682e-08,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.406460664530492,
+          "independent_model": 10.406460664530492,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 406.06070128666477,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 19.785889150499727,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 64.06498774122065,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.5388541883320626,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.40810917999,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10028.39655249489,
+            -14.03139340507505,
+            -5.908483282278667
+          ],
+          "keep_out_margin_m": 9528.40810917999,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.340914391399,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.413901345684,
+          "worst_epoch_s": 480.0000000000001,
+          "worst_rel_lvlh_m": [
+            -10028.408683548989,
+            -8.34740977203137,
+            -5.913812026818505
+          ],
+          "keep_out_margin_m": 9528.413901345684,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.007581058066,
+          "duration_s": 5400.0,
+          "min_range_m": 984.3541155090198,
+          "worst_epoch_s": 0.0,
+          "worst_rel_lvlh_m": [
+            20.125411739305264,
+            -983.6670443813941,
+            -30.77561242023539
+          ],
+          "keep_out_margin_m": 484.35411550901983,
+          "passed": true
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9528.408109187236,
+          "independent_margin_m": 9528.40810917999,
+          "difference_m": -7.245034794323146e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9528.413901349299,
+          "independent_margin_m": 9528.413901345684,
+          "difference_m": -3.614331944845617e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": 484.35411546990815,
+          "independent_margin_m": 484.35411550901983,
+          "difference_m": 3.911168278136756e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        }
+      ],
+      "main_margins": {
+        "keep_out": 406.06070123997404,
+        "terminal_cone": 19.785889148840667,
+        "cross_track": 64.06498766872028,
+        "approach_speed": 2.538854188346182
+      }
+    },
+    {
+      "cluster": 0,
+      "index": 0,
+      "seed": 20000000,
+      "selection": "passive_contingency_failure",
+      "main_failure_class": "safety_violation",
+      "main_reason": "passive release hold_point_coast: keep-out margin -322.925 m",
+      "independent_failure_class": "safety_violation",
+      "independent_reason": "passive release hold_point_coast: keep-out margin -322.925 m",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 19.049543187431805,
+          "independent_model": 19.04954335140395,
+          "difference": 1.6397214608332433e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.08292499332213848,
+          "independent_model": 0.08292499057947819,
+          "difference": -2.742660293320043e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 923.8245594298385,
+          "independent_model": 923.8245599653712,
+          "difference": 5.355327630240936e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.279007152485043,
+          "independent_model": 10.279007152485043,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 423.82455996537124,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 21.296499999058597,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 59.50422408227678,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.551855104642735,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.799546271142,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10028.788828749859,
+            -13.376366141983908,
+            -6.003370647944394
+          ],
+          "keep_out_margin_m": 9528.799546271142,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.5059233066108,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.81003134841,
+          "worst_epoch_s": 480.0,
+          "worst_rel_lvlh_m": [
+            -10028.807012693944,
+            -4.940644405869989,
+            -6.011409828947308
+          ],
+          "keep_out_margin_m": 9528.81003134841,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.172589973278,
+          "duration_s": 5400.0,
+          "min_range_m": 177.07478959290987,
+          "worst_epoch_s": 4415.0,
+          "worst_rel_lvlh_m": [
+            -13.752383645578803,
+            -176.31481887428217,
+            8.912782885675263
+          ],
+          "keep_out_margin_m": -322.92521040709016,
+          "passed": false
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9528.799546279852,
+          "independent_margin_m": 9528.799546271142,
+          "difference_m": -8.70932126417756e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9528.81003136872,
+          "independent_margin_m": 9528.81003134841,
+          "difference_m": -2.0309016690589488e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": -322.92521015164766,
+          "independent_margin_m": -322.92521040709016,
+          "difference_m": -2.5544250092934817e-07,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": false,
+          "independent_passed": false
+        }
+      ],
+      "main_margins": {
+        "keep_out": 423.8245594298385,
+        "terminal_cone": 21.296499981751495,
+        "cross_track": 59.50422417017489,
+        "approach_speed": 2.55185510399245
+      }
+    },
+    {
+      "cluster": 0,
+      "index": 4,
+      "seed": 20000004,
+      "selection": "passive_contingency_failure",
+      "main_failure_class": "safety_violation",
+      "main_reason": "passive release hold_point_coast: keep-out margin -214.262 m",
+      "independent_failure_class": "safety_violation",
+      "independent_reason": "passive release hold_point_coast: keep-out margin -214.262 m",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 88.19538364235035,
+          "independent_model": 88.19538183366522,
+          "difference": -1.8086851270027182e-06,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.08003685038104782,
+          "independent_model": 0.08003685158664435,
+          "difference": 1.2055965253887635e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 830.0503436906243,
+          "independent_model": 830.0503441080621,
+          "difference": 4.174377181698219e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.348343009970327,
+          "independent_model": 10.348343009970327,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 330.05034410806206,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 12.613472095952218,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 83.03108873190536,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.5326451011185425,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.799546271142,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10028.788828749859,
+            -13.376366141983908,
+            -6.003370647944394
+          ],
+          "keep_out_margin_m": 9528.799546271142,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.6564444183538,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.814520824071,
+          "worst_epoch_s": 479.9999999999999,
+          "worst_rel_lvlh_m": [
+            -10028.812423121833,
+            -2.430865070157779,
+            -6.013802784822474
+          ],
+          "keep_out_margin_m": 9528.814520824071,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.3231110850206,
+          "duration_s": 5400.0,
+          "min_range_m": 285.73823664544665,
+          "worst_epoch_s": 5400.0,
+          "worst_rel_lvlh_m": [
+            -20.15614792021037,
+            -284.7163460296512,
+            13.291797688491062
+          ],
+          "keep_out_margin_m": -214.26176335455335,
+          "passed": false
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9528.799546279852,
+          "independent_margin_m": 9528.799546271142,
+          "difference_m": -8.70932126417756e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9528.814520838616,
+          "independent_margin_m": 9528.814520824071,
+          "difference_m": -1.4544639270752668e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": -214.26176327964464,
+          "independent_margin_m": -214.26176335455335,
+          "difference_m": -7.490871212212369e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": false,
+          "independent_passed": false
+        }
+      ],
+      "main_margins": {
+        "keep_out": 330.05034369062435,
+        "terminal_cone": 12.613472079439205,
+        "cross_track": 83.0310887974897,
+        "approach_speed": 2.53264510128043
+      }
+    },
+    {
+      "cluster": 1,
+      "index": 9,
+      "seed": 21000012,
+      "selection": "passive_contingency_failure",
+      "main_failure_class": "safety_violation",
+      "main_reason": "passive release hold_point_coast: keep-out margin -336.878 m",
+      "independent_failure_class": "safety_violation",
+      "independent_reason": "passive release hold_point_coast: keep-out margin -336.878 m",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 210.11984515768347,
+          "independent_model": 210.11984137266757,
+          "difference": -3.7850159060326405e-06,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.1570196528221973,
+          "independent_model": 0.15701965212184063,
+          "difference": -7.003566615537693e-10,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 715.2453310766774,
+          "independent_model": 715.2453309167752,
+          "difference": -1.5990224255801877e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.433847124083282,
+          "independent_model": 10.433847124083282,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 215.24533091677517,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 5.334890506817288,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 86.35432982048832,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.5223996018270602,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10029.869101249344,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10029.859154863756,
+            -12.700839637810986,
+            -6.181461356344698
+          ],
+          "keep_out_margin_m": 9529.869101249344,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.9175209928338,
+          "duration_s": 5400.0,
+          "min_range_m": 10029.896045743533,
+          "worst_epoch_s": 480.0000000000001,
+          "worst_rel_lvlh_m": [
+            -10029.893794850654,
+            2.5992944394483857,
+            -6.1964591936284705
+          ],
+          "keep_out_margin_m": 9529.896045743533,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.584187659501,
+          "duration_s": 5400.0,
+          "min_range_m": 163.12155162581215,
+          "worst_epoch_s": 5020.0,
+          "worst_rel_lvlh_m": [
+            -139.99548551441356,
+            83.69180147935775,
+            -2.3636847369925
+          ],
+          "keep_out_margin_m": -336.8784483741879,
+          "passed": false
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9529.869101257244,
+          "independent_margin_m": 9529.869101249344,
+          "difference_m": -7.899870979599655e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9529.896045749774,
+          "independent_margin_m": 9529.896045743533,
+          "difference_m": -6.2409526435658336e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": -336.87844963020075,
+          "independent_margin_m": -336.8784483741879,
+          "difference_m": 1.2560128652694402e-06,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": false,
+          "independent_passed": false
+        }
+      ],
+      "main_margins": {
+        "keep_out": 215.24533107667742,
+        "terminal_cone": 5.33489051469526,
+        "cross_track": 86.35432979345399,
+        "approach_speed": 2.522399601784846
+      }
+    },
+    {
+      "cluster": 2,
+      "index": 4,
+      "seed": 22000010,
+      "selection": "passive_contingency_failure",
+      "main_failure_class": "safety_violation",
+      "main_reason": "passive release hold_point_coast: keep-out margin -251.082 m",
+      "independent_failure_class": "safety_violation",
+      "independent_reason": "passive release hold_point_coast: keep-out margin -251.082 m",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 58.15485551003329,
+          "independent_model": 58.154854999839266,
+          "difference": -5.101940274698791e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.14149701047957003,
+          "independent_model": 0.14149700470481275,
+          "difference": -5.774757283472098e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 963.3102983413474,
+          "independent_model": 963.3102988238297,
+          "difference": 4.824822781301918e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.326784681482579,
+          "independent_model": 10.326784681482579,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 463.3102988238297,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 26.492389280201536,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 69.95267383552937,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.575723375945487,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.648068994806,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10028.637760575377,
+            -13.063848495331968,
+            -6.0078929272685855
+          ],
+          "keep_out_margin_m": 9528.648068994806,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.634955311879,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.662337260195,
+          "worst_epoch_s": 479.9999999999999,
+          "worst_rel_lvlh_m": [
+            -10028.660225857666,
+            -2.4764365832920703,
+            -6.018001615711455
+          ],
+          "keep_out_margin_m": 9528.662337260195,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.301621978546,
+          "duration_s": 5400.0,
+          "min_range_m": 248.91846298268712,
+          "worst_epoch_s": 4715.0,
+          "worst_rel_lvlh_m": [
+            -11.731442152461128,
+            -248.63486628405118,
+            -1.8648717379020425
+          ],
+          "keep_out_margin_m": -251.08153701731288,
+          "passed": false
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9528.648069009587,
+          "independent_margin_m": 9528.648068994806,
+          "difference_m": -1.478110789321363e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9528.662337270567,
+          "independent_margin_m": 9528.662337260195,
+          "difference_m": -1.0371877579018474e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": -251.0815372942948,
+          "independent_margin_m": -251.08153701731288,
+          "difference_m": 2.769819218428893e-07,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": false,
+          "independent_passed": false
+        }
+      ],
+      "main_margins": {
+        "keep_out": 463.31029834134745,
+        "terminal_cone": 26.492389265683897,
+        "cross_track": 69.95267389921037,
+        "approach_speed": 2.5757233760945475
+      }
+    },
+    {
+      "cluster": 3,
+      "index": 3,
+      "seed": 23000012,
+      "selection": "passive_contingency_failure",
+      "main_failure_class": "safety_violation",
+      "main_reason": "passive release hold_point_coast: keep-out margin -126.603 m",
+      "independent_failure_class": "safety_violation",
+      "independent_reason": "passive release hold_point_coast: keep-out margin -126.603 m",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 165.09137045695238,
+          "independent_model": 165.0913659231531,
+          "difference": -4.533799284445195e-06,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.10929449574140218,
+          "independent_model": 0.10929449800361232,
+          "difference": 2.262210141434906e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 759.3005679617885,
+          "independent_model": 759.3005679134552,
+          "difference": -4.8333276936318725e-08,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.237285579389727,
+          "independent_model": 10.237285579389727,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 259.3005679134552,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 8.10134224456452,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 73.49621088955473,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.517715669073014,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10032.359634778855,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10032.352356643532,
+            -10.074972800591695,
+            -6.672976258708331
+          ],
+          "keep_out_margin_m": 9532.359634778855,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.5317515954454,
+          "duration_s": 5400.0,
+          "min_range_m": 10032.376551430658,
+          "worst_epoch_s": 479.9999999999999,
+          "worst_rel_lvlh_m": [
+            -10032.374253577162,
+            -1.2050049231133926,
+            -6.6823514525717655
+          ],
+          "keep_out_margin_m": 9532.376551430658,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.198418262112,
+          "duration_s": 5400.0,
+          "min_range_m": 373.39743178217276,
+          "worst_epoch_s": 3240.0000000000005,
+          "worst_rel_lvlh_m": [
+            -9.077095118896096,
+            -372.2450484536393,
+            -27.872429163469278
+          ],
+          "keep_out_margin_m": -126.60256821782724,
+          "passed": false
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9532.359634776858,
+          "independent_margin_m": 9532.359634778855,
+          "difference_m": 1.9972503650933504e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9532.376551439613,
+          "independent_margin_m": 9532.376551430658,
+          "difference_m": -8.954884833656251e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": -126.60256632436216,
+          "independent_margin_m": -126.60256821782724,
+          "difference_m": -1.8934650825030985e-06,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": false,
+          "independent_passed": false
+        }
+      ],
+      "main_margins": {
+        "keep_out": 259.3005679617885,
+        "terminal_cone": 8.101342245818898,
+        "cross_track": 73.4962109606513,
+        "approach_speed": 2.517715669073488
+      }
+    },
+    {
+      "cluster": 4,
+      "index": 5,
+      "seed": 24000017,
+      "selection": "passive_contingency_failure",
+      "main_failure_class": "safety_violation",
+      "main_reason": "passive release hold_point_coast: keep-out margin -344.740 m",
+      "independent_failure_class": "safety_violation",
+      "independent_reason": "passive release hold_point_coast: keep-out margin -344.740 m",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 78.36168659272157,
+          "independent_model": 78.36168599817448,
+          "difference": -5.945470888946147e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.05732055851968975,
+          "independent_model": 0.05732055594748726,
+          "difference": -2.5722024926677634e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 844.8012781887585,
+          "independent_model": 844.8012790428957,
+          "difference": 8.541371698811417e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.25729865498531,
+          "independent_model": 10.25729865498531,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 344.80127904289566,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 14.800102639392733,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 49.93509963860288,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.5351315383415187,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10026.178942878389,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10026.165505462985,
+            -15.45313270990664,
+            -5.536458403313645
+          ],
+          "keep_out_margin_m": 9526.178942878389,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.9366620270546,
+          "duration_s": 5400.0,
+          "min_range_m": 10026.196851449295,
+          "worst_epoch_s": 480.0,
+          "worst_rel_lvlh_m": [
+            -10026.19531394023,
+            0.16050867026206106,
+            -5.55022266790229
+          ],
+          "keep_out_margin_m": 9526.196851449295,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.603328693722,
+          "duration_s": 5400.0,
+          "min_range_m": 155.25974051765778,
+          "worst_epoch_s": 4350.0,
+          "worst_rel_lvlh_m": [
+            -9.432277313234046,
+            -153.6865867762096,
+            -19.926169109371557
+          ],
+          "keep_out_margin_m": -344.74025948234225,
+          "passed": false
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9526.17894291039,
+          "independent_margin_m": 9526.178942878389,
+          "difference_m": -3.200148057658225e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9526.196851475352,
+          "independent_margin_m": 9526.196851449295,
+          "difference_m": -2.6057023205794394e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": -344.7402616841805,
+          "independent_margin_m": -344.74025948234225,
+          "difference_m": 2.20183824239939e-06,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": false,
+          "independent_passed": false
+        }
+      ],
+      "main_margins": {
+        "keep_out": 344.8012781887585,
+        "terminal_cone": 14.800102609556504,
+        "cross_track": 49.935099715517936,
+        "approach_speed": 2.5351315374387777
+      }
+    },
+    {
+      "cluster": 5,
+      "index": 9,
+      "seed": 25000024,
+      "selection": "passive_contingency_failure",
+      "main_failure_class": "safety_violation",
+      "main_reason": "passive release hold_point_coast: keep-out margin -86.043 m",
+      "independent_failure_class": "safety_violation",
+      "independent_reason": "passive release hold_point_coast: keep-out margin -86.043 m",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 129.92816099832376,
+          "independent_model": 129.9281570183416,
+          "difference": -3.979982153623496e-06,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.008589720164820557,
+          "independent_model": 0.008589721583085928,
+          "difference": 1.4182653714639448e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 794.2557235125685,
+          "independent_model": 794.2557235492797,
+          "difference": 3.671118520287564e-08,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.29521887864449,
+          "independent_model": 10.29521887864449,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 294.25572354927965,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 10.81393795117205,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 87.17460716756625,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.5184616995544324,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.870546680373,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10028.859148423187,
+            -13.889870507628075,
+            -5.974500723531946
+          ],
+          "keep_out_margin_m": 9528.870546680373,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.5556247854759,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.882269265348,
+          "worst_epoch_s": 480.0,
+          "worst_rel_lvlh_m": [
+            -10028.879417618333,
+            -4.625803855548384,
+            -5.983276271199884
+          ],
+          "keep_out_margin_m": 9528.882269265348,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.2222914521426,
+          "duration_s": 5400.0,
+          "min_range_m": 413.9570337596136,
+          "worst_epoch_s": 4925.0,
+          "worst_rel_lvlh_m": [
+            -9.961984984113514,
+            -413.8299147653764,
+            -2.4466915448166944
+          ],
+          "keep_out_margin_m": -86.04296624038642,
+          "passed": false
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9528.87054669129,
+          "independent_margin_m": 9528.870546680373,
+          "difference_m": -1.091757440008223e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9528.882269272328,
+          "independent_margin_m": 9528.882269265348,
+          "difference_m": -6.979462341405451e-09,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": -86.0429640065945,
+          "independent_margin_m": -86.04296624038642,
+          "difference_m": -2.23379191766071e-06,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": false,
+          "independent_passed": false
+        }
+      ],
+      "main_margins": {
+        "keep_out": 294.25572351256847,
+        "terminal_cone": 10.813937951137902,
+        "cross_track": 87.17460718024017,
+        "approach_speed": 2.5184616995843383
+      }
+    },
+    {
+      "cluster": 8,
+      "index": 4,
+      "seed": 28000028,
+      "selection": "passive_contingency_failure",
+      "main_failure_class": "safety_violation",
+      "main_reason": "passive release hold_point_coast: keep-out margin -315.869 m",
+      "independent_failure_class": "safety_violation",
+      "independent_reason": "passive release hold_point_coast: keep-out margin -315.869 m",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 261.80354911323116,
+          "independent_model": 261.8035481315702,
+          "difference": -9.816609463086934e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.08462009664028504,
+          "independent_model": 0.08462009837709482,
+          "difference": 1.736809779329107e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 666.8528085685118,
+          "independent_model": 666.8528089951773,
+          "difference": 4.2666545141401e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.321335309372193,
+          "independent_model": 10.321335309372193,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 166.85280899517727,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 1.493776097192253,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 87.60286456325946,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.5384205627548777,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10027.226867521404,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10027.214511624505,
+            -14.665328319384116,
+            -5.720031060167003
+          ],
+          "keep_out_margin_m": 9527.226867521404,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.9184518996491,
+          "duration_s": 5400.0,
+          "min_range_m": 10027.246943103073,
+          "worst_epoch_s": 479.9999999999999,
+          "worst_rel_lvlh_m": [
+            -10027.245282823797,
+            0.6463500388308603,
+            -5.733959318993584
+          ],
+          "keep_out_margin_m": 9527.246943103073,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.585118566316,
+          "duration_s": 5400.0,
+          "min_range_m": 184.1307643983314,
+          "worst_epoch_s": 3900.0,
+          "worst_rel_lvlh_m": [
+            -178.7074533852768,
+            33.15786048500724,
+            29.467622749718554
+          ],
+          "keep_out_margin_m": -315.8692356016686,
+          "passed": false
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9527.226867533725,
+          "independent_margin_m": 9527.226867521404,
+          "difference_m": -1.2321834219619632e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9527.246943115104,
+          "independent_margin_m": 9527.246943103073,
+          "difference_m": -1.2030795915052295e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": -315.8692353732355,
+          "independent_margin_m": -315.8692356016686,
+          "difference_m": -2.284331230839598e-07,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": false,
+          "independent_passed": false
+        }
+      ],
+      "main_margins": {
+        "keep_out": 166.85280856851182,
+        "terminal_cone": 1.4937760811106955,
+        "cross_track": 87.60286455445896,
+        "approach_speed": 2.538420562404206
+      }
+    },
+    {
+      "cluster": 11,
+      "index": 0,
+      "seed": 31000033,
+      "selection": "boundary_safety_violation",
+      "main_failure_class": "safety_violation",
+      "main_reason": "passive release hold_point_coast: keep-out margin -419.614 m",
+      "independent_failure_class": "safety_violation",
+      "independent_reason": "passive release hold_point_coast: keep-out margin -419.614 m",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 302.9451969026395,
+          "independent_model": 302.94519596816065,
+          "difference": -9.344788622911437e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.046933687249584466,
+          "independent_model": 0.04693369166165894,
+          "difference": 4.412074476600747e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 631.7463371207828,
+          "independent_model": 631.7463378444428,
+          "difference": 7.23660036783258e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.268836809847619,
+          "independent_model": 10.26883680984762,
+          "difference": 1.7763568394002505e-15,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 131.7463378444428,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 0.00011267616356747112,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 86.270933321754,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.5410177124451057,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.95892486678,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10028.94933368859,
+            -12.461973657595536,
+            -6.089185886958603
+          ],
+          "keep_out_margin_m": 9528.95892486678,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.4430961296601,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.968245263557,
+          "worst_epoch_s": 480.0000000000001,
+          "worst_rel_lvlh_m": [
+            -10028.96510920285,
+            -5.073219966834131,
+            -6.096337901444713
+          ],
+          "keep_out_margin_m": 9528.968245263557,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.1097627963272,
+          "duration_s": 5400.0,
+          "min_range_m": 80.38649231216759,
+          "worst_epoch_s": 5320.000000000001,
+          "worst_rel_lvlh_m": [
+            -9.62459640332997,
+            -79.55026305795593,
+            -6.411781167288769
+          ],
+          "keep_out_margin_m": -419.6135076878324,
+          "passed": false
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9528.95892490252,
+          "independent_margin_m": 9528.95892486678,
+          "difference_m": -3.573950380086899e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9528.968245286804,
+          "independent_margin_m": 9528.968245263557,
+          "difference_m": -2.3246684577316046e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": -419.6135099821165,
+          "independent_margin_m": -419.6135076878324,
+          "difference_m": 2.2942841155781935e-06,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": false,
+          "independent_passed": false
+        }
+      ],
+      "main_margins": {
+        "keep_out": 131.74633712078275,
+        "terminal_cone": 0.00011264405183908366,
+        "cross_track": 86.27093334669325,
+        "approach_speed": 2.541017712694435
+      }
+    },
+    {
+      "cluster": 10,
+      "index": 1,
+      "seed": 30000031,
+      "selection": "boundary_arrival_accuracy",
+      "main_failure_class": "arrival_accuracy",
+      "main_reason": "arrival 119.2 m / 0.201 m/s against 50 m / 0.2 m/s",
+      "independent_failure_class": "arrival_accuracy",
+      "independent_reason": "arrival 119.2 m / 0.201 m/s against 50 m / 0.2 m/s",
+      "verdict_flip": false,
+      "all_within_bands": true,
+      "residuals": {
+        "position_error_m": {
+          "main_model": 119.17700699200289,
+          "independent_model": 119.17700476153797,
+          "difference": -2.2304649149873512e-06,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "relative_speed_m_s": {
+          "main_model": 0.20084008981226442,
+          "independent_model": 0.20084008428311081,
+          "difference": -5.529153607186643e-09,
+          "tolerance": 1e-05,
+          "within_band": true
+        },
+        "min_approach_distance_m": {
+          "main_model": 1002.064599203074,
+          "independent_model": 1002.0645997753971,
+          "difference": 5.723231879528612e-07,
+          "tolerance": 0.01,
+          "within_band": true
+        },
+        "realized_delta_v_m_s": {
+          "main_model": 10.254929235049698,
+          "independent_model": 10.254929235049698,
+          "difference": 0.0,
+          "tolerance": 1e-09,
+          "within_band": true
+        }
+      },
+      "independent_checks": {
+        "keep_out": {
+          "unit": "m",
+          "min_margin": 502.06459977539714,
+          "passed": true
+        },
+        "terminal_cone": {
+          "unit": "deg",
+          "min_margin": 31.39118570775578,
+          "passed": true
+        },
+        "cross_track": {
+          "unit": "m",
+          "min_margin": 68.39308156447487,
+          "passed": true
+        },
+        "approach_speed": {
+          "unit": "m/s",
+          "min_margin": 2.613389267705829,
+          "passed": true
+        }
+      },
+      "passive": [
+        {
+          "kind": "no_burn_at_t0",
+          "release_epoch_s": 0.0,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.761134662129,
+          "worst_epoch_s": 1040.0,
+          "worst_rel_lvlh_m": [
+            -10028.751521027418,
+            -12.49256078081089,
+            -6.063128319638054
+          ],
+          "keep_out_margin_m": 9528.761134662129,
+          "passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "release_epoch_s": 560.5839919424235,
+          "duration_s": 5400.0,
+          "min_range_m": 10028.774293109807,
+          "worst_epoch_s": 479.9999999999999,
+          "worst_rel_lvlh_m": [
+            -10028.772076371737,
+            -2.7544211668969183,
+            -6.072519302886576
+          ],
+          "keep_out_margin_m": 9528.774293109807,
+          "passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "release_epoch_s": 3977.2506586090904,
+          "duration_s": 5400.0,
+          "min_range_m": 1065.0914925118218,
+          "worst_epoch_s": 0.0,
+          "worst_rel_lvlh_m": [
+            102.63713322385928,
+            -1060.1083641531877,
+            7.4674330998035146
+          ],
+          "keep_out_margin_m": 565.0914925118218,
+          "passed": true
+        }
+      ],
+      "passive_comparison": [
+        {
+          "kind": "no_burn_at_t0",
+          "main_margin_m": 9528.761134682336,
+          "independent_margin_m": 9528.761134662129,
+          "difference_m": -2.020715328399092e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "gate_abort_no_burn",
+          "main_margin_m": 9528.77429313105,
+          "independent_margin_m": 9528.774293109807,
+          "difference_m": -2.1242158254608512e-08,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        },
+        {
+          "kind": "hold_point_coast",
+          "main_margin_m": 565.0914919474758,
+          "independent_margin_m": 565.0914925118218,
+          "difference_m": 5.643460099236108e-07,
+          "tolerance_m": 0.01,
+          "within_band": true,
+          "main_passed": true,
+          "independent_passed": true
+        }
+      ],
+      "main_margins": {
+        "keep_out": 502.06459920307395,
+        "terminal_cone": 31.391185692914384,
+        "cross_track": 68.39308163965143,
+        "approach_speed": 2.6133892668006506
+      }
+    }
+  ],
+  "skipped_rows": [],
+  "ground_plan": {
+    "mission_id": "leo-rdv-001",
+    "drift_end_s": 560.5949924589561,
+    "transfer_tof_s": 3416.666666666667,
+    "total_delta_v_m_s": 10.345425677017637,
+    "delta_v_budget_m_s": 25.0,
+    "budget_margin_m_s": 14.654574322982363,
+    "plan_digest": "4db16503e0b00373e4b0efbc5078347ca06fe74893b1b5f8c4def48b9b2733a4",
+    "config_sha256": "7cf9a0a2e8112b027d505a876559a6cfc1f532a2e22ec421c5e5c42b14158b03",
+    "maneuvers_sha256": "1fffec72f99ec04cad6ea5d86b1e6bbd1b3f562cb1ed6ee1e0df395ffb0c545f",
+    "sealed_consumed": true,
+    "planner": "orbitopt.rendezvous.canonical_plan (E12-04 plan_rendezvous_safe, constrained optimum)"
+  },
+  "campaign": {
+    "schema_version": "1.0",
+    "mission_id": "LEO-RDV-001",
+    "disturbances": {
+      "initial_state": {
+        "enabled": true,
+        "sigma_pos_lvlh_m": [
+          1.0,
+          3.0,
+          1.0
+        ],
+        "sigma_vel_lvlh_m_s": [
+          0.002,
+          0.004,
+          0.002
+        ],
+        "n_components": 6
+      },
+      "execution": {
+        "enabled": true,
+        "sigma_magnitude_rel": 0.01,
+        "sigma_pointing_deg": 0.5,
+        "n_components": 8
+      },
+      "j2": {
+        "enabled": true,
+        "sigma_rel": 0.03,
+        "n_components": 1
+      },
+      "drag": {
+        "enabled": true,
+        "sigma_ln": 0.6,
+        "reference_density_kg_m3": 5e-12,
+        "reference_altitude_m": 490000.0,
+        "scale_height_m": 50000.0,
+        "ballistic_coefficient_m2_per_kg": 0.025,
+        "chief_ballistic_coefficient_m2_per_kg": 0.045,
+        "n_components": 1
+      }
+    },
+    "arms": {
+      "train": {
+        "seed_base": 100000,
+        "n_clusters": 22,
+        "samples_per_cluster": 12,
+        "n": 264
+      },
+      "holdout": {
+        "seed_base": 20000000,
+        "n_clusters": 22,
+        "samples_per_cluster": 12,
+        "n": 264
+      }
+    },
+    "statistics": {
+      "ci_level": 0.95,
+      "target_ci_width": 0.12,
+      "planning_rate": 0.5,
+      "derived_n_per_arm": 263,
+      "cluster_bootstrap_trials": 4000,
+      "passive_contingency_in_success": true
+    },
+    "grading": {
+      "passive_contingency_in_success": true
+    },
+    "truth_grid": {
+      "sample_dt_s": 5.0,
+      "grid_convergence_dt_s": 1.0,
+      "grid_convergence_samples": 5
+    },
+    "spot_check_samples": 6
+  },
+  "notes": [
+    "time-of-flight held at the ground plan's: this prices a locked mission design, not a per-sample re-optimisation (the latter costs ~9 s/sample for a delta-v change E12-05 measured as flat across the window)",
+    "the truth grid is campaign.sample_dt_s, coarser than the config's check_sample_dt_s by design; grid_convergence measures whether it can move a verdict",
+    "drag is present in the truth model whenever the source is enabled: the plan ignores the atmosphere, and the lognormal factor prices what is unknown about it",
+    "the independent-model line is the E12-05 TudatPy re-flight and is recorded not_checked wherever no backend is available (REFLY_BACKEND_MISSING)"
+  ]
+}

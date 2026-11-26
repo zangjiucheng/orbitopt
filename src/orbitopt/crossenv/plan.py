@@ -39,7 +39,7 @@ PLAN_SCHEMA_FILE = "crossenv-plan-1.0.json"
 RESOLVED_PLAN_FILE = "plan.resolved.json"
 
 #: Runner names the stage subprocesses dispatch on (``stages.STAGE_RUNNERS``).
-KNOWN_RUNNERS = ("ascent", "recovery", "rendezvous_refly")
+KNOWN_RUNNERS = ("ascent", "recovery", "rendezvous_refly", "rendezvous_refly_samples")
 
 _ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 

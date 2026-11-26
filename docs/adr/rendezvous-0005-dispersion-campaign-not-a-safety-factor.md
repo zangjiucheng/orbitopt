@@ -1,12 +1,14 @@
 # ADR rendezvous-0005: a dispersion campaign, not a safety factor (E12-07)
 
-- **Status:** Accepted
+- **Status:** Accepted; classification amended by E12-10 (see *Amendment* below)
 - **Date:** 2026-11-25
 - **Deciders:** E12 Orbital Rendezvous & Mission Operations (Epic #389), E12-07 (#397)
 - **Code:** `src/orbitopt/rendezvous/robustness.py`, `src/orbitopt/data/leo_rdv_001_robustness.yaml`,
   `src/orbitopt/verify/tolerances.py`
 - **Evidence:** `docs/benchmarks/e12_07_rendezvous_robustness.json`,
-  `tests/test_e12_07_rendezvous_robustness.py`, `benchmarks/bench_e12_07_rendezvous_robustness.py`
+  `tests/test_e12_07_rendezvous_robustness.py`, `benchmarks/bench_e12_07_rendezvous_robustness.py`;
+  independent re-flight: `docs/benchmarks/e12_10_independent_reflight.json`,
+  `benchmarks/bench_e12_10_independent_reflight.py`, ADR rendezvous-0004
 - **Builds on:** ADR rendezvous-0001 (LEO-RDV-001, `plan_rendezvous`), ADR rendezvous-0002
   (whole-trajectory safety constraints), ADR rendezvous-0003
   (the TudatPy re-flight whose backend this campaign
@@ -150,3 +152,33 @@ the transfer, which is a guidance assumption the mission's GNC would have to
 confirm; and the 1 s convergence check is only as convincing as the samples it
 picks, which is why the pick is the marginal ones and the reported number is the
 largest observed change rather than a mean.
+
+## Amendment (E12-10, task #412): Robustness Characterization
+
+Two things this campaign left open, E12-10 closes — and one of them is a wording
+rule, so it belongs here.
+
+1. **Success here does not include the passive contingencies.** The 69 safety
+   failures are violations seen *on the commanded trajectory*. The E12-04
+   contract also carries passive contingency releases (no-burn at t0, gate abort
+   at t1, hold-point coast), and a sample can pass this campaign's success test
+   while an uncontrolled coast after a missed gate drifts through the keep-out
+   corridor. E12-10 adds `passive_contingency_in_success` (default `false`: this
+   artifact's numbers stand as recorded); the E12-10 benchmark re-runs the same
+   campaign with it on and re-reports the rate and taxonomy under those criteria.
+2. **The independent-model line was `NOT_CHECKED`, and the grid/physics
+   comparison covered only 6/5 samples.** So, until task #412's per-sample TudatPy
+   re-flight covers it, the conclusion above is a **Robustness Characterization**
+   — a measured dispersion study of the design — and must not be reported as a
+   *Robust Safety Qualification*. The qualification wording is earned only when
+   the E12-10 artifact records the independent re-flight `checked` over the
+   samples its declared selection names (every success, passive-driven failures,
+   one boundary per failure class) with no verdict flips and every per-sample
+   residual inside the declared cross-model bands. See
+   `docs/benchmarks/e12_10_independent_reflight.json` (classification block) and
+   ADR rendezvous-0004.
+
+   Outcome: under the E12-10 criteria the hold-out rate is 13/264 (4.9 %, cluster
+   CI 2.7–7.6 %) against this campaign's 14/264. The TudatPy re-flight of 23
+   selected samples agrees with every main-model verdict. This campaign's own
+   numbers remain a Robustness Characterization.
