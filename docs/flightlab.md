@@ -3,7 +3,7 @@
 Flight Lab simulates ascent and booster recovery from code or the CLI.
 Mission Control's **Runs**, **Vehicles** and **Compare** workspaces display
 saved flights, vehicle definitions and run comparisons.
-The [rendezvous workflow](computed-mission.md#e12-orbital-rendezvous) generates
+The [rendezvous workflow](rendezvous.md) generates
 saved target and chaser trajectories for the same viewer.
 
 <figure>
