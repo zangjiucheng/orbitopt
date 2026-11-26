@@ -50,11 +50,15 @@ appears nowhere: nothing here is compared against flown data.
 Cross-environment execution (approach: reuse crossenv). The re-flight needs the
 tudatpy interpreter, which the main orbitopt environment does not carry. When
 ``ORBITOPT_TUDAT_PYTHON`` names one, the re-flight runs as a crossenv **stage**
-(runner ``rendezvous_refly``): the tudat-environment subprocess recomputes the
-plan and its verdict with this same package (env-parity recheck), re-flies the
-pair, and seals its evidence into a digest-pinned exchange envelope
-(:mod:`orbitopt.crossenv.envelope`) that the orchestrator re-validates on read.
-Running inside a tudat environment executes the same worker in-process.
+(runner ``rendezvous_refly``): the orchestrator writes the canonical sealed
+plan (E12-08, :mod:`orbitopt.rendezvous.canonical`) and passes its path in
+``ORBITOPT_RENDZVOUS_SEALED_PLAN``; the tudat-environment subprocess re-reads
+that document, re-verifies every digest against its own config, recomputes the
+verdict with this same package (env-parity recheck) and flies exactly that
+plan -- then seals its evidence into a digest-pinned exchange envelope
+(:mod:`orbitopt.crossenv.envelope`) that the orchestrator re-validates on read
+and whose ``plan_digest`` must equal the sealed one. Running inside a tudat
+environment executes the same worker in-process.
 **No backend, no fake pass**: the independent-model, Kepler and convergence
 lines are then absent and recorded ``not_checked`` with reason
 ``REFLY_BACKEND_MISSING`` (the task-#261 rule); the CW and optimizer lines are
@@ -163,8 +167,8 @@ class ReflyBackendError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 def _maneuvers_digest(plan) -> str:
-    doc = [m.to_dict() for m in plan.maneuvers]
-    return hashlib.sha256(json.dumps(doc, sort_keys=True).encode("utf-8")).hexdigest()
+    from orbitopt.rendezvous.canonical import maneuvers_sha256
+    return maneuvers_sha256(plan)
 
 
 def _maneuver_diff_magnitude(plan_a, plan_b) -> float:
@@ -179,10 +183,16 @@ def _maneuver_diff_magnitude(plan_a, plan_b) -> float:
     return worst
 
 
-def run_refly_in_current_environment(cfg, config_path=None) -> dict:
+def run_refly_in_current_environment(cfg, config_path=None, plan=None) -> dict:
     """Fly the full mission of ``cfg`` independently in tudatpy and return the
     sealed-ready evidence document (pure data, JSON-safe). Call only in an
-    environment that has tudatpy; raises :class:`ReflyBackendError` if not."""
+    environment that has tudatpy; raises :class:`ReflyBackendError` if not.
+
+    ``plan`` (E12-08) is the plan to FLY -- the canonical sealed plan the
+    orchestrator hands over, so the re-flight tests the SAME trajectory every
+    other component graded. Without it this falls back to planning the
+    unconstrained E12-03 optimum here (legacy path; the orchestrator and the
+    crossenv stage always pass the sealed plan)."""
     try:
         import tudatpy  # noqa: F401
     except ImportError as exc:
@@ -192,6 +202,7 @@ def run_refly_in_current_environment(cfg, config_path=None) -> dict:
     from orbitopt.crossenv.envelope import environment_record
     from orbitopt.relative.frames import eci_to_lvlh
     from orbitopt.relative.propagation import EARTH_J2, EARTH_RE
+    from orbitopt.rendezvous.canonical import canonical_config_sha256, rendezvous_plan_digest
     from orbitopt.rendezvous.planner import initial_states, plan_rendezvous
     from orbitopt.rendezvous.verify import verify_plan
     from orbitopt.verify.tudat_propagate import (
@@ -221,7 +232,7 @@ def run_refly_in_current_environment(cfg, config_path=None) -> dict:
     propagation_frame = "ECLIPJ2000"
     epoch_anchor = 0.0
     mu = cfg.dynamics.mu
-    plan = plan_rendezvous(cfg)
+    plan = plan_rendezvous(cfg) if plan is None else plan
     vmain = verify_plan(cfg, plan)
     m1, m2 = plan.maneuvers
     t1, tof = float(m1.epoch_s), float(plan.tof_s)
@@ -397,6 +408,8 @@ def run_refly_in_current_environment(cfg, config_path=None) -> dict:
         "propagation_frame": propagation_frame,
         "epoch_anchor_s": epoch_anchor,
         "config_sha256": config_sha,
+        "canonical_config_sha256": canonical_config_sha256(cfg),
+        "plan_digest": rendezvous_plan_digest(cfg, plan),
         "environment": environment_record("tudat"),
         "plan": plan.to_dict(),
         "maneuvers_sha256": _maneuvers_digest(plan),
@@ -848,11 +861,18 @@ def resolve_refly_backend() -> tuple[str | None, str | None]:
     return None, None
 
 
-def refly_via_crossenv(cfg, config_path: Path, out_dir, interpreter: str) -> dict:
+def refly_via_crossenv(cfg, config_path: Path, out_dir, interpreter: str, sealed=None) -> dict:
     """Run the re-flight as a crossenv stage in ``interpreter`` and return
     ``{"document", "envelope_digest", "stage_report"}`` after re-validating
     the sealed envelope in this process (schema + every digest, re-computed
-    over here before anything is read)."""
+    over here before anything is read).
+
+    ``sealed`` (E12-08) is the canonical sealed plan to FLY: it is written
+    under ``out_dir`` and its path passed to the worker through
+    ``ORBITOPT_RENDZVOUS_SEALED_PLAN`` (the stage subprocess inherits the
+    environment); the worker re-reads and re-verifies it under its own config
+    before flying, so a worker flying anything other than this exact plan is
+    a hard failure. Without it the worker plans the legacy E12-03 optimum."""
     from orbitopt.crossenv.envelope import envelope_digest, read_payloads
     from orbitopt.crossenv.plan import (
         CrossEnvPlan,
@@ -862,11 +882,27 @@ def refly_via_crossenv(cfg, config_path: Path, out_dir, interpreter: str) -> dic
     )
 
     out = Path(out_dir)
+    sealed_env: dict[str, str] = {}
+    if sealed is not None:
+        from orbitopt.rendezvous.canonical import write_sealed_plan
+        sealed_path = write_sealed_plan(sealed, out / "plan.sealed.json")
+        # absolute: the stage subprocess runs with cwd=repo_root, which may
+        # differ from this process's cwd when out_dir was given relatively
+        sealed_env["ORBITOPT_RENDZVOUS_SEALED_PLAN"] = str(sealed_path.resolve())
     stage = CrossEnvStage(id="refly", runner=REFLY_STAGE_RUNNER, env="tudat")
     plan = CrossEnvPlan(mission_id=f"e12-05-refly-{cfg.mission_id}", scenario=Path(config_path),
                         environments={"tudat": str(interpreter)}, stages=(stage,), out=out)
     resolved = write_resolved_plan(plan, out / "plan.resolved.json")
-    proc = run_stage_subprocess(plan, stage, out, resolved)
+    prior = {k: os.environ.get(k) for k in sealed_env}
+    os.environ.update(sealed_env)
+    try:
+        proc = run_stage_subprocess(plan, stage, out, resolved)
+    finally:
+        for k, v in prior.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
     report_path = out / stage.id / "stage-report.json"
     stage_report = (json.loads(report_path.read_text(encoding="utf-8"))
                     if report_path.is_file() else None)
@@ -881,20 +917,29 @@ def refly_via_crossenv(cfg, config_path: Path, out_dir, interpreter: str) -> dic
         raise ReflyBackendError(
             f"sealed evidence is {doc.get('kind')!r}/{doc.get('mission_id')!r}, not "
             f"{REFLY_REPORT_KIND!r}/{cfg.mission_id!r}")
+    if sealed is not None and doc.get("plan_digest") != sealed.plan_digest:
+        raise ReflyBackendError(
+            f"the re-flight flew plan {doc.get('plan_digest')!r}, not the sealed canonical "
+            f"plan {sealed.plan_digest!r} -- one artifact, or the comparison is meaningless")
     return {"document": doc, "envelope_digest": envelope_digest(exchange),
             "stage_report": stage_report}
 
 
 def verify_rendezvous_refly(*, config_path=None, out_dir: str | Path = "runs/e12-05-refly",
                             stationarity: bool = True) -> dict:
-    """The task's one command: plan + verify on the main model, replay on CW,
-    re-fly the pair in TudatPy (crossenv when ``ORBITOPT_TUDAT_PYTHON`` is
-    set, in-process when this environment has tudatpy, honest ``not_checked``
-    when neither), compare against the Kepler closed form, and write
-    ``rendezvous-refly-report.json`` under ``out_dir``.
-    """
+    """The task's one command: seal the canonical plan and verify it on the
+    main model, replay on CW, re-fly the pair in TudatPy (crossenv when
+    ``ORBITOPT_TUDAT_PYTHON`` is set, in-process when this environment has
+    tudatpy, honest ``not_checked`` when neither), compare against the Kepler
+    closed form, and write ``rendezvous-refly-report.json`` under ``out_dir``.
+
+    From E12-08 the re-flight flies the canonical sealed plan (E12-04
+    safety-constrained optimum, digest-verified on both sides), and the
+    report records the consumed ``plan_digest`` -- this artifact and the
+    safety report, studio replay and Monte Carlo describe ONE trajectory."""
     import dataclasses
 
+    from orbitopt.rendezvous.canonical import canonical_plan, write_sealed_plan
     from orbitopt.rendezvous.config import load_rendezvous_config
     from orbitopt.rendezvous.planner import plan_rendezvous
     from orbitopt.verify.report import write_report
@@ -903,9 +948,11 @@ def verify_rendezvous_refly(*, config_path=None, out_dir: str | Path = "runs/e12
         config_path = Path(str(resources.files("orbitopt").joinpath("data", "leo_rdv_001.yaml")))
     config_path = Path(config_path)
     cfg = load_rendezvous_config(config_path)
-    plan = plan_rendezvous(cfg)
+    sealed = canonical_plan(cfg)
+    plan = sealed.plan
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    write_sealed_plan(sealed, out / "plan.sealed.json")
 
     main_q = main_model_key_quantities(cfg, plan)
     if stationarity:
@@ -923,11 +970,16 @@ def verify_rendezvous_refly(*, config_path=None, out_dir: str | Path = "runs/e12
     crossenv_meta = None
     backend, interpreter = resolve_refly_backend()
     if backend == "crossenv":
-        run = refly_via_crossenv(cfg, config_path, out, interpreter)
+        run = refly_via_crossenv(cfg, config_path, out, interpreter, sealed=sealed)
         refly_doc = run["document"]
         crossenv_meta = {k: v for k, v in run.items() if k != "document"}
     elif backend == "in_process":
-        refly_doc = run_refly_in_current_environment(cfg, config_path)
+        refly_doc = run_refly_in_current_environment(cfg, config_path, plan=plan)
+        if refly_doc.get("plan_digest") != sealed.plan_digest:
+            raise ReflyBackendError(
+                f"the re-flight flew plan {refly_doc.get('plan_digest')!r}, not the sealed "
+                f"canonical plan {sealed.plan_digest!r} -- one artifact, or the comparison "
+                "is meaningless")
     else:
         not_checked.append(
             f"{REFLY_BACKEND_MISSING}: no ORBITOPT_TUDAT_PYTHON and no importable tudatpy in "
@@ -938,10 +990,17 @@ def verify_rendezvous_refly(*, config_path=None, out_dir: str | Path = "runs/e12
     if refly_doc is not None:
         main_q["maneuver_identity_m_s"] = _maneuver_diff_magnitude(
             plan, _plan_from_doc(refly_doc["plan"]))
+    main_q["sealed_plan"] = {
+        "planner": "orbitopt.rendezvous.canonical_plan (E12-04 plan_rendezvous_safe)",
+        "plan_digest": sealed.plan_digest, "config_sha256": sealed.config_sha256,
+        "initial_states_sha256": sealed.initial_states_sha256,
+        "maneuvers_sha256": sealed.maneuvers_sha256,
+    }
     report = build_refly_report(cfg, main_q, cw_q, refly_doc, kepler,
                                 not_checked_reasons=not_checked, crossenv=crossenv_meta)
     path = write_report(report, out / "rendezvous-refly-report.json")
-    return {"report": report, "refly": refly_doc, "plan": plan, "main_quantities": main_q,
+    return {"report": report, "refly": refly_doc, "plan": plan, "sealed": sealed,
+            "main_quantities": main_q,
             "cw": cw_q, "kepler": kepler, "report_path": str(path)}
 
 
@@ -965,10 +1024,20 @@ def refly_stage_impl(cfg, config_path, exchange_dir: Path) -> tuple[list, dict]:
     """Worker half of the ``rendezvous_refly`` stage: fly the re-flight here,
     write the evidence artifact, return ``(payload specs, evidence doc)`` --
     the stage runner reads ok/failed_checks off the doc. Sealing itself stays
-    in the crossenv stage runner (crossenv owns the envelope)."""
+    in the crossenv stage runner (crossenv owns the envelope).
+
+    E12-08: when ``ORBITOPT_RENDZVOUS_SEALED_PLAN`` names a sealed document
+    (set by :func:`refly_via_crossenv`), this side re-reads it under its own
+    config -- digests recomputed, mismatch is a hard stage failure -- and
+    flies exactly that plan."""
     from orbitopt.verify.report import to_jsonable
 
-    doc = run_refly_in_current_environment(cfg, config_path)
+    sealed_path = os.environ.get("ORBITOPT_RENDZVOUS_SEALED_PLAN")
+    plan = None
+    if sealed_path:
+        from orbitopt.rendezvous.canonical import read_sealed_plan
+        plan = read_sealed_plan(sealed_path, cfg).plan
+    doc = run_refly_in_current_environment(cfg, config_path, plan=plan)
     reports = Path(exchange_dir) / "reports"
     reports.mkdir(parents=True, exist_ok=True)
     (reports / "rendezvous-refly-evidence.json").write_text(

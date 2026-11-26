@@ -40,9 +40,10 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from orbitopt.rendezvous import (
+    canonical_plan,
     load_reference_config,
     load_rendezvous_config,
-    plan_rendezvous_safe,
+    write_sealed_plan,
 )
 from orbitopt.rendezvous import robustness as rb
 from orbitopt.verify.report import provenance, to_jsonable
@@ -84,8 +85,12 @@ def main() -> int:
             holdout=dataclasses.replace(campaign.holdout, n_clusters=2, samples_per_cluster=4),
             cluster_bootstrap_trials=400, spot_check_samples=3, grid_convergence_samples=2)
 
-    plan = plan_rendezvous_safe(cfg).plan
-    result = rb.run_campaign(cfg, campaign, plan, jobs=max(1, args.jobs),
+    # E12-08: the campaign flies the canonical sealed plan, and the sealed
+    # document is written next to the artifact so a reviewer can re-verify
+    # the ground_plan digests the campaign recorded.
+    sealed = canonical_plan(cfg)
+    write_sealed_plan(sealed, Path(args.out).parent / (Path(args.out).stem + ".sealed.json"))
+    result = rb.run_campaign(cfg, campaign, sealed, jobs=max(1, args.jobs),
                              solo=not args.no_solo, grid_check=not args.no_grid,
                              config_path=config_path)
 
