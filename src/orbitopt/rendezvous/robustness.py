@@ -102,6 +102,8 @@ plan, ``jobs``): the same seeds give the same report on 1 worker or 16.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
@@ -148,6 +150,7 @@ from .planner import (
 )
 from .safety import (
     TRAJECTORY_CHECKS,
+    PassiveRelease,
     candidate_safety_reason,
     evaluate_trajectory_safety,
 )
@@ -157,6 +160,11 @@ __all__ = [
     "FAILURE_CLASSES",
     "FAILURE_PRECEDENCE",
     "INTEGRATION_VS_RK4_TOLERANCES",
+    "PASSIVE_CHECK_PREFIX",
+    "SAMPLE_REFLY_MAX_PASSIVE_CAUSED",
+    "SAMPLE_REFLY_MAX_SUCCESSES",
+    "SAMPLE_REFLY_MAX_TOTAL",
+    "SAMPLE_REFLY_SPEC_KIND",
     "ArmResult",
     "CampaignResult",
     "DisturbanceModel",
@@ -169,16 +177,20 @@ __all__ = [
     "RobustnessConfigError",
     "SampleDraws",
     "SampleRecord",
+    "build_reflight_spec",
     "draw_sample",
     "failure_summary",
     "fly_truth",
     "fly_truth_sample",
+    "grade_flight",
+    "grade_trajectory_checks",
     "grid_convergence",
     "load_campaign",
     "load_reference_campaign",
     "parse_campaign",
     "plan_sample",
     "run_campaign",
+    "select_reflight_samples",
     "run_campaign_arm",
     "select_spot_checks",
     "sensitivity_reading",
@@ -429,6 +441,12 @@ class RobustnessCampaign:
     grid_convergence_samples: int
     spot_check_samples: int
     cluster_bootstrap_trials: int = 4000
+    #: E12-10 (task #412): grade success with the E12-04 passive contingency
+    #: releases included -- a sample only succeeds when the uncontrolled coasts
+    #: (no burn at t0, gate abort, Hold Point coast) also stay outside the
+    #: keep-out sphere on the truth physics. False keeps the E12-07 semantics
+    #: (trajectory checks only) so packaged campaigns and old artifacts stand.
+    passive_contingency_in_success: bool = False
 
     @property
     def derived_n(self) -> int:
@@ -451,8 +469,12 @@ class RobustnessCampaign:
                 "statistics": {"ci_level": self.ci_level, "target_ci_width": self.target_ci_width,
                                "planning_rate": self.planning_rate,
                                "derived_n_per_arm": self.derived_n,
-                               "cluster_bootstrap_trials": self.cluster_bootstrap_trials},
-                "truth_grid": {"sample_dt_s": self.sample_dt_s,
+                                "cluster_bootstrap_trials": self.cluster_bootstrap_trials,
+                               "passive_contingency_in_success":
+                               bool(self.passive_contingency_in_success)},
+                 "grading": {"passive_contingency_in_success":
+                             bool(self.passive_contingency_in_success)},
+                 "truth_grid": {"sample_dt_s": self.sample_dt_s,
                                "grid_convergence_dt_s": self.grid_convergence_dt_s,
                                "grid_convergence_samples": self.grid_convergence_samples},
                 "spot_check_samples": self.spot_check_samples}
@@ -559,7 +581,8 @@ def parse_campaign(doc: Mapping[str, Any], *,
         ci_level=ci_level, target_ci_width=width, planning_rate=rate,
         sample_dt_s=dt, grid_convergence_dt_s=fine_dt, grid_convergence_samples=n_grid,
         spot_check_samples=spot,
-        cluster_bootstrap_trials=int(camp_doc.get("cluster_bootstrap_trials", 4000)))
+        cluster_bootstrap_trials=int(camp_doc.get("cluster_bootstrap_trials", 4000)),
+        passive_contingency_in_success=bool(camp_doc.get("passive_contingency_in_success", False)))
 
 
 def load_campaign(path: str | Path) -> RobustnessCampaign:
@@ -764,13 +787,82 @@ def _rotate(vec: np.ndarray, angle_rad: Sequence[float]) -> np.ndarray:
     return vec * c + np.cross(axis, vec) * s + axis * float(np.dot(axis, vec)) * (1.0 - c)
 
 
+def _check_value(check, key: str):
+    return check[key] if isinstance(check, Mapping) else getattr(check, key)
+
+
+def grade_trajectory_checks(cfg: RendezvousMissionConfig, checks: Mapping[str, Any], *,
+                            realized_delta_v_m_s: float, planned_delta_v_m_s: float,
+                            position_error_m: float, relative_speed_m_s: float,
+                            passive: Sequence[PassiveRelease] = (),
+                            finite: bool = True) -> dict[str, Any]:
+    """The mission's verdict on an already-evaluated flight, as one shared
+    function of its parts -- the single place the failure precedence
+    (:data:`FAILURE_PRECEDENCE`) is applied, so the Monte Carlo
+    (:meth:`FlightOutcome.grade`) and the E12-10 independent re-flight grade the
+    same contract on the two models. ``checks`` carries the four
+    :data:`TRAJECTORY_CHECKS` (``SafetyCheck``s or plain dicts with ``passed`` /
+    ``min_margin`` / ``unit``); ``passive`` the :class:`PassiveRelease` coasts
+    (E12-10: a failed passive release is a safety violation -- keep-out broken
+    with no thrust to fix it). ``finite=False`` is the ``other`` outcome: a
+    trajectory that went non-finite cannot be graded against margins at all."""
+    margins = {name: float(_check_value(checks[name], "min_margin")) for name in TRAJECTORY_CHECKS}
+    failed = tuple(name for name in TRAJECTORY_CHECKS if not _check_value(checks[name], "passed"))
+    bad_passive = tuple(p for p in passive if not p.passed)
+    over_budget = realized_delta_v_m_s > cfg.delta_v_budget_m_s
+    off_target = (position_error_m > cfg.max_position_error_m
+                  or relative_speed_m_s > cfg.max_relative_speed_m_s)
+    worst = min(margins.values()) if margins else float("nan")
+    if not finite:
+        cls, reason = "other", "truth propagation produced a non-finite state"
+    elif failed or bad_passive:
+        cls = "safety_violation"
+        reason = "; ".join(
+            [*(f"{n} margin {margins[n]:+.3f} {_check_value(checks[n], 'unit')}" for n in failed),
+             *(f"passive release {p.kind}: keep-out margin {p.keep_out_margin_m:+.3f} m"
+               for p in bad_passive)])
+    elif over_budget:
+        cls = "fuel_over_budget"
+        reason = (f"executed {realized_delta_v_m_s:.2f} m/s over the fixed budget "
+                  f"{cfg.delta_v_budget_m_s:.2f} m/s (planned {planned_delta_v_m_s:.2f})")
+    elif off_target:
+        cls = "arrival_accuracy"
+        reason = (f"arrival {position_error_m:.1f} m / {relative_speed_m_s:.3f} m/s "
+                  f"against {cfg.max_position_error_m:.0f} m / "
+                  f"{cfg.max_relative_speed_m_s:.1f} m/s")
+    else:
+        cls, reason = None, (f"arrival {position_error_m:.1f} m / "
+                             f"{relative_speed_m_s:.3f} m/s; worst safety margin {worst:+.1f}")
+    return {"failure_class": cls, "reason": reason, "margins": margins,
+            "failed_checks": [*(failed), *(f"passive_{p.kind}" for p in bad_passive)]}
+
+
+def grade_flight(cfg: RendezvousMissionConfig, times_s: np.ndarray, rel_lvlh: np.ndarray, *,
+                 realized_delta_v_m_s: float, planned_delta_v_m_s: float,
+                 passive: Sequence[PassiveRelease] = ()) -> dict[str, Any]:
+    """Grade an LVLH trajectory pair against the mission's contract: evaluate
+    the four trajectory checks on the samples, then
+    :func:`grade_trajectory_checks`. The E12-10 independent model calls this on
+    its own re-flown samples -- the same contract the Monte Carlo grades, not a
+    re-statement of it."""
+    return grade_trajectory_checks(
+        cfg, evaluate_trajectory_safety(cfg, times_s, rel_lvlh[:, :3], rel_lvlh[:, 3:]),
+        realized_delta_v_m_s=realized_delta_v_m_s, planned_delta_v_m_s=planned_delta_v_m_s,
+        position_error_m=float(np.linalg.norm(
+            rel_lvlh[-1, :3] - np.asarray(cfg.hold_point_rel_lvlh, dtype=float))),
+        relative_speed_m_s=float(np.linalg.norm(rel_lvlh[-1, 3:])),
+        passive=passive, finite=bool(np.all(np.isfinite(rel_lvlh))))
+
+
 @dataclass(frozen=True)
 class FlightOutcome:
     """What the truth model says one commanded plan did: the acceptance
     quantities, the flown samples, and what the planner believed, so a report can
     show command-versus-trust without a second run. ``ok=False`` is the
     ``planning_infeasible`` outcome: no flyable, screened candidate for this
-    sample's estimate."""
+    sample's estimate. ``passive`` (E12-10) holds the uncontrolled-contingency
+    coasts graded on the same truth physics -- empty unless the campaign grades
+    success with them (``passive_contingency_in_success``)."""
 
     ok: bool
     failure_class: str | None
@@ -785,40 +877,25 @@ class FlightOutcome:
     tof_s: float
     times_s: np.ndarray
     rel_lvlh: np.ndarray
+    passive: tuple[PassiveRelease, ...] = ()
 
     def grade(self, cfg: RendezvousMissionConfig) -> dict[str, Any]:
         """The mission's own verdict on the flown trajectory: the four E12-04
         trajectory checks on the flown samples, plus the config's budget and
-        arrival tolerances. Returns the governing failure class (``None`` on
+        arrival tolerances and -- under E12-10 grading -- the passive
+        contingency releases. Returns the governing failure class (``None`` on
         success) by :data:`FAILURE_PRECEDENCE`, a reason string, the per-check
-        margins and the list of checks that failed."""
-        checks = evaluate_trajectory_safety(cfg, self.times_s, self.rel_lvlh[:, :3],
-                                            self.rel_lvlh[:, 3:])
-        margins = {name: float(checks[name].min_margin) for name in TRAJECTORY_CHECKS}
-        failed = tuple(name for name in TRAJECTORY_CHECKS if not checks[name].passed)
-        over_budget = self.realized_delta_v_m_s > cfg.delta_v_budget_m_s
-        off_target = (self.position_error_m > cfg.max_position_error_m
-                      or self.relative_speed_m_s > cfg.max_relative_speed_m_s)
-        worst = min(margins.values()) if margins else float("nan")
-        if not np.all(np.isfinite(self.rel_lvlh)):
-            cls, reason = "other", "truth propagation produced a non-finite state"
-        elif failed:
-            cls = "safety_violation"
-            reason = "; ".join(f"{n} margin {margins[n]:+.3f} {checks[n].unit}" for n in failed)
-        elif over_budget:
-            cls = "fuel_over_budget"
-            reason = (f"executed {self.realized_delta_v_m_s:.2f} m/s over the fixed budget "
-                      f"{cfg.delta_v_budget_m_s:.2f} m/s (planned {self.planned_delta_v_m_s:.2f})")
-        elif off_target:
-            cls = "arrival_accuracy"
-            reason = (f"arrival {self.position_error_m:.1f} m / {self.relative_speed_m_s:.3f} m/s "
-                      f"against {cfg.max_position_error_m:.0f} m / "
-                      f"{cfg.max_relative_speed_m_s:.1f} m/s")
-        else:
-            cls, reason = None, (f"arrival {self.position_error_m:.1f} m / "
-                                 f"{self.relative_speed_m_s:.3f} m/s; worst safety margin {worst:+.1f}")
-        return {"failure_class": cls, "reason": reason, "margins": margins,
-                "failed_checks": list(failed)}
+        margins and the list of checks that failed (passive releases appear as
+        ``passive_<kind>``)."""
+        return grade_trajectory_checks(
+            cfg, evaluate_trajectory_safety(cfg, self.times_s, self.rel_lvlh[:, :3],
+                                            self.rel_lvlh[:, 3:]),
+            realized_delta_v_m_s=self.realized_delta_v_m_s,
+            planned_delta_v_m_s=self.planned_delta_v_m_s,
+            position_error_m=self.position_error_m,
+            relative_speed_m_s=self.relative_speed_m_s,
+            passive=self.passive,
+            finite=bool(np.all(np.isfinite(self.rel_lvlh))) if self.ok else True)
 
 
 def _executed_burns(sol: Mapping[str, Any], draws: SampleDraws) -> tuple[np.ndarray, np.ndarray]:
@@ -858,9 +935,45 @@ def plan_sample(cfg: RendezvousMissionConfig, tof_s: float, draws: SampleDraws) 
     return sol
 
 
+def _truth_passive_releases(cfg: RendezvousMissionConfig, deriv, *, sub_dt: float,
+                            integrator: str, dt_s: float, t1: float, tof: float,
+                            initial_pair: np.ndarray, gate_pair: np.ndarray,
+                            arrival_pair: np.ndarray) -> tuple[PassiveRelease, ...]:
+    """The three E12-04 passive releases flown on THIS sample's truth physics
+    (E12-10): no burn from t0, gate abort (release at the gate with burn 1
+    never fired), and a coast from the Hold Point after insertion. Same
+    constraint as ``safety._passive_release`` -- keep-out clear for
+    ``passive_contingency_s`` with no thrust -- but integrated with the
+    sample's perturbed J2 and drag instead of the nominal plan's forces.
+    ``worst_epoch_s`` is seconds since the release, as in the nominal report."""
+    s = cfg.safety
+    dur = float(s.passive_contingency_s)
+    ts = _grid(0.0, dur, float(dt_s))
+    frame = cfg.dynamics.frame
+    out = []
+    for kind, epoch, y0 in (("no_burn_at_t0", 0.0, initial_pair),
+                           ("gate_abort_no_burn", t1, gate_pair),
+                           ("hold_point_coast", t1 + tof, arrival_pair)):
+        st = _integrate_pair(np.asarray(y0, dtype=float), ts, deriv,
+                             sub_dt=sub_dt, integrator=integrator)
+        rho, _ = eci_to_lvlh(st[:, 0:3], st[:, 6:9], st[:, 3:6] - st[:, 0:3],
+                             st[:, 9:12] - st[:, 6:9], frame,
+                             where=f"robustness: passive release {kind}")
+        rng = np.linalg.norm(rho, axis=1)
+        i = int(np.argmin(rng))
+        margin = float(rng[i] - s.keep_out_radius_m)
+        out.append(PassiveRelease(
+            kind=kind, release_epoch_s=float(epoch), duration_s=dur,
+            min_range_m=float(rng[i]), worst_epoch_s=float(ts[i]),
+            worst_rel_lvlh_m=tuple(float(x) for x in rho[i]),
+            keep_out_margin_m=margin, passed=margin >= 0.0))
+    return tuple(out)
+
+
 def fly_truth(cfg: RendezvousMissionConfig, sol: Mapping[str, Any], dv1_exec: np.ndarray,
               dv2_exec: np.ndarray, *, j2_truth: float, drag: DragError | None,
-              density_factor: float, dt_s: float, integrator: str = "rk4") -> FlightOutcome:
+              density_factor: float, dt_s: float, integrator: str = "rk4",
+              passive_contingency: bool = False) -> FlightOutcome:
     """Fly one commanded plan on the perturbed truth. Both spacecraft start at
     the config's declared states (the errors that matter are in what the planner
     knew, not in where the vehicles really were); the drift leg coasts to the
@@ -895,6 +1008,13 @@ def fly_truth(cfg: RendezvousMissionConfig, sol: Mapping[str, Any], dv1_exec: np
     after2 = leg_b[-1].copy()
     after2[9:12] += np.asarray(dv2_exec, dtype=float)          # hover insertion
 
+    passive: tuple[PassiveRelease, ...] = ()
+    if passive_contingency and cfg.safety is not None:
+        passive = _truth_passive_releases(
+            cfg, deriv, sub_dt=sub_dt, integrator=integrator, dt_s=float(dt_s),
+            t1=t1, tof=tof, initial_pair=np.concatenate((r0c, r0d, v0c, v0d)),
+            gate_pair=leg_a[-1], arrival_pair=after2)
+
     times = np.concatenate((grid_a, grid_b[1:] + t1, [t1 + tof]))
     states = np.vstack((leg_a, leg_b[1:], after2[None, :]))
     rho, rho_dot = eci_to_lvlh(states[:, 0:3], states[:, 6:9],
@@ -911,7 +1031,8 @@ def fly_truth(cfg: RendezvousMissionConfig, sol: Mapping[str, Any], dv1_exec: np
         realized_delta_v_m_s=float(np.linalg.norm(dv1_exec) + np.linalg.norm(dv2_exec)),
         planned_delta_v_m_s=float(sol["total_m_s"]),
         min_range_m=float(rng[i]), min_range_epoch_s=float(times[i]),
-        gate_epoch_s=t1, tof_s=tof, times_s=times, rel_lvlh=np.hstack((rho, rho_dot)))
+        gate_epoch_s=t1, tof_s=tof, times_s=times, rel_lvlh=np.hstack((rho, rho_dot)),
+        passive=passive)
 
 
 def fly_truth_sample(cfg: RendezvousMissionConfig, campaign: RobustnessCampaign,
@@ -936,7 +1057,8 @@ def fly_truth_sample(cfg: RendezvousMissionConfig, campaign: RobustnessCampaign,
                      else (EARTH_J2 if cfg.dynamics.j2 else 0.0),
                      drag=model.drag if model.is_active("drag") else None,
                      density_factor=draws.drag_factor,
-                     dt_s=campaign.sample_dt_s, integrator=integrator)
+                     dt_s=campaign.sample_dt_s, integrator=integrator,
+                     passive_contingency=bool(campaign.passive_contingency_in_success))
 
 
 @dataclass(frozen=True)
@@ -1410,6 +1532,213 @@ def spot_check(cfg: RendezvousMissionConfig, campaign: RobustnessCampaign,
 
 # --------------------------------------------------------------------------- #
 # campaign
+# --------------------------------------------------------------------------- #
+
+# --------------------------------------------------------------------------- #
+# E12-10: re-flight sample selection and per-sample flight specifications
+# --------------------------------------------------------------------------- #
+
+#: Evidence-document kind of the per-sample re-flight specification that
+#: :func:`build_reflight_spec` hands to the independent model, and of the
+#: ``campaign`` block it carries for provenance.
+SAMPLE_REFLY_SPEC_KIND = "orbitopt.verify.rendezvous-sample-reflight-spec"
+SAMPLE_REFLY_SPEC_SCHEMA_VERSION = "1.0"
+
+#: ``failed_checks`` entries for the E12-10 passive contingency releases: the
+#: prefix marks them as releases that failed their keep-out coast, distinct from
+#: the four trajectory checks (``passive_no_burn_at_t0`` and kin). The prefix is
+#: also how a sample that fails *only* under E12-10 grading is recognised.
+PASSIVE_CHECK_PREFIX = "passive_"
+
+#: Selection caps (the acceptance criterion: "selection rule and counts written
+#: into the benchmark artifact"). Every re-flight is a TudatPy pulse-sequence
+#: run, so the caps keep the independent campaign bounded while every *kind* of
+#: outcome the hold-out arm produced is represented. The success cap sits above
+#: the hold-out's success count (13 on the reference campaign): a success the
+#: independent model did not re-fly is a success the qualification wording
+#: cannot rest on, and the benchmark reports whether the cap bit.
+SAMPLE_REFLY_MAX_TOTAL = 32
+SAMPLE_REFLY_MAX_SUCCESSES = 16
+SAMPLE_REFLY_MAX_PASSIVE_CAUSED = 8
+
+
+def select_reflight_samples(cfg: RendezvousMissionConfig, records: Sequence[SampleRecord], *,
+                            max_total: int = SAMPLE_REFLY_MAX_TOTAL,
+                            max_successes: int = SAMPLE_REFLY_MAX_SUCCESSES,
+                            max_passive: int = SAMPLE_REFLY_MAX_PASSIVE_CAUSED,
+                            ) -> list[tuple[SampleRecord, str]]:
+    """Deterministic per-sample re-flight selection over one arm's records, by
+    coverage rule (each pick carries its reason):
+
+    1. every **success** under the campaign's grading (capped, lowest
+       ``(cluster, index)`` first) -- the independent model must confirm the
+       successes it is asked to qualify;
+    2. **passive-contingency failures** -- samples whose ``failed_checks`` carry
+       a ``passive_*`` entry, capped, those failing *only* a passive check first:
+       these are the verdicts the E12-10 criteria newly create, and they are
+       exactly what the independent model has to check;
+    3. one **boundary sample per failure class** (``safety_violation`` /
+       ``arrival_accuracy`` / ``fuel_over_budget``): the flyable sample of that
+       class closest to flipping (smallest distance to its governing threshold)
+       -- where a model difference could plausibly move a verdict;
+    4. one **planning_infeasible** representative, recorded as *skipped* rather
+       than flown: a sample the planner could not fly has no trajectory for the
+       independent model to re-fly, and saying so is part of the coverage claim.
+
+    Ties break on ``(cluster, index)``; the function is a pure function of the
+    records, so the same arm always yields the same selection."""
+    pool = sorted(records, key=lambda r: (r.cluster, r.index))
+    chosen: list[tuple[SampleRecord, str]] = []
+    seen: set[tuple[int, int]] = set()
+
+    def add(rec: SampleRecord, why: str) -> None:
+        key = (rec.cluster, rec.index)
+        if key not in seen and len(chosen) < int(max_total):
+            seen.add(key)
+            chosen.append((rec, why))
+
+    for rec in (r for r in pool if r.success):
+        if sum(1 for r, why in chosen if why == "success") >= int(max_successes):
+            break
+        add(rec, "success")
+    def passive_kind(rec: SampleRecord) -> int | None:
+        """0 = fails only passive checks, 1 = passive among others, None = none."""
+        flags = [c.startswith(PASSIVE_CHECK_PREFIX) for c in rec.failed_checks]
+        if rec.success or not any(flags):
+            return None
+        return 0 if all(flags) else 1
+
+    passive = sorted((r for r in pool if passive_kind(r) is not None),
+                     key=lambda r: (passive_kind(r), r.cluster, r.index))
+    for rec in passive[:int(max_passive)]:
+        add(rec, "passive_contingency_failure")
+
+    def distance(rec: SampleRecord, cls: str) -> float:
+        if cls == "safety_violation":
+            vals = [abs(float(v)) for v in rec.margins.values() if np.isfinite(v)]
+            return min(vals) if vals else float("inf")
+        if cls == "arrival_accuracy":
+            return min(abs(rec.position_error_m - cfg.max_position_error_m),
+                       abs(rec.relative_speed_m_s - cfg.max_relative_speed_m_s))
+        return abs(rec.realized_delta_v_m_s - cfg.delta_v_budget_m_s)
+
+    for cls in ("safety_violation", "arrival_accuracy", "fuel_over_budget"):
+        cands = [r for r in pool if r.failure_class == cls]
+        if cands:
+            add(min(cands, key=lambda r: (distance(r, cls), r.cluster, r.index)),
+                f"boundary_{cls}")
+    infeasible = [r for r in pool if r.failure_class == "planning_infeasible"]
+    if infeasible:
+        add(infeasible[0], "planning_infeasible")
+    return chosen
+
+
+def reflight_spec_digest(spec: Mapping[str, Any]) -> str:
+    """Digest over exactly the flyable payload of a re-flight spec (flights,
+    skipped rows, mission): :func:`build_reflight_spec` stamps it, the worker
+    re-computes it over what it was handed, and the orchestrator compares --
+    so the independent model provably flew the samples this benchmark selected."""
+    return hashlib.sha256(json.dumps(
+        {"flights": spec.get("flights", []), "skipped": spec.get("skipped", []),
+         "mission_id": spec.get("mission_id")},
+        sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def build_reflight_spec(cfg: RendezvousMissionConfig, campaign: RobustnessCampaign,
+                        records: Sequence[SampleRecord], plan: RendezvousPlan, *,
+                        selection: Sequence[tuple[SampleRecord, str]] | None = None,
+                        ) -> dict[str, Any]:
+    """The per-sample specification the E12-10 independent model flies: each
+    selected sample's **own** re-plan (gate epoch and executed burns re-derived
+    from its recorded draws, so the burns carry its execution error), its truth
+    J2, and its own drag factor on the declared atmosphere -- plus the main
+    model's verdict and acceptance quantities for the same sample, so the two
+    verdicts can be compared side by side.
+
+    Flyable samples become ``flights``; a ``planning_infeasible`` sample becomes
+    a ``skipped`` row (nothing to re-fly). The document self-identifies: mission
+    and canonical config digest, the ground plan's digest, the campaign
+    declaration it was selected under, and a ``spec_digest`` over the
+    flights/skipped rows, so the worker can prove it flew this exact
+    specification."""
+    tof = float(plan.tof_s)
+    sel = select_reflight_samples(cfg, records) if selection is None else list(selection)
+    model = campaign.disturbances
+    drag = model.drag if model.is_active("drag") else None
+    flights: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for rec, why in sel:
+        row = {"cluster": int(rec.cluster), "index": int(rec.index), "seed": int(rec.seed),
+               "selection": why,
+               "main_failure_class": rec.failure_class, "main_reason": str(rec.reason)[:400],
+               "main_position_error_m": float(rec.position_error_m),
+               "main_relative_speed_m_s": float(rec.relative_speed_m_s),
+               "main_min_range_m": float(rec.min_range_m),
+               "main_realized_delta_v_m_s": float(rec.realized_delta_v_m_s),
+               "main_planned_delta_v_m_s": float(rec.planned_delta_v_m_s),
+               "main_margins": {k: float(v) for k, v in rec.margins.items()},
+               "main_failed_checks": list(rec.failed_checks)}
+        if rec.failure_class == "planning_infeasible":
+            skipped.append({**row, "why_skipped":
+                            "no screened candidate for this sample's estimate: the independent "
+                            "model cannot re-fly an unflyable sample, so its main-model verdict "
+                            "stands unconfirmed"})
+            continue
+        sol = plan_sample(cfg, tof, rec.draws)
+        dv1, dv2 = _executed_burns(sol, rec.draws)
+        flight = {**row, "t1_s": float(sol["t1"]), "tof_s": tof,
+                  "dv1_exec_eci_m_s": [float(x) for x in dv1],
+                  "dv2_exec_eci_m_s": [float(x) for x in dv2],
+                  "j2_truth": (EARTH_J2 * float(rec.draws.j2_factor)) if model.is_active("j2")
+                              else (EARTH_J2 if cfg.dynamics.j2 else 0.0),
+                  "drag": None}
+        if drag is not None:
+            atm = drag.atmosphere
+            flight["drag"] = {
+                "density_factor": float(rec.draws.drag_factor),
+                "chief_ballistic_coefficient_m2_per_kg":
+                    float(drag.chief_ballistic_coefficient_m2_per_kg),
+                "ballistic_coefficient_m2_per_kg": float(drag.ballistic_coefficient_m2_per_kg),
+                "atmosphere": {"surface_density_kg_m3": float(atm.density_sea_level_kg_m3),
+                               "scale_height_m": float(atm.scale_height_m),
+                               # the sphere _drag_accel measures altitude from
+                               "body_radius_m": float(EARTH_RE)}}
+        flights.append(flight)
+    counts: dict[str, int] = {}
+    for _, why in sel:
+        counts[why] = counts.get(why, 0) + 1
+    doc: dict[str, Any] = {
+        "kind": SAMPLE_REFLY_SPEC_KIND,
+        "schema_version": SAMPLE_REFLY_SPEC_SCHEMA_VERSION,
+        "mission_id": cfg.mission_id,
+        "config_sha256": canonical_config_sha256(cfg),
+        "plan_digest": rendezvous_plan_digest(cfg, plan),
+        "campaign": campaign.to_dict(),
+        "selection_rule": {
+            "description": ("every success (cap 16); passive-contingency failures, passive-only "
+                            "first (cap 8); one "
+                            "boundary sample per failure class (smallest distance to its "
+                            "governing threshold); one planning_infeasible representative "
+                            "recorded as skipped; cap 32; deterministic by (cluster, index)"),
+            "max_total": int(SAMPLE_REFLY_MAX_TOTAL),
+            "max_successes": int(SAMPLE_REFLY_MAX_SUCCESSES),
+            "max_passive_caused": int(SAMPLE_REFLY_MAX_PASSIVE_CAUSED),
+            "counts_by_reason": counts,
+            "n_selected": len(sel), "n_flyable": len(flights), "n_skipped": len(skipped)},
+        "flights": flights,
+        "skipped": skipped,
+        # The worker evaluates the independent verdict, the safety scan and the
+        # min-approach minimum on the campaign's own truth grid: the quantities
+        # being compared are grid-located minima, and comparing a finer grid to
+        # a coarser one measures the grid, not the models.
+        "scan_step_s": float(campaign.sample_dt_s),
+    }
+    doc["spec_digest"] = reflight_spec_digest(doc)
+    return doc
+
+
+# --------------------------------------------------------------------------- #
+# campaign result
 # --------------------------------------------------------------------------- #
 
 @dataclass(frozen=True)

@@ -43,7 +43,8 @@ See the [replay format](adr/rendezvous-0002-mission-studio-flightlab-replay.md).
 |---|---|
 | Nominal plan | The two-impulse plan uses **10.344 m/s** total Δv. Safety checks evaluate the approach trajectory. [Safety constraints](adr/rendezvous-0002-safety-constraints-whole-trajectory.md). |
 | Independent re-flight | The recorded nonlinear TudatPy re-flight passed its declared checks. Its closest approach was about **909 m**. [Re-flight report](benchmarks/e12_05_independent_refly.json). |
-| Dispersion campaign | **14 of 264** hold-out cases passed under the declared stress levels (5.3%, Wilson 95% CI 3.2–8.7%). There were 181 arrival-accuracy failures and 69 safety failures. [Campaign design](adr/rendezvous-0003-dispersion-campaign-not-a-safety-factor.md). |
+| Dispersion campaign | **14 of 264** hold-out cases passed under the declared stress levels (5.3%, Wilson 95% CI 3.2–8.7%). There were 181 arrival-accuracy failures and 69 safety failures. This is a robustness characterization: passive contingencies were not graded, and no independent model re-flew the samples. [Campaign design](adr/rendezvous-0003-dispersion-campaign-not-a-safety-factor.md). |
+| Independent robustness re-flight | With the passive contingency checks graded, **13 of 264** hold-out cases pass (4.9%, cluster-bootstrap 95% CI 2.7–7.6%). There are 164 arrival-accuracy failures and 87 safety failures. The hold-point coast is the dominant safety failure. TudatPy re-flew 23 selected samples, each with its own perturbation, and agreed with every main-model verdict. [Re-flight report](benchmarks/e12_10_independent_reflight.json), [design](adr/rendezvous-0004-independent-robustness-reflight.md). |
 
 For the independent re-flight in a TudatPy environment, use
 `orbitopt crossenv run --plan src/orbitopt/data/crossenv_e12_05_plan.yaml`.

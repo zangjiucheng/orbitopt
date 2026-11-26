@@ -156,6 +156,53 @@ CW_VS_NONLINEAR_TOLERANCES = {
 #: ``newton_tol_m``).
 OPTIMIZER_STATIONARITY_TOL_M_S = 0.01
 
+# --- E12-10 (task #412): per-sample re-flight of selected robustness samples ---
+
+#: Evidence kind of the sample re-flight report, the crossenv stage runner that
+#: flies it, the payload name inside its envelope, and the env var through which
+#: the orchestrator hands the re-flight spec to the worker stage (the E12-05
+#: sealed-plan mechanism, same pattern).
+SAMPLE_REFLY_EVIDENCE_KIND = "orbitopt.verify.rendezvous-sample-reflight"
+SAMPLE_REFLY_SCHEMA_VERSION = "1.0"
+SAMPLE_REFLY_STAGE_RUNNER = "rendezvous_refly_samples"
+SAMPLE_REFLY_PAYLOAD_NAME = "sample-reflight-evidence"
+SAMPLE_REFLY_SPEC_ENV = "ORBITOPT_RENDZVOUS_REFLIGHT_SPEC"
+
+#: Fixed scan step [s] for the E12-10 safety scan and passive coasts. The spec
+#: carries the campaign's own truth grid (``campaign.sample_dt_s``) and the
+#: worker uses that: the safety checks and the min-approach minimum are
+#: grid-located quantities, and the comparison is against the main model *on
+#: that grid* — comparing a finer grid against a coarser one would measure the
+#: grid, not the models. This constant is only the fallback when a spec carries
+#: no grid.
+SAMPLE_REFLY_SCAN_STEP_S = 5.0
+
+#: Declared cross-model bands [absolute, in the quantity's unit] between an
+#: E12-10 TudatPy per-sample re-flight and the main model. Both fly the same
+#: per-sample physics -- same GM, the sample's own J2, the same exponential
+#: atmosphere measured from the same sphere, the same burns, the same 5 s grid
+#: for the scan and the passive coasts -- so a residual is the implementation's
+#: difference alone (tudat's spherical-harmonic C20 against the analytic J2
+#: acceleration, tudat's aerodynamic model against ``_drag_accel``, tudat's
+#: integrators against orbitopt's). Measured on the reference hold-out selection
+#: (23 samples, docs/benchmarks/e12_10_independent_reflight.json): at most
+#: 4.5e-6 m in arrival position, 5.8e-9 m/s in arrival speed, 9.2e-7 m in the
+#: grid minimum of the range, 2.3e-6 m in a passive keep-out margin. The bands
+#: sit >= 1000x above that, and >= 1000x below the scales the contract grades
+#: (50 m / 0.2 m/s arrival tolerances, 500 m keep-out). The first runs of this
+#: comparison saw 10-150 m residuals, which were two harness bugs, not physics:
+#: fixed-step RK4 legs overshooting the gate epoch, and tudat measuring drag
+#: altitude from the 6371 km mean sphere (see ADR rendezvous-0004).
+SAMPLE_REFLY_VS_MAIN_TOLERANCES = {
+    "position_error_m": 0.01,
+    "relative_speed_m_s": 1.0e-5,
+    "min_approach_distance_m": 0.01,
+    "realized_delta_v_m_s": 1.0e-9,
+}
+
+#: Band on each passive release's keep-out margin [m] (same scale as the range).
+SAMPLE_REFLY_PASSIVE_MARGIN_TOLERANCE_M = 0.01
+
 
 class ReflyBackendError(RuntimeError):
     """The tudatpy backend the re-flight needs is not reachable, or the
@@ -242,6 +289,29 @@ def _maneuver_diff_magnitude(plan_a, plan_b) -> float:
     return worst
 
 
+def _gcrs_to_ecliptic_block() -> tuple[np.ndarray, np.ndarray]:
+    """(rot, block): the GCRS -> ECLIPJ2000 rotation at the J2000.0 anchor and
+    its 6x6 state version. The SPICE kernel pool tudatpy loads standard defines
+    no GCRS/ICRS frame (measured: SPICE(UNKNOWNFRAME)) -- and a rejected frame
+    makes tudat's propagation *abort at t=0 and hand back a one-sample
+    history*, so re-flights are flown in ECLIPJ2000. That frame is NOT GCRS:
+    they differ by the obliquity of the ecliptic (23.4 deg about x) even at a
+    common J2000.0 anchor, and a zonal field is only axisymmetric about the SPIN
+    axis -- feeding GCRS components in as ecliptic components misplaces every J2
+    torque (measured: 133 m of false cross-model hold-point disagreement, task
+    #395). The config states and the inertial burns are rotated with this block;
+    every graded quantity is chief-LVLH or a norm, invariant under the one
+    constant rotation applied to both crafts."""
+    eps = math.radians(84381.448 / 3600.0)  # obliquity at J2000.0, IAU76: ECLIPJ2000
+                                           # is exactly this rotation of GCRS about x
+                                           # (verified against SPICE to 1e-7)
+    rot = np.array([[1.0, 0.0, 0.0],
+                    [0.0, math.cos(eps), math.sin(eps)],
+                    [0.0, -math.sin(eps), math.cos(eps)]])
+    block = np.block([[rot, np.zeros((3, 3))], [np.zeros((3, 3)), rot]])
+    return rot, block
+
+
 def run_refly_in_current_environment(cfg, config_path=None, plan=None) -> dict:
     """Fly the full mission of ``cfg`` independently in tudatpy and return the
     sealed-ready evidence document (pure data, JSON-safe). Call only in an
@@ -295,13 +365,7 @@ def run_refly_in_current_environment(cfg, config_path=None, plan=None) -> dict:
     vmain = verify_plan(cfg, plan)
     m1, m2 = plan.maneuvers
     t1, tof = float(m1.epoch_s), float(plan.tof_s)
-    eps = math.radians(84381.448 / 3600.0)  # obliquity at J2000.0, IAU76: ECLIPJ2000
-                                            # is exactly this rotation of GCRS about x
-                                            # (verified against SPICE to 1e-7)
-    rot = np.array([[1.0, 0.0, 0.0],
-                    [0.0, math.cos(eps), math.sin(eps)],
-                    [0.0, -math.sin(eps), math.cos(eps)]])
-    block = np.block([[rot, np.zeros((3, 3))], [np.zeros((3, 3)), rot]])
+    rot, block = _gcrs_to_ecliptic_block()
     dv1 = rot @ np.asarray(m1.delta_v_m_s, dtype=float)
     dv2 = rot @ np.asarray(m2.delta_v_m_s, dtype=float)
     r0c, v0c, r0d, v0d = initial_states(cfg)
@@ -514,6 +578,351 @@ def run_refly_in_current_environment(cfg, config_path=None, plan=None) -> dict:
         "ok": not failed,
         "failed_checks": failed,
     }
+
+
+def run_sample_reflight_in_current_environment(cfg, spec: Mapping) -> dict:
+    """E12-10 (task #412): re-fly the SELECTED robustness samples independently
+    in tudatpy, each with **its own** perturbation, and return the evidence
+    document (pure data, JSON-safe). The counterpart of
+    :func:`run_refly_in_current_environment` for the Monte Carlo: E12-05 re-flew
+    one nominal plan; this re-flies the samples whose verdicts the E12-10
+    criteria rest on, under the sample's own truth physics -- the ``j2_truth``
+    and drag the spec records from the sample's own draws, so the independent
+    model prices the same dispersion, not the nominal.
+
+    The spec self-identifies: mission id, canonical config digest and the
+    ``spec_digest`` recomputed over the flights it carries -- a worker handed a
+    different or edited selection is a hard failure, never a silent re-selection.
+    Every flight is the sample's pulse sequence rotated into ECLIPJ2000 (see
+    :func:`_gcrs_to_ecliptic_block`); the headline arrival quantities come off
+    the production DOP853, the safety scan and the passive coasts off fixed-step
+    RK4 on the campaign's own truth grid (``spec["scan_step_s"]``) -- the same
+    split E12-05 uses, now per perturbed sample, and on the grid the main model's
+    verdict was graded on, so the verdicts mean the same check on the same grid.
+
+    The verdict each re-flight gets is the mission's own contract applied to the
+    independently flown trajectory:
+    :func:`orbitopt.rendezvous.robustness.grade_trajectory_checks` -- the single
+    grader, so an ``independent`` verdict means the same word as a main-model
+    one, including the passive-contingency checks when the campaign grades with
+    them (the passive coasts are flown only then).
+    """
+    from orbitopt.crossenv.envelope import environment_record
+    from orbitopt.relative.frames import eci_to_lvlh
+    from orbitopt.relative.propagation import EARTH_RE
+    from orbitopt.rendezvous.canonical import canonical_config_sha256
+    from orbitopt.rendezvous.planner import initial_states
+    from orbitopt.rendezvous.robustness import grade_trajectory_checks, reflight_spec_digest
+    from orbitopt.rendezvous.safety import PassiveRelease, evaluate_trajectory_safety
+
+    if spec.get("kind") != "orbitopt.verify.rendezvous-sample-reflight-spec":
+        raise ReflyBackendError(
+            f"the re-flight spec is {spec.get('kind')!r}, not a sample-reflight spec")
+    if spec.get("mission_id") != cfg.mission_id:
+        raise ReflyBackendError(
+            f"the spec was selected for mission {spec.get('mission_id')!r}, this config is "
+            f"{cfg.mission_id!r}")
+    config_sha = canonical_config_sha256(cfg)
+    if spec.get("config_sha256") != config_sha:
+        raise ReflyBackendError(
+            "the spec was built against a different config: spec "
+            f"{str(spec.get('config_sha256'))[:12]!r} != here {config_sha[:12]!r}")
+    if spec.get("spec_digest") != reflight_spec_digest(spec):
+        raise ReflyBackendError(
+            "spec_digest mismatch: the flights/skipped rows are not what "
+            "build_reflight_spec signed -- edited or truncated selection")
+    frame = cfg.dynamics.frame
+    if frame != "GCRS":
+        raise ReflyBackendError(
+            f"the re-flight is defined for the config frame GCRS; frame {frame!r} is "
+            "not wired -- refusing a silent frame switch")
+    try:
+        import tudatpy  # noqa: F401
+    except ImportError as exc:
+        raise ReflyBackendError(
+            f"{REFLY_BACKEND_MISSING}: tudatpy is not importable in {sys.executable!r}") from exc
+
+    from orbitopt.verify.tudat_propagate import (
+        VERIFY_ATOL,
+        VERIFY_RTOL,
+        ReusableCoastPropagator,
+    )
+
+    grading = bool(((spec.get("campaign") or {}).get("statistics") or {})
+                   .get("passive_contingency_in_success", False))
+    rot, block = _gcrs_to_ecliptic_block()
+    mu = cfg.dynamics.mu
+    r0c, v0c, r0d, v0d = initial_states(cfg)
+    s_chief0 = block @ np.concatenate([r0c, v0c])
+    s_deputy0 = block @ np.concatenate([r0d, v0d])
+
+    cache: dict[tuple, ReusableCoastPropagator] = {}
+
+    def prop(integrator: str, step: float, j2_truth: float, bc, atm) -> ReusableCoastPropagator:
+        """One tudat environment per (integrator, step, sample J2, ballistic
+        coefficient, atmosphere): robustness samples differ only in those, and
+        building one environment per flight instead of per leg is what makes a
+        full selection affordable."""
+        key = (integrator, float(step), float(j2_truth),
+               None if bc is None else float(bc),
+               None if atm is None else tuple(float(x) for x in atm))
+        if key not in cache:
+            cache[key] = ReusableCoastPropagator(
+                central_body="Earth", perturbing_bodies=("Earth",), step_size=float(step),
+                earth_spherical_harmonic=(2, 0) if j2_truth else None,
+                integrator=integrator, rtol=VERIFY_RTOL, atol=VERIFY_ATOL,
+                central_gravity={"gravitational_parameter": mu, "reference_radius": EARTH_RE,
+                                 "j2": float(j2_truth)},
+                frame="ECLIPJ2000",
+                drag=None if atm is None or bc is None else {
+                    "atmosphere": {"surface_density_kg_m3": float(atm[0]),
+                                   "scale_height_m": float(atm[1]),
+                                   "body_radius_m": float(atm[2])},
+                    "ballistic_coefficient_m2_per_kg": float(bc)})
+        return cache[key]
+
+    def coast(p: ReusableCoastPropagator, state, t0: float, dur: float,
+              where: str) -> tuple[np.ndarray, np.ndarray]:
+        """``p.coast`` with the E12-05 abort guard: tudat terminates at t=0
+        without raising when something is wrong, and a one-sample history is an
+        error here, never a fake coast.
+
+        The last sample is always the state AT ``t0 + dur``: fixed-step RK4
+        does not stop on the end epoch, it overshoots to the next grid point
+        (a 560.6 s gate on a 5 s grid lands at 565 s), and the next leg, the
+        burn and the passive releases start from this state. Samples past the
+        end are dropped and one partial step lands exactly on it, so the
+        history is the main model's inclusive grid (``robustness._grid``)."""
+        t_end = t0 + dur
+        epochs, states = p.coast(state, t0, dur)
+        epochs = np.asarray(epochs, dtype=float)
+        states = np.asarray(states, dtype=float)
+        end_gap = t_end - float(np.max(epochs))
+        if len(states) < 2 or end_gap > (1.5 * p._step_size + 0.5):
+            raise ReflyBackendError(
+                f"tudat coast for {where} advanced only to {float(np.max(epochs)):.3f} s of "
+                f"the requested {t_end:.3f} s ({len(states)} samples) -- propagation "
+                "aborted (frame/kernel issue?)")
+        keep = epochs <= t_end + 1e-9
+        epochs, states = epochs[keep], states[keep]
+        gap = t_end - float(epochs[-1])
+        if gap > 1e-9:
+            e2, s2 = p.coast(states[-1], float(epochs[-1]), gap, max_step=gap)
+            if abs(float(e2[-1]) - t_end) > 1e-6:
+                raise ReflyBackendError(
+                    f"tudat coast for {where}: the closing partial step landed at "
+                    f"{float(e2[-1]):.6f} s, not {t_end:.6f} s")
+            epochs = np.append(epochs, t_end)
+            states = np.vstack([states, np.asarray(s2, dtype=float)[-1]])
+        return epochs, states
+
+    rows: list[dict] = []
+    scan_step = float(spec.get("scan_step_s", SAMPLE_REFLY_SCAN_STEP_S))
+    for fl in spec.get("flights", ()):
+        t1, tof = float(fl["t1_s"]), float(fl["tof_s"])
+        dv1 = rot @ np.asarray(fl["dv1_exec_eci_m_s"], dtype=float)
+        dv2 = rot @ np.asarray(fl["dv2_exec_eci_m_s"], dtype=float)
+        j2_truth = float(fl["j2_truth"])
+        drag = fl.get("drag")
+        atm, bc_c, bc_d = None, None, None
+        if drag is not None:
+            atm = (float(drag["atmosphere"]["surface_density_kg_m3"]),
+                   float(drag["atmosphere"]["scale_height_m"]),
+                   float(drag["atmosphere"]["body_radius_m"]))
+            # The main model scales the DENSITY by the sample's log-normal
+            # factor; scaling the ballistic coefficient by the same factor
+            # reproduces -0.5*(rho0*f)*|v|*bc*v exactly (the two enter only as
+            # a product). A declared drag-free vehicle (bc 0) simply gets no
+            # aerodynamic acceleration -- ``prop`` flies it without drag.
+            f = float(drag["density_factor"])
+            bc_c = float(drag["chief_ballistic_coefficient_m2_per_kg"]) * f or None
+            bc_d = float(drag["ballistic_coefficient_m2_per_kg"]) * f or None
+
+        # ---- headline arrival quantities: production DOP853, sample's own truth
+        pc = prop("dop853", 60.0, j2_truth, bc_c, atm)
+        pd = prop("dop853", 60.0, j2_truth, bc_d, atm)
+        chief_t1 = coast(pc, s_chief0, 0.0, t1, f"sample {fl['cluster']}/{fl['index']} chief drift")[1][-1]
+        chief_t2 = coast(pc, chief_t1, t1, tof, "chief transfer")[1][-1]
+        deputy_t1 = coast(pd, s_deputy0, 0.0, t1, "deputy drift")[1][-1].copy()
+        deputy_t1[3:] += dv1
+        deputy_t2_pre = coast(pd, deputy_t1, t1, tof, "deputy transfer")[1][-1]
+        deputy_t2 = deputy_t2_pre.copy()
+        deputy_t2[3:] += dv2
+        rho, rho_dot = eci_to_lvlh(chief_t2[:3], chief_t2[3:], deputy_t2[:3] - chief_t2[:3],
+                                   deputy_t2[3:] - chief_t2[3:], frame,
+                                   where="rendezvous_refly: sample arrival")
+        hold = np.asarray(cfg.hold_point_rel_lvlh, dtype=float)
+        pos_err = float(np.linalg.norm(rho - hold))
+        rel_speed = float(np.linalg.norm(rho_dot))
+
+        # ---- safety scan + passive coasts: fixed-step RK4 on the scan grid,
+        # both crafts on identical grids (same legs, same anchor, same step)
+        qc = prop("rk4", scan_step, j2_truth, bc_c, atm)
+        qd = prop("rk4", scan_step, j2_truth, bc_d, atm)
+        e_cd, s_cd = coast(qc, s_chief0, 0.0, t1, "chief drift scan")
+        e_ct, s_ct = coast(qc, s_cd[-1], t1, tof, "chief transfer scan")
+        e_dd, s_dd = coast(qd, s_deputy0, 0.0, t1, "deputy drift scan")
+        deputy_burnt = s_dd[-1].copy()
+        deputy_burnt[3:] += dv1
+        e_dt, s_dt = coast(qd, deputy_burnt, t1, tof, "deputy transfer scan")
+        post = np.concatenate([s_ct[-1], s_dt[-1] + np.concatenate([np.zeros(3), dv2])])
+        n, m = min(len(s_cd), len(s_dd)), min(len(s_ct), len(s_dt))
+        pair = np.concatenate([np.hstack([s_cd[:n], s_dd[:n]]),
+                               np.hstack([s_ct[1:1 + m], s_dt[1:1 + m]]),
+                               post[None, :]], axis=0)
+        times = np.concatenate((e_cd[:n], e_ct[1:1 + m], [t1 + tof]))
+        rho_s, rho_dot_s = eci_to_lvlh(pair[:, 0:3], pair[:, 3:6],
+                                       pair[:, 6:9] - pair[:, 0:3],
+                                       pair[:, 9:12] - pair[:, 3:6], frame,
+                                       where="rendezvous_refly: sample scan")
+        checks = evaluate_trajectory_safety(cfg, times, rho_s, rho_dot_s)
+        rng = np.linalg.norm(rho_s, axis=1)
+        i = int(np.argmin(rng))
+
+        passive: tuple[PassiveRelease, ...] = ()
+        if grading and cfg.safety is not None:
+            dur = float(cfg.safety.passive_contingency_s)
+
+            def release(kind: str, t0: float, chief_state, deputy_state) -> PassiveRelease:
+                ec, sc = coast(qc, chief_state, t0, dur, f"passive {kind} (chief)")
+                sd = coast(qd, deputy_state, t0, dur, f"passive {kind} (deputy)")[1]
+                k = min(len(sc), len(sd))
+                rho_p, _ = eci_to_lvlh(sc[:k, :3], sc[:k, 3:], sd[:k, :3] - sc[:k, :3],
+                                       sd[:k, 3:] - sc[:k, 3:], frame,
+                                       where=f"rendezvous_refly: passive {kind}")
+                r_p = np.linalg.norm(rho_p, axis=1)
+                j = int(np.argmin(r_p))
+                margin = float(r_p[j] - cfg.safety.keep_out_radius_m)
+                return PassiveRelease(
+                    kind=kind, release_epoch_s=float(t0), duration_s=dur,
+                    min_range_m=float(r_p[j]), worst_epoch_s=float(ec[j] - t0),
+                    worst_rel_lvlh_m=tuple(float(x) for x in rho_p[j]),
+                    keep_out_margin_m=margin, passed=margin >= 0.0)
+
+            passive = (release("no_burn_at_t0", 0.0, s_chief0, s_deputy0),
+                       release("gate_abort_no_burn", t1, s_cd[-1], s_dd[-1]),
+                       release("hold_point_coast", t1 + tof, s_ct[-1],
+                               s_dt[-1] + np.concatenate([np.zeros(3), dv2])))
+
+        realized = float(np.linalg.norm(dv1) + np.linalg.norm(dv2))
+        verdict = grade_trajectory_checks(
+            cfg, checks, realized_delta_v_m_s=realized,
+            planned_delta_v_m_s=float(fl["main_planned_delta_v_m_s"]),
+            position_error_m=pos_err, relative_speed_m_s=rel_speed,
+            passive=passive, finite=bool(np.all(np.isfinite(pair))))
+        rows.append({
+            "cluster": int(fl["cluster"]), "index": int(fl["index"]), "seed": int(fl["seed"]),
+            "selection": fl["selection"], "t1_s": t1, "tof_s": tof,
+            "position_error_m": pos_err, "relative_speed_m_s": rel_speed,
+            "realized_delta_v_m_s": realized,
+            "min_approach_distance_m": float(rng[i]), "min_approach_epoch_s": float(times[i]),
+            "arrival_rel_lvlh_m": [float(x) for x in rho],
+            "arrival_rel_lvlh_rate_m_s": [float(x) for x in rho_dot],
+            "checks": {name: {"unit": c.unit, "min_margin": float(c.min_margin),
+                              "passed": bool(c.passed)} for name, c in checks.items()},
+            "passive": [p.to_dict() for p in passive],
+            "verdict": {"failure_class": verdict["failure_class"],
+                        "failed_checks": list(verdict["failed_checks"]),
+                        "reason": verdict["reason"], "margins": verdict["margins"]},
+        })
+    return {
+        "kind": SAMPLE_REFLY_EVIDENCE_KIND,
+        "schema_version": SAMPLE_REFLY_SCHEMA_VERSION,
+        "mission_id": cfg.mission_id,
+        "frame": frame,
+        "propagation_frame": "ECLIPJ2000",
+        "epoch_anchor_s": 0.0,
+        "config_sha256": config_sha,
+        "spec_digest": spec["spec_digest"],
+        "plan_digest": spec.get("plan_digest"),
+        "tolerances": {**SAMPLE_REFLY_VS_MAIN_TOLERANCES,
+                       "passive_keep_out_margin_m": SAMPLE_REFLY_PASSIVE_MARGIN_TOLERANCE_M},
+        "scan_step_s": float(scan_step),
+        "environment": environment_record("tudat"),
+        "selection_rule": spec.get("selection_rule"),
+        "flights": rows,
+        "skipped": [dict(x) for x in spec.get("skipped", ())],
+    }
+
+
+#: spec key carrying the main model's value of each band-compared quantity
+_MAIN_QUANTITY_KEY = {
+    "position_error_m": "main_position_error_m",
+    "relative_speed_m_s": "main_relative_speed_m_s",
+    "min_approach_distance_m": "main_min_range_m",
+    "realized_delta_v_m_s": "main_realized_delta_v_m_s",
+}
+
+
+def sample_reflight_comparison(spec: Mapping, evidence: Mapping) -> dict:
+    """Per-sample main-versus-independent comparison: for every re-flown sample,
+    the two verdicts, whether they flipped, the residual on each acceptance
+    quantity against :data:`SAMPLE_REFLY_VS_MAIN_TOLERANCES`, and a summary.
+    Pure function of the two artifacts (the spec that selected and flew, the
+    evidence that came back), so the orchestrator, the benchmark and the tests
+    all compare through one implementation."""
+    by_key = {(int(r["cluster"]), int(r["index"])): r for r in evidence.get("flights", ())}
+    samples, flips, violations = [], [], []
+    n_within = 0
+    for fl in spec.get("flights", ()):
+        key = (int(fl["cluster"]), int(fl["index"]))
+        row = by_key.get(key)
+        if row is None:
+            raise ReflyBackendError(f"the evidence has no re-flight for selected sample {key}")
+        residuals, within = {}, True
+        for name, tol in SAMPLE_REFLY_VS_MAIN_TOLERANCES.items():
+            main_v = float(fl[_MAIN_QUANTITY_KEY[name]])
+            diff = float(row[name]) - main_v
+            inside = abs(diff) <= tol
+            within = within and inside
+            residuals[name] = {"main_model": main_v, "independent_model": float(row[name]),
+                               "difference": diff, "tolerance": tol, "within_band": inside}
+            if not inside:
+                violations.append({"sample": list(key), "quantity": name,
+                                   "difference": diff, "tolerance": tol})
+        flip = row["verdict"]["failure_class"] != fl["main_failure_class"]
+        if flip:
+            flips.append({"sample": list(key), "selection": fl["selection"],
+                          "main_model": fl["main_failure_class"],
+                          "independent_model": row["verdict"]["failure_class"]})
+        passive_cmp = []
+        main_p = {p["kind"]: p for p in fl.get("main_passive") or ()}
+        if row["passive"] and not main_p:
+            raise ReflyBackendError(
+                f"sample {key}: the independent model flew passive releases but the spec "
+                "carries no main-model passive margins to compare them with")
+        for p in row["passive"]:
+            m = main_p[p["kind"]]
+            diff = float(p["keep_out_margin_m"]) - float(m["keep_out_margin_m"])
+            inside = abs(diff) <= SAMPLE_REFLY_PASSIVE_MARGIN_TOLERANCE_M
+            within = within and inside
+            passive_cmp.append({"kind": p["kind"],
+                                "main_margin_m": float(m["keep_out_margin_m"]),
+                                "independent_margin_m": float(p["keep_out_margin_m"]),
+                                "difference_m": diff,
+                                "tolerance_m": SAMPLE_REFLY_PASSIVE_MARGIN_TOLERANCE_M,
+                                "within_band": inside,
+                                "main_passed": bool(m["passed"]),
+                                "independent_passed": bool(p["passed"])})
+            if not inside:
+                violations.append({"sample": list(key),
+                                   "quantity": f"passive_{p['kind']}_keep_out_margin_m",
+                                   "difference": diff,
+                                   "tolerance": SAMPLE_REFLY_PASSIVE_MARGIN_TOLERANCE_M})
+        n_within += int(within)
+        samples.append({"cluster": key[0], "index": key[1], "seed": int(fl["seed"]),
+                        "selection": fl["selection"],
+                        "main_failure_class": fl["main_failure_class"],
+                        "main_reason": fl["main_reason"],
+                        "independent_failure_class": row["verdict"]["failure_class"],
+                        "independent_reason": row["verdict"]["reason"],
+                        "verdict_flip": flip, "all_within_bands": within,
+                        "residuals": residuals, "independent_checks": row["checks"],
+                        "passive": row["passive"], "passive_comparison": passive_cmp,
+                        "main_margins": fl["main_margins"]})
+    return {"n_reflied": len(samples), "n_verdict_within_bands": n_within,
+            "n_verdict_flips": len(flips), "n_band_violations": len(violations),
+            "verdict_flips": flips, "band_violations": violations, "samples": samples}
 
 
 # ---------------------------------------------------------------------------
@@ -1093,6 +1502,133 @@ def refly_stage_impl(cfg, config_path, exchange_dir: Path) -> tuple[list, dict]:
                  "schema_version": REFLY_SCHEMA_VERSION, "report_kind": REFLY_REPORT_KIND,
                  "path": "reports/rendezvous-refly-evidence.json", "digest_kind": "file"}]
     return payloads, doc
+
+
+def sample_reflight_stage_impl(cfg, config_path, exchange_dir: Path) -> tuple[list, dict]:
+    """Worker half of the ``rendezvous_refly_samples`` stage: read the re-flight
+    spec named by ``ORBITOPT_RENDZVOUS_REFLIGHT_SPEC`` (set by
+    :func:`sample_reflight_via_crossenv`), fly it here under this environment's
+    own config (the worker re-checks mission, config sha and spec digest before
+    flying -- a hard stage failure on any mismatch), and write the evidence
+    artifact. Sealing stays in the crossenv stage runner."""
+    from orbitopt.verify.report import to_jsonable
+
+    spec_path = os.environ.get(SAMPLE_REFLY_SPEC_ENV)
+    if not spec_path:
+        raise ReflyBackendError(
+            f"{SAMPLE_REFLY_SPEC_ENV} not set: the sample re-flight stage has no spec to fly")
+    spec = json.loads(Path(spec_path).read_text(encoding="utf-8"))
+    doc = run_sample_reflight_in_current_environment(cfg, spec)
+    reports = Path(exchange_dir) / "reports"
+    reports.mkdir(parents=True, exist_ok=True)
+    (reports / "sample-reflight-evidence.json").write_text(
+        json.dumps(to_jsonable(doc), indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    payloads = [{"name": SAMPLE_REFLY_PAYLOAD_NAME, "type": "report",
+                 "schema_version": SAMPLE_REFLY_SCHEMA_VERSION,
+                 "report_kind": SAMPLE_REFLY_EVIDENCE_KIND,
+                 "path": "reports/sample-reflight-evidence.json", "digest_kind": "file"}]
+    return payloads, doc
+
+
+def sample_reflight_via_crossenv(cfg, config_path: Path, out_dir, interpreter: str,
+                                 spec: Mapping) -> dict:
+    """Run the sample re-flight as a crossenv stage in ``interpreter`` and
+    return ``{"document", "envelope_digest", "stage_report"}`` after
+    re-validating the sealed envelope here (schema + digests, re-computed over
+    here before anything is read) -- the E12-05 mechanism: the spec is written
+    under ``out_dir``, its path passed through ``SAMPLE_REFLY_SPEC_ENV``, and
+    the worker proves it flew THIS spec before it flies anything."""
+    from orbitopt.crossenv.envelope import envelope_digest, read_payloads
+    from orbitopt.crossenv.plan import (
+        CrossEnvPlan,
+        CrossEnvStage,
+        run_stage_subprocess,
+        write_resolved_plan,
+    )
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    spec_path = out / "reflight.spec.json"
+    spec_path.write_text(json.dumps(spec, indent=1, ensure_ascii=False, sort_keys=True) + "\n",
+                         encoding="utf-8")
+    # absolute: the stage subprocess runs with cwd=repo_root, which may differ
+    # from this process's cwd when out_dir was given relatively
+    spec_env = {SAMPLE_REFLY_SPEC_ENV: str(spec_path.resolve())}
+    stage = CrossEnvStage(id="sample-reflight", runner=SAMPLE_REFLY_STAGE_RUNNER, env="tudat")
+    plan = CrossEnvPlan(mission_id=f"e12-10-sample-reflight-{cfg.mission_id}",
+                        scenario=Path(config_path),
+                        environments={"tudat": str(interpreter)}, stages=(stage,), out=out)
+    resolved = write_resolved_plan(plan, out / "plan.resolved.json")
+    prior = {k: os.environ.get(k) for k in spec_env}
+    os.environ.update(spec_env)
+    try:
+        proc = run_stage_subprocess(plan, stage, out, resolved)
+    finally:
+        for k, v in prior.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    report_path = out / stage.id / "stage-report.json"
+    stage_report = (json.loads(report_path.read_text(encoding="utf-8"))
+                    if report_path.is_file() else None)
+    if proc.returncode != 0 or not stage_report or stage_report.get("status") != "completed":
+        tail = (proc.stderr or proc.stdout or "").strip()[-1500:]
+        raise ReflyBackendError(
+            f"crossenv sample re-flight stage failed (rc={proc.returncode}): "
+            f"{tail or (stage_report or {}).get('summary') or 'no stage report'}")
+    exchange = out / stage.id / "exchange"
+    doc = read_payloads(exchange)[SAMPLE_REFLY_PAYLOAD_NAME]  # validates envelope + digests
+    _check_sample_reflight_doc(cfg, spec, doc)
+    return {"document": doc, "envelope_digest": envelope_digest(exchange),
+            "stage_report": stage_report}
+
+
+def _check_sample_reflight_doc(cfg, spec: Mapping, doc: Mapping) -> None:
+    """The orchestrator-side guarantee: the evidence is this mission's sample
+    re-flight, of THIS spec and the SAME ground plan the spec was selected
+    under -- one artifact, or the per-sample comparison is meaningless."""
+    if doc.get("kind") != SAMPLE_REFLY_EVIDENCE_KIND or doc.get("mission_id") != cfg.mission_id:
+        raise ReflyBackendError(
+            f"sealed evidence is {doc.get('kind')!r}/{doc.get('mission_id')!r}, not "
+            f"{SAMPLE_REFLY_EVIDENCE_KIND!r}/{cfg.mission_id!r}")
+    if doc.get("spec_digest") != spec.get("spec_digest"):
+        raise ReflyBackendError(
+            f"the re-flight flew spec {doc.get('spec_digest')!r}, not the selected spec "
+            f"{spec.get('spec_digest')!r}")
+    if doc.get("plan_digest") != spec.get("plan_digest"):
+        raise ReflyBackendError(
+            f"the re-flight was selected against plan {spec.get('plan_digest')!r} but flew "
+            f"under {doc.get('plan_digest')!r}")
+
+
+def verify_sample_reflight(cfg, spec: Mapping, *, config_path,
+                           out_dir: str | Path = "runs/e12-10-reflight") -> dict:
+    """Fly a re-flight spec on the independent model and compare it sample by
+    sample: crossenv when ``ORBITOPT_TUDAT_PYTHON`` names an interpreter,
+    in-process when this environment imports tudatpy, and an honest
+    ``status="not_checked"`` with ``REFLY_BACKEND_MISSING`` when neither (the
+    task-#261 rule -- recorded, never passed). Returns the evidence document,
+    the comparison (:func:`sample_reflight_comparison`) and the backend used;
+    report assembly is the caller's (the E12-10 benchmark)."""
+    backend, interpreter = resolve_refly_backend()
+    if backend is None:
+        return {"status": "not_checked", "backend": None, "evidence": None,
+                "comparison": None,
+                "reason": (f"{REFLY_BACKEND_MISSING}: no ORBITOPT_TUDAT_PYTHON and no "
+                           f"importable tudatpy in {sys.executable!r} -- the independent "
+                           "per-sample re-flight is NOT_CHECKED (recorded, never passed)")}
+    out = Path(out_dir)
+    if backend == "crossenv":
+        run = sample_reflight_via_crossenv(cfg, config_path, out, interpreter, spec)
+        doc = run["document"]
+        meta = {k: v for k, v in run.items() if k != "document"}
+    else:
+        doc = run_sample_reflight_in_current_environment(cfg, spec)
+        _check_sample_reflight_doc(cfg, spec, doc)
+        meta = None
+    return {"status": "checked", "backend": backend, "evidence": doc,
+            "comparison": sample_reflight_comparison(spec, doc), "crossenv": meta}
 
 
 def main(argv=None) -> int:

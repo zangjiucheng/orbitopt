@@ -335,6 +335,36 @@ def run_rendezvous_refly_stage(plan: CrossEnvPlan, stage: CrossEnvStage, out_dir
     }
 
 
+@_register("rendezvous_refly_samples")
+def run_rendezvous_sample_reflight_stage(plan: CrossEnvPlan, stage: CrossEnvStage,
+                                        out_dir: Path) -> dict:
+    """E12-10 (task #412): fly the per-sample re-flight spec named by
+    ``ORBITOPT_RENDZVOUS_REFLIGHT_SPEC`` in *this* environment (tudatpy) and
+    seal the evidence. The worker itself re-checks the spec's digests against
+    its own config, so the sealed evidence carries its own provenance."""
+    from orbitopt.rendezvous.config import load_rendezvous_config
+    from orbitopt.verify.rendezvous_refly import sample_reflight_stage_impl
+
+    stage_dir = Path(out_dir) / stage.id
+    exchange = stage_dir / EXCHANGE_DIRNAME
+    exchange.mkdir(parents=True, exist_ok=True)
+    cfg = load_rendezvous_config(plan.scenario)
+    payloads, doc = sample_reflight_stage_impl(cfg, plan.scenario, exchange)
+    write_envelope(exchange, stage=stage.id, runner=stage.runner, env_label=stage.env,
+                   payloads=payloads)
+    return {
+        "kind": STAGE_REPORT_KIND, "schema_version": STAGE_REPORT_SCHEMA_VERSION,
+        "stage": stage.id, "runner": stage.runner, "env": stage.env,
+        "environment": environment_record(stage.env),
+        "status": "completed", "mission_ok": bool(doc["flights"]),
+        "summary": (f"mission_id={doc['mission_id']} "
+                    f"spec_digest={str(doc['spec_digest'])[:12]} "
+                    f"flights={len(doc['flights'])} skipped={len(doc['skipped'])}"),
+        "failed_checks": [],
+        "payloads": [p["name"] for p in payloads],
+    }
+
+
 def execute_stage(plan: CrossEnvPlan, stage: CrossEnvStage, out_dir) -> int:
     """Run one stage and write its ``stage-report.json`` next to its exchange
     dir. Returns a process exit code: 0 = the stage completed (its *mission
