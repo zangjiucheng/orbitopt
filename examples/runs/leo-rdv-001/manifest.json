@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0",
+  "run_id": "leo-rdv-001-studio",
+  "target_sha256": "7cf9a0a2e8112b027d505a876559a6cfc1f532a2e22ec421c5e5c42b14158b03",
+  "vehicle_sha256": "dfc434cc4046154bb75f6c842dbe5baa5dea989bfeb5e7958367a9788ba72092",
+  "engines": {},
+  "git_sha": "0000000000000000000000000000000000000000",
+  "created_utc": "2026-01-01T00:00:00Z",
+  "assumptions": [
+    "Mission studio replay of leo-rdv-001: two-body + J2 (j2=True) RK4 pair propagation on the config's frame/mu; burns impulsive at the planned epochs.",
+    "Both tracks carry a constant 5,000 kg: the point-mass rendezvous model has no mass dynamics (the mass row is illustrative, not flown data).",
+    "The timeline ends at the hold-point insertion burn (arrival); no coast segment is appended after arrival.",
+    "git_sha=0000000000000000000000000000000000000000 and created_utc=2026-01-01T00:00:00Z are fixed markers so regenerating this run directory reproduces it.",
+    "backend omitted: the studio bridge is not a Flight Lab physics backend; maneuver/hold/zone events live in the rendezvous.json sidecar because the flight-result-1.0 event vocabulary is ascent-only.",
+    "keep-out sphere radius 500 m centred on the target at arrival (config safety block); the check grades the live chaser-to-centre distance, not an observed zone crossing."
+  ],
+  "toolchain": {
+    "python": "3.12.16",
+    "orbitopt": "0.1.0",
+    "numpy": "2.5.5",
+    "scipy": "1.18.1",
+    "astropy": "absent",
+    "tudatpy": "absent",
+    "gfold": "absent",
+    "jsbsim": "absent",
+    "cvxpy": "absent",
+    "jsonschema": "4.26.0",
+    "pyyaml": "6.0.3",
+    "opentsiolkovsky": "1.0.0",
+    "opentsiolkovsky_sha256": "binary absent; pinned asset e39da128a084a8782e0159f26e777048dac5c49b9855d50030ba5a2e5dca7e06"
+  },
+  "bodies": [
+    {
+      "body_id": "target",
+      "parent_body_id": null,
+      "frame": "GCRS",
+      "epoch_utc": "2026-01-01T00:00:00Z",
+      "t_start_s": 0.0,
+      "t_end_s": 3977.261659125623,
+      "provenance": "official"
+    },
+    {
+      "body_id": "chaser",
+      "parent_body_id": null,
+      "frame": "GCRS",
+      "epoch_utc": "2026-01-01T00:00:00Z",
+      "t_start_s": 0.0,
+      "t_end_s": 3977.261659125623,
+      "provenance": "official"
+    }
+  ]
+}

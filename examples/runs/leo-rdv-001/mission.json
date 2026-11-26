@@ -1,0 +1,76 @@
+{
+ "schema_version": "1.0",
+ "mission_id": "leo-rdv-001",
+ "title": "LEO rendezvous reference mission -- 500 km target, 1 km V-bar Hold Point \u2014 Mission Studio replay",
+ "frame": "GCRS",
+ "epoch": {
+  "mjd2000": 9497.0,
+  "timescale": "UTC"
+ },
+ "spacecraft": [
+  {
+   "spacecraft_id": "target",
+   "role": "TARGET",
+   "metadata": {
+    "altitude_m": "500000.0"
+   }
+  },
+  {
+   "spacecraft_id": "chaser",
+   "role": "CHASER",
+   "metadata": {
+    "altitude_m": "490000.0"
+   }
+  }
+ ],
+ "zones": [
+  {
+   "name": "keepout",
+   "center_m": [
+    1433951.6937975928,
+    -4324794.614783714,
+    -5140313.666794423
+   ],
+   "radius_m": 500.0
+  },
+  {
+   "name": "hold-point",
+   "center_m": [
+    -807.3647263804949,
+    -542.7706257130823,
+    231.4351884644556
+   ],
+   "radius_m": 50.0
+  }
+ ],
+ "events": [
+  {
+   "spacecraft_id": "chaser",
+   "kind": "maneuver",
+   "epoch": {
+    "mjd2000": 9497.007289107782,
+    "timescale": "TDB"
+   },
+   "data": {
+    "maneuver": "transfer_injection",
+    "delta_v_m_s": "4.090812"
+   },
+   "counterpart_id": "target"
+  },
+  {
+   "spacecraft_id": "chaser",
+   "kind": "hold_point_arrival",
+   "epoch": {
+    "mjd2000": 9497.046833860868,
+    "timescale": "TDB"
+   },
+   "data": {
+    "position_error_m": "4.669722e-07",
+    "relative_speed_m_s": "5.172409e-10"
+   },
+   "counterpart_id": "target",
+   "hold_point_id": "hold-point"
+  }
+ ],
+ "metadata": {}
+}
