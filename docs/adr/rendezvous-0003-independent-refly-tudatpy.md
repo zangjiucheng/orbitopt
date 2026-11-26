@@ -1,4 +1,4 @@
-# ADR rendezvous-0002: TudatPy two-spacecraft re-flight as independent verification (E12-05)
+# ADR rendezvous-0003: TudatPy two-spacecraft re-flight as independent verification (E12-05)
 
 - **Status:** Accepted
 - **Date:** 2026-11-25

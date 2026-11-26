@@ -1,4 +1,4 @@
-# ADR rendezvous-0003: a dispersion campaign, not a safety factor (E12-07)
+# ADR rendezvous-0005: a dispersion campaign, not a safety factor (E12-07)
 
 - **Status:** Accepted
 - **Date:** 2026-11-25
@@ -8,7 +8,8 @@
 - **Evidence:** `docs/benchmarks/e12_07_rendezvous_robustness.json`,
   `tests/test_e12_07_rendezvous_robustness.py`, `benchmarks/bench_e12_07_rendezvous_robustness.py`
 - **Builds on:** ADR rendezvous-0001 (LEO-RDV-001, `plan_rendezvous`), ADR rendezvous-0002
-  (whole-trajectory safety constraints, and the TudatPy re-flight whose backend this campaign
+  (whole-trajectory safety constraints), ADR rendezvous-0003
+  (the TudatPy re-flight whose backend this campaign
   records as missing), ADR relative-0001 (`propagate_pair`, `_accel`), E3-03/E7-05
   (sample-size planning, hold-out discipline), E10-03/R-06 (clustered intervals, source sensitivity)
 
