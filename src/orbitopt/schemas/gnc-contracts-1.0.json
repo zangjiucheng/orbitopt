@@ -1,0 +1,620 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://github.com/zangjiucheng/orbitopt/schemas/gnc-contracts-1.0.json",
+ "title": "orbitopt closed-loop GNC record + clock contracts v1.0 (E13-01)",
+ "description": "One versioned bundle for the five closed-loop GNC record kinds (truth, observation, estimate, command, control_event) plus the simulation clock declaration and the replayable run log. The whole bundle shares one schema_version: the five record kinds reference each other (an estimate names its observations, a control event names its command), so they cannot version independently. Record payloads reuse the E12-01 vocabulary: Observation/Estimate embed a relative-state-1.0 document (validated by orbitopt.mission.multispacecraft.relative_state_from_dict, not re-invented here), epochs are MJD2000 labels on a declared timescale, and the run log may embed a multi-spacecraft-mission-1.0 roster and a canonical-plan digest (E12-08) to bind a run to a sealed plan. The clock timescale is restricted to the uniform scales TT/TDB: a simulation clock must be linear, and a UTC label inside a loop silently jumps by a leap second. Cross-field rules (latency equals t_available minus t_sample, a covariance is symmetric, a record's epoch equals clock t0 plus its elapsed seconds) are checked by orbitopt.gnc, not here. Compatibility policy: adding optional fields is not a breaking change; removing/renaming/narrowing is and gets gnc-contracts-2.0.json.",
+ "type": "object",
+ "$defs": {
+  "epoch": {
+   "type": "object",
+   "required": [
+    "mjd2000",
+    "timescale"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "mjd2000": {
+     "type": "number"
+    },
+    "timescale": {
+     "enum": [
+      "TT",
+      "TDB"
+     ]
+    }
+   }
+  },
+  "vec3": {
+   "type": "array",
+   "minItems": 3,
+   "maxItems": 3,
+   "items": {
+    "type": "number"
+   },
+   "description": "Three finite numbers (finiteness enforced by orbitopt.gnc.contracts, matching orbitopt.mission.multispacecraft)."
+  },
+  "relative_state": {
+   "type": "object",
+   "required": [
+    "schema_version",
+    "target_id",
+    "chaser_id",
+    "epoch",
+    "frame",
+    "position_m",
+    "velocity_m_s"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "schema_version": {
+     "const": "1.0"
+    },
+    "target_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "chaser_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "epoch": {
+     "$ref": "#/$defs/epoch"
+    },
+    "frame": {
+     "enum": [
+      "GCRS",
+      "ECEF",
+      "LAUNCH_ECI"
+     ]
+    },
+    "position_m": {
+     "$ref": "#/$defs/vec3"
+    },
+    "velocity_m_s": {
+     "$ref": "#/$defs/vec3"
+    },
+    "metadata": {
+     "type": "object",
+     "propertyNames": {
+      "type": "string"
+     }
+    }
+   },
+   "description": "The E12-01 relative state (relative-state-1.0 shape, parsed by orbitopt.mission.multispacecraft.relative_state_from_dict). Sensors measure and the filter estimates the CHASER-minus-TARGET state; the frame enum matches E12-01 exactly -- a relative-state-1.0 document is valid in either direction."
+  },
+  "truth": {
+   "type": "object",
+   "required": [
+    "schema_version",
+    "record_kind",
+    "record_id",
+    "t_s",
+    "epoch",
+    "spacecraft_id",
+    "frame",
+    "position_m",
+    "velocity_m_s"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "schema_version": {
+     "const": "1.0"
+    },
+    "record_kind": {
+     "const": "truth"
+    },
+    "record_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "t_s": {
+     "type": "number",
+     "minimum": 0,
+     "description": "Elapsed seconds from the run's clock t0 (the E12-03 convention: loop timing is elapsed seconds, never wall-clock arithmetic)."
+    },
+    "epoch": {
+     "$ref": "#/$defs/epoch"
+    },
+    "spacecraft_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "frame": {
+     "enum": [
+      "GCRS",
+      "ECEF",
+      "LAUNCH_ECI"
+     ]
+    },
+    "position_m": {
+     "$ref": "#/$defs/vec3"
+    },
+    "velocity_m_s": {
+     "$ref": "#/$defs/vec3"
+    },
+    "metadata": {
+     "type": "object",
+     "propertyNames": {
+      "type": "string"
+     }
+    }
+   },
+   "description": "Truth: the ACTUAL simulated absolute state of one spacecraft at a dynamics epoch. Producers: the simulator only. Consumed by loggers and by offline evaluators -- NEVER by guidance/navigation: orbitopt.gnc.feed rejects any truth record (see the E13-01 isolation tests)."
+  },
+  "observation": {
+   "type": "object",
+   "required": [
+    "schema_version",
+    "record_kind",
+    "record_id",
+    "sensor_id",
+    "t_sample_s",
+    "t_available_s",
+    "latency_s",
+    "relative_state",
+    "covariance_position_m2"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "schema_version": {
+     "const": "1.0"
+    },
+    "record_kind": {
+     "const": "observation"
+    },
+    "record_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "sensor_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "t_sample_s": {
+     "type": "number",
+     "minimum": 0,
+     "description": "Instant the sensor shutter opened (the clock's declared sample time, never an accumulated drift)."
+    },
+    "t_available_s": {
+     "type": "number",
+     "minimum": 0,
+     "description": "Instant the measurement reaches the navigation filter: t_sample_s + latency_s (checked equal by orbitopt.gnc). A dropped frame is simply ABSENT -- remaining timestamps never shift."
+    },
+    "latency_s": {
+     "type": "number",
+     "minimum": 0
+    },
+    "relative_state": {
+     "$ref": "#/$defs/relative_state"
+    },
+    "covariance_position_m2": {
+     "type": "array",
+     "minItems": 9,
+     "maxItems": 9,
+     "items": {
+      "type": "number"
+     },
+     "description": "Measurement position covariance, 3x3 row-major, metres^2. Symmetry/non-negative diagonals checked by orbitopt.gnc."
+    },
+    "covariance_velocity_m2_s2": {
+     "type": "array",
+     "minItems": 9,
+     "maxItems": 9,
+     "items": {
+      "type": "number"
+     },
+     "description": "Optional measurement velocity covariance, 3x3 row-major, (m/s)^2 (a range-only sensor has none to state). Same rules as covariance_position_m2."
+    },
+    "metadata": {
+     "type": "object",
+     "propertyNames": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "estimate": {
+   "type": "object",
+   "required": [
+    "schema_version",
+    "record_kind",
+    "record_id",
+    "estimator_id",
+    "t_update_s",
+    "relative_state",
+    "covariance_rel_m2",
+    "source_observation_ids"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "schema_version": {
+     "const": "1.0"
+    },
+    "record_kind": {
+     "const": "estimate"
+    },
+    "record_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "estimator_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "t_update_s": {
+     "type": "number",
+     "minimum": 0,
+     "description": "Filter-update instant (elapsed s from clock t0)."
+    },
+    "relative_state": {
+     "$ref": "#/$defs/relative_state"
+    },
+    "covariance_rel_m2": {
+     "type": "array",
+     "minItems": 36,
+     "maxItems": 36,
+     "items": {
+      "type": "number"
+     },
+     "description": "State covariance, 6x6 row-major (rho then rho_dot, m and m/s). Symmetry/non-negative diagonals checked by orbitopt.gnc."
+    },
+    "source_observation_ids": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "string",
+      "minLength": 1
+     },
+     "description": "Every observation this update used. An estimate with no provenance is a truth leak in disguise; the run-log validator checks these ids exist and were available by t_update_s."
+    },
+    "metadata": {
+     "type": "object",
+     "propertyNames": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "command": {
+   "type": "object",
+   "required": [
+    "schema_version",
+    "record_kind",
+    "record_id",
+    "actuator_id",
+    "t_tick_s",
+    "t_execute_s",
+    "delta_v_eci_m_s",
+    "source_estimate_id"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "schema_version": {
+     "const": "1.0"
+    },
+    "record_kind": {
+     "const": "command"
+    },
+    "record_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "actuator_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "t_tick_s": {
+     "type": "number",
+     "minimum": 0,
+     "description": "Control tick the law ran at."
+    },
+    "t_execute_s": {
+     "type": "number",
+     "minimum": 0,
+     "description": "Instant the command asks the actuator to fire (>= t_tick_s)."
+    },
+    "delta_v_eci_m_s": {
+     "$ref": "#/$defs/vec3"
+    },
+    "source_estimate_id": {
+     "type": "string",
+     "minLength": 1,
+     "description": "The estimate the law read. Mandatory: every command must be attributable to a navigation estimate, never to truth (see feed.GuidanceInput)."
+    },
+    "metadata": {
+     "type": "object",
+     "propertyNames": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "control_event": {
+   "type": "object",
+   "required": [
+    "schema_version",
+    "record_kind",
+    "record_id",
+    "actuator_id",
+    "t_exec_s",
+    "executed",
+    "commanded_delta_v_m_s",
+    "realized_delta_v_m_s",
+    "source_command_id"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "schema_version": {
+     "const": "1.0"
+    },
+    "record_kind": {
+     "const": "control_event"
+    },
+    "record_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "actuator_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "t_exec_s": {
+     "type": "number",
+     "minimum": 0
+    },
+    "executed": {
+     "type": "boolean"
+    },
+    "commanded_delta_v_m_s": {
+     "$ref": "#/$defs/vec3"
+    },
+    "realized_delta_v_m_s": {
+     "$ref": "#/$defs/vec3",
+     "description": "Delta-v the actuator ACTUALLY delivered (0-vector when executed is false). The commanded-minus-realized gap is execution error -- the E12-10 campaign's dominant failure source, recorded per burn here."
+    },
+    "source_command_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "metadata": {
+     "type": "object",
+     "propertyNames": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "clock": {
+   "type": "object",
+   "required": [
+    "schema_version",
+    "kind",
+    "t0",
+    "dt_dynamics_s",
+    "sensors",
+    "estimator",
+    "controller"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "schema_version": {
+     "const": "1.0"
+    },
+    "kind": {
+     "const": "orbitopt.gnc.clock"
+    },
+    "t0": {
+     "$ref": "#/$defs/epoch"
+    },
+    "dt_dynamics_s": {
+     "type": "number",
+     "exclusiveMinimum": 0
+    },
+    "sensors": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "object",
+      "required": [
+       "sensor_id",
+       "period_s",
+       "phase_s",
+       "latency_s",
+       "dropped_ticks"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "sensor_id": {
+        "type": "string",
+        "minLength": 1
+       },
+       "period_s": {
+        "type": "number",
+        "exclusiveMinimum": 0
+       },
+       "phase_s": {
+        "type": "number",
+        "minimum": 0,
+        "description": "First sample time after t0; must be < period_s. Sampling domains are DECLARED, not derived: sensor ticks, filter updates and control ticks share only t0 (E13-01)."
+       },
+       "latency_s": {
+        "type": "number",
+        "minimum": 0
+       },
+       "dropped_ticks": {
+        "type": "array",
+        "items": {
+         "type": "integer",
+         "minimum": 0
+        },
+        "description": "Tick indices this sensor does not deliver (frame drop). A drop removes one record; every timestamp is computed from the tick index independently, so a drop NEVER shifts later samples."
+       }
+      }
+     }
+    },
+    "estimator": {
+     "type": "object",
+     "required": [
+      "estimator_id",
+      "period_s",
+      "phase_s",
+      "latency_s"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "estimator_id": {
+       "type": "string",
+       "minLength": 1
+      },
+      "period_s": {
+       "type": "number",
+       "exclusiveMinimum": 0
+      },
+      "phase_s": {
+       "type": "number",
+       "minimum": 0
+      },
+      "latency_s": {
+       "type": "number",
+       "minimum": 0,
+       "description": "Filter compute time after an update before the estimate is readable."
+      }
+     }
+    },
+    "controller": {
+     "type": "object",
+     "required": [
+      "actuator_id",
+      "period_s",
+      "phase_s",
+      "latency_s"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "actuator_id": {
+       "type": "string",
+       "minLength": 1
+      },
+      "period_s": {
+       "type": "number",
+       "exclusiveMinimum": 0
+      },
+      "phase_s": {
+       "type": "number",
+       "minimum": 0
+      },
+      "latency_s": {
+       "type": "number",
+       "minimum": 0,
+       "description": "Command-to-fire delay (uplink + valve); the ControlEvent records what really happened at t_exec_s."
+      }
+     }
+    },
+    "metadata": {
+     "type": "object",
+     "propertyNames": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "run_log": {
+   "type": "object",
+   "required": [
+    "schema_version",
+    "kind",
+    "run_id",
+    "clock",
+    "config",
+    "records",
+    "run_digest"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "schema_version": {
+     "const": "1.0"
+    },
+    "kind": {
+     "const": "orbitopt.gnc.run-log"
+    },
+    "run_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "mission": {
+     "type": [
+      "object",
+      "null"
+     ],
+     "description": "Optional multi-spacecraft-mission-1.0 roster (E12-01); orbitopt.gnc.recording re-validates it and gates its epoch against the clock t0."
+    },
+    "plan_digest": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "pattern": "^[0-9a-f]{64}$",
+     "description": "Optional E12-08 canonical plan digest this closed-loop run flew against."
+    },
+    "config": {
+     "type": "object",
+     "propertyNames": {
+      "type": "string"
+     },
+     "description": "The free-form run configuration (noise parameters, guidance gains, sim settings): what made this log what it is."
+    },
+    "clock": {
+     "$ref": "#/$defs/clock"
+    },
+    "records": {
+     "type": "object",
+     "required": [
+      "truth",
+      "observation",
+      "estimate",
+      "command",
+      "control_event"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "truth": {
+       "type": "array",
+       "items": {
+        "$ref": "#/$defs/truth"
+       }
+      },
+      "observation": {
+       "type": "array",
+       "items": {
+        "$ref": "#/$defs/observation"
+       }
+      },
+      "estimate": {
+       "type": "array",
+       "items": {
+        "$ref": "#/$defs/estimate"
+       }
+      },
+      "command": {
+       "type": "array",
+       "items": {
+        "$ref": "#/$defs/command"
+       }
+      },
+      "control_event": {
+       "type": "array",
+       "items": {
+        "$ref": "#/$defs/control_event"
+       }
+      }
+     }
+    },
+    "run_digest": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$",
+     "description": "Canonical sha256 over (run_id, mission, plan_digest, config, clock, records), floats quantized like the E12-08 digests (orbitopt.rendezvous.canonical.DIGEST_SIGNIFICANT_DIGITS)."
+    }
+   }
+  }
+ }
+}

@@ -188,3 +188,14 @@ silently move the goalposts. `benchmark_report()` emits the suite as a
 verification-report-1.0 document (no new schema); `orbitopt benchmarks` runs
 it from the command line (exit 1 on failure).
 
+
+## Closed-loop GNC data contracts and the simulation clock (task #418)
+
+`orbitopt.gnc` defines the five records a closed-loop run exchanges — truth, observation,
+estimate, command, control event — under one versioned schema bundle (`gnc-contracts-1.0.json`),
+and a `ClockSpec` that makes every sample/update/tick instant a pure function of its tick index,
+so a dropped frame deletes a record and never retimes a later one. Plant truth flows only into the
+append-only `GncRunLog`: guidance sees a `GuidanceInput` exposing one `Estimate`, the guidance-side
+module contains no truth/plant identifier (AST-enforced), and the run log's causal gates plus the
+E12-08-policy run digest make a sealed log replayable, tamper-evident evidence. Rationale:
+ADR gnc-0001; usage: `docs/gnc-contract.md`.
