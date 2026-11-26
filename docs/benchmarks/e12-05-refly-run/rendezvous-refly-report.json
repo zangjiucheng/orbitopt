@@ -1,13 +1,13 @@
 {
-  "digest": "82eee3b7aa31ee5198fa3c466f0e069dc0185d28603001e897c77b906b9b6ce5",
+  "digest": "1445b1f9db830e4474ce776e780bcf3b2bca022e0fabcc757246f9c1e8270230",
   "inputs": {
     "crossenv": {
-      "envelope_digest": "sha256:dec9f54a71f3300e9db490e3255aac96cb3a98752de579a75bdc18641b45b1a2",
+      "envelope_digest": "sha256:831888eba26a3f16c198c19edc370f097c2b7e3f474c6f80fd98c8151d7c2806",
       "stage_report": {
         "env": "tudat",
         "environment": {
           "argv": [
-            "/u9/j7zang/cf-compute/395/src/orbitopt/crossenv/__main__.py",
+            "/u9/j7zang/cf-compute/411/src/orbitopt/crossenv/__main__.py",
             "stage",
             "--plan",
             "docs/benchmarks/e12-05-refly-run/plan.resolved.json",
@@ -146,7 +146,7 @@
         "measured": {
           "numerical.point_mass_kepler_position": 1.0596587066205948e-07,
           "numerical.point_mass_kepler_velocity": 6.170639437434709e-11,
-          "numerical.tudat_step_axis_60s": 15.245439206888284,
+          "numerical.tudat_step_axis_60s": 21.636352071220063,
           "numerical.tudat_tolerance_axis": 0.0
         },
         "note": "TudatPy tolerance/step sweeps + Kepler closed-form compare of the same point-mass model",
@@ -211,41 +211,41 @@
       "convergence": {
         "scenario": "transfer leg [t1, t2], point mass, both crafts, error against the tightest run of the same axis at the latest common sample epoch (see compare_epoch_s per axis)",
         "step_axis": {
-          "bound_at_60s_m": 15.245439206888284,
-          "bound_at_60s_m_s": 15.3528120733782,
+          "bound_at_60s_m": 21.636352071220063,
+          "bound_at_60s_m_s": 0.022895886204697402,
           "compare_epoch_s": 3800.594992458956,
-          "observed_order": 4.100617882143959,
+          "observed_order": 4.1007543214261055,
           "reference_step_s": 3.75,
           "runs": [
             {
               "integrator": "rk4",
-              "position_error_m": 1519.2090158649705,
+              "position_error_m": 2157.0155885230624,
               "step_size": 180.0,
-              "velocity_error_m_s": 1531.2497340420039
+              "velocity_error_m_s": 2.3521814611397827
             },
             {
               "integrator": "rk4",
-              "position_error_m": 15.245439206888284,
+              "position_error_m": 21.636352071220063,
               "step_size": 60.0,
-              "velocity_error_m_s": 15.3528120733782
+              "velocity_error_m_s": 0.022895886204697402
             },
             {
               "integrator": "rk4",
-              "position_error_m": 0.8952876049403916,
+              "position_error_m": 1.2704278567027927,
               "step_size": 30.0,
-              "velocity_error_m_s": 0.9013594258232086
+              "velocity_error_m_s": 0.0013307869083903781
             },
             {
               "integrator": "rk4",
-              "position_error_m": 0.05394516498079427,
+              "position_error_m": 0.07654366477428096,
               "step_size": 15.0,
-              "velocity_error_m_s": 0.05430338984352829
+              "velocity_error_m_s": 7.972594198147394e-05
             },
             {
               "integrator": "rk4",
-              "position_error_m": 0.0031211305006327637,
+              "position_error_m": 0.0044283625792992925,
               "step_size": 7.5,
-              "velocity_error_m_s": 0.0031414902008044627
+              "velocity_error_m_s": 4.598912078591201e-06
             }
           ]
         },
@@ -294,7 +294,7 @@
       },
       "env": {
         "argv": [
-          "/u9/j7zang/cf-compute/395/src/orbitopt/crossenv/__main__.py",
+          "/u9/j7zang/cf-compute/411/src/orbitopt/crossenv/__main__.py",
           "stage",
           "--plan",
           "docs/benchmarks/e12-05-refly-run/plan.resolved.json",
@@ -343,11 +343,11 @@
   "label": "E12-05 independent re-flight of leo-rdv-001 (TudatPy two-spacecraft re-fly)",
   "propagations": [],
   "provenance": {
-    "numpy": "2.5.5",
+    "numpy": "2.0.0",
     "orbitopt": "installed (version unknown)",
-    "pykep": "2.6.4",
-    "python": "3.12.13",
-    "tudatpy": "1.1.0"
+    "pykep": "2.6.2",
+    "python": "3.10.22",
+    "tudatpy": "1.0.0"
   },
   "residuals": [
     {
@@ -397,7 +397,7 @@
       "evidence": "numerical_consistency",
       "name": "numerical.tudat_step_axis_60s",
       "note": "legacy fixed-step RK4 at 60 s vs the 3.75 s reference at their latest common sample epoch 3800.6 s (fixed-step grids straddle the leg end; comparing last samples would measure a time offset, not integration error); observed order 4.10, expected ~4)",
-      "position_residual_m": 15.245439206888284,
+      "position_residual_m": 21.636352071220063,
       "reference": "RK4 reference at step 3.75 s",
       "tolerance": {
         "position_m": 50.0

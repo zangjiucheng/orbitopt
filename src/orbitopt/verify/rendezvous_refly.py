@@ -166,9 +166,68 @@ class ReflyBackendError(RuntimeError):
 # worker: the TudatPy re-flight (runs in the tudat environment)
 # ---------------------------------------------------------------------------
 
-def _maneuvers_digest(plan) -> str:
+def maneuvers_digest(plan) -> str:
+    """Canonical digest of a plan's maneuver sequence (epochs + inertial
+    delta-v) -- the identity every cross-environment comparison keys on
+    (E12-08: one source of truth, ``orbitopt.rendezvous.canonical``, whose
+    digest is byte-identical to the original worker-side computation)."""
     from orbitopt.rendezvous.canonical import maneuvers_sha256
     return maneuvers_sha256(plan)
+
+
+def sweep_table(runs: list, leg_end_epoch: float, epoch_anchor: float) -> tuple[list, float]:
+    """Convergence-sweep table: every run compared against the last (the
+    reference run) at the latest common sample epoch <= ``leg_end_epoch``.
+
+    Each run is ``(settings, epochs, history)``, and every history row is the
+    concatenated pair state ``[r_c, v_c, r_d, v_d]`` (what
+    ``np.concatenate([chief, deputy], axis=1)`` of two ``[r, v]`` state
+    histories produces). The graded metrics are therefore the norm over BOTH
+    crafts' position columns ``d[0:3] + d[6:9]`` and over both crafts'
+    velocity columns ``d[3:6] + d[9:12]`` -- taking ``d[:6]`` / ``d[6:]``
+    would mix position with velocity in one norm and report a deputy position
+    difference as a velocity in m/s (task #411). Returns the table and the
+    comparison epoch in mission time.
+    """
+    common = min(float(epochs[epochs <= leg_end_epoch + 1e-6][-1])
+                 for _, epochs, _ in runs)
+    ref = runs[-1][2][int(np.argmin(np.abs(runs[-1][1] - common)))]
+    table = []
+    for settings, epochs, hist in runs[:-1]:
+        d = hist[int(np.argmin(np.abs(epochs - common)))] - ref
+        table.append({**settings,
+                      "position_error_m": float(np.linalg.norm(
+                          np.concatenate([d[0:3], d[6:9]]))),
+                      "velocity_error_m_s": float(np.linalg.norm(
+                          np.concatenate([d[3:6], d[9:12]])))})
+    return table, common - epoch_anchor
+
+
+def physics_verdict_from_refly_report(report, plan) -> bool | None:
+    """``physics_verified`` derived from evidence (E12-09, the task-#261 rule):
+    True/False only when an independent re-flight result exists **for this
+    very plan** -- the report is a rendezvous-refly report of the same
+    mission, its main-model maneuver digest equals ``plan``'s, and the
+    independent-model line reached a verdict (``passed`` -> True, ``failed``
+    -> False). No report, a foreign/mismatched one, or a ``not_checked``
+    independent line all answer ``None``: not assessed, never a fake pass.
+    ``report`` is the loaded report document or the path to one."""
+    if report is None:
+        return None
+    try:
+        doc = report if isinstance(report, Mapping) else json.loads(
+            Path(str(report)).read_text(encoding="utf-8"))
+        if doc.get("kind") != REPORT_KIND:
+            return None
+        inputs = doc["inputs"]
+        if inputs.get("mission_id") != plan.mission_id:
+            return None
+        if inputs["main_model"]["maneuvers_sha256"] != maneuvers_digest(plan):
+            return None
+        result = inputs["error_sources"]["independent_model_agreement"]["result"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return {"passed": True, "failed": False}.get(result)
 
 
 def _maneuver_diff_magnitude(plan_a, plan_b) -> float:
@@ -346,18 +405,6 @@ def run_refly_in_current_environment(cfg, config_path=None, plan=None) -> dict:
         ed, sd = coast(prop, pm_run["deputy_t1_burnt"], t1, tof, where + " (deputy)")
         return ec, np.concatenate([sc, sd], axis=1)
 
-    def sweep(runs: list) -> tuple[list, float]:
-        common = min(float(epochs[epochs <= leg_end_epoch + 1e-6][-1])
-                     for _, epochs, _ in runs)
-        ref = runs[-1][2][int(np.argmin(np.abs(runs[-1][1] - common)))]
-        table = []
-        for settings, epochs, hist in runs[:-1]:
-            d = hist[int(np.argmin(np.abs(epochs - common)))] - ref
-            table.append({**settings,
-                          "position_error_m": float(np.linalg.norm(d[:6])),
-                          "velocity_error_m_s": float(np.linalg.norm(d[6:]))})
-        return table, common - epoch_anchor
-
     tol_runs = []
     for f in SWEEP_TOL_FACTORS + (SWEEP_TOL_REF_FACTOR,):
         p = propagator(j2=False, integrator="dop853", step_size=60.0,
@@ -365,14 +412,14 @@ def run_refly_in_current_environment(cfg, config_path=None, plan=None) -> dict:
         epochs, hist = pair_history(p, "sweep tolerance axis")
         tol_runs.append((dict(integrator="dop853", rtol_factor=f, rtol=VERIFY_RTOL * f,
                               atol=VERIFY_ATOL * f), epochs, hist))
-    tol_table, tol_common = sweep(tol_runs)
+    tol_table, tol_common = sweep_table(tol_runs, leg_end_epoch, epoch_anchor)
 
     step_runs = []
     for s in list(SWEEP_RK4_STEPS_S) + [SWEEP_RK4_REF_STEP_S]:
         epochs, hist = pair_history(propagator(j2=False, integrator="rk4", step_size=s),
                                     f"sweep step axis ({s} s)")
         step_runs.append((dict(integrator="rk4", step_size=s), epochs, hist))
-    step_table, step_common = sweep(step_runs)
+    step_table, step_common = sweep_table(step_runs, leg_end_epoch, epoch_anchor)
 
     def observed_order(table: list, ratio: float) -> float:
         slopes = [math.log(a["position_error_m"] / b["position_error_m"]) / math.log(ratio)
@@ -412,7 +459,7 @@ def run_refly_in_current_environment(cfg, config_path=None, plan=None) -> dict:
         "plan_digest": rendezvous_plan_digest(cfg, plan),
         "environment": environment_record("tudat"),
         "plan": plan.to_dict(),
-        "maneuvers_sha256": _maneuvers_digest(plan),
+        "maneuvers_sha256": maneuvers_digest(plan),
         "mission_in_refly_env": {
             "position_error_m": vmain.position_error_m,
             "relative_speed_m_s": vmain.relative_speed_m_s,
@@ -565,7 +612,7 @@ def main_model_key_quantities(cfg, plan) -> dict:
         "min_approach_epoch_s": float(t1 + grid[idx]),
         "arrival_rel_lvlh_m": [float(x) for x in vmain.arrival_rel_lvlh_m],
         "arrival_rel_lvlh_rate_m_s": [float(x) for x in vmain.arrival_rel_lvlh_rate_m_s],
-        "maneuvers_sha256": _maneuvers_digest(plan),
+        "maneuvers_sha256": maneuvers_digest(plan),
         "verification_checks": dict(vmain.checks),
         "verification_passed": bool(vmain.passed),
     }

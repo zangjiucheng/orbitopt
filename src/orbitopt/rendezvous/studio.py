@@ -39,13 +39,22 @@ Honesty rules this bridge keeps:
   regenerating the run directory reproduces it; both go on record in the
   manifest's ``assumptions``;
 * ``backend`` stays ``None``: the studio bridge is not a Flight Lab physics
-  backend (the E1-01 vocabulary has no rendezvous engine).
+  backend (the E1-01 vocabulary has no rendezvous engine);
+* ``physics_verified`` is NEVER hard-coded (E12-09, task #261 rule): it is
+  true only when an independent TudatPy re-flight of THIS plan (matching
+  maneuver digest) passed its independent-model line -- pass the report path
+  from ``python -m orbitopt.verify.rendezvous_refly`` as ``refly_report=``.
+  Without that evidence it records ``None`` (not assessed), never a fake pass;
+* ``optimizer_converged`` is graded the same way the refly report's
+  ``optimizer.landing_residual`` line grades it: the independently
+  re-propagated landing residual within the config's own Newton tolerance.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -148,7 +157,8 @@ def _norms(rows: np.ndarray) -> np.ndarray:
 
 def build_studio_run(cfg: RendezvousMissionConfig, *, sample_dt_s: float = DEFAULT_SAMPLE_DT_S,
                      tolerances: MissionTolerances | None = None,
-                     sealed: SealedRendezvousPlan | None = None) -> StudioRun:
+                     sealed: SealedRendezvousPlan | None = None,
+                     refly_report: Mapping | str | Path | None = None) -> StudioRun:
     """Replay ``cfg`` as a Flight Lab run on its canonical sealed plan (E12-08).
 
     The trajectory is ``sealed`` when given -- digest-verified against
@@ -160,12 +170,19 @@ def build_studio_run(cfg: RendezvousMissionConfig, *, sample_dt_s: float = DEFAU
     constraints therefore raises here and produces no artefacts at all --
     Mission Studio cannot show green for a mission the safety gate refuses.
 
+    ``refly_report`` (report document or path) is the independent TudatPy
+    re-flight evidence that sets ``physics_verified`` (E12-09): only a report
+    whose maneuver digest matches the flown plan yields a True/False verdict,
+    anything else leaves the field ``None`` (not assessed).
+
     Raises what the canonical planning, ``validate_mission`` or the
     replay/report consistency guards raise; a mission that cannot be planned
     or whose tracks disagree with the shared reference produces no artefacts.
     """
     if not (math.isfinite(sample_dt_s) and 0.5 <= sample_dt_s <= 60.0):
         raise ValueError(f"sample_dt_s must be in [0.5, 60] s, got {sample_dt_s!r}")
+    from orbitopt.verify.rendezvous_refly import physics_verdict_from_refly_report
+
     if sealed is None:
         sealed = canonical_plan(cfg)
     else:
@@ -277,8 +294,8 @@ def build_studio_run(cfg: RendezvousMissionConfig, *, sample_dt_s: float = DEFAU
         tracks=(target_track, chaser_track),
         events=(),
         verification=Verification(
-            optimizer_converged=True,
-            physics_verified=True,
+            optimizer_converged=bool(ver.position_error_m <= cfg.optimizer.newton_tol_m),
+            physics_verified=physics_verdict_from_refly_report(refly_report, plan),
             mission_constraints_passed=bool(ver.passed and (safety is None
                                                             or safety.get("passed"))),
             backend_self_check=None,
