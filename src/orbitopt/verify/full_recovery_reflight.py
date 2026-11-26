@@ -335,8 +335,9 @@ def _twin_flight(mission_factory: Callable[[], _Mission], sep_state: Any,
 
     Returns the acceptance quantities: boostback cutoff state, entry-window
     peak q / proper load (cutoff -> corridor-h0 crossing, the same window the
-    main model grades), and the terminal descent to ellipsoid height zero
-    (impact) with bisection-refined time/state. ``density_fn`` swaps only
+    main model grades) with the height and time of the peak, and the terminal
+    descent to ellipsoid height zero (impact) with bisection-refined
+    time/state. ``density_fn`` swaps only
     the density profile (pressure/sound speed stay US76) -- used for the
     atmosphere budget line, which measures the *form* difference between
     the two models' density profiles; it is a labelled perturbation
@@ -415,6 +416,8 @@ def _twin_flight(mission_factory: Callable[[], _Mission], sep_state: Any,
     cut: dict | None = None
     prev_on = False
     q_max = 0.0
+    q_max_h_m = 0.0
+    q_max_t_s = 0.0
     g_max = 0.0
     h0_t = None
     h0_v = None
@@ -441,10 +444,11 @@ def _twin_flight(mission_factory: Callable[[], _Mission], sep_state: Any,
                    "velocity_ecef_m_s": [float(v) for v in y[3:6]],
                    "mass_kg": float(y[6])}
         prev_on = on
-        if cut is not None and h0_t is None:
-            q_max = max(q_max, q1)
-            g_max = max(g_max, g1)
         h_old = _twin_geodetic(y[:3])[2]
+        if cut is not None and h0_t is None:
+            if q1 > q_max:                     # E11R-02: the peak's locus is part
+                q_max, q_max_h_m, q_max_t_s = q1, h_old, t   # of the record, not
+            g_max = max(g_max, g1)             # just its value
         h_new = _twin_geodetic(y2[:3])[2]
         if cut is not None and h0_t is None and h_new <= corridor_h0_m < h_old:
             frac0 = (h_old - corridor_h0_m) / (h_old - h_new)
@@ -469,6 +473,8 @@ def _twin_flight(mission_factory: Callable[[], _Mission], sep_state: Any,
                           float(np.dot(yf[3:6], yf[:3] / np.linalg.norm(yf[:3]))),
                       "mass_kg": float(yf[6])}
             return {"cut": cut, "entry_max_q_pa": q_max,
+                    "entry_peak_q_height_m": q_max_h_m,
+                    "entry_peak_q_t_s": q_max_t_s,
                     "entry_max_proper_g": g_max, "corridor_h0_cross_t_s": h0_t,
                     "h0_speed_m_s": h0_v, "h0_position_ecef_m": h0_pos,
                     "h0_mass_kg": h0_mass, "h0_tilt_deg": h0_tilt,
