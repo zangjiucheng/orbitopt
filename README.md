@@ -42,6 +42,7 @@ and viewer-only options. Use `orbitopt --help` for commands.
 - [Mission Control](docs/guide.md): 3D view, timeline, telemetry and verification.
 - [Flight Lab](docs/flightlab.md): ascent, recovery and run comparisons;
   [Vehicle view](docs/flightlab.md#vehicle-view) shows the catalog and flight overlays.
+- [Orbital rendezvous](docs/computed-mission.md#e12-orbital-rendezvous): replay the target and chaser, and inspect safety and dispersion results.
 - [Computed mission](docs/computed-mission.md): replay ascent and recovery,
   then propagate across TudatPy and G-FOLD environments;
   [Kourou/Starbase designs](docs/e5-08-new-vehicle-report.md) report remaining qualification gaps.

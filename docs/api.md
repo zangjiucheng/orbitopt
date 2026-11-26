@@ -28,6 +28,7 @@ The [quickstart](quickstart.md) introduces common workflows. The
 | Task | Python reference |
 |---|---|
 | Load a plan, run stages and verify exchanges | [Cross-environment API]({{ site.baseurl }}/api/python/orbitopt.crossenv/) |
+| Plan, grade and replay rendezvous | [Rendezvous API]({{ site.baseurl }}/api/python/orbitopt.rendezvous/), [relative dynamics]({{ site.baseurl }}/api/python/orbitopt.relative/), [multi-spacecraft mission]({{ site.baseurl }}/api/python/orbitopt.mission.multispacecraft/) |
 | Construct and grade the shared separation handoff | [Coupled branches]({{ site.baseurl }}/api/python/orbitopt.mission.coupled_branches/) |
 | Plan and replay grid-fin entry | [Boostback and replay callbacks]({{ site.baseurl }}/api/python/orbitopt.flightlab.recovery.boostback/), [grid-fin model and guidance]({{ site.baseurl }}/api/python/orbitopt.flightlab.recovery.grid_fins/) |
 | Read recorded booster burns and bridge a powered staging gap | [Engine status]({{ site.baseurl }}/api/python/orbitopt.flightlab.engine_status/), [powered handoff]({{ site.baseurl }}/api/python/orbitopt.mission.powered_bridge/) |

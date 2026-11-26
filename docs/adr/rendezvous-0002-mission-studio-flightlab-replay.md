@@ -68,8 +68,8 @@ existing panels, not a parallel UI. Three contract facts shape the design:
 
 ## Consequences
 
-- LEO-RDV-001 replays with `orbitopt rendezvous studio -o runs/leo-rdv-001-studio`
-  and opens in Flight Lab / `orbitopt view` with no further setup.
+- Generate LEO-RDV-001 with `orbitopt rendezvous studio -o runs/leo-rdv-001-studio`,
+  then select `leo-rdv-001-studio` in Mission Control's **Runs** workspace.
 - The sidecar is display metadata: `scene_export` skips malformed markers rather
   than failing a render, and no UI path reads it into physics.
 - A future event-bearing contract version can absorb the sidecar's `events`

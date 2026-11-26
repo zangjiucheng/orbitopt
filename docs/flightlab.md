@@ -3,9 +3,11 @@
 Flight Lab simulates ascent and booster recovery from code or the CLI.
 Mission Control's **Runs**, **Vehicles** and **Compare** workspaces display
 saved flights, vehicle definitions and run comparisons.
+The [rendezvous workflow](computed-mission.md#e12-orbital-rendezvous) generates
+saved target and chaser trajectories for the same viewer.
 
 <figure>
-  <a href="assets/flightlab-runs-starbase.png"><img src="assets/flightlab-runs-starbase.png" alt="Starbase RTLS replay with a detailed coastal map, ascent and recovery tracks, and per-stage telemetry"></a>
+  <a href="assets/flightlab-runs-starbase.png"><img src="assets/flightlab-runs-starbase.png" alt="Starbase RTLS replay with a coastal map, synchronized chart crosshairs and continuous timeline lanes"></a>
   <figcaption>Sentinel-2 cloudless 2024 by EOX IT Services GmbH, containing modified Copernicus Sentinel data 2024 (CC BY-NC-SA 4.0).</figcaption>
 </figure>
 
@@ -54,11 +56,14 @@ mass flow relative to the track's peak burn rate. Propellant marked `(est.)`
 uses track mass minus dry mass and any attached upper stages, from the
 vehicle file matched by the run's digest. Unknown dry masses remain missing.
 
-**Double-click a telemetry plot** to open a larger, live-linked window.
-Scroll to zoom around the pointer, right-drag to pan, hover for time and
-interpolated per-series values, and use **Reset view** to restore the full range.
-Left-click or drag still seeks the shared mission clock. The same controls
-work on the inline plots and comparison telemetry.
+In **Runs → Telemetry**, hover over a chart to read interpolated values at the
+same time across all charts. Scroll to zoom and right-drag or Shift-drag to pan
+the shared time range. Click or drag to seek, then use **← / →** while the chart
+has focus to step through its samples. The timeline shows one continuous bar
+per lane, with phase boundaries marked along it.
+
+**Double-click a chart** to open a larger view that follows the mission clock.
+Use **Reset view** there to restore the full time range.
 
 In **Runs → Telemetry**, open **Plots** next to the tabs to choose which
 charts to display. Mission Control remembers your selection across runs and
@@ -84,7 +89,7 @@ Separation tooltips show the velocity difference and the applicable limit.
 Recorded mission replays use their mission configuration when the run and
 input digests match. Other runs use the standalone staging check.
 
-[![Expanded propellant plot showing stage and booster estimates with a precise time readout](assets/flightlab-telemetry-detail.png)](assets/flightlab-telemetry-detail.png)
+[![Expanded propellant chart with a crosshair and interpolated upper-stage and booster estimates](assets/flightlab-telemetry-detail.png)](assets/flightlab-telemetry-detail.png)
 
 Targets and vehicles are edited in YAML or through the Python designer API;
 the desktop mode renders runs rather than configuring or flying them.

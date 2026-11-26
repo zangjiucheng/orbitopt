@@ -20,6 +20,35 @@ dispersion reliability are separate results.
 | E5-07 cross-environment | Recorded ascent + TudatPy mission leg with parking propagation. | Propagation evidenced in the foreign environment; joint gate NOT-DECLARED by design. |
 | E5-08 design variants | Powered-entry RTLS at Kourou and Starbase. | DC7 and Starbase pass the nominal joint physical gate. The original gap remains a negative regression. [Results](e5-08-new-vehicle-report.md). |
 | E8-01 reference check | Compares sealed records with raw backend output and closed forms. | No new flight; validates extraction, continuity and stated reference comparisons. |
+| E12 rendezvous | Plans and replays a target and chaser in LEO. | Nominal, independent re-flight and dispersion results cover the declared reference scenario. [Replay and evidence](#e12-orbital-rendezvous). |
+
+## E12 orbital rendezvous
+
+Generate the packaged **LEO-RDV-001** run from the repository root:
+
+```bash
+orbitopt rendezvous studio -o runs/leo-rdv-001-studio
+orbitopt
+```
+
+In Mission Control, select the run under **Runs**. Follow the target and
+chaser, inspect maneuvers and safety checks in **Flight → Rendezvous**, and
+select range, relative speed or the radial, along-track and cross-track
+components in **Telemetry → Plots**. Use `--config PATH` for another mission
+and `--dt S` to set the replay sample interval. The run directory includes
+`mission.json`, `replay.json` and the Rendezvous panel's `rendezvous.json`.
+See the [replay format](adr/rendezvous-0002-mission-studio-flightlab-replay.md).
+
+| Evidence | LEO-RDV-001 result |
+|---|---|
+| Nominal plan | The two-impulse plan uses **10.344 m/s** total Δv. Safety checks evaluate the approach trajectory. [Safety constraints](adr/rendezvous-0002-safety-constraints-whole-trajectory.md). |
+| Independent re-flight | The recorded nonlinear TudatPy re-flight passed its declared checks. Its closest approach was about **909 m**. [Re-flight report](benchmarks/e12_05_independent_refly.json). |
+| Dispersion campaign | **14 of 264** hold-out cases passed under the declared stress levels (5.3%, Wilson 95% CI 3.2–8.7%). There were 181 arrival-accuracy failures and 69 safety failures. [Campaign design](adr/rendezvous-0003-dispersion-campaign-not-a-safety-factor.md). |
+
+For the independent re-flight in a TudatPy environment, use
+`orbitopt crossenv run --plan src/orbitopt/data/crossenv_e12_05_plan.yaml`.
+See the [independent verification design](adr/rendezvous-0002-independent-refly-tudatpy.md)
+and [CW validity study](benchmarks/e12_02_cw_validity.md) for the model limits.
 
 ## Replay and view the RTLS mission
 
@@ -142,8 +171,8 @@ telemetry or independently validated landing is claimed. See
 | E11-05 | Starbase’s independent debris impact-speed discrepancy remained +12.70% against a 12% tolerance. [Aero qualification](benchmarks/e11_05_starbase_aero_qualification.md). |
 | E11-06 | The experimental Starbase replay records two booster ignitions, one for boostback and one for continuous entry and landing. Its saved landing and orbit re-flight checks pass. [Inspect the run](flightlab.md#viewing-runs-in-mission-control). [Gate record: missions, re-flights, FL-304 rates with CIs](#e11-06-gate-record-task-390). |
 
-If you have the E11-06 run locally, open **Runs → e11-06-starbase-continuous-burn**
-to inspect the burn sequence and fin telemetry.
+Add the archived `tests/data/mission/reference/e11-06-starbase-continuous-burn/mission-hs/recovery/run`
+folder in **Runs** to inspect the hot-staging burn sequence and fin telemetry.
 
 At hot staging, the mission chain can bridge the gap between sampled tracks
 using observed acceleration and mass flow while the parent is still firing.
@@ -154,17 +183,13 @@ and the saved replay shows a nominal simulation.
 
 ### E11-06 gate record (task #390)
 
-The release gate re-derived the continuous-burn design on the pinned landing
-stack and archived the evidence under
-`tests/data/mission/reference/e11-06-starbase-continuous-burn{,-reports}`:
-both mission chains (sealed-ascent and hot-staging) grade all 72 checks green;
-the independent SECO orbit re-flights pass; the FL-304 Monte Carlo (36 samples,
-seeds 8/9/10) records 33/36 pinned-script, 36/36 per-sample re-planning, with
-cluster-bootstrap 95% CIs; and the two ignitions are checked in the flown track
-itself (`tests/test_e11_06_gate_record.py`). The README there records what
-stays red or assumed: the DESIGN ASSUMPTION fin drag, the twin speed/q delta,
-the E5-08-era unassessed placeholders, and the search's first-feasible-stops
-reproduction variance (6/36 to 33/36 by seed) — nothing relaxed to pass.
+Both archived mission chains pass all 71 listed checks. The separate SECO
+orbit re-flights also pass. With the selected design, FL-304 recorded 33/36
+landings on each ascent with a pinned script and 36/36 with per-sample
+re-planning on the sealed ascent. The independent twin's peak dynamic
+pressure differs by **18.2%** against a **12%**
+band. The [gate archive](../tests/data/mission/reference/e11-06-starbase-continuous-burn-reports/README.md)
+includes the intervals, fin drag assumption and search sensitivity.
 
 ## Earlier studies
 

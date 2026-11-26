@@ -11,11 +11,11 @@ E11-06 branch itself records its headline results in its commit message
 - `../e11-06-starbase-continuous-burn/` — the run artifacts:
   - `mission/` — the full two-stage LEO mission chain on the sealed E5-08c
     Starbase ascent (`run_two_stage_leo`, cold-staging ascent + continuous-burn
-    recovery). `mission.verification.json` verdict: **all 72 checks pass**.
+    recovery). `mission.verification.json` lists **71 passing checks**.
   - `mission-hs/` — the same chain on a re-derived hot-staging ascent
     (ascent run under `ascent-hs/`); the powered bridge grades the
     continuous-burn handoffs (`recovery.handoff-entry-landing`,
-    `recovery.joint-*-landing`): **all 72 checks pass**.
+    `recovery.joint-*-landing`): **all 71 listed checks pass**.
   - `ascent-refly/` — a copy of the sealed E5-08c ascent with the independent
     SECO orbit re-fly written back (`orbit-refly-*` checks green; the two
     E5-08-era `recovery-*` placeholders stay red — they were never assessed in
