@@ -1,8 +1,15 @@
 """Mission Studio bridge: replay a planned rendezvous inside Flight Lab (E12-06).
 
 One entry point, :func:`build_studio_run`, turns a rendezvous mission config
-(plan + independent verification included) into the artefacts Flight Lab
-replays and the E12-01 multi-spacecraft contract audits:
+into the artefacts Flight Lab replays and the E12-01 multi-spacecraft
+contract audits. From E12-08 the replayed trajectory is the CANONICAL sealed
+plan (:func:`orbitopt.rendezvous.canonical.canonical_plan` -- the E12-04
+safety-constrained optimum when the config has a ``safety`` block): a caller
+may pass an already-sealed plan, and the bridge verifies its digests against
+the config before drawing a single sample, so the studio run provably
+re-flies the same trajectory the safety report, the TudatPy re-flight and
+the Monte Carlo campaign graded, and the sidecar records the consumed
+``plan_digest``.
 
 * a **FlightResult v1 run directory** (``orbitopt.flightlab.contract``): two
   ``BodyTrack``s -- ``target`` and ``chaser`` -- on one shared epoch and one
@@ -12,10 +19,11 @@ replays and the E12-01 multi-spacecraft contract audits:
   hold-point volume, maneuver/hold events on the shared epoch) and its
   ``multispacecraft-replay-1.0`` unified replay, both validated before write;
 * a ``rendezvous.json`` **sidecar** with the plan, the verification report,
-  the maneuver events and the scene marker samples. The sidecar exists
-  because the ``flight-result-1.0`` event vocabulary is ascent-only and the
-  v1 schemas are frozen: rendezvous events never enter ``events.json``, the
-  UI reads them here instead (E12-06 decision).
+  the E12-04 safety summary, the maneuver events and the scene marker
+  samples. The sidecar exists because the ``flight-result-1.0`` event
+  vocabulary is ascent-only and the v1 schemas are frozen: rendezvous events
+  never enter ``events.json``, the UI reads them here instead (E12-06
+  decision).
 
 Honesty rules this bridge keeps:
 
@@ -64,9 +72,14 @@ from orbitopt.mission.multispacecraft import (
 )
 from orbitopt.relative.frames import eci_to_lvlh, lvlh_to_eci
 from orbitopt.relative.propagation import EARTH_J2, propagate_pair
+from orbitopt.rendezvous.canonical import (
+    SealedRendezvousPlan,
+    canonical_config_sha256,
+    canonical_plan,
+    verify_seal,
+)
 from orbitopt.rendezvous.config import RendezvousMissionConfig
-from orbitopt.rendezvous.planner import initial_states, plan_rendezvous
-from orbitopt.rendezvous.verify import verify_plan
+from orbitopt.rendezvous.planner import initial_states
 from orbitopt.timescales import utc_datetime_to_mjd2000, utc_mjd2000_to_tdb_seconds
 
 #: Sidecar schema tag (this module's own document, not a frozen v1 schema).
@@ -81,8 +94,10 @@ MISSION_EPOCH_UTC = "2026-01-01T00:00:00Z"
 #: mass dynamics; recorded as a manifest assumption, never as flown data.
 TRACK_MASS_KG = 5000.0
 
-#: Keep-out sphere radius [m] centred on the target at arrival. The check is
-#: the LIVE chaser-to-centre distance, not an observed zone crossing.
+#: Keep-out sphere radius [m] centred on the target at arrival, used when the
+#: config carries no E12-04 ``safety`` block; with one, the zone takes the
+#: config's own ``keep_out_radius_m``. The check is the LIVE chaser-to-centre
+#: distance, not an observed zone crossing.
 KEEPOUT_RADIUS_M = 500.0
 
 #: Fixed marker digests (precedent: ``sixdof/two_stage.py``): this run has no
@@ -102,33 +117,12 @@ _KEEPOUT_ZONE = "keepout"
 
 def rendezvous_config_sha256(cfg: RendezvousMissionConfig) -> str:
     """Digest of the mission configuration the run replays (stands in for
-    the FlightTarget digest of an ascent run): canonical JSON of every
-    config field, sha256."""
-    doc = {
-        "mission_id": cfg.mission_id,
-        "title": cfg.title,
-        "dynamics": {"frame": cfg.dynamics.frame, "mu": cfg.dynamics.mu, "j2": cfg.dynamics.j2},
-        "target": {"altitude_m": cfg.target.altitude_m,
-                   "inclination_deg": cfg.target.inclination_deg,
-                   "raan_deg": cfg.target.raan_deg,
-                   "argument_of_latitude_deg": cfg.target.argument_of_latitude_deg},
-        "chaser": {"altitude_m": cfg.chaser.altitude_m,
-                   "initial_separation_m": cfg.chaser.initial_separation_m},
-        "hold_point_rel_lvlh": list(cfg.hold_point_rel_lvlh),
-        "delta_v_budget_m_s": cfg.delta_v_budget_m_s,
-        "max_position_error_m": cfg.max_position_error_m,
-        "max_relative_speed_m_s": cfg.max_relative_speed_m_s,
-        "windows": {"drift_max_s": cfg.windows.drift_max_s,
-                    "transfer_tof_min_s": cfg.windows.transfer_tof_min_s,
-                    "transfer_tof_max_s": cfg.windows.transfer_tof_max_s},
-        "phasing": {"departure_gate_y_m": cfg.phasing.departure_gate_y_m,
-                    "gate_scan_step_s": cfg.phasing.gate_scan_step_s},
-        "optimizer": {"newton_tol_m": cfg.optimizer.newton_tol_m,
-                      "newton_max_iter": cfg.optimizer.newton_max_iter,
-                      "jacobian_eps_m_s": cfg.optimizer.jacobian_eps_m_s,
-                      "golden_max_iter": cfg.optimizer.golden_max_iter},
-    }
-    return hashlib.sha256(json.dumps(doc, sort_keys=True).encode("utf-8")).hexdigest()
+    the FlightTarget digest of an ascent run): the canonical full-config
+    digest of :func:`orbitopt.rendezvous.canonical.canonical_config_sha256`
+    -- every field including the E12-04 ``safety`` block, so a config that
+    changes only its safety constraints cannot ride on the previous run's
+    identity (the pre-E12-08 subset digest omitted that block)."""
+    return canonical_config_sha256(cfg)
 
 
 @dataclass(frozen=True)
@@ -153,19 +147,34 @@ def _norms(rows: np.ndarray) -> np.ndarray:
 
 
 def build_studio_run(cfg: RendezvousMissionConfig, *, sample_dt_s: float = DEFAULT_SAMPLE_DT_S,
-                     tolerances: MissionTolerances | None = None) -> StudioRun:
-    """Plan, independently verify, and replay ``cfg`` as a Flight Lab run.
+                     tolerances: MissionTolerances | None = None,
+                     sealed: SealedRendezvousPlan | None = None) -> StudioRun:
+    """Replay ``cfg`` as a Flight Lab run on its canonical sealed plan (E12-08).
 
-    Raises what ``plan_rendezvous``/``verify_plan``/``validate_mission`` raise
-    -- a mission that cannot be planned or whose tracks disagree with the
-    shared reference produces no artefacts.
+    The trajectory is ``sealed`` when given -- digest-verified against
+    ``cfg`` first, so a plan sealed under another config is a hard failure,
+    never a quietly greener run -- and a fresh
+    :func:`orbitopt.rendezvous.canonical.canonical_plan` of the same config
+    otherwise: the E12-04 safety-constrained optimum whenever the config
+    carries a ``safety`` block. A custom config that violates its own safety
+    constraints therefore raises here and produces no artefacts at all --
+    Mission Studio cannot show green for a mission the safety gate refuses.
+
+    Raises what the canonical planning, ``validate_mission`` or the
+    replay/report consistency guards raise; a mission that cannot be planned
+    or whose tracks disagree with the shared reference produces no artefacts.
     """
     if not (math.isfinite(sample_dt_s) and 0.5 <= sample_dt_s <= 60.0):
         raise ValueError(f"sample_dt_s must be in [0.5, 60] s, got {sample_dt_s!r}")
-    plan = plan_rendezvous(cfg)
-    ver = verify_plan(cfg, plan)
+    if sealed is None:
+        sealed = canonical_plan(cfg)
+    else:
+        verify_seal(cfg, sealed)
+    plan, ver, safety = sealed.plan, sealed.verification, sealed.safety
     frame, mu = cfg.dynamics.frame, cfg.dynamics.mu
     j2 = EARTH_J2 if cfg.dynamics.j2 else 0.0
+    keepout_r = float(cfg.safety.keep_out_radius_m) if cfg.safety is not None \
+        else KEEPOUT_RADIUS_M
     m1, m2 = plan.maneuvers
     t1 = float(plan.drift_end_s)
     t2 = float(plan.arrival_epoch_s)
@@ -221,7 +230,13 @@ def build_studio_run(cfg: RendezvousMissionConfig, *, sample_dt_s: float = DEFAU
     def epoch_at(t: float) -> Epoch:
         # TDB label: to_tdb_seconds() is then exact, so an event at track end
         # is inside coverage (UTC labels would drift ms against the track).
-        return Epoch(mjd2000=(tdb0 + t) / 86400.0 + 0.5, timescale="TDB")
+        # The mjd2000 round-trip can still overshoot by an ulp of the day
+        # (~ps) -- nudge down until the event lands at or before its sample
+        # time, or a track-end event would fall outside coverage.
+        mjd = (tdb0 + t) / 86400.0 + 0.5
+        while (mjd - 0.5) * 86400.0 - tdb0 > t:  # Epoch(TDB).to_tdb_seconds()
+            mjd = math.nextafter(mjd, 0.0)
+        return Epoch(mjd2000=mjd, timescale="TDB")
 
     hold_center_eci = np.asarray(
         lvlh_to_eci(rt2, vt2, hold, np.zeros(3), frame, where="studio: hold zone")[0], dtype=float)
@@ -253,18 +268,21 @@ def build_studio_run(cfg: RendezvousMissionConfig, *, sample_dt_s: float = DEFAU
             ("backend omitted: the studio bridge is not a Flight Lab physics backend; "
              "maneuver/hold/zone events live in the rendezvous.json sidecar because the "
              "flight-result-1.0 event vocabulary is ascent-only."),
-            (f"keep-out sphere radius {KEEPOUT_RADIUS_M:.0f} m centred on the target at "
-             "arrival; the check grades the live chaser-to-centre distance, not an observed "
-             "zone crossing."),
+            (f"keep-out sphere radius {keepout_r:.0f} m centred on the target at arrival"
+             + (" (config safety block)" if cfg.safety is not None
+                else " (no safety block: studio default)")
+             + "; the check grades the live chaser-to-centre distance, not an observed"
+               " zone crossing."),
         ),
         tracks=(target_track, chaser_track),
         events=(),
         verification=Verification(
             optimizer_converged=True,
             physics_verified=True,
-            mission_constraints_passed=bool(ver.passed),
+            mission_constraints_passed=bool(ver.passed and (safety is None
+                                                            or safety.get("passed"))),
             backend_self_check=None,
-            checks=_run_checks(cfg, plan, ver, keepout_min),
+            checks=_run_checks(cfg, plan, ver, keepout_min, keepout_r, safety),
         ),
     )
 
@@ -279,7 +297,7 @@ def build_studio_run(cfg: RendezvousMissionConfig, *, sample_dt_s: float = DEFAU
         ),
         zones=(
             Zone(_KEEPOUT_ZONE, center_m=tuple(float(x) for x in keepout_center),
-                 radius_m=KEEPOUT_RADIUS_M),
+                 radius_m=keepout_r),
             Zone(_HOLD_POINT_ZONE, center_m=tuple(float(x) for x in hold_center_eci),
                  radius_m=cfg.max_position_error_m),
         ),
@@ -299,10 +317,25 @@ def build_studio_run(cfg: RendezvousMissionConfig, *, sample_dt_s: float = DEFAU
                          + "; ".join(f"{c.id}({c.reason_code})" for c in report.failures))
     replay_doc = build_unified_replay(mission, (target_track, chaser_track), tolerances)
 
+    safety_summary = None if safety is None else {
+        "plan_digest": safety.get("plan_digest") or sealed.plan_digest,
+        "passed": bool(safety.get("passed")),
+        "checks": {name: {"passed": bool(c.get("passed")),
+                          "min_margin": c.get("min_margin"), "unit": c.get("unit")}
+                   for name, c in (safety.get("checks") or {}).items()},
+        "passive_releases": len(safety.get("passive_contingency") or []),
+    }
     sidecar = {
         "schema_version": SIDECAR_SCHEMA_VERSION,
         "mission_id": cfg.mission_id,
         "config_sha256": run.target_sha256,
+        "plan_digest": sealed.plan_digest,
+        "initial_states_sha256": sealed.initial_states_sha256,
+        "maneuvers_sha256": sealed.maneuvers_sha256,
+        "sealed_plan": {"passed": sealed.passed,
+                        "canonical_planner": "plan_rendezvous_safe (E12-04) when the config "
+                                             "carries a safety block, else plan_rendezvous"},
+        "safety": safety_summary,
         "epoch_utc": MISSION_EPOCH_UTC,
         "timeline_end_s": t2,
         "plan": plan.to_dict(),
@@ -316,10 +349,10 @@ def build_studio_run(cfg: RendezvousMissionConfig, *, sample_dt_s: float = DEFAU
         ],
         "keepout": {
             "zone": _KEEPOUT_ZONE,
-            "radius_m": KEEPOUT_RADIUS_M,
+            "radius_m": keepout_r,
             "center_eci_at_arrival_m": [float(x) for x in keepout_center],
             "min_range_m": keepout_min,
-            "respected": keepout_min >= KEEPOUT_RADIUS_M,
+            "respected": keepout_min >= keepout_r,
         },
         "hold_point": {
             "zone": _HOLD_POINT_ZONE,
@@ -340,11 +373,6 @@ def build_studio_run(cfg: RendezvousMissionConfig, *, sample_dt_s: float = DEFAU
     }
     return StudioRun(run=run, mission_doc=mission_to_dict(mission), replay_doc=replay_doc,
                      sidecar=sidecar, keepout_min_range_m=keepout_min)
-
-
-def _plan(cfg: RendezvousMissionConfig):
-    from orbitopt.rendezvous.planner import plan_rendezvous
-    return plan_rendezvous(cfg)
 
 
 def _check_against_report(rho: np.ndarray, rho_dot: np.ndarray, hold: np.ndarray,
@@ -381,7 +409,8 @@ def _track(body_id: str, frame: str, t_s: np.ndarray, r: np.ndarray, v: np.ndarr
     )
 
 
-def _run_checks(cfg: RendezvousMissionConfig, plan, ver, keepout_min: float) -> tuple[Check, ...]:
+def _run_checks(cfg: RendezvousMissionConfig, plan, ver, keepout_min: float,
+                keepout_r: float, safety: dict | None) -> tuple[Check, ...]:
     named = {
         "gate-within-drift-window": (ver.checks["gate_within_drift_window"],
                                      plan.drift_end_s, cfg.windows.drift_max_s, "s"),
@@ -393,9 +422,18 @@ def _run_checks(cfg: RendezvousMissionConfig, plan, ver, keepout_min: float) -> 
                                             ver.relative_speed_m_s, cfg.max_relative_speed_m_s, "m/s"),
         "delta-v-within-budget": (ver.checks["delta_v_within_budget"],
                                   ver.total_delta_v_m_s, cfg.delta_v_budget_m_s, "m/s"),
-        "keepout-respected": (keepout_min >= KEEPOUT_RADIUS_M,
-                              keepout_min, KEEPOUT_RADIUS_M, "m"),
+        "keepout-respected": (keepout_min >= keepout_r, keepout_min, keepout_r, "m"),
     }
+    if safety is not None:
+        for name, c in (safety.get("checks") or {}).items():
+            named[f"safety-{name.replace('_', '-')}"] = (
+                bool(c.get("passed")), c.get("min_margin") if c.get("min_margin") is not None
+                else 1.0, 0.0, c.get("unit") or "")
+        releases = safety.get("passive_contingency") or []
+        named["safety-passive-releases"] = (
+            all(bool(r.get("passed")) for r in releases),
+            min((float(r.get("keep_out_margin_m", 0.0)) for r in releases), default=0.0),
+            0.0, "m")
     return tuple(Check(id=cid, passed=passed, value=float(value), limit=float(limit), unit=unit)
                  for cid, (passed, value, limit, unit) in named.items())
 
