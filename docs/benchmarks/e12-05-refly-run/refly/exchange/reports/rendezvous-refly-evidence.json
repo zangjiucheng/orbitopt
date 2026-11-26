@@ -10,12 +10,12 @@
  "plan_digest": "11cb8cd24bd8c96391576703000cf14b42cde2de5978d4b0d8631ea4a34e9bfb",
  "environment": {
   "env": "tudat",
-  "python_executable": "/u9/j7zang/envs/tudatpy/bin/python",
+  "python_executable": "/u9/j7zang/mamba/envs/orbitopt/bin/python",
   "python": "3.10.22",
   "platform": "Linux-6.8.0-149-generic-x86_64-with-glibc2.39",
   "toolchain": {
    "python": "3.10.22",
-   "orbitopt": "unknown (source tree; see git_sha)",
+   "orbitopt": "0.1.0",
    "numpy": "2.0.0",
    "scipy": "1.13.1",
    "astropy": "6.1.7",
@@ -29,14 +29,14 @@
    "opentsiolkovsky_sha256": "8041a9b5806136eb0e9d2a7b2c9ebed58ccc1876198cbf5c6373c440cb182c4c"
   },
   "argv": [
-   "/u9/j7zang/orbitopt-408/src/orbitopt/crossenv/__main__.py",
+   "/u9/j7zang/cf-compute/417/src/orbitopt/crossenv/__main__.py",
    "stage",
    "--plan",
-   "/u9/j7zang/e1205_out/e12-05-refly-run/plan.resolved.json",
+   "docs/benchmarks/e12-05-refly-run/plan.resolved.json",
    "--stage",
    "refly",
    "--out",
-   "/u9/j7zang/e1205_out/e12-05-refly-run"
+   "docs/benchmarks/e12-05-refly-run"
   ]
  },
  "plan": {

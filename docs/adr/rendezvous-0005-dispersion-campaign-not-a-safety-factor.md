@@ -8,7 +8,7 @@
 - **Evidence:** `docs/benchmarks/e12_07_rendezvous_robustness.json`,
   `tests/test_e12_07_rendezvous_robustness.py`, `benchmarks/bench_e12_07_rendezvous_robustness.py`;
   independent re-flight: `docs/benchmarks/e12_10_independent_reflight.json`,
-  `benchmarks/bench_e12_10_independent_reflight.py`, ADR rendezvous-0004
+  `benchmarks/bench_e12_10_independent_reflight.py`, ADR rendezvous-0006
 - **Builds on:** ADR rendezvous-0001 (LEO-RDV-001, `plan_rendezvous`), ADR rendezvous-0002
   (whole-trajectory safety constraints), ADR rendezvous-0003
   (the TudatPy re-flight whose backend this campaign
@@ -177,7 +177,7 @@ rule, so it belongs here.
    one boundary per failure class) with no verdict flips and every per-sample
    residual inside the declared cross-model bands. See
    `docs/benchmarks/e12_10_independent_reflight.json` (classification block) and
-   ADR rendezvous-0004.
+   ADR rendezvous-0006.
 
    Outcome: under the E12-10 criteria the hold-out rate is 13/264 (4.9 %, cluster
    CI 2.7–7.6 %) against this campaign's 14/264. The TudatPy re-flight of 23

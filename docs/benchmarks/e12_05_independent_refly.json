@@ -1,13 +1,13 @@
 {
  "kind": "orbitopt.bench.e12-05-independent-refly",
  "schema_version": "1.0",
- "generated_utc": "2026-11-26T18:19:08+00:00",
+ "generated_utc": "2026-11-26T22:19:36+00:00",
  "provenance": {
-  "python": "3.12.13",
-  "numpy": "2.5.5",
-  "orbitopt": "installed (version unknown)",
-  "tudatpy": "1.1.0",
-  "pykep": "2.6.4"
+  "python": "3.10.22",
+  "numpy": "2.0.0",
+  "orbitopt": "0.1.0",
+  "tudatpy": "1.0.0",
+  "pykep": "2.6.2"
  },
  "mission_id": "leo-rdv-001",
  "backend": "present",

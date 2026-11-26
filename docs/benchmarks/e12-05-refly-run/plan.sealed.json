@@ -1,6 +1,6 @@
 {
  "kind": "orbitopt.rendezvous.sealed-plan",
- "schema_version": "1.0",
+ "schema_version": "1.1",
  "canonical_planner": "orbitopt.rendezvous.canonical_plan (E12-04 plan_rendezvous_safe when the config has a safety block; E12-03 plan_rendezvous otherwise)",
  "mission_id": "leo-rdv-001",
  "config_sha256": "7915deab3bbe302d0f6d8b444339e6927e23179aab1014d85e320b9568bb0549",
@@ -42836,5 +42836,8 @@
    }
   ]
  },
- "passed": true
+ "passed": true,
+ "verification_digest": "15e4addcd493054654195c4230a862c066fba761e9a04ff01691cab95f6ca5f2",
+ "environment_digest": "5d8b7ba4defb38a6d1e86552f60ff7bf772eae52a0e3c882d80f5bcf9404e566",
+ "artifact_sha256": "3e2d8e993050584a22cf5e9ddacf4e068b60635e12e00de13876a279de012b3c"
 }
