@@ -1,13 +1,13 @@
 {
  "kind": "orbitopt.bench.e12-05-independent-refly",
  "schema_version": "1.0",
- "generated_utc": "2026-11-25T16:28:32+00:00",
+ "generated_utc": "2026-11-26T07:14:13+00:00",
  "provenance": {
-  "python": "3.12.13",
-  "numpy": "2.5.5",
+  "python": "3.10.22",
+  "numpy": "2.0.0",
   "orbitopt": "installed (version unknown)",
-  "tudatpy": "1.1.0",
-  "pykep": "2.6.4"
+  "tudatpy": "1.0.0",
+  "pykep": "2.6.2"
  },
  "mission_id": "leo-rdv-001",
  "backend": "present",
@@ -57,7 +57,7 @@
    "measured": {
     "numerical.point_mass_kepler_position": 1.0596587066205948e-07,
     "numerical.point_mass_kepler_velocity": 6.170639437434709e-11,
-    "numerical.tudat_step_axis_60s": 15.245439206888284,
+    "numerical.tudat_step_axis_60s": 21.636352071220063,
     "numerical.tudat_tolerance_axis": 0.0
    }
   },
@@ -197,39 +197,39 @@
     {
      "integrator": "rk4",
      "step_size": 180.0,
-     "position_error_m": 1519.2090158649705,
-     "velocity_error_m_s": 1531.2497340420039
+     "position_error_m": 2157.0155885230624,
+     "velocity_error_m_s": 2.3521814611397827
     },
     {
      "integrator": "rk4",
      "step_size": 60.0,
-     "position_error_m": 15.245439206888284,
-     "velocity_error_m_s": 15.3528120733782
+     "position_error_m": 21.636352071220063,
+     "velocity_error_m_s": 0.022895886204697402
     },
     {
      "integrator": "rk4",
      "step_size": 30.0,
-     "position_error_m": 0.8952876049403916,
-     "velocity_error_m_s": 0.9013594258232086
+     "position_error_m": 1.2704278567027927,
+     "velocity_error_m_s": 0.0013307869083903781
     },
     {
      "integrator": "rk4",
      "step_size": 15.0,
-     "position_error_m": 0.05394516498079427,
-     "velocity_error_m_s": 0.05430338984352829
+     "position_error_m": 0.07654366477428096,
+     "velocity_error_m_s": 7.972594198147394e-05
     },
     {
      "integrator": "rk4",
      "step_size": 7.5,
-     "position_error_m": 0.0031211305006327637,
-     "velocity_error_m_s": 0.0031414902008044627
+     "position_error_m": 0.0044283625792992925,
+     "velocity_error_m_s": 4.598912078591201e-06
     }
    ],
    "compare_epoch_s": 3800.594992458956,
    "reference_step_s": 3.75,
-   "bound_at_60s_m": 15.245439206888284,
-   "bound_at_60s_m_s": 15.3528120733782,
-   "observed_order": 4.100617882143959
+   "bound_at_60s_m": 21.636352071220063,
+   "bound_at_60s_m_s": 0.022895886204697402,
+   "observed_order": 4.1007543214261055
   }
  },
  "declared_tolerances": {

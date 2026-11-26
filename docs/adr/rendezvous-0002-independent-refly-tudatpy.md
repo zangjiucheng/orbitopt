@@ -70,8 +70,13 @@ magnitude above the integration error being certified.
    2.3e5 m wrong at 7.5 km/s), not integration error. Every sweep run is
    compared against the 3.75 s reference at their latest common epoch ≤ leg
    end; the adaptive DOP853 tolerance axis terminates exactly at leg end
-   (residual 0.0 m, order n/a), the step axis shows order **4.10** and a 15.2
-   m bound at 60 s steps, 3× below the declared 50 m.
+    (residual 0.0 m, order n/a), the step axis shows order **4.10** and a 21.6
+    m position / 0.023 m/s velocity bound at 60 s steps, 2.3× below the
+    declared 50 m. Each metric is sliced per quantity -- position over both
+    crafts' position columns of the concatenated state, velocity over the
+    velocity columns; the original baseline normed the mixed pair state
+    (`d[:6]` / `d[6:]`), reporting the deputy position difference as a
+    velocity, corrected and regenerated under E12-09 (task #411).
 
 5. **The circular-orbit Kepler replay is exact.** Both initial orbits are
    exactly circular (e ≈ 0), where the classical Kepler-element pipeline
@@ -84,6 +89,13 @@ magnitude above the integration error being certified.
 - Cross-model band 1.0 m / 0.01 m/s stands with >6000× margin (measured
   1.6e-4 m / 5.9e-8 m/s); CW bands 600 m / 0.5 m/s hold at measured 252.7 m /
   0.20 m/s, documenting how much the linearized planner model costs.
+- The E12-09 slice correction (task #411) does not move any E12-05 hold-point
+  conclusion: the headline agreement compares the acceptance quantities
+  directly, never through the sweep slicing, and repeats at 1.6e-4 m /
+  passed. Only the numerical line's sweep columns change — the step-axis 60 s
+  position bound moves 15.2 → 21.6 m (still 2.3× inside its 50 m band) and
+  the step-axis velocity column becomes a real 0.023 m/s instead of the
+  deputy position difference it used to show.
 - The obliquity lesson generalizes: *any* frame change in a J2 mission is a
   physics change, not a bookkeeping one; the guard comment lives at the
   rotation site so the next frame edit meets it first.

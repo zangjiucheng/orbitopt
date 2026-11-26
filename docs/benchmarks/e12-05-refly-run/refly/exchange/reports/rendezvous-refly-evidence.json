@@ -5,7 +5,7 @@
  "frame": "GCRS",
  "propagation_frame": "ECLIPJ2000",
  "epoch_anchor_s": 0.0,
- "config_sha256": "ca3fde120751186cc4ddafb5244d364c406900cfa5ac5cb5fd77e24d978697a9",
+ "config_sha256": "507dad7a1bcbaf5ed8f551e54830c74191e2d1c35e088e9682fb7d8d76908d16",
  "environment": {
   "env": "tudat",
   "python_executable": "/u9/j7zang/envs/tudatpy/bin/python",
@@ -27,7 +27,7 @@
    "opentsiolkovsky_sha256": "8041a9b5806136eb0e9d2a7b2c9ebed58ccc1876198cbf5c6373c440cb182c4c"
   },
   "argv": [
-   "/u9/j7zang/cf-compute/395/src/orbitopt/crossenv/__main__.py",
+   "/u9/j7zang/cf-compute/411/src/orbitopt/crossenv/__main__.py",
    "stage",
    "--plan",
    "docs/benchmarks/e12-05-refly-run/plan.resolved.json",
@@ -263,39 +263,39 @@
     {
      "integrator": "rk4",
      "step_size": 180.0,
-     "position_error_m": 1519.2090158649705,
-     "velocity_error_m_s": 1531.2497340420039
+     "position_error_m": 2157.0155885230624,
+     "velocity_error_m_s": 2.3521814611397827
     },
     {
      "integrator": "rk4",
      "step_size": 60.0,
-     "position_error_m": 15.245439206888284,
-     "velocity_error_m_s": 15.3528120733782
+     "position_error_m": 21.636352071220063,
+     "velocity_error_m_s": 0.022895886204697402
     },
     {
      "integrator": "rk4",
      "step_size": 30.0,
-     "position_error_m": 0.8952876049403916,
-     "velocity_error_m_s": 0.9013594258232086
+     "position_error_m": 1.2704278567027927,
+     "velocity_error_m_s": 0.0013307869083903781
     },
     {
      "integrator": "rk4",
      "step_size": 15.0,
-     "position_error_m": 0.05394516498079427,
-     "velocity_error_m_s": 0.05430338984352829
+     "position_error_m": 0.07654366477428096,
+     "velocity_error_m_s": 7.972594198147394e-05
     },
     {
      "integrator": "rk4",
      "step_size": 7.5,
-     "position_error_m": 0.0031211305006327637,
-     "velocity_error_m_s": 0.0031414902008044627
+     "position_error_m": 0.0044283625792992925,
+     "velocity_error_m_s": 4.598912078591201e-06
     }
    ],
    "compare_epoch_s": 3800.594992458956,
    "reference_step_s": 3.75,
-   "bound_at_60s_m": 15.245439206888284,
-   "bound_at_60s_m_s": 15.3528120733782,
-   "observed_order": 4.100617882143959
+   "bound_at_60s_m": 21.636352071220063,
+   "bound_at_60s_m_s": 0.022895886204697402,
+   "observed_order": 4.1007543214261055
   }
  },
  "ok": true,
