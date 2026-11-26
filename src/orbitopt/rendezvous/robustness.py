@@ -131,6 +131,13 @@ from orbitopt.verify.rendezvous_refly import (
     resolve_refly_backend,
 )
 
+from .canonical import (
+    SealedRendezvousPlan,
+    canonical_config_sha256,
+    consume_sealed_plan,
+    maneuvers_sha256,
+    rendezvous_plan_digest,
+)
 from .config import RendezvousMissionConfig
 from .planner import (
     RendezvousPlan,
@@ -1439,13 +1446,20 @@ class CampaignResult:
 
 
 def run_campaign(cfg: RendezvousMissionConfig, campaign: RobustnessCampaign,
-                 plan: RendezvousPlan, *, arms: Sequence[str] = ("train", "holdout"),
+                 plan: RendezvousPlan | SealedRendezvousPlan,
+                 *, arms: Sequence[str] = ("train", "holdout"),
                  jobs: int = 1, model: DisturbanceModel | None = None,
                  solo: bool = False, cross_check: bool = True,
                  grid_check: bool = True, config_path: str | Path | None = None,
                  out_dir: str | Path = "runs/e12-07-spot-check") -> CampaignResult:
     """Fly the campaign. Every arm shares the ground plan's time-of-flight; each
     arm draws on its own seed base. ``jobs > 1`` parallelises inside each arm.
+
+    ``plan`` may be a plain :class:`RendezvousPlan` or a
+    :class:`~orbitopt.rendezvous.canonical.SealedRendezvousPlan` (E12-08): a
+    sealed plan is digest-verified against ``cfg`` here -- a campaign flying
+    a plan sealed for different inputs fails before the first sample -- and
+    the ground-plan block of the result records the consumed ``plan_digest``.
 
     ``solo=True`` also runs the one-source-at-a-time lineup (same layout and
     seeds, one family enabled at a time): the marginal counterpart of the joint
@@ -1457,6 +1471,10 @@ def run_campaign(cfg: RendezvousMissionConfig, campaign: RobustnessCampaign,
     import sys
 
     import scipy
+
+    consumed_sealed = isinstance(plan, SealedRendezvousPlan)
+    if consumed_sealed:
+        plan = consume_sealed_plan(plan, cfg)
 
     flown: dict[str, ArmResult] = {}
     for name in arms:
@@ -1476,7 +1494,14 @@ def run_campaign(cfg: RendezvousMissionConfig, campaign: RobustnessCampaign,
                      "total_delta_v_m_s": plan.total_delta_v_m_s,
                      "delta_v_budget_m_s": plan.delta_v_budget_m_s,
                      "budget_margin_m_s": plan.budget_margin_m_s,
-                     "planner": "orbitopt.rendezvous.plan_rendezvous_safe (constrained optimum)"},
+                     "plan_digest": rendezvous_plan_digest(cfg, plan),
+                     "config_sha256": canonical_config_sha256(cfg),
+                     "maneuvers_sha256": maneuvers_sha256(plan),
+                     "sealed_consumed": bool(consumed_sealed),
+                     "planner": "orbitopt.rendezvous.canonical_plan (E12-04 "
+                                "plan_rendezvous_safe, constrained optimum)"
+                                if consumed_sealed or cfg.safety is not None
+                                else "orbitopt.rendezvous.plan_rendezvous"},
         arms=flown,
         cross_check=spot_check(cfg, campaign, plan, headline_arm, config_path=config_path,
                                out_dir=out_dir) if cross_check else {"state": "not_run"},

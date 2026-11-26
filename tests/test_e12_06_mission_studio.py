@@ -46,10 +46,10 @@ def test_studio_run_roundtrips_and_all_checks_pass(studio_dir):
 
 
 def test_studio_plan_matches_the_reference_verification(studio_dir):
+    from orbitopt.rendezvous.canonical import canonical_plan
     from orbitopt.rendezvous.config import load_reference_config
-    from orbitopt.rendezvous.planner import plan_rendezvous
 
-    plan = plan_rendezvous(load_reference_config())
+    plan = canonical_plan(load_reference_config()).plan
     sidecar = _sidecar(studio_dir)
     doc = sidecar["plan"]
     assert doc["drift_end_s"] == plan.drift_end_s
@@ -59,6 +59,13 @@ def test_studio_plan_matches_the_reference_verification(studio_dir):
     assert sidecar["verification"]["passed"] is True
     assert [m["magnitude_m_s"] for m in doc["maneuvers"]] == \
            [pytest.approx(m.magnitude_m_s, abs=1e-12) for m in plan.maneuvers]
+    # E12-08: the replay carries the sealed plan's identity and is the E12-04
+    # safety-constrained canonical plan: the safety summary is present, it
+    # passed, and it records the same plan digest the sidecar does.
+    assert sidecar["plan_digest"] == canonical_plan(load_reference_config()).plan_digest
+    safety = sidecar["safety"]
+    assert safety is not None and safety["passed"]
+    assert safety["plan_digest"] == sidecar["plan_digest"]
 
 
 def test_timeline_events_cover_both_maneuvers(studio_dir):
@@ -203,3 +210,55 @@ def test_cli_rendezvous_studio_writes_a_replayable_run(tmp_path):
     run = read_run(out)
     assert all(check.passed for check in run.verification.checks)
     assert (out / "rendezvous.json").is_file()
+
+
+def test_safety_gates_are_graded_as_run_checks(studio_dir):
+    run = read_run(studio_dir)
+    ids = {c.id for c in run.verification.checks}
+    assert {"safety-keep-out", "safety-terminal-cone", "safety-cross-track",
+            "safety-approach-speed", "safety-fuel-budget", "safety-time-window",
+            "safety-passive-releases"} <= ids
+    assert all(c.passed for c in run.verification.checks)
+    from orbitopt.rendezvous.config import load_reference_config
+    sidecar = _sidecar(studio_dir)
+    assert sidecar["keepout"]["radius_m"] == load_reference_config().safety.keep_out_radius_m
+
+
+def test_unsafe_custom_config_produces_no_green_run(tmp_path):
+    """E12-08: a config whose fixed safety constraints no plan can meet must
+    fail at planning, not render a run -- Mission Studio cannot show green
+    for a mission the safety gate refuses."""
+    import re
+
+    import pytest
+
+    from importlib import resources as imp_resources
+
+    from orbitopt.cli import main
+    from orbitopt.rendezvous.planner import RendezvousPlanError
+
+    raw = imp_resources.files("orbitopt").joinpath("data", "leo_rdv_001.yaml").read_text()
+    bad = re.sub(r"transfer_tof_min_s: \S+", "transfer_tof_min_s: 1600.0", raw)
+    bad = re.sub(r"transfer_tof_max_s: \S+", "transfer_tof_max_s: 1900.0", bad)
+    assert bad != raw
+    path = tmp_path / "unsafe-leo-rdv-001.yaml"
+    path.write_text(bad, encoding="utf-8")
+    out = tmp_path / "unsafe-run"
+    with pytest.raises(RendezvousPlanError):
+        main(["rendezvous", "studio", "--config", str(path), "-o", str(out)])
+    assert not (out / "rendezvous.json").exists()
+
+
+def test_cli_can_replay_a_sealed_plan_document(tmp_path):
+    from orbitopt.cli import main
+    from orbitopt.rendezvous import canonical_plan, load_reference_config, write_sealed_plan
+
+    sealed = canonical_plan(load_reference_config())
+    doc = tmp_path / "leo-rdv-001.sealed.json"
+    write_sealed_plan(sealed, doc)
+    out = tmp_path / "cli-run"
+    main(["rendezvous", "studio", "--sealed-plan", str(doc), "-o", str(out), "--json"])
+    sidecar = json.loads((out / "rendezvous.json").read_text(encoding="utf-8"))
+    assert sidecar["plan_digest"] == sealed.plan_digest
+    assert sidecar["safety"]["passed"] is True
+

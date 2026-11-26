@@ -41,6 +41,7 @@ import numpy as np
 from orbitopt.relative.frames import eci_to_lvlh
 from orbitopt.relative.propagation import EARTH_J2, propagate_pair
 
+from .canonical import canonical_config_sha256, rendezvous_plan_digest
 from .config import RendezvousConfigError, RendezvousMissionConfig, SafetyCfg
 from .planner import (
     RendezvousPlan,
@@ -138,12 +139,17 @@ class PassiveRelease:
 class SafetyReport:
     """The safety verdict for one plan: ``checks`` names every constraint
     (trajectory checks plus the fuel-budget and time-window event checks),
-    ``passive`` holds the contingency coasts. ``passed`` is the AND of all."""
+    ``passive`` holds the contingency coasts. ``passed`` is the AND of all.
+    ``plan_digest`` / ``config_sha256`` (E12-08) record the identity of the
+    plan this report graded -- the same digest the sealed canonical plan
+    carries, recomputed here from the config and plan actually consumed."""
 
     mission_id: str
     frame: str
     checks: dict[str, SafetyCheck]
     passive: tuple[PassiveRelease, ...]
+    plan_digest: str = ""
+    config_sha256: str = ""
 
     @property
     def passed(self) -> bool:
@@ -158,6 +164,8 @@ class SafetyReport:
             "mission_id": self.mission_id,
             "frame": self.frame,
             "time_note": "all epochs are elapsed seconds from the shared epoch t0",
+            "plan_digest": self.plan_digest,
+            "config_sha256": self.config_sha256,
             "passed": self.passed,
             "checks": {name: c.to_dict() for name, c in self.checks.items()},
             "passive_contingency": [p.to_dict() for p in self.passive],
@@ -377,7 +385,10 @@ def verify_plan_safety(cfg: RendezvousMissionConfig, plan: RendezvousPlan) -> Sa
         _passive_release(cfg, "gate_abort_no_burn", float(m1.epoch_s), rt1, vt1, rc1, vc1),
         _passive_release(cfg, "hold_point_coast", float(m2.epoch_s), rt2, vt2, rc2, vc2 + dv2),
     )
-    return SafetyReport(mission_id=cfg.mission_id, frame=frame, checks=checks, passive=passive)
+    return SafetyReport(mission_id=cfg.mission_id, frame=frame, checks=checks, passive=passive,
+                        plan_digest=rendezvous_plan_digest(cfg, plan),
+                        config_sha256=canonical_config_sha256(cfg))
+
 
 
 def candidate_safety_reason(cfg: RendezvousMissionConfig, sol: dict) -> str | None:
@@ -424,11 +435,17 @@ class SafetyPlanResult:
     def passed(self) -> bool:
         return self.verification.passed and self.safety.passed
 
+    @property
+    def plan_digest(self) -> str:
+        """The E12-08 identity of the plan this acceptance record qualified."""
+        return self.safety.plan_digest
+
     def to_dict(self) -> dict:
         return {
             "plan": self.plan.to_dict(),
             "verification": self.verification.to_dict(),
             "safety": self.safety.to_dict(),
+            "plan_digest": self.plan_digest,
             "passed": self.passed,
         }
 
