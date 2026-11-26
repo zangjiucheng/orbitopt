@@ -1,0 +1,228 @@
+{
+ "task": "E11R-02 E11-06 entry peak-q discrepancy error budget",
+ "generated_by": "bench_e11r_02_peak_q_error_budget.py",
+ "git_commit": "52b51c0d25411f75bb635099f014bc6862abc653",
+ "gate_record": "tests/data/mission/reference/e11-06-starbase-continuous-burn-reports/README.md",
+ "candidate": "tests/data/mission/reference/e11-06-starbase-continuous-burn/candidate.json",
+ "env": {
+  "E11_ENGINE_STAGES": "1",
+  "E11_FINS_FIXED": "1"
+ },
+ "runtime_s": 73.2,
+ "protocol": "one convention changed per twin re-fly; closure is exact (delta = profile-form line + everything else); band untouched",
+ "archive": {
+  "main_peak_q_pa": 136674.57568160773,
+  "twin_peak_q_pa": 161531.8443847428,
+  "twin_main_atmosphere_peak_q_pa": 133381.1093547043,
+  "delta_pct": 18.187192884389628
+ },
+ "rerun": {
+  "main_peak_q_pa": 135573.77968635713,
+  "main_feasible": true,
+  "corridor_speed_m_s": 241.0117788347968,
+  "tilt_deg": 11.875856414210418,
+  "twin_peak_q_pa": 159717.34637978856,
+  "twin_entry_peak_q_height_m": 11341.924122599885,
+  "twin_entry_peak_q_t_s": 388.80000000002246,
+  "main_track_peak_q_pa": 135573.77968635713,
+  "main_entry_peak_q_height_m": 9961.964820206165,
+  "main_entry_peak_q_t_s": 390.0,
+  "delta_pct": 17.80843371726179,
+  "variants": {
+   "twin": {
+    "entry_max_q_pa": 159717.34637978856,
+    "entry_peak_q_height_m": 11341.924122599885,
+    "entry_max_proper_g": 8.626156233599984,
+    "h0_speed_m_s": 221.3872403271295
+   },
+   "twin_fine": {
+    "entry_max_q_pa": 158995.38105876825,
+    "entry_peak_q_height_m": 11300.272857917473,
+    "entry_max_proper_g": 8.607057662791881,
+    "h0_speed_m_s": 221.4424534176349
+   },
+   "twin_main_profile": {
+    "entry_max_q_pa": 131110.92937120263,
+    "entry_peak_q_height_m": 10531.950400060043,
+    "entry_max_proper_g": 7.739852563615615,
+    "h0_speed_m_s": 219.01728463456695
+   },
+   "twin_main_profile_below_25km": {
+    "entry_max_q_pa": 131304.42025385864,
+    "entry_peak_q_height_m": 10531.898201814853,
+    "entry_max_proper_g": 7.743494407467922,
+    "h0_speed_m_s": 220.0696100034767
+   },
+   "twin_main_profile_above_25km": {
+    "entry_max_q_pa": 159487.27348524236,
+    "entry_peak_q_height_m": 11341.625759427436,
+    "entry_max_proper_g": 8.622419192803305,
+    "h0_speed_m_s": 221.24524212967083
+   },
+   "twin_us76_geometric": {
+    "entry_max_q_pa": 160176.29917228888,
+    "entry_peak_q_height_m": 11231.168018747121,
+    "entry_max_proper_g": 8.642022248857604,
+    "h0_speed_m_s": 221.26585637892538
+   },
+   "twin_point_mass": {
+    "entry_max_q_pa": 159351.2823322262,
+    "entry_peak_q_height_m": 11307.355524118058,
+    "entry_max_proper_g": 8.613316114408342,
+    "h0_speed_m_s": 221.27449428265783
+   },
+   "twin_no_fins": {
+    "entry_max_q_pa": 230073.4197086925,
+    "entry_peak_q_height_m": 7943.868997379206,
+    "entry_max_proper_g": 6.173536195316371,
+    "h0_speed_m_s": 617.0221298590394
+   }
+  },
+  "twin_no_fins_error": null
+ },
+ "budget_pts_of_main_peak_q": {
+  "density_profile_form": 21.1,
+  "everything_else_unexplained": -3.292,
+  "density_profile_form_below_25km_segment": 20.958,
+  "density_profile_form_above_25km_segment": 0.17,
+  "density_height_convention_geopotential": -0.339,
+  "numerics_step_halving": 0.533,
+  "gravity_j2": 0.27,
+  "entry_window_definition": 0.0,
+  "grid_fin_aero_contribution_in_twin": -51.895
+ },
+ "notes": {
+  "everything_else": "the -3.29 pts left once the profiles are shared is the twin-vs-main difference in how the boostback/entry-burn history and the Cd(Mach) coherence are built. The sub-lines measured on the twin (step halving, J2, height convention, window) account for +0.46 pts of it, and its sign is OPPOSITE to the profile line, i.e. it partly cancels rather than adds. It is a sixth of the profile line and does not change the verdict either way",
+  "grid_fin_aero_contribution_in_twin": "NOT a cross-model line: the twin re-flown with its own fin force switched off. The fins carry so much of this trajectory (a finless twin dives through the corridor at 617 m/s and its peak q is 52 pts HIGHER) that a fin-model difference could not be dismissed by hand -- it is closed instead by the closure itself: ONE convention swap, the density profile, leaves 3.29 pts, so no other single difference (fins, engine handling, guidance tracking) can account for an 18 pt gap. The archived gate listed the fin implementation as an unpriced candidate; with the closure measured it is priced out",
+  "e10_07_alias": "budget key 'atmosphere' == 'density_profile_form' here"
+ },
+ "closure_error_pts": 0.0,
+ "windows": {
+  "main_window_s": [
+   381.25,
+   402.96909906903323
+  ],
+  "twin_window_s": [
+   198.25,
+   407.9328430239472
+  ],
+  "boostback_burn_start_s": 120.5,
+  "note": "main grades entry-burn ignition -> corridor crossing, twin grades boostback cutoff -> crossing; the line prices the difference by re-windowing the main model's own track onto the twin window"
+ },
+ "density_profile_table": [
+  {
+   "h_km": 0.0,
+   "rho_main_kg_m3": 1.225,
+   "rho_twin_us76_kg_m3": 1.225000018124288,
+   "main_over_twin": 0.9999999852046632
+  },
+  {
+   "h_km": 5.0,
+   "rho_main_kg_m3": 0.6145841207202843,
+   "rho_twin_us76_kg_m3": 0.7364275650417414,
+   "main_over_twin": 0.8345479581355012
+  },
+  {
+   "h_km": 8.0,
+   "rho_main_kg_m3": 0.40630155343613783,
+   "rho_twin_us76_kg_m3": 0.5257839348298444,
+   "main_over_twin": 0.7727538376911919
+  },
+  {
+   "h_km": 11.0,
+   "rho_main_kg_m3": 0.26860595117743374,
+   "rho_twin_us76_kg_m3": 0.3647984779195798,
+   "main_over_twin": 0.7363132453547359
+  },
+  {
+   "h_km": 15.0,
+   "rho_main_kg_m3": 0.15469341521659075,
+   "rho_twin_us76_kg_m3": 0.19475143854525387,
+   "main_over_twin": 0.7943120542375098
+  },
+  {
+   "h_km": 20.0,
+   "rho_main_kg_m3": 0.07760989107927044,
+   "rho_twin_us76_kg_m3": 0.08890693639262345,
+   "main_over_twin": 0.872934038988095
+  },
+  {
+   "h_km": 25.0,
+   "rho_main_kg_m3": 0.03899,
+   "rho_twin_us76_kg_m3": 0.040081816363471176,
+   "main_over_twin": 0.9727603072283367
+  },
+  {
+   "h_km": 30.0,
+   "rho_main_kg_m3": 0.01774,
+   "rho_twin_us76_kg_m3": 0.018408821681975447,
+   "main_over_twin": 0.9636684143325529
+  },
+  {
+   "h_km": 40.0,
+   "rho_main_kg_m3": 0.003972,
+   "rho_twin_us76_kg_m3": 0.00399518659700009,
+   "main_over_twin": 0.9941963669437865
+  },
+  {
+   "h_km": 50.0,
+   "rho_main_kg_m3": 0.001057,
+   "rho_twin_us76_kg_m3": 0.001023165645573981,
+   "main_over_twin": 1.03306830577471
+  },
+  {
+   "h_km": 60.0,
+   "rho_main_kg_m3": 0.0003206,
+   "rho_twin_us76_kg_m3": 0.000309604553053033,
+   "main_over_twin": 1.035514487233925
+  },
+  {
+   "h_km": 70.0,
+   "rho_main_kg_m3": 8.77e-05,
+   "rho_twin_us76_kg_m3": 8.279866194818258e-05,
+   "main_over_twin": 1.0591958606152936
+  },
+  {
+   "h_km": 80.0,
+   "rho_main_kg_m3": 1.905e-05,
+   "rho_twin_us76_kg_m3": 1.8448194718851998e-05,
+   "main_over_twin": 1.0326213643296502
+  },
+  {
+   "h_km": 90.0,
+   "rho_main_kg_m3": 3.396e-06,
+   "rho_twin_us76_kg_m3": 3.4147090867044526e-06,
+   "main_over_twin": 0.9945210305682266
+  },
+  {
+   "h_km": 100.0,
+   "rho_main_kg_m3": 5.297e-07,
+   "rho_twin_us76_kg_m3": 5.787664814571008e-07,
+   "main_over_twin": 0.9152223167216401
+  }
+ ],
+ "profile_segments": {
+  "segment_base_km": 25.0,
+  "max_abs_ratio_deviation_in_segment_pct": 26.37,
+  "max_abs_ratio_deviation_above_segment_pct": 8.48
+ },
+ "verdict": {
+  "band_entry_peak_q_pct_UNCHANGED": 12.0,
+  "measured_delta_pct": 17.81,
+  "archive_delta_pct": 18.19,
+  "reproduces_archive": true,
+  "closure_error_pts": 0.0,
+  "line_density_profile_form_pts": 21.1,
+  "line_everything_else_pts": -3.29,
+  "share_of_form_line_inside_0_to_25km_segment_pct": 99.3,
+  "sub_lines_of_everything_else_pts": 0.46,
+  "peak_q_height_main_m": 9962.0,
+  "peak_q_height_twin_m": 11341.9,
+  "inside_band": false,
+  "implementation_differences_in_this_band": [],
+  "differences_outside_this_band": [
+   "engine staging: the twin's thrust model reads only ``cmd.throttle`` and ignores ``cmd.min_throttle_scale`` (the 13 -> 5 -> 3 staging the gated main model flies), so the twin over-thrusts the LANDING burn. That flag is set only by the landing law (landing.py:1867), i.e. after the corridor crossing, so it cannot touch this band -- it is recorded here because it does bias the impact-speed/impact-time lines of the same gate, which E11R-02 does not grade"
+  ],
+  "mechanism": "the whole gap is the density-profile FORM, and the form difference that matters is one segment. The twin integrates the US76 layer equations (own implementation, own geopotential conversion); the main model uses the published piecewise-exponential table whose first base below 100 km is at 25 km, i.e. one exponential from the ground with scale height 7.249 km. The two agree exactly at sea level and to 92% above 25 km, but differ by -26.4% to -12.7% inside that segment (worst near the 11 km tropopause). Re-flying the twin on the main profile moves peak q by +21.10 pts, of which 99% is carried by the sub-25 km segment alone (+0.17 pts above it). The entry peak sits inside that segment in both models (main 10.0 km, twin 11.3 km), so the models do not disagree AT the peak by 18%: the twin integrates denser air through the whole descent, so the air builds faster and its peak arrives both higher and earlier. Both implementations reproduce their published source to the last printed digit, so there is no implementation difference left to fix -- this is a genuine model-form difference and it stays recorded red at the unchanged 12% band"
+ }
+}

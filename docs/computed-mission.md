@@ -170,6 +170,7 @@ telemetry or independently validated landing is claimed. See
 | E11-04 | 24 of 32 newly admitted cases landed in counterfactual re-flights. [Admission validation](benchmarks/e11_04_counterfactual_admission.md). |
 | E11-05 | Starbase’s independent debris impact-speed discrepancy remained +12.70% against a 12% tolerance. [Aero qualification](benchmarks/e11_05_starbase_aero_qualification.md). |
 | E11-06 | The experimental Starbase replay records two booster ignitions, one for boostback and one for continuous entry and landing. Its saved landing and orbit re-flight checks pass. [Inspect the run](flightlab.md#viewing-runs-in-mission-control). [Gate record: missions, re-flights, FL-304 rates with CIs](#e11-06-gate-record-task-390). |
+| E11R-02 | The twin's 18.2% entry peak-q gap is the density-profile form, inside the main model's single 0–25 km table segment; the 12% band is unchanged. [Peak-q error budget](benchmarks/e11r_02_peak_q_error_budget.md). |
 
 Add the archived `tests/data/mission/reference/e11-06-starbase-continuous-burn/mission-hs/recovery/run`
 folder in **Runs** to inspect the hot-staging burn sequence and fin telemetry.
@@ -188,7 +189,10 @@ orbit re-flights also pass. With the selected design, FL-304 recorded 33/36
 landings on each ascent with a pinned script and 36/36 with per-sample
 re-planning on the sealed ascent. The independent twin's peak dynamic
 pressure differs by **18.2%** against a **12%**
-band. The [gate archive](../tests/data/mission/reference/e11-06-starbase-continuous-burn-reports/README.md)
+band. E11R-02 attributed that gap to the density-profile form inside the main
+model's single 0–25 km table segment, without moving the band: [peak-q error
+budget](benchmarks/e11r_02_peak_q_error_budget.md). The
+[gate archive](../tests/data/mission/reference/e11-06-starbase-continuous-burn-reports/README.md)
 includes the intervals, fin drag assumption and search sensitivity.
 
 ## Earlier studies

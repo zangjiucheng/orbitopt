@@ -70,7 +70,14 @@ engine-state/mass-flow consistency, green landing gates, CI bookkeeping).
 - **Twin disagreement stays visible**: the independent twin re-fly (`twin.json`
   delta) agrees on speed (+4.6%) and tilt, but its entry peak-q differs by
   +18.2% against the 12% E10-07 band, so that check is **red** by design;
-  peak-g agrees within its 1.0 band.
+  peak-g agrees within its 1.0 band. E11R-02 attributed it (task #415,
+  `docs/benchmarks/e11r_02_peak_q_error_budget.md`): the density-profile FORM,
+  carried almost entirely by the single 0–25 km segment of the published
+  piecewise-exponential table the main model flies (the two profiles agree at
+  sea level, split by up to 26% near the 11 km tropopause, and agree above
+  25 km). Integration step, gravity, the height convention and the entry-window
+  definition each measure under 1 pt, and the window difference is exactly zero.
+  Genuine model difference, not an implementation bug — the band stays at 12%.
 - **E5-08-era placeholders**: the sealed ascent run's own `recovery-landing` /
   `recovery-propellant-reserve` checks were never assessed in E5-08 and stay
   red in `ascent-refly/` (value `None`, reason `RECOVERY_LANDING_NOT_ASSESSED`).
