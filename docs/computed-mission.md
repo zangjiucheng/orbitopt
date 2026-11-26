@@ -170,6 +170,8 @@ telemetry or independently validated landing is claimed. See
 | E11-04 | 24 of 32 newly admitted cases landed in counterfactual re-flights. [Admission validation](benchmarks/e11_04_counterfactual_admission.md). |
 | E11-05 | Starbase’s independent debris impact-speed discrepancy remained +12.70% against a 12% tolerance. [Aero qualification](benchmarks/e11_05_starbase_aero_qualification.md). |
 | E11-06 | The experimental Starbase replay records two booster ignitions, one for boostback and one for continuous entry and landing. Its saved landing and orbit re-flight checks pass. [Inspect the run](flightlab.md#viewing-runs-in-mission-control). [Gate record: missions, re-flights, FL-304 rates with CIs](#e11-06-gate-record-task-390). |
+| E11R-01 | Ranking each search's feasible pool on training seeds and flying the best pinned landed 35–36 of 36 hold-out samples for each of 5 search seeds, against 6–33 of 36 for the first-feasible stop of the same runs (significant per seed except seed 5). Against the sealed 33/36 champion the gain is not significant (Holm p = 1), and the pooled 179/180 reuses the same 36 samples for every seed. [Campaign report](../tests/data/mission/reference/e11r-01-robust-candidate-selection/campaign.md). |
+| E11R-02 | The twin's 18.2% entry peak-q gap is the density-profile form, inside the main model's single 0–25 km table segment; the 12% band is unchanged. [Peak-q error budget](benchmarks/e11r_02_peak_q_error_budget.md). |
 
 Add the archived `tests/data/mission/reference/e11-06-starbase-continuous-burn/mission-hs/recovery/run`
 folder in **Runs** to inspect the hot-staging burn sequence and fin telemetry.
@@ -188,7 +190,10 @@ orbit re-flights also pass. With the selected design, FL-304 recorded 33/36
 landings on each ascent with a pinned script and 36/36 with per-sample
 re-planning on the sealed ascent. The independent twin's peak dynamic
 pressure differs by **18.2%** against a **12%**
-band. The [gate archive](../tests/data/mission/reference/e11-06-starbase-continuous-burn-reports/README.md)
+band. E11R-02 attributed that gap to the density-profile form inside the main
+model's single 0–25 km table segment, without moving the band: [peak-q error
+budget](benchmarks/e11r_02_peak_q_error_budget.md). The
+[gate archive](../tests/data/mission/reference/e11-06-starbase-continuous-burn-reports/README.md)
 includes the intervals, fin drag assumption and search sensitivity.
 
 ## Earlier studies
