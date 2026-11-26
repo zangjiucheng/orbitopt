@@ -1,42 +1,47 @@
 {
  "kind": "orbitopt.bench.e12-05-independent-refly",
  "schema_version": "1.0",
- "generated_utc": "2026-11-26T07:14:13+00:00",
+ "generated_utc": "2026-11-26T18:19:08+00:00",
  "provenance": {
-  "python": "3.10.22",
-  "numpy": "2.0.0",
+  "python": "3.12.13",
+  "numpy": "2.5.5",
   "orbitopt": "installed (version unknown)",
-  "tudatpy": "1.0.0",
-  "pykep": "2.6.2"
+  "tudatpy": "1.1.0",
+  "pykep": "2.6.4"
  },
  "mission_id": "leo-rdv-001",
  "backend": "present",
  "not_checked_reasons": [],
  "reference_plan": {
+  "planner": "orbitopt.rendezvous.canonical_plan (E12-04 plan_rendezvous_safe, constrained optimum)",
+  "plan_digest": "11cb8cd24bd8c96391576703000cf14b42cde2de5978d4b0d8631ea4a34e9bfb",
+  "config_sha256": "7915deab3bbe302d0f6d8b444339e6927e23179aab1014d85e320b9568bb0549",
+  "initial_states_sha256": "4bb58231980e1ef87a47d55907f2570482437ceb2fd091529a517cc5065357d5",
+  "maneuvers_sha256": "d10771e1f8ad1650af25b999081f0a6fd1fc21ba3c4eabd80dbcd0f38d8b9e5d",
   "drift_end_s": 560.5949924589561,
-  "tof_s": 3388.958224162859,
-  "total_delta_v_m_s": 10.3436725483533,
+  "tof_s": 3416.666666666667,
+  "total_delta_v_m_s": 10.345425677044807,
   "delta_v_budget_m_s": 25.0,
   "maneuvers": [
    {
     "kind": "transfer_injection",
     "epoch_s": 560.5949924589561,
     "delta_v_eci_m_s": [
-     -1.8859091836247899,
-     1.7467849481182611,
-     3.241093494684719
+     -1.9484241852178457,
+     1.6385085810815667,
+     3.2021363831045164
     ],
-    "magnitude_m_s": 4.136737621017369
+    "magnitude_m_s": 4.090812216641266
    },
    {
     "kind": "hold_point_insertion",
-    "epoch_s": 3949.5532166218154,
+    "epoch_s": 3977.261659125623,
     "delta_v_eci_m_s": [
-     2.7899575671572165,
-     -2.6397475814383142,
-     -4.875849738449233
+     2.912263532988618,
+     -2.557310715361382,
+     -4.909080622538568
     ],
-    "magnitude_m_s": 6.206934927335931
+    "magnitude_m_s": 6.25461346040354
    }
   ]
  },
@@ -55,9 +60,9 @@
    ],
    "result": "passed",
    "measured": {
-    "numerical.point_mass_kepler_position": 1.0596587066205948e-07,
-    "numerical.point_mass_kepler_velocity": 6.170639437434709e-11,
-    "numerical.tudat_step_axis_60s": 21.636352071220063,
+    "numerical.point_mass_kepler_position": 2.368886180151939e-08,
+    "numerical.point_mass_kepler_velocity": 2.569822616228994e-11,
+    "numerical.tudat_step_axis_60s": 21.63710773819739,
     "numerical.tudat_tolerance_axis": 0.0
    }
   },
@@ -75,9 +80,9 @@
    ],
    "result": "passed",
    "measured": {
-    "cw.hold_point_position_error": 252.68621861032688,
-    "cw.min_approach_distance": 240.04683223283826,
-    "cw.relative_speed": 0.1976060045311883
+    "cw.hold_point_position_error": 257.7213794562161,
+    "cw.min_approach_distance": 245.43934288248704,
+    "cw.relative_speed": 0.19561089487660752
    }
   },
   "optimizer_nonconvergence": {
@@ -92,8 +97,8 @@
    ],
    "result": "passed",
    "measured": {
-    "optimizer.delta_v_stationarity": 3.5279366983331784e-08,
-    "optimizer.landing_residual": 4.924672239437107e-07
+    "optimizer.delta_v_stationarity": 3.3478155218702454e-05,
+    "optimizer.landing_residual": 4.6929256553916673e-07
    }
   },
   "independent_model_agreement": {
@@ -114,10 +119,10 @@
    ],
    "result": "passed",
    "measured": {
-    "refly.hold_point_position_error": 0.0001612846971288549,
+    "refly.hold_point_position_error": 0.00016057663594041467,
     "refly.maneuver_sequence_identity": 0.0,
-    "refly.min_approach_distance": 3.1683474958299485e-05,
-    "refly.relative_speed": 5.87803192710694e-08,
+    "refly.min_approach_distance": 3.1062853850016836e-05,
+    "refly.relative_speed": 6.023939043434726e-08,
     "refly.total_delta_v": 0.0
    }
   }
@@ -128,24 +133,24 @@
  },
  "acceptance_quantities": {
   "main_model": {
-   "position_error_m": 4.924672239437107e-07,
-   "relative_speed_m_s": 5.446294010855733e-10,
-   "min_approach_distance_m": 908.9076340092689,
-   "total_delta_v_m_s": 10.3436725483533,
-   "min_approach_epoch_s": 3868.594992458956
+   "position_error_m": 4.6929256553916673e-07,
+   "relative_speed_m_s": 5.196195604726354e-10,
+   "min_approach_distance_m": 913.0346289439342,
+   "total_delta_v_m_s": 10.345425677044807,
+   "min_approach_epoch_s": 3898.594992458956
   },
   "cw_replay": {
-   "position_error_m": 252.6862191027941,
-   "relative_speed_m_s": 0.1976060050758177,
-   "min_approach_distance_m": 668.8608017764307,
-   "total_delta_v_m_s": 10.3436725483533
+   "position_error_m": 257.72137992550864,
+   "relative_speed_m_s": 0.19561089539622709,
+   "min_approach_distance_m": 667.5952860614472,
+   "total_delta_v_m_s": 10.345425677044807
   },
   "refly_j2": {
-   "position_error_m": 0.00016177716435279862,
-   "relative_speed_m_s": 5.9324948672154975e-08,
-   "min_approach_distance_m": 908.9076656927439,
-   "min_approach_epoch_s": 3868.594992458956,
-   "total_delta_v_m_s": 10.3436725483533
+   "position_error_m": 0.00016104592850595383,
+   "relative_speed_m_s": 6.07590099948199e-08,
+   "min_approach_distance_m": 913.034660006788,
+   "min_approach_epoch_s": 3898.594992458956,
+   "total_delta_v_m_s": 10.345425677044807
   }
  },
  "convergence": {
@@ -185,7 +190,7 @@
      "velocity_error_m_s": 0.0
     }
    ],
-   "compare_epoch_s": 3949.5532166218154,
+   "compare_epoch_s": 3977.261659125623,
    "reference_rtol": 1e-12,
    "reference_atol": 1e-07,
    "bound_at_default_m": 0.0,
@@ -197,39 +202,39 @@
     {
      "integrator": "rk4",
      "step_size": 180.0,
-     "position_error_m": 2157.0155885230624,
-     "velocity_error_m_s": 2.3521814611397827
+     "position_error_m": 2157.086544292797,
+     "velocity_error_m_s": 2.3522122995415873
     },
     {
      "integrator": "rk4",
      "step_size": 60.0,
-     "position_error_m": 21.636352071220063,
-     "velocity_error_m_s": 0.022895886204697402
+     "position_error_m": 21.63710773819739,
+     "velocity_error_m_s": 0.022896140330175726
     },
     {
      "integrator": "rk4",
      "step_size": 30.0,
-     "position_error_m": 1.2704278567027927,
-     "velocity_error_m_s": 0.0013307869083903781
+     "position_error_m": 1.2704729705918292,
+     "velocity_error_m_s": 0.0013308006864029816
     },
     {
      "integrator": "rk4",
      "step_size": 15.0,
-     "position_error_m": 0.07654366477428096,
-     "velocity_error_m_s": 7.972594198147394e-05
+     "position_error_m": 0.07654654145098425,
+     "velocity_error_m_s": 7.972688291389362e-05
     },
     {
      "integrator": "rk4",
      "step_size": 7.5,
-     "position_error_m": 0.0044283625792992925,
-     "velocity_error_m_s": 4.598912078591201e-06
+     "position_error_m": 0.004428623429605778,
+     "velocity_error_m_s": 4.59907039005611e-06
     }
    ],
    "compare_epoch_s": 3800.594992458956,
    "reference_step_s": 3.75,
-   "bound_at_60s_m": 21.636352071220063,
-   "bound_at_60s_m_s": 0.022895886204697402,
-   "observed_order": 4.1007543214261055
+   "bound_at_60s_m": 21.63710773819739,
+   "bound_at_60s_m_s": 0.022896140330175726,
+   "observed_order": 4.100738519424659
   }
  },
  "declared_tolerances": {

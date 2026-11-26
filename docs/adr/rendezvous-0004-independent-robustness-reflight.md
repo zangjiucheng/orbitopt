@@ -54,12 +54,15 @@ after a missed gate drifted through the keep-out sphere.
    measured residual and at least 1000 times below the scales the contract
    grades (50 m, 0.2 m/s, a 500 m keep-out radius).
 5. **Wording.** The E12-07 conclusion is a **Robustness Characterization**.
-   The E12-10 artifact may say **Robust Safety Qualification** only when the
-   re-flight is `checked`, every hold-out success was re-flown, there are no
-   verdict flips and there are no band violations. The benchmark derives the
-   label from those four facts. Its `outcome` field says what the qualification
-   found. No success-rate requirement is declared, so it records the rate and
-   does not claim the design is robust.
+   The E12-10 artifact may say **Independently Verified Robustness
+   Characterization** only when the re-flight is `checked`, every hold-out
+   success was re-flown, there are no verdict flips and there are no band
+   violations. The benchmark derives the label from those four facts. Its
+   `outcome` field says what was found. The label certifies the *evidence*, not
+   the design: the first wording, "Robust Safety Qualification", read as a
+   result for a design that succeeds on 4.9 % of the hold-out samples, so it was
+   dropped. No success-rate requirement is declared, so the artifact records the
+   rate and does not claim the design is robust.
 
 ## Two harness defects the first runs exposed
 

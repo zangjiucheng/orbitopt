@@ -14,7 +14,9 @@ be checked to describe the SAME trajectory, and a mismatched digest is a hard
 failure, not a shrug.
 
 The digests are pure functions of ``(config, plan)`` (and of the config
-alone for the initial states), canonical-JSON then sha256, so a consumer that
+alone for the initial states), canonical-JSON then sha256 of the floats rounded
+to 8 significant digits (a plan solved on another machine differs in the last
+bits; see ``DIGEST_SIGNIFICANT_DIGITS``), so a consumer that
 holds the config and the maneuver sequence can recompute the identity without
 the sealed file; the file exists to pin one artifact on disk and to carry the
 E12-04 acceptance record (verification + safety reports) alongside it.
@@ -47,8 +49,28 @@ class PlanSealError(ValueError):
     document's own digests do not match its contents (tampered or stale)."""
 
 
+#: Significant digits kept when a float enters a digest. A plan solved on two machines (different BLAS / libm /
+#: numpy) differs in the last bits -- 3e-12 relative on the LEO-RDV-001 burns -- and a digest of the exact
+#: ``repr`` made the "same" plan three different identities on three machines. 8 digits (1e-8 relative, far
+#: below any physical tolerance in the mission config) absorbs that; a rounding boundary can still split two
+#: values that straddle it, with probability of about noise / quantum (~3e-4 per number), so the digest is
+#: stable in practice, not by proof.
+DIGEST_SIGNIFICANT_DIGITS = 8
+
+
+def _quantize(value: Any) -> Any:
+    """``value`` with every float rounded to :data:`DIGEST_SIGNIFICANT_DIGITS` significant digits."""
+    if isinstance(value, float):
+        return float(f"{value:.{DIGEST_SIGNIFICANT_DIGITS - 1}e}")
+    if isinstance(value, (list, tuple)):
+        return [_quantize(x) for x in value]
+    if isinstance(value, dict):
+        return {k: _quantize(v) for k, v in value.items()}
+    return value
+
+
 def _canonical_sha256(doc: Any) -> str:
-    return hashlib.sha256(json.dumps(doc, sort_keys=True).encode("utf-8")).hexdigest()
+    return hashlib.sha256(json.dumps(_quantize(doc), sort_keys=True).encode("utf-8")).hexdigest()
 
 
 def _as_plain(value: Any) -> Any:

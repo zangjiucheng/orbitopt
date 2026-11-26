@@ -20,7 +20,7 @@ on, under the E12-10 grading criteria:
   cross-model bands.
 
 Until this re-flight is *checked* here, the campaign's conclusion is a
-**Robustness Characterization** -- not a Robust Safety Qualification. No
+**Robustness Characterization** -- not a statement that the design is robust or safe. No
 backend, no fake pass: the re-flight line is recorded ``not_checked`` with
 ``REFLY_BACKEND_MISSING``, exactly as E12-05 and E12-07 do it.
 
@@ -159,7 +159,7 @@ def main() -> int:
     n_success_reflown = spec["selection_rule"]["counts_by_reason"].get("success", 0)
     covered = covered and n_success_reflown == n_success
     sr = ho.summary["cluster_bootstrap"] or ho.summary["wilson"]
-    label = "Robust Safety Qualification" if covered else "Robustness Characterization"
+    label = "Independently Verified Robustness Characterization" if covered else "Robustness Characterization"
 
     doc = {
         "kind": ARTIFACT_KIND, "schema_version": "1.0",
@@ -175,11 +175,13 @@ def main() -> int:
                                                                 or comparison["n_band_violations"])
                          else "not_covered"),
             "wording_rule": ("this campaign may be reported as Robustness Characterization; "
-                             "the wording Robust Safety Qualification is only earned once the "
-                             "independent per-sample re-flight is CHECKED, covers the samples "
-                             "the verdicts rest on, and every sample agrees with the main "
-                             "model within the declared bands (task #412 acceptance)"),
-            "outcome": (f"the qualification evidence is independent; the design it qualifies "
+                             "the wording Independently Verified Robustness Characterization is "
+                             "only earned once the independent per-sample re-flight is CHECKED, "
+                             "covers the samples the verdicts rest on, and every sample agrees "
+                             "with the main model within the declared bands (task #412 "
+                             "acceptance). It says the EVIDENCE is independent, not that the "
+                             "design is robust or safe: see `outcome` for the success rate"),
+            "outcome": (f"the evidence is independent; the design it characterizes "
                         f"succeeds on {n_success}/{ho.n} hold-out samples "
                         f"({ho.summary['success_rate']:.1%}, cluster CI "
                         f"{sr['lower']:.1%}-{sr['upper']:.1%}) under these criteria. No "

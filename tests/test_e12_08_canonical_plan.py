@@ -227,3 +227,54 @@ def test_safety_plan_result_exposes_the_digest(reference_sealed):
     result = plan_rendezvous_safe(load_reference_config())
     assert result.plan_digest == reference_sealed.plan_digest
     assert result.to_dict()["plan_digest"] == reference_sealed.plan_digest
+
+
+# ---------------------------------------------------------------------------
+# the committed artifacts name THIS plan (a digest that moved with the machine used to go unnoticed)
+# ---------------------------------------------------------------------------
+
+def _repo():
+    from pathlib import Path
+    return Path(__file__).resolve().parents[1]
+
+
+def test_committed_sealed_plan_has_the_digest_this_code_computes(reference_sealed):
+    """The digest hashes floats rounded to 8 digits, so a plan re-solved on another machine (last-bit noise) still
+    gets the committed identity. Before that rounding the same config gave a different digest per machine."""
+    doc = json.loads((_repo() / "examples/runs/leo-rdv-001-sealed-plan.json").read_text(encoding="utf-8"))
+    assert doc["plan_digest"] == reference_sealed.plan_digest
+    assert doc["maneuvers_sha256"] == reference_sealed.maneuvers_sha256
+    assert doc["config_sha256"] == reference_sealed.config_sha256
+    assert doc["initial_states_sha256"] == reference_sealed.initial_states_sha256
+
+
+def test_digest_survives_last_bit_noise_in_the_maneuvers(reference_sealed):
+    from orbitopt.rendezvous import maneuvers_sha256
+
+    noisy = copy.deepcopy(reference_sealed.plan)
+    noisy = dataclasses.replace(noisy, maneuvers=tuple(
+        dataclasses.replace(m, delta_v_m_s=tuple(float(x) * (1.0 + 4e-12) for x in m.delta_v_m_s))
+        for m in noisy.maneuvers))
+    assert maneuvers_sha256(noisy) == reference_sealed.maneuvers_sha256
+    real = dataclasses.replace(noisy, maneuvers=tuple(
+        dataclasses.replace(m, delta_v_m_s=tuple(float(x) * (1.0 + 1e-6) for x in m.delta_v_m_s))
+        for m in noisy.maneuvers))
+    assert maneuvers_sha256(real) != reference_sealed.maneuvers_sha256      # a real change still moves it
+
+
+def test_committed_example_run_and_benchmarks_record_the_sealed_digest(reference_sealed):
+    run = json.loads((_repo() / "examples/runs/leo-rdv-001/rendezvous.json").read_text(encoding="utf-8"))
+    assert run["plan_digest"] == reference_sealed.plan_digest
+    bench = json.loads((_repo() / "docs/benchmarks/e12_10_independent_reflight.json").read_text(encoding="utf-8"))
+    assert bench["ground_plan"]["plan_digest"] == reference_sealed.plan_digest
+    assert bench["independent"]["plan_digest"] == reference_sealed.plan_digest
+
+
+def test_committed_refly_evidence_is_for_the_sealed_plan_and_the_example_run_says_so(reference_sealed):
+    """The E12-05 evidence names the sealed plan's maneuver digest, so the packaged run's ``physics_verified`` is
+    True by the digest match (it used to be null: the evidence graded a different, planning-reference plan)."""
+    refly = json.loads((_repo() / "docs/benchmarks/e12-05-refly-run/rendezvous-refly-report.json")
+                       .read_text(encoding="utf-8"))
+    assert refly["inputs"]["main_model"]["maneuvers_sha256"] == reference_sealed.maneuvers_sha256
+    ver = json.loads((_repo() / "examples/runs/leo-rdv-001/verification.json").read_text(encoding="utf-8"))
+    assert json.dumps(ver).count('"physics_verified": true') >= 1

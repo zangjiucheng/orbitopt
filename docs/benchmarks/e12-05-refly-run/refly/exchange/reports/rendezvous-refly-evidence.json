@@ -6,6 +6,8 @@
  "propagation_frame": "ECLIPJ2000",
  "epoch_anchor_s": 0.0,
  "config_sha256": "507dad7a1bcbaf5ed8f551e54830c74191e2d1c35e088e9682fb7d8d76908d16",
+ "canonical_config_sha256": "7915deab3bbe302d0f6d8b444339e6927e23179aab1014d85e320b9568bb0549",
+ "plan_digest": "11cb8cd24bd8c96391576703000cf14b42cde2de5978d4b0d8631ea4a34e9bfb",
  "environment": {
   "env": "tudat",
   "python_executable": "/u9/j7zang/envs/tudatpy/bin/python",
@@ -27,14 +29,14 @@
    "opentsiolkovsky_sha256": "8041a9b5806136eb0e9d2a7b2c9ebed58ccc1876198cbf5c6373c440cb182c4c"
   },
   "argv": [
-   "/u9/j7zang/cf-compute/411/src/orbitopt/crossenv/__main__.py",
+   "/u9/j7zang/orbitopt-408/src/orbitopt/crossenv/__main__.py",
    "stage",
    "--plan",
-   "docs/benchmarks/e12-05-refly-run/plan.resolved.json",
+   "/u9/j7zang/e1205_out/e12-05-refly-run/plan.resolved.json",
    "--stage",
    "refly",
    "--out",
-   "docs/benchmarks/e12-05-refly-run"
+   "/u9/j7zang/e1205_out/e12-05-refly-run"
   ]
  },
  "plan": {
@@ -42,44 +44,44 @@
   "frame": "GCRS",
   "time_note": "all epochs are elapsed seconds from the shared epoch t0",
   "drift_end_s": 560.5949924589561,
-  "transfer_tof_s": 3388.958224162859,
-  "arrival_epoch_s": 3949.5532166218154,
+  "transfer_tof_s": 3416.666666666667,
+  "arrival_epoch_s": 3977.261659125623,
   "maneuvers": [
    {
     "kind": "transfer_injection",
     "epoch_s": 560.5949924589561,
     "delta_v_eci_m_s": [
-     -1.8859091836247899,
-     1.7467849481182611,
-     3.241093494684719
+     -1.9484241852178457,
+     1.6385085810815667,
+     3.2021363831045164
     ],
-    "magnitude_m_s": 4.136737621017369
+    "magnitude_m_s": 4.090812216641266
    },
    {
     "kind": "hold_point_insertion",
-    "epoch_s": 3949.5532166218154,
+    "epoch_s": 3977.261659125623,
     "delta_v_eci_m_s": [
-     2.7899575671572165,
-     -2.6397475814383142,
-     -4.875849738449233
+     2.912263532988618,
+     -2.557310715361382,
+     -4.909080622538568
     ],
-    "magnitude_m_s": 6.206934927335931
+    "magnitude_m_s": 6.25461346040354
    }
   ],
-  "total_delta_v_m_s": 10.3436725483533,
+  "total_delta_v_m_s": 10.345425677044807,
   "delta_v_budget_m_s": 25.0,
-  "budget_margin_m_s": 14.6563274516467,
+  "budget_margin_m_s": 14.654574322955193,
   "hold_point_rel_lvlh_m": [
    0.0,
    -1000.0,
    0.0
   ]
  },
- "maneuvers_sha256": "1d2b192629c27633a2d651259683d167fc7209decfe4f4fbffc219f165c04612",
+ "maneuvers_sha256": "d10771e1f8ad1650af25b999081f0a6fd1fc21ba3c4eabd80dbcd0f38d8b9e5d",
  "mission_in_refly_env": {
-  "position_error_m": 4.924672239437107e-07,
-  "relative_speed_m_s": 5.446294010855733e-10,
-  "total_delta_v_m_s": 10.3436725483533,
+  "position_error_m": 4.6929256553916673e-07,
+  "relative_speed_m_s": 5.196195604726354e-10,
+  "total_delta_v_m_s": 10.345425677044807,
   "checks": {
    "gate_within_drift_window": true,
    "tof_within_transfer_window": true,
@@ -120,22 +122,23 @@
      "normalized_c20": -0.0004841653701469824,
      "associated_reference_frame": "IAU_Earth"
     },
-    "central_gravitational_parameter": 398600441500000.0
+    "central_gravitational_parameter": 398600441500000.0,
+    "drag": null
    },
    "arrival_rel_lvlh_m": [
-    -8.78298777706732e-06,
-    -1000.0001615385631,
-    -5.1501075404303265e-08
+    -9.744335557115846e-06,
+    -1000.0001607508536,
+    -4.5469988663171534e-08
    ],
    "arrival_rel_lvlh_rate_m_s": [
-    -4.353396330700682e-08,
-    4.0299096481435e-08,
-    -4.758114311355165e-10
+    -4.3195957105087223e-08,
+    4.27262705762285e-08,
+    -4.820663574640769e-10
    ],
-   "position_error_m": 0.00016177716435279862,
-   "relative_speed_m_s": 5.9324948672154975e-08,
-   "min_approach_distance_m": 908.9076656927439,
-   "min_approach_epoch_s": 3868.594992458956
+   "position_error_m": 0.00016104592850595383,
+   "relative_speed_m_s": 6.07590099948199e-08,
+   "min_approach_distance_m": 913.034660006788,
+   "min_approach_epoch_s": 3898.594992458956
   },
   "point_mass": {
    "model": {
@@ -164,53 +167,54 @@
      "normalized_c20": -0.0,
      "associated_reference_frame": "IAU_Earth"
     },
-    "central_gravitational_parameter": 398600441500000.0
+    "central_gravitational_parameter": 398600441500000.0,
+    "drag": null
    },
    "arrival_rel_lvlh_m": [
-    44.17673195600497,
-    -1247.2387448073525,
-    -0.0633867285231986
+    43.877650624235514,
+    -1246.5760694801331,
+    -0.6924813580495197
    ],
    "arrival_rel_lvlh_rate_m_s": [
-    -0.013255955551016082,
-    -0.03713777821489693,
-    -0.019825457046742108
+    -0.012701811468749174,
+    -0.035736620003072025,
+    -0.019299410359755395
    ],
-   "position_error_m": 251.15450343982536,
-   "relative_speed_m_s": 0.04413596804672583,
-   "min_approach_distance_m": 1135.617101013995,
-   "min_approach_epoch_s": 3844.594992458956,
+   "position_error_m": 250.45056557134217,
+   "relative_speed_m_s": 0.04255477956782116,
+   "min_approach_distance_m": 1140.426931706307,
+   "min_approach_epoch_s": 3876.594992458956,
    "chief_state_at_arrival": [
-    1220031.5079860915,
-    -6125354.308304745,
-    -2881028.6892050644,
-    6191.298512802957,
-    2834.2003928146837,
-    -3403.9585799699926
+    1390982.195412337,
+    -6043955.177909535,
+    -2973977.6277294615,
+    6146.983526565912,
+    3040.7419294194106,
+    -3304.5854805431136
    ],
    "deputy_state_after_gate": [
     2203591.4472252214,
     6477588.058383603,
     596945.165296583,
-    -5853.358957914383,
-    1567.6945779221558,
-    4622.650723735965
+    -5853.421472915976,
+    1567.579740048606,
+    4622.658051150234
    ],
    "deputy_transfer_end_state": [
-    1219024.9354287565,
-    -6125857.984821466,
-    -2880489.543837342,
-    6188.749635855777,
-    2837.3538371508484,
-    -3401.1286939302813
+    1389984.1073296655,
+    -6044491.479167865,
+    -2973456.016030687,
+    6144.347374445837,
+    3043.849904085692,
+    -3301.7106075285747
    ],
    "deputy_state_at_arrival": [
-    1219024.9354287565,
-    -6125857.984821466,
-    -2880489.543837342,
-    6191.539593422935,
-    2832.9924144547767,
-    -3404.5521673173307
+    1389984.1073296655,
+    -6044491.479167865,
+    -2973456.016030687,
+    6147.259637978826,
+    3039.5508972489365,
+    -3305.1973611578146
    ]
   }
  },
@@ -251,7 +255,7 @@
      "velocity_error_m_s": 0.0
     }
    ],
-   "compare_epoch_s": 3949.5532166218154,
+   "compare_epoch_s": 3977.261659125623,
    "reference_rtol": 1e-12,
    "reference_atol": 1e-07,
    "bound_at_default_m": 0.0,
@@ -263,39 +267,39 @@
     {
      "integrator": "rk4",
      "step_size": 180.0,
-     "position_error_m": 2157.0155885230624,
-     "velocity_error_m_s": 2.3521814611397827
+     "position_error_m": 2157.086544292797,
+     "velocity_error_m_s": 2.3522122995415873
     },
     {
      "integrator": "rk4",
      "step_size": 60.0,
-     "position_error_m": 21.636352071220063,
-     "velocity_error_m_s": 0.022895886204697402
+     "position_error_m": 21.63710773819739,
+     "velocity_error_m_s": 0.022896140330175726
     },
     {
      "integrator": "rk4",
      "step_size": 30.0,
-     "position_error_m": 1.2704278567027927,
-     "velocity_error_m_s": 0.0013307869083903781
+     "position_error_m": 1.2704729705918292,
+     "velocity_error_m_s": 0.0013308006864029816
     },
     {
      "integrator": "rk4",
      "step_size": 15.0,
-     "position_error_m": 0.07654366477428096,
-     "velocity_error_m_s": 7.972594198147394e-05
+     "position_error_m": 0.07654654145098425,
+     "velocity_error_m_s": 7.972688291389362e-05
     },
     {
      "integrator": "rk4",
      "step_size": 7.5,
-     "position_error_m": 0.0044283625792992925,
-     "velocity_error_m_s": 4.598912078591201e-06
+     "position_error_m": 0.004428623429605778,
+     "velocity_error_m_s": 4.59907039005611e-06
     }
    ],
    "compare_epoch_s": 3800.594992458956,
    "reference_step_s": 3.75,
-   "bound_at_60s_m": 21.636352071220063,
-   "bound_at_60s_m_s": 0.022895886204697402,
-   "observed_order": 4.1007543214261055
+   "bound_at_60s_m": 21.63710773819739,
+   "bound_at_60s_m_s": 0.022896140330175726,
+   "observed_order": 4.100738519424659
   }
  },
  "ok": true,

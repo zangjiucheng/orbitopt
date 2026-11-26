@@ -169,8 +169,9 @@ rule, so it belongs here.
 2. **The independent-model line was `NOT_CHECKED`, and the grid/physics
    comparison covered only 6/5 samples.** So, until task #412's per-sample TudatPy
    re-flight covers it, the conclusion above is a **Robustness Characterization**
-   — a measured dispersion study of the design — and must not be reported as a
-   *Robust Safety Qualification*. The qualification wording is earned only when
+   — a measured dispersion study of the design — and must not be reported as
+   robust or qualified. The stronger wording, *Independently Verified Robustness
+   Characterization* (it certifies the evidence, not the design), is earned only when
    the E12-10 artifact records the independent re-flight `checked` over the
    samples its declared selection names (every success, passive-driven failures,
    one boundary per failure class) with no verdict flips and every per-sample

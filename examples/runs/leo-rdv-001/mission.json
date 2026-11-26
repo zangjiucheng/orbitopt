@@ -37,8 +37,8 @@
    "name": "hold-point",
    "center_m": [
     -807.3647263804949,
-    -542.7706257130823,
-    231.4351884644556
+    -542.7706257130822,
+    231.43518846445542
    ],
    "radius_m": 50.0
   }
@@ -65,8 +65,8 @@
     "timescale": "TDB"
    },
    "data": {
-    "position_error_m": "4.669722e-07",
-    "relative_speed_m_s": "5.172409e-10"
+    "position_error_m": "4.702541e-07",
+    "relative_speed_m_s": "5.210721e-10"
    },
    "counterpart_id": "target",
    "hold_point_id": "hold-point"
