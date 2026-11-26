@@ -6,7 +6,7 @@ re-flying the sealed continuous-burn script with an entry peak dynamic pressure
 `reflight.entry_peak_q` band, so that one check is red by design while the
 other eight agree (`speed +4.6 %`, `tilt 2.2°`, `peak_g 0.84 g`):
 `twin.json` under
-[`tests/data/mission/reference/e11-06-starbase-continuous-burn-reports/`](../tests/data/mission/reference/e11-06-starbase-continuous-burn-reports/README.md).
+[`tests/data/mission/reference/e11-06-starbase-continuous-burn-reports/`](../../tests/data/mission/reference/e11-06-starbase-continuous-burn-reports/README.md).
 The archive named the candidates — atmosphere model, grid-fin drag
 implementation, angle-of-attack and attitude, integration step, event
 extraction — without pricing any of them. This task prices them and leaves the

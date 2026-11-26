@@ -37,22 +37,19 @@ orbitopt view examples/runs/leo-rdv-001-scene.json
 or add the `examples/runs/leo-rdv-001` directory under **Runs** in Mission
 Control. Follow the target and chaser, inspect maneuvers and safety checks in
 **Flight → Rendezvous**, and select range, relative speed or the radial,
-along-track and cross-track components in **Telemetry → Plots**. To rebuild
-the run from source: `orbitopt rendezvous studio -o examples/runs/leo-rdv-001`
-(`--config PATH` for another mission, `--dt S` for the sample interval). The
-run directory includes `mission.json`, `replay.json` and the Rendezvous
-panel's `rendezvous.json`; the sidecar carries the consumed `plan_digest`.
-See the [replay format](adr/rendezvous-0004-mission-studio-flightlab-replay.md).
+along-track and cross-track components in **Telemetry → Plots**. The
+[quickstart](rendezvous-quickstart.md#replay-it-in-flight-lab) shows how to
+rebuild the run from the sealed plan and attach the matching TudatPy report.
 
-Three lines of evidence, kept separate — a nominal pass is neither an
-independent pass nor a robust success:
+The [verification report](rendezvous-verification-report.md) gives the
+tolerances, plan digests and dispersion intervals for each result.
 
 | Evidence | LEO-RDV-001 result |
 |---|---|
-| Nominal plan (sealed, same-model) | The canonical two-impulse plan uses **10.345 m/s** total Δv (time of flight 3416.7 s) and passes landing, Δv-budget and whole-trajectory safety checks. The Mission Studio replay re-propagates the sealed plan **locally** (`propagate_pair`) — it is a replay, not independent verification. [Safety constraints](adr/rendezvous-0002-safety-constraints-whole-trajectory.md). |
-| Independent re-flight (TudatPy, cross-environment) | The recorded nonlinear TudatPy two-spacecraft re-flight **passed** its declared checks, closest approach about **913 m**. It re-flew the sealed plan (10.345 m/s; the evidence carries the sealed plan's maneuver digest), so the packaged studio run reports `physics_verified: true`; evidence whose digest does not match gives `null` (fail-closed). [Re-flight report](benchmarks/e12_05_independent_refly.json). |
-| Robust dispersion (Monte Carlo, not a nominal result) | Under the declared stress levels, **14 of 264** hold-out cases passed (5.3%, Wilson 95% CI 3.2–8.7%): 181 arrival-accuracy failures and 69 safety failures. This prices a locked mission design under stress; it says nothing against the nominal pass above, and the nominal pass does not soften it. [Campaign design](adr/rendezvous-0005-dispersion-campaign-not-a-safety-factor.md). |
-| Independent robustness re-flight | With the passive contingency checks graded, **13 of 264** hold-out cases pass (4.9%, cluster-bootstrap 95% CI 2.7–7.6%). There are 164 arrival-accuracy failures and 87 safety failures. The hold-point coast is the dominant safety failure. TudatPy re-flew 23 selected samples, each with its own perturbation, and agreed with every main-model verdict. [Re-flight report](benchmarks/e12_10_independent_reflight.json), [design](adr/rendezvous-0004-independent-robustness-reflight.md). |
+| Nominal plan | **10.345 m/s** total Δv. The arrival, Δv budget and whole-trajectory safety checks pass. [Safety constraints](adr/rendezvous-0002-safety-constraints-whole-trajectory.md). |
+| Independent re-flight | TudatPy passes the nominal checks on the sealed plan. Closest approach is about **913 m**. [Re-flight report](benchmarks/e12_05_independent_refly.json). |
+| Dispersion campaign | **14 of 264** hold-out cases pass under the declared stress levels (5.3%). [Campaign design](adr/rendezvous-0005-dispersion-campaign-not-a-safety-factor.md). |
+| Independent robustness re-flight | **13 of 264** hold-out cases pass when passive contingency checks are included (4.9%). TudatPy agrees with all **23** selected per-sample verdicts. [Re-flight report](benchmarks/e12_10_independent_reflight.json). |
 
 For the independent re-flight in a TudatPy environment, use
 `orbitopt crossenv run --plan src/orbitopt/data/crossenv_e12_05_plan.yaml`.
@@ -179,7 +176,7 @@ telemetry or independently validated landing is claimed. See
 | E11-04 | 24 of 32 newly admitted cases landed in counterfactual re-flights. [Admission validation](benchmarks/e11_04_counterfactual_admission.md). |
 | E11-05 | Starbase’s independent debris impact-speed discrepancy remained +12.70% against a 12% tolerance. [Aero qualification](benchmarks/e11_05_starbase_aero_qualification.md). |
 | E11-06 | The experimental Starbase replay records two booster ignitions, one for boostback and one for continuous entry and landing. Its saved landing and orbit re-flight checks pass. [Inspect the run](flightlab.md#viewing-runs-in-mission-control). [Gate record: missions, re-flights, FL-304 rates with CIs](#e11-06-gate-record-task-390). |
-| E11R-01 | Ranking each search's feasible pool on training seeds and flying the best pinned landed 35–36 of 36 hold-out samples for each of 5 search seeds, against 6–33 of 36 for the first-feasible stop of the same runs (significant per seed except seed 5). Against the sealed 33/36 champion the gain is not significant (Holm p = 1), and the pooled 179/180 reuses the same 36 samples for every seed. [Campaign report](../tests/data/mission/reference/e11r-01-robust-candidate-selection/campaign.md). |
+| E11R-01 | Training-ranked candidates landed in **35–36 of 36** hold-out cases per search seed. First-feasible candidates landed in **6–33 of 36**. The gain over the sealed 33/36 champion was statistically inconclusive. All five seeds reuse the same hold-out cases. [Campaign report](../tests/data/mission/reference/e11r-01-robust-candidate-selection/campaign.md). |
 | E11R-02 | The twin's 18.2% entry peak-q gap is the density-profile form, inside the main model's single 0–25 km table segment; the 12% band is unchanged. [Peak-q error budget](benchmarks/e11r_02_peak_q_error_budget.md). |
 
 Add the archived `tests/data/mission/reference/e11-06-starbase-continuous-burn/mission-hs/recovery/run`

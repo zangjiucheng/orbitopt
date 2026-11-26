@@ -1,11 +1,8 @@
 # Rendezvous
 
-orbitopt plans and verifies two-impulse orbital rendezvous: a chaser
-transfers from a phasing drift to a hold point near a target, on a model
-that runs from planning through independent re-flight to a stress-tested
-dispersion campaign. The reference mission is **LEO-RDV-001** — a chaser
-500 km minus 10 km below a Sentinel-class target, transferred to a 1 km
-V-bar hold point.
+orbitopt plans and verifies two-impulse orbital rendezvous. In the
+**LEO-RDV-001** reference mission, a chaser starts at 490 km altitude and
+transfers to a hold point 1 km behind a target in a 500 km orbit.
 
 | Page | |
 |---|---|
@@ -23,7 +20,8 @@ The decisions behind each layer are ADRs:
 (independent re-flight),
 [rendezvous-0004](adr/rendezvous-0004-mission-studio-flightlab-replay.md)
 (studio replay), [rendezvous-0005](adr/rendezvous-0005-dispersion-campaign-not-a-safety-factor.md)
-(dispersion campaign).
+(dispersion campaign). The [E12-10 re-flight ADR](adr/rendezvous-0004-independent-robustness-reflight.md)
+describes the independent checks on selected dispersed cases.
 
 A precomputed Mission Studio run of LEO-RDV-001 is committed under
 `examples/runs/leo-rdv-001`; the [quickstart](rendezvous-quickstart.md)

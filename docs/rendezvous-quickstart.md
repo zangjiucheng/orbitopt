@@ -40,12 +40,20 @@ print(plan.total_delta_v_m_s, result.position_error_m)
 
 ```bash
 orbitopt rendezvous studio --config src/orbitopt/data/leo_rdv_001.yaml \
+    --sealed-plan examples/runs/leo-rdv-001-sealed-plan.json \
+    --refly-report docs/benchmarks/e12-05-refly-run/rendezvous-refly-report.json \
     -o runs/leo-rdv-001-studio
 ```
 
-This writes a Flight Lab run directory plus the Rendezvous sidecar, openable
-in Mission Control and exportable with
+This writes a new run without replacing the committed example. The replay
+validates the sealed plan against the mission configuration and checks that
+the independent report matches the plan before displaying its physics verdict.
+Open the run in Mission Control or export it with
 `orbitopt flight to-scene runs/leo-rdv-001-studio -o scene.json`.
+
+For a new configuration, omit `--sealed-plan` and use
+`--write-sealed-plan PATH` to save the plan that Studio uses. Supply a
+matching `--refly-report` once independent evidence is available.
 
 ## Re-run the independent re-flight
 

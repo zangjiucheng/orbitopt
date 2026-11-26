@@ -5,7 +5,7 @@ LEO-RDV-001 carries five lines of evidence. They are **labelled separately**
 each names the digests it grades.
 
 The sealed plan: canonical planner `plan_rendezvous_safe` on
-`leo_rdv_001.yaml` (config sha256 `7cf9a0a2…158b03`),
+`leo_rdv_001.yaml` (normalized config SHA-256 `7915deab…bb0549`),
 **plan_digest `11cb8cd24bd8c96391576703000cf14b42cde2de5978d4b0d8631ea4a34e9bfb`**
 (maneuvers sha256 `d10771e1…8b9e5d`), full text in the file
 `examples/runs/leo-rdv-001-sealed-plan.json`.
@@ -55,14 +55,18 @@ does not match, or no report at all, gives `physics_verified: null` (**not asses
 re-flight covers the *nominal* sealed plan; §5 re-flies perturbed samples of it.
 Re-run with
 `orbitopt crossenv run --plan src/orbitopt/data/crossenv_e12_05_plan.yaml`.
+To reproduce the packaged Studio verdict, use the
+[full report](benchmarks/e12-05-refly-run/rendezvous-refly-report.json) as
+`--refly-report`. The benchmark summary lists the comparison and tolerances.
 
 ## 4. Robust dispersion (Monte Carlo — a stress price, not a nominal result)
 
 The E12-07 campaign
 ([ADR rendezvous-0005](adr/rendezvous-0005-dispersion-campaign-not-a-safety-factor.md),
-[data](benchmarks/e12_07_rendezvous_robustness.json)) prices the **sealed**
-design (ground plan = this digest, tof 3416.67 s) under declared stress,
-with clustered sampling and a train/hold-out split:
+[data](benchmarks/e12_07_rendezvous_robustness.json)) evaluates the reference
+transfer under declared stress, with clustered sampling and a train/hold-out
+split. The archived E12-07 JSON records the transfer timing and Δv. E12-10
+records the sealed plan digest explicitly.
 
 | Quantity | Value |
 |---|---|
