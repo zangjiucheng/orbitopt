@@ -478,10 +478,15 @@ def main(argv=None) -> int:
         print(f"search: {len(todo)} no-stop DE runs (pop {args.popsize}*13="
               f"{args.popsize * 13}, {args.maxiter} gens, no first-feasible stop), workers "
               f"{min(args.workers, len(todo))}", flush=True)
-        with ProcessPoolExecutor(max_workers=min(args.workers, len(todo))) as pool:
-            for rec in pool.map(search_worker, todo):
-                cache["search"][str(rec["seed"])] = rec
-                save_cache(cache)
+        if len(todo) == 1:                             # per-seed isolation: no pool to break
+            rec = search_worker(todo[0])
+            cache["search"][str(rec["seed"])] = rec
+            save_cache(cache)
+        else:
+            with ProcessPoolExecutor(max_workers=min(args.workers, len(todo))) as pool:
+                for rec in pool.map(search_worker, todo):
+                    cache["search"][str(rec["seed"])] = rec
+                    save_cache(cache)
     for s in args.search_seeds:
         r = cache["search"][str(s)]
         print(f"seed {s}: pool {len(r['pool'])}/{r['pool_total']} feasible, "
