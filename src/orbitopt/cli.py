@@ -402,8 +402,16 @@ def _cmd_flight_to_scene(args):
 
     try:
         run = read_run(args.run_dir)
+        sidecar = Path(args.run_dir) / "rendezvous.json"
+        rendezvous = None
+        if sidecar.exists():  # E12-06 studio run: sidecar events/markers into the scene
+            try:
+                rendezvous = json.loads(sidecar.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                rendezvous = None
         scene = run_to_scene(run, earth_texture=not args.no_earth_texture,
-                             mission_scenario=replay_mission_scenario(run))
+                             mission_scenario=replay_mission_scenario(run),
+                             rendezvous=rendezvous)
     except (jsonschema.ValidationError, ValueError) as exc:
         print(f"REJECTED: {args.run_dir}\n  {exc}")
         raise SystemExit(1) from None

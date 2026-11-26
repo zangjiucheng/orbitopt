@@ -81,7 +81,7 @@ time-of-flight, re-screens the candidate against the fixed constraints, and
 flies the result on the perturbed truth. The time-of-flight stays the ground
 plan's: this prices a locked mission design, and per-sample re-optimisation
 costs ~9 s for a delta-v change E12-05 measured as flat to within 0.01 m/s
-across the window (docs/adr/rendezvous-0003-robustness-dispersion-campaign.md).
+across the window (docs/adr/rendezvous-0005-dispersion-campaign-not-a-safety-factor.md).
 The re-plan step is what makes ``planning_infeasible`` a live outcome under
 dispersion: a sample fails that way when its estimate never reaches the gate
 inside the drift window, when burn-1 targeting does not close, or when the

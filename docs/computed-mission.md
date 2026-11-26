@@ -24,30 +24,38 @@ dispersion reliability are separate results.
 
 ## E12 orbital rendezvous
 
-Generate the packaged **LEO-RDV-001** run from the repository root:
+The [Rendezvous](rendezvous.md) section carries the quickstart, the relative-motion
+theory, the mission configuration and the full verification report.
+
+The packaged **LEO-RDV-001** Mission Studio replay is precomputed under
+`examples/runs/leo-rdv-001`. Open the scene without any compute stack:
 
 ```bash
-orbitopt rendezvous studio -o runs/leo-rdv-001-studio
-orbitopt
+orbitopt view examples/runs/leo-rdv-001-scene.json
 ```
 
-In Mission Control, select the run under **Runs**. Follow the target and
-chaser, inspect maneuvers and safety checks in **Flight → Rendezvous**, and
-select range, relative speed or the radial, along-track and cross-track
-components in **Telemetry → Plots**. Use `--config PATH` for another mission
-and `--dt S` to set the replay sample interval. The run directory includes
-`mission.json`, `replay.json` and the Rendezvous panel's `rendezvous.json`.
-See the [replay format](adr/rendezvous-0002-mission-studio-flightlab-replay.md).
+or add the `examples/runs/leo-rdv-001` directory under **Runs** in Mission
+Control. Follow the target and chaser, inspect maneuvers and safety checks in
+**Flight → Rendezvous**, and select range, relative speed or the radial,
+along-track and cross-track components in **Telemetry → Plots**. To rebuild
+the run from source: `orbitopt rendezvous studio -o examples/runs/leo-rdv-001`
+(`--config PATH` for another mission, `--dt S` for the sample interval). The
+run directory includes `mission.json`, `replay.json` and the Rendezvous
+panel's `rendezvous.json`; the sidecar carries the consumed `plan_digest`.
+See the [replay format](adr/rendezvous-0004-mission-studio-flightlab-replay.md).
+
+Three lines of evidence, kept separate — a nominal pass is neither an
+independent pass nor a robust success:
 
 | Evidence | LEO-RDV-001 result |
 |---|---|
-| Nominal plan | The two-impulse plan uses **10.344 m/s** total Δv. Safety checks evaluate the approach trajectory. [Safety constraints](adr/rendezvous-0002-safety-constraints-whole-trajectory.md). |
-| Independent re-flight | The recorded nonlinear TudatPy re-flight passed its declared checks. Its closest approach was about **909 m**. [Re-flight report](benchmarks/e12_05_independent_refly.json). |
-| Dispersion campaign | **14 of 264** hold-out cases passed under the declared stress levels (5.3%, Wilson 95% CI 3.2–8.7%). There were 181 arrival-accuracy failures and 69 safety failures. [Campaign design](adr/rendezvous-0003-dispersion-campaign-not-a-safety-factor.md). |
+| Nominal plan (sealed, same-model) | The canonical two-impulse plan uses **10.345 m/s** total Δv (time of flight 3416.7 s) and passes landing, Δv-budget and whole-trajectory safety checks. The Mission Studio replay re-propagates the sealed plan **locally** (`propagate_pair`) — it is a replay, not independent verification. [Safety constraints](adr/rendezvous-0002-safety-constraints-whole-trajectory.md). |
+| Independent re-flight (TudatPy, cross-environment) | The recorded nonlinear TudatPy two-spacecraft re-flight **passed** its declared checks, closest approach about **909 m**. It re-flew the E12-03 planning reference (10.3437 m/s), not the sealed safety plan; until the re-flight evidence digests match the sealed plan, the studio run reports `physics_verified: null` (fail-closed). [Re-flight report](benchmarks/e12_05_independent_refly.json). |
+| Robust dispersion (Monte Carlo, not a nominal result) | Under the declared stress levels, **14 of 264** hold-out cases passed (5.3%, Wilson 95% CI 3.2–8.7%): 181 arrival-accuracy failures and 69 safety failures. This prices a locked mission design under stress; it says nothing against the nominal pass above, and the nominal pass does not soften it. [Campaign design](adr/rendezvous-0005-dispersion-campaign-not-a-safety-factor.md). |
 
 For the independent re-flight in a TudatPy environment, use
 `orbitopt crossenv run --plan src/orbitopt/data/crossenv_e12_05_plan.yaml`.
-See the [independent verification design](adr/rendezvous-0002-independent-refly-tudatpy.md)
+See the [independent verification design](adr/rendezvous-0003-independent-refly-tudatpy.md)
 and [CW validity study](benchmarks/e12_02_cw_validity.md) for the model limits.
 
 ## Replay and view the RTLS mission

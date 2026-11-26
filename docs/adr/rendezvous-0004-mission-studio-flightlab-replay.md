@@ -1,4 +1,4 @@
-# ADR rendezvous-0002: mission studio replay as a Flight Lab run with a sidecar (E12-06)
+# ADR rendezvous-0004: mission studio replay as a Flight Lab run with a sidecar (E12-06)
 
 - **Status:** Accepted
 - **Date:** 2026-11-25
@@ -7,7 +7,7 @@
   `src/orbitopt/flightlab/{compare,scene_export}.py`, `src/orbitopt/flightlab/ui/{telemetry,flight_panel}.py`,
   `src/orbitopt/cli.py` (`orbitopt rendezvous studio`)
 - **Evidence:** `tests/test_e12_06_mission_studio.py`
-- **Builds on:** ADR rendezvous-0001 (plan + independent verification), ADR relative-0001
+- **Builds on:** ADR rendezvous-0001 (plan), ADR rendezvous-0003 (independent verification), ADR relative-0001
   (`propagate_pair`, LVLH frames), the frozen FlightResult/scene/mission/replay v1 contracts
 
 ## Context and problem
