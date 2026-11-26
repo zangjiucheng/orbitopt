@@ -13,7 +13,7 @@ The machine-readable spec is the package [`benchmarks/e14_spec/`](../../benchmar
 `formulation.py`. The gate [`tests/test_e14_10_benchmark_spec.py`](../../tests/test_e14_10_benchmark_spec.py) checks
 the data and checks that this document agrees with it. That includes this digest of every pre-registered choice:
 
-spec digest: `sha256:3b63ef3c792941b99030ceb98fc6b423d1f1d41ce953da99d79336cedc58fa4b`
+spec digest: `sha256:e5104c340d419f388643bed2ad1de32662f8384f7b1c4adb7a05b90ad877db47`
 
 ## What is verified and what is proposed
 

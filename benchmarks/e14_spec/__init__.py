@@ -26,6 +26,7 @@ def spec_document() -> dict:
         "fixed_solver": arms.FIXED_SOLVER,
         "rule_table": arms.RULE_TABLE,
         "primary_comparisons": [list(p) for p in arms.PRIMARY_COMPARISONS],
+        "primary_endpoints": list(metrics.PRIMARY_ENDPOINTS),
         "metrics": [asdict(m) for m in metrics.METRICS],
         "protocol": {"scoring_seeds": list(metrics.SCORING_SEEDS), "tuning_seeds": list(metrics.TUNING_SEEDS),
                      "alpha": metrics.ALPHA, "confidence": metrics.CONFIDENCE,

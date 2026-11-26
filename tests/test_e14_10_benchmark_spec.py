@@ -381,6 +381,8 @@ def test_ten_metrics_defined_with_unit_denominator_and_arms():
         assert m.unit and m.denominator and m.definition and m.target and m.arms
         assert set(m.arms) <= set(A.ARM_IDS)
         assert m.threshold_status == "proposed; frozen in ADR optimization-0001 by E14-01"
+    assert set(M.PRIMARY_ENDPOINTS) <= set(M.METRIC_IDS)
+    assert len(A.PRIMARY_COMPARISONS) * len(M.PRIMARY_ENDPOINTS) == 15  # the Holm family the document states
 
 
 def test_optimality_gap_orientation():

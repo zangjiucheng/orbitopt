@@ -97,6 +97,10 @@ METRICS: tuple[Metric, ...] = (
 
 METRIC_IDS: tuple[str, ...] = tuple(m.id for m in METRICS)
 
+#: the endpoints tested in every primary comparison (arms.PRIMARY_COMPARISONS); Holm runs over comparisons x endpoints.
+#: optimality_gap is tested as its success indicator. The six threshold metrics are pass/fail, not hypotheses.
+PRIMARY_ENDPOINTS: tuple[str, ...] = ("optimality_gap", "function_evaluations", "wall_clock")
+
 
 # ---------------------------------------------------------------------------------------------------------- scoring
 def optimality_gap(reference: float, achieved: float, sense: str, indicator: str = "objective") -> float:

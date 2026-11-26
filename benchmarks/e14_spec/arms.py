@@ -93,5 +93,5 @@ ARMS: tuple[Arm, ...] = (
 
 ARM_IDS: tuple[str, ...] = tuple(a.id for a in ARMS)
 
-#: the pre-registered primary comparisons (treatment, control); Holm runs across all of them and every metric tested
+#: the pre-registered primary comparisons (treatment, control); Holm runs over these x metrics.PRIMARY_ENDPOINTS
 PRIMARY_COMPARISONS: tuple[tuple[str, str], ...] = (("B", "A"), ("C", "A"), ("D", "A"), ("E", "D"), ("E", "B"))
