@@ -65,7 +65,7 @@ resamples whole clusters. The pooled Wilson interval is reported beside it and
 labelled the optimistic reading when the two differ: the same discipline R-06
 (task #238) applies to per-seed clustering in the recovery Monte Carlo.
 
-Sample size (the task's "样本量按目标 CI 宽度确定"): the campaign declares a
+Sample size (the task's "sample size set by the target CI width"): the campaign declares a
 target Wilson width, a confidence level and a cluster size; each arm's size is
 derived with :func:`orbitopt.flightlab.recovery.stats.required_sample_size` at
 the worst-case planning rate and rounded up to whole clusters, so the quoted

@@ -47,7 +47,7 @@ delta-v between the **TudatPy re-flight and the main model** -- is graded as
 ``model_agreement`` on evidence ``independent_model``. ``historical_telemetry``
 appears nowhere: nothing here is compared against flown data.
 
-Cross-environment execution (做法: reuse crossenv). The re-flight needs the
+Cross-environment execution (approach: reuse crossenv). The re-flight needs the
 tudatpy interpreter, which the main orbitopt environment does not carry. When
 ``ORBITOPT_TUDAT_PYTHON`` names one, the re-flight runs as a crossenv **stage**
 (runner ``rendezvous_refly``): the tudat-environment subprocess recomputes the

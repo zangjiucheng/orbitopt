@@ -29,6 +29,7 @@ GROUPS = {
     "optimize": "Optimization",
     "problems": "Optimization problems",
     "relative": "Relative orbital dynamics",
+    "rendezvous": "Rendezvous planning and operations",
     "verify": "Verification",
     "viz": "Visualization and Mission Control",
 }
