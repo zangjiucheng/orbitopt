@@ -1,0 +1,1355 @@
+{
+ "constraint_audit": {
+  "fin_set": "v3_pp",
+  "fin_set_definition": {
+   "cd_add_mach": [
+    [
+     0.3,
+     0.55
+    ],
+    [
+     1.0,
+     1.8
+    ],
+    [
+     1.2,
+     1.9
+    ],
+    [
+     2.0,
+     1.0
+    ],
+    [
+     5.0,
+     0.6
+    ],
+    [
+     12.0,
+     0.5
+    ]
+   ],
+   "cd_add_reference_fin_area_m2": 63.617,
+   "count": 3,
+   "fin_area_m2": 28.1
+  },
+  "graded_limits": {
+   "entry_g_max": 12.0,
+   "entry_q_max_pa": 250000.0,
+   "max_touchdown_lateral_speed_m_s": 1.0,
+   "max_touchdown_speed_m_s": 3.0,
+   "min_propellant_reserve_kg": 100000.0
+  },
+  "grid_fin_assumption_note": "v3_pp grid-fin absolute drag: no public Super Heavy data -- the per-planform calibration (bench_e11_06 FIN_SETS/PP_CD) is a DESIGN ASSUMPTION, inherited unchanged here; every check graded in this campaign inherits it",
+  "grid_fin_drag_is_design_assumption": true,
+  "landing_law": "sealed E11-06 continuous burn (lit_at_start, 4.0 g cap, TVC 20 deg/s, engine stages 13->5->3 under E11_ENGINE_STAGES=1)",
+  "limits_identical_to_sealed_record": true,
+  "pinned_everywhere": "training and hold-out both fly the authored script pinned (search=keep): the only object under test is the SELECTION rule",
+  "sealed_vehicle_file_tagged": true,
+  "search_bounds_unchanged": [
+   [
+    0.0,
+    0.5
+   ],
+   [
+    -40.0,
+    120.0
+   ],
+   [
+    0.4,
+    1.0
+   ],
+   [
+    -40.0,
+    40.0
+   ],
+   [
+    -45.0,
+    45.0
+   ],
+   [
+    3200.0,
+    30000.0
+   ],
+   [
+    150.0,
+    350.0
+   ],
+   [
+    0.4,
+    1.0
+   ],
+   [
+    0.0,
+    60.0
+   ],
+   [
+    12000.0,
+    60000.0
+   ],
+   [
+    0.0,
+    60.0
+   ],
+   [
+    8000.0,
+    25000.0
+   ],
+   [
+    0.0,
+    60.0
+   ]
+  ]
+ },
+ "holdout": {
+  "cand-s1-3": {
+   "arm": "cand-s1-3",
+   "cluster_ci95": [
+    0.9167,
+    1.0
+   ],
+   "n": 36,
+   "per_seed": {
+    "10": {
+     "n": 12,
+     "successes": 12
+    },
+    "8": {
+     "n": 12,
+     "successes": 11
+    },
+    "9": {
+     "n": 12,
+     "successes": 12
+    }
+   },
+   "rate": 0.9722,
+   "reasons": {
+    "LANDING_LATERAL_SPEED_EXCEEDED": 1
+   },
+   "successes": 35
+  },
+  "cand-s2-5": {
+   "arm": "cand-s2-5",
+   "cluster_ci95": [
+    1.0,
+    1.0
+   ],
+   "n": 36,
+   "per_seed": {
+    "10": {
+     "n": 12,
+     "successes": 12
+    },
+    "8": {
+     "n": 12,
+     "successes": 12
+    },
+    "9": {
+     "n": 12,
+     "successes": 12
+    }
+   },
+   "rate": 1.0,
+   "reasons": {},
+   "successes": 36
+  },
+  "cand-s3-9": {
+   "arm": "cand-s3-9",
+   "cluster_ci95": [
+    1.0,
+    1.0
+   ],
+   "n": 36,
+   "per_seed": {
+    "10": {
+     "n": 12,
+     "successes": 12
+    },
+    "8": {
+     "n": 12,
+     "successes": 12
+    },
+    "9": {
+     "n": 12,
+     "successes": 12
+    }
+   },
+   "rate": 1.0,
+   "reasons": {},
+   "successes": 36
+  },
+  "cand-s4-9": {
+   "arm": "cand-s4-9",
+   "cluster_ci95": [
+    1.0,
+    1.0
+   ],
+   "n": 36,
+   "per_seed": {
+    "10": {
+     "n": 12,
+     "successes": 12
+    },
+    "8": {
+     "n": 12,
+     "successes": 12
+    },
+    "9": {
+     "n": 12,
+     "successes": 12
+    }
+   },
+   "rate": 1.0,
+   "reasons": {},
+   "successes": 36
+  },
+  "cand-s5-7": {
+   "arm": "cand-s5-7",
+   "cluster_ci95": [
+    1.0,
+    1.0
+   ],
+   "n": 36,
+   "per_seed": {
+    "10": {
+     "n": 12,
+     "successes": 12
+    },
+    "8": {
+     "n": 12,
+     "successes": 12
+    },
+    "9": {
+     "n": 12,
+     "successes": 12
+    }
+   },
+   "rate": 1.0,
+   "reasons": {},
+   "successes": 36
+  },
+  "sealed": {
+   "arm": "sealed",
+   "cluster_ci95": [
+    0.8333,
+    1.0
+   ],
+   "n": 36,
+   "per_seed": {
+    "10": {
+     "n": 12,
+     "successes": 11
+    },
+    "8": {
+     "n": 12,
+     "successes": 10
+    },
+    "9": {
+     "n": 12,
+     "successes": 12
+    }
+   },
+   "rate": 0.9167,
+   "reasons": {
+    "CORRIDOR_MISSED": 3
+   },
+   "successes": 33
+  },
+  "stop-s1": {
+   "arm": "stop-s1",
+   "cluster_ci95": [
+    0.5,
+    0.75
+   ],
+   "n": 36,
+   "per_seed": {
+    "10": {
+     "n": 12,
+     "successes": 6
+    },
+    "8": {
+     "n": 12,
+     "successes": 9
+    },
+    "9": {
+     "n": 12,
+     "successes": 9
+    }
+   },
+   "rate": 0.6667,
+   "reasons": {
+    "CORRIDOR_MISSED": 12
+   },
+   "successes": 24
+  },
+  "stop-s2": {
+   "arm": "stop-s2",
+   "cluster_ci95": [
+    0.0833,
+    0.25
+   ],
+   "n": 36,
+   "per_seed": {
+    "10": {
+     "n": 12,
+     "successes": 1
+    },
+    "8": {
+     "n": 12,
+     "successes": 2
+    },
+    "9": {
+     "n": 12,
+     "successes": 3
+    }
+   },
+   "rate": 0.1667,
+   "reasons": {
+    "CORRIDOR_MISSED": 18,
+    "LANDING_LATERAL_SPEED_EXCEEDED": 12
+   },
+   "successes": 6
+  },
+  "stop-s3": {
+   "arm": "stop-s3",
+   "cluster_ci95": [
+    0.3333,
+    0.5833
+   ],
+   "n": 36,
+   "per_seed": {
+    "10": {
+     "n": 12,
+     "successes": 4
+    },
+    "8": {
+     "n": 12,
+     "successes": 7
+    },
+    "9": {
+     "n": 12,
+     "successes": 5
+    }
+   },
+   "rate": 0.4444,
+   "reasons": {
+    "CORRIDOR_MISSED": 12,
+    "LANDING_LATERAL_SPEED_EXCEEDED": 8
+   },
+   "successes": 16
+  },
+  "stop-s4": {
+   "arm": "stop-s4",
+   "cluster_ci95": [
+    0.25,
+    0.6667
+   ],
+   "n": 36,
+   "per_seed": {
+    "10": {
+     "n": 12,
+     "successes": 3
+    },
+    "8": {
+     "n": 12,
+     "successes": 6
+    },
+    "9": {
+     "n": 12,
+     "successes": 8
+    }
+   },
+   "rate": 0.4722,
+   "reasons": {
+    "CORRIDOR_MISSED": 13,
+    "LANDING_LATERAL_SPEED_EXCEEDED": 5,
+    "LANDING_POSITION_OUT_OF_TOLERANCE": 1
+   },
+   "successes": 17
+  },
+  "stop-s5": {
+   "arm": "stop-s5",
+   "cluster_ci95": [
+    0.8333,
+    1.0
+   ],
+   "n": 36,
+   "per_seed": {
+    "10": {
+     "n": 12,
+     "successes": 11
+    },
+    "8": {
+     "n": 12,
+     "successes": 10
+    },
+    "9": {
+     "n": 12,
+     "successes": 12
+    }
+   },
+   "rate": 0.9167,
+   "reasons": {
+    "CORRIDOR_MISSED": 3
+   },
+   "successes": 33
+  }
+ },
+ "paired_selected_vs_stop": [
+  {
+   "arms": [
+    "cand-s1-3",
+    "stop-s1"
+   ],
+   "diff": 11,
+   "n_pairs": 36,
+   "p_raw": 0.0009765625,
+   "table": {
+    "a_only": 11,
+    "b_only": 0,
+    "both": 24,
+    "neither": 1
+   }
+  },
+  {
+   "arms": [
+    "cand-s2-5",
+    "stop-s2"
+   ],
+   "diff": 30,
+   "n_pairs": 36,
+   "p_raw": 1.862645149230957e-09,
+   "table": {
+    "a_only": 30,
+    "b_only": 0,
+    "both": 6,
+    "neither": 0
+   }
+  },
+  {
+   "arms": [
+    "cand-s3-9",
+    "stop-s3"
+   ],
+   "diff": 20,
+   "n_pairs": 36,
+   "p_raw": 1.9073486328125e-06,
+   "table": {
+    "a_only": 20,
+    "b_only": 0,
+    "both": 16,
+    "neither": 0
+   }
+  },
+  {
+   "arms": [
+    "cand-s4-9",
+    "stop-s4"
+   ],
+   "diff": 19,
+   "n_pairs": 36,
+   "p_raw": 3.814697265625e-06,
+   "table": {
+    "a_only": 19,
+    "b_only": 0,
+    "both": 17,
+    "neither": 0
+   }
+  },
+  {
+   "arms": [
+    "cand-s5-7",
+    "stop-s5"
+   ],
+   "diff": 3,
+   "n_pairs": 36,
+   "p_raw": 0.25,
+   "table": {
+    "a_only": 3,
+    "b_only": 0,
+    "both": 33,
+    "neither": 0
+   }
+  }
+ ],
+ "paired_vs_sealed": [
+  {
+   "arms": [
+    "cand-s1-3",
+    "sealed"
+   ],
+   "diff": 2,
+   "n_pairs": 36,
+   "p_holm": 1.0,
+   "p_raw": 0.5,
+   "significant": false,
+   "table": {
+    "a_only": 2,
+    "b_only": 0,
+    "both": 33,
+    "neither": 1
+   }
+  },
+  {
+   "arms": [
+    "cand-s2-5",
+    "sealed"
+   ],
+   "diff": 3,
+   "n_pairs": 36,
+   "p_holm": 1.0,
+   "p_raw": 0.25,
+   "significant": false,
+   "table": {
+    "a_only": 3,
+    "b_only": 0,
+    "both": 33,
+    "neither": 0
+   }
+  },
+  {
+   "arms": [
+    "cand-s3-9",
+    "sealed"
+   ],
+   "diff": 3,
+   "n_pairs": 36,
+   "p_holm": 1.0,
+   "p_raw": 0.25,
+   "significant": false,
+   "table": {
+    "a_only": 3,
+    "b_only": 0,
+    "both": 33,
+    "neither": 0
+   }
+  },
+  {
+   "arms": [
+    "cand-s4-9",
+    "sealed"
+   ],
+   "diff": 3,
+   "n_pairs": 36,
+   "p_holm": 1.0,
+   "p_raw": 0.25,
+   "significant": false,
+   "table": {
+    "a_only": 3,
+    "b_only": 0,
+    "both": 33,
+    "neither": 0
+   }
+  },
+  {
+   "arms": [
+    "cand-s5-7",
+    "sealed"
+   ],
+   "diff": 3,
+   "n_pairs": 36,
+   "p_holm": 1.0,
+   "p_raw": 0.25,
+   "significant": false,
+   "table": {
+    "a_only": 3,
+    "b_only": 0,
+    "both": 33,
+    "neither": 0
+   }
+  }
+ ],
+ "per_seed": [
+  {
+   "holdout_selected": {
+    "arm": "cand-s1-3",
+    "cluster_ci95": [
+     0.9167,
+     1.0
+    ],
+    "n": 36,
+    "per_seed": {
+     "10": {
+      "n": 12,
+      "successes": 12
+     },
+     "8": {
+      "n": 12,
+      "successes": 11
+     },
+     "9": {
+      "n": 12,
+      "successes": 12
+     }
+    },
+    "rate": 0.9722,
+    "reasons": {
+     "LANDING_LATERAL_SPEED_EXCEEDED": 1
+    },
+    "successes": 35
+   },
+   "holdout_stop": {
+    "arm": "stop-s1",
+    "cluster_ci95": [
+     0.5,
+     0.75
+    ],
+    "n": 36,
+    "per_seed": {
+     "10": {
+      "n": 12,
+      "successes": 6
+     },
+     "8": {
+      "n": 12,
+      "successes": 9
+     },
+     "9": {
+      "n": 12,
+      "successes": 9
+     }
+    },
+    "rate": 0.6667,
+    "reasons": {
+     "CORRIDOR_MISSED": 12
+    },
+    "successes": 24
+   },
+   "nfev": 4096,
+   "pool_kept": 10,
+   "pool_total": 100,
+   "search_runtime_s": 6275.8,
+   "seed": 1,
+   "selected_arm": "cand-s1-3",
+   "train_score_selected": {
+    "mean_fuel_margin_kg": 118137.2,
+    "mean_miss_m": 561.5,
+    "n": 12,
+    "successes": 12
+   },
+   "train_score_stop": {
+    "mean_fuel_margin_kg": 112482.6,
+    "mean_miss_m": 1262.8,
+    "n": 12,
+    "successes": 7
+   }
+  },
+  {
+   "holdout_selected": {
+    "arm": "cand-s2-5",
+    "cluster_ci95": [
+     1.0,
+     1.0
+    ],
+    "n": 36,
+    "per_seed": {
+     "10": {
+      "n": 12,
+      "successes": 12
+     },
+     "8": {
+      "n": 12,
+      "successes": 12
+     },
+     "9": {
+      "n": 12,
+      "successes": 12
+     }
+    },
+    "rate": 1.0,
+    "reasons": {},
+    "successes": 36
+   },
+   "holdout_stop": {
+    "arm": "stop-s2",
+    "cluster_ci95": [
+     0.0833,
+     0.25
+    ],
+    "n": 36,
+    "per_seed": {
+     "10": {
+      "n": 12,
+      "successes": 1
+     },
+     "8": {
+      "n": 12,
+      "successes": 2
+     },
+     "9": {
+      "n": 12,
+      "successes": 3
+     }
+    },
+    "rate": 0.1667,
+    "reasons": {
+     "CORRIDOR_MISSED": 18,
+     "LANDING_LATERAL_SPEED_EXCEEDED": 12
+    },
+    "successes": 6
+   },
+   "nfev": 4096,
+   "pool_kept": 10,
+   "pool_total": 81,
+   "search_runtime_s": 6225.8,
+   "seed": 2,
+   "selected_arm": "cand-s2-5",
+   "train_score_selected": {
+    "mean_fuel_margin_kg": 105684.6,
+    "mean_miss_m": 430.2,
+    "n": 12,
+    "successes": 12
+   },
+   "train_score_stop": {
+    "mean_fuel_margin_kg": 99968.2,
+    "mean_miss_m": 1905.1,
+    "n": 12,
+    "successes": 2
+   }
+  },
+  {
+   "holdout_selected": {
+    "arm": "cand-s3-9",
+    "cluster_ci95": [
+     1.0,
+     1.0
+    ],
+    "n": 36,
+    "per_seed": {
+     "10": {
+      "n": 12,
+      "successes": 12
+     },
+     "8": {
+      "n": 12,
+      "successes": 12
+     },
+     "9": {
+      "n": 12,
+      "successes": 12
+     }
+    },
+    "rate": 1.0,
+    "reasons": {},
+    "successes": 36
+   },
+   "holdout_stop": {
+    "arm": "stop-s3",
+    "cluster_ci95": [
+     0.3333,
+     0.5833
+    ],
+    "n": 36,
+    "per_seed": {
+     "10": {
+      "n": 12,
+      "successes": 4
+     },
+     "8": {
+      "n": 12,
+      "successes": 7
+     },
+     "9": {
+      "n": 12,
+      "successes": 5
+     }
+    },
+    "rate": 0.4444,
+    "reasons": {
+     "CORRIDOR_MISSED": 12,
+     "LANDING_LATERAL_SPEED_EXCEEDED": 8
+    },
+    "successes": 16
+   },
+   "nfev": 4096,
+   "pool_kept": 10,
+   "pool_total": 82,
+   "search_runtime_s": 6230.5,
+   "seed": 3,
+   "selected_arm": "cand-s3-9",
+   "train_score_selected": {
+    "mean_fuel_margin_kg": 87112.2,
+    "mean_miss_m": 754.6,
+    "n": 12,
+    "successes": 12
+   },
+   "train_score_stop": {
+    "mean_fuel_margin_kg": 87981.7,
+    "mean_miss_m": 1396.1,
+    "n": 12,
+    "successes": 6
+   }
+  },
+  {
+   "holdout_selected": {
+    "arm": "cand-s4-9",
+    "cluster_ci95": [
+     1.0,
+     1.0
+    ],
+    "n": 36,
+    "per_seed": {
+     "10": {
+      "n": 12,
+      "successes": 12
+     },
+     "8": {
+      "n": 12,
+      "successes": 12
+     },
+     "9": {
+      "n": 12,
+      "successes": 12
+     }
+    },
+    "rate": 1.0,
+    "reasons": {},
+    "successes": 36
+   },
+   "holdout_stop": {
+    "arm": "stop-s4",
+    "cluster_ci95": [
+     0.25,
+     0.6667
+    ],
+    "n": 36,
+    "per_seed": {
+     "10": {
+      "n": 12,
+      "successes": 3
+     },
+     "8": {
+      "n": 12,
+      "successes": 6
+     },
+     "9": {
+      "n": 12,
+      "successes": 8
+     }
+    },
+    "rate": 0.4722,
+    "reasons": {
+     "CORRIDOR_MISSED": 13,
+     "LANDING_LATERAL_SPEED_EXCEEDED": 5,
+     "LANDING_POSITION_OUT_OF_TOLERANCE": 1
+    },
+    "successes": 17
+   },
+   "nfev": 4096,
+   "pool_kept": 10,
+   "pool_total": 94,
+   "search_runtime_s": 6249.4,
+   "seed": 4,
+   "selected_arm": "cand-s4-9",
+   "train_score_selected": {
+    "mean_fuel_margin_kg": 102436.0,
+    "mean_miss_m": 930.1,
+    "n": 12,
+    "successes": 12
+   },
+   "train_score_stop": {
+    "mean_fuel_margin_kg": 89089.8,
+    "mean_miss_m": 630.0,
+    "n": 12,
+    "successes": 7
+   }
+  },
+  {
+   "holdout_selected": {
+    "arm": "cand-s5-7",
+    "cluster_ci95": [
+     1.0,
+     1.0
+    ],
+    "n": 36,
+    "per_seed": {
+     "10": {
+      "n": 12,
+      "successes": 12
+     },
+     "8": {
+      "n": 12,
+      "successes": 12
+     },
+     "9": {
+      "n": 12,
+      "successes": 12
+     }
+    },
+    "rate": 1.0,
+    "reasons": {},
+    "successes": 36
+   },
+   "holdout_stop": {
+    "arm": "stop-s5",
+    "cluster_ci95": [
+     0.8333,
+     1.0
+    ],
+    "n": 36,
+    "per_seed": {
+     "10": {
+      "n": 12,
+      "successes": 11
+     },
+     "8": {
+      "n": 12,
+      "successes": 10
+     },
+     "9": {
+      "n": 12,
+      "successes": 12
+     }
+    },
+    "rate": 0.9167,
+    "reasons": {
+     "CORRIDOR_MISSED": 3
+    },
+    "successes": 33
+   },
+   "nfev": 4096,
+   "pool_kept": 10,
+   "pool_total": 254,
+   "search_runtime_s": 6076.1,
+   "seed": 5,
+   "selected_arm": "cand-s5-7",
+   "train_score_selected": {
+    "mean_fuel_margin_kg": 87932.7,
+    "mean_miss_m": 352.2,
+    "n": 12,
+    "successes": 12
+   },
+   "train_score_stop": {
+    "mean_fuel_margin_kg": 86234.2,
+    "mean_miss_m": 895.9,
+    "n": 12,
+    "successes": 9
+   }
+  }
+ ],
+ "protocol": {
+  "holdout": "pinned FL-304 on the sealed grid, paired sample-for-sample",
+  "ranking": "pinned MC on training seeds only: landings, then mean corridor fuel margin, then mean corridor miss, then harvest order",
+  "search": "E11-06b DE, no first-feasible stop (runs to --maxiter), every feasible design harvested, pool capped first-come at --pool-cap"
+ },
+ "provenance": {
+  "ascent": "sealed E5-08c Starbase ascent (read, not re-flown)",
+  "command": "E11_ENGINE_STAGES=1 python benchmarks/bench_e11r_01_robust_candidate_selection.py --workers 40 --cache campaign-cache.json -o e11r01-campaign.json --md e11r01-campaign.md",
+  "date_utc": "2026-11-26T13:00:35+00:00",
+  "env": {
+   "E11_ENGINE_STAGES": "1",
+   "E11_FINS_FIXED": null,
+   "OMP_NUM_THREADS": "1"
+  },
+  "fins": "v3_pp",
+  "git_note": "run from a byte-identical synced copy of the task-branch worktree on the compute host",
+  "git_sha": "f97fbf92fa2183cb6d525427cb1b8cfcb581e5d1",
+  "host": "ubuntu2404-010",
+  "python": "3.12.3",
+  "sealed_records_read": [
+   "tests/data/mission/reference/e11-06-starbase-continuous-burn/candidate.json",
+   "tests/data/mission/reference/e11-06-starbase-continuous-burn-reports/candidate-set.json"
+  ]
+ },
+ "runtime_s": 0.9,
+ "scores": {
+  "cand-s1-0": {
+   "mean_fuel_margin_kg": 112482.6,
+   "mean_miss_m": 1262.8,
+   "n": 12,
+   "successes": 7
+  },
+  "cand-s1-1": {
+   "mean_fuel_margin_kg": 119324.3,
+   "mean_miss_m": 831.5,
+   "n": 12,
+   "successes": 7
+  },
+  "cand-s1-2": {
+   "mean_fuel_margin_kg": 103597.7,
+   "mean_miss_m": 883.6,
+   "n": 12,
+   "successes": 9
+  },
+  "cand-s1-3": {
+   "mean_fuel_margin_kg": 118137.2,
+   "mean_miss_m": 561.5,
+   "n": 12,
+   "successes": 12
+  },
+  "cand-s1-4": {
+   "mean_fuel_margin_kg": 109784.7,
+   "mean_miss_m": 1876.6,
+   "n": 12,
+   "successes": 7
+  },
+  "cand-s1-5": {
+   "mean_fuel_margin_kg": 89034.3,
+   "mean_miss_m": 733.9,
+   "n": 12,
+   "successes": 12
+  },
+  "cand-s1-6": {
+   "mean_fuel_margin_kg": 45521.8,
+   "mean_miss_m": 408.8,
+   "n": 12,
+   "successes": 12
+  },
+  "cand-s1-7": {
+   "mean_fuel_margin_kg": 96079.1,
+   "mean_miss_m": 348.5,
+   "n": 12,
+   "successes": 9
+  },
+  "cand-s1-8": {
+   "mean_fuel_margin_kg": 94428.1,
+   "mean_miss_m": 475.6,
+   "n": 12,
+   "successes": 9
+  },
+  "cand-s1-9": {
+   "mean_fuel_margin_kg": 88684.4,
+   "mean_miss_m": 1148.6,
+   "n": 12,
+   "successes": 6
+  },
+  "cand-s2-0": {
+   "mean_fuel_margin_kg": 99968.2,
+   "mean_miss_m": 1905.1,
+   "n": 12,
+   "successes": 2
+  },
+  "cand-s2-1": {
+   "mean_fuel_margin_kg": 142167.1,
+   "mean_miss_m": 1384.1,
+   "n": 12,
+   "successes": 8
+  },
+  "cand-s2-2": {
+   "mean_fuel_margin_kg": 95171.3,
+   "mean_miss_m": 615.5,
+   "n": 12,
+   "successes": 12
+  },
+  "cand-s2-3": {
+   "mean_fuel_margin_kg": 112161.9,
+   "mean_miss_m": 802.8,
+   "n": 12,
+   "successes": 7
+  },
+  "cand-s2-4": {
+   "mean_fuel_margin_kg": 102985.2,
+   "mean_miss_m": 546.9,
+   "n": 12,
+   "successes": 7
+  },
+  "cand-s2-5": {
+   "mean_fuel_margin_kg": 105684.6,
+   "mean_miss_m": 430.2,
+   "n": 12,
+   "successes": 12
+  },
+  "cand-s2-6": {
+   "mean_fuel_margin_kg": 106228.8,
+   "mean_miss_m": 1175.1,
+   "n": 12,
+   "successes": 9
+  },
+  "cand-s2-7": {
+   "mean_fuel_margin_kg": 80684.7,
+   "mean_miss_m": 934.2,
+   "n": 12,
+   "successes": 11
+  },
+  "cand-s2-8": {
+   "mean_fuel_margin_kg": 73113.4,
+   "mean_miss_m": 949.7,
+   "n": 12,
+   "successes": 9
+  },
+  "cand-s2-9": {
+   "mean_fuel_margin_kg": 87939.7,
+   "mean_miss_m": 929.4,
+   "n": 12,
+   "successes": 7
+  },
+  "cand-s3-0": {
+   "mean_fuel_margin_kg": 87981.7,
+   "mean_miss_m": 1396.1,
+   "n": 12,
+   "successes": 6
+  },
+  "cand-s3-1": {
+   "mean_fuel_margin_kg": 84441.2,
+   "mean_miss_m": 702.7,
+   "n": 12,
+   "successes": 8
+  },
+  "cand-s3-2": {
+   "mean_fuel_margin_kg": 61872.4,
+   "mean_miss_m": 600.1,
+   "n": 12,
+   "successes": 9
+  },
+  "cand-s3-3": {
+   "mean_fuel_margin_kg": 52155.4,
+   "mean_miss_m": 1155.1,
+   "n": 12,
+   "successes": 9
+  },
+  "cand-s3-4": {
+   "mean_fuel_margin_kg": 90340.9,
+   "mean_miss_m": 639.1,
+   "n": 12,
+   "successes": 9
+  },
+  "cand-s3-5": {
+   "mean_fuel_margin_kg": 74788.5,
+   "mean_miss_m": 1743.2,
+   "n": 12,
+   "successes": 6
+  },
+  "cand-s3-6": {
+   "mean_fuel_margin_kg": 101451.2,
+   "mean_miss_m": 279.9,
+   "n": 12,
+   "successes": 11
+  },
+  "cand-s3-7": {
+   "mean_fuel_margin_kg": 110587.6,
+   "mean_miss_m": 723.8,
+   "n": 12,
+   "successes": 5
+  },
+  "cand-s3-8": {
+   "mean_fuel_margin_kg": 107750.5,
+   "mean_miss_m": 1777.1,
+   "n": 12,
+   "successes": 3
+  },
+  "cand-s3-9": {
+   "mean_fuel_margin_kg": 87112.2,
+   "mean_miss_m": 754.6,
+   "n": 12,
+   "successes": 12
+  },
+  "cand-s4-0": {
+   "mean_fuel_margin_kg": 89089.8,
+   "mean_miss_m": 630.0,
+   "n": 12,
+   "successes": 7
+  },
+  "cand-s4-1": {
+   "mean_fuel_margin_kg": 94405.1,
+   "mean_miss_m": 621.0,
+   "n": 12,
+   "successes": 10
+  },
+  "cand-s4-2": {
+   "mean_fuel_margin_kg": 65094.7,
+   "mean_miss_m": 1262.6,
+   "n": 12,
+   "successes": 7
+  },
+  "cand-s4-3": {
+   "mean_fuel_margin_kg": 87977.1,
+   "mean_miss_m": 1691.5,
+   "n": 12,
+   "successes": 7
+  },
+  "cand-s4-4": {
+   "mean_fuel_margin_kg": 79236.2,
+   "mean_miss_m": 1832.0,
+   "n": 12,
+   "successes": 10
+  },
+  "cand-s4-5": {
+   "mean_fuel_margin_kg": 66585.8,
+   "mean_miss_m": 1367.4,
+   "n": 12,
+   "successes": 12
+  },
+  "cand-s4-6": {
+   "mean_fuel_margin_kg": 46444.8,
+   "mean_miss_m": 1664.1,
+   "n": 12,
+   "successes": 0
+  },
+  "cand-s4-7": {
+   "mean_fuel_margin_kg": 97284.8,
+   "mean_miss_m": 827.6,
+   "n": 12,
+   "successes": 8
+  },
+  "cand-s4-8": {
+   "mean_fuel_margin_kg": 103235.0,
+   "mean_miss_m": 752.4,
+   "n": 12,
+   "successes": 9
+  },
+  "cand-s4-9": {
+   "mean_fuel_margin_kg": 102436.0,
+   "mean_miss_m": 930.1,
+   "n": 12,
+   "successes": 12
+  },
+  "cand-s5-0": {
+   "mean_fuel_margin_kg": 86234.2,
+   "mean_miss_m": 895.9,
+   "n": 12,
+   "successes": 9
+  },
+  "cand-s5-1": {
+   "mean_fuel_margin_kg": 101522.8,
+   "mean_miss_m": 1201.2,
+   "n": 12,
+   "successes": 7
+  },
+  "cand-s5-2": {
+   "mean_fuel_margin_kg": 108819.6,
+   "mean_miss_m": 758.6,
+   "n": 12,
+   "successes": 8
+  },
+  "cand-s5-3": {
+   "mean_fuel_margin_kg": 119385.4,
+   "mean_miss_m": 1262.0,
+   "n": 12,
+   "successes": 8
+  },
+  "cand-s5-4": {
+   "mean_fuel_margin_kg": 109635.7,
+   "mean_miss_m": 1687.5,
+   "n": 12,
+   "successes": 7
+  },
+  "cand-s5-5": {
+   "mean_fuel_margin_kg": 93603.8,
+   "mean_miss_m": 1101.3,
+   "n": 12,
+   "successes": 10
+  },
+  "cand-s5-6": {
+   "mean_fuel_margin_kg": 78659.7,
+   "mean_miss_m": 1030.7,
+   "n": 12,
+   "successes": 12
+  },
+  "cand-s5-7": {
+   "mean_fuel_margin_kg": 87932.7,
+   "mean_miss_m": 352.2,
+   "n": 12,
+   "successes": 12
+  },
+  "cand-s5-8": {
+   "mean_fuel_margin_kg": 80456.8,
+   "mean_miss_m": 497.1,
+   "n": 12,
+   "successes": 8
+  },
+  "cand-s5-9": {
+   "mean_fuel_margin_kg": 99881.9,
+   "mean_miss_m": 431.3,
+   "n": 12,
+   "successes": 7
+  },
+  "stop-s1": {
+   "mean_fuel_margin_kg": 112482.6,
+   "mean_miss_m": 1262.8,
+   "n": 12,
+   "successes": 7
+  },
+  "stop-s2": {
+   "mean_fuel_margin_kg": 99968.2,
+   "mean_miss_m": 1905.1,
+   "n": 12,
+   "successes": 2
+  },
+  "stop-s3": {
+   "mean_fuel_margin_kg": 87981.7,
+   "mean_miss_m": 1396.1,
+   "n": 12,
+   "successes": 6
+  },
+  "stop-s4": {
+   "mean_fuel_margin_kg": 89089.8,
+   "mean_miss_m": 630.0,
+   "n": 12,
+   "successes": 7
+  },
+  "stop-s5": {
+   "mean_fuel_margin_kg": 86234.2,
+   "mean_miss_m": 895.9,
+   "n": 12,
+   "successes": 9
+  }
+ },
+ "sealed_reproduced": {
+  "matches_record_33_36": true,
+  "n": 36,
+  "successes": 33
+ },
+ "seed_manifest": {
+  "bootstrap_seed": 20261126,
+  "disjoint_note": "training disjoint from the hold-out and from every prior stream (asserted at import); search seeds are the archived E12-00 candidate-set seeds",
+  "holdout_seeds": [
+   8,
+   9,
+   10
+  ],
+  "n_per_seed": 12,
+  "search_seeds": [
+   1,
+   2,
+   3,
+   4,
+   5
+  ],
+  "train_per_seed": 4,
+  "train_seeds": [
+   901,
+   902,
+   903
+  ]
+ },
+ "task": "E11R-01 robust candidate selection (#414)",
+ "verdict": {
+  "archived_table": {
+   "max_rate": 0.9166666666666666,
+   "min_rate": 0.16666666666666666,
+   "successes": [
+    24,
+    6,
+    16,
+    17,
+    33
+   ]
+  },
+  "dispersion_selected": {
+   "max": 1.0,
+   "mean": 0.9944,
+   "min": 0.9722,
+   "n": 5,
+   "range": 0.0278,
+   "std": 0.0124
+  },
+  "dispersion_stop": {
+   "max": 0.9167,
+   "mean": 0.5333,
+   "min": 0.1667,
+   "n": 5,
+   "range": 0.75,
+   "std": 0.2788
+  },
+  "pooled_selected": {
+   "cluster_ci95": [
+    0.9833,
+    1.0
+   ],
+   "clusters": 5,
+   "n": 180,
+   "rate": 0.9944,
+   "successes": 179
+  }
+ }
+}
