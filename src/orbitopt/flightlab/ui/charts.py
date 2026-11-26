@@ -6,16 +6,18 @@ the pyvista/VTK imports the replay page's 3D view needs.
 """
 from __future__ import annotations
 
+import bisect
 import math
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-from orbitopt.flightlab.ui.telemetry import TelemetryChannel
+from orbitopt.flightlab.ui.telemetry import TelemetryChannel, interpolated_value
 from orbitopt.viz.theme import HAIRLINE, INFO, INK_MUTED, INK_SECONDARY, PANEL
 
-__all__ = ["TelemetryChart", "fmt_clock", "fmt_number", "nice_ticks", "qfont"]
+__all__ = ["TelemetryChart", "fmt_clock", "fmt_met", "fmt_number", "link_charts", "nice_ticks", "qfont",
+           "readout_rows"]
 
 
 def _font(size: float, bold: bool = False) -> QFont:
@@ -91,6 +93,32 @@ def _slider_resolution(seconds: float) -> float:
     return 1.0
 
 
+def _fmt_met(seconds: float) -> str:
+    """Mission elapsed time as ``T+h:mm:ss.s`` (the readout's exact clock)."""
+    if not math.isfinite(seconds):
+        return "T+—"
+    negative = seconds < 0
+    hours, rest = divmod(abs(float(seconds)), 3600.0)
+    minutes, secs = divmod(rest, 60.0)
+    return f"T{'-' if negative else '+'}{int(hours)}:{int(minutes):02d}:{secs:04.1f}"
+
+
+def readout_rows(channel: TelemetryChannel, t: float) -> list[tuple[str, str, str, float]]:
+    """``(label, colour, value text, value)`` of every series with data at time ``t`` -- linearly interpolated, and
+    only inside the series' own span (a stage that has not flown yet, or has landed, reads nothing rather than its
+    clamped end value). The hover box and the tests share this."""
+    rows: list[tuple[str, str, str, float]] = []
+    for series in channel.series:
+        pts = series.points
+        if not pts or not (pts[0][0] - 1e-9 <= t <= pts[-1][0] + 1e-9):
+            continue
+        value = interpolated_value(pts, t)
+        if value is None or not math.isfinite(value):
+            continue
+        rows.append((series.label or series.body_id, series.color, _fmt_number(value), float(value)))
+    return rows
+
+
 class _TelemetryChart(QWidget):
     """One synchronized channel chart.
 
@@ -102,6 +130,11 @@ class _TelemetryChart(QWidget):
 
     time_requested = Signal(float)
     hovered = Signal(float)
+    #: the mouse's time over the plot (``None`` when it leaves): :func:`link_charts` mirrors it on the other charts
+    #: so one crosshair reads every channel
+    hover_time_changed = Signal(object)
+    #: the visible time window changed through this chart's own wheel / pan / reset
+    view_range_changed = Signal(float, float)
 
     MARGINS = (66, 26, 18, 28)
     _TITLE_X = 8.0
@@ -117,14 +150,17 @@ class _TelemetryChart(QWidget):
         self._ymax = 1.0
         self._time = 0.0
         self._dragging = False
+        self._hover: float | None = None
         self._pan_x = None
         self._full_range = (0.0, 1.0)
         self._detail_chart = None
         self._detail_dialog = None
-        self.setToolTip("Double-click to expand · scroll to zoom · right-drag to pan · left-click to seek")
+        self.setToolTip("Hover: read every channel at that time · left-click or drag: seek · scroll: zoom · "
+                        "right- or shift-drag: pan · double-click: expand · Left/Right: step one sample")
         self._cache: QPixmap | None = None
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)   # arrow keys step the cursor
         self.setMinimumSize(120, 110)
         from orbitopt.flightlab.ui.plot_export import ExportButton, channel_to_csv
 
@@ -359,13 +395,109 @@ class _TelemetryChart(QWidget):
         rect = self.plot_rect()
         p.setPen(QPen(QColor(INFO), 1, Qt.DashLine))
         p.drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()))
+        if self._hover is not None and self._xmin <= self._hover <= self._xmax and self._channel.has_data:
+            hx = self._x(self._hover)
+            p.setPen(QPen(QColor(INK_SECONDARY), 1, Qt.SolidLine))
+            p.drawLine(QPointF(hx, rect.top()), QPointF(hx, rect.bottom()))
+            rows = readout_rows(self._channel, self._hover)
+            for _label, color, _text, value in rows:
+                p.setPen(QPen(QColor(PANEL), 1.2))
+                p.setBrush(QBrush(QColor(color)))
+                p.drawEllipse(QPointF(hx, self._y(value)), 3.6, 3.6)
+            p.setBrush(Qt.NoBrush)
+            self._paint_readout(p, rect, hx, rows)
+
+    def _paint_readout(self, p: QPainter, rect: QRectF, hx: float, rows: list[tuple[str, str, str, float]]) -> None:
+        """The hover box: the exact time, then one coloured row per series with data there, on the side of the
+        crosshair that has room."""
+        p.setFont(_font(8.5))
+        fm = p.fontMetrics()
+        unit = self._channel.unit
+        lines = [(None, _fmt_met(self._hover), "")]
+        lines += [(color, label, f"{text} {unit}".strip()) for label, color, text, _v in rows]
+        if not rows:
+            lines.append((None, "no data here", ""))
+        label_w = max(fm.horizontalAdvance(a) for _c, a, _b in lines)
+        value_w = max(fm.horizontalAdvance(b) for _c, _a, b in lines)
+        row_h = fm.height() + 2
+        box_w = min(rect.width() - 8.0, 22.0 + label_w + (12.0 + value_w if value_w else 0.0))
+        box_h = row_h * len(lines) + 6.0
+        x = hx + 10.0
+        if x + box_w > rect.right() - 2.0:
+            x = hx - 10.0 - box_w
+        x = max(rect.left() + 2.0, x)
+        y = rect.top() + 4.0
+        if self.legend_placement == "inside":      # the legend box owns the top-right: read from below it
+            y = max(rect.top() + 4.0, rect.bottom() - box_h - 4.0)
+        box = QRectF(x, y, box_w, box_h)
+        backdrop = QColor(PANEL)
+        backdrop.setAlpha(238)
+        p.setPen(QPen(QColor(HAIRLINE), 1))
+        p.setBrush(QBrush(backdrop))
+        p.drawRect(box)
+        for n, (color, label, value) in enumerate(lines):
+            ry = box.top() + 3.0 + n * row_h
+            if color:
+                p.setPen(Qt.NoPen)
+                p.setBrush(QBrush(QColor(color)))
+                p.drawRect(QRectF(box.left() + 6.0, ry + (row_h - 7.0) / 2.0, 7, 7))
+                p.setPen(QColor(INK_SECONDARY))
+            else:
+                p.setPen(QColor(INFO) if n == 0 else QColor(INK_MUTED))
+            p.drawText(QRectF(box.left() + 18.0 if color else box.left() + 6.0, ry,
+                              box.width() - 20.0, row_h), Qt.AlignLeft | Qt.AlignVCenter, label)
+            if value:
+                p.setPen(QColor(color or INK_SECONDARY))
+                p.drawText(QRectF(box.left(), ry, box.width() - 6.0, row_h), Qt.AlignRight | Qt.AlignVCenter, value)
+        p.setBrush(Qt.NoBrush)
+
+    def set_hover_time(self, t: float | None) -> None:
+        """Mirror another chart's crosshair (no signal, so no feedback loop)."""
+        t = None if t is None else float(t)
+        if t != self._hover:
+            self._hover = t
+            self.update()
+
+    @property
+    def hover_time(self) -> float | None:
+        return self._hover
+
+    def _set_hover(self, t: float | None) -> None:
+        if t != self._hover:
+            self._hover = t
+            self.update()
+            self.hover_time_changed.emit(t)
+
+    def leaveEvent(self, event):  # noqa: N802
+        if not self._dragging:
+            self._set_hover(None)
+        super().leaveEvent(event)
+
+    def keyPressEvent(self, event):  # noqa: N802
+        """Left/Right move the cursor to the previous/next sample time of the channel: step through the run one
+        record at a time."""
+        key = event.key()
+        if key in (Qt.Key.Key_Left, Qt.Key.Key_Right) and self._channel.has_data:
+            times = sorted({pt[0] for s in self._channel.series for pt in s.points})
+            if times:
+                if key == Qt.Key.Key_Right:
+                    t = times[min(bisect.bisect_right(times, self._time + 1e-9), len(times) - 1)]
+                else:
+                    t = times[max(bisect.bisect_left(times, self._time - 1e-9) - 1, 0)]
+                self.time_requested.emit(t)
+                event.accept()
+                return
+        super().keyPressEvent(event)
 
     def mousePressEvent(self, event):  # noqa: N802
-        if event.button() in (Qt.MouseButton.RightButton, Qt.MouseButton.MiddleButton):
+        shift_pan = (event.button() == Qt.MouseButton.LeftButton
+                     and bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier))
+        if shift_pan or event.button() in (Qt.MouseButton.RightButton, Qt.MouseButton.MiddleButton):
             self._pan_x = event.position().x()
             event.accept()
         elif event.button() == Qt.MouseButton.LeftButton:
             self._dragging = True
+            self.setFocus()
             self.time_requested.emit(self._time_at_x(event.position().x()))
             event.accept()
         else:
@@ -375,17 +507,20 @@ class _TelemetryChart(QWidget):
         if self._pan_x is not None:
             delta = (self._pan_x - event.position().x()) / self.plot_rect().width() * (self._xmax - self._xmin)
             self._pan_x = event.position().x()
-            self._set_visible_range(self._xmin + delta, self._xmax + delta)
+            self._set_visible_range(self._xmin + delta, self._xmax + delta, emit=True)
             event.accept()
         elif self._dragging:
             self.time_requested.emit(self._time_at_x(event.position().x()))
             event.accept()
         else:
-            self.hovered.emit(self._time_at_x(event.position().x()))
+            t = self._time_at_x(event.position().x())
+            self.hovered.emit(t)
+            self._set_hover(t if self.plot_rect().adjusted(-1, -1, 1, 1).contains(event.position()) else None)
             super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):  # noqa: N802
-        if event.button() in (Qt.MouseButton.RightButton, Qt.MouseButton.MiddleButton):
+        if self._pan_x is not None and event.button() in (
+                Qt.MouseButton.RightButton, Qt.MouseButton.MiddleButton, Qt.MouseButton.LeftButton):
             self._pan_x = None
             event.accept()
         elif event.button() == Qt.MouseButton.LeftButton and self._dragging:
@@ -394,18 +529,34 @@ class _TelemetryChart(QWidget):
         else:
             super().mouseReleaseEvent(event)
 
-    def _set_visible_range(self, lo, hi):
+    def set_view_range(self, lo: float, hi: float, *, emit: bool = False) -> None:
+        """Show ``[lo, hi]``; silent unless ``emit`` (a linked chart's move must not echo back)."""
+        self._set_visible_range(lo, hi, emit=emit)
+
+    @property
+    def view_range(self) -> tuple[float, float]:
+        return self._xmin, self._xmax
+
+    @property
+    def is_zoomed(self) -> bool:
+        return (self._xmin, self._xmax) != self._full_range
+
+    def _set_visible_range(self, lo, hi, *, emit: bool = False):
         full_lo, full_hi = self._full_range
         width = min(hi - lo, full_hi - full_lo)
         if width <= 0:
             return
         lo = max(full_lo, min(lo, full_hi - width))
+        if (lo, lo + width) == (self._xmin, self._xmax):
+            return
         self._xmin, self._xmax = lo, lo + width
         self._recompute_y_range()
         self.invalidate()
+        if emit:
+            self.view_range_changed.emit(self._xmin, self._xmax)
 
     def reset_view(self):
-        self._set_visible_range(*self._full_range)
+        self._set_visible_range(*self._full_range, emit=True)
 
     def wheelEvent(self, event):  # noqa: N802
         if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
@@ -418,7 +569,7 @@ class _TelemetryChart(QWidget):
         factor = 1.3 ** max(-8, min(8, -steps))
         if (self._xmax - self._xmin) * factor >= max(1e-6, (self._full_range[1] - self._full_range[0]) * 1e-6):
             self._set_visible_range(anchor + (self._xmin - anchor) * factor,
-                                    anchor + (self._xmax - anchor) * factor)
+                                    anchor + (self._xmax - anchor) * factor, emit=True)
         event.accept()
 
     def mouseDoubleClickEvent(self, event):  # noqa: N802
@@ -476,3 +627,16 @@ qfont = _font
 nice_ticks = _nice_ticks
 fmt_number = _fmt_number
 fmt_clock = _fmt_clock
+
+
+def link_charts(charts) -> None:
+    """Make ``charts`` one instrument: a crosshair on any of them is mirrored on the others (one hover reads every
+    channel at that time) and a zoom or pan of any is applied to all."""
+    charts = list(charts)
+    for source in charts:
+        source.hover_time_changed.connect(lambda t, src=source: [c.set_hover_time(t) for c in charts if c is not src])
+        source.view_range_changed.connect(
+            lambda lo, hi, src=source: [c.set_view_range(lo, hi) for c in charts if c is not src])
+
+
+fmt_met = _fmt_met

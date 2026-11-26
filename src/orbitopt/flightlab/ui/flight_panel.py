@@ -44,7 +44,7 @@ from orbitopt.flightlab.compare import RunBundle, recovery_summary
 from orbitopt.flightlab.contract import Verification
 from orbitopt.flightlab.reasons import explain_all
 from orbitopt.flightlab.run_index import KeyEvent, SummaryRow, key_events, launch_summary
-from orbitopt.flightlab.ui.charts import _fmt_clock, _TelemetryChart
+from orbitopt.flightlab.ui.charts import _fmt_clock, _TelemetryChart, link_charts
 from orbitopt.flightlab.ui.engine_hud import EngineHud
 from orbitopt.flightlab.ui.rendezvous_panel import RendezvousPanel
 from orbitopt.flightlab.ui.recovery_panel import (
@@ -333,6 +333,7 @@ class TelemetryPanel(QScrollArea):
             self._set_plot_available(gated, False)
         menu.addSeparator()
         menu.addAction("Show all plots", self._show_all_plots)
+        link_charts(self.charts.values())   # one crosshair / one zoom across the channels
         for column in range(3):
             self._grid.setColumnStretch(column, 1)
         self._layout_plots()

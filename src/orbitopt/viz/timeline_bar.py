@@ -375,12 +375,13 @@ class TimelineTrack(QWidget):
         lanes = self._lanes if self._phases else [""]
         band = max(1.0, (bottom - top - 6.0) / len(lanes))
         for li, lane in enumerate(lanes):
-            for k, phase in enumerate(self._phases):
-                if phase.get("lane", "") != lane:
-                    continue
-                x0, x1 = self._overview_x(phase["start"]), self._overview_x(phase["end"])
-                p.setBrush(QColor(SURFACE_HOVER if k % 2 else HAIRLINE))
-                p.drawRect(QRectF(x0, top + 3.0 + li * band, max(1.0, x1 - x0), band))
+            span = self._lane_span(lane)
+            if span is None:
+                continue
+            # one entity, one bar: the lane's phases are not drawn as separate blocks
+            x0, x1 = self._overview_x(span[0]), self._overview_x(span[1])
+            p.setBrush(QColor(HAIRLINE))
+            p.drawRect(QRectF(x0, top + 3.0 + li * band, max(1.0, x1 - x0), band))
         p.setPen(QPen(QColor(ACCENT_MID), 1.0))
         for e in self._state.events:
             x = self._overview_x(e.get("time", 0.0))
@@ -420,29 +421,58 @@ class TimelineTrack(QWidget):
             p.setPen(QPen(QColor(INK_MUTED), 1.0, Qt.DashLine))
             p.drawLine(QPointF(self._hover_x, top), QPointF(self._hover_x, self._rows()["events"][1]))
 
+    def _lane_span(self, lane: str) -> tuple[float, float] | None:
+        """``(start, end)`` of everything in ``lane`` -- the one entity the lane
+        stands for -- or None when it carries no phase."""
+        spans = [(float(ph["start"]), float(ph["end"])) for ph in self._phases
+                 if ph.get("lane", "") == lane]
+        return (min(a for a, _ in spans), max(b for _, b in spans)) if spans else None
+
     def _paint_phases(self, p: QPainter, lane_rows: list):
+        """One continuous bar per lane. A lane is one real entity (the stack,
+        the upper stage, the first stage...); its phases (burn, coast, parking
+        orbit...) used to be separate blocks in alternating shades, so one
+        entity read as several. They are now sub-spans of ONE bar: a hairline
+        tick at each boundary, the label over each span, and the current
+        phase washed lighter."""
         current = self.current_phase()
         font = QFont(self.font())
         font.setPointSizeF(8.5)
         p.setFont(font)
         left, right = self.track_left, self.track_left + self.track_width
         for lane, top, bottom in lane_rows:
-            row_phases = [phase for phase in self._phases if phase.get("lane", "") == lane]
-            for k, phase in enumerate(row_phases):
+            row_phases = sorted((ph for ph in self._phases if ph.get("lane", "") == lane),
+                                key=lambda ph: ph["start"])
+            span = self._lane_span(lane)
+            if span is None:
+                continue
+            bx0, bx1 = max(self.x_of(span[0]), left), min(self.x_of(span[1]), right)
+            if bx1 <= bx0:
+                continue
+            bar = QRectF(bx0, top, max(1.0, bx1 - bx0), bottom - top)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(PANEL_RAISED))
+            p.drawRect(bar)
+            for phase in row_phases:
                 x0, x1 = max(self.x_of(phase["start"]), left), min(self.x_of(phase["end"]), right)
                 if x1 <= x0:
                     continue
                 rect = QRectF(x0, top, max(1.0, x1 - x0), bottom - top)
                 active = phase is current
-                p.setPen(Qt.NoPen)
-                p.setBrush(QColor(ACCENT_DIM if active else (PANEL_RAISED if k % 2 == 0 else SURFACE_HOVER)))
-                p.drawRect(rect)
-                p.setPen(QPen(QColor(HAIRLINE), 1.0))
-                p.drawLine(rect.topLeft(), rect.bottomLeft())
+                if active:
+                    p.setPen(Qt.NoPen)
+                    p.setBrush(QColor(ACCENT_DIM))
+                    p.drawRect(rect)
+                if x0 > bar.left() + 1.0:   # a boundary inside the bar: a short tick, not a block edge
+                    p.setPen(QPen(QColor(INK_MUTED), 1.0))
+                    p.drawLine(QPointF(x0, top + 2.0), QPointF(x0, bottom - 2.0))
                 text = p.fontMetrics().elidedText(phase["label"], Qt.ElideRight, int(rect.width() - 8))
                 if text and text != "…":
                     p.setPen(QColor(INK_PRIMARY if active else INK_SECONDARY))
-                    p.drawText(rect.adjusted(4, 0, -4, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
+                    p.drawText(rect.adjusted(5, 0, -4, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
+            p.setPen(QPen(QColor(HAIRLINE), 1.0))          # the entity's own outline
+            p.setBrush(Qt.NoBrush)
+            p.drawRect(bar)
 
     def _paint_events(self, p: QPainter, top: float, bottom: float):
         left, right = self.track_left, self.track_left + self.track_width
