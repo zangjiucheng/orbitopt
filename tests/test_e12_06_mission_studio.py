@@ -43,6 +43,12 @@ def test_studio_run_roundtrips_and_all_checks_pass(studio_dir):
     assert any(check.id == "keepout-respected" for check in run.verification.checks)
     # flight-result-1.0 events are ascent-kind only: maneuvers live sidecar-only
     assert run.events == ()
+    # E12-09 (task #261 rule): no independent re-fly evidence was carried --
+    # physics_verified is NOT a hard-coded True; it records "not assessed".
+    assert run.verification.physics_verified is None
+    # the landing residual (4.9e-7 m) within the config's Newton tolerance is
+    # what optimizer_converged records; not a literal True
+    assert run.verification.optimizer_converged is True
 
 
 def test_studio_plan_matches_the_reference_verification(studio_dir):
@@ -203,3 +209,78 @@ def test_cli_rendezvous_studio_writes_a_replayable_run(tmp_path):
     run = read_run(out)
     assert all(check.passed for check in run.verification.checks)
     assert (out / "rendezvous.json").is_file()
+
+
+class TestPhysicsVerifiedFromEvidence:
+    """E12-09: ``physics_verified`` is exported from evidence, never hard-coded.
+    True only when a rendezvous-refly report for THIS plan (matching maneuver
+    digest) says the independent-model line passed; a failed line is False;
+    missing, foreign or digest-mismatched evidence is not assessed (None)."""
+
+    @staticmethod
+    def _report(plan, result="passed"):
+        from orbitopt.verify.rendezvous_refly import REPORT_KIND, maneuvers_digest
+
+        return {"schemaVersion": "1.0", "kind": REPORT_KIND,
+                "inputs": {"mission_id": plan.mission_id,
+                           "main_model": {"maneuvers_sha256": maneuvers_digest(plan)},
+                           "error_sources": {
+                               "independent_model_agreement": {"result": result}}}}
+
+    @staticmethod
+    def _build(refly_report):
+        from orbitopt.rendezvous.config import load_reference_config
+        from orbitopt.rendezvous.studio import build_studio_run
+
+        return build_studio_run(load_reference_config(), sample_dt_s=60.0,
+                                refly_report=refly_report)
+
+    def test_no_evidence_is_not_assessed(self):
+        assert self._build(None).run.verification.physics_verified is None
+
+    def test_matching_passed_report_verifies(self):
+        from orbitopt.rendezvous.config import load_reference_config
+        from orbitopt.rendezvous.planner import plan_rendezvous
+
+        plan = plan_rendezvous(load_reference_config())
+        assert self._build(self._report(plan, "passed")).run.verification.physics_verified is True
+
+    def test_matching_failed_report_falsifies(self):
+        from orbitopt.rendezvous.config import load_reference_config
+        from orbitopt.rendezvous.planner import plan_rendezvous
+
+        plan = plan_rendezvous(load_reference_config())
+        assert self._build(self._report(plan, "failed")).run.verification.physics_verified is False
+
+    def test_not_checked_report_is_not_assessed(self):
+        from orbitopt.rendezvous.config import load_reference_config
+        from orbitopt.rendezvous.planner import plan_rendezvous
+
+        plan = plan_rendezvous(load_reference_config())
+        assert self._build(self._report(plan, "not_checked")).run.verification.physics_verified is None
+
+    def test_foreign_plan_digest_is_not_assessed(self):
+        from orbitopt.rendezvous.config import load_reference_config
+        from orbitopt.rendezvous.planner import plan_rendezvous
+
+        plan = plan_rendezvous(load_reference_config())
+        doc = self._report(plan)
+        doc["inputs"]["main_model"]["maneuvers_sha256"] = "0" * 64
+        assert self._build(doc).run.verification.physics_verified is None
+
+    def test_foreign_mission_is_not_assessed(self):
+        from orbitopt.rendezvous.config import load_reference_config
+        from orbitopt.rendezvous.planner import plan_rendezvous
+
+        doc = self._report(plan_rendezvous(load_reference_config()))
+        doc["inputs"]["mission_id"] = "not-my-mission"
+        assert self._build(doc).run.verification.physics_verified is None
+
+    def test_report_path_is_read(self, tmp_path):
+        from orbitopt.rendezvous.config import load_reference_config
+        from orbitopt.rendezvous.planner import plan_rendezvous
+
+        plan = plan_rendezvous(load_reference_config())
+        path = tmp_path / "rendezvous-refly-report.json"
+        path.write_text(json.dumps(self._report(plan)), encoding="utf-8")
+        assert self._build(path).run.verification.physics_verified is True

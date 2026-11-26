@@ -270,7 +270,7 @@ def _cmd_rendezvous_studio(args):
     from orbitopt.rendezvous.studio import build_studio_run, write_studio_run
 
     cfg = load_rendezvous_config(args.config) if args.config else load_reference_config()
-    studio = build_studio_run(cfg, sample_dt_s=args.dt)
+    studio = build_studio_run(cfg, sample_dt_s=args.dt, refly_report=args.refly_report)
     root = write_studio_run(args.output, studio)
     ver = studio.sidecar["verification"]
     keepout = studio.sidecar["keepout"]
@@ -278,17 +278,22 @@ def _cmd_rendezvous_studio(args):
         import json
         print(json.dumps({"run_dir": str(root), "run_id": studio.run.run_id,
                           "passed": ver["passed"],
+                          "physics_verified": studio.run.verification.physics_verified,
                           "total_delta_v_m_s": ver["total_delta_v_m_s"],
                           "position_error_m": ver["position_error_m"],
                           "relative_speed_m_s": ver["relative_speed_m_s"],
                           "keepout_respected": keepout["respected"]}, indent=2))
         return
     verdict = "PASS" if ver["passed"] else "FAIL"
+    physics = studio.run.verification.physics_verified
+    physics_word = ("not assessed (no --refly-report matching this plan)"
+                    if physics is None else str(physics))
     print(f"Rendezvous studio run: {root}")
     print(f"  verdict      {verdict}  (Δv {ver['total_delta_v_m_s']:.3f} m/s, "
           f"pos err {ver['position_error_m']:.3e} m, rel speed {ver['relative_speed_m_s']:.3e} m/s, "
           f"keep-out {'clear' if keepout['respected'] else 'INTRUSION'}"
           f" @ {keepout['min_range_m']:.0f} m)")
+    print(f"  physics      verified={physics_word}")
     print("  open in Flight Lab with `orbitopt view` or pass the dir to the UI")
 
 
@@ -843,6 +848,11 @@ def build_parser() -> argparse.ArgumentParser:
                                         "mission.json/replay.json/rendezvous.json)")
     rendezvous_studio.add_argument("--dt", type=float, default=5.0, metavar="S",
                                    help="track sample interval [s] (default 5)")
+    rendezvous_studio.add_argument("--refly-report", default=None, metavar="PATH",
+                                   help="rendezvous-refly report JSON (from "
+                                        "`python -m orbitopt.verify.rendezvous_refly`): the "
+                                        "independent re-flight evidence that sets "
+                                        "physics_verified (same plan digest required)")
     rendezvous_studio.add_argument("--json", action="store_true", help="print the verdict as JSON")
 
     flight = sub.add_parser("flight", help="Flight Lab contract tools (FlightTarget / FlightResult)")
