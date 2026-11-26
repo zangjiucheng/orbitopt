@@ -21,6 +21,15 @@ holds the config and the maneuver sequence can recompute the identity without
 the sealed file; the file exists to pin one artifact on disk and to carry the
 E12-04 acceptance record (verification + safety reports) alongside it.
 
+E13-00 separates what each digest means. The rounded digests above answer
+"numerically the same plan?"; the unrounded ``verification_digest`` binds the
+EXACT acceptance record (verdict, model version, margins, safety report) to
+the plan digest, ``artifact_sha256`` answers "is this the raw file, byte for
+byte, outside the digest-covered fields?", and ``environment_digest`` records
+WHERE the seal ran -- provenance, never part of ``plan_digest``, which stays
+machine-independent. ``verify_seal`` refuses a document whose stored safety
+verdict contradicts its own checks or whose digests do not add up.
+
     from orbitopt.rendezvous import canonical_plan, write_sealed_plan
     sealed = canonical_plan(load_reference_config())
     write_sealed_plan(sealed, "runs/leo-rdv-001.sealed.json")
@@ -41,7 +50,7 @@ from .verify import RendezvousVerification, verify_plan
 
 #: Sealed-document identity (schema tag of this module's own document).
 SEALED_KIND = "orbitopt.rendezvous.sealed-plan"
-SEALED_SCHEMA_VERSION = "1.0"
+SEALED_SCHEMA_VERSION = "1.1"  # E13-00: verification_digest / environment_digest / artifact_sha256
 
 
 class PlanSealError(ValueError):
@@ -71,6 +80,43 @@ def _quantize(value: Any) -> Any:
 
 def _canonical_sha256(doc: Any) -> str:
     return hashlib.sha256(json.dumps(_quantize(doc), sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def raw_sha256(doc: Any) -> str:
+    """E13-00 raw-integrity digest: sha256 of the exact canonical JSON of
+    ``doc`` (sorted keys, no float rounding). Where the rounded
+    :func:`_canonical_sha256` digests answer "is this numerically the same
+    plan?", this one answers "is this the exact same artifact?" -- the raw
+    byte identity of an E12-04 verification / safety report, or of a sealed
+    document. A report copy that is textually different (a byte of a margin
+    changed, a check dropped, a key renamed) has a different digest even when
+    it is still parseable and numerically plausible."""
+    return hashlib.sha256(
+        json.dumps(doc, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def sealed_artifact_sha256(document: dict) -> str:
+    """Artifact digest of a sealed document over its content WITHOUT the
+    ``artifact_sha256`` field itself, so the field can carry its own identity.
+    Recomputing it on read catches edits no other digest covers -- tampered
+    provenance strings, unknown or removed fields, the raw artifact."""
+    return raw_sha256({k: v for k, v in document.items() if k != "artifact_sha256"})
+
+
+def verification_digest(verification: dict, plan_digest: str,
+                        safety: dict | None = None) -> str:
+    """E13-00: binds the EXACT E12-04 acceptance record (the raw
+    machine-readable ``verification`` document -- acceptance verdict, model
+    version, every margin -- plus the whole-trajectory safety report, to the
+    plan digest of the plan they graded. Flipping a stored safety verdict,
+    editing a margin or swapping in a report for another plan changes it;
+    ``verify_seal`` refuses then."""
+    return raw_sha256({
+        "kind": "orbitopt.rendezvous.verification-digest",
+        "plan_digest": plan_digest,
+        "verification": verification,
+        "safety": safety,
+    })
 
 
 def _as_plain(value: Any) -> Any:
@@ -177,6 +223,12 @@ class SealedRendezvousPlan:
     initial_states_sha256: str
     maneuvers_sha256: str
     plan_digest: str
+    #: E13-00: binds the raw verification/safety acceptance record to this
+    #: plan digest; ``verify_seal`` recomputes and refuses a tampered verdict.
+    verification_digest: str = ""
+    #: E13-00: sha256 of the compute environment at seal time. Provenance
+    #: only -- never part of ``plan_digest``, which stays machine-independent.
+    environment_digest: str = ""
 
     @property
     def passed(self) -> bool:
@@ -184,7 +236,7 @@ class SealedRendezvousPlan:
                 and (self.safety is None or bool(self.safety.get("passed"))))
 
     def to_document(self) -> dict:
-        return {
+        doc = {
             "kind": SEALED_KIND,
             "schema_version": SEALED_SCHEMA_VERSION,
             "canonical_planner": "orbitopt.rendezvous.canonical_plan "
@@ -199,22 +251,31 @@ class SealedRendezvousPlan:
             "verification": self.verification.to_dict(),
             "safety": self.safety,
             "passed": self.passed,
+            "verification_digest": self.verification_digest,
+            "environment_digest": self.environment_digest,
         }
+        doc["artifact_sha256"] = sealed_artifact_sha256(doc)
+        return doc
 
 
 def seal_plan(cfg: RendezvousMissionConfig, plan: RendezvousPlan,
               verification: RendezvousVerification,
               safety: dict | None = None) -> SealedRendezvousPlan:
-    """Seal an already-planned-and-verified mission: compute the four digests
-    over the inputs as given and cross-check them against the verification
-    record's identity. Raises :class:`PlanSealError` when the plan is not the
-    plan for this config (digest mismatch)."""
+    """Seal an already-planned-and-verified mission: compute the identity
+    digests over the inputs as given and cross-check them against the
+    verification record's identity. Raises :class:`PlanSealError` when the
+    plan is not the plan for this config (digest mismatch)."""
+    from orbitopt.crossenv.envelope import environment_digest  # late: optional heavy import
+
+    vd = verification_digest(verification.to_dict(), rendezvous_plan_digest(cfg, plan), safety)
     sealed = SealedRendezvousPlan(
         plan=plan, verification=verification, safety=safety,
         config_sha256=canonical_config_sha256(cfg),
         initial_states_sha256=initial_states_sha256(cfg),
         maneuvers_sha256=maneuvers_sha256(plan),
-        plan_digest=rendezvous_plan_digest(cfg, plan))
+        plan_digest=rendezvous_plan_digest(cfg, plan),
+        verification_digest=vd,
+        environment_digest=environment_digest("seal"))
     verify_seal(cfg, sealed)
     return sealed
 
@@ -267,6 +328,34 @@ def verify_seal(cfg: RendezvousMissionConfig, sealed: SealedRendezvousPlan) -> N
         raise PlanSealError(
             f"sealed plan is for {sealed.plan.mission_id!r}, config declares "
             f"{cfg.mission_id!r}")
+    # E13-00: the stored acceptance record is part of the seal, not a comment
+    # beside it. A flipped verdict or a report that grades another plan fails.
+    if sealed.safety is not None:
+        safety_reported = bool(sealed.safety.get("passed"))
+        safety_recomputed = (
+            all(bool(c.get("passed")) for c in sealed.safety.get("checks", {}).values())
+            and all(bool(p.get("passed")) for p in sealed.safety.get("passive_contingency", [])))
+        if safety_reported != safety_recomputed:
+            raise PlanSealError(
+                f"{cfg.mission_id}: stored safety verdict {safety_reported} contradicts its "
+                f"own checks (recomputed {safety_recomputed}) -- tampered safety report")
+        if str(sealed.safety.get("plan_digest", "")) != sealed.plan_digest:
+            raise PlanSealError(
+                f"{cfg.mission_id}: stored safety report carries plan_digest "
+                f"{str(sealed.safety.get('plan_digest'))[:16]}..., not this plan's "
+                f"{sealed.plan_digest[:16]}... -- safety verdict for another plan")
+    if sealed.verification_digest:
+        expected_vd = verification_digest(sealed.verification.to_dict(), sealed.plan_digest,
+                                          sealed.safety)
+        if expected_vd != sealed.verification_digest:
+            raise PlanSealError(
+                f"{cfg.mission_id}: verification digest mismatch -- consumed "
+                f"{sealed.verification_digest[:16]}..., recomputed {expected_vd[:16]}... "
+                f"(the acceptance record was edited, or grades a different plan)")
+    else:
+        raise PlanSealError(
+            f"{cfg.mission_id}: sealed document carries no verification_digest "
+            f"(schema {SEALED_SCHEMA_VERSION} requires one)")
 
 
 def consume_sealed_plan(sealed: SealedRendezvousPlan,
@@ -303,7 +392,8 @@ def sealed_from_document(doc: dict, cfg: RendezvousMissionConfig) -> SealedRende
         raise PlanSealError(
             f"document is {doc.get('kind')!r}/{doc.get('schema_version')!r}, not "
             f"{SEALED_KIND!r}/{SEALED_SCHEMA_VERSION}")
-    for field in ("config_sha256", "initial_states_sha256", "maneuvers_sha256", "plan_digest"):
+    for field in ("config_sha256", "initial_states_sha256", "maneuvers_sha256", "plan_digest",
+                  "verification_digest", "artifact_sha256"):
         if not isinstance(doc.get(field), str):
             raise PlanSealError(f"sealed document is missing its {field}")
     plan = _plan_from_full_dict(doc["plan"])
@@ -326,6 +416,15 @@ def sealed_from_document(doc: dict, cfg: RendezvousMissionConfig) -> SealedRende
         config_sha256=str(doc["config_sha256"]),
         initial_states_sha256=str(doc["initial_states_sha256"]),
         maneuvers_sha256=str(doc["maneuvers_sha256"]),
-        plan_digest=str(doc["plan_digest"]))
+        plan_digest=str(doc["plan_digest"]),
+        verification_digest=str(doc["verification_digest"]),
+        environment_digest=str(doc.get("environment_digest", "")))
     verify_seal(cfg, sealed)
+    # E13-00 raw integrity, checked last so the named digest mismatch (wrong
+    # config, edited maneuver) reports first; this catches edits OUTSIDE the
+    # digest-covered fields -- provenance strings, unknown or removed fields.
+    if str(doc["artifact_sha256"]) != sealed_artifact_sha256(doc):
+        raise PlanSealError(
+            "sealed document artifact digest mismatch -- the raw artifact was edited "
+            "outside the digest-covered fields (E13-00 integrity check)")
     return sealed

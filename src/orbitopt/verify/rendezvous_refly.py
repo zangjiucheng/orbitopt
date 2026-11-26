@@ -192,7 +192,7 @@ SAMPLE_REFLY_SCAN_STEP_S = 5.0
 #: (50 m / 0.2 m/s arrival tolerances, 500 m keep-out). The first runs of this
 #: comparison saw 10-150 m residuals, which were two harness bugs, not physics:
 #: fixed-step RK4 legs overshooting the gate epoch, and tudat measuring drag
-#: altitude from the 6371 km mean sphere (see ADR rendezvous-0004).
+#: altitude from the 6371 km mean sphere (see ADR rendezvous-0006).
 SAMPLE_REFLY_VS_MAIN_TOLERANCES = {
     "position_error_m": 0.01,
     "relative_speed_m_s": 1.0e-5,
@@ -250,15 +250,26 @@ def sweep_table(runs: list, leg_end_epoch: float, epoch_anchor: float) -> tuple[
     return table, common - epoch_anchor
 
 
-def physics_verdict_from_refly_report(report, plan) -> bool | None:
-    """``physics_verified`` derived from evidence (E12-09, the task-#261 rule):
+def physics_verdict_from_refly_report(report, cfg, plan) -> bool | None:
+    """``physics_verified`` derived from evidence (E12-09, hardened by E13-00):
     True/False only when an independent re-flight result exists **for this
-    very plan** -- the report is a rendezvous-refly report of the same
-    mission, its main-model maneuver digest equals ``plan``'s, and the
-    independent-model line reached a verdict (``passed`` -> True, ``failed``
-    -> False). No report, a foreign/mismatched one, or a ``not_checked``
-    independent line all answer ``None``: not assessed, never a fake pass.
-    ``report`` is the loaded report document or the path to one."""
+    very plan under this very config** -- the report is a rendezvous-refly
+    report whose embedded self-digest validates (the raw artifact is intact),
+    whose recorded plan identity (``inputs.mission_id``, the
+    ``main_model.sealed_plan`` config / initial-states / maneuver digests and
+    plan digest, and the worker's ``environment_digest``) matches what the
+    consumer recomputes from ``cfg`` and ``plan``, and whose independent-model
+    line reached a verdict (``passed`` -> True, ``failed`` -> False). No
+    report, an artifact whose digest does not recompute, a foreign config or
+    initial state with otherwise-identical maneuvers, a plan-digest
+    mismatch, or a ``not_checked`` independent line all answer ``None``: not
+    assessed, never a fake pass. ``report`` is the loaded report document or
+    the path to one."""
+    from orbitopt.rendezvous.canonical import (canonical_config_sha256,
+                                               initial_states_sha256,
+                                               rendezvous_plan_digest)
+    from orbitopt.verify.report import report_digest
+
     if report is None:
         return None
     try:
@@ -266,10 +277,30 @@ def physics_verdict_from_refly_report(report, plan) -> bool | None:
             Path(str(report)).read_text(encoding="utf-8"))
         if doc.get("kind") != REPORT_KIND:
             return None
+        # E13-00: an evidence artifact must verify itself -- a report whose
+        # embedded digest does not recompute was edited after it was written.
+        embedded = doc.get("digest")
+        if not isinstance(embedded, str) or embedded != report_digest(doc):
+            return None
         inputs = doc["inputs"]
         if inputs.get("mission_id") != plan.mission_id:
             return None
-        if inputs["main_model"]["maneuvers_sha256"] != maneuvers_digest(plan):
+        main_model = inputs["main_model"]
+        sealed = main_model.get("sealed_plan", {})
+        claimed = {
+            "config_sha256": canonical_config_sha256(cfg),
+            "initial_states_sha256": initial_states_sha256(cfg),
+            "maneuvers_sha256": maneuvers_digest(plan),
+            "plan_digest": rendezvous_plan_digest(cfg, plan),
+        }
+        for field, expected in claimed.items():
+            if sealed.get(field) != expected:
+                return None
+            if field in main_model and main_model[field] != expected:
+                return None
+        # E13-00: evidence provenance -- the worker records which environment
+        # flew it; an artifact with no bound environment is not assessed.
+        if not str(main_model.get("worker", {}).get("environment_digest", "")):
             return None
         result = inputs["error_sources"]["independent_model_agreement"]["result"]
     except (OSError, ValueError, KeyError, TypeError):
@@ -1451,7 +1482,21 @@ def verify_rendezvous_refly(*, config_path=None, out_dir: str | Path = "runs/e12
         "plan_digest": sealed.plan_digest, "config_sha256": sealed.config_sha256,
         "initial_states_sha256": sealed.initial_states_sha256,
         "maneuvers_sha256": sealed.maneuvers_sha256,
+        "verification_digest": sealed.verification_digest,
     }
+    # E13-00: bind the evidence to the environment that flew it and to the
+    # identity the worker itself verified (it re-read the sealed plan under
+    # its own config before flying it -- see the stage impl).
+    if refly_doc is not None:
+        from orbitopt.crossenv.envelope import environment_digest_of
+
+        main_q["worker"] = {
+            "environment": dict(refly_doc["environment"]),
+            "environment_digest": environment_digest_of(refly_doc["environment"]),
+            "evidence_plan_digest": str(refly_doc.get("plan_digest", "")),
+            "evidence_canonical_config_sha256": str(
+                refly_doc.get("canonical_config_sha256", "")),
+        }
     report = build_refly_report(cfg, main_q, cw_q, refly_doc, kepler,
                                 not_checked_reasons=not_checked, crossenv=crossenv_meta)
     path = write_report(report, out / "rendezvous-refly-report.json")

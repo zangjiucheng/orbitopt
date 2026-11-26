@@ -1,25 +1,25 @@
 {
-  "digest": "8201b2b173e07b995ef65d521dfab2857081f65413cd38ebc8a37e1f318ad845",
+  "digest": "75e02bee2d37e680086d73cb82fcadf9420970a363043d3df4e8ce93df3e7e20",
   "inputs": {
     "crossenv": {
-      "envelope_digest": "sha256:12f0999b509af2328c3b9718ee6ffaa489a1b511121b9a9a777a1442b8f4c8b4",
+      "envelope_digest": "sha256:4063ec56383a7994c06f87c854ea39a3c557ac4f2fbb02ac85c040568f84564e",
       "stage_report": {
         "env": "tudat",
         "environment": {
           "argv": [
-            "/u9/j7zang/orbitopt-408/src/orbitopt/crossenv/__main__.py",
+            "/u9/j7zang/cf-compute/417/src/orbitopt/crossenv/__main__.py",
             "stage",
             "--plan",
-            "/u9/j7zang/e1205_out/e12-05-refly-run/plan.resolved.json",
+            "docs/benchmarks/e12-05-refly-run/plan.resolved.json",
             "--stage",
             "refly",
             "--out",
-            "/u9/j7zang/e1205_out/e12-05-refly-run"
+            "docs/benchmarks/e12-05-refly-run"
           ],
           "env": "tudat",
           "platform": "Linux-6.8.0-149-generic-x86_64-with-glibc2.39",
           "python": "3.10.22",
-          "python_executable": "/u9/j7zang/envs/tudatpy/bin/python",
+          "python_executable": "/u9/j7zang/mamba/envs/orbitopt/bin/python",
           "toolchain": {
             "astropy": "6.1.7",
             "cvxpy": "absent",
@@ -29,7 +29,7 @@
             "numpy": "2.0.0",
             "opentsiolkovsky": "1.0.0",
             "opentsiolkovsky_sha256": "8041a9b5806136eb0e9d2a7b2c9ebed58ccc1876198cbf5c6373c440cb182c4c",
-            "orbitopt": "unknown (source tree; see git_sha)",
+            "orbitopt": "0.1.0",
             "python": "3.10.22",
             "pyyaml": "6.0.1",
             "scipy": "1.13.1",
@@ -200,7 +200,8 @@
         "initial_states_sha256": "4bb58231980e1ef87a47d55907f2570482437ceb2fd091529a517cc5065357d5",
         "maneuvers_sha256": "d10771e1f8ad1650af25b999081f0a6fd1fc21ba3c4eabd80dbcd0f38d8b9e5d",
         "plan_digest": "11cb8cd24bd8c96391576703000cf14b42cde2de5978d4b0d8631ea4a34e9bfb",
-        "planner": "orbitopt.rendezvous.canonical_plan (E12-04 plan_rendezvous_safe)"
+        "planner": "orbitopt.rendezvous.canonical_plan (E12-04 plan_rendezvous_safe)",
+        "verification_digest": "15e4addcd493054654195c4230a862c066fba761e9a04ff01691cab95f6ca5f2"
       },
       "total_delta_v_m_s": 10.345425677044807,
       "verification_checks": {
@@ -210,7 +211,43 @@
         "relative_speed_within_tolerance": true,
         "tof_within_transfer_window": true
       },
-      "verification_passed": true
+      "verification_passed": true,
+      "worker": {
+        "environment": {
+          "argv": [
+            "/u9/j7zang/cf-compute/417/src/orbitopt/crossenv/__main__.py",
+            "stage",
+            "--plan",
+            "docs/benchmarks/e12-05-refly-run/plan.resolved.json",
+            "--stage",
+            "refly",
+            "--out",
+            "docs/benchmarks/e12-05-refly-run"
+          ],
+          "env": "tudat",
+          "platform": "Linux-6.8.0-149-generic-x86_64-with-glibc2.39",
+          "python": "3.10.22",
+          "python_executable": "/u9/j7zang/mamba/envs/orbitopt/bin/python",
+          "toolchain": {
+            "astropy": "6.1.7",
+            "cvxpy": "absent",
+            "gfold": "absent",
+            "jsbsim": "absent",
+            "jsonschema": "4.26.0",
+            "numpy": "2.0.0",
+            "opentsiolkovsky": "1.0.0",
+            "opentsiolkovsky_sha256": "8041a9b5806136eb0e9d2a7b2c9ebed58ccc1876198cbf5c6373c440cb182c4c",
+            "orbitopt": "0.1.0",
+            "python": "3.10.22",
+            "pyyaml": "6.0.1",
+            "scipy": "1.13.1",
+            "tudatpy": "1.0.0"
+          }
+        },
+        "environment_digest": "915061be0f6d0456ba7829827c82d39f238bbf04253b6b27773df6e6a7c42e5a",
+        "evidence_canonical_config_sha256": "7915deab3bbe302d0f6d8b444339e6927e23179aab1014d85e320b9568bb0549",
+        "evidence_plan_digest": "11cb8cd24bd8c96391576703000cf14b42cde2de5978d4b0d8631ea4a34e9bfb"
+      }
     },
     "mission_id": "leo-rdv-001",
     "not_checked_reasons": [],
@@ -301,19 +338,19 @@
       },
       "env": {
         "argv": [
-          "/u9/j7zang/orbitopt-408/src/orbitopt/crossenv/__main__.py",
+          "/u9/j7zang/cf-compute/417/src/orbitopt/crossenv/__main__.py",
           "stage",
           "--plan",
-          "/u9/j7zang/e1205_out/e12-05-refly-run/plan.resolved.json",
+          "docs/benchmarks/e12-05-refly-run/plan.resolved.json",
           "--stage",
           "refly",
           "--out",
-          "/u9/j7zang/e1205_out/e12-05-refly-run"
+          "docs/benchmarks/e12-05-refly-run"
         ],
         "env": "tudat",
         "platform": "Linux-6.8.0-149-generic-x86_64-with-glibc2.39",
         "python": "3.10.22",
-        "python_executable": "/u9/j7zang/envs/tudatpy/bin/python",
+        "python_executable": "/u9/j7zang/mamba/envs/orbitopt/bin/python",
         "toolchain": {
           "astropy": "6.1.7",
           "cvxpy": "absent",
@@ -323,7 +360,7 @@
           "numpy": "2.0.0",
           "opentsiolkovsky": "1.0.0",
           "opentsiolkovsky_sha256": "8041a9b5806136eb0e9d2a7b2c9ebed58ccc1876198cbf5c6373c440cb182c4c",
-          "orbitopt": "unknown (source tree; see git_sha)",
+          "orbitopt": "0.1.0",
           "python": "3.10.22",
           "pyyaml": "6.0.1",
           "scipy": "1.13.1",
@@ -350,11 +387,11 @@
   "label": "E12-05 independent re-flight of leo-rdv-001 (TudatPy two-spacecraft re-fly)",
   "propagations": [],
   "provenance": {
-    "numpy": "2.5.5",
-    "orbitopt": "installed (version unknown)",
-    "pykep": "2.6.4",
-    "python": "3.12.13",
-    "tudatpy": "1.1.0"
+    "numpy": "2.0.0",
+    "orbitopt": "0.1.0",
+    "pykep": "2.6.2",
+    "python": "3.10.22",
+    "tudatpy": "1.0.0"
   },
   "residuals": [
     {

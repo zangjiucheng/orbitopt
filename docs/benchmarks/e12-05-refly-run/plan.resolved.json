@@ -4,10 +4,10 @@
  "mission": {
   "id": "e12-05-refly-leo-rdv-001"
  },
- "scenario": "/u9/j7zang/orbitopt-408/src/orbitopt/data/leo_rdv_001.yaml",
- "out": "/u9/j7zang/e1205_out/e12-05-refly-run",
+ "scenario": "/u9/j7zang/cf-compute/417/src/orbitopt/data/leo_rdv_001.yaml",
+ "out": "docs/benchmarks/e12-05-refly-run",
  "environments": {
-  "tudat": "/u9/j7zang/envs/tudatpy/bin/python"
+  "tudat": "/u9/j7zang/mamba/envs/orbitopt/bin/python"
  },
  "stages": [
   {
