@@ -8,14 +8,19 @@ as independent evidence. ``save_run`` writes a run directory and ``replay``
 re-executes it without an LLM call. See ``docs/agent/runtime.md``.
 """
 
+from .diagnostics import DISHONEST, REMEDIES, diagnose, distrust, feasible, loosened
 from .model import (TRACE_SCHEMA, Action, AlternateRun, BudgetUse, Decision, Diagnosis, FailureKind, IterationRecord,
                     Limits, Policy, Proposal, RecordKind, Remedy, RunOutcome, RunStatus, StopReason, Trace,
                     VerificationRecord, Violation, ViolationCode, trace_digest)
 from .validation import OPTION_SPECS, PROBLEM_FIELDS, PROPOSAL_FIELDS, OptionSpec, validate_proposal
+from .planners import (PROPOSAL_SCHEMA, LLMPlanner, Planner, PlannerState, PlannerUnavailable, RecordedPlanner,
+                       RuleBasedPlanner, prompt_state)
 
 __all__ = [
-    "Action", "AlternateRun", "BudgetUse", "Decision", "Diagnosis", "FailureKind", "IterationRecord", "Limits",
-    "OPTION_SPECS", "OptionSpec", "Policy", "PROBLEM_FIELDS", "Proposal", "PROPOSAL_FIELDS", "RecordKind", "Remedy",
+    "Action", "AlternateRun", "BudgetUse", "Decision", "diagnose", "Diagnosis", "DISHONEST", "distrust",
+    "FailureKind", "feasible", "IterationRecord", "Limits", "LLMPlanner", "loosened", "OPTION_SPECS", "OptionSpec",
+    "Planner", "PlannerState", "PlannerUnavailable", "Policy", "PROBLEM_FIELDS", "prompt_state", "Proposal",
+    "PROPOSAL_FIELDS", "PROPOSAL_SCHEMA", "RecordedPlanner", "RecordKind", "REMEDIES", "Remedy", "RuleBasedPlanner",
     "RunOutcome", "RunStatus", "StopReason", "Trace", "trace_digest", "TRACE_SCHEMA", "validate_proposal",
     "VerificationRecord", "Violation", "ViolationCode",
 ]
