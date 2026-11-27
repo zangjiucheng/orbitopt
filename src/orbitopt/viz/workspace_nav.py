@@ -4,7 +4,7 @@ The window used to stack every destination into one left column (a Missions |
 Flight Lab switch, then Runs | Vehicles inside it). It is now three layers:
 
 1. **Workspace bar** (top, always visible): *Missions · Runs · Vehicles ·
-   Compare* -- what kind of thing you are looking at;
+   Compare · Optimize* -- what kind of thing you are looking at;
 2. **Context list** (left, collapsible): only the list of the current
    workspace -- the missions, the runs, or the vehicles;
 3. **Inspector** (right): the tabs for the thing selected.
@@ -37,13 +37,14 @@ from PySide6.QtWidgets import (
 
 __all__ = ["CommandPalette", "PaletteItem", "WORKSPACES", "WorkspaceBar", "filter_items"]
 
-MISSIONS, RUNS, VEHICLES, COMPARE = "missions", "runs", "vehicles", "compare"
+MISSIONS, RUNS, VEHICLES, COMPARE, OPTIMIZE = "missions", "runs", "vehicles", "compare", "optimize"
 #: (id, label, tooltip), in display order
 WORKSPACES = (
     (MISSIONS, "Missions", "Mission scenes in the 3D view"),
     (RUNS, "Runs", "Flight runs: replay, telemetry, checks"),
     (VEHICLES, "Vehicles", "The vehicle catalog, read-only"),
     (COMPARE, "Compare", "Two runs side by side"),
+    (OPTIMIZE, "Optimize", "Natural language to a verified, replayable optimization run"),
 )
 
 
@@ -84,7 +85,7 @@ def filter_items(items: Iterable[PaletteItem], query: str, limit: int = 40) -> l
 
 
 class WorkspaceBar(QWidget):
-    """The top bar: the product mark, the four workspaces, the palette hint."""
+    """The top bar: the product mark, the workspaces, the palette hint."""
 
     workspace_changed = Signal(str)
     palette_requested = Signal()

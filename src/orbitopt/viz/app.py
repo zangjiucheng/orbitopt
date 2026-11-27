@@ -77,6 +77,7 @@ from orbitopt.viz.sidebar import MissionSidebar
 from orbitopt.viz.workspace_nav import (
     COMPARE,
     MISSIONS,
+    OPTIMIZE,
     RUNS,
     VEHICLES,
     CommandPalette,
@@ -400,6 +401,12 @@ class MissionControlWindow(QMainWindow):
         # the read-only Vehicle page: the other Flight Lab view that is not the 3D scene
         self.vehicle_page = VehiclePage()
         self._vehicle_index = self.center_stack.addWidget(self.vehicle_page)
+        # Optimize: natural language to a verified run. Built on first visit (see _show_optimize), so startup
+        # imports nothing of orbitopt.agent and works without the agent extras.
+        self.optimize_host = QWidget()
+        QVBoxLayout(self.optimize_host).setContentsMargins(0, 0, 0, 0)
+        self.optimize_workspace = None
+        self._optimize_index = self.center_stack.addWidget(self.optimize_host)
         # QStackedWidget includes hidden pages in its minimum size. The
         # comparison page must not impose its height on the 3D workspace.
         pages = [self.center_stack.widget(i) for i in range(self.center_stack.count())]
@@ -413,6 +420,7 @@ class MissionControlWindow(QMainWindow):
                 page.setSizePolicy(policy)
 
         self.center_stack.currentChanged.connect(fit_current_page)
+        self.center_stack.currentChanged.connect(self._on_center_page)
         fit_current_page(self.center_stack.currentIndex())
         self._flight_page_index = self._flightlab_index   # which of the two is up
         self.sidebar.set_flightlab_panel(self.flightlab_nav)
@@ -539,7 +547,7 @@ class MissionControlWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+K"), self, activated=self._open_palette)   # Cmd+K on macOS
         QShortcut(QKeySequence("Ctrl+B"), self, activated=self._toggle_sidebar)
         QShortcut(QKeySequence("Ctrl+Shift+B"), self, activated=self._toggle_info_panel)
-        for n, key in enumerate((MISSIONS, RUNS, VEHICLES, COMPARE), start=1):
+        for n, key in enumerate((MISSIONS, RUNS, VEHICLES, COMPARE, OPTIMIZE), start=1):
             QShortcut(QKeySequence(f"Ctrl+{n}"), self,
                       activated=lambda k=key: self.workspace_bar.buttons[k].click())
         self.statusBar().showMessage("Ready")
@@ -1426,6 +1434,8 @@ class MissionControlWindow(QMainWindow):
 
     # ------------------------------------------------------- workspaces
     def _current_workspace(self) -> str:
+        if self.center_stack.currentWidget() is self.optimize_host:
+            return OPTIMIZE
         if self.sidebar.mode != self.sidebar.FLIGHTLAB:
             return MISSIONS
         if self._compare_shown and self.center_stack.currentWidget() is self.flightlab_compare:
@@ -1437,7 +1447,8 @@ class MissionControlWindow(QMainWindow):
         breadcrumb (called wherever that state changes)."""
         ws = self._current_workspace()
         self.workspace_bar.set_workspace(ws)
-        trail = {MISSIONS: "Missions", RUNS: "Runs", VEHICLES: "Vehicles", COMPARE: "Compare"}[ws]
+        trail = {MISSIONS: "Missions", RUNS: "Runs", VEHICLES: "Vehicles", COMPARE: "Compare",
+                 OPTIMIZE: "Optimize"}[ws]
         leaf = ""
         if ws == MISSIONS:
             leaf = self._mission_active[1] or ""
@@ -1454,6 +1465,10 @@ class MissionControlWindow(QMainWindow):
             self._sync_workspace()
             return
         nav = self.flightlab_nav
+        if ws == OPTIMIZE:
+            self._show_optimize()
+            return
+        self._leave_optimize()
         if ws == MISSIONS:
             self.sidebar.set_mode(self.sidebar.MISSIONS)
         elif ws == COMPARE:
@@ -1472,7 +1487,8 @@ class MissionControlWindow(QMainWindow):
         items = [PaletteItem("Workspace", label, tip, lambda k=key: self.workspace_bar.buttons[k].click())
                  for key, label, tip in (
                      (MISSIONS, "Missions", "mission scenes"), (RUNS, "Runs", "flight runs"),
-                     (VEHICLES, "Vehicles", "vehicle catalog"), (COMPARE, "Compare", "two runs side by side"))]
+                     (VEHICLES, "Vehicles", "vehicle catalog"), (COMPARE, "Compare", "two runs side by side"),
+                     (OPTIMIZE, "Optimize", "natural-language optimization"))]
         sb = self.sidebar
         for i in range(sb.mission_list.count()):
             row = sb.mission_list.item(i)
@@ -1506,6 +1522,38 @@ class MissionControlWindow(QMainWindow):
         if not nav.select_vehicle(name):
             return
         self._sync_workspace()
+
+    def _show_optimize(self) -> None:
+        """The Optimize page: its own three columns, so the scene's list, inspector, charts and timeline hide."""
+        if self.optimize_workspace is None:
+            from PySide6.QtCore import QSettings
+
+            from orbitopt.viz.optimize.workspace import OptimizationWorkspace
+
+            self.optimize_workspace = OptimizationWorkspace(settings=QSettings("orbitopt", "Mission Control"))
+            self.optimize_host.layout().addWidget(self.optimize_workspace)
+        self._set_playing(False)
+        self._compare_shown = True
+        self._set_scene_chrome(False)
+        self.left_stack.hide()
+        self.workspace_bar.set_panel_enabled("left", False)
+        self.chart_panel.hide()
+        self.timeline_bar.hide()
+        self.center_stack.setCurrentIndex(self._optimize_index)
+        self.scene_title_label.setText("Optimize")
+        self.scene_subtitle_label.setText("Natural language in; a confirmed problem, a verified run and a replay out")
+        self._sync_workspace()
+
+    def _leave_optimize(self) -> None:
+        """Back from the Optimize page to the 3D view (the list returns with it, see _on_center_page)."""
+        if self.center_stack.currentWidget() is self.optimize_host:
+            self._show_view()
+
+    def _on_center_page(self, index: int) -> None:
+        """Every way off the Optimize page (workspace bar, palette, a run or vehicle picked) restores the list."""
+        if index != self._optimize_index and self.left_stack.isHidden():
+            self.left_stack.show()
+            self.workspace_bar.set_panel_enabled("left", True)
 
     def _set_scene_chrome(self, on: bool) -> None:
         """The scene's inspector and view controls mean nothing on a Flight Lab
@@ -1570,7 +1618,7 @@ class MissionControlWindow(QMainWindow):
             return
         self._compare_shown = False
         self._set_scene_chrome(True)
-        if self.center_stack.currentWidget() in (self.flightlab_compare, self.vehicle_page):
+        if self.center_stack.currentWidget() in (self.flightlab_compare, self.vehicle_page, self.optimize_host):
             self.center_stack.setCurrentIndex(0)
         self.chart_panel.setVisible(self.chart_panel.count() > 0)
         self.timeline_bar.setVisible((self.state.scene or {}).get("timeline") is not None)
@@ -2256,6 +2304,8 @@ class MissionControlWindow(QMainWindow):
         plotter.close() before window.close()). Also stop the animation timer and
         any in-flight scene-loading thread so nothing fires mid-teardown."""
         self._set_playing(False)
+        if self.optimize_workspace is not None:
+            self.optimize_workspace.shutdown()   # cancels a running optimization and waits for its thread
         self._timer.stop()
         self._scrub_timer.stop()
         self._rotation_timer.stop()
