@@ -178,12 +178,9 @@ table and the statuses follow it.
 
 [![Replay: EQUAL across compile, edits and run, stepped to iteration 1 of 2](../assets/optimization-studio-replay.png)](../assets/optimization-studio-replay.png)
 
-An `agent-trace-1.0` trace does not record where a run was cancelled.
-`replay` therefore runs a cancelled run's recording to its end and reports a
-difference. The workspace then re-executes the recording with the cancel
-firing after the last recorded proposal and compares the trace digest. This
-is exactly where the runtime checks cancellation. Trace 1.1 records the
-position, and `replay` then needs no such step.
+A cancelled run records where the cancel fired (trace 1.1), so `replay`
+re-executes it up to that point and reads EQUAL. A cancelled 1.0 trace has no
+recorded position and reads DIVERGED, as it does in the runtime.
 
 ## Measured latency
 

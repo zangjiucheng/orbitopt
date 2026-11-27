@@ -512,38 +512,6 @@ def _replay_compile(exp_dir: Path, meta: Mapping[str, Any], run_problem: Mapping
     return parts
 
 
-class _Counted:
-    """Counts the proposals a recorded planner has served."""
-
-    def __init__(self, inner):
-        self.inner, self.served, self.name = inner, 0, inner.name
-
-    def propose(self, state):
-        self.served += 1
-        return self.inner.propose(state)
-
-
-def _replay_to_cancellation(run_dir: Path, trace: Mapping[str, Any], tools) -> str:
-    """The digest of the trace re-executed from its proposals with the cancel firing after the last one.
-
-    Bridge for ``agent-trace-1.0``: that trace does not record where a run
-    was cancelled, so ``replay`` runs a cancelled run's recording to its end
-    and reports a difference. The runtime checks cancellation before each
-    iteration, so the recorded position is exactly "after the last recorded
-    proposal"; this re-execution passes that position as ``cancel``.
-    """
-    from orbitopt.agent.runtime import Policy, Proposal, RecordedPlanner, solve
-    from orbitopt.optimization import Budget, parse_problem
-
-    problem = parse_problem(json.loads((run_dir / "problem.json").read_text(encoding="utf-8")))
-    proposals = [Proposal.from_dict(r["proposal"]) for r in trace["iterations"]]
-    planner = _Counted(RecordedPlanner(proposals, name=trace["planner"]))
-    outcome = solve(problem, planner=planner, budget=Budget(**trace["limits"]),
-                    policy=Policy.from_dict(trace["policy"]), tools=tools, seed=trace["seed"],
-                    cancel=lambda: planner.served >= len(proposals))
-    return outcome.trace.digest()
-
-
 def _replay_runtime(run_dir: Path, expected: str | None) -> tuple[ReplayPart, Mapping | None, Mapping | None]:
     from orbitopt.agent.commands import tools_for
     from orbitopt.agent.runtime import load_trace, replay
@@ -563,12 +531,6 @@ def _replay_runtime(run_dir: Path, expected: str | None) -> tuple[ReplayPart, Ma
                f"sealed run re-graded: {report.sealed_verdict}"]
     if report.equal:
         return ReplayPart("run", EQUAL, tuple(details)), trace, problem_doc
-    if (trace is not None and trace["outcome"]["status"] == "cancelled" and not report.integrity
-            and not any(d.startswith("sealed/") for d in report.differences)):
-        if _replay_to_cancellation(run_dir, trace, tools) == trace["digest"]:
-            return ReplayPart("run", EQUAL, (
-                f"cancelled run re-executed up to the recorded cancellation, after iteration "
-                f"{len(trace['iterations'])}: trace {trace['digest']}", details[2])), trace, problem_doc
     return ReplayPart("run", DIVERGED, tuple(report.integrity) + tuple(report.differences)), trace, problem_doc
 
 
