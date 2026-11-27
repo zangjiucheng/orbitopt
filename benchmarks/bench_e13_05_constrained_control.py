@@ -199,9 +199,10 @@ def _arm_block(rows) -> dict:
     viol = {}
     for k in VIOL_FAMILIES:
         fam = [r["violations"].get(k) for r in rows if r.get("violations") and k in r["violations"]]
+        margins = [f["min_margin"] for f in fam if f.get("min_margin") is not None]
         viol[k] = {"violated_samples": sum(f["violated_samples"] > 0 for f in fam),
                    "count_total": sum(f["violated_samples"] for f in fam),
-                   "min_margin": (min((f["min_margin"] for f in fam), default=None))}
+                   "min_margin": (min(margins) if margins else None)}
     phases: dict = {}
     for r in rows:
         for ph, dv in (r.get("commanded_by_phase_m_s") or {}).items():
@@ -304,6 +305,9 @@ def main() -> int:
     if not args.quick:
         _identity_guard(rows_by_arm["baseline"], FROZEN)
         print("baseline identity vs frozen E13-04 artifact: exact", flush=True)
+    raw = Path(str(out) + ".rows")
+    raw.parent.mkdir(parents=True, exist_ok=True)
+    raw.write_text(json.dumps({"rows_by_arm": rows_by_arm}))
     doc = {"kind": "orbitopt.e13-05.constrained-control.1.0",
            "generated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
            "quick_layout": bool(args.quick),
