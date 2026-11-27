@@ -138,7 +138,8 @@ def simulate_closed_loop(*, run_id: str, clock: ClockSpec, frame: str,
                          actuator: Actuator | None = None,
                          mission: Mapping | None = None,
                          plan_digest: str | None = None,
-                         config_extra: Mapping | None = None) -> GncRunLog:
+                         config_extra: Mapping | None = None,
+                         observation_hook: Callable | None = None) -> GncRunLog:
     """Fly one closed-loop run and return the sealed run log.
 
     ``sensors`` maps clock sensor id -> E13-03 sensor model and must cover
@@ -148,6 +149,10 @@ def simulate_closed_loop(*, run_id: str, clock: ClockSpec, frame: str,
     two-body + J2 propagator (E12-02); a campaign injects its own. The
     actuator defaults to delivering exactly what was commanded.
     ``config_extra`` is merged into the log config (campaign provenance).
+    ``observation_hook``, when given, is applied to each arrived
+    ``Observation`` *before* logging and filtering -- the environment seam
+    for injecting a declared navigation fault (a sensor bias switching on);
+    the sealed log records what the filter really consumed.
     """
     declared = {s.sensor_id for s in clock.sensors}
     if set(sensors) != declared:
@@ -162,6 +167,8 @@ def simulate_closed_loop(*, run_id: str, clock: ClockSpec, frame: str,
         raise TypeError(f"filter must be a RelativeNavEKF, got {filter!r}")
     if not (math.isfinite(float(t_end_s)) and float(t_end_s) > 0.0):
         raise ValueError(f"t_end_s must be > 0, got {t_end_s!r}")
+    if observation_hook is not None and not callable(observation_hook):
+        raise ValueError(f"observation_hook must be callable or None, got {observation_hook!r}")
     plant_default = plant is None
     if plant_default:
         plant = default_plant(frame=frame)
@@ -293,6 +300,8 @@ def simulate_closed_loop(*, run_id: str, clock: ClockSpec, frame: str,
                               v_rel_m_s=tuple(float(x) for x in y[9:12] - y[6:9])),
                 target_id=target_id, chaser_id=chaser_id,
                 epoch=clock.epoch_at(tick.t_sample_s))
+            if obs is not None and observation_hook is not None:
+                obs = observation_hook(obs)
             if obs is not None:
                 log.append_observation(obs)
                 arrived[tick.sensor_id] = obs

@@ -49,6 +49,11 @@ contracts, one declared clock, one sealed replayable run log.
    one declared constraint family (keep-out, corridor, velocity profile,
    thrust/budget), a finite-horizon CW LQR law, and a receding-horizon
    constrained MPC law that carries the constraint set inside its QP.
+ * :mod:`orbitopt.gnc.supervisor` (E13-06) -- ``SafetySupervisor``: a
+   covariance-inflated E12-04-envelope monitor and a nominal -> hold -> abort
+   state machine wrapped around any GuidanceLaw (estimate + covariance only,
+   zero thrust once supervising), with ``score_supervision`` as the offline
+   truth-scoring reader (missed alarms and false alarms, counted separately).
 """
 from .clock import (
                      CLOCK_KIND,
@@ -165,10 +170,30 @@ from .sensors import (
                      sensor_task_config_to_document,
 )
 from .sim import ProportionalLaw, SensorNoise, simulate
+from .supervisor import (
+                     INSTANTANEOUS_MONITORS,
+                     STATE_ABORT,
+                     STATE_HOLD,
+                     STATE_NOMINAL,
+                     SUPERVISOR_STATES,
+                     MonitorReading,
+                     SafetyEnvelope,
+                     SafetySupervisor,
+                     SupervisionEvent,
+                     SupervisorConfig,
+                     alert_intervals,
+                     score_supervision,
+                     violation_intervals,
+)
 
 __all__ = [
                      "Actuator",
                      "ApproachConstraints",
+                     "INSTANTANEOUS_MONITORS",
+                     "STATE_ABORT",
+                     "STATE_HOLD",
+                     "STATE_NOMINAL",
+                     "SUPERVISOR_STATES",
                      "CwMidCourseLaw",
                      "GuidanceLawError",
                      "MANEUVER_MODES",
@@ -185,6 +210,7 @@ __all__ = [
                      "cw_impulse_matrices",
                      "finite_horizon_cw_lqr_gains",
                      "VelocityProfile",
+                     "violation_intervals",
                      "CHANNELS",
                      "CLOCK_KIND",
                      "CLOCK_TIMESCALES",
@@ -208,6 +234,11 @@ __all__ = [
                      "GncRunLog",
                      "GuidanceInput",
                      "GuidanceLaw",
+                     "MonitorReading",
+                     "SafetyEnvelope",
+                     "SafetySupervisor",
+                     "SupervisionEvent",
+                     "SupervisorConfig",
                      "MeasurementChannel",
                      "MeasurementModel",
                      "NATIVE_COVARIANCE_KEY",
@@ -268,6 +299,8 @@ __all__ = [
                      "sensor_config_from_document",
                      "sensor_config_to_document",
                      "sensor_spec_from_document",
+                     "alert_intervals",
+                     "score_supervision",
                      "sensor_task_config_from_document",
                      "sensor_task_config_to_document",
                      "sigma_coverage",
