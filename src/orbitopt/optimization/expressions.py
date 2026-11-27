@@ -24,8 +24,9 @@ trigger unbounded integer arithmetic such as ``9**9**9``. Evaluation compiles
 only the validated, expanded tree, never the raw text, and runs it with no
 builtins.
 
-A ``ToolCall`` names a scientific tool by registered id. The IR only types the
-reference; the registry is E14-04.
+A ``ToolCall`` names a scientific tool by registered id, with expression
+arguments, JSON constant arguments and the output it reads. The IR only types
+the reference; the registry is E14-04.
 """
 
 from __future__ import annotations
@@ -84,6 +85,20 @@ class ExpressionError(ValueError):
 
 class EvaluationError(ArithmeticError):
     """Evaluating a valid expression failed: a domain error, overflow, missing value or tool."""
+
+
+class ToolCallError(EvaluationError):
+    """A ``ToolCall`` could not produce a value: no tool is registered, the tool raised, or no such output.
+
+    Every exception a tool raises reaches the caller as this error, with the
+    original as ``__cause__``, so a solver that skips points where the problem
+    is undefined skips these too. A grader that must tell "undefined here"
+    from "could not ask the tool" catches this subclass first.
+    """
+
+    def __init__(self, tool_id: str, message: str):
+        self.tool_id = tool_id
+        super().__init__(f"tool {tool_id!r}: {message}")
 
 
 @dataclass(frozen=True)
@@ -384,18 +399,29 @@ class Expression:
         return result if vectorised else float(result)
 
 
+JsonConstant = str | bool | int | float | list
+"""A ``ToolCall`` constant: a JSON string, boolean, finite number or array of these."""
+
+
 @dataclass(frozen=True)
 class ToolCall:
-    """A reference to a registered scientific tool, called with expression-valued arguments.
+    """A reference to a registered scientific tool: what it is called with and which output is read.
 
-    ``args`` maps each tool argument to an expression source over declared
-    names. The tool receives SI-coherent argument values and must return an
-    SI-coherent value; the objective or constraint ``unit`` declares its
+    ``args`` maps a tool argument to an expression source over declared
+    names; it is evaluated in SI-coherent units. ``constants`` maps a tool
+    argument to a JSON constant passed unchanged (an integrand string, a
+    rule name, an array of layer thicknesses in the tool's own SI units);
+    the two share no key. The tool returns either a number or an object of
+    outputs; ``output`` names the field to read from an object and is
+    ``None`` for a tool that returns a number. The value must be
+    SI-coherent; the objective or constraint ``unit`` declares its
     dimension, which the E14-04 registry is responsible for checking.
     """
 
     tool_id: str
     args: Mapping[str, str] = field(default_factory=dict)
+    constants: Mapping[str, JsonConstant] = field(default_factory=dict)
+    output: str | None = None
 
     @property
     def names(self) -> frozenset[str]:

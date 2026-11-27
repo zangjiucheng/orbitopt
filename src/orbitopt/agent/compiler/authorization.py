@@ -29,7 +29,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal, Sequence
 
-from orbitopt.optimization import Expression, OptimizationProblem, ToolCall, UnitError, parse_unit
+from orbitopt.optimization import Expression, OptimizationProblem, ToolCall, UnitError, canonical_digest, parse_unit
 
 from .outcome import Violation
 from .schema import AuthorizedChange
@@ -213,6 +213,17 @@ def _literals(source: str) -> list[float]:
             if isinstance(node, ast.Constant) and type(node.value) in (int, float) and id(node) not in skipped]
 
 
+def _constant_numbers(values) -> list[float]:
+    """The numbers in ``ToolCall`` constants, arrays flattened; strings and booleans hold none."""
+    out = []
+    for value in values:
+        if isinstance(value, (list, tuple)):
+            out += _constant_numbers(value)
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            out.append(value)
+    return out
+
+
 @dataclass(frozen=True)
 class _Number:
     direction: str  # ">=", "<=", "==", or "any"
@@ -230,9 +241,11 @@ def _problem_numbers(problem: OptimizationProblem) -> list[_Number]:
         out += [_Number("any", c, v.unit) for c in v.choices]
     out += [_Number("any", p.value, p.unit) for p in problem.parameters]
     for item in (*problem.objectives, *problem.constraints):
-        sources = list(item.expression.args.values()) if isinstance(item.expression, ToolCall) \
-            else [item.expression.source]
+        expr = item.expression
+        sources = list(expr.args.values()) if isinstance(expr, ToolCall) else [expr.source]
         out += [_Number("any", lit, None) for src in sources for lit in _literals(src)]
+        if isinstance(expr, ToolCall):
+            out += [_Number("any", float(value), None) for value in _constant_numbers(expr.constants.values())]
     out += [_Number(c.sense, c.rhs, c.unit) for c in problem.constraints]
     return out
 
@@ -300,7 +313,8 @@ class _Diff:
 
 def _expr_key(expr: Expression | ToolCall):
     if isinstance(expr, ToolCall):
-        return ("tool", expr.tool_id, tuple(sorted((k, "".join(v.split())) for k, v in expr.args.items())))
+        return ("tool", expr.tool_id, tuple(sorted((k, "".join(v.split())) for k, v in expr.args.items())),
+                canonical_digest(dict(expr.constants)), expr.output)
     return ("expr", "".join(expr.source.split()))
 
 

@@ -7,7 +7,7 @@ import numbers
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping
 
-from ..expressions import EvaluationError, ToolCall
+from ..expressions import EvaluationError, ToolCall, ToolCallError
 from ..problem import Evaluation, OptimizationProblem, Variable, VerificationPolicy
 from .report import FindingCode, Outcome
 
@@ -100,12 +100,13 @@ def check_point(problem: OptimizationProblem, x: Mapping[str, Any], policy: Veri
     point = {name: float(x[name]) for name in names}
     try:
         ev = problem.evaluate(point, tools)
+    except ToolCallError as exc:  # the tool could not be asked: evaluation impossible, never a pass
+        add(FindingCode.EVALUATION_ERROR, path, f"evaluation failed in a tool: {exc}")
+        cause = type(exc.__cause__).__name__ if exc.__cause__ is not None else "ToolCallError"
+        return PointCheck(Outcome.NOT_ASSESSED, f"evaluation raised {cause}")
     except EvaluationError as exc:
         add(FindingCode.EVALUATION_ERROR, path, f"the problem is not defined at this point: {exc}")
         return PointCheck(Outcome.FAILED, "the problem is not defined at this point")
-    except Exception as exc:  # a tool raised: evaluation impossible, never a pass
-        add(FindingCode.EVALUATION_ERROR, path, f"evaluation raised {exc!r}")
-        return PointCheck(Outcome.NOT_ASSESSED, f"evaluation raised {type(exc).__name__}")
     objectives, residuals, feasible = _floats(ev.objectives), _floats(ev.residuals), in_domain
     for name, value in objectives.items():
         if not math.isfinite(value):

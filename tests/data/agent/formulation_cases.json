@@ -78,7 +78,7 @@
    "expected_outcome": "compile",
    "reference_problem": "integ-exp-1e-10",
    "reference_ir": {
-    "schemaVersion": "1.0",
+    "schemaVersion": "1.1",
     "id": "integ-exp-1e-10",
     "title": "",
     "variables": [
@@ -121,12 +121,15 @@
      {
       "name": "error_target",
       "expression": {
-       "tool_id": "quadrature.abs_error.exp",
+       "tool_id": "quadrature.abs_error",
        "args": {
         "rule": "rule",
         "n": "n",
         "a": "a",
         "b": "b"
+       },
+       "constants": {
+        "integrand": "exp(t)"
        }
       },
       "sense": "<=",
@@ -136,13 +139,11 @@
     ]
    },
    "replies": [
-    "{\"status\": \"compiled\", \"problem\": {\"title\": \"\", \"variables\": [{\"name\": \"rule\", \"kind\": \"integer\", \"lower\": 0.0, \"upper\": 3.0, \"unit\": \"\", \"source\": \"assumed\"}, {\"name\": \"n\", \"kind\": \"integer\", \"lower\": 1.0, \"upper\": 512.0, \"unit\": \"\", \"source\": \"assumed\"}], \"parameters\": [], \"objectives\": [{\"name\": \"evaluations\", \"expression\": \"n\", \"sense\": \"minimize\", \"unit\": \"\", \"source\": \"user\"}], \"constraints\": [{\"name\": \"accuracy\", \"expression\": {\"tool_id\": \"quadrature.abs_error.exp\", \"args\": {\"rule\": \"rule\", \"n\": \"n\", \"a\": \"0\", \"b\": \"1\"}}, \"sense\": \"<=\", \"rhs\": 1e-10, \"unit\": \"\", \"source\": \"user\"}]}, \"questions\": [], \"assumptions\": [{\"about\": \"variables/rule\", \"text\": \"the rule index follows the catalogue's fixed menu: 0 Gauss-Legendre, 1 composite trapezoid, 2 composite Simpson, 3 Gauss-Legendre after x = a + (b - a) s^2\"}, {\"about\": \"variables/n\", \"text\": \"N is capped at the catalogue's N_MAX of 512 evaluations\"}], \"unsupported_reason\": null, \"authorized_changes\": [], \"tradeoff_quote\": null}"
+    "{\"status\": \"compiled\", \"problem\": {\"title\": \"\", \"variables\": [{\"name\": \"rule\", \"kind\": \"integer\", \"lower\": 0.0, \"upper\": 3.0, \"unit\": \"\", \"source\": \"assumed\"}, {\"name\": \"n\", \"kind\": \"integer\", \"lower\": 1.0, \"upper\": 512.0, \"unit\": \"\", \"source\": \"assumed\"}], \"parameters\": [], \"objectives\": [{\"name\": \"evaluations\", \"expression\": \"n\", \"sense\": \"minimize\", \"unit\": \"\", \"source\": \"user\"}], \"constraints\": [{\"name\": \"accuracy\", \"expression\": {\"tool_id\": \"quadrature.abs_error\", \"args\": {\"rule\": \"rule\", \"n\": \"n\", \"a\": \"0\", \"b\": \"1\"}, \"constants\": {\"integrand\": \"exp(t)\"}}, \"sense\": \"<=\", \"rhs\": 1e-10, \"unit\": \"\", \"source\": \"user\"}]}, \"questions\": [], \"assumptions\": [{\"about\": \"variables/rule\", \"text\": \"the rule index follows the catalogue's fixed menu: 0 Gauss-Legendre, 1 composite trapezoid, 2 composite Simpson, 3 Gauss-Legendre after x = a + (b - a) s^2\"}, {\"about\": \"variables/n\", \"text\": \"N is capped at the catalogue's N_MAX of 512 evaluations\"}], \"unsupported_reason\": null, \"authorized_changes\": [], \"tradeoff_quote\": null}"
    ],
-   "notes": "Benchmark example FC-005. Decision recorded here: the compiler adopts the catalogue's fixed rule menu and N_MAX = 512 explicitly, as listed assumptions (origin compiler), rather than asking. The integrand is named by the tool id because IR 1.0 tool arguments are expressions only (no string arguments).",
+   "notes": "Benchmark example FC-005. Decision recorded here: the compiler adopts the catalogue's fixed rule menu and N_MAX = 512 explicitly, as listed assumptions (origin compiler), rather than asking. The integrand reaches the tool as a constant argument.",
    "known_tool_ids": [
-    "quadrature.abs_error.exp",
-    "quadrature.abs_error.runge",
-    "quadrature.abs_error.peak"
+    "quadrature.abs_error"
    ]
   },
   {
@@ -1820,7 +1821,7 @@
    "expected_outcome": "compile",
    "reference_problem": "integ-runge-1e-8",
    "reference_ir": {
-    "schemaVersion": "1.0",
+    "schemaVersion": "1.1",
     "id": "integ-runge-1e-8",
     "title": "",
     "variables": [
@@ -1863,12 +1864,15 @@
      {
       "name": "error_target",
       "expression": {
-       "tool_id": "quadrature.abs_error.runge",
+       "tool_id": "quadrature.abs_error",
        "args": {
         "rule": "rule",
         "n": "n",
         "a": "a",
         "b": "b"
+       },
+       "constants": {
+        "integrand": "1/(1+25*t**2)"
        }
       },
       "sense": "<=",
@@ -1878,13 +1882,11 @@
     ]
    },
    "replies": [
-    "{\"status\": \"compiled\", \"problem\": {\"title\": \"\", \"variables\": [{\"name\": \"rule\", \"kind\": \"integer\", \"lower\": 0.0, \"upper\": 3.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"n\", \"kind\": \"integer\", \"lower\": 1.0, \"upper\": 512.0, \"unit\": \"\", \"source\": \"user\"}], \"parameters\": [{\"name\": \"a\", \"value\": -1.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"b\", \"value\": 1.0, \"unit\": \"\", \"source\": \"user\"}], \"objectives\": [{\"name\": \"evaluations\", \"expression\": \"n\", \"sense\": \"minimize\", \"unit\": \"\", \"source\": \"user\"}], \"constraints\": [{\"name\": \"accuracy\", \"expression\": {\"tool_id\": \"quadrature.abs_error.runge\", \"args\": {\"rule\": \"rule\", \"n\": \"n\", \"a\": \"a\", \"b\": \"b\"}}, \"sense\": \"<=\", \"rhs\": 1e-08, \"unit\": \"\", \"source\": \"user\"}]}, \"questions\": [], \"assumptions\": [{\"about\": \"variables/rule\", \"text\": \"the rule index follows the catalogue's fixed menu: 0 Gauss-Legendre, 1 composite trapezoid, 2 composite Simpson, 3 Gauss-Legendre after x = a + (b - a) s^2\"}], \"unsupported_reason\": null, \"authorized_changes\": [], \"tradeoff_quote\": null}"
+    "{\"status\": \"compiled\", \"problem\": {\"title\": \"\", \"variables\": [{\"name\": \"rule\", \"kind\": \"integer\", \"lower\": 0.0, \"upper\": 3.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"n\", \"kind\": \"integer\", \"lower\": 1.0, \"upper\": 512.0, \"unit\": \"\", \"source\": \"user\"}], \"parameters\": [{\"name\": \"a\", \"value\": -1.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"b\", \"value\": 1.0, \"unit\": \"\", \"source\": \"user\"}], \"objectives\": [{\"name\": \"evaluations\", \"expression\": \"n\", \"sense\": \"minimize\", \"unit\": \"\", \"source\": \"user\"}], \"constraints\": [{\"name\": \"accuracy\", \"expression\": {\"tool_id\": \"quadrature.abs_error\", \"args\": {\"rule\": \"rule\", \"n\": \"n\", \"a\": \"a\", \"b\": \"b\"}, \"constants\": {\"integrand\": \"1/(1+25*t**2)\"}}, \"sense\": \"<=\", \"rhs\": 1e-08, \"unit\": \"\", \"source\": \"user\"}]}, \"questions\": [], \"assumptions\": [{\"about\": \"variables/rule\", \"text\": \"the rule index follows the catalogue's fixed menu: 0 Gauss-Legendre, 1 composite trapezoid, 2 composite Simpson, 3 Gauss-Legendre after x = a + (b - a) s^2\"}], \"unsupported_reason\": null, \"authorized_changes\": [], \"tradeoff_quote\": null}"
    ],
    "notes": "Integration cost with the rule menu stated in the prompt.",
    "known_tool_ids": [
-    "quadrature.abs_error.exp",
-    "quadrature.abs_error.runge",
-    "quadrature.abs_error.peak"
+    "quadrature.abs_error"
    ]
   },
   {
@@ -2997,9 +2999,7 @@
    ],
    "notes": "Unsupported model detected by the compiler: the reply references a tool id that the caller did not list.",
    "known_tool_ids": [
-    "quadrature.abs_error.exp",
-    "quadrature.abs_error.runge",
-    "quadrature.abs_error.peak"
+    "quadrature.abs_error"
    ],
    "expect": {
     "category": "unsupported_model"

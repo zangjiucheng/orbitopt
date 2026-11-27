@@ -200,7 +200,6 @@ TOOLS = (
                      "The cost charged is the rule's n evaluations; the reference integral is overhead."),
         domain={**LIMIT_DOMAIN, "n": Interval(1, 512)},
         cost=CostModel("cheap", "n"),
-        value_field="abs_error",
         tested_by=tests("test_quadrature_cost_reproduces_benchmark_minimum_evaluations",
                         "test_quadrature_cost_rules_match_the_benchmark_definitions"),
     ), quadrature_cost),

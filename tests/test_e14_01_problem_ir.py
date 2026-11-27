@@ -40,6 +40,7 @@ from orbitopt.optimization import (
     Parameter,
     Termination,
     ToolCall,
+    ToolCallError,
     UnitError,
     Variable,
     VerificationPolicy,
@@ -84,7 +85,8 @@ def rich() -> OptimizationProblem:
         parameters=(Parameter("dv_max", 4000.0, unit="m/s"), Parameter("mass", 1200.0, unit="kg")),
         objectives=(
             Objective("total_dv", "dv1", unit="km/s"),
-            Objective("payload", ToolCall("mission.payload_margin", {"dv": "dv1", "t": "tof"}),
+            Objective("payload", ToolCall("mission.payload_margin", {"dv": "dv1", "t": "tof"},
+                                          {"model": "two_body", "stages": [1, 2.5], "drag": True}, "margin"),
                       sense="maximize", unit="kg", origin="compiler"),
         ),
         constraints=(
@@ -430,6 +432,14 @@ INVALID = [
      "/objectives/0/expression/tool_id"),
     ("unsafe tool argument", objective(ToolCall("orbit.dv", {"a": "x.__class__"})), ErrorCode.UNSAFE_EXPRESSION,
      "/objectives/0/expression/args/a"),
+    ("argument both expression and constant", objective(ToolCall("orbit.dv", {"a": "x"}, {"a": 1.0})),
+     ErrorCode.DUPLICATE_NAME, "/objectives/0/expression/constants/a"),
+    ("non-finite constant", objective(ToolCall("orbit.dv", {"a": "x"}, {"b": [1.0, math.inf]})), ErrorCode.NON_FINITE,
+     "/objectives/0/expression/constants/b/1"),
+    ("object constant", objective(ToolCall("orbit.dv", {"a": "x"}, {"b": {"k": 1}})), ErrorCode.INVALID_VALUE,
+     "/objectives/0/expression/constants/b"),
+    ("bad output name", objective(ToolCall("orbit.dv", {"a": "x"}, output="dv total")), ErrorCode.INVALID_NAME,
+     "/objectives/0/expression/output"),
 ]
 
 
@@ -559,8 +569,69 @@ def test_tool_calls_evaluate_through_a_registry_in_si():
 
     assert problem.evaluate({"d": 3.0}, tools={"orbit.cost": cost}).objectives["cost"] == pytest.approx(7.0)
     assert seen == {"dist": 6000.0}
-    with pytest.raises(EvaluationError):
+    with pytest.raises(ToolCallError):
         problem.evaluate({"d": 3.0})
+
+
+def _tool_problem(call: ToolCall) -> OptimizationProblem:
+    return OptimizationProblem(id="tool", variables=(Variable("d", lower=0.0, unit="km"),),
+                               objectives=(Objective("cost", call, unit="km"),))
+
+
+def test_a_tool_call_passes_constants_unchanged_and_reads_the_output_it_names():
+    seen = {}
+
+    def survey(dist, model, layers):
+        seen.update(dist=dist, model=model, layers=layers)
+        return {"cost": dist + 1000.0, "count": 3.0}
+
+    call = ToolCall("orbit.survey", {"dist": "2 * d"}, {"model": "j2", "layers": [0.5, 1.5]}, output="cost")
+    problem = _tool_problem(call)
+    assert validate_problem(problem) == []
+    assert problem.evaluate({"d": 3.0}, tools={"orbit.survey": survey}).objectives["cost"] == pytest.approx(7.0)
+    assert seen == {"dist": 6000.0, "model": "j2", "layers": [0.5, 1.5]}
+    count = _tool_problem(replace(call, output="count"))
+    assert count.evaluate({"d": 3.0}, tools={"orbit.survey": survey}).objectives["cost"] == pytest.approx(3e-3)
+    assert count.digest() != problem.digest()
+    assert _tool_problem(replace(call, constants={"model": "j4", "layers": [0.5, 1.5]})).digest() != problem.digest()
+    back = parse_problem(json.loads(json.dumps(problem.to_dict())))
+    assert back == problem and back.objectives[0].expression.constants == {"model": "j2", "layers": [0.5, 1.5]}
+
+
+@pytest.mark.parametrize("call, tool", [
+    (ToolCall("orbit.survey", {"dist": "d"}), lambda dist: {"cost": dist}),           # several outputs, none named
+    (ToolCall("orbit.survey", {"dist": "d"}, output="cost"), lambda dist: dist),      # a number, an output named
+    (ToolCall("orbit.survey", {"dist": "d"}, output="total"), lambda dist: {"cost": dist}),
+    (ToolCall("orbit.survey", {"dist": "d"}), lambda dist: 1.0 / 0.0),                # the tool raises
+    (ToolCall("orbit.survey", {"dist": "d"}), lambda dist: "fast"),                   # not a number
+])
+def test_every_tool_failure_is_a_tool_call_error_that_is_an_evaluation_error(call, tool):
+    with pytest.raises(ToolCallError) as info:
+        _tool_problem(call).evaluate({"d": 1.0}, tools={"orbit.survey": tool})
+    assert isinstance(info.value, EvaluationError) and info.value.tool_id == "orbit.survey"
+
+
+def test_a_tool_exception_keeps_its_cause():
+    class Refused(Exception):
+        pass
+
+    def refuse(dist):
+        raise Refused("outside the validity domain")
+
+    with pytest.raises(ToolCallError) as info:
+        _tool_problem(ToolCall("orbit.survey", {"dist": "d"})).evaluate({"d": 1.0}, tools={"orbit.survey": refuse})
+    assert isinstance(info.value.__cause__, Refused) and "outside the validity domain" in str(info.value)
+
+
+def test_a_1_0_tool_call_parses_with_no_constants_and_no_output():
+    doc = {**QUADRATIC_1_0, "objectives": [{"name": "f", "expression": {"tool_id": "orbit.cost", "args": {"a": "x"}}}]}
+    assert schema_errors(doc, PROBLEM_SCHEMAS["1.0"]) == []
+    call = parse_problem(doc).objectives[0].expression
+    assert call == ToolCall("orbit.cost", {"a": "x"}) and call.constants == {} and call.output is None
+    with_constants = {**doc, "objectives": [{"name": "f", "expression": {
+        "tool_id": "orbit.cost", "args": {"a": "x"}, "constants": {"k": 1}, "output": "v"}}]}
+    assert {e.path for e in schema_errors(with_constants, PROBLEM_SCHEMAS["1.0"])} == {"/objectives/0/expression"}
+    assert parse_problem({**with_constants, "schemaVersion": "1.1"}).objectives[0].expression.output == "v"
 
 
 def test_importing_the_ir_pulls_in_no_other_orbitopt_module_or_numpy():

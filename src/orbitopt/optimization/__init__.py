@@ -16,6 +16,7 @@ from .expressions import (
     Expression,
     ExpressionError,
     ToolCall,
+    ToolCallError,
 )
 from .problem import (
     INDEPENDENT_METHODS,
@@ -46,7 +47,7 @@ __all__ = [
     "Expression", "ExpressionError", "FUNCTIONS", "INDEPENDENT_METHODS", "InvalidProblemError", "MAX_EXPANDED_NODES",
     "MAX_NODES", "Objective", "RESERVED_NAMES", "SCALAR_FUNCTIONS",
     "OptimizationProblem", "OptimizationResult", "PROBLEM_SCHEMA", "PROBLEM_SCHEMAS", "Parameter", "ProblemError",
-    "RESULT_SCHEMA", "RESULT_SCHEMAS", "SCHEMA_VERSION", "STATUSES", "SYMBOLS", "Termination", "ToolCall", "Unit",
+    "RESULT_SCHEMA", "RESULT_SCHEMAS", "SCHEMA_VERSION", "STATUSES", "SYMBOLS", "Termination", "ToolCall", "ToolCallError", "Unit",
     "UnitError", "Variable", "VerificationPolicy", "canonical_digest", "load_schema", "parse_problem", "parse_unit",
     "schema_errors", "schema_for", "validate_problem",
 ]

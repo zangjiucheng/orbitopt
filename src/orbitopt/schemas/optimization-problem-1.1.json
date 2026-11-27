@@ -35,8 +35,16 @@
       "properties": {
         "tool_id": {"type": "string", "description": "Registered tool id (E14-04 registry)."},
         "args": {"type": "object", "additionalProperties": {"type": "string"},
-                 "description": "Tool argument name to expression source."}
+                 "description": "Tool argument name to expression source."},
+        "constants": {"type": "object", "additionalProperties": {"$ref": "#/$defs/constant"},
+                      "description": "Tool argument name to a JSON constant passed unchanged; no key is also in args. Part of the digest."},
+        "output": {"type": ["string", "null"], "description": "The output field read from a tool that returns an object; null for a tool that returns a number."}
       }
+    },
+    "constant": {
+      "description": "A JSON string, boolean, number or array of these.",
+      "oneOf": [{"type": "string"}, {"type": "boolean"}, {"type": "number"},
+                {"type": "array", "items": {"$ref": "#/$defs/constant"}}]
     },
     "variable": {
       "type": "object",

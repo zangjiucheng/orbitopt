@@ -32,7 +32,9 @@ _EXPRESSION = {"anyOf": [
     {"type": "string"},
     {"type": "object", "additionalProperties": False, "required": ["tool_id", "args"],
      "properties": {"tool_id": {"type": "string"},
-                    "args": {"type": "object", "additionalProperties": {"type": "string"}}}},
+                    "args": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "constants": {"type": "object"},
+                    "output": {"type": ["string", "null"]}}},
 ]}
 
 DRAFT_SCHEMA: dict = {

@@ -62,8 +62,9 @@ def _quadrature_tool(f, exact):
 
 def _tools():
     import numpy as np
-    return {"quadrature.abs_error.exp": _quadrature_tool(np.exp, math.e - 1.0),
-            "quadrature.abs_error.runge": _quadrature_tool(lambda t: 1.0 / (1.0 + 25.0 * t ** 2), 0.4 * math.atan(5.0))}
+    by_integrand = {"exp(t)": _quadrature_tool(np.exp, math.e - 1.0),
+                    "1/(1+25*t**2)": _quadrature_tool(lambda t: 1.0 / (1.0 + 25.0 * t ** 2), 0.4 * math.atan(5.0))}
+    return {"quadrature.abs_error": lambda integrand, **args: by_integrand[integrand](**args)}
 
 
 def _run(case, replies=None, sentinel=None):

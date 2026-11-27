@@ -33,7 +33,8 @@ from typing import Any, Callable, Literal, Mapping
 from jsonschema import Draft202012Validator
 
 from .errors import ErrorCode, InvalidProblemError, ProblemError
-from .expressions import RESERVED_NAMES, TOOL_ID_PATTERN, EvaluationError, Expression, ExpressionError, ToolCall
+from .expressions import (RESERVED_NAMES, TOOL_ID_PATTERN, EvaluationError, Expression, ExpressionError, ToolCall,
+                          ToolCallError)
 from .units import Unit, UnitError, format_dims, parse_unit
 
 SCHEMA_VERSION = "1.1"
@@ -274,8 +275,12 @@ class OptimizationProblem:
         Names are converted to SI-coherent values before evaluation, so
         ``x [km] + y [m]`` is correct; each result is converted back to its
         objective or constraint unit. ``tools`` maps a ``ToolCall.tool_id`` to
-        a callable taking the evaluated arguments as keywords (SI in, SI out).
-        Values may be floats or numpy arrays. Assumes a valid problem.
+        a callable taking the evaluated arguments and the constants as
+        keywords (SI in, SI out) and returning a number, or an object from
+        which ``ToolCall.output`` is read. Values may be floats or numpy
+        arrays. Raises ``EvaluationError``, and ``ToolCallError`` (its
+        subclass) for anything that goes wrong in or around a tool. Assumes a
+        valid problem.
         """
         missing = {v.name for v in self.variables} - x.keys()
         if missing:
@@ -284,15 +289,14 @@ class OptimizationProblem:
         si.update({p.name: p.value * parse_unit(p.unit).scale for p in self.parameters})
 
         def value(item):
-            expr = item.expression
-            if isinstance(expr, ToolCall):
-                tool = (tools or {}).get(expr.tool_id)
-                if tool is None:
-                    raise EvaluationError(f"no tool registered for {expr.tool_id!r}")
-                raw = tool(**{arg: Expression(src).evaluate(si) for arg, src in expr.args.items()})
-            else:
-                raw = expr.evaluate(si)
-            return raw / parse_unit(item.unit).scale
+            expr, scale = item.expression, parse_unit(item.unit).scale
+            if not isinstance(expr, ToolCall):
+                return expr.evaluate(si) / scale
+            raw = _call(expr, si, tools)
+            try:
+                return raw / scale
+            except TypeError:
+                raise ToolCallError(expr.tool_id, f"returned {type(raw).__name__}, not a number") from None
 
         return Evaluation(objectives={o.name: value(o) for o in self.objectives},
                           residuals={c.name: c.residual(value(c)) for c in self.constraints})
@@ -315,9 +319,29 @@ class OptimizationProblem:
         return True
 
 
+def _call(call: ToolCall, si: Mapping[str, Any], tools: Mapping[str, Callable[..., Any]] | None) -> Any:
+    """The value of one tool reference: the tool's number, or its ``output`` field."""
+    tool = (tools or {}).get(call.tool_id)
+    if tool is None:
+        raise ToolCallError(call.tool_id, "no tool is registered for this id")
+    kwargs = {arg: Expression(src).evaluate(si) for arg, src in call.args.items()}
+    try:
+        raw = tool(**kwargs, **call.constants)
+    except Exception as exc:  # a tool is third-party code: whatever it raises, the point cannot be evaluated
+        raise ToolCallError(call.tool_id, f"raised {type(exc).__name__}: {exc}") from exc
+    if call.output is None:
+        if isinstance(raw, Mapping):
+            raise ToolCallError(call.tool_id, f"returned the outputs {sorted(raw)}; the call names none of them")
+        return raw
+    if not isinstance(raw, Mapping) or call.output not in raw:
+        raise ToolCallError(call.tool_id, f"returned no output {call.output!r}")
+    return raw[call.output]
+
+
 def _expression_from(data: Any) -> Expression | ToolCall:
     if isinstance(data, Mapping):
-        return ToolCall(data["tool_id"], dict(data.get("args", {})))
+        return ToolCall(data["tool_id"], dict(data.get("args", {})), dict(data.get("constants", {})),
+                        data.get("output"))
     return Expression(data)
 
 
@@ -328,7 +352,8 @@ def _plain(obj: Any) -> Any:
     if isinstance(obj, Expression):
         return obj.source
     if isinstance(obj, ToolCall):
-        return {"tool_id": obj.tool_id, "args": dict(obj.args)}
+        return {"tool_id": obj.tool_id, "args": dict(obj.args), "constants": _plain(dict(obj.constants)),
+                "output": obj.output}
     if hasattr(obj, "__dataclass_fields__"):
         return {f.name: _plain(getattr(obj, f.name)) for f in fields(obj)}
     if isinstance(obj, (list, tuple)):
@@ -526,6 +551,15 @@ def _check_source(err: _Collector, source: Any, path: str, declared: set[str]) -
     return expr if names <= declared else None
 
 
+def _check_constant(err: _Collector, value: Any, path: str) -> None:
+    """A JSON string, boolean, finite number, or an array of these (nested arrays allowed)."""
+    if isinstance(value, (list, tuple)):
+        for i, item in enumerate(value):
+            _check_constant(err, item, f"{path}/{i}")
+    elif not isinstance(value, (str, bool)):
+        err.finite(value, path)
+
+
 def _check_expression(err: _Collector, item: Objective | Constraint, path: str,
                       declared: set[str], dims: dict) -> None:
     target = err.unit(item.unit, f"{path}/unit")
@@ -538,6 +572,15 @@ def _check_expression(err: _Collector, item: Objective | Constraint, path: str,
             if not (isinstance(arg, str) and arg.isidentifier()):
                 err(ErrorCode.INVALID_NAME, f"{path}/expression/args", f"tool argument {arg!r} is not an identifier")
             _check_source(err, source, f"{path}/expression/args/{arg}", declared)
+        for arg, constant in expr.constants.items():
+            where = f"{path}/expression/constants/{arg}"
+            if not (isinstance(arg, str) and arg.isidentifier()):
+                err(ErrorCode.INVALID_NAME, f"{path}/expression/constants", f"tool argument {arg!r} is not an identifier")
+            elif arg in expr.args:
+                err(ErrorCode.DUPLICATE_NAME, where, f"tool argument {arg!r} is both an expression and a constant")
+            _check_constant(err, constant, where)
+        if expr.output is not None and not (isinstance(expr.output, str) and expr.output.isidentifier()):
+            err(ErrorCode.INVALID_NAME, f"{path}/expression/output", f"tool output {expr.output!r} is not an identifier")
         return
     if not isinstance(expr, Expression):
         err(ErrorCode.INVALID_VALUE, f"{path}/expression", "expected an Expression or a ToolCall")

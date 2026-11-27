@@ -42,7 +42,10 @@ and a numeric rhs. Variable kinds are "continuous", "integer", "binary" and \
 5. Use status "unsupported" with an "unsupported_reason" when the request \
 needs something this format cannot express: a physics or simulation model \
 that is neither an expression nor one of the known tool ids (use \
-{{"tool_id": ..., "args": {{...}}}} as the expression for a known tool), \
+{{"tool_id": ..., "args": {{...}}}} as the expression for a known tool: "args" \
+maps a tool input to an expression, "constants" maps a tool input to a fixed \
+JSON value such as a string, and "output" names the output to read when the \
+tool returns several), \
 randomness or expectations, dynamics over time, soft constraints or \
 penalties, min-max over infinitely many cases, or a variable kind not listed \
 above. Do not approximate it.

@@ -212,6 +212,8 @@ class Evaluator:
         self.max_evaluations = budget.max_evaluations
         self.deadline = None if budget.max_wall_s is None else started + budget.max_wall_s
         self.count = 0
+        self.failures = 0
+        self.last_failure = ""
         self.best: Point | None = None
         self._best_key: tuple | None = None
         self._cache: OrderedDict[tuple[float, ...], Point] = OrderedDict()
@@ -249,7 +251,9 @@ class Evaluator:
         x = self.space.decode(key)
         try:
             ev = problem.evaluate(x, self.tools)
-        except EvaluationError:
+        except EvaluationError as exc:  # undefined here, or a tool failed (ToolCallError): the point is infeasible
+            self.failures += 1
+            self.last_failure = str(exc)
             inf = math.inf
             return Point(x, {}, {}, (inf,) * len(problem.objectives), (inf,) * len(problem.constraints), False, inf)
         objectives = {k: float(v) for k, v in ev.objectives.items()}
@@ -383,6 +387,10 @@ def _result(problem: OptimizationProblem, capability: SolverCapability, structur
         reported = [evaluator(p) for p in outcome.points]
     except BudgetExhausted as exhausted:
         reported, stop, message = [], exhausted.termination, f"{message}; {exhausted}"
+    if evaluator.count and evaluator.failures == evaluator.count:
+        stop = Termination.ERROR
+        message = f"all {evaluator.count} evaluations failed, the last with: {evaluator.last_failure}" + (
+            f" ({message})" if message else "")
     front: list[Point] = []
     if capability.multiobjective:
         front = sorted(_non_dominated([p for p in reported if p.feasible]), key=lambda p: p.f)

@@ -77,7 +77,6 @@ TOOLS = (
                 "t_hot": _TEMPERATURE, "t_cold": _TEMPERATURE,
                 "h_hot": Interval(1e-2, 1e7), "h_cold": Interval(1e-2, 1e7)},
         cost=CostModel("trivial"),
-        value_field="heat_flux",
         tested_by=tests("test_layered_wall_matches_hand_calculation_and_conserves_flux"),
     ), layered_wall),
     Tool(ToolSpec(
@@ -109,7 +108,6 @@ TOOLS = (
                 "boundary_temperature": _TEMPERATURE, "nx": Interval(2, 1000), "nt": Interval(1, 20_000),
                 "theta": Interval(0.0, 1.0)},
         cost=CostModel("moderate", "nt"),
-        value_field="temperature",
         replay_tolerance=1e-10,
         tested_by=tests("test_transient_slab_matches_series_solution_with_measured_orders"),
     ), transient_slab),
