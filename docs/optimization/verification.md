@@ -21,7 +21,7 @@ report.statuses["independently_verified"]           # StatusOutcome(passed, reas
 report.codes                                        # finding codes, empty here
 ```
 
-`verify_result(problem, result, *, policy=None, evidence=(), artifact_digest=None, provenance=None, tools=None, seed=0)`
+`verify_result(problem, result, *, policy=None, evidence=(), artifact_digest=None, solved_problem=None, tools=None, seed=0)`
 never raises. An error inside the guard becomes a `guard_error` finding and a
 failed verdict.
 
@@ -30,12 +30,13 @@ failed verdict.
 | `policy` | Defaults to `problem.verification`. It names the required statuses and the tolerances. |
 | `evidence` | Evidence items for `independently_verified` and lower-bound certificates. The guard checks each item itself. |
 | `artifact_digest` | The digest recorded for the result when it was stored. It must equal `result_digest(result)`. |
-| `provenance` | `Provenance(solved_problem, cache_hit, cache_key)`. It records the problem the solver actually ran and any cache hit. |
+| `solved_problem` | The problem the solver actually ran, when it differs from the graded one. A cache hit is not an argument: it is `result.provenance.cache_key`, which the result digest covers. |
 | `tools` | Resolvers for `ToolCall` objectives and constraints, by tool id. |
 | `seed` | The seed for the samples that check a lower-bound certificate. |
 
 `result` may also be the dict form. The guard checks it against
-`optimization-result-1.0.json` first, so a missing field gives
+the result schema its `schemaVersion` names (`optimization-result-1.1.json`,
+or 1.0 for an older document) first, so a missing field gives
 `malformed_result`.
 
 ## How each status is derived
@@ -63,8 +64,8 @@ status never passes.
 These checks give fatal findings, whatever the statuses say:
 
 - `problem_mismatch`: `result.problem_digest` is not the digest of the problem
-  that the result claims to answer. That problem is `provenance.solved_problem`
-  when given, and the graded problem otherwise.
+  that the result claims to answer. That problem is `solved_problem` when
+  given, and the graded problem otherwise.
 - `unauthorized_relaxation` and `formulation_mismatch`: the solved problem's
   `hard_constraint_fingerprint()` differs from the graded problem's. A widened
   domain, a dropped or unlocked user constraint, or a loosened right-hand side
@@ -127,7 +128,7 @@ This class covers linear programs and convex quadratic programs. For them,
 the KKT conditions are sufficient for global optimality. The guard computes
 gradients by central differences with step `max(1, abs(x_i))`, which is exact
 for quadratics up to rounding. An inequality is active when its residual is
-within `10 * constraint_tol * max(1, abs(rhs))` of zero. The multipliers come
+within `10 * constraint_tol * tolerance_scale(rhs)` of zero. The multipliers come
 from a least-squares solve on the active set. While an inequality multiplier
 is negative, that constraint leaves the set and the solve repeats. The point
 passes when the stationarity residual is at most
@@ -154,15 +155,15 @@ check, not a proof.
 
 ## Sealed runs
 
-`seal_run(problem, result, evidence, run_dir, *, cache_hit=False, cache_key=None)`
+`seal_run(problem, result, evidence, run_dir)`
 writes four files and returns the manifest digest:
 
 | File | Content |
 |---|---|
 | `problem.json` | `problem.to_dict()` for the problem the solver ran. |
-| `result.json` | `result.to_dict()`. |
-| `evidence.json` | The evidence items and the cache provenance. An `AlternateSolverCheck` is stored without its callable. |
-| `manifest.json` | Format `orbitopt.optimization.run/1`, the `sha256:` digest of each file's exact bytes, `problem.digest()` and `result_digest(result)`. |
+| `result.json` | `result.to_dict()`, whose `provenance` records a cache hit. |
+| `evidence.json` | The evidence items. An `AlternateSolverCheck` is stored without its callable. |
+| `manifest.json` | Format `orbitopt.optimization.run/2`, the `sha256:` digest of each file's exact bytes, `problem.digest()` and `result_digest(result)`. Format 1 kept the cache record in `evidence.json`; a format 1 run is refused as malformed. |
 
 Every file is canonical JSON: sorted keys, compact separators, UTF-8, and no
 NaN or infinity. `verify_run(run_dir, *, problem=None, policy=None, alternate_solvers=None, tools=None, expected_manifest_digest=None, seed=0)`
@@ -182,12 +183,11 @@ pinning, and it is not a tamper seal.
 ## Fault matrix
 
 `tests/test_e14_06_verification_guard.py` applies all nine injectors of
-`benchmarks/e14_spec/faults.py` to an honest artifact of each of the 24
+`benchmarks/e14_spec/faults.py` to an honest artifact of each of the 25
 catalogue instances that the IR can express. The other instances use black
-boxes, have several objectives, store no optimiser, or exceed the IR
-expression limits (`rosenbrock-d20`). Each faulty artifact is graded twice,
-once with `verify_result` and once from a sealed run with `verify_run`. Of
-the 432 graded cells, none passes, and each one names the injector's reason
+boxes, have several objectives or store no optimiser. Each faulty artifact
+is graded twice, once with `verify_result` and once from a sealed run with
+`verify_run`. Of the 450 graded cells, none passes, and each one names the injector's reason
 among its findings. Rerun the matrix with this command:
 
 ```bash

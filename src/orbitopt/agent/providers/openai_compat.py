@@ -12,6 +12,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -39,12 +40,29 @@ def json_instruction(schema: dict) -> str:
             f"against this JSON Schema:\n{canonical_json(schema)}")
 
 
+_FUNCTION_NAME = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+"""What an OpenAI-compatible server accepts as a function name."""
+
+
+def wire_name(name: str) -> str:
+    """The function name sent for a tool named ``name``: each '.' becomes '-'.
+
+    Tool ids such as ``math.erf.v1`` contain dots, which the function-name
+    pattern rejects, and never contain '-', so the mapping is reversible for
+    every tool id. Raises ``ProviderError`` for a name that still does not fit.
+    """
+    wire = name.replace(".", "-")
+    if not _FUNCTION_NAME.match(wire):
+        raise ProviderError(f"tool name {name!r} cannot be sent as a function name (1-64 of [a-zA-Z0-9_-])")
+    return wire
+
+
 def _wire_message(message: Message) -> dict:
     data = {"role": message.role, "content": message.content}
     if message.tool_calls:
         data["tool_calls"] = [
             {"id": call.id, "type": "function",
-             "function": {"name": call.name, "arguments": json.dumps(call.arguments, sort_keys=True)}}
+             "function": {"name": wire_name(call.name), "arguments": json.dumps(call.arguments, sort_keys=True)}}
             for call in message.tool_calls]
     if message.tool_call_id is not None:
         data["tool_call_id"] = message.tool_call_id
@@ -63,7 +81,8 @@ class OpenAICompatProvider(ChatProvider):
     for JSON. Either way the reply is validated locally. ``api_key_env=None``
     sends no ``Authorization`` header. The server must return a ``usage``
     block; a response without one is a ``ProviderError``, because silent zero
-    usage would defeat budget enforcement.
+    usage would defeat budget enforcement. Tool names cross the wire
+    through ``wire_name`` and come back mapped to the names offered.
     """
 
     name = "openai_compat"
@@ -114,8 +133,9 @@ class OpenAICompatProvider(ChatProvider):
                 else:
                     messages.insert(0, Message("system", instruction))
         if request.tools:
+            _tool_names(request)
             body["tools"] = [{"type": "function", "function": {
-                "name": tool.name, "description": tool.description,
+                "name": wire_name(tool.name), "description": tool.description,
                 "parameters": tool.parameters_schema}} for tool in request.tools]
         body["messages"] = [_wire_message(m) for m in messages]
         return body
@@ -146,11 +166,11 @@ class OpenAICompatProvider(ChatProvider):
             except _RETRYABLE_TRANSPORT as exc:
                 last_error = _redact(f"{type(exc).__name__}: {exc}", key)
                 continue
-            return self._parse(payload, time.monotonic() - started, key)
+            return self._parse(payload, time.monotonic() - started, key, _tool_names(request))
         raise ProviderUnavailableError(
             f"{self.name}: POST {url} failed after {attempts} attempts; last error: {last_error}")
 
-    def _parse(self, payload: bytes, latency_s: float, key: str | None) -> ProviderResponse:
+    def _parse(self, payload: bytes, latency_s: float, key: str | None, names: dict[str, str]) -> ProviderResponse:
         try:
             data = json.loads(payload)
             choice = data["choices"][0]
@@ -164,17 +184,18 @@ class OpenAICompatProvider(ChatProvider):
             preview = _redact(payload[:300].decode("utf-8", "replace"), key)
             raise ProviderError(f"{self.name}: malformed response ({type(exc).__name__}: {exc}); "
                                 f"body starts {preview!r}") from None
-        calls = tuple(self._tool_call(index, raw, message.get("content"))
+        usage = Usage(prompt, completion, total, None if cost is None else float(cost))
+        calls = tuple(self._tool_call(index, raw, message.get("content"), names, usage)
                       for index, raw in enumerate(message.get("tool_calls") or ()))
         return ProviderResponse(
-            text=message.get("content"), parsed=None, tool_calls=calls,
-            usage=Usage(prompt, completion, total, None if cost is None else float(cost)),
+            text=message.get("content"), parsed=None, tool_calls=calls, usage=usage,
             model=data.get("model") or self.model, finish_reason=choice.get("finish_reason"),
             latency_s=latency_s, raw_id=data.get("id"))
 
-    def _tool_call(self, index: int, raw: dict, text: str | None) -> ToolCall:
+    def _tool_call(self, index: int, raw: dict, text: str | None, names: dict[str, str], usage: Usage) -> ToolCall:
         function = raw.get("function") or {}
         name = function.get("name") or ""
+        name = names.get(name, name)  # an unknown name stays as sent, for call_tools to reject
         arguments = function.get("arguments") or "{}"
         try:
             parsed = json.loads(arguments) if isinstance(arguments, str) else arguments
@@ -182,6 +203,15 @@ class OpenAICompatProvider(ChatProvider):
             parsed = exc
         if not isinstance(parsed, dict):
             raise ToolCallError(f"{self.name}: tool call arguments are not a JSON object",
-                                raw_text=text,
+                                raw_text=text, usage=usage,
                                 errors=[f"{name}: arguments {str(arguments)[:200]!r} are not a JSON object"])
         return ToolCall(raw.get("id") or f"call_{index}", name, parsed)
+
+
+def _tool_names(request: ChatRequest) -> dict[str, str]:
+    """Wire name to offered tool name; ``ProviderError`` when two tools would share a wire name."""
+    names = {wire_name(tool.name): tool.name for tool in request.tools}
+    if len(names) != len(request.tools):
+        raise ProviderError("two tool names map to the same function name: "
+                            f"{sorted(tool.name for tool in request.tools)}")
+    return names

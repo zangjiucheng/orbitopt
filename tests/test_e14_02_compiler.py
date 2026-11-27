@@ -62,8 +62,9 @@ def _quadrature_tool(f, exact):
 
 def _tools():
     import numpy as np
-    return {"quadrature.abs_error.exp": _quadrature_tool(np.exp, math.e - 1.0),
-            "quadrature.abs_error.runge": _quadrature_tool(lambda t: 1.0 / (1.0 + 25.0 * t ** 2), 0.4 * math.atan(5.0))}
+    by_integrand = {"exp(t)": _quadrature_tool(np.exp, math.e - 1.0),
+                    "1/(1+25*t**2)": _quadrature_tool(lambda t: 1.0 / (1.0 + 25.0 * t ** 2), 0.4 * math.atan(5.0))}
+    return {"quadrature.abs_error": lambda integrand, **args: by_integrand[integrand](**args)}
 
 
 def _run(case, replies=None, sentinel=None):
@@ -300,10 +301,7 @@ def test_usage_sums_every_provider_call(case_id):
     replies = case["replies"][:len(provider.requests)]
     calls = sum((mock_usage(request, MockReply(text)) for request, text in zip(provider.requests, replies)),
                 Usage(0, 0, 0))
-    if case_id == "FC-044":  # the provider raised StructuredOutputError, which carries no usage: a documented gap
-        assert outcome.usage == Usage(0, 0, 0) and calls.total > 0
-    else:
-        assert outcome.usage == calls and calls.total > 0
+    assert outcome.usage == calls and calls.total > 0  # FC-044 ends in StructuredOutputError, which carries usage
 
 
 def test_repair_rounds_are_bounded():

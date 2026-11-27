@@ -25,11 +25,13 @@ reply = provider.call_tools(messages, [ToolSpec("propagate", "...", params_schem
 - `generate_structured` validates the reply with `jsonschema`. If the reply
   is invalid, the provider sends the validation errors back to the model and
   tries once more. If that reply is also invalid, it raises
-  `StructuredOutputError` (with `.raw_text` and `.errors`). It never returns
-  data that failed validation.
+  `StructuredOutputError` (with `.raw_text`, `.errors` and `.usage`, the
+  tokens of every reply the failure cost). It never returns data that failed
+  validation.
 - `call_tools` checks every tool call against the parameters schema of the
   tool it names. A call to a tool that was not offered, or with invalid
-  arguments, raises `ToolCallError`, a subclass of `StructuredOutputError`.
+  arguments, raises `ToolCallError`, a subclass of `StructuredOutputError`,
+  which carries that reply's `.usage` too.
 - Every reply is a `ProviderResponse` carrying a `Usage` (prompt, completion
   and total tokens, plus `cost_usd` when the server reports one).
 - Failures are typed. `ProviderError` means retrying will not help.
@@ -57,7 +59,12 @@ reads the key from the named environment variable at call time and never
 stores it; the key does not appear in `repr`, and any response text quoted in
 an error has it redacted. HTTP 429, HTTP 5xx, timeouts and connection
 failures are retried up to `max_retries` times (default 3) with capped
-exponential backoff. Other HTTP errors fail at once. Pass
+exponential backoff. Other HTTP errors fail at once. Function names on the
+wire must match `^[a-zA-Z0-9_-]{1,64}$`, which rejects the dots in tool ids
+such as `math.erf.v1`. `wire_name` sends each `.` as `-` (tool ids never
+contain `-`), and the provider maps a returned name back to the tool offered.
+Two tools that would share a wire name, or a name longer than 64 characters,
+raise `ProviderError` before anything is sent. Pass
 `supports_json_schema=False` for a server that rejects `response_format`
 `json_schema`; the provider then asks for JSON in a system instruction and
 validates the reply the same way.

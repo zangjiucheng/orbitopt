@@ -24,12 +24,12 @@ from .evidence import (
     evidence_to_dict,
     result_digest,
 )
-from .guard import Provenance, compare_formulations, verify_result
+from .guard import compare_formulations, verify_result
 from .report import Finding, FindingCode, Outcome, StatusOutcome, VerificationReport
 
 __all__ = [
     "AlternateSolver", "AlternateSolverCheck", "AnalyticalOptimum", "EvidenceItem", "Finding", "FindingCode",
-    "KKTResult", "LowerBoundCertificate", "Outcome", "Provenance", "RUN_FORMAT", "ReferenceSolution",
+    "KKTResult", "LowerBoundCertificate", "Outcome", "RUN_FORMAT", "ReferenceSolution",
     "StatusOutcome", "VerificationReport", "canonical_json", "compare_formulations", "evidence_from_dict",
     "evidence_to_dict", "file_digest", "kkt_certificate", "polynomial_degree", "refute_lower_bound",
     "result_digest", "seal_run", "unsupported_reason", "verify_result", "verify_run",

@@ -9,6 +9,7 @@ recorded digest, so the guard sees the same attack in its own format.
 
 from __future__ import annotations
 
+import ast
 import copy
 import importlib.util
 import json
@@ -22,6 +23,7 @@ from pathlib import Path
 import pytest
 
 from orbitopt.optimization import (
+    Provenance,
     Constraint,
     Evidence,
     Expression,
@@ -40,7 +42,6 @@ from orbitopt.optimization.verification import (
     FindingCode,
     LowerBoundCertificate,
     Outcome,
-    Provenance,
     ReferenceSolution,
     kkt_certificate,
     result_digest,
@@ -69,65 +70,35 @@ spec = _load()
 P, F = spec.problems, spec.faults
 
 
-# ------------------------------------------------------------------------------ neutral form -> IR, symbolically
-class Sym:
-    """Builds an IR expression source by running a neutral expression on symbols instead of numbers."""
+# ------------------------------------------------------------------------------ neutral form -> IR
+class _Inline(ast.NodeTransformer):
+    """Replace ``n`` and each scalar datum by its value; ``x[i]``, ``s[i]`` and sums are IR 1.1 syntax already."""
 
-    def __init__(self, src: str):
-        self.src = src
+    def __init__(self, values: dict):
+        self.values = values
 
-    @staticmethod
-    def text(v) -> str:
-        if isinstance(v, Sym):
-            return v.src
-        text = str(int(v)) if float(v).is_integer() and abs(v) < 1e15 else repr(float(v))
-        return f"({text})" if text.startswith("-") else text
-
-    def _op(self, other, op, reverse=False):
-        if not isinstance(other, (Sym, int, float)):
-            return NotImplemented
-        a, b = (Sym.text(other), self.src) if reverse else (self.src, Sym.text(other))
-        return Sym(f"({a} {op} {b})")
-
-    def __add__(self, o):
-        return self if isinstance(o, (int, float)) and o == 0 else self._op(o, "+")
-
-    def __radd__(self, o):
-        return self if isinstance(o, (int, float)) and o == 0 else self._op(o, "+", True)
-
-    def __sub__(self, o): return self._op(o, "-")
-    def __rsub__(self, o): return self._op(o, "-", True)
-    def __mul__(self, o): return self._op(o, "*")
-    def __rmul__(self, o): return self._op(o, "*", True)
-    def __truediv__(self, o): return self._op(o, "/")
-    def __rtruediv__(self, o): return self._op(o, "/", True)
-    def __pow__(self, o): return self._op(o, "**")
-    def __rpow__(self, o): return self._op(o, "**", True)
-    def __neg__(self): return Sym(f"(-{self.src})")
-    def __pos__(self): return self
-    def __abs__(self): return Sym(f"abs({self.src})")
-
-
-def _fn(name, number_fn):
-    def call(*args):
-        if any(isinstance(a, Sym) for a in args):
-            return Sym(f"{name}({', '.join(Sym.text(a) for a in args)})")
-        return number_fn(*args)
-    return call
+    def visit_Name(self, node):
+        return ast.Constant(self.values[node.id]) if node.id in self.values else node
 
 
 def to_ir(form: dict) -> OptimizationProblem:
-    """The IR problem a neutral form states; variables are x0..x{n-1}, constraints are ``g <= 0`` / ``h == 0``."""
+    """The IR problem a neutral form states; variables are x0..x{n-1}, constraints are ``g <= 0`` / ``h == 0``.
+
+    The neutral grammar is IR 1.1 syntax once ``n`` and scalar data are inlined; a data vector ``s`` becomes the
+    parameters ``s0, s1, ...`` that ``s[i]`` reads, and ``pi`` and ``e`` are parameters too.
+    """
     if form["blackboxes"]:
         raise ValueError("black boxes have no IR expression")
-    ns = {name: _fn(name, getattr(math, name)) for name in ("sqrt", "exp", "log", "cos", "sin", "atan")}
-    ns.update(pi=math.pi, e=math.e, sum=sum, range=range, abs=abs, min=_fn("min", min), max=_fn("max", max),
-              n=form["dimension"], __builtins__={}, **form["data"])
-    ns["x"] = [Sym(f"x{i}") for i in range(form["dimension"])]
+    data = form["data"]
+    inline = _Inline({"n": form["dimension"], **{k: v for k, v in data.items()
+                                                 if isinstance(v, (int, float)) and not isinstance(v, bool)}})
 
     def source(expr: str) -> str:
-        return Sym.text(eval(expr, ns))  # noqa: S307 - the catalogue's own expression literals
+        return ast.unparse(inline.visit(ast.parse(expr, mode="eval")).body)
 
+    vectors = tuple(Parameter(f"{name}{i}", float(v)) for name, values in sorted(data.items())
+                    if isinstance(values, list) and all(isinstance(v, (int, float)) for v in values)
+                    for i, v in enumerate(values))
     variables = []
     for i, (lo, hi) in enumerate(form["bounds"]):
         if form["variable_type"] == "binary" and (lo, hi) == (0.0, 1.0):
@@ -137,6 +108,7 @@ def to_ir(form: dict) -> OptimizationProblem:
             variables.append(Variable(f"x{i}", kind, lower=lo, upper=hi))
     return OptimizationProblem(
         id=form["id"], variables=tuple(variables),
+        parameters=(Parameter("pi", math.pi), Parameter("e", math.e), *vectors),
         objectives=tuple(Objective(f"f{k}", source(e), sense=form["sense"]) for k, e in enumerate(form["objective_exprs"])),
         constraints=tuple(Constraint(c["name"], source(c["expr"]), "<=" if c["kind"] == "le" else "==", 0.0)
                           for c in form["constraints"]))
@@ -164,6 +136,20 @@ def resolve(bench_digest: str) -> str:
     return BENCH_TO_IR.get(bench_digest) or __import__("hashlib").sha256(bench_digest.encode()).hexdigest()
 
 
+def test_a_tiny_right_hand_side_is_graded_relative_to_itself():
+    """``error <= 1e-10`` means 1e-10: a point with error 1e-9 fails, though it is within 1e-6 absolute."""
+    problem = OptimizationProblem(id="tiny-rhs", variables=(Variable("err", lower=0.0, upper=1.0),),
+                                  objectives=(Objective("f", "err"),),
+                                  constraints=(Constraint("accuracy", "err", "<=", 1e-10),))
+    result = OptimizationResult(problem_digest=problem.digest(), solver_id="s", termination="converged",
+                                solver_converged=True, constraints_satisfied=True, x={"err": 1e-9})
+    report = verify_result(problem, result)
+    assert report.statuses["constraints_satisfied"].outcome is Outcome.FAILED
+    assert FindingCode.CONSTRAINT_VIOLATION in report.codes and FindingCode.CLAIM_CONTRADICTED in report.codes
+    tight = replace(result, x={"err": 1e-10})
+    assert verify_result(problem, tight).statuses["constraints_satisfied"].outcome is Outcome.PASSED
+
+
 def test_translation_agrees_with_the_catalogue_callables():
     assert len(HOSTS) >= 15, HOSTS
     for inst_id in HOSTS:
@@ -177,7 +163,11 @@ def test_translation_agrees_with_the_catalogue_callables():
 
 # ------------------------------------------------------------------------------ benchmark artifact -> guard inputs
 def guard_inputs(artifact: dict, inst):
-    """Map an E14-10 artifact onto (graded problem, result, evidence, provenance), field by field."""
+    """Map an E14-10 artifact onto (graded problem, result, evidence, solved problem), field by field.
+
+    The artifact's cache record becomes the result's ``provenance``, so the result digest the evidence names
+    covers it.
+    """
     reference = IR[inst.id]
     ev = artifact["evidence"]
     names = [v.name for v in reference.variables]
@@ -188,7 +178,8 @@ def guard_inputs(artifact: dict, inst):
         termination="converged" if converged else "error", solver_converged=converged,
         constraints_satisfied=verified, independently_verified=verified,
         x=dict(zip(names, artifact["x"])), objective_values={"f0": artifact["objective"]},
-        constraint_residuals={c.name: r for c, r in zip(reference.constraints, artifact["constraint_residuals"])})
+        constraint_residuals={c.name: r for c, r in zip(reference.constraints, artifact["constraint_residuals"])},
+        provenance=Provenance(cache_key=resolve(ev["cache"]["problem_digest"]) if ev["cache"]["hit"] else None))
     evidence = []
     check = ev.get("independent_check")
     if check is not None:  # the catalogue's stored reference, run by the named verifier
@@ -196,9 +187,7 @@ def guard_inputs(artifact: dict, inst):
             id=check["verifier"], producer=check["verifier"], problem_digest=reference.digest(),
             result_digest=result_digest(result), value=inst.reference.value,
             tolerance=max(1e-9, inst.tolerance.objective_abs), source=inst.reference.derivation))
-    provenance = Provenance(solved_problem=to_ir(ev["solved_problem"]), cache_hit=ev["cache"]["hit"],
-                            cache_key=resolve(ev["cache"]["problem_digest"]))
-    return reference, result, evidence, provenance
+    return reference, result, evidence, to_ir(ev["solved_problem"])
 
 
 def _flip(digest: str) -> str:
@@ -217,16 +206,15 @@ def _params(fault, inst) -> dict:  # as in tests/test_e14_10_benchmark_spec.py
 
 
 def grade_in_memory(artifact, inst, resealed=True):
-    problem, result, evidence, provenance = guard_inputs(artifact, inst)
+    problem, result, evidence, solved = guard_inputs(artifact, inst)
     seal = result_digest(result)
-    return verify_result(problem, result, evidence=evidence, provenance=provenance,
+    return verify_result(problem, result, evidence=evidence, solved_problem=solved,
                          artifact_digest=seal if resealed else _flip(seal))
 
 
 def grade_sealed(artifact, inst, run_dir: Path, resealed=True):
-    problem, result, evidence, provenance = guard_inputs(artifact, inst)
-    seal_run(provenance.solved_problem, result, evidence, run_dir, cache_hit=provenance.cache_hit,
-             cache_key=provenance.cache_key)
+    problem, result, evidence, solved = guard_inputs(artifact, inst)
+    seal_run(solved, result, evidence, run_dir)
     if not resealed:
         manifest = json.loads((run_dir / "manifest.json").read_text())
         manifest["files"]["result.json"] = _flip(manifest["files"]["result.json"])
@@ -354,6 +342,28 @@ def test_feasible_but_not_optimal_result_claiming_optimality_fails():
     assert C.CLAIM_CONTRADICTED in report.codes and report.verdict is Outcome.FAILED
 
 
+def test_a_cache_hit_is_part_of_the_result_and_a_stale_one_fails():
+    point = {"x": 0.5, "y": 0.5}
+    fresh = honest(WORKED, point)
+    cached = replace(fresh, provenance=Provenance(cache_key=WORKED.digest()))
+    assert result_digest(cached) != result_digest(fresh)  # the cache record is pinned by the result digest
+    assert verify_result(WORKED, cached, evidence=[reference(WORKED, cached, 0.5)]).verdict is Outcome.PASSED
+    stale = replace(fresh, provenance=Provenance(cache_key="0" * 64))
+    report = verify_result(WORKED, stale, evidence=[reference(WORKED, stale, 0.5)])
+    assert C.STALE_CACHE in report.codes and report.verdict is Outcome.FAILED
+    swapped = verify_result(WORKED, stale, evidence=[reference(WORKED, fresh, 0.5)])  # evidence for the fresh one
+    assert C.EVIDENCE_MISMATCH in swapped.codes
+
+
+def test_the_results_own_evidence_naming_another_problem_is_noted():
+    spliced = Evidence("solver", "ran", producer="solver.a", problem_digest="0" * 64)
+    result = honest(WORKED, {"x": 0.5, "y": 0.5}, evidence=(spliced,))
+    report = verify_result(WORKED, result, evidence=[reference(WORKED, result, 0.5)])
+    assert any(f.code is C.EVIDENCE_MISMATCH and f.path == "/evidence/0/problem_digest" for f in report.findings)
+    own = replace(result, evidence=(replace(spliced, problem_digest=WORKED.digest()),))
+    assert C.EVIDENCE_MISMATCH not in verify_result(WORKED, own, evidence=[reference(WORKED, own, 0.5)]).codes
+
+
 def test_forged_independent_claim_and_self_attestation_never_pass():
     own = Evidence("analytical", "the solver says its answer is optimal", {"value": 0.5})
     result = honest(WORKED, {"x": 0.5, "y": 0.5}, independently_verified=True, evidence=(own,))
@@ -450,13 +460,13 @@ def test_solved_problem_that_weakens_a_hard_constraint_fails_and_one_that_tighte
     }
     for name, (solved, code) in cases.items():
         result = replace(honest(WORKED, point), problem_digest=solved.digest())
-        report = verify_result(WORKED, result, provenance=Provenance(solved_problem=solved),
+        report = verify_result(WORKED, result, solved_problem=solved,
                                evidence=[reference(WORKED, result, 0.5)])
         assert code in report.codes and report.verdict is Outcome.FAILED, name
     tightened = replace(WORKED, constraints=WORKED.constraints + (
         Constraint("agent_cut", "x - y", "<=", 0.1, origin="agent"),))
     result = replace(honest(WORKED, point), problem_digest=tightened.digest())
-    report = verify_result(WORKED, result, provenance=Provenance(solved_problem=tightened),
+    report = verify_result(WORKED, result, solved_problem=tightened,
                            evidence=[reference(WORKED, result, 0.5)])
     assert report.verdict is Outcome.PASSED and C.REVISED_PROBLEM in report.codes
 

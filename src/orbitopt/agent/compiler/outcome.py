@@ -70,7 +70,7 @@ class Assumption:
 
 @dataclass(frozen=True)
 class UnsupportedReason:
-    """Why the request is outside what IR 1.0 and the known tools can express."""
+    """Why the request is outside what the IR and the known tools can express."""
 
     category: UnsupportedCategory
     explanation: str
@@ -119,7 +119,7 @@ class NeedsClarification:
 
 @dataclass(frozen=True)
 class Unsupported:
-    """The request needs something IR 1.0 cannot express; no approximation is offered."""
+    """The request needs something the IR cannot express; no approximation is offered."""
 
     reason: UnsupportedReason
     usage: Usage

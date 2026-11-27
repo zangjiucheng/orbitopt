@@ -10,10 +10,11 @@ proposed) can still be built and asked for all its errors at once:
 ``validate_problem`` returns them as typed ``ProblemError`` values, and
 ``parse_problem`` is the boundary for untrusted dict input that raises one
 ``InvalidProblemError`` carrying all of them. The JSON Schema
-``schemas/optimization-problem-1.0.json`` checks structure only (types,
+``schemas/optimization-problem-1.1.json`` checks structure only (types,
 required fields, enumerations); every value rule lives in ``validate_problem``
 so it reports one specific ``ErrorCode`` whether the problem came from Python
-or JSON.
+or JSON. A 1.0 document still parses: it is checked against the 1.0 schema
+and its missing 1.1 fields take their defaults (see ``docs/optimization/ir.md``).
 """
 
 from __future__ import annotations
@@ -32,11 +33,14 @@ from typing import Any, Callable, Literal, Mapping
 from jsonschema import Draft202012Validator
 
 from .errors import ErrorCode, InvalidProblemError, ProblemError
-from .expressions import FUNCTIONS, TOOL_ID_PATTERN, EvaluationError, Expression, ExpressionError, ToolCall
+from .expressions import (RESERVED_NAMES, TOOL_ID_PATTERN, EvaluationError, Expression, ExpressionError, ToolCall,
+                          ToolCallError)
 from .units import Unit, UnitError, format_dims, parse_unit
 
-SCHEMA_VERSION = "1.0"
-PROBLEM_SCHEMA = "optimization-problem-1.0.json"
+SCHEMA_VERSION = "1.1"
+PROBLEM_SCHEMA = "optimization-problem-1.1.json"
+PROBLEM_SCHEMAS = {"1.0": "optimization-problem-1.0.json", SCHEMA_VERSION: PROBLEM_SCHEMA}
+"""The problem schema for each ``schemaVersion`` that still parses; ``to_dict`` writes the newest."""
 VARIABLE_KINDS = ("continuous", "integer", "binary", "discrete")
 OBJECTIVE_SENSES = ("minimize", "maximize")
 CONSTRAINT_SENSES = ("<=", ">=", "==")
@@ -48,6 +52,22 @@ DIGEST_SIGNIFICANT_DIGITS = 12
 
 VariableKind = Literal["continuous", "integer", "binary", "discrete"]
 Origin = Literal["user", "compiler", "agent"]
+DomainViolation = Literal["below_lower", "above_upper", "not_integer", "not_a_choice"]
+DOMAIN_VIOLATIONS = ("below_lower", "above_upper", "not_integer", "not_a_choice")
+"""Every reason ``Variable.domain_violations`` can give."""
+
+
+def tolerance_scale(reference: float) -> float:
+    """What ``constraint_tol`` is relative to for a right-hand side or bound: ``|reference|``, or 1 when it is 0.
+
+    A constraint ``g <sense> rhs`` holds when its violation is at most
+    ``constraint_tol * tolerance_scale(rhs)``, and a bound or discrete choice
+    the same way. IR 1.0 used ``max(1, |rhs|)``, which let a tiny right-hand
+    side drown in the tolerance: ``error <= 1e-10`` accepted errors up to
+    ``1e-6``. Under this rule it accepts up to ``1e-10 * (1 + 1e-6)``. A zero
+    right-hand side carries no magnitude, so its scale stays 1.
+    """
+    return abs(reference) or 1.0
 
 
 def _set(obj: Any, **values: Any) -> None:
@@ -80,6 +100,26 @@ class Variable:
     def __post_init__(self):
         if isinstance(self.choices, list):
             _set(self, choices=tuple(self.choices))
+
+    def domain_violations(self, value: float, tol: float) -> tuple[DomainViolation, ...]:
+        """Why a finite ``value`` lies outside this variable's domain; empty when it lies inside.
+
+        A bound or choice ``r`` is met within ``tol * tolerance_scale(r)``,
+        integrality within ``tol``; a binary variable is an integer in
+        [0, 1]. This is the per-variable half of ``constraints_satisfied``.
+        """
+        if self.kind == "discrete":
+            met = any(abs(value - c) <= tol * tolerance_scale(c) for c in self.choices)
+            return () if met else ("not_a_choice",)
+        lower, upper = (0.0, 1.0) if self.kind == "binary" else (self.lower, self.upper)
+        found: list[DomainViolation] = []
+        if lower is not None and value < lower - tol * tolerance_scale(lower):
+            found.append("below_lower")
+        if upper is not None and value > upper + tol * tolerance_scale(upper):
+            found.append("above_upper")
+        if self.kind in ("integer", "binary") and abs(value - round(value)) > tol:
+            found.append("not_integer")
+        return tuple(found)
 
 
 @dataclass(frozen=True)
@@ -143,6 +183,14 @@ class Constraint:
         """
         return self.rhs - lhs if self.sense == ">=" else lhs - self.rhs
 
+    def violation(self, residual: float) -> float:
+        """How far a canonical residual breaks the constraint: ``|h|`` for an equality, ``g`` otherwise."""
+        return abs(residual) if self.sense == "==" else residual
+
+    def allowance(self, tol: float) -> float:
+        """The largest violation that still satisfies the constraint: ``tol * tolerance_scale(rhs)``."""
+        return tol * tolerance_scale(self.rhs)
+
 
 @dataclass(frozen=True)
 class Budget:
@@ -159,7 +207,8 @@ class VerificationPolicy:
     """Which result statuses must be true for acceptance, and the thresholds behind them.
 
     ``constraint_tol``: a constraint or bound holds when its violation is at
-    most ``constraint_tol * max(1, |rhs or bound|)``. ``objective_rtol``: an
+    most ``constraint_tol * tolerance_scale(rhs or bound)``, that is relative
+    to ``|rhs|``, or absolute when ``rhs`` is 0. ``objective_rtol``: an
     independent check agrees when ``|f - f_ref| <= objective_rtol * max(1, |f_ref|)``.
     ``optimality_gap``: the relative gap an optimality certificate must close.
     ``independent_methods`` are the methods that may set ``independently_verified``.
@@ -204,7 +253,7 @@ class OptimizationProblem:
 
     def to_dict(self) -> dict:
         """The JSON-ready dict form; every field is written, defaults included."""
-        return {"schemaVersion": SCHEMA_VERSION, **_plain(self)}
+        return {"schemaVersion": SCHEMA_VERSION, **to_plain(self)}
 
     @classmethod
     def from_dict(cls, data: Mapping) -> "OptimizationProblem":
@@ -256,7 +305,7 @@ class OptimizationProblem:
         """
 
         def entries(items, keep, drop=("description",)):
-            return sorted((_without(_plain(item), *drop) for item in items if keep(item)), key=lambda d: d["name"])
+            return sorted((_without(to_plain(item), *drop) for item in items if keep(item)), key=lambda d: d["name"])
 
         return canonical_digest({
             "objectives": entries(self.objectives, lambda o: o.origin == "user"),
@@ -271,8 +320,12 @@ class OptimizationProblem:
         Names are converted to SI-coherent values before evaluation, so
         ``x [km] + y [m]`` is correct; each result is converted back to its
         objective or constraint unit. ``tools`` maps a ``ToolCall.tool_id`` to
-        a callable taking the evaluated arguments as keywords (SI in, SI out).
-        Values may be floats or numpy arrays. Assumes a valid problem.
+        a callable taking the evaluated arguments and the constants as
+        keywords (SI in, SI out) and returning a number, or an object from
+        which ``ToolCall.output`` is read. Values may be floats or numpy
+        arrays. Raises ``EvaluationError``, and ``ToolCallError`` (its
+        subclass) for anything that goes wrong in or around a tool. Assumes a
+        valid problem.
         """
         missing = {v.name for v in self.variables} - x.keys()
         if missing:
@@ -281,15 +334,14 @@ class OptimizationProblem:
         si.update({p.name: p.value * parse_unit(p.unit).scale for p in self.parameters})
 
         def value(item):
-            expr = item.expression
-            if isinstance(expr, ToolCall):
-                tool = (tools or {}).get(expr.tool_id)
-                if tool is None:
-                    raise EvaluationError(f"no tool registered for {expr.tool_id!r}")
-                raw = tool(**{arg: Expression(src).evaluate(si) for arg, src in expr.args.items()})
-            else:
-                raw = expr.evaluate(si)
-            return raw / parse_unit(item.unit).scale
+            expr, scale = item.expression, parse_unit(item.unit).scale
+            if not isinstance(expr, ToolCall):
+                return expr.evaluate(si) / scale
+            raw = _call(expr, si, tools)
+            try:
+                return raw / scale
+            except TypeError:
+                raise ToolCallError(expr.tool_id, f"returned {type(raw).__name__}, not a number") from None
 
         return Evaluation(objectives={o.name: value(o) for o in self.objectives},
                           residuals={c.name: c.residual(value(c)) for c in self.constraints})
@@ -301,37 +353,62 @@ class OptimizationProblem:
         using ``verification.constraint_tol`` (see ``VerificationPolicy``).
         """
         tol = self.verification.constraint_tol
-        if not all(v.name in x and _in_domain(v, x[v.name], tol) for v in self.variables):
-            return False
+        for v in self.variables:
+            value = x.get(v.name)
+            if not (_number(value) and math.isfinite(value)) or v.domain_violations(value, tol):
+                return False
         for c in self.constraints:
             r = residuals.get(c.name)
-            if r is None or not math.isfinite(r):
-                return False
-            if (abs(r) if c.sense == "==" else r) > tol * max(1.0, abs(c.rhs)):
+            if r is None or not math.isfinite(r) or c.violation(r) > c.allowance(tol):
                 return False
         return True
 
 
+def _call(call: ToolCall, si: Mapping[str, Any], tools: Mapping[str, Callable[..., Any]] | None) -> Any:
+    """The value of one tool reference: the tool's number, or its ``output`` field."""
+    tool = (tools or {}).get(call.tool_id)
+    if tool is None:
+        raise ToolCallError(call.tool_id, "no tool is registered for this id")
+    kwargs = {arg: Expression(src).evaluate(si) for arg, src in call.args.items()}
+    try:
+        raw = tool(**kwargs, **call.constants)
+    except Exception as exc:  # a tool is third-party code: whatever it raises, the point cannot be evaluated
+        raise ToolCallError(call.tool_id, f"raised {type(exc).__name__}: {exc}") from exc
+    if call.output is None:
+        if isinstance(raw, Mapping):
+            raise ToolCallError(call.tool_id, f"returned the outputs {sorted(raw)}; the call names none of them")
+        return raw
+    if not isinstance(raw, Mapping) or call.output not in raw:
+        raise ToolCallError(call.tool_id, f"returned no output {call.output!r}")
+    return raw[call.output]
+
+
 def _expression_from(data: Any) -> Expression | ToolCall:
     if isinstance(data, Mapping):
-        return ToolCall(data["tool_id"], dict(data.get("args", {})))
+        return ToolCall(data["tool_id"], dict(data.get("args", {})), dict(data.get("constants", {})),
+                        data.get("output"))
     return Expression(data)
 
 
-def _plain(obj: Any) -> Any:
-    """Dataclass IR objects to JSON-ready values (expressions as a string or a tool object)."""
+def to_plain(obj: Any) -> Any:
+    """IR objects as JSON-ready values: dataclasses as dicts, expressions as a string or a tool object.
+
+    This is the form ``to_dict``, the digest and the hard-constraint
+    fingerprint are built from.
+    """
     if isinstance(obj, Enum):
         return obj.value
     if isinstance(obj, Expression):
         return obj.source
     if isinstance(obj, ToolCall):
-        return {"tool_id": obj.tool_id, "args": dict(obj.args)}
+        return {"tool_id": obj.tool_id, "args": dict(obj.args), "constants": to_plain(dict(obj.constants)),
+                "output": obj.output}
     if hasattr(obj, "__dataclass_fields__"):
-        return {f.name: _plain(getattr(obj, f.name)) for f in fields(obj)}
+        return {f.name: to_plain(getattr(obj, f.name)) for f in fields(obj)}
     if isinstance(obj, (list, tuple)):
-        return [_plain(item) for item in obj]
+        return [to_plain(item) for item in obj]
     if isinstance(obj, Mapping):
-        return {key: _plain(value) for key, value in obj.items()}
+        return {key: to_plain(value) for key, value in obj.items()}
     return obj
 
 
@@ -388,13 +465,21 @@ def schema_errors(document: Any, schema_name: str) -> list[ProblemError]:
             for e in found]
 
 
+def schema_for(document: Any, schemas: Mapping[str, str]) -> str:
+    """The schema a document's ``schemaVersion`` names, or the newest when it names no known version."""
+    version = document.get("schemaVersion") if isinstance(document, Mapping) else None
+    return schemas.get(version, schemas[SCHEMA_VERSION])
+
+
 def parse_problem(data: Mapping) -> OptimizationProblem:
     """Parse untrusted dict input: schema, then ``from_dict``, then ``validate_problem``.
 
-    Raises one ``InvalidProblemError`` carrying every error found at the
-    first failing stage.
+    The schema is the one ``data["schemaVersion"]`` names (``PROBLEM_SCHEMAS``),
+    so a 1.0 document parses with every 1.1 field at its default. Raises one
+    ``InvalidProblemError`` carrying every error found at the first failing
+    stage.
     """
-    errors = schema_errors(data, PROBLEM_SCHEMA)
+    errors = schema_errors(data, schema_for(data, PROBLEM_SCHEMAS))
     if errors:
         raise InvalidProblemError(errors)
     problem = OptimizationProblem.from_dict(data)
@@ -406,20 +491,6 @@ def parse_problem(data: Mapping) -> OptimizationProblem:
 
 def _number(value: Any) -> bool:
     return isinstance(value, numbers.Real) and not isinstance(value, bool)
-
-
-def _in_domain(v: Variable, value: Any, tol: float) -> bool:
-    if not _number(value) or not math.isfinite(value):
-        return False
-    if v.kind == "binary":
-        return min(abs(value), abs(value - 1)) <= tol
-    if v.kind == "discrete":
-        return any(abs(value - c) <= tol * max(1.0, abs(c)) for c in v.choices)
-    if v.lower is not None and value < v.lower - tol * max(1.0, abs(v.lower)):
-        return False
-    if v.upper is not None and value > v.upper + tol * max(1.0, abs(v.upper)):
-        return False
-    return v.kind != "integer" or abs(value - round(value)) <= tol
 
 
 class _Collector:
@@ -460,10 +531,10 @@ class _Collector:
                 seen.add(name)  # declared even when invalid, so expressions do not cascade into unknown names
             ok = isinstance(name, str) and (
                 (name.isidentifier() and not keyword.iskeyword(name) and not name.startswith("_")
-                 and name not in FUNCTIONS) if identifier else bool(name.strip()))
+                 and name not in RESERVED_NAMES) if identifier else bool(name.strip()))
             if not ok:
                 self(ErrorCode.INVALID_NAME, f"{path}/{i}/name",
-                     f"{name!r} is not a valid name" + (" (an identifier, not a keyword or function, "
+                     f"{name!r} is not a valid name" + (" (an identifier, not a keyword, function, sum or range, "
                                                         "not starting with '_')" if identifier else ""))
             elif duplicate:
                 self(ErrorCode.DUPLICATE_NAME, f"{path}/{i}/name", f"name {name!r} is declared twice")
@@ -496,7 +567,7 @@ def _check_variable(err: _Collector, v: Variable, path: str) -> None:
             elif all(err.finite(c, f"{path}/choices/{i}") for i, c in enumerate(v.choices)) \
                     and len(set(v.choices)) != len(v.choices):
                 err(ErrorCode.INVALID_VALUE, f"{path}/choices", "choices must be distinct")
-    if v.initial is not None and err.finite(v.initial, f"{path}/initial") and not _in_domain(v, v.initial, 0.0):
+    if v.initial is not None and err.finite(v.initial, f"{path}/initial") and v.domain_violations(v.initial, 0.0):
         err(ErrorCode.INITIAL_OUT_OF_DOMAIN, f"{path}/initial", f"initial guess {v.initial} is outside the domain")
 
 
@@ -515,6 +586,15 @@ def _check_source(err: _Collector, source: Any, path: str, declared: set[str]) -
     return expr if names <= declared else None
 
 
+def _check_constant(err: _Collector, value: Any, path: str) -> None:
+    """A JSON string, boolean, finite number, or an array of these (nested arrays allowed)."""
+    if isinstance(value, (list, tuple)):
+        for i, item in enumerate(value):
+            _check_constant(err, item, f"{path}/{i}")
+    elif not isinstance(value, (str, bool)):
+        err.finite(value, path)
+
+
 def _check_expression(err: _Collector, item: Objective | Constraint, path: str,
                       declared: set[str], dims: dict) -> None:
     target = err.unit(item.unit, f"{path}/unit")
@@ -527,6 +607,15 @@ def _check_expression(err: _Collector, item: Objective | Constraint, path: str,
             if not (isinstance(arg, str) and arg.isidentifier()):
                 err(ErrorCode.INVALID_NAME, f"{path}/expression/args", f"tool argument {arg!r} is not an identifier")
             _check_source(err, source, f"{path}/expression/args/{arg}", declared)
+        for arg, constant in expr.constants.items():
+            where = f"{path}/expression/constants/{arg}"
+            if not (isinstance(arg, str) and arg.isidentifier()):
+                err(ErrorCode.INVALID_NAME, f"{path}/expression/constants", f"tool argument {arg!r} is not an identifier")
+            elif arg in expr.args:
+                err(ErrorCode.DUPLICATE_NAME, where, f"tool argument {arg!r} is both an expression and a constant")
+            _check_constant(err, constant, where)
+        if expr.output is not None and not (isinstance(expr.output, str) and expr.output.isidentifier()):
+            err(ErrorCode.INVALID_NAME, f"{path}/expression/output", f"tool output {expr.output!r} is not an identifier")
         return
     if not isinstance(expr, Expression):
         err(ErrorCode.INVALID_VALUE, f"{path}/expression", "expected an Expression or a ToolCall")

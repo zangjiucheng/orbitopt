@@ -13,9 +13,10 @@ same seeded points and reports every disagreement it finds:
   residual-sign match per constraint: every reference constraint and finite
   bound that cuts the probe box has a compiled constraint or bound that is
   satisfied at exactly the same points, and the reverse;
-* tool calls: the same tool id, the same arguments (numerically, at the probe
-  points), sense, rhs and unit. A tool with no implementation in ``tools`` is
-  replaced by the same deterministic opaque function on both sides.
+* tool calls: the same tool id, output and constants, the same arguments
+  (numerically, at the probe points), sense, rhs and unit. A tool with no
+  implementation in ``tools`` is replaced by the same deterministic opaque
+  function on both sides.
 
 Probe points are drawn from the union of both boxes, so a widened or narrowed
 finite bound shows up as points one problem accepts and the other rejects. A
@@ -33,12 +34,14 @@ from __future__ import annotations
 
 import hashlib
 import itertools
+import json
 import math
 import random
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
-from orbitopt.optimization import EvaluationError, Expression, OptimizationProblem, ToolCall, Variable, parse_unit
+from orbitopt.optimization import (EvaluationError, Expression, OptimizationProblem, ToolCall, Variable,
+                                   canonical_digest, parse_unit, tolerance_scale)
 
 SPAN = 10.0
 """Width given to a side that is open in both problems."""
@@ -56,18 +59,29 @@ class EquivalenceReport:
     points: int
 
 
-def opaque_tools(*problems: OptimizationProblem) -> dict[str, Callable[..., float]]:
-    """A deterministic stand-in in [-1, 1] for every tool id the problems reference."""
+def opaque_tools(*problems: OptimizationProblem) -> dict[str, Callable[..., Any]]:
+    """A deterministic stand-in in [-1, 1] for every tool id the problems reference.
 
-    def opaque(tool_id):
+    A tool some call reads an ``output`` of returns an object with one value
+    per output those calls name; any other returns a number. Each value
+    depends on the tool id, every argument and constant, and the output name.
+    """
+
+    def unit_value(key: str) -> float:
+        return int(hashlib.sha256(key.encode()).hexdigest()[:12], 16) / 16 ** 12 * 2.0 - 1.0
+
+    def opaque(tool_id, outputs):
         def call(**kwargs):
-            key = tool_id + "|" + "|".join(f"{k}={float(v):.12g}" for k, v in sorted(kwargs.items()))
-            return int(hashlib.sha256(key.encode()).hexdigest()[:12], 16) / 16 ** 12 * 2.0 - 1.0
+            key = tool_id + "|" + "|".join(f"{k}={v:.12g}" if isinstance(v, float) else f"{k}={json.dumps(v)}"
+                                           for k, v in sorted(kwargs.items()))
+            return {o: unit_value(f"{key}|{o}") for o in outputs} if outputs else unit_value(key)
         return call
 
-    ids = {item.expression.tool_id for p in problems for item in (*p.objectives, *p.constraints)
-           if isinstance(item.expression, ToolCall)}
-    return {tool_id: opaque(tool_id) for tool_id in sorted(ids)}
+    calls = [item.expression for p in problems for item in (*p.objectives, *p.constraints)
+             if isinstance(item.expression, ToolCall)]
+    outputs = {c.tool_id: sorted({d.output for d in calls if d.tool_id == c.tool_id and d.output is not None})
+               for c in calls}
+    return {tool_id: opaque(tool_id, outputs[tool_id]) for tool_id in sorted(outputs)}
 
 
 def _domain(v: Variable, scale: float = 1.0) -> tuple[str, float | None, float | None, tuple[float, ...]]:
@@ -125,17 +139,6 @@ def sample_points(problem: OptimizationProblem, *, samples: int = 64, seed: int 
     names = [v.name for v in problem.variables]
     return _points(names, {n: d[0] for n, d in domains.items()}, {n: _box([d]) for n, d in domains.items()},
                    {n: d[3] for n, d in domains.items()}, samples, seed)
-
-
-def _in_domain(domain: tuple, value: float, tol: float) -> bool:
-    kind, lo, hi, choices = domain
-    if choices:
-        return any(abs(value - c) <= tol * max(1.0, abs(c)) for c in choices)
-    if lo is not None and value < lo - tol * max(1.0, abs(lo)):
-        return False
-    if hi is not None and value > hi + tol * max(1.0, abs(hi)):
-        return False
-    return kind != "integer" or abs(value - round(value)) <= tol
 
 
 def _si(item) -> float:
@@ -198,7 +201,7 @@ def _atoms(problem: OptimizationProblem, label: str, evaluations: Sequence, poin
             continue
         residuals = [ev.residuals[c.name] for ev in evaluations]
         atoms.append(_Atom(f"{label} constraint {c.name!r}", c.sense == "==",
-                           _pattern(residuals, c.sense == "==", tol * max(1.0, abs(c.rhs)))))
+                           _pattern(residuals, c.sense == "==", c.allowance(tol))))
     for v in problem.variables:
         kind, lo, hi, choices = _domain(v, scale[v.name])
         for side, bound in (("lower", lo), ("upper", hi)):
@@ -207,7 +210,7 @@ def _atoms(problem: OptimizationProblem, label: str, evaluations: Sequence, poin
             sign = -1.0 if side == "lower" else 1.0
             residuals = [sign * (p[to_b[v.name]] - bound) for p in points_b]
             atoms.append(_Atom(f"{label} {side} bound of {v.name!r}", False,
-                               _pattern(residuals, False, tol * max(1.0, abs(bound)))))
+                               _pattern(residuals, False, tol * tolerance_scale(bound))))
     return [a for a in atoms if a.equality or not all(a.pattern)]
 
 
@@ -224,7 +227,9 @@ def _si_values(problem: OptimizationProblem, x: Mapping[str, float]) -> dict[str
 
 def _same_tool_item(ga, ia, gb, ib, si_a, si_b, rtol) -> bool:
     ea, eb = ia.expression, ib.expression
-    if ga != gb or ea.tool_id != eb.tool_id or set(ea.args) != set(eb.args):
+    if ga != gb or ea.tool_id != eb.tool_id or ea.output != eb.output or set(ea.args) != set(eb.args):
+        return False
+    if canonical_digest(dict(ea.constants)) != canonical_digest(dict(eb.constants)):
         return False
     ua, ub = parse_unit(ia.unit), parse_unit(ib.unit)
     if ua.dims != ub.dims or not _agree(ua.scale, ub.scale, 1e-12):
@@ -335,8 +340,8 @@ def semantically_equivalent(a: OptimizationProblem, b: OptimizationProblem, *, r
     else:
         tol = b.verification.constraint_tol
         inside = [i for i, (pa, pb) in enumerate(zip(kept_a, kept_b))
-                  if all(_in_domain(_domain(v), pa[v.name], tol) for v in a.variables)
-                  and all(_in_domain(_domain(v), pb[v.name], tol) for v in b.variables)]
+                  if not any(v.domain_violations(pa[v.name], tol) for v in a.variables)
+                  and not any(v.domain_violations(pb[v.name], tol) for v in b.variables)]
         if not inside:
             reasons.append("no probe point lies inside both variable domains")
         unmatched = list(a.objectives)

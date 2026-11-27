@@ -107,9 +107,9 @@ class ToolSpec:
     ``input_schema`` and ``output_schema`` are JSON Schema objects. Every
     numeric field (``number`` or ``integer``, or an array of them) has an
     SI-coherent unit in ``input_units`` or ``output_units``, ``""`` for
-    dimensionless; an array's unit applies to each element. ``value_field``
-    names the scalar output an IR ``ToolCall`` objective or constraint
-    receives. ``domain`` declares the input ranges the tool was verified on;
+    dimensionless; an array's unit applies to each element. An IR
+    ``ToolCall`` reads one scalar numeric output, which it names in
+    ``output``. ``domain`` declares the input ranges the tool was verified on;
     a call outside them is refused, never extrapolated. A stochastic tool
     (``deterministic=False``) must take a required integer ``seed``.
     ``replay_tolerance`` is the relative tolerance replay allows (``0``
@@ -127,7 +127,6 @@ class ToolSpec:
     domain: Mapping[str, Interval]
     cost: CostModel
     tested_by: tuple[str, ...]
-    value_field: str = "value"
     deterministic: bool = True
     replay_tolerance: float = 0.0
 
@@ -140,7 +139,7 @@ class ToolSpec:
             "assumptions": list(self.assumptions),
             "domain": {k: {"lower": v.lower, "upper": v.upper} for k, v in self.domain.items()},
             "cost": {"cost_class": self.cost.cost_class, "evaluations": self.cost.evaluations},
-            "value_field": self.value_field, "deterministic": self.deterministic,
+            "deterministic": self.deterministic,
             "replay_tolerance": self.replay_tolerance, "tested_by": list(self.tested_by),
         }
 
@@ -222,10 +221,6 @@ def spec_errors(spec: ToolSpec) -> list[str]:
             errors.append(f"domain given for {name!r}, which is not a numeric input")
         elif interval.lower is not None and interval.upper is not None and interval.lower > interval.upper:
             errors.append(f"domain of {name!r} has lower {interval.lower} above upper {interval.upper}")
-
-    outputs = numeric_fields(spec.output_schema)
-    if outputs.get(spec.value_field) is not False or spec.value_field not in spec.output_schema.get("required", ()):
-        errors.append(f"value_field {spec.value_field!r} must be a required scalar numeric output")
 
     if spec.cost.cost_class not in COST_CLASSES:
         errors.append(f"cost class {spec.cost.cost_class!r} is not one of {list(COST_CLASSES)}")

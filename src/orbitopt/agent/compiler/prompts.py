@@ -30,8 +30,11 @@ you added it, and explain every assumed item in "assumptions" (about = \
 3. Expressions are arithmetic over declared variable and parameter names: \
 numbers, + - * / **, unary minus, and the functions {", ".join(sorted(FUNCTIONS))}. \
 No other names, no attributes, no strings, no comparisons, no "^" (write "**"). \
-Write sums out term by term (x0 + x1 + x2); there is no indexing. Write pi as \
-3.141592653589793 and e as 2.718281828459045.
+x[3] reads the declared variable x3, and sum(<term> for i in range(a, b)) adds \
+<term> for each integer i from a to b - 1, so sum(x[i]**2 for i in range(3)) \
+is x0**2 + x1**2 + x2**2; an index or range bound is integer arithmetic over \
+numbers and sum indices. Write pi as 3.141592653589793 and e as \
+2.718281828459045.
 4. A constraint is "expression sense rhs" with sense one of "<=", ">=", "==" \
 and a numeric rhs. Variable kinds are "continuous", "integer", "binary" and \
 "discrete" (with "choices"). Units are built from {", ".join(SYMBOLS)}; \
@@ -39,7 +42,10 @@ and a numeric rhs. Variable kinds are "continuous", "integer", "binary" and \
 5. Use status "unsupported" with an "unsupported_reason" when the request \
 needs something this format cannot express: a physics or simulation model \
 that is neither an expression nor one of the known tool ids (use \
-{{"tool_id": ..., "args": {{...}}}} as the expression for a known tool), \
+{{"tool_id": ..., "args": {{...}}}} as the expression for a known tool: "args" \
+maps a tool input to an expression, "constants" maps a tool input to a fixed \
+JSON value such as a string, and "output" names the output to read when the \
+tool returns several), \
 randomness or expectations, dynamics over time, soft constraints or \
 penalties, min-max over infinitely many cases, or a variable kind not listed \
 above. Do not approximate it.

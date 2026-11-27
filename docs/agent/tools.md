@@ -72,7 +72,6 @@ session's allowlist and budget, so replay skips it.
 | `tool_id` | Dotted lower-case names that end in a version, such as `math.erf.v1`. A changed tool gets a new id. Every valid id is also a valid IR `ToolCall.tool_id`. |
 | `input_schema`, `output_schema` | JSON Schema objects. The input schema must set `additionalProperties: false`. |
 | `input_units`, `output_units` | One SI-coherent unit string per numeric field, `""` for dimensionless. The unit of an array applies to each element. A unit with a scale other than 1, such as `km`, is rejected. |
-| `value_field` | The required scalar output that an IR `ToolCall` receives. |
 | `assumptions` | The model assumptions, as text. |
 | `domain` | One closed `Interval` per numeric input. The tests verify the tool on these ranges. A tool raises `DomainError` for a precondition that an interval cannot express, such as an unstable explicit time step. |
 | `cost` | `CostModel(cost_class, evaluations)`. `cost_class` is `trivial`, `cheap`, `moderate` or `expensive`. `evaluations` is an IR expression over the required scalar inputs, such as `"3*n"`, and is the amount charged to `CallBudget.max_evaluations`. |
@@ -118,11 +117,17 @@ call.
 `ToolCall` objective and constraint.
 
 - The tool must be in the view.
-- The call must bind every required input and no unknown input. Each bound input must be a scalar number.
-- The dimension of each argument expression must equal the declared unit of its input.
-- The dimension of the tool's `value_field` must equal the `unit` that the problem declares for that objective or constraint.
+- The call's `args` and `constants` together must bind every required input and no unknown input.
+- An expression in `args` must feed a scalar numeric input, and its dimension must equal the input's declared unit.
+- A constant reaches the tool unchanged, in the tool's own SI units, and the input schema checks it when the call runs. A string integrand, a rule name or an array goes here.
+- `output` must name a required scalar numeric output, and its dimension must equal the `unit` that the problem declares for that objective or constraint.
 
 A failed check raises `ToolError` with `unit_mismatch` or `invalid_args`.
+Each resolver returns the tool's whole output object, and the IR reads the
+field that `output` names. A `ToolError` that a call raises inside
+`evaluate`, such as an `out_of_domain` refusal, reaches the caller as the
+IR's `ToolCallError`, a subclass of `EvaluationError`, with the `ToolError`
+as its cause. A solver therefore treats the point as infeasible and goes on.
 This check covers the open point in
 [ADR optimization-0001](../adr/optimization-0001-optimization-ir.md). The IR
 trusts the unit declared on a `ToolCall`, so a problem that passes
@@ -134,7 +139,7 @@ solver's evaluations are logged and budgeted.
 ```python
 problem = OptimizationProblem(
 	id="bessel-j0-minimum", variables=(Variable("x", lower=2.0, upper=5.0),),
-	objectives=(Objective("j0", ToolCall("math.bessel_j0.v1", {"x": "x"})),))
+	objectives=(Objective("j0", ToolCall("math.bessel_j0.v1", {"x": "x"}, output="value")),))
 tools = bind_problem(problem, view, agent)
 minimize_scalar(lambda x: problem.evaluate({"x": x}, tools=tools).objectives["j0"],
 	bounds=(2.0, 5.0), method="bounded")                    # x = 3.8317..., the first zero of J1

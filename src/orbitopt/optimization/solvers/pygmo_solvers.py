@@ -7,7 +7,7 @@ population with it, so the adapter evolves one generation at a time, plans
 the generation count to fit ``max_evaluations``, and keeps the last complete
 population when the wall clock runs out mid-generation. The result's ``x`` is
 the front member with the lexicographically smallest objective vector, and
-the whole front is in the solver evidence under ``front``.
+the whole front is ``OptimizationResult.front``.
 """
 
 from __future__ import annotations

@@ -78,7 +78,7 @@
    "expected_outcome": "compile",
    "reference_problem": "integ-exp-1e-10",
    "reference_ir": {
-    "schemaVersion": "1.0",
+    "schemaVersion": "1.1",
     "id": "integ-exp-1e-10",
     "title": "",
     "variables": [
@@ -121,12 +121,15 @@
      {
       "name": "error_target",
       "expression": {
-       "tool_id": "quadrature.abs_error.exp",
+       "tool_id": "quadrature.abs_error",
        "args": {
         "rule": "rule",
         "n": "n",
         "a": "a",
         "b": "b"
+       },
+       "constants": {
+        "integrand": "exp(t)"
        }
       },
       "sense": "<=",
@@ -136,13 +139,11 @@
     ]
    },
    "replies": [
-    "{\"status\": \"compiled\", \"problem\": {\"title\": \"\", \"variables\": [{\"name\": \"rule\", \"kind\": \"integer\", \"lower\": 0.0, \"upper\": 3.0, \"unit\": \"\", \"source\": \"assumed\"}, {\"name\": \"n\", \"kind\": \"integer\", \"lower\": 1.0, \"upper\": 512.0, \"unit\": \"\", \"source\": \"assumed\"}], \"parameters\": [], \"objectives\": [{\"name\": \"evaluations\", \"expression\": \"n\", \"sense\": \"minimize\", \"unit\": \"\", \"source\": \"user\"}], \"constraints\": [{\"name\": \"accuracy\", \"expression\": {\"tool_id\": \"quadrature.abs_error.exp\", \"args\": {\"rule\": \"rule\", \"n\": \"n\", \"a\": \"0\", \"b\": \"1\"}}, \"sense\": \"<=\", \"rhs\": 1e-10, \"unit\": \"\", \"source\": \"user\"}]}, \"questions\": [], \"assumptions\": [{\"about\": \"variables/rule\", \"text\": \"the rule index follows the catalogue's fixed menu: 0 Gauss-Legendre, 1 composite trapezoid, 2 composite Simpson, 3 Gauss-Legendre after x = a + (b - a) s^2\"}, {\"about\": \"variables/n\", \"text\": \"N is capped at the catalogue's N_MAX of 512 evaluations\"}], \"unsupported_reason\": null, \"authorized_changes\": [], \"tradeoff_quote\": null}"
+    "{\"status\": \"compiled\", \"problem\": {\"title\": \"\", \"variables\": [{\"name\": \"rule\", \"kind\": \"integer\", \"lower\": 0.0, \"upper\": 3.0, \"unit\": \"\", \"source\": \"assumed\"}, {\"name\": \"n\", \"kind\": \"integer\", \"lower\": 1.0, \"upper\": 512.0, \"unit\": \"\", \"source\": \"assumed\"}], \"parameters\": [], \"objectives\": [{\"name\": \"evaluations\", \"expression\": \"n\", \"sense\": \"minimize\", \"unit\": \"\", \"source\": \"user\"}], \"constraints\": [{\"name\": \"accuracy\", \"expression\": {\"tool_id\": \"quadrature.abs_error\", \"args\": {\"rule\": \"rule\", \"n\": \"n\", \"a\": \"0\", \"b\": \"1\"}, \"constants\": {\"integrand\": \"exp(t)\"}}, \"sense\": \"<=\", \"rhs\": 1e-10, \"unit\": \"\", \"source\": \"user\"}]}, \"questions\": [], \"assumptions\": [{\"about\": \"variables/rule\", \"text\": \"the rule index follows the catalogue's fixed menu: 0 Gauss-Legendre, 1 composite trapezoid, 2 composite Simpson, 3 Gauss-Legendre after x = a + (b - a) s^2\"}, {\"about\": \"variables/n\", \"text\": \"N is capped at the catalogue's N_MAX of 512 evaluations\"}], \"unsupported_reason\": null, \"authorized_changes\": [], \"tradeoff_quote\": null}"
    ],
-   "notes": "Benchmark example FC-005. Decision recorded here: the compiler adopts the catalogue's fixed rule menu and N_MAX = 512 explicitly, as listed assumptions (origin compiler), rather than asking. The integrand is named by the tool id because IR 1.0 tool arguments are expressions only (no string arguments).",
+   "notes": "Benchmark example FC-005. Decision recorded here: the compiler adopts the catalogue's fixed rule menu and N_MAX = 512 explicitly, as listed assumptions (origin compiler), rather than asking. The integrand reaches the tool as a constant argument.",
    "known_tool_ids": [
-    "quadrature.abs_error.exp",
-    "quadrature.abs_error.runge",
-    "quadrature.abs_error.peak"
+    "quadrature.abs_error"
    ]
   },
   {
@@ -1820,7 +1821,7 @@
    "expected_outcome": "compile",
    "reference_problem": "integ-runge-1e-8",
    "reference_ir": {
-    "schemaVersion": "1.0",
+    "schemaVersion": "1.1",
     "id": "integ-runge-1e-8",
     "title": "",
     "variables": [
@@ -1863,12 +1864,15 @@
      {
       "name": "error_target",
       "expression": {
-       "tool_id": "quadrature.abs_error.runge",
+       "tool_id": "quadrature.abs_error",
        "args": {
         "rule": "rule",
         "n": "n",
         "a": "a",
         "b": "b"
+       },
+       "constants": {
+        "integrand": "1/(1+25*t**2)"
        }
       },
       "sense": "<=",
@@ -1878,13 +1882,11 @@
     ]
    },
    "replies": [
-    "{\"status\": \"compiled\", \"problem\": {\"title\": \"\", \"variables\": [{\"name\": \"rule\", \"kind\": \"integer\", \"lower\": 0.0, \"upper\": 3.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"n\", \"kind\": \"integer\", \"lower\": 1.0, \"upper\": 512.0, \"unit\": \"\", \"source\": \"user\"}], \"parameters\": [{\"name\": \"a\", \"value\": -1.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"b\", \"value\": 1.0, \"unit\": \"\", \"source\": \"user\"}], \"objectives\": [{\"name\": \"evaluations\", \"expression\": \"n\", \"sense\": \"minimize\", \"unit\": \"\", \"source\": \"user\"}], \"constraints\": [{\"name\": \"accuracy\", \"expression\": {\"tool_id\": \"quadrature.abs_error.runge\", \"args\": {\"rule\": \"rule\", \"n\": \"n\", \"a\": \"a\", \"b\": \"b\"}}, \"sense\": \"<=\", \"rhs\": 1e-08, \"unit\": \"\", \"source\": \"user\"}]}, \"questions\": [], \"assumptions\": [{\"about\": \"variables/rule\", \"text\": \"the rule index follows the catalogue's fixed menu: 0 Gauss-Legendre, 1 composite trapezoid, 2 composite Simpson, 3 Gauss-Legendre after x = a + (b - a) s^2\"}], \"unsupported_reason\": null, \"authorized_changes\": [], \"tradeoff_quote\": null}"
+    "{\"status\": \"compiled\", \"problem\": {\"title\": \"\", \"variables\": [{\"name\": \"rule\", \"kind\": \"integer\", \"lower\": 0.0, \"upper\": 3.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"n\", \"kind\": \"integer\", \"lower\": 1.0, \"upper\": 512.0, \"unit\": \"\", \"source\": \"user\"}], \"parameters\": [{\"name\": \"a\", \"value\": -1.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"b\", \"value\": 1.0, \"unit\": \"\", \"source\": \"user\"}], \"objectives\": [{\"name\": \"evaluations\", \"expression\": \"n\", \"sense\": \"minimize\", \"unit\": \"\", \"source\": \"user\"}], \"constraints\": [{\"name\": \"accuracy\", \"expression\": {\"tool_id\": \"quadrature.abs_error\", \"args\": {\"rule\": \"rule\", \"n\": \"n\", \"a\": \"a\", \"b\": \"b\"}, \"constants\": {\"integrand\": \"1/(1+25*t**2)\"}}, \"sense\": \"<=\", \"rhs\": 1e-08, \"unit\": \"\", \"source\": \"user\"}]}, \"questions\": [], \"assumptions\": [{\"about\": \"variables/rule\", \"text\": \"the rule index follows the catalogue's fixed menu: 0 Gauss-Legendre, 1 composite trapezoid, 2 composite Simpson, 3 Gauss-Legendre after x = a + (b - a) s^2\"}], \"unsupported_reason\": null, \"authorized_changes\": [], \"tradeoff_quote\": null}"
    ],
    "notes": "Integration cost with the rule menu stated in the prompt.",
    "known_tool_ids": [
-    "quadrature.abs_error.exp",
-    "quadrature.abs_error.runge",
-    "quadrature.abs_error.peak"
+    "quadrature.abs_error"
    ]
   },
   {
@@ -2980,7 +2982,7 @@
    "replies": [
     "{\"status\": \"unsupported\", \"problem\": null, \"questions\": [], \"assumptions\": [], \"unsupported_reason\": {\"category\": \"semi_infinite\", \"explanation\": \"the worst case over every t in [0, 1] is a semi-infinite min-max program\"}, \"authorized_changes\": [], \"tradeoff_quote\": null}"
    ],
-   "notes": "Benchmark example FC-003: semi-infinite min-max. IR 1.0 has no epigraph or semi-infinite constraint, so the case stays unsupported.",
+   "notes": "Benchmark example FC-003: semi-infinite min-max. The IR has no epigraph or semi-infinite constraint, so the case stays unsupported.",
    "expect": {
     "category": "semi_infinite"
    }
@@ -2997,9 +2999,7 @@
    ],
    "notes": "Unsupported model detected by the compiler: the reply references a tool id that the caller did not list.",
    "known_tool_ids": [
-    "quadrature.abs_error.exp",
-    "quadrature.abs_error.runge",
-    "quadrature.abs_error.peak"
+    "quadrature.abs_error"
    ],
    "expect": {
     "category": "unsupported_model"
@@ -3377,6 +3377,174 @@
      "uncovered_statement"
     ]
    }
+  },
+  {
+   "id": "FC-058",
+   "prompt": "Minimize the 20-dimensional Rosenbrock function, the sum over i = 1..19 of 100*(x_{i+1} - x_i^2)^2 + (1 - x_i)^2, with every variable between -5 and 10.",
+   "language": "en",
+   "expected_outcome": "compile",
+   "reference_problem": "rosenbrock-d20",
+   "reference_ir": {
+    "schemaVersion": "1.1",
+    "id": "rosenbrock-d20",
+    "title": "",
+    "variables": [
+     {
+      "name": "x0",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x1",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x2",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x3",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x4",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x5",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x6",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x7",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x8",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x9",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x10",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x11",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x12",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x13",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x14",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x15",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x16",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x17",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x18",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x19",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     }
+    ],
+    "parameters": [],
+    "objectives": [
+     {
+      "name": "f",
+      "expression": "sum(100*(x[i+1] - x[i]**2)**2 + (1 - x[i])**2 for i in range(19))",
+      "sense": "minimize",
+      "unit": ""
+     }
+    ],
+    "constraints": []
+   },
+   "replies": [
+    "{\"status\": \"compiled\", \"problem\": {\"title\": \"\", \"variables\": [{\"name\": \"x0\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x1\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x2\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x3\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x4\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x5\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x6\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x7\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x8\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x9\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x10\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x11\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x12\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x13\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x14\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x15\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x16\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x17\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x18\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x19\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}], \"parameters\": [], \"objectives\": [{\"name\": \"rosenbrock\", \"expression\": \"sum(100*(x[i+1] - x[i]**2)**2 + (1 - x[i])**2 for i in range(19))\", \"sense\": \"minimize\", \"unit\": \"\", \"source\": \"user\"}], \"constraints\": []}, \"questions\": [], \"assumptions\": [], \"unsupported_reason\": null, \"authorized_changes\": [], \"tradeoff_quote\": null}"
+   ],
+   "notes": "Twenty-dimensional Rosenbrock as one IR 1.1 indexed sum; written term by term it has more than the 500 source nodes an expression may have."
   }
  ]
 }

@@ -6,6 +6,7 @@ hard-constraint fingerprint, the result contract and the documented worked
 example.
 """
 
+import ast
 import dataclasses
 import json
 import math
@@ -18,7 +19,9 @@ import pytest
 
 from orbitopt.optimization import (
     PROBLEM_SCHEMA,
+    PROBLEM_SCHEMAS,
     RESULT_SCHEMA,
+    RESULT_SCHEMAS,
     STATUSES,
     SYMBOLS,
     Budget,
@@ -26,6 +29,8 @@ from orbitopt.optimization import (
     ErrorCode,
     EvaluationError,
     Evidence,
+    MAX_EXPANDED_NODES,
+    MAX_NODES,
     Expression,
     ExpressionError,
     InvalidProblemError,
@@ -33,15 +38,20 @@ from orbitopt.optimization import (
     OptimizationProblem,
     OptimizationResult,
     Parameter,
+    ParetoPoint,
+    Provenance,
     Termination,
     ToolCall,
+    ToolCallError,
     UnitError,
     Variable,
     VerificationPolicy,
     canonical_digest,
+    tolerance_scale,
     parse_problem,
     parse_unit,
     schema_errors,
+    schema_for,
     validate_problem,
 )
 
@@ -78,7 +88,8 @@ def rich() -> OptimizationProblem:
         parameters=(Parameter("dv_max", 4000.0, unit="m/s"), Parameter("mass", 1200.0, unit="kg")),
         objectives=(
             Objective("total_dv", "dv1", unit="km/s"),
-            Objective("payload", ToolCall("mission.payload_margin", {"dv": "dv1", "t": "tof"}),
+            Objective("payload", ToolCall("mission.payload_margin", {"dv": "dv1", "t": "tof"},
+                                          {"model": "two_body", "stages": [1, 2.5], "drag": True}, "margin"),
                       sense="maximize", unit="kg", origin="compiler"),
         ),
         constraints=(
@@ -115,7 +126,7 @@ def test_round_trip_through_json_is_exact_and_keeps_the_digest():
 
 def test_minimal_dict_takes_defaults_and_locks_user_constraints():
     problem = parse_problem({
-        "schemaVersion": "1.0", "id": "p",
+        "schemaVersion": "1.1", "id": "p",
         "variables": [{"name": "x", "lower": -1, "upper": 1}],
         "objectives": [{"name": "f", "expression": "x**2"}],
         "constraints": [{"name": "c", "expression": "x", "sense": "<=", "rhs": 0.5},
@@ -153,12 +164,46 @@ def test_invalid_problem_error_carries_every_error_at_once():
 
 
 # Pinned: the digest is a cross-machine contract. If the canonical form must
-# change, that is a new IR version, not an edit to this number.
-QUADRATIC_DIGEST = "b246af297af29145749cf2c0cc544e7d50cfefd67ac86293284d151fe787beda"
+# change, that is a new IR version, not an edit to this number. IR 1.0 pinned
+# b246af29...; the 1.1 digest hashes the 1.1 form (schemaVersion "1.1").
+QUADRATIC_DIGEST = "3c09d1026773084a2e7a003cd3dde04439b5359db9f4447211d35e125510016c"
 
 
 def test_digest_is_pinned_across_machines():
     assert quadratic().digest() == QUADRATIC_DIGEST
+
+
+QUADRATIC_1_0 = {
+    "schemaVersion": "1.0", "id": "quadratic",
+    "variables": [{"name": "x", "lower": 0.0}, {"name": "y", "lower": 0.0}],
+    "objectives": [{"name": "f", "expression": "x**2 + y**2"}],
+    "constraints": [{"name": "halfplane", "expression": "x + y", "sense": ">=", "rhs": 1.0}],
+}
+
+
+def test_a_1_0_document_parses_into_the_1_1_problem_and_writes_back_as_1_1():
+    assert schema_for(QUADRATIC_1_0, PROBLEM_SCHEMAS) == "optimization-problem-1.0.json"
+    problem = parse_problem(QUADRATIC_1_0)
+    assert problem == quadratic()
+    assert problem.to_dict()["schemaVersion"] == "1.1"
+    assert problem.digest() == QUADRATIC_DIGEST
+    assert schema_errors(problem.to_dict(), PROBLEM_SCHEMA) == []
+
+
+def test_an_unknown_schema_version_is_a_schema_error():
+    with pytest.raises(InvalidProblemError) as info:
+        parse_problem({**QUADRATIC_1_0, "schemaVersion": "2.0"})
+    assert {(e.code, e.path) for e in info.value.errors} == {(ErrorCode.SCHEMA, "/schemaVersion")}
+
+
+def test_a_1_0_result_document_parses_with_the_1_1_defaults():
+    data = {"schemaVersion": "1.0", "problem_digest": "0" * 64, "solver_id": "s", "termination": "converged",
+            "evidence": [{"kind": "solver", "summary": "ran"}]}
+    assert schema_errors(data, schema_for(data, RESULT_SCHEMAS)) == []
+    result = OptimizationResult.from_dict(data)
+    assert result == OptimizationResult(problem_digest="0" * 64, solver_id="s", termination=Termination.CONVERGED,
+                                        evidence=(Evidence("solver", "ran"),))
+    assert schema_errors(result.to_dict(), RESULT_SCHEMA) == []
 
 
 def test_digest_ignores_key_order_containers_and_last_bit_noise():
@@ -314,6 +359,7 @@ INVALID = [
      "/parameters/0/name"),
     ("keyword name", {"variables": (X, Y, Variable("lambda"))}, ErrorCode.INVALID_NAME, "/variables/2/name"),
     ("function name", {"variables": (X, Y, Variable("sin"))}, ErrorCode.INVALID_NAME, "/variables/2/name"),
+    ("sum as a name", {"variables": (X, Y, Variable("sum"))}, ErrorCode.INVALID_NAME, "/variables/2/name"),
     ("duplicate constraint", {"constraints": (Constraint("c", "x + y", ">=", 1.0),) * 2},
      ErrorCode.DUPLICATE_NAME, "/constraints/1/name"),
     ("unknown name", objective("x**2 + z"), ErrorCode.UNKNOWN_NAME, "/objectives/0/expression"),
@@ -337,14 +383,28 @@ INVALID = [
     ("__import__", objective("__import__('os')"), ErrorCode.UNKNOWN_FUNCTION,
      "/objectives/0/expression"),
     ("dunder name", objective("x + __builtins__"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
-    ("subscript", objective("x[0] + y"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
+    ("subscript of an expression", objective("(x + y)[0]"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
+    ("subscript of an undeclared name", objective("x[0] + y"), ErrorCode.UNKNOWN_NAME, "/objectives/0/expression"),
+    ("slice", objective("x[0:2]"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
     ("non-whitelisted call", objective("open(x)"), ErrorCode.UNKNOWN_FUNCTION, "/objectives/0/expression"),
     ("keyword argument", objective("max(x, y, key=x)"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
     ("wrong arity", objective("atan2(x)"), ErrorCode.WRONG_ARITY, "/objectives/0/expression"),
     ("string literal", objective("x + 'y'"), ErrorCode.BAD_LITERAL, "/objectives/0/expression"),
     ("boolean literal", objective("x + True"), ErrorCode.BAD_LITERAL, "/objectives/0/expression"),
     ("lambda", objective("(lambda: x)()"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
-    ("comprehension", objective("sum([x for x in y])"), ErrorCode.UNKNOWN_FUNCTION, "/objectives/0/expression"),
+    ("list comprehension", objective("sum([x for x in y])"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
+    ("sum over a name", objective("sum(x for i in y)"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
+    ("filtered sum", objective("sum(x for i in range(3) if i)"), ErrorCode.UNSAFE_EXPRESSION,
+     "/objectives/0/expression"),
+    ("generator outside sum", objective("max((x for i in range(3)), y)"), ErrorCode.UNSAFE_EXPRESSION,
+     "/objectives/0/expression"),
+    ("range outside sum", objective("x + range(3)"), ErrorCode.UNKNOWN_FUNCTION, "/objectives/0/expression"),
+    ("fractional index", objective("sum(x for i in range(2.5))"), ErrorCode.UNSAFE_EXPRESSION,
+     "/objectives/0/expression"),
+    ("huge sum", objective("sum(x for i in range(1000000000))"), ErrorCode.EXPRESSION_TOO_COMPLEX,
+     "/objectives/0/expression"),
+    ("exponent through an index", objective("sum(x**i for i in range(200))"), ErrorCode.EXPONENT_TOO_LARGE,
+     "/objectives/0/expression"),
     ("comparison", objective("x < y"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
     ("caret power", objective("x ^ 2"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
     ("huge exponent", objective("x ** 99999999999"), ErrorCode.EXPONENT_TOO_LARGE, "/objectives/0/expression"),
@@ -375,6 +435,14 @@ INVALID = [
      "/objectives/0/expression/tool_id"),
     ("unsafe tool argument", objective(ToolCall("orbit.dv", {"a": "x.__class__"})), ErrorCode.UNSAFE_EXPRESSION,
      "/objectives/0/expression/args/a"),
+    ("argument both expression and constant", objective(ToolCall("orbit.dv", {"a": "x"}, {"a": 1.0})),
+     ErrorCode.DUPLICATE_NAME, "/objectives/0/expression/constants/a"),
+    ("non-finite constant", objective(ToolCall("orbit.dv", {"a": "x"}, {"b": [1.0, math.inf]})), ErrorCode.NON_FINITE,
+     "/objectives/0/expression/constants/b/1"),
+    ("object constant", objective(ToolCall("orbit.dv", {"a": "x"}, {"b": {"k": 1}})), ErrorCode.INVALID_VALUE,
+     "/objectives/0/expression/constants/b"),
+    ("bad output name", objective(ToolCall("orbit.dv", {"a": "x"}, output="dv total")), ErrorCode.INVALID_NAME,
+     "/objectives/0/expression/output"),
 ]
 
 
@@ -426,6 +494,60 @@ def test_evaluation_failures_raise_one_error_type(source, values):
         Expression(source).evaluate(values)
 
 
+def _rosenbrock(x):
+    return sum(100 * (x[i + 1] - x[i] ** 2) ** 2 + (1 - x[i]) ** 2 for i in range(len(x) - 1))
+
+
+@pytest.mark.parametrize("n", [2, 20, 200])
+def test_an_indexed_sum_reads_scalars_x0_to_xn_and_matches_its_unrolled_value(n):
+    expr = Expression(f"sum(100*(x[i+1] - x[i]**2)**2 + (1 - x[i])**2 for i in range({n} - 1))")
+    assert expr.names == {f"x{i}" for i in range(n)}
+    point = [math.cos(3.0 * i) * 2.0 for i in range(n)]
+    assert expr.evaluate({f"x{i}": v for i, v in enumerate(point)}) == pytest.approx(_rosenbrock(point), rel=1e-13)
+    assert Expression(f"sum(x[i] for i in range({n}))").evaluate({f"x{i}": 1.0 for i in range(n)}) == float(n)
+
+
+@pytest.mark.parametrize("source, expected", [
+    ("sum(i * x[i] for i in range(4))", 0 * 1 + 1 * 2 + 2 * 3 + 3 * 4),
+    ("sum(x[i] for i in range(2, 4))", 3 + 4),
+    ("sum(x[i] for i in range(3, 1))", 0.0),
+    ("sum(sum(x[i] * x[j] for j in range(i)) for i in range(4))", 1 * 2 + 1 * 3 + 2 * 3 + 1 * 4 + 2 * 4 + 3 * 4),
+    ("x[3] - x[2 * 1]", 4 - 3),
+    ("sum(x[3 - i] ** 2 for i in range(-1 + 1, 4))", 1 + 4 + 9 + 16),
+])
+def test_indices_are_integer_arithmetic_over_literals_and_enclosing_indices(source, expected):
+    assert Expression(source).evaluate({f"x{i}": float(i + 1) for i in range(4)}) == float(expected)
+
+
+def test_the_expanded_tree_is_plain_public_syntax_and_counts_its_own_node_limit():
+    tree = Expression("sum(sqrt(x[i]) * k for i in range(1000))").tree
+    allowed = (ast.Constant, ast.Name, ast.UnaryOp, ast.BinOp, ast.Call, ast.Load, ast.Add, ast.Sub, ast.Mult,
+               ast.Div, ast.Pow, ast.USub, ast.UAdd)
+    nodes = list(ast.walk(tree))
+    assert all(isinstance(n, allowed) for n in nodes) and len(nodes) > MAX_NODES
+    assert all(isinstance(n.value, float) for n in nodes if isinstance(n, ast.Constant))
+    depth = lambda n: 1 + max((depth(c) for c in ast.iter_child_nodes(n)), default=0)  # noqa: E731
+    assert depth(tree) < 30  # a long sum expands into a balanced tree, not a chain
+    # Both limits count every node ast.walk yields: a term x_i * 2 is 5 (BinOp, Mult, Name, Load, Constant), each
+    # joining addition 2 (BinOp, Add), the root 1. So 2857 terms are 19998 nodes and 2858 terms 20005.
+    terms = (MAX_EXPANDED_NODES + 1) // 7
+    assert Expression(f"sum(x[i] * 2 for i in range({terms}))").names
+    with pytest.raises(ExpressionError) as info:
+        Expression(f"sum(x[i] * 2 for i in range({terms + 1}))").names
+    assert info.value.code is ErrorCode.EXPRESSION_TOO_COMPLEX
+
+
+def test_units_hold_through_a_sum():
+    problem = OptimizationProblem(
+        id="sum-units", variables=tuple(Variable(f"d{i}", lower=0.0, unit="km") for i in range(3)),
+        objectives=(Objective("total", "sum(d[i] for i in range(3))", unit="m"),),
+        constraints=(Constraint("mixed", "sum(d[i] for i in range(3)) + 1", "<=", 5.0, unit="km"),))
+    assert codes(problem) == [(ErrorCode.UNIT_MISMATCH, "/constraints/0/expression")]
+    good = replace(problem, constraints=())
+    assert validate_problem(good) == []
+    assert good.evaluate({"d0": 1.0, "d1": 2.0, "d2": 3.0}).objectives["total"] == pytest.approx(6000.0)
+
+
 def test_unsafe_source_is_rejected_before_anything_runs(tmp_path):
     marker = tmp_path / "ran"
     source = f"__import__('pathlib').Path({str(marker)!r}).touch()"
@@ -450,8 +572,69 @@ def test_tool_calls_evaluate_through_a_registry_in_si():
 
     assert problem.evaluate({"d": 3.0}, tools={"orbit.cost": cost}).objectives["cost"] == pytest.approx(7.0)
     assert seen == {"dist": 6000.0}
-    with pytest.raises(EvaluationError):
+    with pytest.raises(ToolCallError):
         problem.evaluate({"d": 3.0})
+
+
+def _tool_problem(call: ToolCall) -> OptimizationProblem:
+    return OptimizationProblem(id="tool", variables=(Variable("d", lower=0.0, unit="km"),),
+                               objectives=(Objective("cost", call, unit="km"),))
+
+
+def test_a_tool_call_passes_constants_unchanged_and_reads_the_output_it_names():
+    seen = {}
+
+    def survey(dist, model, layers):
+        seen.update(dist=dist, model=model, layers=layers)
+        return {"cost": dist + 1000.0, "count": 3.0}
+
+    call = ToolCall("orbit.survey", {"dist": "2 * d"}, {"model": "j2", "layers": [0.5, 1.5]}, output="cost")
+    problem = _tool_problem(call)
+    assert validate_problem(problem) == []
+    assert problem.evaluate({"d": 3.0}, tools={"orbit.survey": survey}).objectives["cost"] == pytest.approx(7.0)
+    assert seen == {"dist": 6000.0, "model": "j2", "layers": [0.5, 1.5]}
+    count = _tool_problem(replace(call, output="count"))
+    assert count.evaluate({"d": 3.0}, tools={"orbit.survey": survey}).objectives["cost"] == pytest.approx(3e-3)
+    assert count.digest() != problem.digest()
+    assert _tool_problem(replace(call, constants={"model": "j4", "layers": [0.5, 1.5]})).digest() != problem.digest()
+    back = parse_problem(json.loads(json.dumps(problem.to_dict())))
+    assert back == problem and back.objectives[0].expression.constants == {"model": "j2", "layers": [0.5, 1.5]}
+
+
+@pytest.mark.parametrize("call, tool", [
+    (ToolCall("orbit.survey", {"dist": "d"}), lambda dist: {"cost": dist}),           # several outputs, none named
+    (ToolCall("orbit.survey", {"dist": "d"}, output="cost"), lambda dist: dist),      # a number, an output named
+    (ToolCall("orbit.survey", {"dist": "d"}, output="total"), lambda dist: {"cost": dist}),
+    (ToolCall("orbit.survey", {"dist": "d"}), lambda dist: 1.0 / 0.0),                # the tool raises
+    (ToolCall("orbit.survey", {"dist": "d"}), lambda dist: "fast"),                   # not a number
+])
+def test_every_tool_failure_is_a_tool_call_error_that_is_an_evaluation_error(call, tool):
+    with pytest.raises(ToolCallError) as info:
+        _tool_problem(call).evaluate({"d": 1.0}, tools={"orbit.survey": tool})
+    assert isinstance(info.value, EvaluationError) and info.value.tool_id == "orbit.survey"
+
+
+def test_a_tool_exception_keeps_its_cause():
+    class Refused(Exception):
+        pass
+
+    def refuse(dist):
+        raise Refused("outside the validity domain")
+
+    with pytest.raises(ToolCallError) as info:
+        _tool_problem(ToolCall("orbit.survey", {"dist": "d"})).evaluate({"d": 1.0}, tools={"orbit.survey": refuse})
+    assert isinstance(info.value.__cause__, Refused) and "outside the validity domain" in str(info.value)
+
+
+def test_a_1_0_tool_call_parses_with_no_constants_and_no_output():
+    doc = {**QUADRATIC_1_0, "objectives": [{"name": "f", "expression": {"tool_id": "orbit.cost", "args": {"a": "x"}}}]}
+    assert schema_errors(doc, PROBLEM_SCHEMAS["1.0"]) == []
+    call = parse_problem(doc).objectives[0].expression
+    assert call == ToolCall("orbit.cost", {"a": "x"}) and call.constants == {} and call.output is None
+    with_constants = {**doc, "objectives": [{"name": "f", "expression": {
+        "tool_id": "orbit.cost", "args": {"a": "x"}, "constants": {"k": 1}, "output": "v"}}]}
+    assert {e.path for e in schema_errors(with_constants, PROBLEM_SCHEMAS["1.0"])} == {"/objectives/0/expression"}
+    assert parse_problem({**with_constants, "schemaVersion": "1.1"}).objectives[0].expression.output == "v"
 
 
 def test_importing_the_ir_pulls_in_no_other_orbitopt_module_or_numpy():
@@ -478,7 +661,10 @@ def test_result_round_trips_and_validates_against_its_schema():
         solver_converged=True, constraints_satisfied=True, x={"x": 0.5, "y": 0.5},
         objective_values={"f": 0.5}, constraint_residuals={"halfplane": 0.0}, evaluations=42, iterations=7,
         wall_time_s=0.01, message="ok",
-        evidence=(Evidence("analytical", "KKT point of a convex QP", {"lambda": 1.0}),),
+        evidence=(Evidence("analytical", "KKT point of a convex QP", {"lambda": 1.0}, producer="kkt",
+                           problem_digest=quadratic().digest()),),
+        front=(ParetoPoint({"x": 0.5, "y": 0.5}, {"f": 0.5}), ParetoPoint({"x": 1.0, "y": 0.0}, {"f": 1.0})),
+        provenance=Provenance(cache_key=quadratic().digest()),
     )
     data = json.loads(json.dumps(result.to_dict()))
     assert schema_errors(data, RESULT_SCHEMA) == []
@@ -487,6 +673,55 @@ def test_result_round_trips_and_validates_against_its_schema():
     data["problem_digest"] = "not-a-digest"
     data["termination"] = "gave_up"
     assert {e.path for e in schema_errors(data, RESULT_SCHEMA)} == {"/problem_digest", "/termination"}
+
+
+def _error_problem(rhs: float, sense: str = "<=") -> OptimizationProblem:
+    return OptimizationProblem(id="tiny-rhs", variables=(Variable("err"),), objectives=(Objective("f", "err"),),
+                               constraints=(Constraint("accuracy", "err", sense, rhs),))
+
+
+@pytest.mark.parametrize("rhs, sense, value, holds", [
+    (1e-10, "<=", 1e-10 * (1 + 0.5e-6), True),   # within constraint_tol of the bound, relative to it
+    (1e-10, "<=", 1e-10 * (1 + 2e-6), False),
+    (1e-10, "<=", 1e-9, False),                  # IR 1.0 accepted this: 1e-9 - 1e-10 <= 1e-6 * max(1, 1e-10)
+    (-1e-10, ">=", -1e-10 * (1 + 2e-6), False),
+    (0.0, "<=", 0.5e-6, True),                   # a zero rhs has no magnitude: the tolerance is absolute
+    (0.0, "<=", 2e-6, False),
+    (1e3, "<=", 1e3 + 0.5e-3, True),             # large rhs: relative, as in IR 1.0
+    (1e3, "==", 1e3 - 2e-3, False),
+])
+def test_constraint_tolerance_is_relative_to_the_rhs_or_absolute_at_zero(rhs, sense, value, holds):
+    problem = _error_problem(rhs, sense)
+    assert problem.constraints_satisfied({"err": value}, problem.evaluate({"err": value}).residuals) is holds
+    allowance = problem.constraints[0].allowance(problem.verification.constraint_tol)
+    assert allowance == 1e-6 * (abs(rhs) or 1.0) == 1e-6 * tolerance_scale(rhs)
+
+
+@pytest.mark.parametrize("variable, value, reasons", [
+    (Variable("x", lower=1e-9, upper=2.0), 0.9e-9, ("below_lower",)),
+    (Variable("x", lower=1e-9, upper=2.0), 1e-9 * (1 - 0.5e-6), ()),
+    (Variable("x", lower=0.0, upper=2.0), -0.5e-6, ()),
+    (Variable("x", lower=0.0, upper=2.0), 2.1, ("above_upper",)),
+    (Variable("n", kind="integer", lower=0, upper=3), 1.5, ("not_integer",)),
+    (Variable("n", kind="integer", lower=0, upper=3), 4.5, ("above_upper", "not_integer")),
+    (Variable("b", kind="binary"), 1.0, ()),
+    (Variable("b", kind="binary"), -1.0, ("below_lower",)),
+    (Variable("b", kind="binary"), 0.5, ("not_integer",)),
+    (Variable("c", kind="discrete", choices=(1e-6, 2.0)), 1e-6 * (1 + 0.5e-6), ()),
+    (Variable("c", kind="discrete", choices=(1e-6, 2.0)), 2e-6, ("not_a_choice",)),
+])
+def test_domain_violations_name_every_part_of_the_domain_a_value_breaks(variable, value, reasons):
+    assert variable.domain_violations(value, 1e-6) == reasons
+    problem = OptimizationProblem(id="d", variables=(variable,), objectives=(Objective("f", variable.name),))
+    assert problem.constraints_satisfied({variable.name: value}, {}) is (reasons == ())
+
+
+@pytest.mark.parametrize("termination", ["unbounded", "stalled"])
+def test_unbounded_and_stalled_are_1_1_terminations(termination):
+    data = OptimizationResult(problem_digest="0" * 64, solver_id="s", termination=termination).to_dict()
+    assert schema_errors(data, RESULT_SCHEMA) == []
+    assert OptimizationResult.from_dict(data).termination is Termination(termination)
+    assert {e.path for e in schema_errors({**data, "schemaVersion": "1.0"}, RESULT_SCHEMAS["1.0"])} >= {"/termination"}
 
 
 def _doc_problem_json():

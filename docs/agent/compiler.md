@@ -45,7 +45,12 @@ The model fills `COMPILER_OUTPUT_SCHEMA`:
 - `status` is `compiled`, `needs_clarification` or `unsupported`.
 - `problem` holds flat lists of variables, parameters, objectives and
   constraints. Each item has `source`, which is `user` when the owner stated it
-  and `assumed` when the model added it.
+  and `assumed` when the model added it. An expression is an IR expression
+  string, which may use indexed sums such as
+  `sum(x[i]**2 for i in range(20))`, or a tool call
+  `{"tool_id", "args", "constants", "output"}`. The integration cases pass
+  the integrand as the constant `integrand` of one `quadrature.abs_error`
+  tool.
 - `questions`, `assumptions` and `unsupported_reason` let the model refuse
   or explain.
 - `authorized_changes` lists `{"item": "constraint:<name>", "quote": ...}`
@@ -89,6 +94,8 @@ reply in this order.
 7. Otherwise the result is `Compiled`.
 
 After the last round the result is `CompileFailed` with that round's errors.
+Its `usage` sums every provider call, including one that ended in
+`StructuredOutputError`.
 The model's text only reaches `json.loads`. Its strings become IR field
 values, and the IR's whitelisted evaluator is the only code that runs an
 expression. A test walks the compiler's syntax trees and fails on any call to
@@ -198,13 +205,3 @@ callables.
 These tests exercise the compiler with scripted replies. They say nothing
 about how accurately a real language model formulates problems. E14-10
 measures that with a real model.
-
-## Known gaps
-
-- A provider call that ends in `StructuredOutputError` reports no token
-  usage, so `CompileFailed.usage` leaves out that call's tokens.
-- IR 1.0 tool arguments are expressions only. An integrand or another string
-  setting cannot be passed, so the integration cases name the integrand in
-  the tool id, for example `quadrature.abs_error.exp`.
-- The catalogue objective of `rosenbrock-d20` has more than the IR's 500
-  expression nodes, so no compiler can express it as one IR objective.

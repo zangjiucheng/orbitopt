@@ -1,8 +1,8 @@
 """Sealed run directories: write a run's problem, result and evidence with a manifest, and re-grade from files.
 
 A run directory holds ``problem.json`` (the problem the solver ran),
-``result.json``, ``evidence.json`` (evidence items and cache provenance) and
-``manifest.json``. Each file is canonical JSON (sorted keys, compact, no NaN)
+``result.json`` (whose ``provenance`` records a cache hit), ``evidence.json``
+(the evidence items) and ``manifest.json``. Each file is canonical JSON (sorted keys, compact, no NaN)
 and the manifest records the SHA-256 of each file's exact bytes plus the
 problem's and the result's IR digests. ``verify_run`` re-derives everything
 from the files: a missing file, a changed byte or a digest that does not
@@ -21,10 +21,11 @@ from ..errors import InvalidProblemError
 from ..problem import OptimizationProblem, VerificationPolicy, parse_problem
 from ..result import OptimizationResult
 from .evidence import EvidenceItem, evidence_from_dict, evidence_to_dict, result_digest
-from .guard import Provenance, Tools, verify_result
+from .guard import Tools, verify_result
 from .report import Finding, FindingCode, VerificationReport, decide, unassessed_report
 
-RUN_FORMAT = "orbitopt.optimization.run/1"
+RUN_FORMAT = "orbitopt.optimization.run/2"
+"""Format 2 (IR 1.1) moved the cache record from ``evidence.json`` into ``result.json``; a format 1 run is refused."""
 MANIFEST = "manifest.json"
 FILES = ("problem.json", "result.json", "evidence.json")
 
@@ -40,7 +41,7 @@ def file_digest(data: bytes) -> str:
 
 
 def seal_run(problem: OptimizationProblem, result: OptimizationResult, evidence: Sequence[EvidenceItem],
-             run_dir: str | Path, *, cache_hit: bool = False, cache_key: str | None = None) -> str:
+             run_dir: str | Path) -> str:
     """Write a sealed run of ``result`` for ``problem`` into ``run_dir`` and return the manifest's digest.
 
     ``problem`` is the problem the solver ran. Keep the returned digest
@@ -53,8 +54,7 @@ def seal_run(problem: OptimizationProblem, result: OptimizationResult, evidence:
     documents = {
         "problem.json": problem.to_dict(),
         "result.json": result.to_dict(),
-        "evidence.json": {"evidence": [evidence_to_dict(e) for e in evidence],
-                          "provenance": {"cache_hit": cache_hit, "cache_key": cache_key}},
+        "evidence.json": {"evidence": [evidence_to_dict(e) for e in evidence]},
     }
     encoded = {name: canonical_json(doc) for name, doc in documents.items()}
     manifest = canonical_json({"format": RUN_FORMAT, "files": {n: file_digest(b) for n, b in encoded.items()},
@@ -93,12 +93,11 @@ def verify_run(run_dir: str | Path, *, problem: OptimizationProblem | None = Non
         if manifest.get("problem_digest") != solved.digest():
             findings.append(Finding(FindingCode.DIGEST_MISMATCH, "/manifest.json/problem_digest",
                                     "the manifest's problem digest does not match problem.json"))
-        evidence_doc = docs["evidence.json"]
-        items, provenance = _evidence(evidence_doc, alternate_solvers, findings)
+        items = _evidence(docs["evidence.json"], alternate_solvers, findings)
         graded = solved if problem is None else problem
         report = verify_result(graded, docs["result.json"], policy=policy, evidence=items,
                                artifact_digest=manifest.get("result_digest") or "missing",
-                               provenance=replace(provenance, solved_problem=solved), tools=tools, seed=seed)
+                               solved_problem=solved, tools=tools, seed=seed)
         found = tuple(findings) + report.findings
         return replace(report, findings=found, verdict=decide(report.statuses, report.required, found))
     except Exception as exc:  # reading a run must never turn into a pass
@@ -154,7 +153,7 @@ def _json(data: bytes, name: str, findings: list[Finding]) -> Any:
         return None
 
 
-def _evidence(doc: dict, alternate_solvers, findings: list[Finding]) -> tuple[list[EvidenceItem], Provenance]:
+def _evidence(doc: dict, alternate_solvers, findings: list[Finding]) -> list[EvidenceItem]:
     items = []
     raw_items = doc.get("evidence", [])
     for i, data in enumerate(raw_items if isinstance(raw_items, list) else []):
@@ -164,9 +163,4 @@ def _evidence(doc: dict, alternate_solvers, findings: list[Finding]) -> tuple[li
             findings.append(Finding(FindingCode.MALFORMED_ARTIFACT, f"/evidence.json/evidence/{i}", str(exc)))
     if not isinstance(raw_items, list):
         findings.append(Finding(FindingCode.MALFORMED_ARTIFACT, "/evidence.json/evidence", "not a list"))
-    prov = doc.get("provenance", {})
-    hit, key = (prov.get("cache_hit", False), prov.get("cache_key")) if isinstance(prov, dict) else (None, None)
-    if not isinstance(hit, bool) or not (key is None or isinstance(key, str)):
-        findings.append(Finding(FindingCode.MALFORMED_ARTIFACT, "/evidence.json/provenance", "malformed provenance"))
-        hit, key = True, None  # an unreadable cache record is treated as a hit on an unknown entry
-    return items, Provenance(cache_hit=hit, cache_key=key)
+    return items

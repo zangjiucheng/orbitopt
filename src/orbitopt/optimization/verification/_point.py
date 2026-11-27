@@ -7,7 +7,7 @@ import numbers
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping
 
-from ..expressions import EvaluationError, ToolCall
+from ..expressions import EvaluationError, ToolCall, ToolCallError
 from ..problem import Evaluation, OptimizationProblem, Variable, VerificationPolicy
 from .report import FindingCode, Outcome
 
@@ -28,29 +28,21 @@ def _number(value: Any) -> bool:
     return isinstance(value, numbers.Real) and not isinstance(value, bool)
 
 
-def _scaled(tol: float, reference: float) -> float:
-    return tol * max(1.0, abs(reference))
+_DOMAIN_FINDINGS = {
+    "below_lower": (FindingCode.CONSTRAINT_VIOLATION, "is below the lower bound"),
+    "above_upper": (FindingCode.CONSTRAINT_VIOLATION, "is above the upper bound"),
+    "not_integer": (FindingCode.DOMAIN_VIOLATION, "is not an integer"),
+    "not_a_choice": (FindingCode.DOMAIN_VIOLATION, "is not one of the choices"),
+}
 
 
 def check_domain(v: Variable, value: float, tol: float, path: str, add: Add) -> bool:
-    """Bounds (a binary variable is an integer in [0, 1]), integrality and discrete choices."""
-    if v.kind == "discrete":
-        if any(abs(value - c) <= _scaled(tol, c) for c in v.choices):
-            return True
-        add(FindingCode.DOMAIN_VIOLATION, path, f"{value!r} is not one of the choices {list(v.choices)}")
-        return False
-    lower, upper = (0.0, 1.0) if v.kind == "binary" else (v.lower, v.upper)
-    ok = True
-    if lower is not None and value < lower - _scaled(tol, lower):
-        add(FindingCode.CONSTRAINT_VIOLATION, path, f"{value!r} is below the lower bound {lower!r}")
-        ok = False
-    if upper is not None and value > upper + _scaled(tol, upper):
-        add(FindingCode.CONSTRAINT_VIOLATION, path, f"{value!r} is above the upper bound {upper!r}")
-        ok = False
-    if v.kind in ("integer", "binary") and abs(value - round(value)) > tol:
-        add(FindingCode.DOMAIN_VIOLATION, path, f"{value!r} is not an integer")
-        ok = False
-    return ok
+    """One finding per reason ``Variable.domain_violations`` gives: a bound is a constraint, the rest the domain."""
+    reasons = v.domain_violations(value, tol)
+    for reason in reasons:
+        code, text = _DOMAIN_FINDINGS[reason]
+        add(code, path, f"{value!r} {text} of {v.kind} variable {v.name!r}")
+    return not reasons
 
 
 def missing_tools(problem: OptimizationProblem, tools: Mapping[str, Any] | None) -> list[str]:
@@ -100,25 +92,25 @@ def check_point(problem: OptimizationProblem, x: Mapping[str, Any], policy: Veri
     point = {name: float(x[name]) for name in names}
     try:
         ev = problem.evaluate(point, tools)
+    except ToolCallError as exc:  # the tool could not be asked: evaluation impossible, never a pass
+        add(FindingCode.EVALUATION_ERROR, path, f"evaluation failed in a tool: {exc}")
+        cause = type(exc.__cause__).__name__ if exc.__cause__ is not None else "ToolCallError"
+        return PointCheck(Outcome.NOT_ASSESSED, f"evaluation raised {cause}")
     except EvaluationError as exc:
         add(FindingCode.EVALUATION_ERROR, path, f"the problem is not defined at this point: {exc}")
         return PointCheck(Outcome.FAILED, "the problem is not defined at this point")
-    except Exception as exc:  # a tool raised: evaluation impossible, never a pass
-        add(FindingCode.EVALUATION_ERROR, path, f"evaluation raised {exc!r}")
-        return PointCheck(Outcome.NOT_ASSESSED, f"evaluation raised {type(exc).__name__}")
     objectives, residuals, feasible = _floats(ev.objectives), _floats(ev.residuals), in_domain
     for name, value in objectives.items():
         if not math.isfinite(value):
             add(FindingCode.NON_FINITE, f"/objectives/{name}", f"objective evaluates to {value!r}")
     for c in problem.constraints:
         r = residuals[c.name]
-        violation = abs(r) if c.sense == "==" else r
         if not math.isfinite(r):
             add(FindingCode.NON_FINITE, f"/constraints/{c.name}", f"residual evaluates to {r!r}")
             feasible = False
-        elif violation > _scaled(tol, c.rhs):
+        elif c.violation(r) > c.allowance(tol):
             add(FindingCode.CONSTRAINT_VIOLATION, f"/constraints/{c.name}",
-                f"residual {r:.6g} exceeds the tolerance {_scaled(tol, c.rhs):.3g}")
+                f"residual {r:.6g} exceeds the tolerance {c.allowance(tol):.3g}")
             feasible = False
     # The IR's own definition of the status must agree; a pass needs both.
     feasible = feasible and replace(problem, verification=policy).constraints_satisfied(point, residuals)

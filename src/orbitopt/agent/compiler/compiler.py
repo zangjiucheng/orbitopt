@@ -83,7 +83,7 @@ UNSUPPORTED_MARKERS: dict[str, tuple[str, ...]] = {
     "soft_constraint": ("penalty", "penalize", "penalise", "soft constraint", "preferably",
                         "\u60e9\u7f5a", "\u8f6f\u7ea6\u675f"),
 }
-"""Phrases that suggest IR 1.0 cannot express the request; the Chinese entries are, in order, expectation,
+"""Phrases that suggest the IR cannot express the request; the Chinese entries are, in order, expectation,
 probability, random, uncertain; differential equation, over time; penalty, soft constraint."""
 
 Verdict = Callable[..., CompileOutcome]
@@ -126,7 +126,7 @@ def compile_problem(prompt: str, provider: LLMProvider, *, base_problem: Optimiz
                                                     seed=seed)
         except StructuredOutputError as exc:
             errors = tuple(CompilerIssue(CompilerErrorCode.STRUCTURED_OUTPUT, "", e) for e in exc.errors)
-            return CompileFailed(errors, exc.raw_text, usage, attempts)
+            return CompileFailed(errors, exc.raw_text, usage + exc.usage, attempts)
         usage, raw = usage + response.usage, response.text
         verdict = _judge(CompilerOutput.from_dict(response.parsed), text, base=base_problem,
                          known_tool_ids=known_tool_ids, unit_hints=unit_hints, problem_id=problem_id,
@@ -190,11 +190,11 @@ def _judge(output: CompilerOutput, text: PromptText, *, base: OptimizationProble
 def _draft_unsupported(draft: Mapping[str, Any], known_tool_ids: Sequence[str]) -> UnsupportedReason | None:
     for v in draft["variables"]:
         if v["kind"] not in IR_VARIABLE_KINDS:
-            return UnsupportedReason("variable_kind", f"variable {v['name']!r} has kind {v['kind']!r}; IR 1.0 has "
+            return UnsupportedReason("variable_kind", f"variable {v['name']!r} has kind {v['kind']!r}; the IR has "
                                                       "only continuous, integer, binary and discrete numeric variables")
     for c in draft["constraints"]:
         if c.get("soft"):
-            return UnsupportedReason("soft_constraint", f"constraint {c['name']!r} is soft; IR 1.0 constraints are "
+            return UnsupportedReason("soft_constraint", f"constraint {c['name']!r} is soft; IR constraints are "
                                                         "all hard and it has no penalty terms")
     for item in (*draft["objectives"], *draft["constraints"]):
         expr = item["expression"]
@@ -243,7 +243,7 @@ def _marker_questions(owner: str, assumptions: Sequence[Assumption]) -> list[Que
     notes = " ".join(a.text.casefold() for a in assumptions)
     return [Question("unsupported_feature",
                      f"The statement mentions {phrase!r}, which suggests a {category.replace('_', ' ')} problem that "
-                     "IR 1.0 cannot express. Is the problem deterministic with hard constraints only?", category)
+                     "the IR cannot express. Is the problem deterministic with hard constraints only?", category)
             for category, phrases in UNSUPPORTED_MARKERS.items() for phrase in phrases
             if phrase in lowered and phrase not in notes]
 

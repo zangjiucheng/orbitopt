@@ -356,22 +356,26 @@ def _judge(record, result, error, tolerance) -> ReplayEntry:
     return entry("mismatch", found or "results differ")
 
 
-def bind_problem(problem: OptimizationProblem, view: ToolView, caller: Caller) -> dict[str, Callable[..., float]]:
+def bind_problem(problem: OptimizationProblem, view: ToolView, caller: Caller) -> dict[str, Callable[..., dict]]:
     """The ``tools=`` mapping for ``problem.evaluate``, after checking every ``ToolCall`` against its spec.
 
     For each tool objective and constraint the tool must be in ``view``; the
-    call must bind exactly the tool's inputs, all scalar and numeric (with
-    their defaults allowed to be left out); each argument expression's
-    dimension must equal the input's declared unit; and the dimension of
-    the tool's ``value_field`` output must equal the ``unit`` the problem
-    declares. Any failure raises ``ToolError`` (``unit_mismatch`` for a
-    dimension) before anything runs. Each resolved call goes through
-    ``view.call`` and so is logged and budgeted. Tools take scalars, so
-    evaluate one point at a time, not a numpy array of points. Assumes
-    ``problem`` passed ``validate_problem``.
+    call's expression ``args`` and ``constants`` together must bind exactly
+    the tool's inputs (with their defaults allowed to be left out); an
+    expression argument must be a scalar numeric input whose declared unit
+    has the expression's dimension, while a constant reaches the tool
+    unchanged and is checked by its input schema when the call runs; and
+    ``output`` must name a required scalar numeric output whose dimension
+    equals the ``unit`` the problem declares. Any failure raises
+    ``ToolError`` (``unit_mismatch`` for a dimension) before anything runs.
+    Each resolved call goes through ``view.call`` and so is logged and
+    budgeted, and returns the tool's whole output object, from which the IR
+    reads ``output``. Tools take scalars, so evaluate one point at a time,
+    not a numpy array of points. Assumes ``problem`` passed
+    ``validate_problem``.
     """
     dims = {item.name: parse_unit(item.unit).dims for item in (*problem.variables, *problem.parameters)}
-    bound: dict[str, Callable[..., float]] = {}
+    bound: dict[str, Callable[..., dict]] = {}
     for group, items in (("objectives", problem.objectives), ("constraints", problem.constraints)):
         for i, item in enumerate(items):
             call = item.expression
@@ -386,8 +390,9 @@ def bind_problem(problem: OptimizationProblem, view: ToolView, caller: Caller) -
 
 def _check_binding(spec: ToolSpec, call: ToolCall, unit: str, dims: Mapping, where: str) -> None:
     schema = spec.input_schema
-    missing = set(schema.get("required", ())) - call.args.keys()
-    unknown = call.args.keys() - set(schema.get("properties", {}))
+    bound = call.args.keys() | call.constants.keys()
+    missing = set(schema.get("required", ())) - bound
+    unknown = bound - set(schema.get("properties", {}))
     if missing or unknown:
         raise ToolError(Code.INVALID_ARGS, spec.tool_id,
                         f"{where}: missing inputs {sorted(missing)}, unknown inputs {sorted(unknown)}")
@@ -401,16 +406,22 @@ def _check_binding(spec: ToolSpec, call: ToolCall, unit: str, dims: Mapping, whe
             raise ToolError(Code.UNIT_MISMATCH, spec.tool_id,
                             f"{where}: argument {arg}={source!r} has dimension {format_dims(found)}, "
                             f"the tool expects {format_dims(expected)}")
-    produced = parse_unit(spec.output_units[spec.value_field]).dims
+    outputs = numeric_fields(spec.output_schema)
+    if outputs.get(call.output) is not False or call.output not in spec.output_schema.get("required", ()):
+        scalars = sorted(name for name, is_array in outputs.items()
+                         if not is_array and name in spec.output_schema.get("required", ()))
+        raise ToolError(Code.INVALID_ARGS, spec.tool_id,
+                        f"{where}: output {call.output!r} is not a required scalar number; name one of {scalars}")
+    produced = parse_unit(spec.output_units[call.output]).dims
     declared = parse_unit(unit).dims
     if produced != declared:
         raise ToolError(Code.UNIT_MISMATCH, spec.tool_id,
-                        f"{where}: the tool's {spec.value_field!r} has dimension {format_dims(produced)} but the "
+                        f"{where}: the tool's {call.output!r} has dimension {format_dims(produced)} but the "
                         f"problem declares unit {unit!r} ({format_dims(declared)})")
 
 
-def _resolver(view: ToolView, spec: ToolSpec, caller: Caller) -> Callable[..., float]:
-    def resolve(**kwargs: Any) -> float:
-        return view.call(spec.tool_id, kwargs, caller=caller)[spec.value_field]
+def _resolver(view: ToolView, spec: ToolSpec, caller: Caller) -> Callable[..., dict]:
+    def resolve(**kwargs: Any) -> dict:
+        return view.call(spec.tool_id, kwargs, caller=caller)
 
     return resolve

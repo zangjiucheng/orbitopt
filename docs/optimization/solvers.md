@@ -104,10 +104,13 @@ objective, else least violation. `constraints_satisfied` comes only from
 `OptimizationProblem.constraints_satisfied`. `independently_verified` and
 `optimality_certified` stay false; the verification guard sets them.
 
-**Termination, in order:** `error` (a backend exception or a backend that
-reports failure), then the adapter's budget (`max_evaluations`, `timeout`),
-then `infeasible` (no feasible point found), then `converged` (the backend's
-own flag), then the backend's own iteration limit, and otherwise `error`
+**Termination, in order:** `error` (a backend exception, a backend that
+reports failure, or every evaluation failing), then `unbounded` (HiGHS
+proved the objective unbounded), then the adapter's budget
+(`max_evaluations`, `timeout`), then `infeasible` (no feasible point found),
+then `converged` (the backend's own flag), then the backend's own iteration
+limit or `stalled` (an SLSQP or L-BFGS-B line search that failed, or a
+CMA-ES stop that is neither convergence nor a limit), and otherwise `error`
 with the backend's message. `solver_converged` is true exactly when the
 termination is `converged`. A backend that claims success at an infeasible
 point is reported `infeasible`. From HiGHS, `infeasible` is a proof. From
@@ -130,16 +133,22 @@ every built-in solver. The deterministic ones ignore the seed.
 missing, structure outside the capability) returns `Termination.ERROR` with
 the reason and zero evaluations.
 
-**Multi-objective results.** `OptimizationResult` holds one point. NSGA-II
-reports the front member with the lexicographically smallest objective
-vector as `x`. The whole non-dominated, feasible front goes in
-`evidence[0].data["front"]` as `{"x", "objectives"}` entries.
+**Multi-objective results.** NSGA-II reports the front member with the
+lexicographically smallest objective vector as `x`. The whole non-dominated,
+feasible front is `OptimizationResult.front`, one `ParetoPoint(x,
+objective_values)` per member.
+
+**Evaluation failures.** A point where the problem is undefined, or where a
+tool raised (`ToolCallError`), counts as an evaluation and is infeasible, so
+the backend moves on. The solver evidence names its `producer` (the solver
+id) and the `problem_digest` it solved.
 
 ## Acceptance corpus
 
 `tests/test_e14_03_solver_registry.py` translates the 37 E14-10 catalogue
 instances into the IR. It runs every compatible available solver on each one
 under the catalogue's budget (2000 evaluations per dimension) and scores the
-answer with the catalogue's own callables and tolerances. `rosenbrock-d20`
-cannot be stated in IR 1.0: its unrolled objective exceeds the 500-node
-expression limit.
+answer with the catalogue's own callables and tolerances. The translation
+keeps the catalogue's indexed sums: it inlines `n` and the scalar data and
+declares each data vector `s` as parameters `s0, s1, ...`. All 37 instances
+are valid IR, `rosenbrock-d20` among them as one indexed sum.

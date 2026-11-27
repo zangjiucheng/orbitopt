@@ -364,7 +364,6 @@ def test_registration_rejects_duplicates_and_signature_schema_mismatches():
         "missing unit": {"output_units": {}},
         "open input schema": {"input_schema": {"type": "object", "properties": {"x": {"type": "number"}},
                                                "required": ["x"]}},
-        "value field not numeric": {"value_field": "label"},
         "bad cost class": {"cost": CostModel("free")},
         "cost reads a non-input": {"cost": CostModel("cheap", "3*n")},
         "domain on a non-input": {"domain": {"y": Interval(0.0, 1.0)}},
@@ -546,7 +545,8 @@ def slab_problem(unit="K", time_arg="t"):
         objectives=(Objective("cooling_time", "t", unit="min"),),
         constraints=(Constraint("centre_cool", ToolCall("heat.transient_slab.v1", {
             "length": "L", "diffusivity": "alpha", "time": time_arg, "position": "L/2", "initial_temperature": "t0",
-            "boundary_temperature": "tb", "nx": "40", "nt": "400", "theta": "0.5"}), "<=", 300.0, unit=unit),),
+            "boundary_temperature": "tb", "nx": "40", "nt": "400", "theta": "0.5"}, output="temperature"),
+            "<=", 300.0, unit=unit),),
     )
 
 
@@ -561,6 +561,57 @@ def test_ir_tool_output_unit_mismatch_is_rejected_at_binding():
     with pytest.raises(ToolError) as info:
         bind_problem(slab_problem(), builtin_registry().view(["math.erf.v1"]), AGENT)
     assert info.value.code == Code.NOT_ALLOWED
+
+
+def test_ir_tool_output_must_be_a_named_scalar_number():
+    view = full_view()
+    for output in (None, "mesh_ratios", "nx"):
+        problem = slab_problem()
+        call = dataclasses.replace(problem.constraints[0].expression, output=output)
+        problem = dataclasses.replace(problem, constraints=(dataclasses.replace(problem.constraints[0], expression=call),))
+        with pytest.raises(ToolError) as info:
+            bind_problem(problem, view, AGENT)
+        assert info.value.code == Code.INVALID_ARGS, output
+    assert len(view.log) == 0
+
+
+def test_ir_tool_with_string_and_array_inputs_binds_them_as_constants():
+    """A multi-output tool that takes a string integrand and a rule name feeds one scalar constraint."""
+    problem = OptimizationProblem(
+        id="gauss-points-for-erf", variables=(Variable("n", kind="integer", lower=1, upper=64),),
+        objectives=(Objective("points", "n"),),
+        constraints=(Constraint("accuracy", ToolCall(
+            "numerics.quadrature_cost.v1", {"n": "n"},
+            {"integrand": "exp(-t**2)", "a": 0.0, "b": 1.0, "rule": "gauss_legendre"}, output="abs_error"),
+            "<=", 1e-12),))
+    assert validate_problem(problem) == []
+    view = full_view()
+    tools = bind_problem(problem, view, AGENT)
+    feasible = [n for n in range(1, 13) if problem.evaluate({"n": float(n)}, tools=tools).residuals["accuracy"] <= 0]
+    exact = 0.5 * math.sqrt(math.pi) * math.erf(1.0)
+    first = next(n for n in range(1, 13) if abs(view.log.records[n - 1].result["value"] - exact) <= 1e-12)
+    assert feasible and feasible[0] == first
+    assert view.log.records[0].args == {"integrand": "exp(-t**2)", "a": 0.0, "b": 1.0, "rule": "gauss_legendre", "n": 1}
+    assert replay(view.log, builtin_registry()).ok
+    wall = OptimizationProblem(
+        id="wall", variables=(Variable("t_hot", lower=300.0, upper=500.0, unit="K"),),
+        objectives=(Objective("flux", ToolCall("heat.layered_wall.v1", {"t_hot": "t_hot"}, {
+            "thicknesses": [0.1, 0.05], "conductivities": [1.0, 0.5], "t_cold": 290.0, "h_hot": 10.0,
+            "h_cold": 25.0}, output="heat_flux"), unit="W/m^2"),))
+    flux = wall.evaluate({"t_hot": 400.0}, tools=bind_problem(wall, view, AGENT)).objectives["flux"]
+    assert flux == pytest.approx((400.0 - 290.0) / (1 / 10.0 + 0.1 / 1.0 + 0.05 / 0.5 + 1 / 25.0), rel=1e-12)
+
+
+def test_a_refused_tool_call_reaches_the_solver_as_an_evaluation_error():
+    """A domain refusal inside ``evaluate`` is a ``ToolCallError``, so a solver skips that point instead of stopping."""
+    from orbitopt.optimization import EvaluationError, ToolCallError
+
+    problem = slab_problem()
+    problem = dataclasses.replace(problem, variables=(Variable("t", lower=-5.0, upper=30.0, unit="min"),))
+    tools = bind_problem(problem, full_view(), AGENT)
+    with pytest.raises(ToolCallError) as info:
+        problem.evaluate({"t": -1.0}, tools=tools)
+    assert isinstance(info.value, EvaluationError) and info.value.__cause__.code == Code.OUT_OF_DOMAIN
 
 
 def test_ir_problem_with_tool_constraint_converts_units_and_solves():
@@ -584,7 +635,7 @@ def test_ir_problem_with_tool_objective_solves_end_to_end():
 
     problem = OptimizationProblem(
         id="bessel-j0-minimum", variables=(Variable("x", lower=2.0, upper=5.0, initial=3.0),),
-        objectives=(Objective("j0", ToolCall("math.bessel_j0.v1", {"x": "x"})),))
+        objectives=(Objective("j0", ToolCall("math.bessel_j0.v1", {"x": "x"}, output="value")),))
     assert validate_problem(problem) == []
     view = full_view()
     tools = bind_problem(problem, view, AGENT)

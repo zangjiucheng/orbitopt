@@ -41,7 +41,7 @@ from enum import Enum, IntEnum
 from fractions import Fraction
 from typing import Mapping
 
-from .expressions import _MATH, ToolCall, _parse
+from .expressions import SCALAR_FUNCTIONS, ToolCall
 from .problem import Constraint, Objective, OptimizationProblem
 from .units import parse_unit
 
@@ -228,7 +228,7 @@ class _Expander:
         args = [_constant(self.expand(arg)) for arg in node.args]
         if any(a is None for a in args):
             raise _Opaque
-        return self._number(lambda: _MATH[node.func.id](*(float(a) for a in args)))
+        return self._number(lambda: SCALAR_FUNCTIONS[node.func.id](*(float(a) for a in args)))
 
     def _number(self, compute) -> Polynomial:
         """A constant subtree, folded the way the evaluator computes it; opaque if that fails."""
@@ -247,7 +247,7 @@ def _expand(problem: OptimizationProblem, item: Objective | Constraint) -> tuple
     parameters = {p.name: p.value * parse_unit(p.unit).scale for p in problem.parameters}
     expander = _Expander(variables, parameters)
     scale = _exact(parse_unit(item.unit).scale)
-    poly = expander.expand(_parse(item.expression.source).tree.body)
+    poly = expander.expand(item.expression.tree)
     return {m: c / scale for m, c in poly.items()}, expander.atoms
 
 

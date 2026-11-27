@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zangjiucheng.github.io/orbitopt/schemas/optimization-problem-1.1.json",
+  "title": "orbitopt optimization problem (IR)",
+  "description": "Dict form of orbitopt.optimization.OptimizationProblem (E14-01, ADR optimization-0001): variables, fixed parameters, one or more objectives and hard constraints stated as the user said them (expression, sense, rhs, unit), plus a budget and a verification policy. This schema checks structure only: types, required fields and enumerations. Value rules (bounds order, finiteness, integer bounds, name uniqueness, expression safety and declared names, unit dimensions, positive budgets and tolerances, locking) are enforced by orbitopt.optimization.validate_problem, which reports one specific error code per violation.",
+  "type": "object",
+  "required": ["schemaVersion", "id", "variables", "objectives"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": "1.1"},
+    "id": {"type": "string", "description": "Stable problem identifier; part of the digest."},
+    "title": {"type": "string", "description": "Human title; not part of the digest."},
+    "description": {"type": "string", "description": "Human description; not part of the digest."},
+    "variables": {"type": "array", "items": {"$ref": "#/$defs/variable"}},
+    "parameters": {"type": "array", "items": {"$ref": "#/$defs/parameter"}},
+    "objectives": {"type": "array", "items": {"$ref": "#/$defs/objective"}},
+    "constraints": {"type": "array", "items": {"$ref": "#/$defs/constraint"}},
+    "budget": {"$ref": "#/$defs/budget"},
+    "verification": {"$ref": "#/$defs/verification"},
+    "metadata": {"type": "object", "description": "Free-form provenance; not part of the digest."}
+  },
+  "$defs": {
+    "number": {"type": "number"},
+    "optionalNumber": {"type": ["number", "null"]},
+    "optionalCount": {"type": ["integer", "null"]},
+    "origin": {"enum": ["user", "compiler", "agent"], "description": "Who introduced the item."},
+    "expression": {
+      "description": "A safe arithmetic source string over declared names, or a reference to a registered tool.",
+      "oneOf": [{"type": "string"}, {"$ref": "#/$defs/toolCall"}]
+    },
+    "toolCall": {
+      "type": "object",
+      "required": ["tool_id"],
+      "additionalProperties": false,
+      "properties": {
+        "tool_id": {"type": "string", "description": "Registered tool id (E14-04 registry)."},
+        "args": {"type": "object", "additionalProperties": {"type": "string"},
+                 "description": "Tool argument name to expression source."},
+        "constants": {"type": "object", "additionalProperties": {"$ref": "#/$defs/constant"},
+                      "description": "Tool argument name to a JSON constant passed unchanged; no key is also in args. Part of the digest."},
+        "output": {"type": ["string", "null"], "description": "The output field read from a tool that returns an object; null for a tool that returns a number."}
+      }
+    },
+    "constant": {
+      "description": "A JSON string, boolean, number or array of these.",
+      "oneOf": [{"type": "string"}, {"type": "boolean"}, {"type": "number"},
+                {"type": "array", "items": {"$ref": "#/$defs/constant"}}]
+    },
+    "variable": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "kind": {"enum": ["continuous", "integer", "binary", "discrete"]},
+        "lower": {"$ref": "#/$defs/optionalNumber"},
+        "upper": {"$ref": "#/$defs/optionalNumber"},
+        "choices": {"type": "array", "items": {"$ref": "#/$defs/number"}},
+        "unit": {"type": "string"},
+        "initial": {"$ref": "#/$defs/optionalNumber"},
+        "description": {"type": "string"}
+      }
+    },
+    "parameter": {
+      "type": "object",
+      "required": ["name", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "value": {"$ref": "#/$defs/number"},
+        "unit": {"type": "string"},
+        "description": {"type": "string"}
+      }
+    },
+    "objective": {
+      "type": "object",
+      "required": ["name", "expression"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "expression": {"$ref": "#/$defs/expression"},
+        "sense": {"enum": ["minimize", "maximize"]},
+        "unit": {"type": "string"},
+        "origin": {"$ref": "#/$defs/origin"},
+        "description": {"type": "string"}
+      }
+    },
+    "constraint": {
+      "type": "object",
+      "required": ["name", "expression", "sense", "rhs"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "expression": {"$ref": "#/$defs/expression"},
+        "sense": {"enum": ["<=", ">=", "=="]},
+        "rhs": {"$ref": "#/$defs/number"},
+        "unit": {"type": "string"},
+        "origin": {"$ref": "#/$defs/origin"},
+        "locked": {"type": ["boolean", "null"], "description": "Defaults to origin == user; only user constraints may be locked."},
+        "description": {"type": "string"}
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_evaluations": {"$ref": "#/$defs/optionalCount"},
+        "max_iterations": {"$ref": "#/$defs/optionalCount"},
+        "max_wall_s": {"$ref": "#/$defs/optionalNumber"},
+        "max_tokens": {"$ref": "#/$defs/optionalCount"}
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {"type": "array", "items": {"enum": ["solver_converged", "constraints_satisfied", "independently_verified", "optimality_certified"]}},
+        "independent_methods": {"type": "array", "items": {"enum": ["analytical", "reference_solution", "alternate_solver"]}},
+        "constraint_tol": {"$ref": "#/$defs/number"},
+        "objective_rtol": {"$ref": "#/$defs/number"},
+        "optimality_gap": {"$ref": "#/$defs/number"}
+      }
+    }
+  }
+}
