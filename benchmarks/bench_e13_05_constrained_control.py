@@ -305,6 +305,7 @@ def main() -> int:
     if not args.quick:
         _identity_guard(rows_by_arm["baseline"], FROZEN)
         print("baseline identity vs frozen E13-04 artifact: exact", flush=True)
+    out = Path(args.out)
     raw = Path(str(out) + ".rows")
     raw.parent.mkdir(parents=True, exist_ok=True)
     raw.write_text(json.dumps({"rows_by_arm": rows_by_arm}))
@@ -323,7 +324,6 @@ def main() -> int:
            "arms": {arm: {"summary": _arm_block(rs), "per_sample": rs}
                     for arm, rs in rows_by_arm.items()},
            "paired": _paired(rows_by_arm)}
-    out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(doc))
     print(f"wrote {out} ({out.stat().st_size} bytes, {time.time() - t0:.0f}s)")
