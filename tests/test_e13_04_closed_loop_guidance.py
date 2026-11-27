@@ -22,18 +22,35 @@ import math
 import numpy as np
 import pytest
 
-from orbitopt.gnc import (ChannelErrorConfig, ControllerSpec, CwMidCourseLaw,
-                          CwProcess, DropoutConfig, EstimatorSpec, GNCContractError,
-                          GuidanceLawError, ManeuverPlan, RangeRate, ReferenceEphemeris,
-                          RelativeNavEKF, RelativePosition, RelativeSensorModel,
-                          RelativeVelocity, Stacked, solve_cw_intercept)
+from orbitopt.gnc import (
+    ChannelErrorConfig,
+    ControllerSpec,
+    CwMidCourseLaw,
+    CwProcess,
+    DropoutConfig,
+    EstimatorSpec,
+    GNCContractError,
+    GuidanceLawError,
+    ManeuverPlan,
+    RangeRate,
+    ReferenceEphemeris,
+    RelativeNavEKF,
+    RelativePosition,
+    RelativeSensorModel,
+    RelativeVelocity,
+    Stacked,
+    solve_cw_intercept,
+)
 from orbitopt.gnc.clock import ClockSpec
 from orbitopt.gnc.closed_loop import default_plant, simulate_closed_loop
-from orbitopt.gnc.contracts import Observation
 from orbitopt.gnc.recording import run_log_from_document
 from orbitopt.mission.contract import Epoch
-from orbitopt.mission.multispacecraft import (MultiSpacecraftMission, RelativeState,
-                                          SpacecraftSpec, mission_to_dict)
+from orbitopt.mission.multispacecraft import (
+    MultiSpacecraftMission,
+    RelativeState,
+    SpacecraftSpec,
+    mission_to_dict,
+)
 from orbitopt.relative.cw import cw_state_transition
 
 N = 0.001140
