@@ -605,7 +605,9 @@ def test_a_tool_based_problem_through_an_allowlisted_view(tmp_path):
     first = next(n for n in range(1, 20)
                  if abs(sum(w * math.exp(-((t + 1) / 2) ** 2) for t, w in zip(*leggauss(n))) / 2 - exact) <= 1e-12)
     assert outcome.result.x["n"] == first
-    assert outcome.status is RunStatus.UNVERIFIED_BEST  # differential evolution alone: no alternate
+    assert outcome.status is RunStatus.VERIFIED  # n takes 64 values: enumeration is the independent alternate
+    assert [a.solver_id for a in outcome.trace.verifications[-1].alternates] == ["orbitopt.enumeration"]
+    assert outcome.statuses["optimality_certified"] == "passed"  # and the guard enumerated the domain itself
     assert len(view.log) == outcome.trace.usage.evaluations
     save_run(outcome, tmp_path)
     assert (tmp_path / "tool-calls.json").exists()
@@ -895,7 +897,8 @@ def test_two_runs_with_the_same_seed_have_the_same_trace_digest():
 
 # ------------------------------------------------------------------------------------- end to end on the catalogue
 E2E = ["cqp-worked-d2", "lp-wyndor-d2", "knapsack-p01-n10", "rastrigin-d5", "rosenbrock-d20", "integ-exp-1e-10"]
-VERIFIES = {"cqp-worked-d2", "lp-wyndor-d2", "knapsack-p01-n10", "rastrigin-d5", "rosenbrock-d20"}
+CERTIFIED = {"knapsack-p01-n10"}
+"""Instances whose final report also passes ``optimality_certified``: the guard's enumeration fits the budget."""
 
 
 def llm_policy(request) -> str:
@@ -927,11 +930,8 @@ def test_catalogue_instances_reach_the_known_optimum(instance, planner_kind):
     assert correct(inst, outcome.result), (outcome.status, outcome.result.objective_values)
     assert outcome.trace.usage.evaluations <= A.BUDGET.evaluations(inst.dimension)
     assert every_result_answers(outcome, problem)
-    if instance in VERIFIES:
-        assert outcome.status is RunStatus.VERIFIED
-    else:  # one solver only: nothing independent can check it, and the runtime says so
-        assert outcome.status is RunStatus.UNVERIFIED_BEST
-        assert outcome.statuses["independently_verified"] == "not_assessed"
+    assert outcome.status is RunStatus.VERIFIED  # the integration instance through the enumeration alternate
+    assert (outcome.statuses["optimality_certified"] == "passed") == (instance in CERTIFIED)
     if planner_kind == "rule":
         assert outcome.trace.usage.tokens == 0
     else:
@@ -956,3 +956,48 @@ def test_the_public_api_is_importable_and_imports_no_backend():
             "if m.split('.')[0] in ('scipy', 'numpy'))")
     subprocess.run([sys.executable, "-c", code], check=True, cwd=REPO,
                    env={"PYTHONPATH": str(REPO / "src"), "PATH": ""})
+
+
+# ------------------------------------------------------------------------------------- enumeration in verification
+def test_enumeration_verifies_and_certifies_a_knapsack_that_differential_evolution_gets_wrong():
+    """knapsack-p07-n15: differential evolution stops at 1456, the optimum is 1458 (2^15 points)."""
+    inst = P.by_id("knapsack-p07-n15")
+    problem = to_ir(inst)
+    de_first = RecordedPlanner([Proposal({"action": "solve", "solver_id": "scipy.differential_evolution", "seed": 1}),
+                                Proposal({"action": "stop"})])
+    outcome = solve(problem, planner=de_first, budget=Budget(max_evaluations=100_000))
+    first, second = outcome.trace.verifications
+    assert solves(outcome)[0].result.objective_values["f0"] == 1456.0
+    assert [a.solver_id for a in first.alternates] == ["orbitopt.enumeration"]
+    assert first.alternates[0].allocation == first.alternates[0].result.evaluations == 1 << 15
+    assert first.report.statuses["independently_verified"].outcome is Outcome.FAILED  # refuted
+    assert first.report.statuses["optimality_certified"].outcome is Outcome.FAILED  # and the guard's own count agrees
+    assert outcome.status is RunStatus.VERIFIED and outcome.result.objective_values["f0"] == 1458.0
+    assert second.candidate == "verify-1-orbitopt.enumeration" and correct(inst, outcome.result)
+    assert outcome.trace.usage.evaluations <= 100_000
+
+    rule = solve(problem, planner=RuleBasedPlanner(), budget=Budget(max_evaluations=100_000))
+    assert rule.status is RunStatus.VERIFIED and rule.statuses == {
+        "solver_converged": "passed", "constraints_satisfied": "passed", "independently_verified": "passed",
+        "optimality_certified": "passed"}
+    (only,) = rule.trace.verifications
+    assert [a.solver_id for a in only.alternates] == ["orbitopt.enumeration"]
+    assert only.evaluations == 2 * (1 << 15) + 3  # the alternate's points, the guard's own and three re-evaluations
+
+
+def test_enumeration_is_left_out_of_verification_when_the_budget_cannot_cover_the_domain():
+    problem = to_ir(P.by_id("knapsack-p07-n15"))  # 2^15 points, default limit 2000 * 15
+    outcome = solve(problem, planner=RuleBasedPlanner())
+    assert outcome.trace.limits.max_evaluations == 30_000
+    assert outcome.status is RunStatus.VERIFIED and outcome.statuses["optimality_certified"] == "not_assessed"
+    assert "orbitopt.enumeration" not in {a.solver_id for v in outcome.trace.verifications for a in v.alternates}
+    assert outcome.trace.usage.evaluations <= 30_000
+
+
+def test_a_run_verified_by_enumeration_replays_and_checks(tmp_path):
+    outcome = solve(to_ir(P.by_id("knapsack-p02-n5")), planner=RuleBasedPlanner())
+    assert outcome.statuses["optimality_certified"] == "passed"
+    digest = save_run(outcome, tmp_path)
+    check = check_run(tmp_path, expected_manifest_digest=digest)
+    assert check.verified and check.report.statuses["optimality_certified"].outcome is Outcome.PASSED
+    assert replay(tmp_path, expected_manifest_digest=digest).equal

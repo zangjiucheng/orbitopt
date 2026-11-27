@@ -8,7 +8,8 @@ not a sum of what solvers report. The meter also refuses any evaluation past
 the current allowance, so even a solver that ignores its ``Budget`` cannot
 overspend. A quarter of the evaluation budget (``VERIFICATION_SHARE``) is
 held back for the final verification, which runs the E14-06 guard with
-alternate solvers as independent evidence.
+alternate solvers as independent evidence and, on a finite domain the budget
+covers, the guard's enumeration certificate.
 """
 
 from __future__ import annotations
@@ -19,11 +20,12 @@ import time
 from typing import Any, Callable, Mapping
 
 from orbitopt.agent.tools import Caller, ToolError, ToolRegistry, ToolView, bind_problem
-from orbitopt.optimization import Budget, OptimizationProblem, OptimizationResult, ToolCall, validate_problem
+from orbitopt.optimization import (MAX_ENUMERATION_POINTS, Budget, OptimizationProblem, OptimizationResult, ToolCall,
+                                   validate_problem)
 from orbitopt.optimization.classify import classify
 from orbitopt.optimization.solvers import SolverCapability, SolverRegistry, default_registry
-from orbitopt.optimization.verification import (AlternateSolverCheck, Outcome, VerificationReport, result_digest,
-                                                unsupported_reason, verify_result)
+from orbitopt.optimization.verification import (AlternateSolverCheck, EnumerationCertificate, EvidenceItem, Outcome,
+                                                VerificationReport, result_digest, unsupported_reason, verify_result)
 
 from .diagnostics import diagnose, distrust, feasible
 from .model import (Action, AlternateRun, BudgetUse, CancelPoint, CancelReason, FailureKind, IterationRecord, Limits,
@@ -350,28 +352,46 @@ class _Run:
                 return  # only an alternate's better point is worth another attempt
 
     def alternates(self, result: OptimizationResult, remaining: int, attempt: int,
-                   runs: list[AlternateRun]) -> list[AlternateSolverCheck]:
-        """Alternate solvers for the guard to run, each with an equal share of what verification may spend.
+                   runs: list[AlternateRun]) -> list[EvidenceItem]:
+        """The evidence for the guard: alternate solvers to run, and the guard's own enumeration where it fits.
 
-        They come from every compatible solver except the candidate's own and
-        those the run excluded for a dishonest report or a crash. The policy's
-        solver list does not apply: it limits the planner, and choosing the
-        verification is not the planner's job.
+        Alternates come from every compatible solver except the candidate's
+        own and those the run excluded for a dishonest report or a crash. The
+        policy's solver list does not apply: it limits the planner, and
+        choosing the verification is not the planner's job. An exhaustive
+        solver is the alternate when the evaluations left cover the domain,
+        with exactly the domain as its allocation; it is exact, so it runs
+        alone. Otherwise up to ``MAX_ALTERNATES`` others share what is left
+        equally. On a finite single-objective domain that still fits, an
+        ``EnumerationCertificate`` asks the guard to enumerate it itself,
+        which can pass ``optimality_certified``. The alternates come first:
+        the certificate takes only what they leave.
         """
         policy = self.asked.verification
-        if "independently_verified" not in policy.required or "alternate_solver" not in policy.independent_methods:
-            return []
-        others = [c.solver_id for c in self.capabilities
-                  if c.solver_id != result.solver_id and c.solver_id not in self.excluded][:MAX_ALTERNATES]
-        if not others:
-            return []
-        share = (remaining - self.screen_cost * (1 + len(others))) // len(others)
+        size = self.structure.domain_size
+        wanted = "independently_verified" in policy.required and "alternate_solver" in policy.independent_methods
+        others = [c for c in self.capabilities if wanted and c.solver_id != result.solver_id
+                  and c.solver_id not in self.excluded]
+        spare = remaining - self.screen_cost  # the guard's re-evaluation of the candidate
+        exact = [c for c in others if c.convergence == "exhaustive" and size is not None
+                 and spare - self.screen_cost >= size][:1]
+        rest = [] if exact else [c for c in others if c.convergence != "exhaustive"][:MAX_ALTERNATES]
+        spare -= self.screen_cost * (len(exact) + len(rest)) + sum(size for _ in exact)
+        certify = size is not None and len(self.asked.objectives) == 1 and size <= MAX_ENUMERATION_POINTS \
+            and spare - size >= MIN_ALTERNATE_EVALUATIONS * len(rest)
+        spare -= size if certify else 0
+        share = spare // len(rest) if rest else 0
         if share < MIN_ALTERNATE_EVALUATIONS:
-            return []
+            rest = []
         digest, rdigest = self.asked.digest(), result_digest(result)
-        return [AlternateSolverCheck(id=f"alternate:{sid}", problem_digest=digest, result_digest=rdigest,
-                                     solver_id=sid, solver=self.alternate(sid, share, self.seed + attempt + k, runs))
-                for k, sid in enumerate(others)]
+        plan = [(c.solver_id, size) for c in exact] + [(c.solver_id, share) for c in rest]
+        evidence: list[EvidenceItem] = [
+            AlternateSolverCheck(id=f"alternate:{sid}", problem_digest=digest, result_digest=rdigest, solver_id=sid,
+                                 solver=self.alternate(sid, allocation, self.seed + attempt + k, runs))
+            for k, (sid, allocation) in enumerate(plan)]
+        if certify:
+            evidence.append(EnumerationCertificate(id="enumeration", problem_digest=digest, result_digest=rdigest))
+        return evidence
 
     def alternate(self, solver_id: str, share: int, seed: int, runs: list[AlternateRun]):
         capability = next(c for c in self.capabilities if c.solver_id == solver_id)

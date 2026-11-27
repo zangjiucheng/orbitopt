@@ -278,7 +278,8 @@ class FailureKind(str, Enum):
     """What a solve's outcome means for the next step (see ``diagnostics``)."""
 
     VERIFIED_LOCAL = "verified_local"
-    """Converged with a certificate, or to a first-order point of a problem that is provably convex."""
+    """Converged with a certificate, after an exhaustive enumeration, or to a first-order point of a problem that is
+    provably convex."""
     LOCAL_OPTIMUM = "local_optimum"
     """Converged to a first-order point of a problem that is not provably convex: possibly only local."""
     HEURISTIC_STOP = "heuristic_stop"

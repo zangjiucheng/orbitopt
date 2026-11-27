@@ -174,6 +174,8 @@ class RuleBasedPlanner:
     def solve(self, state: PlannerState, capability: SolverCapability, budget: int, rationale: str, *,
               x0=None, seed: int | None = None, options: dict | None = None) -> dict:
         share = budget if capability.convergence in ("certificate", "first_order") else max(1, budget // 2)
+        if capability.convergence == "exhaustive":  # exactly the domain, or the whole budget for it to refuse
+            share = min(budget, state.structure.domain_size or budget)
         options = {**default_options(capability, share, len(state.problem.variables)), **(options or {})}
         return {"action": "solve", "solver_id": capability.solver_id, "options": options,
                 "x0": None if x0 is None else dict(x0), "seed": state.seed if seed is None else seed,

@@ -151,11 +151,27 @@ runtime verifies it with the whole guard:
 - No alternates run when the policy does not require `independently_verified`
   or does not allow `alternate_solver` evidence.
 
+On a finite domain (`ProblemStructure.domain_size`), enumeration joins the
+final verification:
+
+- An exhaustive solver (`orbitopt.enumeration`) is the alternate when the
+  evaluations left cover the domain. Its allocation is exactly the domain's
+  size. It is exact, so it runs alone and no second alternate is added. A
+  domain that does not fit leaves it out, and the other alternates run as
+  before.
+- On a single-objective problem whose domain still fits after the
+  alternates, the runtime adds an `EnumerationCertificate`, and the guard
+  enumerates the domain itself. That can pass `optimality_certified`.
+  The alternates come first: the certificate takes only what they leave.
+- Both count against `max_evaluations` through the meter. A domain of N
+  points costs about 2N evaluations to verify and certify. A refuted
+  candidate's second attempt needs N more to be certified.
+
 `capability.convergence` decides what a convergence is worth. A
 differential-evolution convergence is a `heuristic_stop`, never an optimum.
 A first-order point is final only on a class that `classify` proves convex
 (`lp`, `convex_qp`). A `certificate` convergence is final on `lp`, `convex_qp`
-and `milp`.
+and `milp`, and an `exhaustive` one on any class.
 
 | Status | When |
 |---|---|
@@ -179,7 +195,7 @@ remedy touches the problem.
 
 | Failure kind | When | Remedies |
 |---|---|---|
-| `verified_local` | A certificate, or a first-order point of a provably convex problem. | stop |
+| `verified_local` | A certificate, an exhaustive enumeration, or a first-order point of a provably convex problem. | stop |
 | `local_optimum` | A first-order point of a problem that is not provably convex. | restart global, restart perturbed, stop |
 | `heuristic_stop` | A heuristic converged. | refine locally, restart global |
 | `non_convergence` | The backend's iteration limit. | refine locally, loosen solver tolerance, switch solver |
@@ -360,14 +376,14 @@ from the `orbitopt-py312` environment):
 | cqp-worked-d2 | LLM | verified | 0.5 (0.5) | 1 | 7 | 800 | 4000 | 555 |
 | lp-wyndor-d2 | rule | verified | 36 (36) | 1 | 2 | 393 | 4000 | 0 |
 | lp-wyndor-d2 | LLM | verified | 36 (36) | 1 | 2 | 393 | 4000 | 617 |
-| knapsack-p01-n10 | rule | verified | 309 (309) | 1 | 2 | 1555 | 20000 | 0 |
-| knapsack-p01-n10 | LLM | verified | 309 (309) | 1 | 2 | 1555 | 20000 | 737 |
+| knapsack-p01-n10 | rule | verified | 309 (309) | 1 | 2 | 2051 | 20000 | 0 |
+| knapsack-p01-n10 | LLM | verified | 309 (309) | 1 | 2 | 2051 | 20000 | 769 |
 | rastrigin-d5 | rule | verified | 1.4e-14 (0) | 4 | 5678 | 2170 | 10000 | 0 |
 | rastrigin-d5 | LLM | verified | 1.4e-14 (0) | 2 | 3757 | 3131 | 10000 | 1038 |
 | rosenbrock-d20 | rule | verified | 4.1e-10 (0) | 4 | 26271 | 7926 | 40000 | 0 |
 | rosenbrock-d20 | LLM | verified | 1.5e-9 (0) | 2 | 17500 | 12311 | 40000 | 1578 |
-| integ-exp-1e-10 | rule | unverified_best | 5 (5) | 3 | 479 | 1 | 4000 | 0 |
-| integ-exp-1e-10 | LLM | unverified_best | 5 (5) | 4 | 646 | 1 | 4000 | 1503 |
+| integ-exp-1e-10 | rule | verified | 5 (5) | 3 | 479 | 2051 | 4000 | 0 |
+| integ-exp-1e-10 | LLM | verified | 5 (5) | 4 | 646 | 2051 | 4000 | 1583 |
 
 What limits these numbers:
 
@@ -378,14 +394,28 @@ What limits these numbers:
   differential evolution, half of what is left per global round, because
   the solve ends on the evaluation limit. The rule-based planner's second
   round does not improve, so its restarts end there.
-- The integration instance has one compatible solver, differential
-  evolution, so no alternate solver exists and nothing independent can check
-  the answer. The runtime reports `unverified_best` with the right value.
+- On the two finite domains, enumeration verifies. `knapsack-p01-n10` has
+  1024 points: the enumeration alternate spends 1024, the guard's own
+  enumeration 1024 more, and the final report passes `optimality_certified`
+  too. The integration instance (4 rules times N up to 512, 2048 points)
+  has differential evolution and enumeration. The enumeration alternate
+  confirms N = 5 with 2048 evaluations, so the run is `verified`. The 1470
+  evaluations left cannot cover a second enumeration, so
+  `optimality_certified` stays not assessed. Before enumeration it had no
+  alternate and was `unverified_best`.
+- `knapsack-p07-n15` (32,768 points) under the default limit of 30,000 is
+  verified by differential evolution against HiGHS, without enumeration.
+  With 100,000 evaluations the rule-based run is verified and certified for
+  65,539. A run whose first solve is differential evolution, at 1456,
+  is refuted by the enumeration alternate and the guard's own count, and
+  verified at 1458 on its second attempt.
 - Rastrigin's unshifted optimum is the box centre, where SLSQP starts by
   default. The alternate check there agrees trivially. The shifted variants
   have no such shortcut.
 - Tokens are the mock's word counts, prompt plus reply, so they show how the
-  prompt grows with the history, not what a real model would bill.
+  prompt grows with the history, not what a real model would bill. The
+  enumeration solver's entry in the prompt added 32 tokens on the knapsack
+  and 80 on the integration instance, over two and four calls.
 
 ## Tests
 

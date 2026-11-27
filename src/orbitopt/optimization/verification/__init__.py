@@ -12,11 +12,13 @@ when it runs.
 """
 
 from .artifact import RUN_FORMAT, canonical_json, file_digest, seal_run, verify_run
-from .certificates import KKTResult, kkt_certificate, polynomial_degree, refute_lower_bound, unsupported_reason
+from .certificates import (KKTResult, enumeration_certificate, kkt_certificate, polynomial_degree, refute_lower_bound,
+                           unsupported_reason)
 from .evidence import (
     AlternateSolver,
     AlternateSolverCheck,
     AnalyticalOptimum,
+    EnumerationCertificate,
     EvidenceItem,
     LowerBoundCertificate,
     ReferenceSolution,
@@ -28,9 +30,9 @@ from .guard import compare_formulations, verify_result
 from .report import Finding, FindingCode, Outcome, StatusOutcome, VerificationReport
 
 __all__ = [
-    "AlternateSolver", "AlternateSolverCheck", "AnalyticalOptimum", "EvidenceItem", "Finding", "FindingCode",
-    "KKTResult", "LowerBoundCertificate", "Outcome", "RUN_FORMAT", "ReferenceSolution",
-    "StatusOutcome", "VerificationReport", "canonical_json", "compare_formulations", "evidence_from_dict",
-    "evidence_to_dict", "file_digest", "kkt_certificate", "polynomial_degree", "refute_lower_bound",
-    "result_digest", "seal_run", "unsupported_reason", "verify_result", "verify_run",
+    "AlternateSolver", "AlternateSolverCheck", "AnalyticalOptimum", "EnumerationCertificate", "EvidenceItem",
+    "Finding", "FindingCode", "KKTResult", "LowerBoundCertificate", "Outcome", "RUN_FORMAT", "ReferenceSolution",
+    "StatusOutcome", "VerificationReport", "canonical_json", "compare_formulations", "enumeration_certificate",
+    "evidence_from_dict", "evidence_to_dict", "file_digest", "kkt_certificate", "polynomial_degree",
+    "refute_lower_bound", "result_digest", "seal_run", "unsupported_reason", "verify_result", "verify_run",
 ]

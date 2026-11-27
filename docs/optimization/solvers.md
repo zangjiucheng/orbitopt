@@ -30,7 +30,9 @@ start, and `tools` maps `ToolCall` ids to callables, as
 `classify(problem)` returns a `ProblemStructure`: one `Form` per objective,
 the most general constraint form, and whether the problem has integer,
 binary or discrete variables, equality constraints and finite bounds on every
-variable. The decision is exact on the expression syntax tree. Each
+variable. `domain_size` is the number of points of the variables' product
+domain when every variable takes finitely many values (binary, discrete, or
+integer with both bounds), and `None` otherwise. The decision is exact on the expression syntax tree. Each
 expression is expanded into a polynomial with rational coefficients. Any
 subtree that is not a polynomial in the variables stays an opaque atom. No
 function is ever sampled.
@@ -70,10 +72,13 @@ promise a derivative where an argument reaches a domain boundary:
 | `scipy.differential_evolution` | anything, one objective | yes | yes, with equalities | yes | `heuristic` |
 | `cma.cma_es` | anything, one objective | no | bounds only | yes | `heuristic` |
 | `pygmo.nsga2` | anything, several objectives | yes | bounds only | yes | `none` |
+| `orbitopt.enumeration` | anything, one objective, every variable finite-domain, at most 2^20 points | yes | yes, with equalities | yes (a finite domain) | `exhaustive` |
 
 `SolverCapability` carries these columns plus `needs_gradients`, `is_global`,
 `deterministic_given_seed`, `iteration_cap` (the backend has its own
-iteration limit), `options` and `unavailable_reason`. A solver whose backend
+iteration limit), `options`, `max_domain_size` (set by a solver that walks
+the whole domain: it takes a problem only when `domain_size` is at most this)
+and `unavailable_reason`. A solver whose backend
 module cannot be found stays registered. Its `unavailable_reason` names the module, `compatible` leaves it
 out, and calling it returns `Termination.ERROR` rather than raising. `cma` is
 not vendored, so `cma.cma_es` is unavailable until `pip install cma`.
@@ -102,10 +107,11 @@ against the same specs and loosens only the options marked `tolerance`.
 | `scipy.differential_evolution` | `popsize` 4-100; **`tol`** [0, 0.1], default 0.01; `atol` [0, 0.1]; `mutation` [0.1, 1.9]; `recombination` [0, 1]; `polish`; `strategy`; `init` |
 | `cma.cma_es` | `sigma0` [1e-12, 1e12]; `popsize` 4-100; **`tolfun`**, **`tolx`** [1e-16, 1e-2], default 1e-11 |
 | `pygmo.nsga2` | `population` 8-1000 (a multiple of 4); `cr` [0, 0.99]; `eta_c` [1, 99]; `m` [0, 1]; `eta_m` [1, 99] |
+| `orbitopt.enumeration` | `max_points` 1 to 2^20, an integer: a lower cap for one solve |
 
 `compatible` ranks the capable solvers from least to most general by
-`max_form`, constraint, equality and integer support, `is_global`, then
-`solver_id`. The order does not depend on the order of registration. A
+`max_form`, constraint, equality and integer support, `is_global`, whether
+the solver walks the whole domain (it comes last), then `solver_id`. The order does not depend on the order of registration. A
 multimodal problem cannot be detected, so for one the first-ranked solver
 may be a local method. Choosing a global solver there is the caller's job.
 
@@ -144,11 +150,38 @@ the other solvers it means they stopped without finding a feasible point.
 
 **What `solver_converged` is worth** depends on `capability.convergence`.
 `certificate` means HiGHS proved optimality within its gap (default
-`mip_rel_gap` 1e-9). `first_order` means a KKT point, which is the optimum
-only on a convex problem. `heuristic` means the population stagnated, so the
+`mip_rel_gap` 1e-9). `exhaustive` means every point of the finite domain was
+evaluated, so the reported point is the global optimum within the
+constraint tolerance, for any objective. `first_order` means a KKT point,
+which is the optimum only on a convex problem. `heuristic` means the population stagnated, so the
 point can be wrong: with seed 1, differential evolution converges at 1456 on
 `knapsack-p07-n15`, whose optimum is 1458. `none` means NSGA-II has no convergence test and
 never reports converged.
+
+## Enumeration
+
+`orbitopt.enumeration` evaluates every point of a finite domain through the
+`Evaluator`, so every point counts against the budget, a `ToolCall`
+objective or constraint is evaluated as for any other solver, and the best
+point is chosen by the IR's own feasibility. Discrete coordinates walk the
+choices' indices, as in every adapter's search vector.
+
+- The domain must be finite and at most `MAX_ENUMERATION_POINTS` (1,048,576,
+  2^20) points. Otherwise `rejection` says why and `compatible` leaves the
+  solver out: `a variable is continuous or has an open bound`, or `its
+  domain has N points, more than the 1048576 it enumerates`.
+- A domain larger than `budget.max_evaluations` or than `max_points` is
+  refused before the first evaluation: termination `max_evaluations`, zero
+  evaluations, no point. A partial enumeration would prove nothing.
+- Having evaluated every point, it reports `converged`. With no feasible
+  point the termination is `infeasible`, which is then a proof.
+- A tool that raised at any point leaves the enumeration unproven: the
+  termination is `stalled`, not `converged`. A point outside an expression's
+  domain is just infeasible.
+
+On `knapsack-p07-n15` (15 binaries, 32,768 points) it costs 32,768
+evaluations and returns 1458, the optimum. Differential evolution with seed
+1 converges at 1456 under the catalogue budget of 30,000.
 
 **Seeds.** The same problem, seed and budget give the identical result for
 every built-in solver. The deterministic ones ignore the seed.

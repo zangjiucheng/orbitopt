@@ -4,10 +4,12 @@ An evidence item is not a verdict. It is a claim that the guard re-checks
 against the result in hand: an ``AnalyticalOptimum`` states a closed-form
 optimum and its derivation, a ``ReferenceSolution`` states a stored optimum
 and its tolerance, an ``AlternateSolverCheck`` hands the guard a solver to run
-itself, and a ``LowerBoundCertificate`` states a lower bound the guard tries
-to refute. Every item names ``problem_digest`` (``OptimizationProblem.digest()``)
-and ``result_digest`` (``result_digest(result)``); an item whose digests are
-missing or name another problem or result never counts.
+itself, a ``LowerBoundCertificate`` states a lower bound the guard tries
+to refute, and an ``EnumerationCertificate`` asks the guard to prove
+optimality by evaluating every point of a finite domain. Every item names
+``problem_digest`` (``OptimizationProblem.digest()``) and ``result_digest``
+(``result_digest(result)``); an item whose digests are missing or name
+another problem or result never counts.
 
 Items travel through ``evidence.json`` in a sealed run. ``AlternateSolverCheck``
 serialises without its callable, so ``verify_run`` needs the solver again by
@@ -19,11 +21,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field, fields
 from typing import Any, Callable, ClassVar, Mapping, Protocol, runtime_checkable
 
-from ..problem import OptimizationProblem, canonical_digest
+from ..problem import MAX_ENUMERATION_POINTS, OptimizationProblem, canonical_digest
 from ..result import OptimizationResult, stable
 
 INDEPENDENT_KINDS = ("analytical", "reference_solution", "alternate_solver")
 CERTIFICATE_KIND = "optimality_certificate"
+ENUMERATION_KIND = "enumeration_certificate"
+CERTIFICATE_KINDS = (CERTIFICATE_KIND, ENUMERATION_KIND)
+"""Evidence about ``optimality_certified``; the policy's ``independent_methods`` do not apply to it."""
 
 
 def result_digest(result: OptimizationResult) -> str:
@@ -130,9 +135,33 @@ class LowerBoundCertificate:
     producer: str = "analytical"
 
 
-EvidenceItem = AnalyticalOptimum | ReferenceSolution | AlternateSolverCheck | LowerBoundCertificate
+@dataclass(frozen=True, kw_only=True)
+class EnumerationCertificate:
+    """Ask the guard to prove that the result is optimal by evaluating every point of the finite domain itself.
+
+    The item carries no claim: the guard walks the product of every
+    variable's values (``Variable.domain_values``), re-evaluates each point
+    with its own point check, and passes ``optimality_certified`` only when
+    no feasible point beats the result by more than ``objective_rtol``. It is
+    not assessed when a variable is continuous or unbounded, when the domain
+    has more than ``max_points`` points (at most ``MAX_ENUMERATION_POINTS``),
+    when the problem has several objectives, or when any point cannot be
+    evaluated. It costs one evaluation per point.
+    """
+
+    kind: ClassVar[str] = ENUMERATION_KIND
+    id: str
+    problem_digest: str
+    result_digest: str
+    objective: str | None = None
+    max_points: int = MAX_ENUMERATION_POINTS
+    producer: str = "guard:enumeration"
+
+
+EvidenceItem = (AnalyticalOptimum | ReferenceSolution | AlternateSolverCheck | LowerBoundCertificate
+                | EnumerationCertificate)
 _TYPES: dict[str, type] = {t.kind: t for t in (AnalyticalOptimum, ReferenceSolution, AlternateSolverCheck,
-                                               LowerBoundCertificate)}
+                                               LowerBoundCertificate, EnumerationCertificate)}
 
 
 def evidence_to_dict(item: EvidenceItem) -> dict:
