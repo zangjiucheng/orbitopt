@@ -31,6 +31,16 @@ contracts, one declared clock, one sealed replayable run log.
   position / velocity / range-rate / range-angle measurement models on the
   E13-01 ``Observation`` records, Joseph-form updates, ``Estimate``
   publishing with provenance.
+* :mod:`orbitopt.gnc.guidance` (E13-04) -- ``CwMidCourseLaw``: the scheduled
+  feedback law on the E13-01 seam (planned gate burn, CW two-point
+  mid-course correction and arrival re-target from the estimate alone; the
+  law cannot name the plant, ``solve_cw_intercept`` guards the near-singular
+  ``Phi_12``).
+* :mod:`orbitopt.gnc.closed_loop`` -- :func:`simulate_closed_loop`: the
+  general Truth -> Sensor -> Navigation -> Guidance -> Command -> Execution
+  error -> Truth loop over any E13-03 sensors, the E13-02 EKF and any
+  GuidanceLaw, sealing a ``GncRunLog``; ``tracking_error`` /
+  ``delta_v_ledger`` / ``convergence_block`` are the offline readers.
 * :mod:`orbitopt.gnc.nav_metrics` -- offline consistency and observability
   evaluation: NEES / NIS against declared chi-square intervals, sigma
   coverage, stacked observability, cluster statistics.
@@ -84,7 +94,25 @@ from .ekf import (
                      frame_covariance,
                      white_noise_acceleration_q,
 )
+from .closed_loop import (
+                     Actuator,
+                     Plant,
+                     convergence_block,
+                     default_actuator,
+                     default_plant,
+                     delta_v_ledger,
+                     simulate_closed_loop,
+                     tracking_error,
+)
 from .feed import GuidanceInput, GuidanceLaw, guidance_input_from, run_guidance_step
+from .guidance import (
+                     GuidanceLawError,
+                     MANEUVER_MODES,
+                     CwMidCourseLaw,
+                     ManeuverPlan,
+                     ReferenceEphemeris,
+                     solve_cw_intercept,
+)
 from .nav_metrics import (
                      ConsistencyGate,
                      chi_square_cdf,
@@ -131,6 +159,20 @@ from .sensors import (
 from .sim import ProportionalLaw, SensorNoise, simulate
 
 __all__ = [
+                     "Actuator",
+                     "CwMidCourseLaw",
+                     "GuidanceLawError",
+                     "MANEUVER_MODES",
+                     "ManeuverPlan",
+                     "Plant",
+                     "ReferenceEphemeris",
+                     "convergence_block",
+                     "default_actuator",
+                     "default_plant",
+                     "delta_v_ledger",
+                     "simulate_closed_loop",
+                     "solve_cw_intercept",
+                     "tracking_error",
                      "CHANNELS",
                      "CLOCK_KIND",
                      "CLOCK_TIMESCALES",
