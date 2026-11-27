@@ -6,7 +6,17 @@ guard (E14-06). See ``docs/optimization/ir.md`` and ADR optimization-0001.
 """
 
 from .errors import ErrorCode, InvalidProblemError, ProblemError
-from .expressions import FUNCTIONS, EvaluationError, Expression, ExpressionError, ToolCall
+from .expressions import (
+    FUNCTIONS,
+    MAX_EXPANDED_NODES,
+    MAX_NODES,
+    RESERVED_NAMES,
+    SCALAR_FUNCTIONS,
+    EvaluationError,
+    Expression,
+    ExpressionError,
+    ToolCall,
+)
 from .problem import (
     INDEPENDENT_METHODS,
     PROBLEM_SCHEMA,
@@ -33,7 +43,8 @@ from .units import SYMBOLS, Unit, UnitError, parse_unit
 
 __all__ = [
     "Budget", "Constraint", "EVIDENCE_KINDS", "ErrorCode", "Evaluation", "EvaluationError", "Evidence",
-    "Expression", "ExpressionError", "FUNCTIONS", "INDEPENDENT_METHODS", "InvalidProblemError", "Objective",
+    "Expression", "ExpressionError", "FUNCTIONS", "INDEPENDENT_METHODS", "InvalidProblemError", "MAX_EXPANDED_NODES",
+    "MAX_NODES", "Objective", "RESERVED_NAMES", "SCALAR_FUNCTIONS",
     "OptimizationProblem", "OptimizationResult", "PROBLEM_SCHEMA", "PROBLEM_SCHEMAS", "Parameter", "ProblemError",
     "RESULT_SCHEMA", "RESULT_SCHEMAS", "SCHEMA_VERSION", "STATUSES", "SYMBOLS", "Termination", "ToolCall", "Unit",
     "UnitError", "Variable", "VerificationPolicy", "canonical_digest", "load_schema", "parse_problem", "parse_unit",

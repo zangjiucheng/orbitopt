@@ -9,6 +9,7 @@ recorded digest, so the guard sees the same attack in its own format.
 
 from __future__ import annotations
 
+import ast
 import copy
 import importlib.util
 import json
@@ -69,65 +70,35 @@ spec = _load()
 P, F = spec.problems, spec.faults
 
 
-# ------------------------------------------------------------------------------ neutral form -> IR, symbolically
-class Sym:
-    """Builds an IR expression source by running a neutral expression on symbols instead of numbers."""
+# ------------------------------------------------------------------------------ neutral form -> IR
+class _Inline(ast.NodeTransformer):
+    """Replace ``n`` and each scalar datum by its value; ``x[i]``, ``s[i]`` and sums are IR 1.1 syntax already."""
 
-    def __init__(self, src: str):
-        self.src = src
+    def __init__(self, values: dict):
+        self.values = values
 
-    @staticmethod
-    def text(v) -> str:
-        if isinstance(v, Sym):
-            return v.src
-        text = str(int(v)) if float(v).is_integer() and abs(v) < 1e15 else repr(float(v))
-        return f"({text})" if text.startswith("-") else text
-
-    def _op(self, other, op, reverse=False):
-        if not isinstance(other, (Sym, int, float)):
-            return NotImplemented
-        a, b = (Sym.text(other), self.src) if reverse else (self.src, Sym.text(other))
-        return Sym(f"({a} {op} {b})")
-
-    def __add__(self, o):
-        return self if isinstance(o, (int, float)) and o == 0 else self._op(o, "+")
-
-    def __radd__(self, o):
-        return self if isinstance(o, (int, float)) and o == 0 else self._op(o, "+", True)
-
-    def __sub__(self, o): return self._op(o, "-")
-    def __rsub__(self, o): return self._op(o, "-", True)
-    def __mul__(self, o): return self._op(o, "*")
-    def __rmul__(self, o): return self._op(o, "*", True)
-    def __truediv__(self, o): return self._op(o, "/")
-    def __rtruediv__(self, o): return self._op(o, "/", True)
-    def __pow__(self, o): return self._op(o, "**")
-    def __rpow__(self, o): return self._op(o, "**", True)
-    def __neg__(self): return Sym(f"(-{self.src})")
-    def __pos__(self): return self
-    def __abs__(self): return Sym(f"abs({self.src})")
-
-
-def _fn(name, number_fn):
-    def call(*args):
-        if any(isinstance(a, Sym) for a in args):
-            return Sym(f"{name}({', '.join(Sym.text(a) for a in args)})")
-        return number_fn(*args)
-    return call
+    def visit_Name(self, node):
+        return ast.Constant(self.values[node.id]) if node.id in self.values else node
 
 
 def to_ir(form: dict) -> OptimizationProblem:
-    """The IR problem a neutral form states; variables are x0..x{n-1}, constraints are ``g <= 0`` / ``h == 0``."""
+    """The IR problem a neutral form states; variables are x0..x{n-1}, constraints are ``g <= 0`` / ``h == 0``.
+
+    The neutral grammar is IR 1.1 syntax once ``n`` and scalar data are inlined; a data vector ``s`` becomes the
+    parameters ``s0, s1, ...`` that ``s[i]`` reads, and ``pi`` and ``e`` are parameters too.
+    """
     if form["blackboxes"]:
         raise ValueError("black boxes have no IR expression")
-    ns = {name: _fn(name, getattr(math, name)) for name in ("sqrt", "exp", "log", "cos", "sin", "atan")}
-    ns.update(pi=math.pi, e=math.e, sum=sum, range=range, abs=abs, min=_fn("min", min), max=_fn("max", max),
-              n=form["dimension"], __builtins__={}, **form["data"])
-    ns["x"] = [Sym(f"x{i}") for i in range(form["dimension"])]
+    data = form["data"]
+    inline = _Inline({"n": form["dimension"], **{k: v for k, v in data.items()
+                                                 if isinstance(v, (int, float)) and not isinstance(v, bool)}})
 
     def source(expr: str) -> str:
-        return Sym.text(eval(expr, ns))  # noqa: S307 - the catalogue's own expression literals
+        return ast.unparse(inline.visit(ast.parse(expr, mode="eval")).body)
 
+    vectors = tuple(Parameter(f"{name}{i}", float(v)) for name, values in sorted(data.items())
+                    if isinstance(values, list) and all(isinstance(v, (int, float)) for v in values)
+                    for i, v in enumerate(values))
     variables = []
     for i, (lo, hi) in enumerate(form["bounds"]):
         if form["variable_type"] == "binary" and (lo, hi) == (0.0, 1.0):
@@ -137,6 +108,7 @@ def to_ir(form: dict) -> OptimizationProblem:
             variables.append(Variable(f"x{i}", kind, lower=lo, upper=hi))
     return OptimizationProblem(
         id=form["id"], variables=tuple(variables),
+        parameters=(Parameter("pi", math.pi), Parameter("e", math.e), *vectors),
         objectives=tuple(Objective(f"f{k}", source(e), sense=form["sense"]) for k, e in enumerate(form["objective_exprs"])),
         constraints=tuple(Constraint(c["name"], source(c["expr"]), "<=" if c["kind"] == "le" else "==", 0.0)
                           for c in form["constraints"]))

@@ -2,13 +2,27 @@
 
 An ``Expression`` is a source string such as ``"x**2 + y**2"`` that passes a
 whitelist walk over its Python syntax tree: numeric literals, names,
-``+ - * / **``, unary ``-``/``+`` and calls to the functions in ``FUNCTIONS``.
-Everything else (attribute access, subscripts, strings, comparisons, lambdas,
-comprehensions, keyword arguments, names starting with ``_``) is rejected
-before anything runs. Integer literals become floats before compilation, so
-no expression can trigger unbounded integer arithmetic such as ``9**9**9``.
-Evaluation compiles only the validated tree, never the raw text, and runs it
-with no builtins.
+``+ - * / **``, unary ``-``/``+``, calls to the functions in ``FUNCTIONS``,
+indexed names and bounded sums. Everything else (attribute access, strings,
+comparisons, lambdas, other comprehensions, keyword arguments, names starting
+with ``_``) is rejected before anything runs.
+
+Indexed sums (IR 1.1). ``x[k]`` reads the declared scalar ``x<k>`` (``x[3]``
+is ``x3``). ``sum(<term> for i in range(a, b))`` adds ``<term>`` for each
+integer ``i``; ``range(n)`` means ``range(0, n)``. Indices and range bounds
+are integer arithmetic (``+ - *``) over integer literals and enclosing sum
+indices, and a sum index used as a value is that number. A parse expands
+every sum and index into a plain tree, then checks that tree again with the
+same whitelist, so evaluation, units and ``classify`` see only names,
+numbers, operators and calls. Two node limits apply: the source tree has at
+most ``MAX_NODES`` nodes and depth ``MAX_DEPTH``, and the expanded tree at
+most ``MAX_EXPANDED_NODES`` nodes. Expansion counts as it builds and stops
+at the limit, so ``range(10**9)`` costs no more than the limit.
+
+Integer literals become floats before compilation, so no expression can
+trigger unbounded integer arithmetic such as ``9**9**9``. Evaluation compiles
+only the validated, expanded tree, never the raw text, and runs it with no
+builtins.
 
 A ``ToolCall`` names a scientific tool by registered id. The IR only types the
 reference; the registry is E14-04.
@@ -34,18 +48,30 @@ FUNCTIONS: dict[str, int | None] = {
 }
 """Callable functions and their arity; ``None`` means two or more arguments."""
 
+RESERVED_NAMES = frozenset(FUNCTIONS) | {"sum", "range"}
+"""Names that cannot be declared as a variable or parameter."""
+
 MAX_SOURCE_LENGTH = 2000
 MAX_NODES = 500
+"""Nodes in the source tree, before sums are expanded."""
 MAX_DEPTH = 200
+"""Nesting depth of the source tree and of the expanded tree."""
+MAX_EXPANDED_NODES = 20_000
+"""Nodes in the tree after every sum and index is expanded."""
+MAX_INDEX = 10**9
+"""Largest magnitude an index or range bound may reach."""
 MAX_EXPONENT = 100.0
 """A literal exponent larger than this in magnitude is rejected."""
 
 TOOL_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
 
 _ALLOWED = (ast.Expression, ast.BinOp, ast.UnaryOp, ast.Name, ast.Load, ast.Constant, ast.Call,
-            ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.USub, ast.UAdd)
-_MATH = {"abs": abs, "min": min, "max": max,
-         **{name: getattr(math, name) for name in FUNCTIONS if hasattr(math, name)}}
+            ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.USub, ast.UAdd,
+            ast.Subscript, ast.GeneratorExp, ast.comprehension, ast.Store)
+_SUM_FORMS = ("sum", "range")
+SCALAR_FUNCTIONS: dict[str, Any] = {"abs": abs, "min": min, "max": max,
+                                    **{name: getattr(math, name) for name in FUNCTIONS if hasattr(math, name)}}
+"""The float implementation of every name in ``FUNCTIONS``, as scalar evaluation calls it."""
 
 
 class ExpressionError(ValueError):
@@ -78,7 +104,7 @@ def _literal(node: ast.AST) -> float | None:
     return None
 
 
-def _check_node(node: ast.AST, callees: set[int]) -> None:
+def _check_node(node: ast.AST, callees: set[int], forms: tuple[str, ...]) -> None:
     if isinstance(node, ast.Constant):
         if type(node.value) not in (int, float):
             raise ExpressionError(ErrorCode.BAD_LITERAL, f"literal {node.value!r} is not a number")
@@ -103,6 +129,9 @@ def _check_node(node: ast.AST, callees: set[int]) -> None:
         if not isinstance(node.func, ast.Name):
             raise ExpressionError(ErrorCode.UNSAFE_EXPRESSION, "only named functions may be called")
         name = node.func.id
+        callees.add(id(node.func))
+        if name in forms:
+            return  # _Expansion checks their shape; neither survives into the expanded tree
         if name not in FUNCTIONS:
             raise ExpressionError(ErrorCode.UNKNOWN_FUNCTION, f"function {name!r} is not one of {sorted(FUNCTIONS)}")
         if node.keywords:
@@ -111,12 +140,119 @@ def _check_node(node: ast.AST, callees: set[int]) -> None:
         if (len(node.args) != arity) if arity is not None else (len(node.args) < 2):
             expected = arity if arity is not None else "two or more"
             raise ExpressionError(ErrorCode.WRONG_ARITY, f"{name}() takes {expected} arguments, got {len(node.args)}")
-        callees.add(id(node.func))
+
+
+def _unsafe(message: str) -> ExpressionError:
+    return ExpressionError(ErrorCode.UNSAFE_EXPRESSION, message)
+
+
+class _Expansion:
+    """Rewrites a checked source tree into a plain tree: every sum unrolled, every ``x[k]`` the name ``x<k>``.
+
+    Counts every node it builds and raises ``EXPRESSION_TOO_COMPLEX`` the
+    moment the count passes ``MAX_EXPANDED_NODES``, so no input makes it do
+    more than that much work. A sum becomes a balanced tree of additions, so
+    the expanded depth grows with the logarithm of its length.
+    """
+
+    def __init__(self):
+        self.count = 0
+
+    def charge(self, nodes: int) -> None:
+        self.count += nodes
+        if self.count > MAX_EXPANDED_NODES:
+            raise ExpressionError(ErrorCode.EXPRESSION_TOO_COMPLEX,
+                                  f"expression expands to more than {MAX_EXPANDED_NODES} nodes")
+
+    def expr(self, node: ast.AST, env: Mapping[str, int]) -> ast.expr:
+        self.charge(1)
+        if isinstance(node, ast.Constant):
+            return ast.Constant(node.value)
+        if isinstance(node, ast.Name):
+            return ast.Constant(env[node.id]) if node.id in env else ast.Name(node.id, ast.Load())
+        if isinstance(node, ast.UnaryOp):
+            return ast.UnaryOp(node.op, self.expr(node.operand, env))
+        if isinstance(node, ast.BinOp):
+            return ast.BinOp(self.expr(node.left, env), node.op, self.expr(node.right, env))
+        if isinstance(node, ast.Subscript):
+            if not isinstance(node.value, ast.Name) or node.value.id in env:
+                raise _unsafe("only a declared name may be indexed, as in x[i]")
+            index = self.index(node.slice, env)
+            if index < 0:
+                raise _unsafe(f"index {index} of {node.value.id!r} is negative")
+            return ast.Name(f"{node.value.id}{index}", ast.Load())
+        if isinstance(node, ast.Call) and node.func.id == "sum":
+            return self.sum(node, env)
+        if isinstance(node, ast.Call):
+            return ast.Call(ast.Name(node.func.id, ast.Load()), [self.expr(a, env) for a in node.args], [])
+        raise _unsafe("a generator is allowed only as the argument of sum()")
+
+    def index(self, node: ast.AST, env: Mapping[str, int]) -> int:
+        """Integer arithmetic over integer literals and enclosing sum indices."""
+        if isinstance(node, ast.Constant) and type(node.value) is int:
+            value = node.value
+        elif isinstance(node, ast.Name) and node.id in env:
+            value = env[node.id]
+        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+            value = self.index(node.operand, env) * (-1 if isinstance(node.op, ast.USub) else 1)
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
+            left, right = self.index(node.left, env), self.index(node.right, env)
+            value = (left + right if isinstance(node.op, ast.Add) else
+                     left - right if isinstance(node.op, ast.Sub) else left * right)
+        else:
+            raise _unsafe("an index or range bound is integer arithmetic (+ - *) over integer literals "
+                          "and sum indices")
+        if abs(value) > MAX_INDEX:
+            raise ExpressionError(ErrorCode.EXPRESSION_TOO_COMPLEX, f"index {value} exceeds {MAX_INDEX}")
+        return value
+
+    def sum(self, call: ast.Call, env: Mapping[str, int]) -> ast.expr:
+        shape = "sum(<term> for i in range(a, b))"
+        if call.keywords or len(call.args) != 1 or not isinstance(call.args[0], ast.GeneratorExp):
+            raise _unsafe(f"sum() takes one generator, written {shape}")
+        generator = call.args[0]
+        clause = generator.generators[0]
+        iterable = clause.iter
+        if len(generator.generators) != 1 or clause.ifs or clause.is_async:
+            raise _unsafe(f"a sum has exactly one 'for' clause and no 'if': {shape}")
+        if not isinstance(clause.target, ast.Name) or clause.target.id in RESERVED_NAMES:
+            raise _unsafe(f"a sum index is a plain name: {shape}")
+        if not (isinstance(iterable, ast.Call) and isinstance(iterable.func, ast.Name)
+                and iterable.func.id == "range" and not iterable.keywords and 1 <= len(iterable.args) <= 2):
+            raise _unsafe(f"a sum ranges over range(n) or range(a, b): {shape}")
+        bounds = [self.index(arg, env) for arg in iterable.args]
+        start, stop = (0, bounds[0]) if len(bounds) == 1 else bounds
+        self.charge(max(stop - start - 1, 0))  # the additions joining the terms, charged before any term is built
+        terms = [self.expr(generator.elt, {**env, clause.target.id: i}) for i in range(start, stop)]
+        if not terms:
+            return ast.Constant(0)
+        while len(terms) > 1:
+            terms = [ast.BinOp(terms[i], ast.Add(), terms[i + 1]) if i + 1 < len(terms) else terms[i]
+                     for i in range(0, len(terms), 2)]
+        return terms[0]
 
 
 class _FloatLiterals(ast.NodeTransformer):
     def visit_Constant(self, node: ast.Constant) -> ast.Constant:
         return ast.copy_location(ast.Constant(float(node.value)), node)
+
+
+def _check(tree: ast.AST, max_nodes: int, forms: tuple[str, ...]) -> frozenset[str]:
+    """Run the whitelist over every node within the node and depth limits; return the names it reads."""
+    callees: set[int] = set()
+    names: set[str] = set()
+    stack, count = [(tree, 0)], 0
+    while stack:
+        node, depth = stack.pop()
+        count += 1
+        if count > max_nodes or depth > MAX_DEPTH:
+            raise ExpressionError(ErrorCode.EXPRESSION_TOO_COMPLEX,
+                                  f"expression exceeds {max_nodes} nodes or nesting depth {MAX_DEPTH}")
+        _check_node(node, callees, forms)
+        if isinstance(node, ast.Name) and id(node) not in callees:
+            names.add(node.id)
+        stack.extend((child, depth + 1) for child in ast.iter_child_nodes(node))
+    return frozenset(names)
 
 
 @lru_cache(maxsize=4096)
@@ -129,21 +265,12 @@ def _parse(source: str) -> _Parsed:
         tree = ast.parse(source.strip(), mode="eval")
     except (SyntaxError, ValueError, MemoryError, RecursionError) as exc:
         raise ExpressionError(ErrorCode.SYNTAX_ERROR, f"expression does not parse: {exc}") from None
-    callees: set[int] = set()
-    names: set[str] = set()
-    stack, count = [(tree, 0)], 0
-    while stack:
-        node, depth = stack.pop()
-        count += 1
-        if count > MAX_NODES or depth > MAX_DEPTH:
-            raise ExpressionError(ErrorCode.EXPRESSION_TOO_COMPLEX,
-                                  f"expression exceeds {MAX_NODES} nodes or nesting depth {MAX_DEPTH}")
-        _check_node(node, callees)
-        if isinstance(node, ast.Name) and id(node) not in callees:
-            names.add(node.id)
-        stack.extend((child, depth + 1) for child in ast.iter_child_nodes(node))
-    tree = ast.fix_missing_locations(_FloatLiterals().visit(tree))
-    return _Parsed(tree, compile(tree, "<expression>", "eval"), frozenset(names))
+    _check(tree, MAX_NODES, _SUM_FORMS)
+    expanded = ast.Expression(_Expansion().expr(tree.body, {}))
+    # The expanded tree is plain syntax; checking it again catches what only an index reveals, such as x**i, i > 100.
+    names = _check(expanded, MAX_EXPANDED_NODES, ())
+    expanded = ast.fix_missing_locations(_FloatLiterals().visit(expanded))
+    return _Parsed(expanded, compile(expanded, "<expression>", "eval"), names)
 
 
 @lru_cache(maxsize=1)
@@ -215,6 +342,16 @@ class Expression:
         """Variable and parameter names the expression reads; raises ``ExpressionError`` if unsafe."""
         return _parse(self.source).names
 
+    @property
+    def tree(self) -> ast.expr:
+        """The validated tree with every sum and index expanded; raises ``ExpressionError`` if unsafe.
+
+        It holds only float ``Constant``, ``Name``, ``UnaryOp``, ``BinOp`` and
+        ``Call`` (of a ``FUNCTIONS`` name) nodes. The tree is cached and
+        shared: read it, never mutate it.
+        """
+        return _parse(self.source).tree.body
+
     def dimension(self, units: Mapping[str, Dims]) -> Dims:
         """Infer the result dimension from the dimension of each name; raises ``ExpressionError``.
 
@@ -237,7 +374,7 @@ class Expression:
             raise EvaluationError(f"no value for {sorted(missing)}")
         namespace = {name: values[name] for name in parsed.names}
         vectorised = any(not isinstance(v, (int, float)) for v in namespace.values())
-        namespace.update(_numpy_functions() if vectorised else _MATH)
+        namespace.update(_numpy_functions() if vectorised else SCALAR_FUNCTIONS)
         try:
             result = eval(parsed.code, {"__builtins__": {}}, namespace)  # noqa: S307 - validated tree only
         except (ArithmeticError, ValueError, TypeError) as exc:

@@ -3377,6 +3377,174 @@
      "uncovered_statement"
     ]
    }
+  },
+  {
+   "id": "FC-058",
+   "prompt": "Minimize the 20-dimensional Rosenbrock function, the sum over i = 1..19 of 100*(x_{i+1} - x_i^2)^2 + (1 - x_i)^2, with every variable between -5 and 10.",
+   "language": "en",
+   "expected_outcome": "compile",
+   "reference_problem": "rosenbrock-d20",
+   "reference_ir": {
+    "schemaVersion": "1.1",
+    "id": "rosenbrock-d20",
+    "title": "",
+    "variables": [
+     {
+      "name": "x0",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x1",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x2",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x3",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x4",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x5",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x6",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x7",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x8",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x9",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x10",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x11",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x12",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x13",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x14",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x15",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x16",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x17",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x18",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     },
+     {
+      "name": "x19",
+      "kind": "continuous",
+      "unit": "",
+      "lower": -5.0,
+      "upper": 10.0
+     }
+    ],
+    "parameters": [],
+    "objectives": [
+     {
+      "name": "f",
+      "expression": "sum(100*(x[i+1] - x[i]**2)**2 + (1 - x[i])**2 for i in range(19))",
+      "sense": "minimize",
+      "unit": ""
+     }
+    ],
+    "constraints": []
+   },
+   "replies": [
+    "{\"status\": \"compiled\", \"problem\": {\"title\": \"\", \"variables\": [{\"name\": \"x0\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x1\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x2\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x3\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x4\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x5\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x6\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x7\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x8\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x9\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x10\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x11\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x12\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x13\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x14\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x15\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x16\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x17\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x18\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}, {\"name\": \"x19\", \"kind\": \"continuous\", \"lower\": -5.0, \"upper\": 10.0, \"unit\": \"\", \"source\": \"user\"}], \"parameters\": [], \"objectives\": [{\"name\": \"rosenbrock\", \"expression\": \"sum(100*(x[i+1] - x[i]**2)**2 + (1 - x[i])**2 for i in range(19))\", \"sense\": \"minimize\", \"unit\": \"\", \"source\": \"user\"}], \"constraints\": []}, \"questions\": [], \"assumptions\": [], \"unsupported_reason\": null, \"authorized_changes\": [], \"tradeoff_quote\": null}"
+   ],
+   "notes": "Twenty-dimensional Rosenbrock as one IR 1.1 indexed sum; written term by term it has more than the 500 source nodes an expression may have."
   }
  ]
 }

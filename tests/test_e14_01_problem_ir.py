@@ -6,6 +6,7 @@ hard-constraint fingerprint, the result contract and the documented worked
 example.
 """
 
+import ast
 import dataclasses
 import json
 import math
@@ -28,6 +29,8 @@ from orbitopt.optimization import (
     ErrorCode,
     EvaluationError,
     Evidence,
+    MAX_EXPANDED_NODES,
+    MAX_NODES,
     Expression,
     ExpressionError,
     InvalidProblemError,
@@ -351,6 +354,7 @@ INVALID = [
      "/parameters/0/name"),
     ("keyword name", {"variables": (X, Y, Variable("lambda"))}, ErrorCode.INVALID_NAME, "/variables/2/name"),
     ("function name", {"variables": (X, Y, Variable("sin"))}, ErrorCode.INVALID_NAME, "/variables/2/name"),
+    ("sum as a name", {"variables": (X, Y, Variable("sum"))}, ErrorCode.INVALID_NAME, "/variables/2/name"),
     ("duplicate constraint", {"constraints": (Constraint("c", "x + y", ">=", 1.0),) * 2},
      ErrorCode.DUPLICATE_NAME, "/constraints/1/name"),
     ("unknown name", objective("x**2 + z"), ErrorCode.UNKNOWN_NAME, "/objectives/0/expression"),
@@ -374,14 +378,28 @@ INVALID = [
     ("__import__", objective("__import__('os')"), ErrorCode.UNKNOWN_FUNCTION,
      "/objectives/0/expression"),
     ("dunder name", objective("x + __builtins__"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
-    ("subscript", objective("x[0] + y"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
+    ("subscript of an expression", objective("(x + y)[0]"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
+    ("subscript of an undeclared name", objective("x[0] + y"), ErrorCode.UNKNOWN_NAME, "/objectives/0/expression"),
+    ("slice", objective("x[0:2]"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
     ("non-whitelisted call", objective("open(x)"), ErrorCode.UNKNOWN_FUNCTION, "/objectives/0/expression"),
     ("keyword argument", objective("max(x, y, key=x)"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
     ("wrong arity", objective("atan2(x)"), ErrorCode.WRONG_ARITY, "/objectives/0/expression"),
     ("string literal", objective("x + 'y'"), ErrorCode.BAD_LITERAL, "/objectives/0/expression"),
     ("boolean literal", objective("x + True"), ErrorCode.BAD_LITERAL, "/objectives/0/expression"),
     ("lambda", objective("(lambda: x)()"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
-    ("comprehension", objective("sum([x for x in y])"), ErrorCode.UNKNOWN_FUNCTION, "/objectives/0/expression"),
+    ("list comprehension", objective("sum([x for x in y])"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
+    ("sum over a name", objective("sum(x for i in y)"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
+    ("filtered sum", objective("sum(x for i in range(3) if i)"), ErrorCode.UNSAFE_EXPRESSION,
+     "/objectives/0/expression"),
+    ("generator outside sum", objective("max((x for i in range(3)), y)"), ErrorCode.UNSAFE_EXPRESSION,
+     "/objectives/0/expression"),
+    ("range outside sum", objective("x + range(3)"), ErrorCode.UNKNOWN_FUNCTION, "/objectives/0/expression"),
+    ("fractional index", objective("sum(x for i in range(2.5))"), ErrorCode.UNSAFE_EXPRESSION,
+     "/objectives/0/expression"),
+    ("huge sum", objective("sum(x for i in range(1000000000))"), ErrorCode.EXPRESSION_TOO_COMPLEX,
+     "/objectives/0/expression"),
+    ("exponent through an index", objective("sum(x**i for i in range(200))"), ErrorCode.EXPONENT_TOO_LARGE,
+     "/objectives/0/expression"),
     ("comparison", objective("x < y"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
     ("caret power", objective("x ^ 2"), ErrorCode.UNSAFE_EXPRESSION, "/objectives/0/expression"),
     ("huge exponent", objective("x ** 99999999999"), ErrorCode.EXPONENT_TOO_LARGE, "/objectives/0/expression"),
@@ -461,6 +479,60 @@ def test_evaluator_matches_numpy_vectorised_and_scalar(source, reference):
 def test_evaluation_failures_raise_one_error_type(source, values):
     with pytest.raises(EvaluationError):
         Expression(source).evaluate(values)
+
+
+def _rosenbrock(x):
+    return sum(100 * (x[i + 1] - x[i] ** 2) ** 2 + (1 - x[i]) ** 2 for i in range(len(x) - 1))
+
+
+@pytest.mark.parametrize("n", [2, 20, 200])
+def test_an_indexed_sum_reads_scalars_x0_to_xn_and_matches_its_unrolled_value(n):
+    expr = Expression(f"sum(100*(x[i+1] - x[i]**2)**2 + (1 - x[i])**2 for i in range({n} - 1))")
+    assert expr.names == {f"x{i}" for i in range(n)}
+    point = [math.cos(3.0 * i) * 2.0 for i in range(n)]
+    assert expr.evaluate({f"x{i}": v for i, v in enumerate(point)}) == pytest.approx(_rosenbrock(point), rel=1e-13)
+    assert Expression(f"sum(x[i] for i in range({n}))").evaluate({f"x{i}": 1.0 for i in range(n)}) == float(n)
+
+
+@pytest.mark.parametrize("source, expected", [
+    ("sum(i * x[i] for i in range(4))", 0 * 1 + 1 * 2 + 2 * 3 + 3 * 4),
+    ("sum(x[i] for i in range(2, 4))", 3 + 4),
+    ("sum(x[i] for i in range(3, 1))", 0.0),
+    ("sum(sum(x[i] * x[j] for j in range(i)) for i in range(4))", 1 * 2 + 1 * 3 + 2 * 3 + 1 * 4 + 2 * 4 + 3 * 4),
+    ("x[3] - x[2 * 1]", 4 - 3),
+    ("sum(x[3 - i] ** 2 for i in range(-1 + 1, 4))", 1 + 4 + 9 + 16),
+])
+def test_indices_are_integer_arithmetic_over_literals_and_enclosing_indices(source, expected):
+    assert Expression(source).evaluate({f"x{i}": float(i + 1) for i in range(4)}) == float(expected)
+
+
+def test_the_expanded_tree_is_plain_public_syntax_and_counts_its_own_node_limit():
+    tree = Expression("sum(sqrt(x[i]) * k for i in range(1000))").tree
+    allowed = (ast.Constant, ast.Name, ast.UnaryOp, ast.BinOp, ast.Call, ast.Load, ast.Add, ast.Sub, ast.Mult,
+               ast.Div, ast.Pow, ast.USub, ast.UAdd)
+    nodes = list(ast.walk(tree))
+    assert all(isinstance(n, allowed) for n in nodes) and len(nodes) > MAX_NODES
+    assert all(isinstance(n.value, float) for n in nodes if isinstance(n, ast.Constant))
+    depth = lambda n: 1 + max((depth(c) for c in ast.iter_child_nodes(n)), default=0)  # noqa: E731
+    assert depth(tree) < 30  # a long sum expands into a balanced tree, not a chain
+    # Both limits count every node ast.walk yields: a term x_i * 2 is 5 (BinOp, Mult, Name, Load, Constant), each
+    # joining addition 2 (BinOp, Add), the root 1. So 2857 terms are 19998 nodes and 2858 terms 20005.
+    terms = (MAX_EXPANDED_NODES + 1) // 7
+    assert Expression(f"sum(x[i] * 2 for i in range({terms}))").names
+    with pytest.raises(ExpressionError) as info:
+        Expression(f"sum(x[i] * 2 for i in range({terms + 1}))").names
+    assert info.value.code is ErrorCode.EXPRESSION_TOO_COMPLEX
+
+
+def test_units_hold_through_a_sum():
+    problem = OptimizationProblem(
+        id="sum-units", variables=tuple(Variable(f"d{i}", lower=0.0, unit="km") for i in range(3)),
+        objectives=(Objective("total", "sum(d[i] for i in range(3))", unit="m"),),
+        constraints=(Constraint("mixed", "sum(d[i] for i in range(3)) + 1", "<=", 5.0, unit="km"),))
+    assert codes(problem) == [(ErrorCode.UNIT_MISMATCH, "/constraints/0/expression")]
+    good = replace(problem, constraints=())
+    assert validate_problem(good) == []
+    assert good.evaluate({"d0": 1.0, "d1": 2.0, "d2": 3.0}).objectives["total"] == pytest.approx(6000.0)
 
 
 def test_unsafe_source_is_rejected_before_anything_runs(tmp_path):

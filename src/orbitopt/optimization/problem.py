@@ -33,7 +33,7 @@ from typing import Any, Callable, Literal, Mapping
 from jsonschema import Draft202012Validator
 
 from .errors import ErrorCode, InvalidProblemError, ProblemError
-from .expressions import FUNCTIONS, TOOL_ID_PATTERN, EvaluationError, Expression, ExpressionError, ToolCall
+from .expressions import RESERVED_NAMES, TOOL_ID_PATTERN, EvaluationError, Expression, ExpressionError, ToolCall
 from .units import Unit, UnitError, format_dims, parse_unit
 
 SCHEMA_VERSION = "1.1"
@@ -471,10 +471,10 @@ class _Collector:
                 seen.add(name)  # declared even when invalid, so expressions do not cascade into unknown names
             ok = isinstance(name, str) and (
                 (name.isidentifier() and not keyword.iskeyword(name) and not name.startswith("_")
-                 and name not in FUNCTIONS) if identifier else bool(name.strip()))
+                 and name not in RESERVED_NAMES) if identifier else bool(name.strip()))
             if not ok:
                 self(ErrorCode.INVALID_NAME, f"{path}/{i}/name",
-                     f"{name!r} is not a valid name" + (" (an identifier, not a keyword or function, "
+                     f"{name!r} is not a valid name" + (" (an identifier, not a keyword, function, sum or range, "
                                                         "not starting with '_')" if identifier else ""))
             elif duplicate:
                 self(ErrorCode.DUPLICATE_NAME, f"{path}/{i}/name", f"name {name!r} is declared twice")

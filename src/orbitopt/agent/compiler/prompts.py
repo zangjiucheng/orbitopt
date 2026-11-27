@@ -30,8 +30,11 @@ you added it, and explain every assumed item in "assumptions" (about = \
 3. Expressions are arithmetic over declared variable and parameter names: \
 numbers, + - * / **, unary minus, and the functions {", ".join(sorted(FUNCTIONS))}. \
 No other names, no attributes, no strings, no comparisons, no "^" (write "**"). \
-Write sums out term by term (x0 + x1 + x2); there is no indexing. Write pi as \
-3.141592653589793 and e as 2.718281828459045.
+x[3] reads the declared variable x3, and sum(<term> for i in range(a, b)) adds \
+<term> for each integer i from a to b - 1, so sum(x[i]**2 for i in range(3)) \
+is x0**2 + x1**2 + x2**2; an index or range bound is integer arithmetic over \
+numbers and sum indices. Write pi as 3.141592653589793 and e as \
+2.718281828459045.
 4. A constraint is "expression sense rhs" with sense one of "<=", ">=", "==" \
 and a numeric rhs. Variable kinds are "continuous", "integer", "binary" and \
 "discrete" (with "choices"). Units are built from {", ".join(SYMBOLS)}; \

@@ -195,12 +195,22 @@ def _numbers(text: str) -> list[float]:
 
 
 def _literals(source: str) -> list[float]:
-    """Numeric literals of a validated expression, excluding exponents (``x**2`` contributes nothing)."""
+    """Numeric literals of a validated expression as written, excluding exponents and index arithmetic.
+
+    ``x**2`` contributes nothing, and neither do the indices and range bounds
+    of ``sum(x[i+1] for i in range(19))``: they count terms, not quantities.
+    """
     tree = ast.parse(source.strip(), mode="eval")
-    exponents = {id(node.right) for node in ast.walk(tree)
-                 if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow)}
+    skipped = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+            skipped.add(id(node.right))
+        elif isinstance(node, ast.Subscript):
+            skipped |= {id(sub) for sub in ast.walk(node.slice)}
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "range":
+            skipped |= {id(sub) for arg in node.args for sub in ast.walk(arg)}
     return [float(node.value) for node in ast.walk(tree)
-            if isinstance(node, ast.Constant) and type(node.value) in (int, float) and id(node) not in exponents]
+            if isinstance(node, ast.Constant) and type(node.value) in (int, float) and id(node) not in skipped]
 
 
 @dataclass(frozen=True)

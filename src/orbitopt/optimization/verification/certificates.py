@@ -55,8 +55,7 @@ def polynomial_degree(expression: Expression | ToolCall, variables: frozenset[st
     """
     if not isinstance(expression, Expression):
         return None
-    _ = expression.names  # raises ExpressionError for an unsafe source
-    return _degree(ast.parse(expression.source.strip(), mode="eval").body, variables)
+    return _degree(expression.tree, variables)  # raises ExpressionError for an unsafe source
 
 
 def _degree(node: ast.AST, variables: frozenset[str]) -> int | None:

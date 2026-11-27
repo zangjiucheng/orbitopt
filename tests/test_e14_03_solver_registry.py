@@ -1,14 +1,14 @@
 """E14-03: the solver registry solves the same IR problem with every compatible solver, honestly.
 
-The acceptance corpus is the E14-10 benchmark catalogue (``benchmarks/e14_spec``), translated here into the IR by
-unrolling its neutral expression grammar. Every compatible available solver runs every instance once (the
+The acceptance corpus is the E14-10 benchmark catalogue (``benchmarks/e14_spec``), translated here into the IR. The
+neutral expression grammar is IR 1.1 syntax once ``n`` and scalar data are inlined and each data vector ``s`` is
+declared as parameters ``s0, s1, ...``. Every compatible available solver runs every instance once (the
 ``matrix`` fixture); the tests then check the results against the catalogue's verified references and tolerances,
 the budget, the seeds, and the honesty rules of ``orbitopt.optimization.solvers.base``.
 """
 from __future__ import annotations
 
 import ast
-import copy
 import dataclasses
 import importlib.util
 import math
@@ -16,7 +16,6 @@ import os
 import subprocess
 import sys
 import time
-from functools import reduce
 from pathlib import Path
 
 import numpy as np
@@ -63,40 +62,26 @@ TOOL_ID = "bench.quadrature_error"
 
 
 # ------------------------------------------------------------------------------------- benchmark catalogue -> IR
-class _Unroll(ast.NodeTransformer):
-    """Rewrite one neutral-grammar expression into the IR grammar: unroll sums, index x and data, inline n."""
+class _Inline(ast.NodeTransformer):
+    """Replace ``n`` and each scalar datum by its value; ``x[i]``, ``s[i]`` and sums are IR 1.1 syntax already."""
 
-    def __init__(self, inst, env=None):
-        self.inst, self.env = inst, env or {}
-
-    def _value(self, node):
-        return eval(ast.unparse(_Unroll(self.inst, self.env).visit(copy.deepcopy(node))), {})  # noqa: S307
-
-    def visit_Call(self, node):
-        if isinstance(node.func, ast.Name) and node.func.id == "sum" and isinstance(node.args[0], ast.GeneratorExp):
-            gen = node.args[0]
-            comp = gen.generators[0]
-            terms = [_Unroll(self.inst, {**self.env, comp.target.id: i}).visit(copy.deepcopy(gen.elt))
-                     for i in range(*(self._value(a) for a in comp.iter.args))]
-            return reduce(lambda a, b: ast.BinOp(a, ast.Add(), b), terms)
-        return self.generic_visit(node)
-
-    def visit_Subscript(self, node):
-        index, name = self._value(node.slice), node.value.id
-        return ast.Name(f"x{index}", ast.Load()) if name == "x" else ast.Constant(float(self.inst.data[name][index]))
+    def __init__(self, inst):
+        self.values = {"n": inst.dimension, **{k: v for k, v in inst.data.items()
+                                               if isinstance(v, (int, float)) and not isinstance(v, bool)}}
 
     def visit_Name(self, node):
-        if node.id in self.env:
-            return ast.Constant(self.env[node.id])
-        if node.id == "n":
-            return ast.Constant(self.inst.dimension)
-        if node.id in self.inst.data and not isinstance(self.inst.data[node.id], (tuple, str)):
-            return ast.Constant(float(self.inst.data[node.id]))
-        return node
+        return ast.Constant(self.values[node.id]) if node.id in self.values else node
 
 
 def ir_source(inst, expr: str) -> str:
-    return ast.unparse(_Unroll(inst).visit(ast.parse(expr, mode="eval")).body)
+    return ast.unparse(_Inline(inst).visit(ast.parse(expr, mode="eval")).body)
+
+
+def data_parameters(inst) -> tuple[Parameter, ...]:
+    """Each numeric data vector ``s`` as the parameters ``s0, s1, ...`` that ``s[i]`` reads."""
+    return tuple(Parameter(f"{name}{i}", float(v)) for name, values in sorted(inst.data.items())
+                 if isinstance(values, tuple) and all(isinstance(v, (int, float)) for v in values)
+                 for i, v in enumerate(values))
 
 
 def to_ir(inst) -> OptimizationProblem:
@@ -114,7 +99,7 @@ def to_ir(inst) -> OptimizationProblem:
             constraints.append(Constraint(c.name, ir_source(inst, c.expr), "==" if c.kind == "eq" else "<=", 0.0))
     return OptimizationProblem(
         id=inst.id, variables=tuple(variable(i, lo, hi) for i, (lo, hi) in enumerate(inst.bounds)),
-        parameters=(Parameter("pi", math.pi), Parameter("e", math.e)),
+        parameters=(Parameter("pi", math.pi), Parameter("e", math.e), *data_parameters(inst)),
         objectives=tuple(Objective(f"f{k}", ir_source(inst, e), sense=inst.sense)
                          for k, e in enumerate(inst.objective_exprs)),
         constraints=tuple(constraints),
@@ -162,16 +147,29 @@ def budget_for(inst) -> Budget:
     return Budget(max_evaluations=A.BUDGET.evaluations(inst.dimension))
 
 
-UNREPRESENTABLE = {"rosenbrock-d20"}
-"""Instances whose unrolled objective exceeds the IR 1.0 expression limit (500 nodes); see the next test."""
-CORPUS = [inst for inst in P.INSTANCES if inst.id not in UNREPRESENTABLE]
+CORPUS = list(P.INSTANCES)
 
 
-def test_the_corpus_translates_to_valid_ir_except_where_the_node_limit_binds():
-    invalid = {inst.id: validate_problem(to_ir(inst)) for inst in P.INSTANCES}
-    invalid = {k: v for k, v in invalid.items() if v}
-    assert set(invalid) == UNREPRESENTABLE
-    assert all(e.code == ErrorCode.EXPRESSION_TOO_COMPLEX for errors in invalid.values() for e in errors)
+def test_the_whole_corpus_translates_to_valid_ir():
+    assert {inst.id: validate_problem(to_ir(inst)) for inst in CORPUS} == {inst.id: [] for inst in CORPUS}
+
+
+def test_rosenbrock_d20_is_one_indexed_sum_that_matches_the_catalogue():
+    """IR 1.0 could not state it: unrolled, its objective has more than 500 nodes. As an indexed sum it has 40."""
+    inst = by_id("rosenbrock-d20")
+    problem = to_ir(inst)
+    source = problem.objectives[0].expression
+    assert source.source.startswith("sum(") and len(source.names) == 20
+    assert sum(1 for _ in ast.walk(ast.parse(source.source, mode="eval"))) < 100
+    unrolled = " + ".join(f"100*(x{i + 1} - x{i}**2)**2 + (1 - x{i})**2" for i in range(19))
+    assert validate_problem(dataclasses.replace(problem, objectives=(Objective("f0", unrolled),)))[0].code \
+        == ErrorCode.EXPRESSION_TOO_COMPLEX
+    rng = np.random.default_rng(20)
+    for point in [list(inst.reference.x), *(list(rng.uniform(-5.0, 10.0, 20)) for _ in range(5))]:
+        value = problem.evaluate({f"x{i}": float(v) for i, v in enumerate(point)}).objectives["f0"]
+        assert value == pytest.approx(inst.objectives[0](point), rel=1e-12, abs=1e-12)
+    assert problem.evaluate({f"x{i}": 1.0 for i in range(20)}).objectives["f0"] == inst.reference.value == 0.0
+    assert classify(problem).problem_class == ProblemClass.BOX_SMOOTH
 
 
 @pytest.mark.parametrize("inst", CORPUS, ids=lambda i: i.id)
