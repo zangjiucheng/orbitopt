@@ -56,6 +56,8 @@ from orbitopt.gnc.ekf import (
 from orbitopt.gnc.guidance import CwMidCourseLaw, ManeuverPlan, ReferenceEphemeris
 from orbitopt.gnc.recording import GncRunLog
 from orbitopt.gnc.sensors import ChannelErrorConfig, DropoutConfig, RelativeSensorModel
+from orbitopt.gnc.supervisor import SafetyEnvelope, SafetySupervisor, SupervisorConfig, \
+    score_supervision
 from orbitopt.mission.contract import Epoch
 from orbitopt.mission.multispacecraft import (
     MultiSpacecraftMission,
@@ -68,6 +70,7 @@ from orbitopt.relative.propagation import EARTH_J2, propagate_pair
 from . import robustness as rb
 from .config import RendezvousMissionConfig
 from .planner import RendezvousPlanError, initial_states
+from .safety import evaluate_trajectory_safety
 from .robustness import (
     FlightOutcome,
     PassiveRelease,
@@ -176,7 +179,9 @@ def _execution_draws(model: rb.DisturbanceModel, seed: int, burn_slot: int) -> t
 def fly_closed_loop_sample(cfg: RendezvousMissionConfig, campaign: RobustnessCampaign,
                            tof_s: float, seed_base: int, cluster: int, index: int, *,
                            clc: ClosedLoopSampleConfig | None = None,
-                           run_id: str | None = None) -> tuple[FlightOutcome, dict, GncRunLog | None]:
+                           run_id: str | None = None,
+                           supervisor: SupervisorConfig | None = None,
+                           observation_hook=None) -> tuple[FlightOutcome, dict, GncRunLog | None]:
     """Fly one campaign sample closed-loop. Returns ``(FlightOutcome,
     assessment, run_log)`` -- the FlightOutcome grades exactly like the
     campaign's own (same trajectory checks, budget and arrival tolerances,
@@ -184,7 +189,15 @@ def fly_closed_loop_sample(cfg: RendezvousMissionConfig, campaign: RobustnessCam
     carries the closed-loop deviations: tracking error, the delta-v ledger by
     phase, refusals, and the settle/convergence evidence. A planning failure
     is the same ``planning_infeasible`` outcome the open-loop campaign
-    reports (the plan is the identical ``plan_sample``), with ``None`` log."""
+    reports (the plan is the identical ``plan_sample``), with ``None`` log.
+
+    With ``supervisor`` given (E13-06) the guidance law is wrapped in a
+    :class:`orbitopt.gnc.supervisor.SafetySupervisor` on the mission's own
+    E12-04 envelope, and ``assessment["supervision"]`` carries the
+    event stream, the truth-scored missed/false-alarm statistics and the
+    independent post-abort passive-safety check; ``observation_hook`` (see
+    :func:`orbitopt.gnc.closed_loop.simulate_closed_loop`) injects a declared
+    navigation fault for supervised negative tests."""
     clc = clc or ClosedLoopSampleConfig()
     model = campaign.disturbances
     draws = rb.draw_sample(model, int(seed_base), int(cluster), int(index))
@@ -282,6 +295,14 @@ def fly_closed_loop_sample(cfg: RendezvousMissionConfig, campaign: RobustnessCam
                          velocity_weight=clc.terminal_velocity_weight)),
         reference=ref, t_terminal_s=t_f, terminal_rho_lvlh_m=cfg.hold_point_rel_lvlh,
         budget_m_s=float(cfg.delta_v_budget_m_s), deadband_m_s=clc.deadband_m_s)
+    sup = None
+    if supervisor is not None:
+        if cfg.safety is None:
+            raise ValueError(f"fly_closed_loop_sample(supervisor=...): {cfg.mission_id} carries "
+                             "no 'safety' block to supervise against")
+        sup = SafetySupervisor(law=law, reference=ref,
+                               envelope=SafetyEnvelope.from_safety_cfg(cfg.safety),
+                               config=supervisor, target_id="tgt", chaser_id="chaser")
 
     # ---- fly ---------------------------------------------------------------
     hold = np.asarray(cfg.hold_point_rel_lvlh, dtype=float)
@@ -291,7 +312,9 @@ def fly_closed_loop_sample(cfg: RendezvousMissionConfig, campaign: RobustnessCam
         chief_r_m=r0c, chief_v_m_s=v0c, deputy_r_m=r0d, deputy_v_m_s=v0d,
         sensors={"relnav": sensor},
         measurement_models={"relnav": Stacked((RelativePosition(), RelativeVelocity()))},
-        filter=filt, laws={"chaser": law}, t_end_s=t_end, plant=plant, actuator=actuator,
+        filter=filt, laws={"chaser": sup if sup is not None else law},
+        t_end_s=t_end, plant=plant, actuator=actuator,
+        observation_hook=observation_hook,
         mission=_mission_doc(cfg),
         config_extra={
             "closed_loop": {"campaign": campaign.mission_id, "seed_base": int(seed_base),
@@ -306,6 +329,26 @@ def fly_closed_loop_sample(cfg: RendezvousMissionConfig, campaign: RobustnessCam
                             "q_accel_m2_s3": clc.q_accel_m2_s3,
                             "plant": "campaign truth (perturbed j2 + drag, rk4)",
                             "draws": draws.to_dict(), "planned_total_m_s": float(sol["total_m_s"])},
+            "supervisor": None if supervisor is None else {
+                "config": {"k_sigma": supervisor.k_sigma,
+                           "warn_keep_out_m": supervisor.warn_keep_out_m,
+                           "warn_cross_track_m": supervisor.warn_cross_track_m,
+                           "warn_cone_deg": supervisor.warn_cone_deg,
+                           "warn_approach_speed_m_s": supervisor.warn_approach_speed_m_s,
+                           "warn_passive_margin_m": supervisor.warn_passive_margin_m,
+                           "trip_ticks": supervisor.trip_ticks,
+                           "clear_ticks": supervisor.clear_ticks,
+                           "hold_max_s": supervisor.hold_max_s,
+                           "passive_step_s": supervisor.passive_step_s,
+                           "q_accel_m2_s3": supervisor.q_accel_m2_s3},
+                "envelope": {"keep_out_radius_m": cfg.safety.keep_out_radius_m,
+                             "cross_track_max_m": cfg.safety.cross_track_max_m,
+                             "cone_half_angle_deg": cfg.safety.cone_half_angle_deg,
+                             "cone_range_m": cfg.safety.cone_range_m,
+                             "passive_contingency_s": cfg.safety.passive_contingency_s,
+                             "source": "mission SafetyCfg (E12-04) via SafetyEnvelope"},
+                "source": "DESIGN ASSUMPTION (E13-06): tuning set; see "
+                          "orbitopt.gnc.supervisor module docstring"},
             "convergence_expected": True})
 
     # ---- grade on the campaign's own contract ------------------------------
@@ -371,8 +414,54 @@ def fly_closed_loop_sample(cfg: RendezvousMissionConfig, campaign: RobustnessCam
                   "law_refusals": list(law.refusals),
                   "n_observations": len(log.records["observation"]),
                   "n_estimates": len(log.records["estimate"])}
+    if sup is not None:
+        assessment["supervision"] = supervise_assessment(
+            cfg, [e.to_dict() for e in sup.events], outcome,
+            final_state=sup.state, config=supervisor)
     assessment["attribution"] = attribute_failure(outcome, assessment, cfg)
     return outcome, assessment, log
+
+
+def supervise_assessment(cfg: RendezvousMissionConfig, events, outcome: FlightOutcome, *,
+                         final_state: str, config: SupervisorConfig | None = None,
+                         **score_opts) -> dict:
+    """The E13-06 truth scoring of one supervised flight, from the event
+    stream, the outcome's own truth samples and the mission config -- the
+    three acceptance quantities in one record:
+
+    * ``score``: :func:`orbitopt.gnc.supervisor.score_supervision` against
+      the four E12-04 trajectory checks evaluated on the flown truth samples
+      (the reuse the task asks for: the truth side is ``evaluate_trajectory_safety``,
+      untouched);
+    * ``post_abort``: independent check of the passive trajectory *after* the
+      first abort -- the truth samples from the abort epoch re-graded with
+      :func:`orbitopt.rendezvous.safety.evaluate_trajectory_safety`, with
+      ``covered`` saying whether the sampled window reaches the full passive
+      contingency horizon (an abort near the end of the run gets a short
+      honest window, not a free pass)."""
+    checks = evaluate_trajectory_safety(cfg, outcome.times_s, outcome.rel_lvlh[:, :3],
+                                        outcome.rel_lvlh[:, 3:])
+    score = score_supervision(events, checks, t_end_s=float(outcome.times_s[-1]), **score_opts)
+    abort_t = next((float(e["t_s"]) for e in events if e["state_to"] == "abort"), None)
+    post_abort: dict = {"aborted": abort_t is not None, "t_abort_s": abort_t}
+    if abort_t is not None and outcome.times_s.size:
+        t, rel = np.asarray(outcome.times_s), np.asarray(outcome.rel_lvlh)
+        m = t >= abort_t
+        pa = evaluate_trajectory_safety(cfg, t[m], rel[m, :3], rel[m, 3:])
+        window = float(t[m][-1] - t[m][0])
+        contingency = float(cfg.safety.passive_contingency_s)
+        post_abort.update({
+            "window_s": window, "contingency_s": contingency,
+            "covered": bool(window >= contingency),
+            "keep_out_min_margin_m": float(pa["keep_out"].min_margin),
+            "keep_out_violations": int(pa["keep_out"].violation_count),
+            "checks_passed": {name: bool(c.passed) for name, c in pa.items()},
+            "keep_out_passed": bool(pa["keep_out"].passed)})
+    return {"final_state": final_state, "events": list(events), "score": score,
+            "post_abort": post_abort,
+            "config": None if config is None else {"k_sigma": config.k_sigma,
+                                                   "warn_passive_margin_m": config.warn_passive_margin_m,
+                                                   "hold_max_s": config.hold_max_s}}
 
 
 # ---------------------------------------------------------------------------
