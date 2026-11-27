@@ -12,16 +12,20 @@ what theory says: it inflates NIS by the deterministic amount
 model the bias), and consistency is restored by ``"bounded"`` when the
 configuration conservatively widens the covariance instead.
 
-The filter half -- NEES of a full EKF state -- is the documented failure
-reason: E13-02 (#419) is still in progress and its filter is not merged into
-this branch, so there is no Estimate stream to form
-``d' P^-1 d`` from. The measurement-level gate below is precisely its
-prerequisite; the reason string is asserted here so the deferral is on
-record, and the same argument is written into docs/gnc-contract.md.
+The filter half -- NEES of a full EKF state -- was the documented failure
+reason when this task merged: E13-02 (#419) was still in progress, so no
+Estimate stream existed to form ``d' P^-1 d`` from. The measurement-level gate
+below is precisely its prerequisite. #419 has since landed on this branch, so
+the reason string is still asserted (the deferral stays on record) and the
+check that replaces it asserts the deferral is discharged by #419's own
+filter-level NEES gates. The same argument is written into
+docs/gnc-contract.md.
 """
 
 import importlib.util
+import json
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -36,8 +40,9 @@ EPOCH = Epoch(9000.0, "TDB")
 TRUTH = RelativeState(target_id="T", chaser_id="C", epoch=EPOCH, frame="GCRS",
                       r_rel_m=(6800.0, 90.0, 15.0), v_rel_m_s=(0.0, 0.008, 0.001))
 
-#: Why the task's filter-level acceptance clause is answered with a failure
-#: reason instead of a NEES number on this branch (task #420 vs task #419).
+#: Why the task's filter-level acceptance clause was answered with a failure
+#: reason instead of a NEES number on task #420's branch (kept on record after
+#: #419 merged: see the discharge test at the end of this file).
 E13_02_FAILURE_REASON = (
     "E13-02 (#419) navigation filter is not merged into this branch yet (status: In progress), "
     "so no Estimate stream exists to form filter-level NEES d'P^-1 d from. Measurement-level "
@@ -45,6 +50,10 @@ E13_02_FAILURE_REASON = (
     "chi-square moments; bias inflation predicted and restored by bias_covariance_mode="
     "'bounded'), which is the prerequisite the EKF consumes. On merge of #419: feed the same "
     "seeded fix stream to the filter and assert per-update NEES mean == 6 at 6 DoF.")
+
+#: Where #419 discharges that deferral: the sealed E13-02 Monte-Carlo evidence.
+E13_02_EVIDENCE = (Path(__file__).resolve().parents[1]
+                   / "docs/benchmarks/e13_02_relative_nav_ekf.json")
 
 
 def cfgs(sigma_p, bias_p, sigma_v, bias_v, mode, seed=21):
@@ -122,12 +131,19 @@ def test_drops_do_not_disturb_the_consistency_of_what_arrives():
     assert abs(_z(a.mean(), 6.0, len(a), 6.0)) < 4.0             # survivors stay consistent
 
 
-def test_filter_level_nees_deferral_is_recorded_with_a_reason():
-    """The acceptance clause '或给出失效原因' -- the failure reason must exist, name the
-    blocker, and the module it needs must still be absent (this test starts failing
-    loudly, in the right direction, the day #419 merges)."""
+def test_filter_level_nees_deferral_is_discharged_by_e13_02():
+    """The acceptance clause '或给出失效原因' was answered with the reason above, whose
+    blocker was #419. #419 has merged, so the clause is answered by its own
+    filter-level NEES gate now: this test keeps the reason on record, checks the
+    blocker is gone, and re-reads the sealed 6-DoF NEES evidence #419 ships."""
     assert "#419" in E13_02_FAILURE_REASON and "NEES" in E13_02_FAILURE_REASON
-    for candidate in ("orbitopt.gnc.ekf", "orbitopt.gnc.filter"):
-        assert importlib.util.find_spec(candidate) is None, \
-            E13_02_FAILURE_REASON.replace("not merged into this branch yet (status: In progress), ",
-                                          "IS now merged -- run the filter-level NEES check: ")
+    assert importlib.util.find_spec("orbitopt.gnc.ekf") is not None
+    assert importlib.util.find_spec("orbitopt.gnc.nav_metrics") is not None
+    assert E13_02_EVIDENCE.exists(), f"run #419's benchmark first: {E13_02_EVIDENCE}"
+    doc = json.loads(E13_02_EVIDENCE.read_text(encoding="utf-8"))
+    gate = doc["setup"]["declared_gates"]["nees"]
+    assert gate["dof"] == 6 and gate["interval"][0] > 1.0            # chi-square band at 6 DoF
+    matched = [r for r in doc["cells"] if r["matched"] and r["meas"] in ("pos", "pos_vel")]
+    assert matched and all(r["nees_pass_rate"] >= 0.70 for r in matched), matched
+    assert all(g["pass"] for g in doc["gates"] if g["name"].startswith("consistency")), \
+        [g for g in doc["gates"] if g["name"].startswith("consistency") and not g["pass"]]

@@ -84,7 +84,9 @@ The polar reconstruction refuses the ±Z boresight singularity (`1e-6·|r|` of a
 Consistency evidence: `tests/test_e13_03_*` (per-error moments, NIS gates) and
 `benchmarks/bench_e13_03_sensor_consistency.py` (sealed at
 `docs/benchmarks/e13_03_sensor_consistency.json`: chi-square moments z-scored < 4, polar
-covariance coverage 0.9985, bias inflation predicted). Filter-level NEES is deferred to the
-merge of E13-02 (#419, in progress): no Estimate stream exists on this branch — the reason is
-asserted in `tests/test_e13_03_nis_consistency.py` so the deferral fails loudly when #419 lands.
+covariance coverage 0.9985, bias inflation predicted). Filter-level NEES was deferred to the
+merge of E13-02 (#419) — no Estimate stream existed on that branch — and the reason was asserted
+in `tests/test_e13_03_nis_consistency.py` so the deferral failed loudly when #419 landed. #419
+has landed: the deferral is discharged there by #419's sealed 6-DoF NEES gate
+(`docs/benchmarks/e13_02_relative_nav_ekf.json`).
 
