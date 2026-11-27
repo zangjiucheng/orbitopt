@@ -434,6 +434,18 @@ def test_the_runtime_takes_option_schemas_from_the_solver_declaration():
     assert prompt_state_options(registry, "test.tunable")["precision"] == {"type": "float", "min": 1e-12, "max": 1e-3}
 
 
+def test_budget_max_iterations_caps_the_loop_and_a_decision_caps_the_backend():
+    capped = {"action": "solve", "solver_id": "scipy.slsqp", "max_iterations": 1, "x0": {"x": 2.0, "y": 2.0}}
+    outcome = solve(WORKED, planner=scripted([capped, capped, capped]), budget=Budget(max_iterations=2))
+    assert outcome.stop_reason is StopReason.MAX_ITERATIONS and len(outcome.trace.iterations) == 2
+    first = solves(outcome)[0]
+    assert first.result.termination is Termination.MAX_ITERATIONS and first.result.iterations <= 1
+    assert first.result.evidence[0].data["budget"]["max_backend_iterations"] == 1
+    no_cap = solve(to_ir(P.by_id("lp-wyndor-d2")), planner=scripted([{"action": "solve", "solver_id": "scipy.highs", "max_iterations": 3},
+                                              {"action": "stop"}]))
+    assert no_cap.trace.iterations[0].violations[0].code is ViolationCode.INVALID_OPTION
+
+
 def prompt_state_options(registry, solver_id):
     seen = []
 

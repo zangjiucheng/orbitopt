@@ -328,7 +328,7 @@ def prompt_state(state: PlannerState) -> dict:
             "constraints": [{"name": c.name, "sense": c.sense, "rhs": c.rhs} for c in problem.constraints],
         },
         "solvers": [{"solver_id": c.solver_id, "convergence": c.convergence, "is_global": c.is_global,
-                     "takes_max_iterations": "max_iterations" in c.honors,
+                     "takes_max_iterations": c.iteration_cap,
                      "options": {name: option(spec) for name, spec in sorted(c.options.items())}}
                     for c in state.solvers],
         "remaining": {"iterations": state.remaining.iterations, "evaluations": state.remaining.evaluations,

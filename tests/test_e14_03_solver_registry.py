@@ -426,6 +426,24 @@ def test_the_wall_clock_budget_stops_every_solver(counted, sid, iid):
         assert r.termination == Termination.TIMEOUT and not r.solver_converged
 
 
+@pytest.mark.parametrize("sid, iid", [case for case in BUDGET_CASES if case[0] != "scipy.highs"])
+def test_the_backend_iteration_cap_is_its_own_argument_and_budget_max_iterations_is_not_one(sid, iid):
+    solver, inst = _solver_or_skip(sid), by_id(iid)
+    looped = dataclasses.replace(to_ir(inst), budget=Budget(max_evaluations=1500, max_iterations=1))
+    free = solver.solve(looped, seed=1)
+    capped = solver.solve(looped, seed=1, max_backend_iterations=1)
+    assert free.iterations is None or free.iterations > 1  # the agent loop cap does not reach the backend
+    assert capped.termination == Termination.MAX_ITERATIONS and capped.iterations <= 1
+    assert capped.evidence[0].data["budget"] == {"max_evaluations": 1500, "max_backend_iterations": 1}
+
+
+def test_a_solver_without_an_iteration_limit_refuses_one():
+    with pytest.raises(ValueError, match="no backend iteration limit"):
+        REGISTRY.solve_with(to_ir(by_id("lp-wyndor-d2")), "scipy.highs", max_backend_iterations=5)
+    with pytest.raises(ValueError, match="positive integer"):
+        REGISTRY.solve_with(to_ir(by_id("rosenbrock-d5")), "scipy.lbfgsb", max_backend_iterations=0)
+
+
 # --------------------------------------------------------------------------------------------- seeds, availability
 @pytest.mark.parametrize("sid, iid", BUDGET_CASES)
 def test_the_same_seed_and_budget_give_the_identical_result(sid, iid):

@@ -64,7 +64,7 @@ class Nsga2Solver(AdapterSolver):
     CAPABILITY = SolverCapability(
         solver_id="pygmo.nsga2", backend="pygmo", max_form=Form.BLACK_BOX, convergence="none", supports_integers=True,
         multiobjective=True, needs_finite_bounds=True, is_global=True,
-        honors=frozenset({"max_evaluations", "max_iterations", "max_wall_s"}),
+        iteration_cap=True,
         options={"population": OptionSpec(int, MIN_POPULATION, 1000), "cr": OptionSpec(float, 0.0, 0.99),
                  "eta_c": OptionSpec(float, 1.0, 99.0), "m": OptionSpec(float, 0.0, 1.0),
                  "eta_m": OptionSpec(float, 1.0, 99.0)})
@@ -80,7 +80,7 @@ class Nsga2Solver(AdapterSolver):
             return Outcome(stop=Termination.MAX_EVALUATIONS,
                            message=f"an evaluation budget of {limit} is below NSGA-II's smallest population "
                                    f"({MIN_POPULATION})")
-        generations = run.budget.max_iterations or DEFAULT_GENERATIONS
+        generations = run.max_backend_iterations or DEFAULT_GENERATIONS
         stop = Termination.MAX_ITERATIONS
         if limit is not None and (limit - size) // size < generations:
             generations, stop = (limit - size) // size, Termination.MAX_EVALUATIONS

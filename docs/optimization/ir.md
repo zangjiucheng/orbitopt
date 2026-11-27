@@ -16,7 +16,7 @@ its IR 1.1 addendum records what changed from 1.0.
 | `parameters` | Fixed named constants with units. |
 | `objectives` | One or more. Each has an expression, a `sense` (`minimize` or `maximize`) and a `unit`. |
 | `constraints` | Hard constraints `expression <sense> rhs` with `sense` one of `<=`, `>=`, `==`. The `unit` covers both sides. |
-| `budget` | Optional limits on evaluations, iterations, wall time and tokens. |
+| `budget` | Optional limits: `max_evaluations` and `max_wall_s`, which every solver enforces, and `max_iterations` (agent loop iterations) and `max_tokens` (LLM tokens), which only the agent runtime reads. No budget field sets a backend's own iteration limit. |
 | `verification` | Which result statuses acceptance requires, plus the thresholds behind them. |
 
 ## Expressions

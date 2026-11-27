@@ -39,7 +39,7 @@ import sys
 import time
 import warnings
 from collections import OrderedDict
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Literal, Mapping, Protocol, Sequence
 
 from ..classify import Form, ProblemStructure, classify
@@ -114,9 +114,11 @@ class SolverCapability:
     ``max_form`` is the most general expression form it accepts.
     ``multiobjective`` is exclusive: a multi-objective solver takes only
     problems with several objectives, any other solver only problems with one.
-    ``honors`` lists the ``Budget`` fields the backend is configured from;
-    ``max_evaluations`` and ``max_wall_s`` are enforced by the adapter for
-    every solver regardless. ``options`` maps each option name ``solve``
+    ``Budget.max_evaluations`` and ``Budget.max_wall_s`` are enforced by the
+    adapter for every solver; ``Budget.max_iterations`` is the agent
+    runtime's loop cap and no solver reads it. ``iteration_cap`` says the
+    backend has its own iteration limit, which ``solve``'s
+    ``max_backend_iterations`` sets (generations for NSGA-II). ``options`` maps each option name ``solve``
     accepts to its ``OptionSpec``. ``backend`` is the module the solver
     imports; when it cannot be found, ``unavailable_reason`` says so.
     """
@@ -133,7 +135,7 @@ class SolverCapability:
     needs_finite_bounds: bool = False
     is_global: bool = False
     deterministic_given_seed: bool = True
-    honors: frozenset[str] = frozenset({"max_evaluations", "max_wall_s"})
+    iteration_cap: bool = False
     options: Mapping[str, OptionSpec] = field(default_factory=dict)
     unavailable_reason: str | None = None
 
@@ -166,7 +168,8 @@ class Solver(Protocol):
 
     def solve(self, problem: OptimizationProblem, *, budget: Budget | None = None, seed: int = 0,
               x0: Mapping[str, float] | None = None, options: Mapping[str, Any] | None = None,
-              tools: Mapping[str, Callable[..., Any]] | None = None) -> OptimizationResult: ...
+              tools: Mapping[str, Callable[..., Any]] | None = None,
+              max_backend_iterations: int | None = None) -> OptimizationResult: ...
 
 
 class BudgetExhausted(Exception):
@@ -337,6 +340,7 @@ class Run:
     start: list[float]
     x0_given: bool
     options: Mapping[str, Any]
+    max_backend_iterations: int | None = None
 
     def remaining_wall_s(self) -> float | None:
         if self.evaluator.deadline is None:
@@ -390,13 +394,17 @@ class AdapterSolver:
 
     def solve(self, problem: OptimizationProblem, *, budget: Budget | None = None, seed: int = 0,
               x0: Mapping[str, float] | None = None, options: Mapping[str, Any] | None = None,
-              tools: Mapping[str, Callable[..., Any]] | None = None) -> OptimizationResult:
+              tools: Mapping[str, Callable[..., Any]] | None = None,
+              max_backend_iterations: int | None = None) -> OptimizationResult:
         """Solve ``problem`` within ``budget`` (default ``problem.budget``) and report an ``OptimizationResult``.
 
         ``seed`` drives every random choice, so a deterministic backend gives
         the identical result for the same problem, seed and budget. ``x0``
         maps variable names to a starting point. ``tools`` maps ``ToolCall``
         ids to callables, as ``OptimizationProblem.evaluate`` takes them.
+        ``max_backend_iterations`` caps the backend's own iterations, for a
+        solver whose capability has ``iteration_cap``. ``budget.max_iterations``
+        is the agent runtime's loop cap, not a solver limit, and is ignored here.
         """
         started = time.perf_counter()
         require_valid(problem)
@@ -410,6 +418,12 @@ class AdapterSolver:
                    if (why := capability.options[name].errors(value)) is not None]
         if invalid:
             raise ValueError(f"{capability.solver_id}: " + "; ".join(invalid))
+        if max_backend_iterations is not None:
+            if not capability.iteration_cap:
+                raise ValueError(f"{capability.solver_id} has no backend iteration limit")
+            if isinstance(max_backend_iterations, bool) or not isinstance(max_backend_iterations, int) \
+                    or max_backend_iterations < 1:
+                raise ValueError(f"max_backend_iterations must be a positive integer, not {max_backend_iterations!r}")
         space = Space.of(problem)
         start = space.start(x0)
         structure = classify(problem)
@@ -418,7 +432,8 @@ class AdapterSolver:
         if refusal:
             outcome = Outcome(stop=Termination.ERROR, message=refusal)
         else:
-            run = Run(problem, structure, space, evaluator, budget, seed, start, x0 is not None, options)
+            run = Run(problem, structure, space, evaluator, budget, seed, start, x0 is not None, options,
+                      max_backend_iterations)
             try:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
@@ -427,7 +442,8 @@ class AdapterSolver:
                 outcome = Outcome(stop=stop.termination, message=str(stop))
             except Exception as exc:  # noqa: BLE001 - any backend failure becomes an honest ERROR result
                 outcome = Outcome(stop=Termination.ERROR, message=f"{type(exc).__name__}: {exc}")
-        return _result(problem, capability, structure, evaluator, outcome, budget, seed, options, started)
+        return _result(problem, capability, structure, evaluator, outcome, budget, seed, options, started,
+                       max_backend_iterations)
 
     def _run(self, run: Run) -> Outcome:
         raise NotImplementedError
@@ -440,7 +456,7 @@ def _non_dominated(points: list[Point]) -> list[Point]:
 
 def _result(problem: OptimizationProblem, capability: SolverCapability, structure: ProblemStructure,
             evaluator: Evaluator, outcome: Outcome, budget: Budget, seed: int, options: Mapping[str, Any],
-            started: float) -> OptimizationResult:
+            started: float, max_backend_iterations: int | None) -> OptimizationResult:
     stop, message = outcome.stop, outcome.message
     try:
         reported = [evaluator(p) for p in outcome.points]
@@ -475,7 +491,8 @@ def _result(problem: OptimizationProblem, capability: SolverCapability, structur
         "backend_version": str(getattr(sys.modules.get(capability.backend), "__version__", "not imported")),
         "problem_class": structure.problem_class.value,
         "seed": seed,
-        "budget": {k: v for k, v in asdict(budget).items() if v is not None},
+        "budget": {k: v for k, v in (("max_evaluations", budget.max_evaluations), ("max_wall_s", budget.max_wall_s),
+                                     ("max_backend_iterations", max_backend_iterations)) if v is not None},
         "options": dict(options),
     }
     digest = problem.digest()

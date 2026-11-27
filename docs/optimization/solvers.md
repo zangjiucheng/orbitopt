@@ -72,12 +72,19 @@ promise a derivative where an argument reaches a domain boundary:
 | `pygmo.nsga2` | anything, several objectives | yes | bounds only | yes | `none` |
 
 `SolverCapability` carries these columns plus `needs_gradients`, `is_global`,
-`deterministic_given_seed`, `honors` (the `Budget` fields the backend is
-configured from), `options` and `unavailable_reason`. A solver whose backend module cannot be found stays
-registered. Its `unavailable_reason` names the module, `compatible` leaves it
+`deterministic_given_seed`, `iteration_cap` (the backend has its own
+iteration limit), `options` and `unavailable_reason`. A solver whose backend
+module cannot be found stays registered. Its `unavailable_reason` names the module, `compatible` leaves it
 out, and calling it returns `Termination.ERROR` rather than raising. `cma` is
 not vendored, so `cma.cma_es` is unavailable until `pip install cma`.
 `rejection(structure)` says in words why a solver cannot take a problem.
+
+**Iteration limits.** Every adapter enforces `Budget.max_evaluations` and
+`Budget.max_wall_s`. `Budget.max_iterations` is the agent runtime's loop cap
+and no solver reads it. A backend's own iteration limit is a separate
+argument, `solve(..., max_backend_iterations=N)`: `maxiter` for SLSQP,
+L-BFGS-B, differential evolution and CMA-ES, and generations for NSGA-II.
+Passing it to a solver without `iteration_cap` (HiGHS) raises `ValueError`.
 
 `options` maps each option `solve` accepts to an `OptionSpec`: its type
 (`bool`, `int`, `float` or `str`), its closed range `[low, high]` or its

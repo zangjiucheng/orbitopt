@@ -84,7 +84,7 @@ def validate_proposal(raw: Any, *, problem: OptimizationProblem, solvers: Mappin
                            ViolationCode.BUDGET_OVERREACH, refuse)
     max_iterations = _integer(raw, "max_iterations", None, 1, MAX_BACKEND_ITERATIONS,
                               ViolationCode.BUDGET_OVERREACH, refuse)
-    if max_iterations is not None and capability is not None and "max_iterations" not in capability.honors:
+    if max_iterations is not None and capability is not None and not capability.iteration_cap:
         refuse(ViolationCode.INVALID_OPTION, "/max_iterations", f"{capability.solver_id} has no iteration limit")
     if out:
         return tuple(out)

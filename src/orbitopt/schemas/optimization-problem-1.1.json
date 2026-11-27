@@ -105,7 +105,7 @@
       "additionalProperties": false,
       "properties": {
         "max_evaluations": {"$ref": "#/$defs/optionalCount"},
-        "max_iterations": {"$ref": "#/$defs/optionalCount"},
+        "max_iterations": {"$ref": "#/$defs/optionalCount", "description": "Agent runtime loop iterations (planner proposals). No solver reads it; a backend's own iteration limit is a solve() argument, not part of the problem."},
         "max_wall_s": {"$ref": "#/$defs/optionalNumber"},
         "max_tokens": {"$ref": "#/$defs/optionalCount"}
       }

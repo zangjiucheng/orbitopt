@@ -49,9 +49,11 @@ default.
 | `max_wall_s` | 600 s | Wall clock from the start of `solve`. |
 | `max_tokens` | 200,000 | LLM tokens, prompt and completion. |
 
-`max_iterations` limits the loop. The runtime does not pass it to a solver as
-its backend iteration cap. A decision sets that cap itself, as
-`max_iterations`.
+`max_iterations` limits the loop, and it is the only meaning
+`Budget.max_iterations` has. The runtime does not pass it to a solver. A
+decision sets a backend's own iteration cap itself, as the proposal field
+`max_iterations`, which the runtime hands to the solver as
+`solve(..., max_backend_iterations=...)`.
 
 Every evaluation goes through one `EvaluationMeter`. The meter is a copy of
 the problem whose `evaluate` counts each call, so solvers and the guard use
@@ -105,7 +107,7 @@ A proposal may name these fields only: `action` (`solve` or `stop`),
 | `solver_not_allowed` | The solver is registered but not available, not compatible with the problem, excluded by the run, or not allowed by the policy. |
 | `invalid_option` | The solver does not declare the option, the value is outside the option's `OptionSpec`, or the policy allows no options. |
 | `x0_unknown_variable`, `x0_out_of_domain` | A start point names an unknown variable or lies outside a variable's domain (bounds, integrality, choices). |
-| `budget_overreach` | `evaluations` beyond what one decision may spend, or a backend `max_iterations` above 100,000. |
+| `budget_overreach` | `evaluations` beyond what one decision may spend, or a backend `max_iterations` above 100,000 (refused as `invalid_option` for a solver without `iteration_cap`). |
 
 Each solver declares its options in `SolverCapability.options`, an
 `OptionSpec` per name with a type, a closed range or choices, and a

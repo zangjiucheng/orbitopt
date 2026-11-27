@@ -194,7 +194,15 @@ class Constraint:
 
 @dataclass(frozen=True)
 class Budget:
-    """Resource limits; each is optional, and positive when present."""
+    """Resource limits; each is optional, and positive when present.
+
+    ``max_evaluations`` counts evaluations of the problem and ``max_wall_s``
+    is wall-clock seconds; every solver adapter enforces both.
+    ``max_iterations`` is the agent runtime's loop cap (planner proposals,
+    accepted or refused); no solver reads it, and a backend's own iteration
+    limit is ``Solver.solve(..., max_backend_iterations=...)``.
+    ``max_tokens`` counts LLM tokens in the agent runtime.
+    """
 
     max_evaluations: int | None = None
     max_iterations: int | None = None
