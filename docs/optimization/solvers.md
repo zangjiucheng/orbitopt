@@ -73,12 +73,28 @@ promise a derivative where an argument reaches a domain boundary:
 
 `SolverCapability` carries these columns plus `needs_gradients`, `is_global`,
 `deterministic_given_seed`, `honors` (the `Budget` fields the backend is
-configured from), `options` (the option names `solve` accepts) and
-`unavailable_reason`. A solver whose backend module cannot be found stays
+configured from), `options` and `unavailable_reason`. A solver whose backend module cannot be found stays
 registered. Its `unavailable_reason` names the module, `compatible` leaves it
 out, and calling it returns `Termination.ERROR` rather than raising. `cma` is
 not vendored, so `cma.cma_es` is unavailable until `pip install cma`.
 `rejection(structure)` says in words why a solver cannot take a problem.
+
+`options` maps each option `solve` accepts to an `OptionSpec`: its type
+(`bool`, `int`, `float` or `str`), its closed range `[low, high]` or its
+`choices`, and `tolerance`, which marks a convergence tolerance of the solver
+(never a problem tolerance) together with the `default` the backend runs
+with. `solve` raises `ValueError` for an option the solver does not declare
+or a value outside its spec. The agent runtime validates a planner's options
+against the same specs and loosens only the options marked `tolerance`.
+
+| Solver | Options (tolerances in bold) |
+|---|---|
+| `scipy.highs` | **`mip_rel_gap`** [0, 1e-4], default 1e-9; `presolve` |
+| `scipy.slsqp` | **`ftol`** [1e-16, 1e-2], default 1e-10 |
+| `scipy.lbfgsb` | **`ftol`** [1e-16, 1e-2], default 2.2e-9; **`gtol`** [1e-16, 1e-2], default 1e-5 |
+| `scipy.differential_evolution` | `popsize` 4-100; **`tol`** [0, 0.1], default 0.01; `atol` [0, 0.1]; `mutation` [0.1, 1.9]; `recombination` [0, 1]; `polish`; `strategy`; `init` |
+| `cma.cma_es` | `sigma0` [1e-12, 1e12]; `popsize` 4-100; **`tolfun`**, **`tolx`** [1e-16, 1e-2], default 1e-11 |
+| `pygmo.nsga2` | `population` 8-1000 (a multiple of 4); `cr` [0, 0.99]; `eta_c` [1, 99]; `m` [0, 1]; `eta_m` [1, 99] |
 
 `compatible` ranks the capable solvers from least to most general by
 `max_form`, constraint, equality and integer support, `is_global`, then

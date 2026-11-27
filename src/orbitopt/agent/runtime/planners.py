@@ -22,11 +22,10 @@ from typing import Iterable, Protocol, Sequence
 from orbitopt.agent.providers import ChatProvider, Message, ProviderError, StructuredOutputError
 from orbitopt.optimization import OptimizationProblem
 from orbitopt.optimization.classify import ProblemStructure
-from orbitopt.optimization.solvers import SolverCapability
+from orbitopt.optimization.solvers import OptionSpec, SolverCapability
 
 from .diagnostics import CERTIFIED_CLASSES, PROVABLY_CONVEX, feasible, loosened
 from .model import BudgetUse, IterationRecord, Proposal, RecordKind, Remedy
-from .validation import OPTION_SPECS
 
 
 class PlannerUnavailable(Exception):
@@ -313,10 +312,7 @@ def prompt_state(state: PlannerState) -> dict:
     """The planner's view as JSON: deterministic for a deterministic run, so a cassette replays."""
     problem = state.problem
 
-    def option(name: str) -> dict:
-        spec = OPTION_SPECS.get(name)
-        if spec is None:
-            return {}
+    def option(spec: OptionSpec) -> dict:
         if spec.choices:
             return {"choices": list(spec.choices)}
         return {"type": spec.kind.__name__} if spec.kind is bool else \
@@ -333,7 +329,8 @@ def prompt_state(state: PlannerState) -> dict:
         },
         "solvers": [{"solver_id": c.solver_id, "convergence": c.convergence, "is_global": c.is_global,
                      "takes_max_iterations": "max_iterations" in c.honors,
-                     "options": {name: option(name) for name in sorted(c.options)}} for c in state.solvers],
+                     "options": {name: option(spec) for name, spec in sorted(c.options.items())}}
+                    for c in state.solvers],
         "remaining": {"iterations": state.remaining.iterations, "evaluations": state.remaining.evaluations,
                       "tokens": state.remaining.tokens},
         "seed": state.seed,

@@ -17,12 +17,12 @@ from .model import (TRACE_SCHEMA, Action, AlternateRun, BudgetUse, Decision, Dia
 from .persistence import RUN_MANIFEST_FORMAT, ReplayReport, load_trace, replay, save_run
 from .planners import (PROPOSAL_SCHEMA, LLMPlanner, Planner, PlannerState, PlannerUnavailable, RecordedPlanner,
                        RuleBasedPlanner, prompt_state)
-from .validation import OPTION_SPECS, PROBLEM_FIELDS, PROPOSAL_FIELDS, OptionSpec, validate_proposal
+from .validation import PROBLEM_FIELDS, PROPOSAL_FIELDS, validate_proposal
 
 __all__ = [
     "Action", "AlternateRun", "BudgetUse", "DISHONEST", "Decision", "Diagnosis", "EvaluationBudgetExceeded",
-    "EvaluationMeter", "FailureKind", "IterationRecord", "LLMPlanner", "Limits", "MAX_ALTERNATES", "OPTION_SPECS",
-    "OptionSpec", "PROBLEM_FIELDS", "PROPOSAL_FIELDS", "PROPOSAL_SCHEMA", "Planner", "PlannerState",
+    "EvaluationMeter", "FailureKind", "IterationRecord", "LLMPlanner", "Limits", "MAX_ALTERNATES",
+    "PROBLEM_FIELDS", "PROPOSAL_FIELDS", "PROPOSAL_SCHEMA", "Planner", "PlannerState",
     "PlannerUnavailable", "Policy", "Proposal", "REMEDIES", "RUN_MANIFEST_FORMAT", "RecordKind", "RecordedPlanner",
     "Remedy", "ReplayReport", "RuleBasedPlanner", "RunOutcome", "RunStatus", "StopReason", "TRACE_SCHEMA", "Trace",
     "VERIFICATION_SHARE", "VerificationRecord", "Violation", "ViolationCode", "diagnose", "distrust", "feasible",

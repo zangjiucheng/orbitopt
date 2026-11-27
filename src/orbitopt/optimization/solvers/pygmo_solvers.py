@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from ..classify import Form
 from ..result import Termination
-from .base import AdapterSolver, BudgetExhausted, Outcome, Run, SolverCapability
+from .base import AdapterSolver, BudgetExhausted, OptionSpec, Outcome, Run, SolverCapability
 
 DEFAULT_POPULATION = 48
 DEFAULT_GENERATIONS = 250
@@ -65,7 +65,9 @@ class Nsga2Solver(AdapterSolver):
         solver_id="pygmo.nsga2", backend="pygmo", max_form=Form.BLACK_BOX, convergence="none", supports_integers=True,
         multiobjective=True, needs_finite_bounds=True, is_global=True,
         honors=frozenset({"max_evaluations", "max_iterations", "max_wall_s"}),
-        options=frozenset({"population", "cr", "eta_c", "m", "eta_m"}))
+        options={"population": OptionSpec(int, MIN_POPULATION, 1000), "cr": OptionSpec(float, 0.0, 0.99),
+                 "eta_c": OptionSpec(float, 1.0, 99.0), "m": OptionSpec(float, 0.0, 1.0),
+                 "eta_m": OptionSpec(float, 1.0, 99.0)})
 
     def _run(self, run: Run) -> Outcome:
         import pygmo as pg

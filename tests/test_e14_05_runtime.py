@@ -34,6 +34,7 @@ from orbitopt.agent.runtime import (
     ViolationCode,
     known_tool_ids,
     load_trace,
+    loosened,
     replay,
     save_run,
     solve,
@@ -59,6 +60,7 @@ from orbitopt.optimization.solvers import (
     DifferentialEvolutionSolver,
     HighsSolver,
     LbfgsbSolver,
+    OptionSpec,
     SlsqpSolver,
     SolverRegistry,
     default_registry,
@@ -404,6 +406,43 @@ def test_a_stalled_solver_gets_a_looser_solver_tolerance_never_a_looser_problem(
     assert second.decision.solver_id == "test.stalling" and second.decision.options == {"ftol": 1e-8}
     assert second.diagnosis.kind is FailureKind.VERIFIED_LOCAL
     assert outcome.status is RunStatus.VERIFIED and every_result_answers(outcome, WORKED)
+
+
+class Tunable(SlsqpSolver):
+    """An SLSQP whose declared options are its own: a tolerance the runtime has never heard of."""
+
+    CAPABILITY = replace(SlsqpSolver.CAPABILITY, solver_id="test.tunable",
+                         options={"ftol": OptionSpec(float, 1e-16, 1e-2, tolerance=True, default=1e-10),
+                                  "precision": OptionSpec(float, 1e-12, 1e-3, tolerance=True, default=1e-9)})
+
+    def solve(self, problem, *, options=None, **kwargs):
+        return super().solve(problem, options={k: v for k, v in (options or {}).items() if k == "ftol"} or None,
+                             **kwargs)
+
+
+def test_the_runtime_takes_option_schemas_from_the_solver_declaration():
+    registry = SolverRegistry([Tunable(), DifferentialEvolutionSolver()])
+    capability = registry.get("test.tunable").capability
+    proposal = {"action": "solve", "solver_id": "test.tunable", "options": {"precision": 1e-6}}
+    outcome = solve(WORKED, planner=scripted([proposal, {**proposal, "options": {"precision": 0.5}},
+                                              {"action": "stop"}]), registry=registry)
+    accepted, refused = outcome.trace.iterations[:2]
+    assert accepted.kind is RecordKind.SOLVE and accepted.decision.options == {"precision": 1e-6}
+    assert refused.kind is RecordKind.REJECTED and refused.violations[0].code is ViolationCode.INVALID_OPTION
+    assert "must lie in" in refused.violations[0].message
+    assert loosened({}, capability) == pytest.approx({"ftol": 1e-8, "precision": 1e-7})
+    assert prompt_state_options(registry, "test.tunable")["precision"] == {"type": "float", "min": 1e-12, "max": 1e-3}
+
+
+def prompt_state_options(registry, solver_id):
+    seen = []
+
+    def spy(request):
+        seen.append(json.loads(request.messages[-1].content))
+        return json.dumps({"action": "stop"})
+
+    solve(WORKED, planner=LLMPlanner(MockProvider(spy)), registry=registry)
+    return next(s["options"] for s in seen[0]["solvers"] if s["solver_id"] == solver_id)
 
 
 def test_a_tiny_budget_ends_as_budget_exhausted():

@@ -11,12 +11,17 @@ import math
 
 from ..classify import Form, linear_coefficients
 from ..result import Termination
-from .base import AdapterSolver, Outcome, Run, SolverCapability
+from .base import AdapterSolver, OptionSpec, Outcome, Run, SolverCapability
 
 DEFAULT_MIP_REL_GAP = 1e-9
 """HiGHS stops a MILP when the relative gap is below this; scipy's default (1e-4) can stop short of the optimum."""
 DEFAULT_SLSQP_FTOL = 1e-10
 """SLSQP's precision goal on the objective; scipy's default (1e-6) is coarser than the E14-10 tolerances."""
+LBFGSB_FTOL = 2.220446049250313e-09
+LBFGSB_GTOL = 1e-5
+"""scipy's own L-BFGS-B defaults, which the adapter keeps."""
+DE_STRATEGIES = ("best1bin", "best1exp", "rand1bin", "rand1exp", "rand2bin", "rand2exp", "randtobest1bin",
+                 "randtobest1exp", "currenttobest1bin", "currenttobest1exp", "best2exp", "best2bin")
 
 
 def _bounds(run: Run) -> list[tuple[float | None, float | None]]:
@@ -42,7 +47,8 @@ class HighsSolver(AdapterSolver):
     CAPABILITY = SolverCapability(
         solver_id="scipy.highs", backend="scipy", max_form=Form.LINEAR, convergence="certificate",
         supports_integers=True, supports_constraints=True, supports_equality=True, is_global=True,
-        options=frozenset({"mip_rel_gap", "presolve"}))
+        options={"mip_rel_gap": OptionSpec(float, 0.0, 1e-4, tolerance=True, default=DEFAULT_MIP_REL_GAP),
+                 "presolve": OptionSpec(bool)})
 
     def _run(self, run: Run) -> Outcome:
         import numpy as np
@@ -116,7 +122,8 @@ class SlsqpSolver(AdapterSolver):
     CAPABILITY = SolverCapability(
         solver_id="scipy.slsqp", backend="scipy", max_form=Form.SMOOTH, convergence="first_order", needs_gradients=True,
         supports_constraints=True, supports_equality=True,
-        honors=frozenset({"max_evaluations", "max_iterations", "max_wall_s"}), options=frozenset({"ftol"}))
+        honors=frozenset({"max_evaluations", "max_iterations", "max_wall_s"}),
+        options={"ftol": OptionSpec(float, 1e-16, 1e-2, tolerance=True, default=DEFAULT_SLSQP_FTOL)})
 
     def _run(self, run: Run) -> Outcome:
         from scipy.optimize import minimize
@@ -144,7 +151,8 @@ class LbfgsbSolver(AdapterSolver):
     CAPABILITY = SolverCapability(
         solver_id="scipy.lbfgsb", backend="scipy", max_form=Form.SMOOTH, convergence="first_order",
         needs_gradients=True, honors=frozenset({"max_evaluations", "max_iterations", "max_wall_s"}),
-        options=frozenset({"ftol", "gtol"}))
+        options={"ftol": OptionSpec(float, 1e-16, 1e-2, tolerance=True, default=LBFGSB_FTOL),
+                 "gtol": OptionSpec(float, 1e-16, 1e-2, tolerance=True, default=LBFGSB_GTOL)})
 
     def _run(self, run: Run) -> Outcome:
         from scipy.optimize import minimize
@@ -170,7 +178,11 @@ class DifferentialEvolutionSolver(AdapterSolver):
         convergence="heuristic", supports_integers=True,
         supports_constraints=True, supports_equality=True, needs_finite_bounds=True, is_global=True,
         honors=frozenset({"max_evaluations", "max_iterations", "max_wall_s"}),
-        options=frozenset({"popsize", "tol", "atol", "mutation", "recombination", "polish", "strategy", "init"}))
+        options={"popsize": OptionSpec(int, 4, 100), "tol": OptionSpec(float, 0.0, 0.1, tolerance=True, default=0.01),
+                 "atol": OptionSpec(float, 0.0, 0.1), "mutation": OptionSpec(float, 0.1, 1.9),
+                 "recombination": OptionSpec(float, 0.0, 1.0), "polish": OptionSpec(bool),
+                 "strategy": OptionSpec(str, choices=DE_STRATEGIES),
+                 "init": OptionSpec(str, choices=("latinhypercube", "sobol", "halton", "random"))})
 
     def _run(self, run: Run) -> Outcome:
         from scipy.optimize import NonlinearConstraint, differential_evolution

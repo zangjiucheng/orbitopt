@@ -6,7 +6,8 @@ the shared ``OptimizationResult``. Backends (scipy, pygmo, cma) are imported
 only when a solver runs. See ``docs/optimization/solvers.md``.
 """
 
-from .base import CONVERGENCE_MEANINGS, AdapterSolver, BudgetExhausted, Outcome, Run, Solver, SolverCapability
+from .base import (CONVERGENCE_MEANINGS, AdapterSolver, BudgetExhausted, OptionSpec, Outcome, Run, Solver,
+                   SolverCapability)
 from .cma_solvers import CmaEsSolver
 from .pygmo_solvers import Nsga2Solver
 from .registry import SolverRegistry, default_registry
@@ -14,6 +15,6 @@ from .scipy_solvers import DifferentialEvolutionSolver, HighsSolver, LbfgsbSolve
 
 __all__ = [
     "AdapterSolver", "BudgetExhausted", "CONVERGENCE_MEANINGS", "CmaEsSolver", "DifferentialEvolutionSolver",
-    "HighsSolver", "LbfgsbSolver", "Nsga2Solver", "Outcome", "Run", "Solver", "SolverCapability", "SolverRegistry",
+    "HighsSolver", "LbfgsbSolver", "Nsga2Solver", "OptionSpec", "Outcome", "Run", "Solver", "SolverCapability", "SolverRegistry",
     "SlsqpSolver", "default_registry",
 ]

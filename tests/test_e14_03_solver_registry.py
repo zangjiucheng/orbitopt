@@ -563,6 +563,24 @@ def test_malformed_requests_raise_and_impossible_ones_return_an_error_result():
     assert r.termination == Termination.ERROR and r.evaluations == 0 and "integer" in r.message
 
 
+def test_every_option_declares_its_type_range_and_tolerance_flag():
+    tolerances = {(c.solver_id, name) for c in REGISTRY.capabilities()
+                  for name, spec in c.options.items() if spec.tolerance}
+    assert tolerances == {("scipy.highs", "mip_rel_gap"), ("scipy.slsqp", "ftol"), ("scipy.lbfgsb", "ftol"),
+                          ("scipy.lbfgsb", "gtol"), ("scipy.differential_evolution", "tol"),
+                          ("cma.cma_es", "tolfun"), ("cma.cma_es", "tolx")}
+    for c in REGISTRY.capabilities():
+        for name, spec in c.options.items():
+            assert spec.kind in (bool, int, float, str), (c.solver_id, name)
+            if spec.tolerance:
+                assert spec.low <= spec.default <= spec.high, (c.solver_id, name)
+    p = to_ir(by_id("rosenbrock-d5"))
+    with pytest.raises(ValueError, match="ftol must lie in"):
+        REGISTRY.solve_with(p, "scipy.lbfgsb", options={"ftol": 0.5})
+    with pytest.raises(ValueError, match="strategy must be one of"):
+        REGISTRY.solve_with(p, "scipy.differential_evolution", options={"strategy": "guess"})
+
+
 def test_the_registry_and_classifier_import_no_numpy_until_a_solver_runs():
     code = ("import sys; from orbitopt.optimization import Objective, OptimizationProblem, Variable; "
             "from orbitopt.optimization.solvers import default_registry; "

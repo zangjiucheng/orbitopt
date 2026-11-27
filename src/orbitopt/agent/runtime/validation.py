@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import math
 import numbers
-from dataclasses import dataclass
 from typing import Any, Mapping
 
 from orbitopt.optimization import OptimizationProblem
@@ -32,59 +31,6 @@ PROBLEM_FIELDS = frozenset({
 
 MAX_SEED = 2**31 - 1
 MAX_BACKEND_ITERATIONS = 100_000
-
-
-@dataclass(frozen=True)
-class OptionSpec:
-    """The type and the closed range of one solver option; ``choices`` for a string option."""
-
-    kind: type
-    low: float | None = None
-    high: float | None = None
-    choices: tuple[str, ...] = ()
-    default: float | None = None
-    """For a solver tolerance (never a problem tolerance): the value a remedy loosens from when none is set."""
-
-    @property
-    def tolerance(self) -> bool:
-        """Whether this is a convergence tolerance of the solver, the one kind of value a remedy may loosen."""
-        return self.default is not None
-
-    def errors(self, value: Any) -> str | None:
-        if self.kind is bool:
-            return None if isinstance(value, bool) else "must be true or false"
-        if self.kind is str:
-            return None if value in self.choices else f"must be one of {list(self.choices)}"
-        if isinstance(value, bool) or not isinstance(value, numbers.Real) or not math.isfinite(value):
-            return "must be a finite number"
-        if self.kind is int and value != int(value):
-            return "must be an integer"
-        if not (self.low <= value <= self.high):
-            return f"must lie in [{self.low:g}, {self.high:g}]"
-        return None
-
-
-DE_STRATEGIES = ("best1bin", "best1exp", "rand1bin", "rand1exp", "rand2bin", "rand2exp", "randtobest1bin",
-                 "randtobest1exp", "currenttobest1bin", "currenttobest1exp", "best2exp", "best2bin")
-OPTION_SPECS: dict[str, OptionSpec] = {
-    "ftol": OptionSpec(float, 1e-16, 1e-2, default=1e-10),
-    "gtol": OptionSpec(float, 1e-16, 1e-2, default=1e-5),
-    "tol": OptionSpec(float, 0.0, 0.1, default=0.01),
-    "atol": OptionSpec(float, 0.0, 0.1),
-    "tolfun": OptionSpec(float, 1e-16, 1e-2, default=1e-11),
-    "tolx": OptionSpec(float, 1e-16, 1e-2, default=1e-11),
-    "mip_rel_gap": OptionSpec(float, 0.0, 1e-4, default=1e-9),
-    "popsize": OptionSpec(int, 4, 100),
-    "mutation": OptionSpec(float, 0.1, 1.9),
-    "recombination": OptionSpec(float, 0.0, 1.0),
-    "polish": OptionSpec(bool),
-    "presolve": OptionSpec(bool),
-    "strategy": OptionSpec(str, choices=DE_STRATEGIES),
-    "init": OptionSpec(str, choices=("latinhypercube", "sobol", "halton", "random")),
-    "sigma0": OptionSpec(float, 1e-12, 1e12),
-}
-"""The schema of every option a built-in solver declares. ``SolverCapability.options`` lists names only;
-an option named there but missing here has no declared schema and is refused."""
 
 
 def validate_proposal(raw: Any, *, problem: OptimizationProblem, solvers: Mapping[str, SolverCapability],
@@ -157,14 +103,14 @@ def _options(value: Any, capability: SolverCapability | None, policy: Policy, re
     options = {}
     for name, setting in sorted(value.items(), key=lambda kv: str(kv[0])):
         path = f"/options/{name}"
-        spec = OPTION_SPECS.get(name)
+        spec = None if capability is None else capability.options.get(name)
         if str(name).lower() in PROBLEM_FIELDS:
             refuse(ViolationCode.PROBLEM_EDIT, path, "an option may not change the problem or its verification")
-        elif capability is not None and name not in capability.options:
+        elif capability is None:
+            continue  # the solver is already refused; its options have no schema to check against
+        elif spec is None:
             refuse(ViolationCode.INVALID_OPTION, path,
                    f"{capability.solver_id} takes options {sorted(capability.options)}")
-        elif spec is None:
-            refuse(ViolationCode.INVALID_OPTION, path, "this option has no declared schema")
         elif (why := spec.errors(setting)) is not None:
             refuse(ViolationCode.INVALID_OPTION, path, why)
         else:

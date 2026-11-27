@@ -23,7 +23,8 @@ backend's message. A multi-objective solve reports its whole front in
 ``OptimizationResult.front``.
 
 Malformed requests raise: an invalid problem raises ``InvalidProblemError``,
-an unknown option or ``x0`` name raises ``ValueError``. A well-formed request
+an unknown option, an option value outside its ``OptionSpec`` or an
+unknown ``x0`` name raises ``ValueError``. A well-formed request
 the solver cannot carry out returns ``Termination.ERROR`` with the reason:
 the backend is not installed, or the problem's structure is outside the
 solver's capability.
@@ -33,11 +34,12 @@ from __future__ import annotations
 
 import importlib.util
 import math
+import numbers
 import sys
 import time
 import warnings
 from collections import OrderedDict
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Callable, Literal, Mapping, Protocol, Sequence
 
 from ..classify import Form, ProblemStructure, classify
@@ -62,6 +64,48 @@ CONVERGENCE_MEANINGS: dict[str, str] = {
 
 
 @dataclass(frozen=True)
+class OptionSpec:
+    """One solver option: its type, its closed range (``choices`` for a string), and whether it is a tolerance.
+
+    ``tolerance`` marks a convergence tolerance of the solver, never a
+    problem tolerance; it is the one kind of option a remedy may loosen.
+    ``default`` is the value the backend runs with when the option is not
+    given; a tolerance must state it, because loosening starts from it.
+    """
+
+    kind: type
+    low: float | None = None
+    high: float | None = None
+    choices: tuple[str, ...] = ()
+    tolerance: bool = False
+    default: float | None = None
+
+    def __post_init__(self):
+        if self.kind not in (bool, int, float, str):
+            raise ValueError(f"an option is bool, int, float or str, not {self.kind!r}")
+        if self.kind in (int, float) and (self.low is None or self.high is None or self.low > self.high):
+            raise ValueError("a numeric option needs a closed range low <= high")
+        if self.kind is str and not self.choices:
+            raise ValueError("a string option needs its choices")
+        if self.tolerance and (self.kind is not float or self.default is None):
+            raise ValueError("a tolerance is a float option with the default the backend uses")
+
+    def errors(self, value: Any) -> str | None:
+        """Why ``value`` is not a valid setting; ``None`` when it is."""
+        if self.kind is bool:
+            return None if isinstance(value, bool) else "must be true or false"
+        if self.kind is str:
+            return None if value in self.choices else f"must be one of {list(self.choices)}"
+        if isinstance(value, bool) or not isinstance(value, numbers.Real) or not math.isfinite(value):
+            return "must be a finite number"
+        if self.kind is int and value != int(value):
+            return "must be an integer"
+        if not (self.low <= value <= self.high):
+            return f"must lie in [{self.low:g}, {self.high:g}]"
+        return None
+
+
+@dataclass(frozen=True)
 class SolverCapability:
     """What a solver can take, declared by the solver and matched against ``classify``.
 
@@ -72,9 +116,9 @@ class SolverCapability:
     problems with several objectives, any other solver only problems with one.
     ``honors`` lists the ``Budget`` fields the backend is configured from;
     ``max_evaluations`` and ``max_wall_s`` are enforced by the adapter for
-    every solver regardless. ``options`` lists the option names ``solve``
-    accepts. ``backend`` is the module the solver imports; when it cannot be
-    found, ``unavailable_reason`` says so.
+    every solver regardless. ``options`` maps each option name ``solve``
+    accepts to its ``OptionSpec``. ``backend`` is the module the solver
+    imports; when it cannot be found, ``unavailable_reason`` says so.
     """
 
     solver_id: str
@@ -90,7 +134,7 @@ class SolverCapability:
     is_global: bool = False
     deterministic_given_seed: bool = True
     honors: frozenset[str] = frozenset({"max_evaluations", "max_wall_s"})
-    options: frozenset[str] = frozenset()
+    options: Mapping[str, OptionSpec] = field(default_factory=dict)
     unavailable_reason: str | None = None
 
     @property
@@ -359,9 +403,13 @@ class AdapterSolver:
         budget = problem.budget if budget is None else budget
         options = dict(options or {})
         capability = self.capability
-        unknown = sorted(set(options) - capability.options)
+        unknown = sorted(set(options) - capability.options.keys())
         if unknown:
             raise ValueError(f"{capability.solver_id} takes options {sorted(capability.options)}, not {unknown}")
+        invalid = [f"{name} {why}" for name, value in sorted(options.items())
+                   if (why := capability.options[name].errors(value)) is not None]
+        if invalid:
+            raise ValueError(f"{capability.solver_id}: " + "; ".join(invalid))
         space = Space.of(problem)
         start = space.start(x0)
         structure = classify(problem)

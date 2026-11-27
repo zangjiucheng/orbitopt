@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from ..classify import Form
 from ..result import Termination
-from .base import AdapterSolver, Outcome, Run, SolverCapability
+from .base import AdapterSolver, OptionSpec, Outcome, Run, SolverCapability
 
 _CONVERGED = frozenset({"tolfun", "tolfunhist", "tolx"})
 _LIMITS = frozenset({"maxiter", "maxfevals"})
@@ -27,7 +27,9 @@ class CmaEsSolver(AdapterSolver):
         solver_id="cma.cma_es", backend="cma", max_form=Form.BLACK_BOX, convergence="heuristic",
         needs_finite_bounds=True, is_global=True,
         honors=frozenset({"max_evaluations", "max_iterations", "max_wall_s"}),
-        options=frozenset({"sigma0", "popsize", "tolfun", "tolx"}))
+        options={"sigma0": OptionSpec(float, 1e-12, 1e12), "popsize": OptionSpec(int, 4, 100),
+                 "tolfun": OptionSpec(float, 1e-16, 1e-2, tolerance=True, default=1e-11),
+                 "tolx": OptionSpec(float, 1e-16, 1e-2, tolerance=True, default=1e-11)})
 
     def _run(self, run: Run) -> Outcome:
         import cma
