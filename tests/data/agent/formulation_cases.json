@@ -2982,7 +2982,7 @@
    "replies": [
     "{\"status\": \"unsupported\", \"problem\": null, \"questions\": [], \"assumptions\": [], \"unsupported_reason\": {\"category\": \"semi_infinite\", \"explanation\": \"the worst case over every t in [0, 1] is a semi-infinite min-max program\"}, \"authorized_changes\": [], \"tradeoff_quote\": null}"
    ],
-   "notes": "Benchmark example FC-003: semi-infinite min-max. IR 1.0 has no epigraph or semi-infinite constraint, so the case stays unsupported.",
+   "notes": "Benchmark example FC-003: semi-infinite min-max. The IR has no epigraph or semi-infinite constraint, so the case stays unsupported.",
    "expect": {
     "category": "semi_infinite"
    }

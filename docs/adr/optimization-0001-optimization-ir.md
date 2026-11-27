@@ -3,8 +3,9 @@
 - **Status:** Accepted. The acceptance thresholds below are proposed and frozen here.
 - **Date:** 2026-11-26
 - **Deciders:** E14 LLM-assisted optimization, E14-01
-- **Code:** `src/orbitopt/optimization/`, `src/orbitopt/schemas/optimization-problem-1.0.json`,
-  `src/orbitopt/schemas/optimization-result-1.0.json`
+- **Code:** `src/orbitopt/optimization/`, `src/orbitopt/schemas/optimization-problem-1.1.json`,
+  `src/orbitopt/schemas/optimization-result-1.1.json` (the 1.0 schemas stay for parsing 1.0 documents)
+- **Amended:** IR 1.1, see the addendum at the end
 - **Evidence:** `tests/test_e14_01_problem_ir.py`, `docs/optimization/ir.md`
 - **Consumers:** E14-02 natural-language intake, E14-03 solvers, E14-04 tool registry,
   E14-05 agent runtime, E14-06 verification guard
@@ -123,7 +124,7 @@ problem states its own:
 | Threshold | Default | Meaning |
 |---|---|---|
 | `required` | `solver_converged`, `constraints_satisfied`, `independently_verified` | Statuses that must be true for acceptance. `optimality_certified` is opt-in because most solvers cannot prove it. |
-| `constraint_tol` | `1e-6` | A constraint or bound holds when its violation is at most `1e-6 * max(1, abs(rhs or bound))`. An integer must be within `1e-6` of an integer. `OptimizationProblem.constraints_satisfied` is the single implementation. |
+| `constraint_tol` | `1e-6` | A constraint or bound holds when its violation is at most `1e-6 * max(1, abs(rhs or bound))`. An integer must be within `1e-6` of an integer. `OptimizationProblem.constraints_satisfied` is the single implementation. IR 1.1 replaces the scale with `tolerance_scale`; see the addendum. |
 | `objective_rtol` | `1e-6` | An independent check agrees when `abs(f - f_ref) <= 1e-6 * max(1, abs(f_ref))`. |
 | `optimality_gap` | `1e-4` | The relative gap an optimality certificate must close. |
 | `independent_methods` | `analytical`, `reference_solution`, `alternate_solver` | The methods allowed to set `independently_verified`. |
@@ -144,3 +145,76 @@ problem states its own:
 - Discrete choices are numeric. Categorical choices would need string-valued
   variables, which arithmetic expressions cannot use. They are out of scope
   for 1.0.
+
+## Addendum: IR 1.1 (2026-11-26)
+
+Four E14 workers (the compiler, the solvers, the tool registry and the
+guard) hit the same limits of 1.0 on their own. IR 1.1 changes the IR once
+and migrates every caller in the same change, with no compatibility layer.
+
+**Indexed sums.** `rosenbrock-d20` could not be written: unrolled, its
+objective has more than 500 nodes. An expression may now write `x[k]` for the
+declared scalar `x<k>` and `sum(<term> for i in range(a, b))` for a sum over
+integer indices. Indices and range bounds are integer arithmetic over
+literals and enclosing indices. A parse expands every sum into a balanced
+tree of additions and checks that tree with the unchanged whitelist, so no
+consumer sees new syntax. The source tree keeps its 500-node and depth-200
+limits, and the expanded tree has its own limit of 20000 nodes. Expansion
+counts while it builds, so the work is bounded by the limit and not by the
+range. A vector variable kind was the alternative. It would have changed the
+solver vector layout, `classify`, the guard and the equivalence check, and
+indexed scalars need none of that. `sum` and `range` become reserved names.
+
+**Tool calls.** `ToolCall` gains `constants` and `output`. `constants` are
+JSON values passed to the tool unchanged and are part of the digest. A string
+integrand, a rule name or an array of layer thicknesses can now reach a tool,
+and the integration cases no longer encode the integrand in the tool id.
+`output` names the field read from a tool that returns an object, which
+replaces the registry's `value_field`. Every failure in or around a tool
+inside `evaluate` is a `ToolCallError`, a subclass of `EvaluationError`, so a
+solver skips a point whose tool refused it instead of stopping.
+
+**Tolerance scale.** `max(1, abs(rhs))` let a small right-hand side drown in
+the tolerance: `error <= 1e-10` accepted errors up to `1e-6`. 1.1 scales
+`constraint_tol` by `tolerance_scale(rhs)`, which is `abs(rhs)`, or 1 when
+`rhs` is 0 and carries no magnitude. Bounds and choices follow the same
+rule. An explicit per-constraint scale was the alternative. It would put the
+fix in every author's hands, and the default would stay wrong. The
+hard-constraint fingerprint keeps its shape, because the rule belongs to the
+version and not to a field. A 1.0 constraint with `0 < abs(rhs) < 1` is
+graded more strictly under 1.1.
+
+**Results.** `Termination` gains `unbounded` and `stalled`, which solvers
+had reported as `error`. `OptimizationResult` gains `front` (the Pareto
+points that NSGA-II used to put in evidence data) and `provenance`
+(`Provenance.cache_key`). The cache record is part of the result, so
+`result_digest` pins it, and a run directory moves to format
+`orbitopt.optimization.run/2`. `Evidence` gains `producer` and
+`problem_digest`. An item inside a result cannot name that result's own
+digest, so evidence pinned to a result still travels beside it, in the
+guard's evidence types.
+
+**Public helpers.** `Expression.tree`, `SCALAR_FUNCTIONS`,
+`Variable.domain_violations`, `Constraint.violation`, `Constraint.allowance`,
+`tolerance_scale` and `to_plain` replace the private names that `classify`,
+the KKT certificate, the guard and the equivalence check imported or copied.
+
+**Versions and digests.** Documents carry `schemaVersion` `"1.1"`.
+`PROBLEM_SCHEMAS` and `RESULT_SCHEMAS` map each version that still parses
+to its schema, and `parse_problem` and the guard pick the schema that a
+document names. A 1.0 document parses, and its missing 1.1 fields take their
+defaults. The digest hashes the 1.1 form, `schemaVersion` included, so it
+differs from the 1.0 digest of the same document. The quantisation is
+unchanged at 12 significant digits, so the digest still agrees across
+machines. The pinned test digest moved with the version.
+
+**Outside the IR, done in the same change.** `StructuredOutputError` carries
+the usage of the replies it cost. The OpenAI-compatible provider sends a
+dotted tool id such as `math.erf.v1` as the function name `math-erf-v1`,
+which matches `^[a-zA-Z0-9_-]{1,64}$`, and maps the name back on return.
+
+**Not done.** The guard asked for a solved-problem digest in the result's
+provenance. `problem_digest` already names the problem the solver ran, so a
+second field would only be able to disagree with it. A result's own evidence
+does not carry `result_digest`, for the reason given above.
+
