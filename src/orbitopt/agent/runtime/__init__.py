@@ -14,16 +14,18 @@ from .loop import (MAX_ALTERNATES, VERIFICATION_SHARE, EvaluationBudgetExceeded,
 from .model import (TRACE_SCHEMA, Action, AlternateRun, BudgetUse, Decision, Diagnosis, FailureKind, IterationRecord,
                     Limits, Policy, Proposal, RecordKind, Remedy, RunOutcome, RunStatus, StopReason, Trace,
                     VerificationRecord, Violation, ViolationCode, trace_digest)
-from .validation import OPTION_SPECS, PROBLEM_FIELDS, PROPOSAL_FIELDS, OptionSpec, validate_proposal
+from .persistence import RUN_MANIFEST_FORMAT, ReplayReport, load_trace, replay, save_run
 from .planners import (PROPOSAL_SCHEMA, LLMPlanner, Planner, PlannerState, PlannerUnavailable, RecordedPlanner,
                        RuleBasedPlanner, prompt_state)
+from .validation import OPTION_SPECS, PROBLEM_FIELDS, PROPOSAL_FIELDS, OptionSpec, validate_proposal
 
 __all__ = [
-    "Action", "AlternateRun", "BudgetUse", "Decision", "diagnose", "Diagnosis", "DISHONEST", "distrust",
-    "EvaluationBudgetExceeded", "EvaluationMeter", "FailureKind", "feasible", "IterationRecord", "known_tool_ids",
-    "Limits", "LLMPlanner", "loosened", "MAX_ALTERNATES", "OPTION_SPECS", "OptionSpec", "Planner", "PlannerState",
-    "PlannerUnavailable", "Policy", "PROBLEM_FIELDS", "prompt_state", "Proposal", "PROPOSAL_FIELDS",
-    "PROPOSAL_SCHEMA", "RecordedPlanner", "RecordKind", "REMEDIES", "Remedy", "RuleBasedPlanner", "RunOutcome",
-    "RunStatus", "screen_cost", "solve", "StopReason", "Trace", "trace_digest", "TRACE_SCHEMA", "validate_proposal",
-    "VERIFICATION_SHARE", "VerificationRecord", "Violation", "ViolationCode",
+    "Action", "AlternateRun", "BudgetUse", "DISHONEST", "Decision", "Diagnosis", "EvaluationBudgetExceeded",
+    "EvaluationMeter", "FailureKind", "IterationRecord", "LLMPlanner", "Limits", "MAX_ALTERNATES", "OPTION_SPECS",
+    "OptionSpec", "PROBLEM_FIELDS", "PROPOSAL_FIELDS", "PROPOSAL_SCHEMA", "Planner", "PlannerState",
+    "PlannerUnavailable", "Policy", "Proposal", "REMEDIES", "RUN_MANIFEST_FORMAT", "RecordKind", "RecordedPlanner",
+    "Remedy", "ReplayReport", "RuleBasedPlanner", "RunOutcome", "RunStatus", "StopReason", "TRACE_SCHEMA", "Trace",
+    "VERIFICATION_SHARE", "VerificationRecord", "Violation", "ViolationCode", "diagnose", "distrust", "feasible",
+    "known_tool_ids", "load_trace", "loosened", "prompt_state", "replay", "save_run", "screen_cost", "solve",
+    "trace_digest", "validate_proposal",
 ]
