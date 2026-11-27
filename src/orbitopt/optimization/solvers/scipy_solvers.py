@@ -11,12 +11,17 @@ import math
 
 from ..classify import Form, linear_coefficients
 from ..result import Termination
-from .base import AdapterSolver, Outcome, Run, SolverCapability
+from .base import AdapterSolver, OptionSpec, Outcome, Run, SolverCapability
 
 DEFAULT_MIP_REL_GAP = 1e-9
 """HiGHS stops a MILP when the relative gap is below this; scipy's default (1e-4) can stop short of the optimum."""
 DEFAULT_SLSQP_FTOL = 1e-10
 """SLSQP's precision goal on the objective; scipy's default (1e-6) is coarser than the E14-10 tolerances."""
+LBFGSB_FTOL = 2.220446049250313e-09
+LBFGSB_GTOL = 1e-5
+"""scipy's own L-BFGS-B defaults, which the adapter keeps."""
+DE_STRATEGIES = ("best1bin", "best1exp", "rand1bin", "rand1exp", "rand2bin", "rand2exp", "randtobest1bin",
+                 "randtobest1exp", "currenttobest1bin", "currenttobest1exp", "best2exp", "best2bin")
 
 
 def _bounds(run: Run) -> list[tuple[float | None, float | None]]:
@@ -42,7 +47,8 @@ class HighsSolver(AdapterSolver):
     CAPABILITY = SolverCapability(
         solver_id="scipy.highs", backend="scipy", max_form=Form.LINEAR, convergence="certificate",
         supports_integers=True, supports_constraints=True, supports_equality=True, is_global=True,
-        options=frozenset({"mip_rel_gap", "presolve"}))
+        options={"mip_rel_gap": OptionSpec(float, 0.0, 1e-4, tolerance=True, default=DEFAULT_MIP_REL_GAP),
+                 "presolve": OptionSpec(bool)})
 
     def _run(self, run: Run) -> Outcome:
         import numpy as np
@@ -116,7 +122,8 @@ class SlsqpSolver(AdapterSolver):
     CAPABILITY = SolverCapability(
         solver_id="scipy.slsqp", backend="scipy", max_form=Form.SMOOTH, convergence="first_order", needs_gradients=True,
         supports_constraints=True, supports_equality=True,
-        honors=frozenset({"max_evaluations", "max_iterations", "max_wall_s"}), options=frozenset({"ftol"}))
+        iteration_cap=True,
+        options={"ftol": OptionSpec(float, 1e-16, 1e-2, tolerance=True, default=DEFAULT_SLSQP_FTOL)})
 
     def _run(self, run: Run) -> Outcome:
         from scipy.optimize import minimize
@@ -130,8 +137,8 @@ class SlsqpSolver(AdapterSolver):
         if eq:
             cons.append({"type": "eq", "fun": lambda v: [ev(v).g[i] for i in eq]})
         options = {"ftol": run.options.get("ftol", DEFAULT_SLSQP_FTOL)}
-        if run.budget.max_iterations is not None:
-            options["maxiter"] = run.budget.max_iterations
+        if run.max_backend_iterations is not None:
+            options["maxiter"] = run.max_backend_iterations
         res = minimize(ev.objective, run.start, method="SLSQP", bounds=_bounds(run), constraints=cons,
                        options=options)
         stop = {9: Termination.MAX_ITERATIONS, 8: Termination.STALLED}.get(res.status)  # 8: line search failed
@@ -143,15 +150,16 @@ class LbfgsbSolver(AdapterSolver):
 
     CAPABILITY = SolverCapability(
         solver_id="scipy.lbfgsb", backend="scipy", max_form=Form.SMOOTH, convergence="first_order",
-        needs_gradients=True, honors=frozenset({"max_evaluations", "max_iterations", "max_wall_s"}),
-        options=frozenset({"ftol", "gtol"}))
+        needs_gradients=True, iteration_cap=True,
+        options={"ftol": OptionSpec(float, 1e-16, 1e-2, tolerance=True, default=LBFGSB_FTOL),
+                 "gtol": OptionSpec(float, 1e-16, 1e-2, tolerance=True, default=LBFGSB_GTOL)})
 
     def _run(self, run: Run) -> Outcome:
         from scipy.optimize import minimize
 
         options = {"maxfun": 10**12, **{k: run.options[k] for k in ("ftol", "gtol") if k in run.options}}
-        if run.budget.max_iterations is not None:
-            options["maxiter"] = run.budget.max_iterations
+        if run.max_backend_iterations is not None:
+            options["maxiter"] = run.max_backend_iterations
         res = minimize(run.evaluator.objective, run.start, method="L-BFGS-B", bounds=_bounds(run), options=options)
         stop = {1: Termination.MAX_ITERATIONS, 2: Termination.STALLED}.get(res.status)  # 2: abnormal line search
         return Outcome(converged=bool(res.success), stop=stop, message=str(res.message), iterations=int(res.nit))
@@ -169,8 +177,12 @@ class DifferentialEvolutionSolver(AdapterSolver):
         solver_id="scipy.differential_evolution", backend="scipy", max_form=Form.BLACK_BOX,
         convergence="heuristic", supports_integers=True,
         supports_constraints=True, supports_equality=True, needs_finite_bounds=True, is_global=True,
-        honors=frozenset({"max_evaluations", "max_iterations", "max_wall_s"}),
-        options=frozenset({"popsize", "tol", "atol", "mutation", "recombination", "polish", "strategy", "init"}))
+        iteration_cap=True,
+        options={"popsize": OptionSpec(int, 4, 100), "tol": OptionSpec(float, 0.0, 0.1, tolerance=True, default=0.01),
+                 "atol": OptionSpec(float, 0.0, 0.1), "mutation": OptionSpec(float, 0.1, 1.9),
+                 "recombination": OptionSpec(float, 0.0, 1.0), "polish": OptionSpec(bool),
+                 "strategy": OptionSpec(str, choices=DE_STRATEGIES),
+                 "init": OptionSpec(str, choices=("latinhypercube", "sobol", "halton", "random"))})
 
     def _run(self, run: Run) -> Outcome:
         from scipy.optimize import NonlinearConstraint, differential_evolution
@@ -185,8 +197,8 @@ class DifferentialEvolutionSolver(AdapterSolver):
             kwargs["integrality"] = list(space.integral)
         if run.x0_given:
             kwargs["x0"] = run.start
-        if run.budget.max_iterations is not None:
-            kwargs["maxiter"] = run.budget.max_iterations
+        if run.max_backend_iterations is not None:
+            kwargs["maxiter"] = run.max_backend_iterations
         res = differential_evolution(ev.objective, list(zip(space.lower, space.upper)), rng=run.seed,
                                      updating="immediate", workers=1, **kwargs)
         limited = "maximum number of iterations" in str(res.message).lower()

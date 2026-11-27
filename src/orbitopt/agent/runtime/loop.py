@@ -270,7 +270,7 @@ class _Run:
         capability = next(c for c in state.solvers if c.solver_id == decision.solver_id)
         result, error = self.run_solver(capability.solver_id, decision.evaluations, seed=decision.seed,
                                         x0=decision.x0, options=decision.options,
-                                        max_iterations=decision.max_iterations)
+                                        max_backend_iterations=decision.max_iterations)
         screen = None if result is None else self.screen(result)
         diagnosis = diagnose(result, screen, capability, self.structure, error)
         if diagnosis.kind in (FailureKind.REJECTED_BY_GUARD, FailureKind.SOLVER_ERROR):
@@ -285,13 +285,14 @@ class _Run:
         return None
 
     def run_solver(self, solver_id: str, allowance: int, *, seed: int, x0=None, options=None,
-                   max_iterations=None) -> tuple[OptimizationResult | None, str]:
+                   max_backend_iterations=None) -> tuple[OptimizationResult | None, str]:
         """One solve on the metered problem, with the meter's allowance set to this solve's share."""
         self.meter.allowance = self.meter.count + allowance
-        budget = Budget(max_evaluations=allowance, max_iterations=max_iterations, max_wall_s=self.wall_left())
+        budget = Budget(max_evaluations=allowance, max_wall_s=self.wall_left())
         try:
             result = self.registry.get(solver_id).solve(self.problem, budget=budget, seed=seed, x0=x0,
-                                                        options=dict(options or {}) or None, tools=self.resolvers)
+                                                        options=dict(options or {}) or None, tools=self.resolvers,
+                                                        max_backend_iterations=max_backend_iterations)
         except Exception as exc:  # noqa: BLE001 - a solver is third-party code; its crash is a failed iteration
             return None, f"{type(exc).__name__}: {exc}"
         finally:

@@ -16,7 +16,8 @@ The sealed run's manifest digest lives here, outside ``sealed/``, as
 out of band, since whoever can rewrite the directory can rewrite the
 manifest too. ``replay`` checks every byte, then re-executes the trace's
 recorded proposals with a ``RecordedPlanner`` and compares the new trace
-with the recorded one.
+with the recorded one. ``regrade`` checks every byte and re-grades only the
+sealed best result with the guard, without re-running the loop.
 """
 
 from __future__ import annotations
@@ -29,7 +30,8 @@ from typing import Any, Mapping
 from orbitopt.agent.tools import Caller, ToolView, bind_problem
 from orbitopt.optimization import Budget, InvalidProblemError, OptimizationProblem, parse_problem, schema_errors
 from orbitopt.optimization.solvers import SolverRegistry, default_registry
-from orbitopt.optimization.verification import RUN_FORMAT, Outcome, canonical_json, file_digest, seal_run, verify_run
+from orbitopt.optimization.verification import (RUN_FORMAT, Outcome, VerificationReport, canonical_json, file_digest,
+                                                seal_run, verify_run)
 
 from .loop import Tools, solve
 from .model import TRACE_SCHEMA, Policy, Proposal, RunOutcome, RunStatus, stable, trace_digest
@@ -111,34 +113,84 @@ def replay(run_dir: str | Path, *, tools: Tools | None = None, registry: SolverR
     decision or outcome shows up as a difference even when the editor also
     recomputed the trace digest. Pass ``tools`` as the original run did.
     """
-    run_dir = Path(run_dir)
     registry = registry or default_registry()
     integrity: list[str] = []
-    manifest = _manifest(run_dir, expected_manifest_digest, integrity)
     try:
-        trace = load_trace(run_dir)
-        problem = parse_problem(json.loads((run_dir / "problem.json").read_text(encoding="utf-8")))
+        manifest, trace, problem = _open(Path(run_dir), expected_manifest_digest, integrity)
     except (OSError, ValueError, InvalidProblemError) as exc:
         return ReplayReport(tuple(integrity) + (f"cannot load the run: {exc}",), (), None, None, None)
-    if trace["digest"] != trace_digest(trace):
-        integrity.append("trace.json: the recorded digest does not match the trace's content")
-    if trace["problem_digest"] != problem.digest():
-        integrity.append("problem.json: its digest is not the problem the trace names")
-    if manifest is not None and manifest.get("trace_digest") != trace["digest"]:
-        integrity.append("manifest.json: the trace digest does not match trace.json")
     proposals = [Proposal.from_dict(r["proposal"]) for r in trace["iterations"]]
     outcome = solve(problem, planner=RecordedPlanner(proposals, name=trace["planner"]),
                     budget=Budget(**trace["limits"]), policy=Policy.from_dict(trace["policy"]), tools=tools,
                     seed=trace["seed"], registry=registry)
     replayed = outcome.trace.to_dict()
     differences = _differences(stable(trace), stable(replayed), "")
-    sealed = _regrade_sealed(run_dir, manifest, problem, trace, tools, registry, integrity)
+    report = _regrade_sealed(Path(run_dir), manifest, problem, trace, tools, registry, integrity)
+    sealed = None if report is None else report.verdict.value
     verified = trace["outcome"]["status"] == RunStatus.VERIFIED.value
     if sealed is not None and (sealed == Outcome.PASSED.value) != verified:
         differences.append(f"sealed/: the guard re-grades the sealed run {sealed!r}, but the trace says "
                            f"{trace['outcome']['status']!r}")
     return ReplayReport(tuple(integrity), tuple(differences[:MAX_DIFFERENCES]), trace["digest"], replayed["digest"],
                         sealed)
+
+
+@dataclass(frozen=True)
+class RegradeReport:
+    """``verified`` when every file is intact and the guard passes the sealed best result again.
+
+    ``integrity`` lists changed, missing or inconsistent files. ``report`` is
+    the guard's fresh grade of ``sealed/``, with the final verification's
+    alternate solvers run again; ``None`` when the run sealed no result.
+    ``recorded_status`` is the run status the trace claims.
+    """
+
+    integrity: tuple[str, ...]
+    report: VerificationReport | None
+    recorded_status: str | None
+
+    @property
+    def verified(self) -> bool:
+        return not self.integrity and self.report is not None and self.report.verdict is Outcome.PASSED
+
+
+def regrade(run_dir: str | Path, *, tools: Tools | None = None, registry: SolverRegistry | None = None,
+            expected_manifest_digest: str | None = None) -> RegradeReport:
+    """Check a run directory's bytes and re-grade its sealed best result; no planner, LLM or loop runs.
+
+    A trace that says ``verified`` while the guard does not pass the sealed
+    result, or the other way round, is an integrity finding. Pass ``tools``
+    as the original run did.
+    """
+    run_dir = Path(run_dir)
+    integrity: list[str] = []
+    try:
+        manifest, trace, problem = _open(run_dir, expected_manifest_digest, integrity)
+    except (OSError, ValueError, InvalidProblemError) as exc:
+        return RegradeReport(tuple(integrity) + (f"cannot load the run: {exc}",), None, None)
+    report = _regrade_sealed(run_dir, manifest, problem, trace, tools, registry or default_registry(), integrity)
+    status = trace["outcome"]["status"]
+    if report is not None and (report.verdict is Outcome.PASSED) != (status == RunStatus.VERIFIED.value):
+        integrity.append(f"sealed/: the guard re-grades the sealed run {report.verdict.value!r}, but the trace says "
+                         f"{status!r}")
+    return RegradeReport(tuple(integrity), report, status)
+
+
+def _open(run_dir: Path, expected: str | None, integrity: list[str]):
+    """The run's manifest (``None`` when unreadable), trace and problem, with every consistency failure in ``integrity``.
+
+    Raises ``OSError``, ``ValueError`` or ``InvalidProblemError`` when the trace or the problem cannot be loaded.
+    """
+    manifest = _manifest(run_dir, expected, integrity)
+    trace = load_trace(run_dir)
+    problem = parse_problem(json.loads((run_dir / "problem.json").read_text(encoding="utf-8")))
+    if trace["digest"] != trace_digest(trace):
+        integrity.append("trace.json: the recorded digest does not match the trace's content")
+    if trace["problem_digest"] != problem.digest():
+        integrity.append("problem.json: its digest is not the problem the trace names")
+    if manifest is not None and manifest.get("trace_digest") != trace["digest"]:
+        integrity.append("manifest.json: the trace digest does not match trace.json")
+    return manifest, trace, problem
 
 
 def _manifest(run_dir: Path, expected: str | None, integrity: list[str]) -> dict | None:
@@ -165,8 +217,9 @@ def _manifest(run_dir: Path, expected: str | None, integrity: list[str]) -> dict
 
 
 def _regrade_sealed(run_dir: Path, manifest: dict | None, problem: OptimizationProblem, trace: dict,
-                    tools: Tools | None, registry: SolverRegistry, integrity: list[str]) -> str | None:
-    """The guard's verdict on the sealed run, with the final verification's alternate solvers run again."""
+                    tools: Tools | None, registry: SolverRegistry,
+                    integrity: list[str]) -> VerificationReport | None:
+    """The guard's report on the sealed run, with the final verification's alternate solvers run again."""
     sealed = None if manifest is None else manifest.get("sealed")
     if not sealed:
         return None
@@ -185,7 +238,7 @@ def _regrade_sealed(run_dir: Path, manifest: dict | None, problem: OptimizationP
                         expected_manifest_digest=sealed["manifest_digest"])
     integrity.extend(f"sealed/: {f.code.value} at {f.path}" for f in report.findings
                      if f.code.value in ("digest_mismatch", "missing_file", "malformed_artifact"))
-    return report.verdict.value
+    return report
 
 
 def _differences(recorded: Any, replayed: Any, path: str) -> list[str]:

@@ -19,8 +19,20 @@ from .problem import SCHEMA_VERSION, to_plain
 RESULT_SCHEMA = "optimization-result-1.1.json"
 RESULT_SCHEMAS = {"1.0": "optimization-result-1.0.json", SCHEMA_VERSION: RESULT_SCHEMA}
 """The result schema for each ``schemaVersion`` that still parses; ``to_dict`` writes the newest."""
+VOLATILE_KEYS = frozenset({"wall_s", "wall_time_s", "latency_s"})
+"""Keys that measure this machine's clock, not a choice or an answer. Identity digests (``result_digest``, the
+agent trace digest) leave them out at any depth, so two identical runs share a digest."""
 EVIDENCE_KINDS = ("solver", "analytical", "reference_solution", "alternate_solver", "optimality_certificate")
 """``analytical``, ``reference_solution`` and ``alternate_solver`` match ``INDEPENDENT_METHODS``."""
+
+
+def stable(data: Any) -> Any:
+    """``data`` without the ``VOLATILE_KEYS``, at any depth."""
+    if isinstance(data, Mapping):
+        return {k: stable(v) for k, v in data.items() if k not in VOLATILE_KEYS}
+    if isinstance(data, (list, tuple)):
+        return [stable(v) for v in data]
+    return data
 
 
 class Termination(str, Enum):

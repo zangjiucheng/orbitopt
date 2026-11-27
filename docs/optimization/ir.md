@@ -16,7 +16,7 @@ its IR 1.1 addendum records what changed from 1.0.
 | `parameters` | Fixed named constants with units. |
 | `objectives` | One or more. Each has an expression, a `sense` (`minimize` or `maximize`) and a `unit`. |
 | `constraints` | Hard constraints `expression <sense> rhs` with `sense` one of `<=`, `>=`, `==`. The `unit` covers both sides. |
-| `budget` | Optional limits on evaluations, iterations, wall time and tokens. |
+| `budget` | Optional limits: `max_evaluations` and `max_wall_s`, which every solver enforces, and `max_iterations` (agent loop iterations) and `max_tokens` (LLM tokens), which only the agent runtime reads. No budget field sets a backend's own iteration limit. |
 | `verification` | Which result statuses acceptance requires, plus the thresholds behind them. |
 
 ## Expressions
@@ -145,6 +145,7 @@ All four start out false. It also holds:
 | `termination` | `converged`, `max_iterations`, `max_evaluations`, `timeout`, `infeasible`, `error`, `cancelled`, `unbounded` (the backend reports the objective improves without bound) or `stalled` (the backend stopped making progress before its convergence test passed). |
 | `front` | The non-dominated feasible points of a multi-objective solve, each a `ParetoPoint(x, objective_values)`. Empty otherwise. |
 | `provenance` | `Provenance(cache_key)`: the problem digest a cache stored the result under, or `None` for a fresh solve. It is part of the result, so the result digest pins it. |
+| `wall_time_s` | Wall-clock seconds of the solve. It is volatile, so the result digest leaves it out (`VOLATILE_KEYS`). |
 | `evidence` | Each item has a `kind`, a `summary`, `data`, its `producer` (a solver id, tool id or method) and the `problem_digest` it was produced for. |
 
 ## Versions and digests

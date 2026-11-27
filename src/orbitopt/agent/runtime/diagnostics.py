@@ -18,7 +18,6 @@ from orbitopt.optimization.solvers import SolverCapability
 from orbitopt.optimization.verification import FindingCode, Outcome, VerificationReport
 
 from .model import Diagnosis, FailureKind, Remedy
-from .validation import OPTION_SPECS
 
 PROVABLY_CONVEX = frozenset({ProblemClass.LP, ProblemClass.CONVEX_QP})
 """Classes whose convexity ``classify`` decides exactly: a first-order point of these is the global optimum."""
@@ -113,13 +112,12 @@ def loosened(options: Mapping[str, object], capability: SolverCapability) -> dic
     """The options with every solver tolerance the solver takes loosened by ``LOOSEN_FACTOR``, within its schema.
 
     ``None`` when no tolerance can be loosened further. Only solver
-    tolerances are touched: ``OPTION_SPECS`` marks them, and no problem
-    tolerance is a solver option.
+    tolerances are touched: the solver's ``OptionSpec`` marks them, and no
+    problem tolerance is a solver option.
     """
     out, changed = dict(options), False
-    for name in sorted(capability.options):
-        spec = OPTION_SPECS.get(name)
-        if spec is None or not spec.tolerance:
+    for name, spec in sorted(capability.options.items()):
+        if not spec.tolerance:
             continue
         current = float(options.get(name, spec.default))
         value = min(current * LOOSEN_FACTOR, spec.high)

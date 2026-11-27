@@ -17,6 +17,7 @@ from enum import Enum
 from typing import Any, Literal, Mapping
 
 from orbitopt.optimization import Budget, OptimizationResult, canonical_digest, schema_errors, to_plain
+from orbitopt.optimization.result import stable
 from orbitopt.optimization.verification import VerificationReport
 
 TRACE_SCHEMA = "agent-trace-1.0.json"
@@ -29,10 +30,6 @@ DEFAULT_EVALUATIONS_PER_DIMENSION = 2000
 """Evaluations per variable, at least two variables, when no limit is named (the E14-10 per-cell budget)."""
 DEFAULT_MAX_WALL_S = 600.0
 DEFAULT_MAX_TOKENS = 200_000
-
-VOLATILE_KEYS = frozenset({"wall_s", "wall_time_s", "latency_s"})
-"""Keys left out of the trace digest: they measure this machine's clock, not the run's choices."""
-
 
 class RunStatus(str, Enum):
     """What the run delivered. Only ``verified`` means the guard passed the final answer."""
@@ -398,17 +395,8 @@ class Trace:
         return data
 
 
-def stable(data: Any) -> Any:
-    """``data`` without the ``VOLATILE_KEYS``, at any depth."""
-    if isinstance(data, Mapping):
-        return {k: stable(v) for k, v in data.items() if k not in VOLATILE_KEYS}
-    if isinstance(data, (list, tuple)):
-        return [stable(v) for v in data]
-    return data
-
-
 def trace_digest(body: Mapping[str, Any]) -> str:
-    """``canonical_digest`` of a trace body without its digest and its wall-clock fields."""
+    """``canonical_digest`` of a trace body without its digest and its wall-clock fields (``VOLATILE_KEYS``)."""
     return canonical_digest(stable({k: v for k, v in body.items() if k != "digest"}))
 
 

@@ -426,6 +426,24 @@ def test_the_wall_clock_budget_stops_every_solver(counted, sid, iid):
         assert r.termination == Termination.TIMEOUT and not r.solver_converged
 
 
+@pytest.mark.parametrize("sid, iid", [case for case in BUDGET_CASES if case[0] != "scipy.highs"])
+def test_the_backend_iteration_cap_is_its_own_argument_and_budget_max_iterations_is_not_one(sid, iid):
+    solver, inst = _solver_or_skip(sid), by_id(iid)
+    looped = dataclasses.replace(to_ir(inst), budget=Budget(max_evaluations=1500, max_iterations=1))
+    free = solver.solve(looped, seed=1)
+    capped = solver.solve(looped, seed=1, max_backend_iterations=1)
+    assert free.iterations is None or free.iterations > 1  # the agent loop cap does not reach the backend
+    assert capped.termination == Termination.MAX_ITERATIONS and capped.iterations <= 1
+    assert capped.evidence[0].data["budget"] == {"max_evaluations": 1500, "max_backend_iterations": 1}
+
+
+def test_a_solver_without_an_iteration_limit_refuses_one():
+    with pytest.raises(ValueError, match="no backend iteration limit"):
+        REGISTRY.solve_with(to_ir(by_id("lp-wyndor-d2")), "scipy.highs", max_backend_iterations=5)
+    with pytest.raises(ValueError, match="positive integer"):
+        REGISTRY.solve_with(to_ir(by_id("rosenbrock-d5")), "scipy.lbfgsb", max_backend_iterations=0)
+
+
 # --------------------------------------------------------------------------------------------- seeds, availability
 @pytest.mark.parametrize("sid, iid", BUDGET_CASES)
 def test_the_same_seed_and_budget_give_the_identical_result(sid, iid):
@@ -521,6 +539,14 @@ def test_a_backend_exception_becomes_an_error_result():
     assert r.termination == Termination.ERROR and "tool fell over" in r.message and not r.solver_converged
 
 
+@pytest.mark.parametrize("sid", ["scipy.slsqp", "scipy.differential_evolution"])
+def test_no_evaluated_point_means_no_feasibility_claim_even_without_constraints(sid):
+    p = problem(*BOX, objective="log(x - 10)")  # undefined on the whole box, and nothing else to satisfy
+    r = REGISTRY.solve_with(p, sid, budget=Budget(max_evaluations=50))
+    assert r.evaluations > 0 and r.termination == Termination.ERROR
+    assert not r.constraints_satisfied and r.x == {} and r.objective_values == {}
+
+
 def test_a_multi_objective_result_carries_a_feasible_non_dominated_front():
     inst = by_id("mo-two-centres-d2")
     r = REGISTRY.solve_with(to_ir(inst), "pygmo.nsga2", budget=budget_for(inst), seed=1)
@@ -553,6 +579,24 @@ def test_malformed_requests_raise_and_impossible_ones_return_an_error_result():
         REGISTRY.solve_with(p, "scipy.highs", options={"popsize": 3})
     r = REGISTRY.solve_with(p, "scipy.lbfgsb")
     assert r.termination == Termination.ERROR and r.evaluations == 0 and "integer" in r.message
+
+
+def test_every_option_declares_its_type_range_and_tolerance_flag():
+    tolerances = {(c.solver_id, name) for c in REGISTRY.capabilities()
+                  for name, spec in c.options.items() if spec.tolerance}
+    assert tolerances == {("scipy.highs", "mip_rel_gap"), ("scipy.slsqp", "ftol"), ("scipy.lbfgsb", "ftol"),
+                          ("scipy.lbfgsb", "gtol"), ("scipy.differential_evolution", "tol"),
+                          ("cma.cma_es", "tolfun"), ("cma.cma_es", "tolx")}
+    for c in REGISTRY.capabilities():
+        for name, spec in c.options.items():
+            assert spec.kind in (bool, int, float, str), (c.solver_id, name)
+            if spec.tolerance:
+                assert spec.low <= spec.default <= spec.high, (c.solver_id, name)
+    p = to_ir(by_id("rosenbrock-d5"))
+    with pytest.raises(ValueError, match="ftol must lie in"):
+        REGISTRY.solve_with(p, "scipy.lbfgsb", options={"ftol": 0.5})
+    with pytest.raises(ValueError, match="strategy must be one of"):
+        REGISTRY.solve_with(p, "scipy.differential_evolution", options={"strategy": "guess"})
 
 
 def test_the_registry_and_classifier_import_no_numpy_until_a_solver_runs():

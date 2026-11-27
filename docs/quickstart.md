@@ -26,6 +26,8 @@ platforms and optional dependencies.
 
 For scene files without the compute stack, install from the checkout with
 `pip install -e .`; use `pip install -e '.[viewer]'` to add the viewer.
+`pip install -e '.[agent]'` adds the [LLM-assisted optimization](agent/index.md)
+commands (`'.[solvers]'` adds only the optimization solvers).
 Python 3.10–3.12 is supported; the locked compute environment uses Python 3.10.
 
 ## Open a mission

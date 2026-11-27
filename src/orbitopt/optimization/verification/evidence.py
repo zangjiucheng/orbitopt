@@ -20,7 +20,7 @@ from dataclasses import dataclass, field, fields
 from typing import Any, Callable, ClassVar, Mapping, Protocol, runtime_checkable
 
 from ..problem import OptimizationProblem, canonical_digest
-from ..result import OptimizationResult
+from ..result import OptimizationResult, stable
 
 INDEPENDENT_KINDS = ("analytical", "reference_solution", "alternate_solver")
 CERTIFICATE_KIND = "optimality_certificate"
@@ -30,10 +30,13 @@ def result_digest(result: OptimizationResult) -> str:
     """SHA-256 of the result's dict form, with the IR's 12-significant-digit float quantisation.
 
     This identifies a result the way ``OptimizationProblem.digest`` identifies
-    a problem. It is an identity, not a tamper seal: two points that agree to
-    12 significant digits share it. ``seal_run`` seals the exact bytes.
+    a problem. The wall-clock keys of ``VOLATILE_KEYS`` (``wall_time_s``, and
+    any such key inside evidence data) are left out, so two runs that found
+    the same answer the same way share it. It is an identity, not a tamper
+    seal: two points that agree to 12 significant digits share it.
+    ``seal_run`` seals the exact bytes, wall clock included.
     """
-    return canonical_digest(result.to_dict())
+    return canonical_digest(stable(result.to_dict()))
 
 
 @runtime_checkable

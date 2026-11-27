@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from ..classify import Form
 from ..result import Termination
-from .base import AdapterSolver, Outcome, Run, SolverCapability
+from .base import AdapterSolver, OptionSpec, Outcome, Run, SolverCapability
 
 _CONVERGED = frozenset({"tolfun", "tolfunhist", "tolx"})
 _LIMITS = frozenset({"maxiter", "maxfevals"})
@@ -26,8 +26,10 @@ class CmaEsSolver(AdapterSolver):
     CAPABILITY = SolverCapability(
         solver_id="cma.cma_es", backend="cma", max_form=Form.BLACK_BOX, convergence="heuristic",
         needs_finite_bounds=True, is_global=True,
-        honors=frozenset({"max_evaluations", "max_iterations", "max_wall_s"}),
-        options=frozenset({"sigma0", "popsize", "tolfun", "tolx"}))
+        iteration_cap=True,
+        options={"sigma0": OptionSpec(float, 1e-12, 1e12), "popsize": OptionSpec(int, 4, 100),
+                 "tolfun": OptionSpec(float, 1e-16, 1e-2, tolerance=True, default=1e-11),
+                 "tolx": OptionSpec(float, 1e-16, 1e-2, tolerance=True, default=1e-11)})
 
     def _run(self, run: Run) -> Outcome:
         import cma
@@ -36,8 +38,8 @@ class CmaEsSolver(AdapterSolver):
         sigma0 = run.options.get("sigma0", 0.3 * min(hi - lo for lo, hi in zip(space.lower, space.upper)))
         opts = {"bounds": [list(space.lower), list(space.upper)], "seed": run.seed + 1, "verbose": -9,
                 **{k: run.options[k] for k in ("popsize", "tolfun", "tolx") if k in run.options}}
-        if run.budget.max_iterations is not None:
-            opts["maxiter"] = run.budget.max_iterations
+        if run.max_backend_iterations is not None:
+            opts["maxiter"] = run.max_backend_iterations
         es = cma.CMAEvolutionStrategy(run.start, sigma0, opts)
         while not es.stop():
             candidates = es.ask()
