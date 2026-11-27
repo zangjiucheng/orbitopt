@@ -1,0 +1,71 @@
+{
+  "generated_utc": "2026-11-27T02:58:17+00:00",
+  "n_stream": 3000,
+  "reference_config_ids": [
+    "lidar",
+    "relnav"
+  ],
+  "cases": [
+    {
+      "case": "noise_only",
+      "n_fixes": 3000,
+      "dof": 6,
+      "nis_mean": 6.008,
+      "nis_var": 11.8104,
+      "expected_mean": 6.0,
+      "expected_var": 12.0,
+      "z_mean": 0.13
+    },
+    {
+      "case": "noise_bias_mode_none",
+      "n_fixes": 3000,
+      "dof": 6,
+      "nis_mean": 7.561,
+      "nis_var": 18.4189,
+      "expected_mean": 7.5,
+      "expected_var": 12.0,
+      "z_mean": 0.96
+    },
+    {
+      "case": "noise_bias_mode_bounded",
+      "n_fixes": 3000,
+      "dof": 6,
+      "nis_mean": 6.0488,
+      "nis_var": 11.7881,
+      "expected_mean": 6.0,
+      "expected_var": 12.0,
+      "z_mean": 0.77
+    },
+    {
+      "case": "reference_lidar_bias_none",
+      "n_fixes": 3000,
+      "dof": 4,
+      "nis_mean": 4.5681,
+      "nis_var": 10.6124,
+      "expected_mean": 4.5725,
+      "expected_var": 8.0,
+      "z_mean": -0.09
+    },
+    {
+      "case": "polar_covariance_coverage",
+      "n_frames": 3000,
+      "empirical_mean_var_m2": 0.40946,
+      "declared_mean_var_m2": 0.410087,
+      "coverage_ratio": 0.9985
+    },
+    {
+      "case": "dropout_fraction",
+      "predicted": 0.06,
+      "measured_by_horizon": [
+        0.083,
+        0.0595,
+        0.0447
+      ]
+    },
+    {
+      "case": "seed_reproducibility",
+      "identical": true
+    }
+  ],
+  "verdict": "consistent"
+}
