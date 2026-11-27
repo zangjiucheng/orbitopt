@@ -185,8 +185,50 @@ print(json.dumps(sorted(m for m in sys.modules if m.split(".")[0] in heavy or m.
 """
 
 
-def test_cli_help_imports_no_llm_sdk_solver_backend_or_e14_package():
+ROOTS_PROBE = r"""
+import importlib, json, sys
+import orbitopt.optimization, orbitopt.agent
+before = sorted(m for m in sys.modules if m.startswith(("orbitopt.agent.", "orbitopt.optimization.solvers",
+                                                        "orbitopt.optimization.verification")))
+for root in (orbitopt.optimization, orbitopt.agent):
+    for name in root.__all__:
+        getattr(root, name)
+heavy = sorted(m for m in sys.modules if m.split(".")[0] in ("numpy", "scipy", "cma", "pygmo"))
+print(json.dumps([before, heavy]))
+"""
+
+
+def probe(source):
     env = {**os.environ, "PYTHONPATH": str(REPO / "src")}
-    result = subprocess.run([sys.executable, "-c", CORE_HELP_PROBE], env=env, cwd=REPO, capture_output=True,
-                            text=True, check=True)
-    assert json.loads(result.stdout.strip().splitlines()[-1]) == []
+    result = subprocess.run([sys.executable, "-c", source], env=env, cwd=REPO, capture_output=True, text=True,
+                            check=True)
+    return json.loads(result.stdout.strip().splitlines()[-1])
+
+
+def test_cli_help_imports_no_llm_sdk_solver_backend_or_e14_package():
+    assert probe(CORE_HELP_PROBE) == []
+
+
+def test_package_roots_reexport_the_public_api_lazily_and_without_numpy():
+    import orbitopt.agent as agent
+    import orbitopt.optimization as optimization
+    from orbitopt.agent import compiler, providers, runtime, tools
+    from orbitopt.optimization import solvers, verification
+
+    for name in agent.__all__:
+        assert any(getattr(part, name, None) is getattr(agent, name) for part in (providers, compiler, runtime, tools))
+    assert (optimization.default_registry, optimization.OptionSpec) == (solvers.default_registry, solvers.OptionSpec)
+    assert (optimization.verify_result, optimization.seal_run) == (verification.verify_result, verification.seal_run)
+    assert agent.replay is runtime.replay and agent.solve is runtime.solve  # the run-level names, not the tool log's
+    for root in (agent, optimization):
+        assert len(set(root.__all__)) == len(root.__all__)
+    assert probe(ROOTS_PROBE) == [[], []]  # nothing loaded on import, and no numpy once every name resolved
+
+
+def test_the_agent_extra_is_the_solvers_extra_and_names_no_llm_sdk():
+    tomllib = pytest.importorskip("tomllib")
+    extras = tomllib.loads((REPO / "pyproject.toml").read_text())["project"]["optional-dependencies"]
+    names = {extra: {req.split(">")[0].split("=")[0].split("[")[0] for req in reqs} for extra, reqs in extras.items()}
+    assert extras["agent"] == ["orbitopt[solvers]"] and names["solvers"] == {"numpy", "scipy", "cma"}
+    sdks = {"openai", "anthropic", "litellm", "langchain", "httpx", "requests", "tiktoken"}
+    assert not any(names[extra] & sdks for extra in names)
