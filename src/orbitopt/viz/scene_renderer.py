@@ -224,6 +224,41 @@ def _equirectangular_sphere(radius: float) -> pv.PolyData:
     return mesh
 
 
+def _ellipsoid_actor(plotter, body: dict, pos0: np.ndarray, color: str, name: str):
+    """Covariance-ellipsoid mesh for a body with scene-1.0 foreign members
+    ``semiAxesKm`` (3 principal semi-axes, scene position unit) and optional
+    ``orientationBasis`` (3x3, columns = the axes' directions in the scene
+    frame -- the shape is baked into the mesh, the actor stays position-
+    only so the caller can move it with the trail). Translucent so trails and
+    the centre marker read through it. Returns None for a malformed spec."""
+    axes = body.get("semiAxesKm")
+    if axes is None or len(axes) != 3:
+        return None
+    try:
+        axes = np.asarray([float(a) for a in axes], dtype=float)
+    except (TypeError, ValueError):
+        return None
+    if not np.all(np.isfinite(axes)) or np.any(axes <= 0.0):
+        return None
+    basis = body.get("orientationBasis")
+    if basis is not None:
+        try:
+            basis = np.asarray([[float(c) for c in row] for row in basis], dtype=float)
+        except (TypeError, ValueError):
+            basis = None
+        if basis is not None and basis.shape != (3, 3):
+            basis = None
+    mesh = pv.Sphere(radius=1.0, theta_resolution=24, phi_resolution=32)
+    points = np.asarray(mesh.points, dtype=float) * axes
+    if basis is not None:
+        points = points @ basis.T
+    mesh.points = points
+    actor = plotter.add_mesh(mesh, color=color, opacity=0.22, specular=0.0,
+                             name=name, pickable=False)
+    actor.position = tuple(float(c) for c in pos0)
+    return actor
+
+
 def _sphere_actor(plotter, body: dict, name: str):
     """Build and add a real, textured 3D sphere for `body`, centered at the
     origin with the actor's own position transform left at (0,0,0) -- the
@@ -643,6 +678,15 @@ class SceneRenderer:
                     full_poly, color=color, line_width=1.1,
                     opacity=0.0 if body.get("hideTrail") else 0.3, pickable=False)
 
+                # Optional covariance ellipsoid (scene-1.0 foreign member
+                # semiAxesKm, from orbitopt.flightlab.scene_export's GNC
+                # studio sidecar): a translucent mesh centred on the body,
+                # moved with it, hidden outside the body's lifespan.
+                ellipsoid_actor = None
+                if body.get("semiAxesKm"):
+                    ellipsoid_actor = _ellipsoid_actor(
+                        self.plotter, body, pos0, color, f"ellipsoid-{body['id']}")
+
                 past_trail = _PastTrail(full_positions)
                 past_actor = self.plotter.add_mesh(
                     past_trail.poly, color=color, line_width=2.6,
@@ -672,7 +716,9 @@ class SceneRenderer:
                     "full_poly": full_poly,
                     "color": color,
                     "lifespan": lifespan,
-                    "actors": [a for a in (marker_actor, full_actor, past_actor) if a is not None],
+                    "ellipsoid_actor": ellipsoid_actor,
+                    "actors": [a for a in (marker_actor, full_actor, past_actor,
+                                           ellipsoid_actor) if a is not None],
                     "visible": True,
                 }
             else:
@@ -857,6 +903,9 @@ class SceneRenderer:
                 entry["sphere_actor"].position = tuple(float(c) for c in pos)
             else:
                 entry["point_poly"].points = pos.reshape(1, 3)
+            ell = entry.get("ellipsoid_actor")
+            if ell is not None:
+                ell.position = tuple(float(c) for c in pos)
 
             entry["past_trail"].update(idx, pos)
             # World frame on purpose: the readout means "distance from the
