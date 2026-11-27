@@ -179,8 +179,10 @@ defaults:
     values: { title: "Tools", parent: "LLM-assisted optimization", nav_order: 3 }
   - scope: { path: "agent/runtime.md" }
     values: { title: "Runtime", parent: "LLM-assisted optimization", nav_order: 4 }
+  - scope: { path: "agent/experiments.md" }
+    values: { title: "Experiment memory", parent: "LLM-assisted optimization", nav_order: 5 }
   - scope: { path: "benchmarks/e14_benchmark_spec.md" }
-    values: { title: "Benchmark specification", parent: "LLM-assisted optimization", nav_order: 5 }
+    values: { title: "Benchmark specification", parent: "LLM-assisted optimization", nav_order: 6 }
 
   # Missions
   - scope: { path: "mars_mission_plan.md" }
