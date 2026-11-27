@@ -3,11 +3,14 @@
 An adapter never trusts a backend with the budget. Every point the backend
 asks about goes through one ``Evaluator``, which counts it, refuses the call
 that would exceed ``max_evaluations`` or ``max_wall_s`` by raising
-``BudgetExhausted`` before evaluating, and remembers the best point so far.
+``BudgetExhausted`` before evaluating, and remembers the best point so far
+among those the IR evaluated without error.
 A maximised objective is negated here and nowhere else. The result always
 reports the IR's own evaluation of the chosen point, never the backend's
 numbers, and ``constraints_satisfied`` comes only from
-``OptimizationProblem.constraints_satisfied``.
+``OptimizationProblem.constraints_satisfied`` at that point. When every
+evaluation failed there is no point: ``x`` is empty and
+``constraints_satisfied`` is false, even for a problem with no constraints.
 
 Termination is decided in this order: an error (a backend exception, a
 backend that reports failure, or every evaluation failing); a backend's
@@ -191,7 +194,8 @@ class Point:
     """One evaluated point: the IR's values plus the minimisation-sense vectors a backend needs.
 
     ``f`` holds each objective negated when maximised; ``g`` each canonical
-    residual in constraint order. Both are ``inf`` where evaluation failed.
+    residual in constraint order. Both are ``inf`` where evaluation failed,
+    and ``failed`` marks such a point, which never becomes the best point.
     """
 
     x: dict[str, float]
@@ -201,6 +205,7 @@ class Point:
     g: tuple[float, ...]
     feasible: bool
     violation: float
+    failed: bool = False
 
 
 class Evaluator:
@@ -240,7 +245,7 @@ class Evaluator:
         if self._cache_size is not None and len(self._cache) > self._cache_size:
             self._cache.popitem(last=False)
         rank = (0, *point.f) if point.feasible else (1, point.violation)
-        if self._best_key is None or rank < self._best_key:
+        if not point.failed and (self._best_key is None or rank < self._best_key):
             self.best, self._best_key = point, rank
         return point
 
@@ -260,7 +265,8 @@ class Evaluator:
             self.failures += 1
             self.last_failure = str(exc)
             inf = math.inf
-            return Point(x, {}, {}, (inf,) * len(problem.objectives), (inf,) * len(problem.constraints), False, inf)
+            return Point(x, {}, {}, (inf,) * len(problem.objectives), (inf,) * len(problem.constraints), False, inf,
+                         failed=True)
         objectives = {k: float(v) for k, v in ev.objectives.items()}
         residuals = {k: float(v) for k, v in ev.residuals.items()}
         f = tuple(_finite(s * objectives[o.name]) for s, o in zip(self._signs, problem.objectives))
@@ -430,7 +436,7 @@ def _result(problem: OptimizationProblem, capability: SolverCapability, structur
         solver_id=capability.solver_id,
         termination=termination,
         solver_converged=termination == Termination.CONVERGED,
-        constraints_satisfied=chosen is not None and problem.constraints_satisfied(x, residuals),
+        constraints_satisfied=feasible,
         x=_finite_values(x),
         objective_values=_finite_values(chosen.objectives if chosen else {}),
         constraint_residuals=_finite_values(residuals),

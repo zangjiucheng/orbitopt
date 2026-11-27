@@ -380,8 +380,8 @@ def test_evaluation_errors_lead_to_a_new_start_then_a_new_solver():
     assert first.result.termination is Termination.ERROR and first.diagnosis.kind is FailureKind.EVALUATION_ERROR
     assert first.diagnosis.remedies[0] is Remedy.CHANGE_INITIAL_GUESS
     assert solves(outcome)[1].decision.x0 is not None
-    assert outcome.status is RunStatus.NO_FEASIBLE  # the best effort is labelled, never passed off as an answer
-    assert outcome.statuses["constraints_satisfied"] == "not_assessed" and outcome.report.verdict is not Outcome.PASSED
+    assert outcome.status is RunStatus.NO_FEASIBLE
+    assert outcome.result is None and outcome.report is None and outcome.statuses == {}  # no evaluated point, no claim
 
 
 class Stalling(SlsqpSolver):

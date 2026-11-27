@@ -100,7 +100,10 @@ answer.
 backend and reported un-negated. `objective_values`, `constraint_residuals`
 and `x` are the IR's own evaluation of the reported point. For one objective
 that point is the best evaluated point: feasible first, then lowest
-objective, else least violation. `constraints_satisfied` comes only from
+objective, else least violation. A point whose evaluation failed is never
+chosen, so when every evaluation fails the result has an empty `x` and
+`constraints_satisfied` is false, even on a problem with no constraints.
+Otherwise `constraints_satisfied` comes only from
 `OptimizationProblem.constraints_satisfied`. `independently_verified` and
 `optimality_certified` stay false; the verification guard sets them.
 

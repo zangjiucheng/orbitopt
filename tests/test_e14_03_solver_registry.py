@@ -521,6 +521,14 @@ def test_a_backend_exception_becomes_an_error_result():
     assert r.termination == Termination.ERROR and "tool fell over" in r.message and not r.solver_converged
 
 
+@pytest.mark.parametrize("sid", ["scipy.slsqp", "scipy.differential_evolution"])
+def test_no_evaluated_point_means_no_feasibility_claim_even_without_constraints(sid):
+    p = problem(*BOX, objective="log(x - 10)")  # undefined on the whole box, and nothing else to satisfy
+    r = REGISTRY.solve_with(p, sid, budget=Budget(max_evaluations=50))
+    assert r.evaluations > 0 and r.termination == Termination.ERROR
+    assert not r.constraints_satisfied and r.x == {} and r.objective_values == {}
+
+
 def test_a_multi_objective_result_carries_a_feasible_non_dominated_front():
     inst = by_id("mo-two-centres-d2")
     r = REGISTRY.solve_with(to_ir(inst), "pygmo.nsga2", budget=budget_for(inst), seed=1)
