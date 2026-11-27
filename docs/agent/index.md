@@ -13,6 +13,7 @@ guard does, from evidence.
 | [Compiler](compiler.md) | Statement in, a validated IR problem or a stated refusal out. |
 | [Tools](tools.md) | The scientific tool registry an IR `ToolCall` reaches, logged and replayable. |
 | [Runtime](runtime.md) | The bounded loop: limits, policy, planners, diagnostics, run directories and replay. |
+| [Optimize workspace](studio.md) | Mission Control's page: words in, the IR as editable math, a watched run, four statuses, replay. |
 | [Benchmark specification](../benchmarks/e14_benchmark_spec.md) | The pre-registered E14-10 design that will measure whether the LLM helps. |
 
 ## Install
