@@ -90,3 +90,26 @@ in `tests/test_e13_03_nis_consistency.py` so the deferral failed loudly when #41
 has landed: the deferral is discharged there by #419's sealed 6-DoF NEES gate
 (`docs/benchmarks/e13_02_relative_nav_ekf.json`).
 
+## Independent closed-loop verification (E13-07)
+
+`orbitopt.verify.gnc_closed_loop` grades a sealed run log with four SEPARATE error classes, never
+blended into one flag; each line carries its own evidence type and its own `cannot_prove` limits:
+
+| Class | Question asked | Evidence type |
+| --- | --- | --- |
+| `numerical_error` | Does re-integrating the recorded commands converge to the recorded truth (step-refinement sweep + tolerance gate)? | `numerical_consistency` |
+| `model_error` | Does an INDEPENDENT propagator (TudatPy, multi-arc over the recorded events) reproduce the truth? Absent backend: `not_checked`, never imputed. | `independent_model` |
+| `navigation_inconsistency` | Are observations and estimates statistically consistent with their DECLARED covariances (NIS / NEES against a truth reference refined through the run's own declared dynamics)? | `analytical` |
+| `optimizer_control_nonconvergence` | Did every command execute within its declared bounds, and does the producer's convergence assertion (if any) agree with the record? | `analytical` |
+
+    from orbitopt.gnc import read_run_log
+    from orbitopt.verify.gnc_closed_loop import verify_gnc_closed_loop, verify_evidence_binding
+
+    report = verify_gnc_closed_loop(read_run_log("rdv-01.json"), out_path="rdv-01-gnc.json")
+    verify_evidence_binding(report, "rdv-01.json")   # digests re-match, or ValueError
+
+The replay splits segments at actuation instants and carries the PRE-impulse truth sample at each
+(evidenced against the reference sim's event priority); a truth stream shorter than two samples is
+recorded `not_checked`, not scored; and the verification digest binds this verdict to this exact run
+— flipping any check, or pointing the same report at another run, raises. Acceptance tests:
+`tests/test_e13_07_independent_closed_loop_verification.py`.
