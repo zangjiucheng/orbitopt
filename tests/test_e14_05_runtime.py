@@ -958,6 +958,18 @@ def test_the_public_api_is_importable_and_imports_no_backend():
                    env={"PYTHONPATH": str(REPO / "src"), "PATH": ""})
 
 
+def test_a_recorded_alternate_that_is_not_a_result_is_a_finding_not_a_crash(tmp_path):
+    save_run(solve(to_ir(P.by_id("cqp-worked-d2")), planner=RuleBasedPlanner()), tmp_path)
+    label = next(p.stem for p in (tmp_path / "results").glob("verify-*.json"))
+    (tmp_path / "results" / f"{label}.json").write_bytes(b"{}")
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    manifest["files"][f"results/{label}.json"] = file_digest(b"{}")
+    (tmp_path / "manifest.json").write_bytes(canonical_json(manifest))
+    report = check_run(tmp_path)
+    assert not report.intact and any(f"results/{label}.json: not a result" in i for i in report.integrity)
+    assert not report.verified
+
+
 # ------------------------------------------------------------------------------------- enumeration in verification
 def test_enumeration_verifies_and_certifies_a_knapsack_that_differential_evolution_gets_wrong():
     """knapsack-p07-n15: differential evolution stops at 1456, the optimum is 1458 (2^15 points)."""

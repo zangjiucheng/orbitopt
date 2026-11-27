@@ -7,7 +7,6 @@ by Python's ``eval`` on raw text.
 
 from __future__ import annotations
 
-import math
 from functools import lru_cache
 from typing import Callable
 

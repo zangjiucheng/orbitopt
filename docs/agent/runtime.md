@@ -262,7 +262,8 @@ is the integrity check. It re-executes nothing.
 1. Every file name the manifest gives, and the sealed run's folder, go
    through `safe_relative`. A name with `..`, an absolute path, a backslash
    or a character outside `[A-Za-z0-9_.-]` raises `UnsafePathError` before
-   any file besides `manifest.json` is read.
+   any file besides `manifest.json` is read. The sealed run's own manifest
+   names go through it too, before any sealed file is read.
 2. Every file must hash to the digest the manifest records, and the
    manifest must seal `problem.json` and `trace.json`. With
    `expected_manifest_digest`, the manifest itself must hash to it.

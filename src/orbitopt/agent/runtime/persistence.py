@@ -169,7 +169,8 @@ def check_run(run_dir: str | Path, *, tools: Tools | None = None, registry: Solv
     allocation, seed and options from ``registry``. The guard still
     re-evaluates points, so a tool-evaluated problem needs ``tools`` as the
     original run had them. Raises ``UnsafePathError`` for a file name that
-    would leave ``run_dir``, before reading anything but ``manifest.json``.
+    would leave ``run_dir``: the manifest's names before any file but
+    ``manifest.json`` is read, the sealed manifest's before any sealed file.
     """
     if alternates not in ("recorded", "rerun"):
         raise ValueError(f"alternates must be 'recorded' or 'rerun', not {alternates!r}")
@@ -182,7 +183,7 @@ def check_run(run_dir: str | Path, *, tools: Tools | None = None, registry: Solv
         raise
     except (OSError, ValueError, InvalidProblemError) as exc:
         return CheckReport(tuple(integrity) + (f"cannot load the run: {exc}",), None, None, alternates, files=files)
-    _check_results(trace, files, integrity)
+    _check_results(trace, files, None if manifest is None else manifest["sealed"], integrity)
     report = _regrade_sealed(run_dir, manifest, problem, trace, files, tools, registry or default_registry(),
                              alternates, integrity)
     status = trace["outcome"]["status"]
@@ -342,7 +343,8 @@ def _labelled(trace: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
     return out
 
 
-def _check_results(trace: Mapping[str, Any], files: Mapping[str, bytes], integrity: list[str]) -> None:
+def _check_results(trace: Mapping[str, Any], files: Mapping[str, bytes], sealed: Mapping[str, Any] | None,
+                   integrity: list[str]) -> None:
     """Each trace entry summarises the full result saved under its label, and the sealed result is the best."""
     for label, summary in _labelled(trace).items():
         name = f"results/{label}.json"
@@ -358,9 +360,9 @@ def _check_results(trace: Mapping[str, Any], files: Mapping[str, bytes], integri
         if changed:
             integrity.append(f"trace.json: {label} is not the result in {name}: {changed[0]}")
     best = trace["outcome"]["best"]
-    sealed = next((name for name in files if name.endswith("/result.json")), None)
-    if sealed is not None and files[sealed] != files.get(f"results/{best}.json"):
-        integrity.append(f"{sealed}: not the result the trace names as best ({best})")
+    name = None if sealed is None else f"{sealed['dir']}/result.json"
+    if name in files and files[name] != files.get(f"results/{best}.json"):
+        integrity.append(f"{name}: not the result the trace names as best ({best})")
 
 
 def _regrade_sealed(run_dir: Path, manifest: dict | None, problem: OptimizationProblem, trace: dict,
@@ -382,8 +384,8 @@ def _regrade_sealed(run_dir: Path, manifest: dict | None, problem: OptimizationP
 
     def recorded(run: Mapping[str, Any]):
         data = files.get(f"results/verify-{attempt['attempt']}-{run['solver_id']}.json")
-        result = None if data is None else OptimizationResult.from_dict(json.loads(data.decode("utf-8")))
-        return lambda graded: result
+        # parsed inside the guard's call, so a result that does not parse is the guard's finding, not a crash
+        return lambda graded: None if data is None else OptimizationResult.from_dict(json.loads(data.decode("utf-8")))
 
     answer = rerun if alternates == "rerun" else recorded
     report = verify_run(run_dir / sealed["dir"], problem=problem, tools=resolvers,
