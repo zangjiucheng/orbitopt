@@ -126,7 +126,7 @@ def compile_problem(prompt: str, provider: LLMProvider, *, base_problem: Optimiz
                                                     seed=seed)
         except StructuredOutputError as exc:
             errors = tuple(CompilerIssue(CompilerErrorCode.STRUCTURED_OUTPUT, "", e) for e in exc.errors)
-            return CompileFailed(errors, exc.raw_text, usage, attempts)
+            return CompileFailed(errors, exc.raw_text, usage + exc.usage, attempts)
         usage, raw = usage + response.usage, response.text
         verdict = _judge(CompilerOutput.from_dict(response.parsed), text, base=base_problem,
                          known_tool_ids=known_tool_ids, unit_hints=unit_hints, problem_id=problem_id,

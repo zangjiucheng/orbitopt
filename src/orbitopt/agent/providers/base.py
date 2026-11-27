@@ -36,13 +36,16 @@ class StructuredOutputError(ProviderError):
     """The model output did not validate, even after the repair retry.
 
     ``raw_text`` is the last raw reply and ``errors`` the validation errors
-    against it. No unvalidated data is ever returned in place of this error.
+    against it. ``usage`` sums the tokens of every reply the failure cost,
+    so a caller's accounting stays complete. No unvalidated data is ever
+    returned in place of this error.
     """
 
-    def __init__(self, message: str, *, raw_text: str | None, errors: Sequence[str]):
+    def __init__(self, message: str, *, raw_text: str | None, errors: Sequence[str], usage: Usage | None = None):
         super().__init__(message)
         self.raw_text = raw_text
         self.errors = tuple(errors)
+        self.usage = Usage(0, 0, 0) if usage is None else usage
 
 
 class ToolCallError(StructuredOutputError):
@@ -358,9 +361,12 @@ class ChatProvider:
                 return replace(response, parsed=value, usage=total,
                                latency_s=sum(a.latency_s for a in attempts))
             messages += (Message("assistant", response.text), Message("user", repair_prompt(errors)))
+        total = attempts[0].usage
+        for earlier in attempts[1:]:
+            total = total + earlier.usage
         raise StructuredOutputError(
             f"{self.name}: structured output failed validation after {len(attempts)} attempts",
-            raw_text=response.text, errors=errors)
+            raw_text=response.text, errors=errors, usage=total)
 
     def call_tools(self, messages, tools, *, max_tokens, temperature=0.0, seed=None):
         """Offer ``tools`` to the model and return its reply with validated tool calls.
@@ -381,5 +387,5 @@ class ChatProvider:
         errors = tool_call_errors(response.tool_calls, by_name)
         if errors:
             raise ToolCallError(f"{self.name}: invalid tool calls", raw_text=response.text,
-                                errors=errors)
+                                errors=errors, usage=response.usage)
         return response

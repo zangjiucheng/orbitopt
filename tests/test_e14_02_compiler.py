@@ -301,10 +301,7 @@ def test_usage_sums_every_provider_call(case_id):
     replies = case["replies"][:len(provider.requests)]
     calls = sum((mock_usage(request, MockReply(text)) for request, text in zip(provider.requests, replies)),
                 Usage(0, 0, 0))
-    if case_id == "FC-044":  # the provider raised StructuredOutputError, which carries no usage: a documented gap
-        assert outcome.usage == Usage(0, 0, 0) and calls.total > 0
-    else:
-        assert outcome.usage == calls and calls.total > 0
+    assert outcome.usage == calls and calls.total > 0  # FC-044 ends in StructuredOutputError, which carries usage
 
 
 def test_repair_rounds_are_bounded():

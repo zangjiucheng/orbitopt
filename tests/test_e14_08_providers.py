@@ -243,6 +243,7 @@ def test_malformed_json_gets_one_repair_retry_then_structured_output_error(endpo
     assert repair[-1]["role"] == "user" and "not valid JSON" in repair[-1]["content"]
     assert caught.value.raw_text == '{"dv_mps": "fast"}'
     assert caught.value.errors == ("dv_mps: 'fast' is not of type 'number'",)
+    assert caught.value.usage.total == 2 * (5 + 7)  # both failed replies are accounted for
 
 
 def test_repair_retry_success_returns_validated_value_and_summed_usage(endpoint):
@@ -251,6 +252,35 @@ def test_repair_retry_success_returns_validated_value_and_summed_usage(endpoint)
     response = http_provider(endpoint).generate_structured(ASK, SCHEMA, max_tokens=64)
     assert response.parsed == {"dv_mps": 1}
     assert (response.usage.prompt_tokens, response.usage.completion_tokens, response.usage.total) == (30, 7, 37)
+
+
+def test_dotted_tool_ids_cross_the_wire_as_function_names_and_come_back(endpoint):
+    erf = ToolSpec("math.erf.v1", "Error function.", {"type": "object", "properties": {"x": {"type": "number"}},
+                                                       "required": ["x"], "additionalProperties": False})
+    endpoint.reply(payload=completion(None, tool_calls=[("math-erf-v1", {"x": 0.5})], finish="tool_calls"))
+    history = ASK + [Message("assistant", None, tool_calls=[ToolCall("c0", "math.erf.v1", {"x": 0.1})]),
+                     Message("tool", '{"value": 0.11}', tool_call_id="c0")]
+    response = http_provider(endpoint).call_tools(history, [erf], max_tokens=64)
+    body = endpoint.requests[0]["body"]
+    assert body["tools"][0]["function"]["name"] == "math-erf-v1"
+    assert body["messages"][2]["tool_calls"][0]["function"]["name"] == "math-erf-v1"
+    assert response.tool_calls == (ToolCall("call_0", "math.erf.v1", {"x": 0.5}),)
+    clash = ToolSpec("math-erf-v1", "Another.", erf.parameters_schema)
+    with pytest.raises(ProviderError, match="same function name"):
+        http_provider(endpoint).call_tools(ASK, [erf, clash], max_tokens=64)
+    with pytest.raises(ProviderError, match="cannot be sent"):
+        http_provider(endpoint).call_tools(ASK, [ToolSpec("x" * 65, "Long.", erf.parameters_schema)], max_tokens=64)
+
+
+def test_invalid_tool_calls_still_report_their_tokens(endpoint):
+    endpoint.reply(payload=completion(None, tool_calls=[("rm_rf", {"path": "/"})], usage=(11, 2)))
+    with pytest.raises(ToolCallError) as caught:
+        http_provider(endpoint).call_tools(ASK, [TOOL], max_tokens=64)
+    assert caught.value.usage.total == 13
+    endpoint.reply(payload=completion(None, tool_calls=[("propagate", "[1, 2]")], usage=(3, 4)))
+    with pytest.raises(ToolCallError) as caught:
+        http_provider(endpoint).call_tools(ASK, [TOOL], max_tokens=64)
+    assert caught.value.usage.total == 7
 
 
 def test_unknown_tool_name_from_the_model_is_rejected(endpoint):
