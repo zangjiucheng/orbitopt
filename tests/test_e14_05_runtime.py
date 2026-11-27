@@ -36,7 +36,7 @@ from orbitopt.agent.runtime import (
     known_tool_ids,
     load_trace,
     loosened,
-    regrade,
+    check_run,
     replay,
     save_run,
     solve,
@@ -642,7 +642,7 @@ def test_a_tampered_run_directory_is_never_replayed_as_equal(target, tmp_path):
 
 
 @pytest.mark.parametrize("name", ["../outside.json", "results/../../outside.json", "ABSOLUTE", "sealed\\..\\x"])
-@pytest.mark.parametrize("check", [replay, regrade])
+@pytest.mark.parametrize("check", [replay, check_run])
 def test_a_manifest_name_that_leaves_the_run_is_refused_before_any_file_is_read(tmp_path, name, check, monkeypatch):
     run = tmp_path / "run"
     save_run(solve(WORKED, planner=RuleBasedPlanner()), run)
@@ -666,7 +666,7 @@ def test_a_sealed_folder_outside_the_run_is_refused(tmp_path, folder):
     manifest = json.loads((run / "manifest.json").read_text())
     manifest["sealed"]["dir"] = folder
     (run / "manifest.json").write_bytes(canonical_json(manifest))
-    for check in (replay, regrade):
+    for check in (replay, check_run):
         with pytest.raises(UnsafePathError):
             check(run)
 
@@ -684,9 +684,51 @@ def test_a_forger_who_recomputes_every_digest_still_fails_replay(tmp_path):
     manifest["trace_digest"] = trace["digest"]
     (tmp_path / "manifest.json").write_bytes(canonical_json(manifest))
     report = replay(tmp_path)
-    assert report.integrity == ()
+    assert any("iteration-0001 is not the result in results/iteration-0001.json" in i for i in report.integrity)
     assert any("objective_values/distance_sq" in d for d in report.differences)
     assert report.status == "diverged"
+    assert not check_run(tmp_path).intact  # caught without re-executing anything
+
+
+class Untouchable(SlsqpSolver):
+    """A solver the integrity check must never run."""
+
+    def solve(self, *args, **kwargs):
+        raise AssertionError("check_run ran a solver")
+
+
+def test_check_run_regrades_the_sealed_run_with_recorded_alternates_and_runs_no_solver(tmp_path, monkeypatch):
+    outcome = solve(to_ir(P.by_id("cqp-worked-d2")), planner=RuleBasedPlanner())
+    assert outcome.status is RunStatus.VERIFIED and outcome.trace.verifications[-1].alternates
+    digest = save_run(outcome, tmp_path)
+    calls = []
+    monkeypatch.setattr(DifferentialEvolutionSolver, "solve", lambda *a, **k: calls.append(a) or None)
+    report = check_run(tmp_path, registry=SolverRegistry([Untouchable()]), expected_manifest_digest=digest)
+    assert report.intact and report.verified and report.alternates == "recorded" and calls == []
+    assert report.report.statuses["independently_verified"].outcome is Outcome.PASSED
+    assert report.recorded_status == "verified" and report.trace["digest"] == outcome.trace.digest()
+    assert set(report.files) >= {"manifest.json", "trace.json", "problem.json", "sealed/result.json",
+                                 "sealed/manifest.json"}
+    assert report.files["trace.json"] == (tmp_path / "trace.json").read_bytes()
+
+
+def test_check_run_finds_a_recorded_alternate_that_was_rewritten(tmp_path):
+    """The recorded alternate goes through the guard: a forged one that disagrees fails the re-grade."""
+    outcome = solve(to_ir(P.by_id("cqp-worked-d2")), planner=RuleBasedPlanner())
+    save_run(outcome, tmp_path)
+    label = next(p.stem for p in (tmp_path / "results").glob("verify-*.json"))
+    path = tmp_path / "results" / f"{label}.json"
+    data = json.loads(path.read_text())
+    data["x"] = {k: v + 0.5 for k, v in data["x"].items()}  # a point that is not where the alternate stopped
+    path.write_bytes(canonical_json(data))
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    manifest["files"][f"results/{label}.json"] = file_digest(canonical_json(data))
+    (tmp_path / "manifest.json").write_bytes(canonical_json(manifest))
+    report = check_run(tmp_path)
+    assert not report.intact
+    assert any(label in i for i in report.integrity)
+
+
 
 
 # ------------------------------------------------------------------------------------- persistence and replay

@@ -1,11 +1,12 @@
 """Record a saved run directory, and write a recorded run back out as a directory.
 
-``record_run`` trusts nothing in the directory. It checks every file's bytes
-against the manifest, refuses a file name that would leave the directory,
-and then has the runtime's ``replay`` re-execute the recorded proposals and
-re-grade the sealed run. Only a run that replays is recorded. The numbers
-in the record come from the replayed trace, and the sealed result must
-agree with them.
+``record_run`` trusts nothing in the directory. By default it runs the
+runtime's ``check_run``: every file's bytes against the manifest, file names
+that stay inside the directory, the trace digest, the trace against the
+saved results, and the guard's re-grade of the sealed run, with no solve run
+again. ``verify="replay"`` has the runtime's ``replay`` re-execute the
+recorded proposals as well. The record stores exactly the bytes the check
+read.
 """
 
 from __future__ import annotations
@@ -15,13 +16,12 @@ from datetime import datetime, timezone
 from functools import cache
 from importlib import metadata
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
-from orbitopt.agent.runtime import (RUN_MANIFEST_FORMAT, BudgetUse, Limits, RunStatus, StopReason, replay,
-                                    safe_relative)
-from orbitopt.optimization import OptimizationProblem, canonical_digest, parse_problem
+from orbitopt.agent.runtime import BudgetUse, Limits, RunStatus, StopReason, check_run, replay, safe_relative
+from orbitopt.optimization import OptimizationProblem
 from orbitopt.optimization.solvers import SolverRegistry
-from orbitopt.optimization.verification import RUN_FORMAT, file_digest
+from orbitopt.optimization.verification import file_digest
 
 from .index import ExperimentDB
 from .model import (STATUS_NAMES, ExperimentRecord, Integrity, RunIntegrityError, SolverStep, VersionPolicy,
@@ -31,7 +31,7 @@ MANIFEST = "manifest.json"
 SEALED_FILES = ("problem.json", "result.json", "evidence.json", MANIFEST)
 OUTCOME_ONLY = ("/outcome/", "/usage/", "/verifications")
 """Where the replay of a cancelled run may differ: a cancellation cannot be re-executed, its iterations can."""
-COMPARED = ("solver_id", "x", "objective_values", "constraint_residuals")
+Verify = Literal["check", "replay"]
 
 
 @cache
@@ -44,20 +44,26 @@ def orbitopt_version() -> str:
 
 
 def record_run(db: ExperimentDB, run_dir: str | Path, *, expected_manifest_digest: str | None = None,
-               tools: Any = None, registry: SolverRegistry | None = None, provider: str | None = None,
-               model: str | None = None, family: str | None = None, parent_id: str | None = None,
-               resumed_from: str | None = None) -> ExperimentRecord:
+               verify: Verify = "check", tools: Any = None, registry: SolverRegistry | None = None,
+               provider: str | None = None, model: str | None = None, family: str | None = None,
+               parent_id: str | None = None, resumed_from: str | None = None) -> ExperimentRecord:
     """Verify the run directory ``run_dir``, store its files and index it; return its record.
 
     Idempotent: the same run (the same ``manifest.json`` bytes) gives one
     record, and recording it again returns the first. A changed, forged or
-    unsafe run raises ``RunIntegrityError`` and records nothing. Pass
-    ``tools`` and ``registry`` as the run used them, since replay re-executes
-    the run. ``provider`` and ``model`` name the LLM behind the planner, which
+    unsafe run raises ``RunIntegrityError`` (``UnsafePathError`` for a name
+    outside the directory) and records nothing. ``verify="check"`` runs
+    ``check_run`` and records ``integrity`` ``checked``; ``verify="replay"``
+    re-executes the run as well and records ``replayed``, which only a cache
+    entry needs. Pass ``tools`` and ``registry`` as the run used them: the
+    guard re-evaluates points, and replay re-runs the solvers.
+    ``provider`` and ``model`` name the LLM behind the planner, which
     the trace does not hold. ``family`` defaults to ``problem.metadata["family"]``,
     then to the problem id. ``parent_id`` and ``resumed_from`` must name
     recorded runs.
     """
+    if verify not in ("check", "replay"):
+        raise ValueError(f"verify must be 'check' or 'replay', not {verify!r}")
     for link in (parent_id, resumed_from):
         if link is not None:
             check_run_id(link)
@@ -73,16 +79,17 @@ def record_run(db: ExperimentDB, run_dir: str | Path, *, expected_manifest_diges
     if existing is not None:
         return existing
 
-    manifest = _json(raw, MANIFEST)
-    files = _read_files(run_dir, manifest)
-    report = replay(run_dir, tools=tools, registry=registry, expected_manifest_digest=run_id)
-    if report.integrity:
-        raise RunIntegrityError("the run directory was changed", report.integrity)
-    trace = _json(files["trace.json"], "trace.json")
-    integrity = _integrity(report.differences, trace)
-    problem = parse_problem(_json(files["problem.json"], "problem.json"))  # the bytes replay parsed
-    record = _record(run_id, manifest, trace, problem, files, integrity, provider=provider, model=model,
-                     family=family, parent_id=parent_id, resumed_from=resumed_from)
+    if verify == "check":
+        check, differences = check_run(run_dir, tools=tools, registry=registry, expected_manifest_digest=run_id), None
+    else:
+        replayed = replay(run_dir, tools=tools, registry=registry, expected_manifest_digest=run_id)
+        check, differences = replayed.check, replayed.differences
+    if check.integrity:
+        raise RunIntegrityError("the run directory was changed", check.integrity)
+    trace, files = check.trace, check.files
+    integrity = Integrity.CHECKED if differences is None else _integrity(differences, trace)
+    record = _record(run_id, _json(files[MANIFEST], MANIFEST), trace, check.problem, files, integrity,
+                     provider=provider, model=model, family=family, parent_id=parent_id, resumed_from=resumed_from)
     for data in files.values():
         db.store.put(data)
     return db.add(record, _cache_keys(record))
@@ -109,54 +116,6 @@ def _json(data: bytes, name: str) -> Any:
         return json.loads(data.decode("utf-8"))
     except (UnicodeDecodeError, ValueError) as exc:
         raise RunIntegrityError(f"{name} is not JSON", (str(exc),)) from None
-
-
-def _read_files(run_dir: Path, manifest: Any) -> dict[str, bytes]:
-    """Every file the manifest seals, with its bytes checked; the sealed run's files under ``sealed/``."""
-    if not isinstance(manifest, dict) or manifest.get("format") != RUN_MANIFEST_FORMAT \
-            or not isinstance(manifest.get("files"), dict):
-        raise RunIntegrityError(f"{MANIFEST} is not an {RUN_MANIFEST_FORMAT} manifest")
-    missing = {"problem.json", "trace.json"} - set(manifest["files"])
-    if missing:
-        raise RunIntegrityError(f"{MANIFEST} does not seal {sorted(missing)}")
-    problems: list[str] = []
-    files = {MANIFEST: (run_dir / MANIFEST).read_bytes()}
-    sealed = manifest.get("sealed")
-    expected = dict(manifest["files"])
-    if sealed is not None:
-        if not isinstance(sealed, dict) or sealed.get("format") != RUN_FORMAT:
-            raise RunIntegrityError(f"{MANIFEST}: the sealed run is not {RUN_FORMAT}")
-        folder = str(safe_relative(sealed.get("dir")))
-        seal = _checked(run_dir, f"{folder}/{MANIFEST}", sealed.get("manifest_digest"), problems)
-        inner = {} if seal is None else _json(seal, f"{folder}/{MANIFEST}")
-        inner_files = inner.get("files") if isinstance(inner, dict) else None
-        if seal is not None and not isinstance(inner_files, dict):
-            raise RunIntegrityError(f"{folder}/{MANIFEST} is not a {RUN_FORMAT} manifest")
-        if seal is not None:
-            files[f"{folder}/{MANIFEST}"] = seal
-            expected.update({f"{folder}/{name}": digest for name, digest in inner_files.items()})
-    for name in expected:
-        safe_relative(name)
-    for name, digest in sorted(expected.items()):
-        data = _checked(run_dir, name, digest, problems)
-        if data is not None:
-            files[name] = data
-    if problems:
-        raise RunIntegrityError("the run directory was changed", tuple(problems))
-    return files
-
-
-def _checked(run_dir: Path, name: str, digest: Any, problems: list[str]) -> bytes | None:
-    path = run_dir / safe_relative(name)
-    try:
-        data = path.read_bytes()
-    except OSError:
-        problems.append(f"{name}: missing")
-        return None
-    if file_digest(data) != digest:
-        problems.append(f"{name}: content digest {file_digest(data)} does not match the manifest")
-        return None
-    return data
 
 
 def _integrity(differences: tuple[str, ...], trace: Mapping) -> Integrity:
@@ -188,11 +147,6 @@ def _record(run_id: str, manifest: Mapping, trace: Mapping, problem: Optimizatio
     best = trace["outcome"]["best"]
     summary = summaries.get(best)
     sealed = manifest.get("sealed")
-    sealed_result = None
-    if sealed is not None:
-        sealed_result = _json(files[f"{sealed['dir']}/result.json"], "sealed result.json")
-        if summary is None or _identity(sealed_result) != _identity(summary):
-            raise RunIntegrityError("the sealed result is not the best result the replayed trace names", (str(best),))
     objective = problem.objectives[0]
     value = None if summary is None else summary["objective_values"].get(objective.name)
     family = links.pop("family") or problem.metadata.get("family")
@@ -208,10 +162,6 @@ def _record(run_id: str, manifest: Mapping, trace: Mapping, problem: Optimizatio
         usage=BudgetUse(**trace["usage"]), created_at=datetime.now(timezone.utc).isoformat(timespec="microseconds"),
         orbitopt_version=orbitopt_version(), integrity=integrity,
         files={name: file_digest(data) for name, data in files.items()}, **links)
-
-
-def _identity(result: Mapping) -> str:
-    return canonical_digest({key: result.get(key) for key in COMPARED})
 
 
 def _sealed_result_digest(files: Mapping[str, bytes], folder: str) -> str:

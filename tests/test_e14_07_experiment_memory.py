@@ -116,7 +116,7 @@ def test_a_recorded_run_reads_back_with_the_runs_own_numbers(db, tmp_path):
     record = record_run(db, tmp_path / "run", expected_manifest_digest=digest)
 
     assert record.run_id == digest and record.problem_digest == CQP.digest()
-    assert record.status is RunStatus.VERIFIED and record.integrity is Integrity.REPLAYED
+    assert record.status is RunStatus.VERIFIED and record.integrity is Integrity.CHECKED
     assert record.objective == outcome.result.objective_values["f0"]
     assert abs(record.objective - P.by_id("cqp-worked-d2").reference.value) < 1e-8
     assert record.statuses == outcome.statuses
@@ -141,6 +141,36 @@ def test_recording_the_same_run_twice_gives_one_record(db, tmp_path):
     assert again == first and again.created_at == first.created_at
     assert count(db) == 1
     assert sorted(p.name for p in (tmp_path / "db/artifacts").rglob("*.json")) == blobs
+
+
+class Untouchable(LbfgsbSolver):
+    """A solver that default ingest must never run."""
+
+    CAPABILITY = replace(LbfgsbSolver.CAPABILITY, solver_id="scipy.slsqp")
+
+    def solve(self, *args, **kwargs):
+        raise AssertionError("ingest ran a solver")
+
+
+def test_default_ingest_runs_no_solver_and_replay_is_opt_in(db, tmp_path):
+    save_run(solve(CQP, planner=RuleBasedPlanner()), tmp_path / "run")
+    nothing = SolverRegistry([Untouchable()])
+    checked = record_run(db, tmp_path / "run", registry=nothing)
+    assert checked.integrity is Integrity.CHECKED and checked.verified
+    with ExperimentDB(tmp_path / "db2") as other:
+        replayed = record_run(other, tmp_path / "run", verify="replay")
+        assert replayed.integrity is Integrity.REPLAYED
+        assert {k: v for k, v in replayed.to_dict().items() if k not in ("created_at", "integrity")} == \
+            {k: v for k, v in checked.to_dict().items() if k not in ("created_at", "integrity")}
+        with pytest.raises(ValueError):
+            record_run(other, tmp_path / "run", verify="trust")
+
+
+def test_a_checked_record_never_serves_the_cache(db, tmp_path):
+    outcome = solve(CQP, planner=RuleBasedPlanner())
+    record = record_run(db, saved(outcome, tmp_path / "run"))
+    assert record.integrity is Integrity.CHECKED and record.verified
+    assert not _ask(db, CQP, record.best_step).hit
 
 
 def test_an_exported_run_replays_equal_from_the_store_alone(db, tmp_path):
@@ -217,7 +247,7 @@ def test_a_directory_that_is_not_a_run_is_refused(db, tmp_path):
 # ------------------------------------------------------------------------------------- cache
 def _recorded(db, tmp_path, problem=CQP, **solve_args):
     outcome = solve(problem, planner=solve_args.pop("planner", RuleBasedPlanner()), **solve_args)
-    record = record_run(db, saved(outcome, tmp_path / f"run-{len(list(tmp_path.iterdir()))}"),
+    record = record_run(db, saved(outcome, tmp_path / f"run-{len(list(tmp_path.iterdir()))}"), verify="replay",
                         tools=solve_args.get("tools"), registry=solve_args.get("registry"))
     return outcome, record
 
@@ -316,7 +346,7 @@ def test_a_hit_spends_no_solver_evaluation_on_an_independent_counter(db, tmp_pat
     outcome = solve(COUNTED, planner=RuleBasedPlanner(), registry=counted_registry(),
                     tools={"test.counted.v1": counter})
     assert outcome.status is RunStatus.VERIFIED
-    record = record_run(db, saved(outcome, tmp_path / "run"), tools={"test.counted.v1": Counter()},
+    record = record_run(db, saved(outcome, tmp_path / "run"), verify="replay", tools={"test.counted.v1": Counter()},
                         registry=counted_registry())
     counter.calls = 0
     found = _ask(db, COUNTED, record.best_step, tools={"test.counted.v1": counter})
@@ -328,7 +358,7 @@ def test_a_hit_spends_no_solver_evaluation_on_an_independent_counter(db, tmp_pat
 def test_an_entry_whose_tool_now_answers_differently_is_stale(db, tmp_path):
     outcome = solve(COUNTED, planner=RuleBasedPlanner(), registry=counted_registry(),
                     tools={"test.counted.v1": Counter()})
-    record = record_run(db, saved(outcome, tmp_path / "run"), tools={"test.counted.v1": Counter()},
+    record = record_run(db, saved(outcome, tmp_path / "run"), verify="replay", tools={"test.counted.v1": Counter()},
                         registry=counted_registry())
     found = _ask(db, COUNTED, record.best_step, tools={"test.counted.v1": Counter(shift=1.0)})
     assert not found.hit and [i.reason for i in found.ignored] == [IgnoredReason.STALE]
@@ -352,7 +382,9 @@ def test_resume_plan_of_a_cancelled_run_replays_its_completed_iterations(db, tmp
     checks = []
     outcome = solve(RASTRIGIN, planner=RuleBasedPlanner(), cancel=lambda: checks.append(1) or len(checks) > 2)
     assert outcome.status is RunStatus.CANCELLED and len(outcome.trace.iterations) == 2
-    record = record_run(db, saved(outcome, tmp_path / "run"))
+    assert record_run(db, saved(outcome, tmp_path / "run")).integrity is Integrity.CHECKED
+    with ExperimentDB(tmp_path / "db2") as other:
+        record = record_run(other, tmp_path / "run", verify="replay")
     assert record.integrity is Integrity.ITERATIONS_REPLAYED
 
     plan = resume_plan(db, record.run_id)

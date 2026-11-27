@@ -71,14 +71,19 @@ def check_run_id(value: Any) -> str:
 
 
 class Integrity(str, Enum):
-    """How far ingest could re-execute the run.
+    """How ingest verified the run.
 
-    ``replayed``: ``replay`` re-executed every proposal and matched the
-    whole trace. ``iterations_replayed``: a cancelled run; every recorded
-    iteration matched, but a cancellation cannot be re-executed, so the
-    outcome rests on the manifest. Only a ``replayed`` record serves the cache.
+    ``checked``: the runtime's ``check_run`` passed: every byte, the trace
+    digest, the trace against the saved results and the guard's re-grade of
+    the sealed run, with no solve run again. ``replayed``: ``replay``
+    re-executed every proposal as well and matched the whole trace.
+    ``iterations_replayed``: a cancelled run; every recorded iteration
+    matched, but a cancellation cannot be re-executed, so the outcome rests
+    on the manifest. Only a ``replayed`` record serves the cache, because only
+    re-execution shows that the step it is keyed by produces its result.
     """
 
+    CHECKED = "checked"
     REPLAYED = "replayed"
     ITERATIONS_REPLAYED = "iterations_replayed"
 

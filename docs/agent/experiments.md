@@ -65,13 +65,13 @@ Use one `ExperimentDB` per process or thread.
 | `status`, `stop_reason`, `limits`, `usage` | As in the trace. `usage` holds iterations, evaluations, tokens and wall seconds. |
 | `created_at` | When the run was recorded, UTC, ISO 8601 with microseconds. |
 | `orbitopt_version` | The version that replayed the run at ingest. |
-| `integrity` | `replayed`, or `iterations_replayed` for a cancelled run. See below. |
+| `integrity` | `checked` (the default ingest), `replayed`, or `iterations_replayed` for a cancelled run that was replayed. See below. |
 | `files` | Each run file by its path in the run directory, to its digest in the store. |
 | `parent_id`, `resumed_from` | Links to recorded runs, or `None`. |
 
 ## Recording a run
 
-`record_run(db, run_dir, *, expected_manifest_digest=None, tools=None, registry=None, provider=None, model=None, family=None, parent_id=None, resumed_from=None)`
+`record_run(db, run_dir, *, expected_manifest_digest=None, verify="check", tools=None, registry=None, provider=None, model=None, family=None, parent_id=None, resumed_from=None)`
 trusts nothing in `run_dir`:
 
 1. It reads `manifest.json`. Its digest is the run id. With
@@ -82,18 +82,29 @@ trusts nothing in `run_dir`:
    absolute path, a backslash or any character outside `[A-Za-z0-9_.-]`
    raises `UnsafePathError` before any of them is read. The check is the
    runtime's `safe_relative`, the one the runtime's `replay` uses.
-4. The runtime's `replay` re-executes the recorded proposals, pinned to the
-   manifest bytes read in step 1, and re-grades the sealed run. Any finding
-   in `ReplayReport.integrity` and any difference refuse the run with
-   `RunIntegrityError`. A forger who rewrites a result and every digest still
-   fails here, because the solvers recompute the result.
-5. The record's numbers come from the replayed trace. The sealed result must
-   name the same solver, point, objective and residuals as the trace's best.
-6. The files go into the store, and then the record goes into the index in
-   one transaction. A crash between the two leaves unreferenced blobs, which
-   the next ingest reuses.
+4. With `verify="check"`, the default, the runtime's
+   [`check_run`](runtime.md#run-directories-and-replay) runs, pinned to the
+   manifest bytes read in step 1. It checks the trace against its digest
+   and against the saved results, checks that the sealed result is the
+   trace's best, and has the guard re-grade the sealed run with the
+   alternates' recorded results. No solver runs. Any finding in
+   `CheckReport.integrity` refuses the run with `RunIntegrityError`. The
+   record's `integrity` is `checked`.
+5. With `verify="replay"`, the runtime's `replay` runs instead. It does the
+   same check with the alternates run again, then re-executes the recorded
+   proposals. Any finding and any difference refuse the run. A forger who
+   rewrites any result and every digest fails here, because the solvers
+   recompute the result. The record's `integrity` is `replayed`.
+6. The record's numbers come from the checked trace, and the store gets the
+   exact bytes the check read. The files go into the store, and then the
+   record goes into the index in one transaction. A crash between the two
+   leaves unreferenced blobs, which the next ingest reuses.
 
-A cancelled run cannot be re-executed, because replay has no cancel signal:
+Use the default to record runs cheaply. Replay a run whose steps you want
+to serve from the cache, since only a `replayed` record holds cache
+entries (see below).
+
+With `verify="replay"`, a cancelled run cannot be re-executed, because replay has no cancel signal:
 it asks the recorded planner for one more proposal, and the recording has
 none. Such a run is recorded with `integrity` `iterations_replayed` when
 every iteration matched and the differences are confined to the outcome,
@@ -112,7 +123,9 @@ each file through its digest check. `replay` then runs on `dest`.
 ## The cache
 
 A cache entry is the step that produced the best result of a verified,
-fully replayed run. Its key is
+fully replayed run. A `checked` record holds no entry: its key would say
+that a solver with these options and this seed produces this result, and
+only re-execution shows that. Its key is
 `cache_key(problem_digest, solver_id, options, seed, x0, evaluations, *, version, policy)`:
 
 - Options and start points are normalised. Keys are sorted, `None` values
@@ -219,20 +232,35 @@ seed (a miss). The table gives medians over the five seeds. It was measured
 on one machine (Apple M1 Pro, macOS, Python 3.12, the `orbitopt-py312`
 environment). Every run was verified, and every hit was served.
 
-| Instance | Run evaluations | `solve` | `replay` alone | `record_run` | Hit | Miss | Evaluations per hit |
-|---|---|---|---|---|---|---|---|
-| cqp-worked-d2 | 807 | 53 ms | 107 ms | 115 ms | 5.2 ms | 0.14 ms | 1 |
-| lp-wyndor-d2 | 419 | 37 ms | 73 ms | 78 ms | 5.7 ms | 0.17 ms | 1 |
-| rastrigin-d5 | 7848 | 343 ms | 444 ms | 434 ms | 7.4 ms | 0.18 ms | 1 |
+| Instance | Run evaluations | `solve` | `replay` alone | Hit | Miss | Evaluations per hit |
+|---|---|---|---|---|---|---|
+| cqp-worked-d2 | 807 | 53 ms | 107 ms | 5.2 ms | 0.14 ms | 1 |
+| lp-wyndor-d2 | 419 | 37 ms | 73 ms | 5.7 ms | 0.17 ms | 1 |
+| rastrigin-d5 | 7848 | 343 ms | 444 ms | 7.4 ms | 0.18 ms | 1 |
+
+`record_run` was timed again in each mode: five seeds, each run ingested
+into a fresh database three times, 15 timings per cell, on the same
+machine. The table gives the median with the range.
+
+| Instance | Run evaluations | `solve` | `verify="check"` | `verify="replay"` | Evaluations at a checked ingest |
+|---|---|---|---|---|---|
+| cqp-worked-d2 | 807 | 52 ms | 8.6 ms (7.8 to 11.6) | 111 ms (95 to 115) | 3 |
+| lp-wyndor-d2 | 419 | 35 ms | 10.0 ms (9.1 to 10.4) | 75 ms (71 to 80) | 3 |
+| rastrigin-d5 | 7848 | 305 ms | 13.9 ms (13.0 to 16.5) | 401 ms (382 to 455) | 3 |
 
 What limits these numbers:
 
-- `record_run` is the replay plus a few milliseconds for hashing, storing
-  and indexing. Replay runs every solve again and then the final
-  verification's alternate solvers a second time, when it re-grades the
-  sealed run. It therefore costs more than the run itself. On Rastrigin,
-  `record_run` came out below replay alone, which is the spread between
-  runs.
+- A replayed ingest runs every solve again and then the final
+  verification's alternates a second time, when it re-grades the sealed
+  run. It costs more than the run itself and grows with it. It took 112,
+  77 and 397 ms before the default changed, the same within the spread.
+- A checked ingest does not depend on the run's evaluations. It evaluates
+  the problem three times: the sealed point and the two alternates'
+  points. A profile of the Rastrigin ingest puts half of its time in
+  `jsonschema` (the trace, the problem twice, the result and the record),
+  an eighth in writing the 13 files to the store with an `fsync` each, and
+  a tenth in the guard. Rastrigin's trace has five iterations and the others
+  two, which is the difference between the rows.
 - A hit does not depend on the run's size. It writes the four sealed files
   to a temporary directory and runs the guard once. A profile puts most of
   that time in `jsonschema`, which checks the stored problem twice and the

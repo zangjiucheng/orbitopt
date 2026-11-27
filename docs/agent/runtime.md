@@ -240,18 +240,58 @@ as `seal_run` asks. `save_run` returns the digest of `manifest.json` itself.
 Keep it out of band, since whoever can rewrite the directory can rewrite the
 manifest too.
 
+`check_run(run_dir, *, tools=None, registry=None, expected_manifest_digest=None, alternates="recorded")`
+is the integrity check. It re-executes nothing.
+
+1. Every file name the manifest gives, and the sealed run's folder, go
+   through `safe_relative`. A name with `..`, an absolute path, a backslash
+   or a character outside `[A-Za-z0-9_.-]` raises `UnsafePathError` before
+   any file besides `manifest.json` is read.
+2. Every file must hash to the digest the manifest records, and the
+   manifest must seal `problem.json` and `trace.json`. With
+   `expected_manifest_digest`, the manifest itself must hash to it.
+3. The trace must match its own digest, name the problem in
+   `problem.json`, and match the manifest's trace digest.
+4. Each result summary in the trace must be the summary of the full result
+   saved under its label, and `sealed/result.json` must be byte for byte the
+   result the trace names as best.
+5. The guard re-grades `sealed/` with `verify_run`, pinned to the sealed
+   manifest digest. A verdict that contradicts the trace's status is a
+   finding.
+
+With `alternates="recorded"` the guard takes each final-verification
+alternate's saved result as that alternate's answer. It re-checks the
+alternate's point and the comparison, and runs no solver. It cannot show
+that the solver produces that point. `alternates="rerun"` runs each
+alternate again with its recorded allocation, seed and options from
+`registry`. The guard re-evaluates points either way, so pass `tools` as the
+run had them.
+
+`CheckReport` holds `integrity` (one line per finding), the guard's
+`report`, the trace's `recorded_status`, the trace, the problem and the
+bytes of every file it checked. `intact` is true with no finding.
+`verified` is true when it is also intact and the guard passes the sealed
+run again. `orbitopt agent verify` runs `check_run` with the alternates run
+again.
+
+What `check_run` catches, and what it does not:
+
+- A changed byte, unless the manifest was rewritten to match. Pin the
+  manifest with `expected_manifest_digest` to catch that too.
+- A forger who rewrites the trace and every digest: the trace no longer
+  summarises the saved results, or the sealed result no longer re-evaluates
+  to its claims.
+- A forger who rewrites a result that is not the best, its trace entry and
+  every digest is not caught, since nothing re-runs that solve. `replay` is.
+
 `replay(run_dir, *, tools=None, registry=None, expected_manifest_digest=None)`
-first checks every file name the manifest gives, and the sealed run's
-folder, with `safe_relative`. A name with `..`, an absolute path, a
-backslash or a character outside `[A-Za-z0-9_.-]` raises `UnsafePathError`
-before any file besides `manifest.json` is read. It then checks every
-file's bytes and the trace digest. It then re-executes the
+runs `check_run` with the alternates run again. It then re-executes the
 recorded proposals with a `RecordedPlanner`, on the problem in `problem.json`,
 with the recorded seed, limits and policy. It compares the new trace with
-the recorded one at 12 significant digits, wall-clock fields left out. It
-also re-grades `sealed/` with `verify_run`, and runs the final verification's
-alternate solvers again with their recorded allocation, seed and options.
-`ReplayReport.equal` is true when no file changed and nothing differs. A
+the recorded one at 12 significant digits, wall-clock fields left out.
+`ReplayReport.check` is that check, and `integrity` and `sealed_verdict`
+read from it. `ReplayReport.equal` is true when no file changed and nothing
+differs. A
 forger who edits a result and recomputes every digest still fails, because
 the solvers recompute the result. A solver whose capability sets
 `deterministic_given_seed` to false shows up as a difference unless it

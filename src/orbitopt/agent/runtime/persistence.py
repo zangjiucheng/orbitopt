@@ -14,28 +14,34 @@ A run directory holds:
 The sealed run's manifest digest lives here, outside ``sealed/``, as
 ``seal_run`` asks. ``save_run`` returns this manifest's own digest; keep it
 out of band, since whoever can rewrite the directory can rewrite the
-manifest too. ``replay`` checks every byte, then re-executes the trace's
+manifest too.
+
+``check_run`` is the integrity check: every byte against the manifest, the
+trace digest, the trace against the full results, and the guard's re-grade
+of the sealed best result. It runs no solver: by default the final
+verification's alternates are given their recorded results. ``replay`` does
+the same check with the alternates run again, then re-executes the trace's
 recorded proposals with a ``RecordedPlanner`` and compares the new trace
-with the recorded one. ``regrade`` checks every byte and re-grades only the
-sealed best result with the guard, without re-running the loop.
+with the recorded one.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
 from orbitopt.agent.tools import Caller, ToolView, bind_problem
-from orbitopt.optimization import Budget, InvalidProblemError, OptimizationProblem, parse_problem, schema_errors
+from orbitopt.optimization import (Budget, InvalidProblemError, OptimizationProblem, OptimizationResult, parse_problem,
+                                   schema_errors)
 from orbitopt.optimization.solvers import SolverRegistry, default_registry
 from orbitopt.optimization.verification import (RUN_FORMAT, Outcome, VerificationReport, canonical_json, file_digest,
                                                 seal_run, verify_run)
 
 from .loop import Tools, solve
-from .model import TRACE_SCHEMA, Policy, Proposal, RunOutcome, RunStatus, stable, trace_digest
+from .model import TRACE_SCHEMA, Policy, Proposal, RunOutcome, RunStatus, result_summary, stable, trace_digest
 from .planners import RecordedPlanner
 
 RUN_MANIFEST_FORMAT = "orbitopt.agent.run/1"
@@ -43,6 +49,7 @@ MANIFEST = "manifest.json"
 SEALED = "sealed"
 MAX_DIFFERENCES = 20
 SAFE_PART = re.compile(r"^[A-Za-z0-9_.-]+$")
+Alternates = Literal["recorded", "rerun"]
 
 
 class UnsafePathError(ValueError):
@@ -90,29 +97,114 @@ def save_run(outcome: RunOutcome, run_dir: str | Path) -> str:
 
 def load_trace(run_dir: str | Path) -> dict:
     """The run's trace as a dict, checked against ``agent-trace-1.0.json``; ``ValueError`` otherwise."""
-    data = json.loads((Path(run_dir) / "trace.json").read_text(encoding="utf-8"))
-    errors = schema_errors(data, TRACE_SCHEMA)
+    return _parse_trace((Path(run_dir) / "trace.json").read_bytes())
+
+
+def _parse_trace(data: bytes) -> dict:
+    trace = json.loads(data.decode("utf-8"))
+    errors = schema_errors(trace, TRACE_SCHEMA)
     if errors:
         raise ValueError(f"trace.json does not match {TRACE_SCHEMA}: " + "; ".join(f"{e.path}: {e.message}"
                                                                               for e in errors[:5]))
-    return data
+    return trace
+
+
+@dataclass(frozen=True)
+class CheckReport:
+    """The integrity check of a run directory, with no solve run again.
+
+    ``integrity`` lists changed, missing or inconsistent files: a byte that
+    does not match the manifest, a trace whose digest does not match its
+    content, a trace entry that is not the full result saved beside it, a
+    sealed result that is not the trace's best, and a sealed re-grade that
+    contradicts the trace's status. ``report`` is the guard's fresh grade of
+    ``sealed/``, ``None`` when the run sealed no result. ``alternates`` says
+    whether the final verification's alternate solvers were given their
+    recorded results (``recorded``) or run again (``rerun``). ``trace``,
+    ``problem`` and ``files`` are what was checked: the trace as recorded, the
+    problem it names, and the bytes of every file by its path in the run
+    directory, the sealed run's included.
+    """
+
+    integrity: tuple[str, ...]
+    report: VerificationReport | None
+    recorded_status: str | None
+    alternates: Alternates
+    trace: Mapping[str, Any] | None = None
+    problem: OptimizationProblem | None = None
+    files: Mapping[str, bytes] = field(default_factory=dict)
+
+    @property
+    def intact(self) -> bool:
+        return not self.integrity
+
+    @property
+    def verified(self) -> bool:
+        """Intact, and the guard passes the sealed best result again."""
+        return self.intact and self.report is not None and self.report.verdict is Outcome.PASSED
+
+    @property
+    def sealed_verdict(self) -> str | None:
+        return None if self.report is None else self.report.verdict.value
+
+
+def check_run(run_dir: str | Path, *, tools: Tools | None = None, registry: SolverRegistry | None = None,
+              expected_manifest_digest: str | None = None, alternates: Alternates = "recorded") -> CheckReport:
+    """Check a run directory without re-executing it: bytes, trace digest, results, and the sealed re-grade.
+
+    No planner, LLM or loop runs. With ``alternates="recorded"`` no solver
+    runs either: the guard re-grades the sealed result with each alternate's
+    recorded result as that alternate's answer, so it re-checks the
+    alternate's point and the comparison but not that the solver produces
+    it. ``"rerun"`` runs the alternates again with their recorded
+    allocation, seed and options from ``registry``. The guard still
+    re-evaluates points, so a tool-evaluated problem needs ``tools`` as the
+    original run had them. Raises ``UnsafePathError`` for a file name that
+    would leave ``run_dir``, before reading anything but ``manifest.json``.
+    """
+    if alternates not in ("recorded", "rerun"):
+        raise ValueError(f"alternates must be 'recorded' or 'rerun', not {alternates!r}")
+    run_dir = Path(run_dir)
+    integrity: list[str] = []
+    files: dict[str, bytes] = {}
+    try:
+        manifest, trace, problem = _open(run_dir, expected_manifest_digest, integrity, files)
+    except UnsafePathError:
+        raise
+    except (OSError, ValueError, InvalidProblemError) as exc:
+        return CheckReport(tuple(integrity) + (f"cannot load the run: {exc}",), None, None, alternates, files=files)
+    _check_results(trace, files, integrity)
+    report = _regrade_sealed(run_dir, manifest, problem, trace, files, tools, registry or default_registry(),
+                             alternates, integrity)
+    status = trace["outcome"]["status"]
+    if report is not None and (report.verdict is Outcome.PASSED) != (status == RunStatus.VERIFIED.value):
+        integrity.append(f"sealed/: the guard re-grades the sealed run {report.verdict.value!r}, but the trace says "
+                         f"{status!r}")
+    return CheckReport(tuple(integrity), report, status, alternates, trace, problem, files)
 
 
 @dataclass(frozen=True)
 class ReplayReport:
-    """``equal`` when every file is intact and the re-executed trace matches the recorded one.
+    """``equal`` when the run passed ``check_run`` and the re-executed trace matches the recorded one.
 
-    ``integrity`` lists changed, missing or inconsistent files. ``differences``
-    lists the trace paths where the re-execution differs (wall-clock fields
-    are not compared). ``sealed_verdict`` is the guard's verdict on the sealed
-    run, re-graded from its files.
+    ``check`` is the integrity check, with the alternates run again.
+    ``differences`` lists the trace paths where the re-execution differs
+    (wall-clock fields are not compared).
     """
 
-    integrity: tuple[str, ...]
+    check: CheckReport
     differences: tuple[str, ...]
     recorded_digest: str | None
     replayed_digest: str | None
-    sealed_verdict: str | None
+
+    @property
+    def integrity(self) -> tuple[str, ...]:
+        return self.check.integrity
+
+    @property
+    def sealed_verdict(self) -> str | None:
+        """The guard's verdict on the sealed run, re-graded from its files."""
+        return self.check.sealed_verdict
 
     @property
     def equal(self) -> bool:
@@ -125,7 +217,7 @@ class ReplayReport:
 
 def replay(run_dir: str | Path, *, tools: Tools | None = None, registry: SolverRegistry | None = None,
            expected_manifest_digest: str | None = None) -> ReplayReport:
-    """Check a run directory and re-execute its recorded proposals; no planner or LLM is called.
+    """``check_run`` with the alternates run again, then re-execute the recorded proposals; no LLM is called.
 
     The re-execution uses the recorded seed, limits and policy, the problem
     from ``problem.json`` and the solvers of ``registry``. A deterministic
@@ -134,80 +226,31 @@ def replay(run_dir: str | Path, *, tools: Tools | None = None, registry: SolverR
     recomputed the trace digest. Pass ``tools`` as the original run did.
     """
     registry = registry or default_registry()
-    integrity: list[str] = []
-    try:
-        manifest, trace, problem = _open(Path(run_dir), expected_manifest_digest, integrity)
-    except UnsafePathError:
-        raise
-    except (OSError, ValueError, InvalidProblemError) as exc:
-        return ReplayReport(tuple(integrity) + (f"cannot load the run: {exc}",), (), None, None, None)
+    check = check_run(run_dir, tools=tools, registry=registry, expected_manifest_digest=expected_manifest_digest,
+                      alternates="rerun")
+    trace, problem = check.trace, check.problem
+    if trace is None or problem is None:
+        return ReplayReport(check, (), None, None)
     proposals = [Proposal.from_dict(r["proposal"]) for r in trace["iterations"]]
     outcome = solve(problem, planner=RecordedPlanner(proposals, name=trace["planner"]),
                     budget=Budget(**trace["limits"]), policy=Policy.from_dict(trace["policy"]), tools=tools,
                     seed=trace["seed"], registry=registry)
     replayed = outcome.trace.to_dict()
     differences = _differences(stable(trace), stable(replayed), "")
-    report = _regrade_sealed(Path(run_dir), manifest, problem, trace, tools, registry, integrity)
-    sealed = None if report is None else report.verdict.value
-    verified = trace["outcome"]["status"] == RunStatus.VERIFIED.value
-    if sealed is not None and (sealed == Outcome.PASSED.value) != verified:
-        differences.append(f"sealed/: the guard re-grades the sealed run {sealed!r}, but the trace says "
-                           f"{trace['outcome']['status']!r}")
-    return ReplayReport(tuple(integrity), tuple(differences[:MAX_DIFFERENCES]), trace["digest"], replayed["digest"],
-                        sealed)
+    return ReplayReport(check, tuple(differences[:MAX_DIFFERENCES]), trace["digest"], replayed["digest"])
 
 
-@dataclass(frozen=True)
-class RegradeReport:
-    """``verified`` when every file is intact and the guard passes the sealed best result again.
-
-    ``integrity`` lists changed, missing or inconsistent files. ``report`` is
-    the guard's fresh grade of ``sealed/``, with the final verification's
-    alternate solvers run again; ``None`` when the run sealed no result.
-    ``recorded_status`` is the run status the trace claims.
-    """
-
-    integrity: tuple[str, ...]
-    report: VerificationReport | None
-    recorded_status: str | None
-
-    @property
-    def verified(self) -> bool:
-        return not self.integrity and self.report is not None and self.report.verdict is Outcome.PASSED
-
-
-def regrade(run_dir: str | Path, *, tools: Tools | None = None, registry: SolverRegistry | None = None,
-            expected_manifest_digest: str | None = None) -> RegradeReport:
-    """Check a run directory's bytes and re-grade its sealed best result; no planner, LLM or loop runs.
-
-    A trace that says ``verified`` while the guard does not pass the sealed
-    result, or the other way round, is an integrity finding. Pass ``tools``
-    as the original run did.
-    """
-    run_dir = Path(run_dir)
-    integrity: list[str] = []
-    try:
-        manifest, trace, problem = _open(run_dir, expected_manifest_digest, integrity)
-    except UnsafePathError:
-        raise
-    except (OSError, ValueError, InvalidProblemError) as exc:
-        return RegradeReport(tuple(integrity) + (f"cannot load the run: {exc}",), None, None)
-    report = _regrade_sealed(run_dir, manifest, problem, trace, tools, registry or default_registry(), integrity)
-    status = trace["outcome"]["status"]
-    if report is not None and (report.verdict is Outcome.PASSED) != (status == RunStatus.VERIFIED.value):
-        integrity.append(f"sealed/: the guard re-grades the sealed run {report.verdict.value!r}, but the trace says "
-                         f"{status!r}")
-    return RegradeReport(tuple(integrity), report, status)
-
-
-def _open(run_dir: Path, expected: str | None, integrity: list[str]):
+def _open(run_dir: Path, expected: str | None, integrity: list[str], files: dict[str, bytes]):
     """The run's manifest (``None`` when unreadable), trace and problem, with every consistency failure in ``integrity``.
 
-    Raises ``OSError``, ``ValueError`` or ``InvalidProblemError`` when the trace or the problem cannot be loaded.
+    ``files`` receives the bytes of every file that matches its digest.
+    Raises ``OSError``, ``ValueError`` or ``InvalidProblemError`` when the
+    trace or the problem cannot be loaded.
     """
-    manifest = _manifest(run_dir, expected, integrity)
-    trace = load_trace(run_dir)
-    problem = parse_problem(json.loads((run_dir / "problem.json").read_text(encoding="utf-8")))
+    manifest = _manifest(run_dir, expected, integrity, files)
+    trace = _parse_trace(files.get("trace.json") or (run_dir / "trace.json").read_bytes())
+    problem = parse_problem(json.loads((files.get("problem.json") or (run_dir / "problem.json").read_bytes())
+                                       .decode("utf-8")))
     if trace["digest"] != trace_digest(trace):
         integrity.append("trace.json: the recorded digest does not match the trace's content")
     if trace["problem_digest"] != problem.digest():
@@ -217,7 +260,7 @@ def _open(run_dir: Path, expected: str | None, integrity: list[str]):
     return manifest, trace, problem
 
 
-def _manifest(run_dir: Path, expected: str | None, integrity: list[str]) -> dict | None:
+def _manifest(run_dir: Path, expected: str | None, integrity: list[str], files: dict[str, bytes]) -> dict | None:
     try:
         raw = (run_dir / MANIFEST).read_bytes()
         manifest = json.loads(raw)
@@ -227,42 +270,109 @@ def _manifest(run_dir: Path, expected: str | None, integrity: list[str]) -> dict
     if expected is not None and file_digest(raw) != expected:
         integrity.append(f"{MANIFEST}: digest {file_digest(raw)} is not the expected {expected}")
     if not isinstance(manifest, dict) or manifest.get("format") != RUN_MANIFEST_FORMAT \
-            or not isinstance(manifest.get("files"), dict):
+            or not isinstance(manifest.get("files"), dict) or not isinstance(manifest.get("sealed"), (dict, type(None))):
         integrity.append(f"{MANIFEST}: not an {RUN_MANIFEST_FORMAT} manifest")
         return None
-    sealed = manifest.get("sealed")
-    for name in (*manifest["files"], *([sealed.get("dir")] if isinstance(sealed, dict) else [])):
+    files[MANIFEST] = raw
+    unsealed = sorted({"problem.json", "trace.json"} - set(manifest["files"]))
+    if unsealed:
+        integrity.append(f"{MANIFEST}: does not seal {unsealed}")
+    sealed = manifest["sealed"]
+    for name in (*manifest["files"], *([sealed.get("dir")] if sealed is not None else [])):
         safe_relative(name)  # every name, before any file is read
     for name, recorded in sorted(manifest["files"].items()):
-        try:
-            actual = file_digest((run_dir / name).read_bytes())
-        except OSError:
-            integrity.append(f"{name}: missing")
-            continue
-        if actual != recorded:
-            integrity.append(f"{name}: content digest {actual} does not match the manifest")
+        _read(run_dir / name, name, recorded, integrity, files)
+    if sealed is not None:
+        _read_sealed(run_dir / sealed["dir"], sealed, files)
     return manifest
 
 
+def _read(path: Path, name: str, recorded: Any, integrity: list[str], files: dict[str, bytes]) -> None:
+    try:
+        data = path.read_bytes()
+    except OSError:
+        integrity.append(f"{name}: missing")
+        return
+    if file_digest(data) != recorded:
+        integrity.append(f"{name}: content digest {file_digest(data)} does not match the manifest")
+        return
+    files[name] = data
+
+
+def _read_sealed(folder: Path, sealed: Mapping[str, Any], files: dict[str, bytes]) -> None:
+    """The sealed run's manifest and files into ``files``, where they match; ``verify_run`` reports the rest."""
+    try:
+        raw = (folder / MANIFEST).read_bytes()
+        inner = json.loads(raw)
+    except (OSError, ValueError):
+        return
+    if file_digest(raw) != sealed.get("manifest_digest") or not isinstance(inner, dict) \
+            or not isinstance(inner.get("files"), dict):
+        return
+    for name in inner["files"]:
+        safe_relative(name)
+    files[f"{sealed['dir']}/{MANIFEST}"] = raw
+    for name, recorded in sorted(inner["files"].items()):
+        _read(folder / name, f"{sealed['dir']}/{name}", recorded, [], files)
+
+
+def _labelled(trace: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    """Every result summary in the trace, by the label ``save_run`` files its full result under."""
+    out = {f"iteration-{item['index']:04d}": item["result"] for item in trace["iterations"] if item["result"]}
+    for attempt in trace["verifications"]:
+        for run in attempt["alternates"]:
+            if run["result"] is not None:
+                out[f"verify-{attempt['attempt']}-{run['solver_id']}"] = run["result"]
+    return out
+
+
+def _check_results(trace: Mapping[str, Any], files: Mapping[str, bytes], integrity: list[str]) -> None:
+    """Each trace entry summarises the full result saved under its label, and the sealed result is the best."""
+    for label, summary in _labelled(trace).items():
+        name = f"results/{label}.json"
+        if name not in files:
+            integrity.append(f"{name}: the trace names this result, but the manifest does not seal it")
+            continue
+        try:
+            full = result_summary(OptimizationResult.from_dict(json.loads(files[name].decode("utf-8"))))
+        except Exception as exc:  # noqa: BLE001 - an unreadable result is a finding, never a crash
+            integrity.append(f"{name}: not a result: {exc!r:.200}")
+            continue
+        changed = _differences(stable(summary), stable(full), "")
+        if changed:
+            integrity.append(f"trace.json: {label} is not the result in {name}: {changed[0]}")
+    best = trace["outcome"]["best"]
+    sealed = next((name for name in files if name.endswith("/result.json")), None)
+    if sealed is not None and files[sealed] != files.get(f"results/{best}.json"):
+        integrity.append(f"{sealed}: not the result the trace names as best ({best})")
+
+
 def _regrade_sealed(run_dir: Path, manifest: dict | None, problem: OptimizationProblem, trace: dict,
-                    tools: Tools | None, registry: SolverRegistry,
+                    files: Mapping[str, bytes], tools: Tools | None, registry: SolverRegistry, alternates: Alternates,
                     integrity: list[str]) -> VerificationReport | None:
-    """The guard's report on the sealed run, with the final verification's alternate solvers run again."""
+    """The guard's report on the sealed run, each final-verification alternate recorded or run again."""
     sealed = None if manifest is None else manifest.get("sealed")
     if not sealed:
         return None
     best = trace["outcome"]["best"]
     attempts = [v for v in trace["verifications"] if v["candidate"] == best]
-    runs = attempts[-1]["alternates"] if attempts else []
+    attempt = attempts[-1] if attempts else None
+    resolvers = bind_problem(problem, tools, Caller("agent-replay")) if isinstance(tools, ToolView) else tools
 
-    def alternate(run: Mapping[str, Any]):
+    def rerun(run: Mapping[str, Any]):
         solver = registry.get(run["solver_id"])
         return lambda graded: solver.solve(graded, budget=Budget(max_evaluations=run["allocation"]), seed=run["seed"],
                                            options=run["options"] or None, tools=resolvers)
 
-    resolvers = bind_problem(problem, tools, Caller("agent-replay")) if isinstance(tools, ToolView) else tools
+    def recorded(run: Mapping[str, Any]):
+        data = files.get(f"results/verify-{attempt['attempt']}-{run['solver_id']}.json")
+        result = None if data is None else OptimizationResult.from_dict(json.loads(data.decode("utf-8")))
+        return lambda graded: result
+
+    answer = rerun if alternates == "rerun" else recorded
     report = verify_run(run_dir / sealed["dir"], problem=problem, tools=resolvers,
-                        alternate_solvers={run["solver_id"]: alternate(run) for run in runs},
+                        alternate_solvers={run["solver_id"]: answer(run) for run in attempt["alternates"]}
+                        if attempt else None,
                         expected_manifest_digest=sealed["manifest_digest"])
     integrity.extend(f"sealed/: {f.code.value} at {f.path}" for f in report.findings
                      if f.code.value in ("digest_mismatch", "missing_file", "malformed_artifact"))
