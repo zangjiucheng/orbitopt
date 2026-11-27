@@ -342,6 +342,18 @@ def test_feasible_but_not_optimal_result_claiming_optimality_fails():
     assert C.CLAIM_CONTRADICTED in report.codes and report.verdict is Outcome.FAILED
 
 
+def test_two_identical_solves_share_a_result_digest_and_the_wall_clock_is_not_part_of_it():
+    from orbitopt.optimization.solvers import SlsqpSolver
+
+    first, second = (SlsqpSolver().solve(WORKED, seed=3) for _ in range(2))
+    assert result_digest(first) == result_digest(second)
+    assert result_digest(replace(first, wall_time_s=first.wall_time_s + 3600.0)) == result_digest(first)
+    timed = replace(first, evidence=(replace(first.evidence[0], data={**first.evidence[0].data, "latency_s": 9.0}),))
+    assert result_digest(timed) == result_digest(first)
+    assert result_digest(replace(first, x={**first.x, "x": first.x["x"] + 1e-3})) != result_digest(first)
+    assert result_digest(replace(first, evaluations=first.evaluations + 1)) != result_digest(first)
+
+
 def test_a_cache_hit_is_part_of_the_result_and_a_stale_one_fails():
     point = {"x": 0.5, "y": 0.5}
     fresh = honest(WORKED, point)

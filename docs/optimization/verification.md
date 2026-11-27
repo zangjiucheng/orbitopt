@@ -178,7 +178,11 @@ returns, and pass it as `expected_manifest_digest`.
 The manifest records the SHA-256 of exact bytes, not the 12-digit quantised
 digest that the IR uses. A tamper seal must catch a change in the 13th digit
 of `x`. The quantised `result_digest` identifies a result for evidence
-pinning, and it is not a tamper seal.
+pinning, and it is not a tamper seal. It leaves out the wall-clock keys of
+`orbitopt.optimization.VOLATILE_KEYS` (`wall_s`, `wall_time_s`, `latency_s`)
+at any depth, as the agent trace digest does, so two runs that found the
+same answer the same way share a result digest. The byte digests still seal
+`wall_time_s`.
 
 ## Fault matrix
 

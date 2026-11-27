@@ -257,7 +257,8 @@ the result, the screen (verdict, the four statuses with reasons, the finding
 codes), the diagnosis, and the evaluations and tokens it cost. Each
 verification record holds the candidate's label, the alternate runs and the
 guard's report. The digest is the IR's `canonical_digest` (12 significant
-digits) of the trace without `wall_s`, `wall_time_s` and `latency_s`. Two
+digits) of the trace without `wall_s`, `wall_time_s` and `latency_s`
+(`orbitopt.optimization.VOLATILE_KEYS`, which `result_digest` leaves out too). Two
 runs with the same problem, planner, seed and solvers share it. A number that
 straddles a 12th-digit rounding boundary still splits it.
 

@@ -20,7 +20,7 @@
     "constraint_residuals": {"$ref": "#/$defs/values", "description": "Canonical residuals by constraint name: g <= 0 for inequalities, h = 0 for equalities."},
     "evaluations": {"type": "integer", "minimum": 0},
     "iterations": {"type": ["integer", "null"], "minimum": 0},
-    "wall_time_s": {"type": "number", "minimum": 0},
+    "wall_time_s": {"type": "number", "minimum": 0, "description": "Wall-clock seconds of the solve. Volatile: result_digest leaves it out, as it leaves out every key named wall_s, wall_time_s or latency_s at any depth (orbitopt.optimization.VOLATILE_KEYS)."},
     "message": {"type": "string"},
     "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
     "front": {"type": "array", "items": {"$ref": "#/$defs/paretoPoint"}, "description": "Non-dominated feasible points of a multi-objective solve; empty otherwise."},

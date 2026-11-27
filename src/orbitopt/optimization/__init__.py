@@ -46,6 +46,7 @@ from .result import (
     EVIDENCE_KINDS,
     RESULT_SCHEMA,
     RESULT_SCHEMAS,
+    VOLATILE_KEYS,
     Evidence,
     OptimizationResult,
     ParetoPoint,
@@ -61,6 +62,6 @@ __all__ = [
     "OptimizationProblem", "OptimizationResult", "PROBLEM_SCHEMA", "PROBLEM_SCHEMAS", "Parameter", "ParetoPoint",
     "ProblemError", "Provenance",
     "RESULT_SCHEMA", "RESULT_SCHEMAS", "SCHEMA_VERSION", "STATUSES", "SYMBOLS", "Termination", "ToolCall", "ToolCallError", "Unit",
-    "UnitError", "Variable", "VerificationPolicy", "canonical_digest", "load_schema", "parse_problem", "parse_unit",
+    "UnitError", "VOLATILE_KEYS", "Variable", "VerificationPolicy", "canonical_digest", "load_schema", "parse_problem", "parse_unit",
     "schema_errors", "schema_for", "to_plain", "tolerance_scale", "validate_problem",
 ]

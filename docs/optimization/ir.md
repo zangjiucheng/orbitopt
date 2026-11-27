@@ -145,6 +145,7 @@ All four start out false. It also holds:
 | `termination` | `converged`, `max_iterations`, `max_evaluations`, `timeout`, `infeasible`, `error`, `cancelled`, `unbounded` (the backend reports the objective improves without bound) or `stalled` (the backend stopped making progress before its convergence test passed). |
 | `front` | The non-dominated feasible points of a multi-objective solve, each a `ParetoPoint(x, objective_values)`. Empty otherwise. |
 | `provenance` | `Provenance(cache_key)`: the problem digest a cache stored the result under, or `None` for a fresh solve. It is part of the result, so the result digest pins it. |
+| `wall_time_s` | Wall-clock seconds of the solve. It is volatile, so the result digest leaves it out (`VOLATILE_KEYS`). |
 | `evidence` | Each item has a `kind`, a `summary`, `data`, its `producer` (a solver id, tool id or method) and the `problem_digest` it was produced for. |
 
 ## Versions and digests
