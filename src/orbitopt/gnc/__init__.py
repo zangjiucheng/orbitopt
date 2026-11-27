@@ -41,9 +41,14 @@ contracts, one declared clock, one sealed replayable run log.
   error -> Truth loop over any E13-03 sensors, the E13-02 EKF and any
   GuidanceLaw, sealing a ``GncRunLog``; ``tracking_error`` /
   ``delta_v_ledger`` / ``convergence_block`` are the offline readers.
-* :mod:`orbitopt.gnc.nav_metrics` -- offline consistency and observability
-  evaluation: NEES / NIS against declared chi-square intervals, sigma
-  coverage, stacked observability, cluster statistics.
+ * :mod:`orbitopt.gnc.nav_metrics` -- offline consistency and observability
+   evaluation: NEES / NIS against declared chi-square intervals, sigma
+   coverage, stacked observability, cluster statistics.
+ * :mod:`orbitopt.gnc.constraints` / :mod:`orbitopt.gnc.lqr` /
+   :mod:`orbitopt.gnc.mpc` (E13-05) -- the constrained-control research set:
+   one declared constraint family (keep-out, corridor, velocity profile,
+   thrust/budget), a finite-horizon CW LQR law, and a receding-horizon
+   constrained MPC law that carries the constraint set inside its QP.
 """
 from .clock import (
                      CLOCK_KIND,
@@ -105,6 +110,9 @@ from .closed_loop import (
                      tracking_error,
 )
 from .feed import GuidanceInput, GuidanceLaw, guidance_input_from, run_guidance_step
+from .constraints import ApproachConstraints, ConstraintSetError, VelocityProfile
+from .lqr import FiniteHorizonCwLaw, CwLqrLaw, cw_impulse_matrices, finite_horizon_cw_lqr_gains
+from .mpc import CwMpcLaw
 from .guidance import (
                      GuidanceLawError,
                      MANEUVER_MODES,
@@ -160,6 +168,7 @@ from .sim import ProportionalLaw, SensorNoise, simulate
 
 __all__ = [
                      "Actuator",
+                     "ApproachConstraints",
                      "CwMidCourseLaw",
                      "GuidanceLawError",
                      "MANEUVER_MODES",
@@ -173,6 +182,9 @@ __all__ = [
                      "simulate_closed_loop",
                      "solve_cw_intercept",
                      "tracking_error",
+                     "cw_impulse_matrices",
+                     "finite_horizon_cw_lqr_gains",
+                     "VelocityProfile",
                      "CHANNELS",
                      "CLOCK_KIND",
                      "CLOCK_TIMESCALES",
@@ -182,12 +194,16 @@ __all__ = [
                      "ClockSpec",
                      "Command",
                      "ConsistencyGate",
+                     "ConstraintSetError",
                      "ControlEvent",
                      "ControllerSpec",
+                     "CwLqrLaw",
+                     "CwMpcLaw",
                      "CwProcess",
                      "DropoutConfig",
                      "Estimate",
                      "EstimatorSpec",
+                     "FiniteHorizonCwLaw",
                      "GNCContractError",
                      "GncRunLog",
                      "GuidanceInput",
