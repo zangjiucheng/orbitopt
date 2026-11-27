@@ -18,6 +18,8 @@ results and explore them in Mission Control.
 | [Computed missions](computed-mission.md) | Replay the RTLS references and choose the right evidence checks. |
 | [Verification](verification.md) | Reports, kinds of evidence, benchmarks and convergence studies. |
 | [Rendezvous](rendezvous.md) | Two-impulse rendezvous: quickstart, theory, configuration and verification. |
+| [Optimization](optimization/index.md) | The optimization IR, its solvers and the verification guard. |
+| [LLM-assisted optimization](agent/index.md) | Compile a statement into a problem, solve it in a verified loop, replay the run. |
 | [Missions and examples](missions.md) | Explore modeled missions, validation and source data. |
 | [API reference](api.md) | Look up Python interfaces, commands and schemas. |
 | [Engineering](engineering.md) | Review implementation notes, benchmarks and tests. |
