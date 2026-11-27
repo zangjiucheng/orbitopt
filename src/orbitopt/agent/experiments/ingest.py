@@ -17,7 +17,8 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any, Mapping
 
-from orbitopt.agent.runtime import RUN_MANIFEST_FORMAT, BudgetUse, Limits, RunStatus, StopReason, replay
+from orbitopt.agent.runtime import (RUN_MANIFEST_FORMAT, BudgetUse, Limits, RunStatus, StopReason, replay,
+                                    safe_relative)
 from orbitopt.optimization import OptimizationProblem, canonical_digest, parse_problem
 from orbitopt.optimization.solvers import SolverRegistry
 from orbitopt.optimization.verification import RUN_FORMAT, file_digest
@@ -25,7 +26,6 @@ from orbitopt.optimization.verification import RUN_FORMAT, file_digest
 from .index import ExperimentDB
 from .model import (STATUS_NAMES, ExperimentRecord, Integrity, RunIntegrityError, SolverStep, VersionPolicy,
                     cache_key, check_run_id)
-from .store import safe_relative
 
 MANIFEST = "manifest.json"
 SEALED_FILES = ("problem.json", "result.json", "evidence.json", MANIFEST)

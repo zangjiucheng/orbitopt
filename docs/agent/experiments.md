@@ -80,7 +80,8 @@ trusts nothing in `run_dir`:
 3. Every file the manifest names, and every file of the sealed run, must
    have a safe name and hash to its recorded digest. A name with `..`, an
    absolute path, a backslash or any character outside `[A-Za-z0-9_.-]`
-   raises `UnsafePathError` before any of them is read.
+   raises `UnsafePathError` before any of them is read. The check is the
+   runtime's `safe_relative`, the one the runtime's `replay` uses.
 4. The runtime's `replay` re-executes the recorded proposals, pinned to the
    manifest bytes read in step 1, and re-grades the sealed run. Any finding
    in `ReplayReport.integrity` and any difference refuse the run with
@@ -197,7 +198,8 @@ an experiment database, raises `SchemaVersionError`.
 
 ## Errors
 
-Every error is an `ExperimentError`. Branch on the class.
+Every error is an `ExperimentError`, except `UnsafePathError`, which the
+runtime defines and raises for both packages. Branch on the class.
 
 | Error | When |
 |---|---|

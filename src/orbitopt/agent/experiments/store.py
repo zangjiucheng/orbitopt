@@ -14,23 +14,12 @@ import json
 import os
 import re
 import tempfile
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
-from .model import ArtifactError, InvalidIdError, UnsafePathError
+from .model import ArtifactError, InvalidIdError
 
 DIGEST = re.compile(r"^sha256:([0-9a-f]{64})$")
-SAFE_PART = re.compile(r"^[A-Za-z0-9_.-]+$")
-
-
-def safe_relative(name: Any) -> PurePosixPath:
-    """``name`` as a relative POSIX path that stays inside its directory, else ``UnsafePathError``."""
-    if not isinstance(name, str) or not name:
-        raise UnsafePathError(f"not a file name: {name!r:.80}")
-    path = PurePosixPath(name)
-    if path.is_absolute() or any(part in ("", ".", "..") or not SAFE_PART.fullmatch(part) for part in name.split("/")):
-        raise UnsafePathError(f"unsafe file name: {name!r:.80}")
-    return path
 
 
 def _strict_json(data: bytes) -> Any:

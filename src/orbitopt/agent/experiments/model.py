@@ -51,10 +51,6 @@ class UnknownRunError(ExperimentError, LookupError):
     """No record has this run id."""
 
 
-class UnsafePathError(ExperimentError, ValueError):
-    """A file name would leave its directory (``..``, an absolute path, a drive, a backslash)."""
-
-
 class ArtifactError(ExperimentError):
     """A stored artifact is missing or its bytes no longer match its digest."""
 

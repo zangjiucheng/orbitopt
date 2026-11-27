@@ -23,8 +23,9 @@ sealed best result with the guard, without re-running the loop.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
 from orbitopt.agent.tools import Caller, ToolView, bind_problem
@@ -41,6 +42,25 @@ RUN_MANIFEST_FORMAT = "orbitopt.agent.run/1"
 MANIFEST = "manifest.json"
 SEALED = "sealed"
 MAX_DIFFERENCES = 20
+SAFE_PART = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+class UnsafePathError(ValueError):
+    """A file name from a manifest would leave its directory (``..``, an absolute path, a drive, a backslash)."""
+
+
+def safe_relative(name: Any) -> PurePosixPath:
+    """``name`` as a relative POSIX path that stays inside its directory, else ``UnsafePathError``.
+
+    Every part must be ``[A-Za-z0-9_.-]+`` and neither ``.`` nor ``..``, so an
+    absolute path, a drive letter, a backslash or an empty part is refused.
+    """
+    if not isinstance(name, str) or not name:
+        raise UnsafePathError(f"not a file name: {name!r:.80}")
+    path = PurePosixPath(name)
+    if path.is_absolute() or any(part in ("", ".", "..") or not SAFE_PART.fullmatch(part) for part in name.split("/")):
+        raise UnsafePathError(f"unsafe file name: {name!r:.80}")
+    return path
 
 
 def save_run(outcome: RunOutcome, run_dir: str | Path) -> str:
@@ -117,6 +137,8 @@ def replay(run_dir: str | Path, *, tools: Tools | None = None, registry: SolverR
     integrity: list[str] = []
     try:
         manifest, trace, problem = _open(Path(run_dir), expected_manifest_digest, integrity)
+    except UnsafePathError:
+        raise
     except (OSError, ValueError, InvalidProblemError) as exc:
         return ReplayReport(tuple(integrity) + (f"cannot load the run: {exc}",), (), None, None, None)
     proposals = [Proposal.from_dict(r["proposal"]) for r in trace["iterations"]]
@@ -166,6 +188,8 @@ def regrade(run_dir: str | Path, *, tools: Tools | None = None, registry: Solver
     integrity: list[str] = []
     try:
         manifest, trace, problem = _open(run_dir, expected_manifest_digest, integrity)
+    except UnsafePathError:
+        raise
     except (OSError, ValueError, InvalidProblemError) as exc:
         return RegradeReport(tuple(integrity) + (f"cannot load the run: {exc}",), None, None)
     report = _regrade_sealed(run_dir, manifest, problem, trace, tools, registry or default_registry(), integrity)
@@ -202,10 +226,14 @@ def _manifest(run_dir: Path, expected: str | None, integrity: list[str]) -> dict
         return None
     if expected is not None and file_digest(raw) != expected:
         integrity.append(f"{MANIFEST}: digest {file_digest(raw)} is not the expected {expected}")
-    if not isinstance(manifest, dict) or manifest.get("format") != RUN_MANIFEST_FORMAT:
+    if not isinstance(manifest, dict) or manifest.get("format") != RUN_MANIFEST_FORMAT \
+            or not isinstance(manifest.get("files"), dict):
         integrity.append(f"{MANIFEST}: not an {RUN_MANIFEST_FORMAT} manifest")
         return None
-    for name, recorded in sorted(manifest.get("files", {}).items()):
+    sealed = manifest.get("sealed")
+    for name in (*manifest["files"], *([sealed.get("dir")] if isinstance(sealed, dict) else [])):
+        safe_relative(name)  # every name, before any file is read
+    for name, recorded in sorted(manifest["files"].items()):
         try:
             actual = file_digest((run_dir / name).read_bytes())
         except OSError:

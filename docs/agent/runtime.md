@@ -241,7 +241,11 @@ Keep it out of band, since whoever can rewrite the directory can rewrite the
 manifest too.
 
 `replay(run_dir, *, tools=None, registry=None, expected_manifest_digest=None)`
-checks every file's bytes and the trace digest. It then re-executes the
+first checks every file name the manifest gives, and the sealed run's
+folder, with `safe_relative`. A name with `..`, an absolute path, a
+backslash or a character outside `[A-Za-z0-9_.-]` raises `UnsafePathError`
+before any file besides `manifest.json` is read. It then checks every
+file's bytes and the trace digest. It then re-executes the
 recorded proposals with a `RecordedPlanner`, on the problem in `problem.json`,
 with the recorded seed, limits and policy. It compares the new trace with
 the recorded one at 12 significant digits, wall-clock fields left out. It

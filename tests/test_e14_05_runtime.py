@@ -31,10 +31,12 @@ from orbitopt.agent.runtime import (
     RuleBasedPlanner,
     RunStatus,
     StopReason,
+    UnsafePathError,
     ViolationCode,
     known_tool_ids,
     load_trace,
     loosened,
+    regrade,
     replay,
     save_run,
     solve,
@@ -637,6 +639,36 @@ def test_a_tampered_run_directory_is_never_replayed_as_equal(target, tmp_path):
     assert not report.equal and report.integrity
     if target.startswith("sealed/"):
         assert report.sealed_verdict != Outcome.PASSED.value
+
+
+@pytest.mark.parametrize("name", ["../outside.json", "results/../../outside.json", "ABSOLUTE", "sealed\\..\\x"])
+@pytest.mark.parametrize("check", [replay, regrade])
+def test_a_manifest_name_that_leaves_the_run_is_refused_before_any_file_is_read(tmp_path, name, check, monkeypatch):
+    run = tmp_path / "run"
+    save_run(solve(WORKED, planner=RuleBasedPlanner()), run)
+    outside = tmp_path / "outside.json"
+    outside.write_bytes(b"{}")
+    manifest = json.loads((run / "manifest.json").read_text())
+    manifest["files"][str(outside) if name == "ABSOLUTE" else name] = file_digest(b"{}")
+    (run / "manifest.json").write_bytes(canonical_json(manifest))
+    read = []
+    real = Path.read_bytes
+    monkeypatch.setattr(Path, "read_bytes", lambda self: read.append(self.name) or real(self))
+    with pytest.raises(UnsafePathError):
+        check(run)
+    assert read == ["manifest.json"]
+
+
+@pytest.mark.parametrize("folder", ["../sealed", "/tmp/sealed"])
+def test_a_sealed_folder_outside_the_run_is_refused(tmp_path, folder):
+    run = tmp_path / "run"
+    save_run(solve(WORKED, planner=RuleBasedPlanner()), run)
+    manifest = json.loads((run / "manifest.json").read_text())
+    manifest["sealed"]["dir"] = folder
+    (run / "manifest.json").write_bytes(canonical_json(manifest))
+    for check in (replay, regrade):
+        with pytest.raises(UnsafePathError):
+            check(run)
 
 
 def test_a_forger_who_recomputes_every_digest_still_fails_replay(tmp_path):
