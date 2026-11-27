@@ -5,7 +5,7 @@ A run directory holds:
 | File | Content |
 |---|---|
 | ``problem.json`` | The problem asked. |
-| ``trace.json`` | The ``agent-trace-1.0`` trace. |
+| ``trace.json`` | The ``agent-trace-1.1`` trace (a 1.0 trace still loads). |
 | ``results/<label>.json`` | Every result of the run, full, by the label the trace uses. |
 | ``sealed/`` | The E14-06 sealed run (``orbitopt.optimization.run/2``) of the best result and its final evidence. |
 | ``tool-calls.json`` | The hash-chained tool call log, when the run evaluated tools through a ``ToolView``. |
@@ -41,7 +41,8 @@ from orbitopt.optimization.verification import (RUN_FORMAT, Outcome, Verificatio
                                                 seal_run, verify_run)
 
 from .loop import Tools, solve
-from .model import TRACE_SCHEMA, Policy, Proposal, RunOutcome, RunStatus, result_summary, stable, trace_digest
+from .model import (TRACE_SCHEMA, TRACE_SCHEMAS, CancelPoint, Policy, Proposal, RunOutcome, RunStatus, result_summary,
+                    stable, trace_digest, upgrade_trace)
 from .planners import RecordedPlanner
 
 RUN_MANIFEST_FORMAT = "orbitopt.agent.run/1"
@@ -50,6 +51,8 @@ SEALED = "sealed"
 MAX_DIFFERENCES = 20
 SAFE_PART = re.compile(r"^[A-Za-z0-9_.-]+$")
 Alternates = Literal["recorded", "rerun"]
+UNCOMPARED = frozenset({"digest", "schemaVersion"})
+"""Top-level trace keys replay does not compare: the digest of a 1.0 trace covers its 1.0 form."""
 
 
 class UnsafePathError(ValueError):
@@ -96,16 +99,20 @@ def save_run(outcome: RunOutcome, run_dir: str | Path) -> str:
 
 
 def load_trace(run_dir: str | Path) -> dict:
-    """The run's trace as a dict, checked against ``agent-trace-1.0.json``; ``ValueError`` otherwise."""
+    """The run's trace as recorded, checked against the schema its ``schemaVersion`` names; ``ValueError`` otherwise.
+
+    ``upgrade_trace`` turns a 1.0 trace into the 1.1 shape.
+    """
     return _parse_trace((Path(run_dir) / "trace.json").read_bytes())
 
 
 def _parse_trace(data: bytes) -> dict:
     trace = json.loads(data.decode("utf-8"))
-    errors = schema_errors(trace, TRACE_SCHEMA)
+    schema = TRACE_SCHEMAS.get(trace.get("schemaVersion"), TRACE_SCHEMA) if isinstance(trace, dict) else TRACE_SCHEMA
+    errors = schema_errors(trace, schema)
     if errors:
-        raise ValueError(f"trace.json does not match {TRACE_SCHEMA}: " + "; ".join(f"{e.path}: {e.message}"
-                                                                              for e in errors[:5]))
+        raise ValueError(f"trace.json does not match {schema}: " + "; ".join(f"{e.path}: {e.message}"
+                                                                         for e in errors[:5]))
     return trace
 
 
@@ -121,8 +128,9 @@ class CheckReport:
     ``sealed/``, ``None`` when the run sealed no result. ``alternates`` says
     whether the final verification's alternate solvers were given their
     recorded results (``recorded``) or run again (``rerun``). ``trace``,
-    ``problem`` and ``files`` are what was checked: the trace as recorded, the
-    problem it names, and the bytes of every file by its path in the run
+    ``problem`` and ``files`` are what was checked: the trace in the newest
+    schema's shape (``upgrade_trace``; its ``digest`` is the recorded one),
+    the problem it names, and the bytes of every file by its path in the run
     directory, the sealed run's included.
     """
 
@@ -180,7 +188,7 @@ def check_run(run_dir: str | Path, *, tools: Tools | None = None, registry: Solv
     if report is not None and (report.verdict is Outcome.PASSED) != (status == RunStatus.VERIFIED.value):
         integrity.append(f"sealed/: the guard re-grades the sealed run {report.verdict.value!r}, but the trace says "
                          f"{status!r}")
-    return CheckReport(tuple(integrity), report, status, alternates, trace, problem, files)
+    return CheckReport(tuple(integrity), report, status, alternates, upgrade_trace(trace), problem, files)
 
 
 @dataclass(frozen=True)
@@ -219,8 +227,11 @@ def replay(run_dir: str | Path, *, tools: Tools | None = None, registry: SolverR
            expected_manifest_digest: str | None = None) -> ReplayReport:
     """``check_run`` with the alternates run again, then re-execute the recorded proposals; no LLM is called.
 
-    The re-execution uses the recorded seed, limits and policy, the problem
-    from ``problem.json`` and the solvers of ``registry``. A deterministic
+    The re-execution uses the recorded seed, limits, policy and cancel point,
+    the problem from ``problem.json`` and the solvers of ``registry``. A
+    trace without a cancel point (1.0) replays without a cancel. The
+    comparison leaves out ``schemaVersion``, so a 1.0 trace that the current
+    runtime reproduces is equal. A deterministic
     solver recomputes the same results, so any edit to a recorded result,
     decision or outcome shows up as a difference even when the editor also
     recomputed the trace digest. Pass ``tools`` as the original run did.
@@ -232,16 +243,18 @@ def replay(run_dir: str | Path, *, tools: Tools | None = None, registry: SolverR
     if trace is None or problem is None:
         return ReplayReport(check, (), None, None)
     proposals = [Proposal.from_dict(r["proposal"]) for r in trace["iterations"]]
+    cancel = trace["outcome"]["cancel"]
     outcome = solve(problem, planner=RecordedPlanner(proposals, name=trace["planner"]),
                     budget=Budget(**trace["limits"]), policy=Policy.from_dict(trace["policy"]), tools=tools,
-                    seed=trace["seed"], registry=registry)
+                    seed=trace["seed"], registry=registry,
+                    cancel=None if cancel is None else CancelPoint.from_dict(cancel))
     replayed = outcome.trace.to_dict()
     differences = _differences(stable(trace), stable(replayed), "")
     return ReplayReport(check, tuple(differences[:MAX_DIFFERENCES]), trace["digest"], replayed["digest"])
 
 
 def _open(run_dir: Path, expected: str | None, integrity: list[str], files: dict[str, bytes]):
-    """The run's manifest (``None`` when unreadable), trace and problem, with every consistency failure in ``integrity``.
+    """The run's manifest (``None`` when unreadable), trace and problem; every inconsistency goes into ``integrity``.
 
     ``files`` receives the bytes of every file that matches its digest.
     Raises ``OSError``, ``ValueError`` or ``InvalidProblemError`` when the
@@ -270,7 +283,8 @@ def _manifest(run_dir: Path, expected: str | None, integrity: list[str], files: 
     if expected is not None and file_digest(raw) != expected:
         integrity.append(f"{MANIFEST}: digest {file_digest(raw)} is not the expected {expected}")
     if not isinstance(manifest, dict) or manifest.get("format") != RUN_MANIFEST_FORMAT \
-            or not isinstance(manifest.get("files"), dict) or not isinstance(manifest.get("sealed"), (dict, type(None))):
+            or not isinstance(manifest.get("files"), dict) \
+            or not isinstance(manifest.get("sealed"), (dict, type(None))):
         integrity.append(f"{MANIFEST}: not an {RUN_MANIFEST_FORMAT} manifest")
         return None
     files[MANIFEST] = raw
@@ -383,7 +397,7 @@ def _differences(recorded: Any, replayed: Any, path: str) -> list[str]:
     if isinstance(recorded, dict) and isinstance(replayed, dict):
         out = []
         for key in sorted(set(recorded) | set(replayed)):
-            if key == "digest" and path == "":
+            if key in UNCOMPARED and path == "":
                 continue
             if key not in recorded or key not in replayed:
                 out.append(f"{path}/{key}: present on one side only")

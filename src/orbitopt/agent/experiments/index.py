@@ -54,7 +54,17 @@ def _create_v1(conn: sqlite3.Connection) -> None:
         conn.execute(statement)
 
 
-MIGRATIONS: tuple[Migration, ...] = (_create_v1,)
+def _retire_iterations_replayed(conn: sqlite3.Connection) -> None:
+    """Version 2: replay now reproduces a cancelled run, so ``iterations_replayed`` is gone.
+
+    Such a record passed every check ``checked`` stands for and replayed its
+    iterations, but not its outcome, so it becomes ``checked``.
+    """
+    conn.execute("UPDATE experiments SET record = json_set(record, '$.integrity', 'checked') "
+                 "WHERE json_extract(record, '$.integrity') = 'iterations_replayed'")
+
+
+MIGRATIONS: tuple[Migration, ...] = (_create_v1, _retire_iterations_replayed)
 SCHEMA_VERSION = len(MIGRATIONS)
 
 

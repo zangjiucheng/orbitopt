@@ -12,6 +12,7 @@ runs on two machines that made the same choices share a digest.
 
 from __future__ import annotations
 
+import copy
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Literal, Mapping
@@ -20,8 +21,10 @@ from orbitopt.optimization import Budget, OptimizationResult, canonical_digest, 
 from orbitopt.optimization.result import stable
 from orbitopt.optimization.verification import VerificationReport
 
-TRACE_SCHEMA = "agent-trace-1.0.json"
-TRACE_SCHEMA_VERSION = "1.0"
+TRACE_SCHEMA_VERSION = "1.1"
+TRACE_SCHEMA = "agent-trace-1.1.json"
+TRACE_SCHEMAS = {"1.0": "agent-trace-1.0.json", TRACE_SCHEMA_VERSION: TRACE_SCHEMA}
+"""The trace schema for each ``schemaVersion`` that still parses; ``to_dict`` writes the newest."""
 TRACE_FORMAT = "orbitopt.agent.trace"
 
 DEFAULT_MAX_ITERATIONS = 20
@@ -61,6 +64,32 @@ class StopReason(str, Enum):
         """Whether a budget limit ended the loop."""
         return self in (StopReason.MAX_ITERATIONS, StopReason.MAX_EVALUATIONS, StopReason.MAX_WALL_S,
                         StopReason.MAX_TOKENS)
+
+
+class CancelReason(str, Enum):
+    """Which cancel check fired: the one before the next planner proposal, or the one before the final verification."""
+
+    BEFORE_ITERATION = "before_iteration"
+    BEFORE_VERIFICATION = "before_verification"
+
+
+@dataclass(frozen=True)
+class CancelPoint:
+    """Where a cancellation fired: after ``iteration`` completed iterations, at the check ``reason`` names.
+
+    Passed to ``solve`` as ``cancel``, it cancels a run at exactly that
+    point, which is how ``replay`` reproduces a cancelled run.
+    """
+
+    iteration: int
+    reason: CancelReason
+
+    def to_dict(self) -> dict:
+        return {"iteration": self.iteration, "reason": self.reason.value}
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "CancelPoint":
+        return cls(int(data["iteration"]), CancelReason(data["reason"]))
 
 
 class Action(str, Enum):
@@ -355,7 +384,10 @@ class VerificationRecord:
 
 @dataclass(frozen=True)
 class Trace:
-    """Everything a run did, in order, with the outcome. ``to_dict`` validates against ``agent-trace-1.0.json``."""
+    """Everything a run did, in order, with the outcome. ``to_dict`` validates against ``agent-trace-1.1.json``.
+
+    ``cancel`` is where a cancellation fired, ``None`` when none did.
+    """
 
     problem_id: str
     problem_digest: str
@@ -372,6 +404,7 @@ class Trace:
     best: str | None
     usage: BudgetUse
     refusal: tuple[str, ...] = ()
+    cancel: CancelPoint | None = None
 
     def body(self) -> dict:
         """The trace as JSON-ready data, without its digest."""
@@ -381,7 +414,8 @@ class Trace:
                 "solvers": list(self.solvers), "iterations": [r.to_dict() for r in self.iterations],
                 "verifications": [v.to_dict() for v in self.verifications],
                 "outcome": {"status": self.status.value, "stop_reason": self.stop_reason.value, "best": self.best,
-                            "refusal": list(self.refusal)},
+                            "refusal": list(self.refusal),
+                            "cancel": None if self.cancel is None else self.cancel.to_dict()},
                 "usage": asdict(self.usage)}
 
     def digest(self) -> str:
@@ -393,6 +427,19 @@ class Trace:
         if errors:  # the runtime built this itself; a mismatch is a bug, not bad input
             raise AssertionError(f"trace does not match {TRACE_SCHEMA}: {errors[:3]}")
         return data
+
+
+def upgrade_trace(data: Mapping[str, Any]) -> dict:
+    """A parsed trace of any version in the newest version's shape; ``digest`` stays the recorded one.
+
+    A 1.0 trace has no cancel point: ``outcome.cancel`` is ``None``, so a
+    cancelled 1.0 run replays as it did under 1.0, without a cancel signal.
+    """
+    trace = copy.deepcopy(dict(data))
+    if trace.get("schemaVersion") == "1.0":
+        trace["schemaVersion"] = TRACE_SCHEMA_VERSION
+        trace["outcome"] = {**trace["outcome"], "cancel": None}
+    return trace
 
 
 def trace_digest(body: Mapping[str, Any]) -> str:

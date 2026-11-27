@@ -65,7 +65,7 @@ Use one `ExperimentDB` per process or thread.
 | `status`, `stop_reason`, `limits`, `usage` | As in the trace. `usage` holds iterations, evaluations, tokens and wall seconds. |
 | `created_at` | When the run was recorded, UTC, ISO 8601 with microseconds. |
 | `orbitopt_version` | The version that replayed the run at ingest. |
-| `integrity` | `checked` (the default ingest), `replayed`, or `iterations_replayed` for a cancelled run that was replayed. See below. |
+| `integrity` | `checked` (the default ingest) or `replayed`. See below. |
 | `files` | Each run file by its path in the run directory, to its digest in the store. |
 | `parent_id`, `resumed_from` | Links to recorded runs, or `None`. |
 
@@ -104,13 +104,10 @@ Use the default to record runs cheaply. Replay a run whose steps you want
 to serve from the cache, since only a `replayed` record holds cache
 entries (see below).
 
-With `verify="replay"`, a cancelled run cannot be re-executed, because replay has no cancel signal:
-it asks the recorded planner for one more proposal, and the recording has
-none. Such a run is recorded with `integrity` `iterations_replayed` when
-every iteration matched and the differences are confined to the outcome,
-the usage and the final verification, which the cancelled run skipped. Its
-outcome rests on the manifest, so keep the digest that `save_run` returns
-and pass it. A run that the wall clock ended is refused unless replay
+A cancelled run replays like any other, because the trace records where
+the cancel fired and replay cancels there. A 1.0 trace has no cancel point,
+so a cancelled 1.0 run does not replay equal: record it with the default
+check. A run that the wall clock ended is refused by replay unless replay
 reproduces it exactly.
 
 Wall-clock fields are not part of the trace digest and replay does not
@@ -208,6 +205,11 @@ transaction, so a step that raises leaves the version where it was.
 `ExperimentDB(root, migrations=...)` is the hook for a later step. A
 database newer than the steps the code knows, or an SQLite file that is not
 an experiment database, raises `SchemaVersionError`.
+
+| Step | Version | What it does |
+|---|---|---|
+| 0 | 1 | Creates the tables. |
+| 1 | 2 | Rewrites `integrity` `iterations_replayed`, which a cancelled run got before replay could cancel, to `checked`. Such a run passed every byte and re-grade check and replayed its iterations, but not its outcome. |
 
 ## Errors
 

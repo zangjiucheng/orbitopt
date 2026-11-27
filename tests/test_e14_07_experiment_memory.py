@@ -385,7 +385,7 @@ def test_resume_plan_of_a_cancelled_run_replays_its_completed_iterations(db, tmp
     assert record_run(db, saved(outcome, tmp_path / "run")).integrity is Integrity.CHECKED
     with ExperimentDB(tmp_path / "db2") as other:
         record = record_run(other, tmp_path / "run", verify="replay")
-    assert record.integrity is Integrity.ITERATIONS_REPLAYED
+    assert record.integrity is Integrity.REPLAYED  # replay cancels where the run was cancelled
 
     plan = resume_plan(db, record.run_id)
     assert plan.resumable and plan.stop_reason is StopReason.CANCELLED
@@ -531,6 +531,20 @@ def test_a_v0_database_migrates_to_the_current_version(tmp_path):
         save_run(solve(CQP, planner=RuleBasedPlanner()), tmp_path / "run")
         record_run(db, tmp_path / "run")
         assert count(db) == 1
+
+
+def test_a_version_1_record_of_a_cancelled_run_migrates_to_checked(tmp_path):
+    root = tmp_path / "db"
+    with ExperimentDB(root, migrations=MIGRATIONS[:1]) as db:  # a database written before version 2
+        checks = []
+        outcome = solve(RASTRIGIN, planner=RuleBasedPlanner(), cancel=lambda: checks.append(1) or len(checks) > 2)
+        record = record_run(db, saved(outcome, tmp_path / "run"))
+    with sqlite3.connect(root / "index.sqlite") as conn:  # what the version 1 code stored for it
+        data = {**record.to_dict(), "integrity": "iterations_replayed"}
+        conn.execute("UPDATE experiments SET record = ? WHERE run_id = ?", (json.dumps(data), record.run_id))
+    with ExperimentDB(root) as db:
+        assert db.version == SCHEMA_VERSION == 2
+        assert db.get(record.run_id) == record and record.integrity is Integrity.CHECKED
 
 
 def test_the_migration_hook_runs_new_steps_once_and_rolls_back_a_failing_one(tmp_path):

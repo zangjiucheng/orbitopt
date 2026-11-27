@@ -26,9 +26,9 @@ from orbitopt.optimization.verification import (AlternateSolverCheck, Outcome, V
                                                 unsupported_reason, verify_result)
 
 from .diagnostics import diagnose, distrust, feasible
-from .model import (Action, AlternateRun, BudgetUse, FailureKind, IterationRecord, Limits, Policy, Proposal,
-                    RecordKind, RunOutcome, RunStatus, StopReason, Trace, VerificationRecord, Violation,
-                    ViolationCode)
+from .model import (Action, AlternateRun, BudgetUse, CancelPoint, CancelReason, FailureKind, IterationRecord, Limits,
+                    Policy, Proposal, RecordKind, RunOutcome, RunStatus, StopReason, Trace, VerificationRecord,
+                    Violation, ViolationCode)
 from .planners import Planner, PlannerState, PlannerUnavailable, default_options
 from .validation import validate_proposal
 
@@ -44,7 +44,7 @@ SCREEN_UNGRADED = frozenset({"independently_verified", "optimality_certified"})
 """Statuses a screen leaves to the final verification: it has no independent evidence and asks for no certificate."""
 
 Tools = ToolView | Mapping[str, Callable[..., Any]]
-Cancel = threading.Event | Callable[[], bool]
+Cancel = threading.Event | Callable[[], bool] | CancelPoint
 
 
 class EvaluationBudgetExceeded(Exception):
@@ -105,7 +105,9 @@ def solve(problem: OptimizationProblem, *, planner: Planner, budget: Budget | No
     neither takes the E14-10 default (``Limits.resolve``). ``policy`` says what
     the planner may change. ``tools`` is a ``ToolView`` (its allowlist is the
     set of known tool ids, and every call is logged) or a mapping of resolvers.
-    ``cancel`` is checked between iterations. The verification policy is
+    ``cancel`` is checked before each planner proposal and before the final
+    verification; the trace records where it fired. A ``CancelPoint`` cancels
+    at exactly that point, as ``replay`` does. The verification policy is
     always ``problem.verification``. Never raises for a bad proposal or a
     failing solver; a malformed problem is refused, not raised.
     """
@@ -114,12 +116,14 @@ def solve(problem: OptimizationProblem, *, planner: Planner, budget: Budget | No
     return run.execute()
 
 
-def _cancel_check(cancel: Cancel | None) -> Callable[[], bool]:
+def _cancel_check(cancel: Cancel | None) -> Callable[[int, CancelReason], bool]:
+    """Whether to cancel after ``done`` iterations at the check ``reason`` names."""
     if cancel is None:
-        return lambda: False
-    if isinstance(cancel, threading.Event):
-        return cancel.is_set
-    return cancel
+        return lambda done, reason: False
+    if isinstance(cancel, CancelPoint):
+        return lambda done, reason: (done, reason) == (cancel.iteration, cancel.reason)
+    check = cancel.is_set if isinstance(cancel, threading.Event) else cancel
+    return lambda done, reason: bool(check())
 
 
 class _Run:
@@ -127,7 +131,8 @@ class _Run:
 
     def __init__(self, problem, planner, limits, policy, tools, seed, cancelled, registry):
         self.asked, self.planner, self.limits, self.policy = problem, planner, limits, policy
-        self.seed, self.cancelled, self.registry, self.tools = seed, cancelled, registry, tools
+        self.seed, self.cancel_check, self.registry, self.tools = seed, cancelled, registry, tools
+        self.cancel_point: CancelPoint | None = None
         self.started = time.perf_counter()
         self.meter = EvaluationMeter(problem, limits.max_evaluations)
         self.problem = self.meter.problem
@@ -179,6 +184,13 @@ class _Run:
 
         return min(eligible, key=rank)
 
+    def cancelled(self, reason: CancelReason) -> bool:
+        """Whether the cancel check fires here; the point where it fired goes into the trace."""
+        if not self.cancel_check(len(self.records), reason):
+            return False
+        self.cancel_point = CancelPoint(len(self.records), reason)
+        return True
+
     # ------------------------------------------------------------------------------------------------- the run
     def execute(self) -> RunOutcome:
         refusal = self.admit()
@@ -186,7 +198,7 @@ class _Run:
             return self.finish(StopReason.REFUSED, refusal)
         stop = self.iterate()
         if stop not in (StopReason.CANCELLED, StopReason.POLICY_VIOLATION, StopReason.MAX_WALL_S):
-            if self.cancelled():
+            if self.cancelled(CancelReason.BEFORE_VERIFICATION):
                 stop = StopReason.CANCELLED
             else:
                 self.verify_best()
@@ -217,7 +229,7 @@ class _Run:
 
     def iterate(self) -> StopReason:
         while True:
-            if self.cancelled():
+            if self.cancelled(CancelReason.BEFORE_ITERATION):
                 return StopReason.CANCELLED
             usage = self.usage()
             reason = usage.exhausted(self.limits)
@@ -389,7 +401,7 @@ class _Run:
                       self.seed, self.limits, self.policy,
                       tuple(c.solver_id for c in self.capabilities), tuple(self.records),
                       tuple(self.verifications), status, stop, None if best is None else best[0], self.usage(),
-                      refusal)
+                      refusal, self.cancel_point)
         return RunOutcome(status, stop, None if best is None else best[1], report,
                           self.evidence.get(best[0], ()) if best else (), trace, self.asked, dict(self.results),
                           self.tool_log)

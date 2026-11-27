@@ -33,6 +33,8 @@ from orbitopt.agent.runtime import (
     StopReason,
     UnsafePathError,
     ViolationCode,
+    CancelPoint,
+    CancelReason,
     known_tool_ids,
     load_trace,
     loosened,
@@ -41,6 +43,7 @@ from orbitopt.agent.runtime import (
     save_run,
     solve,
     trace_digest,
+    upgrade_trace,
 )
 from orbitopt.agent.tools import builtin_registry
 from orbitopt.optimization import (
@@ -494,6 +497,72 @@ def test_cancellation_between_iterations_keeps_the_best_so_far_unverified():
     assert outcome.status is RunStatus.CANCELLED and len(outcome.trace.iterations) == 2
     assert outcome.trace.verifications == () and outcome.result is not None
     assert outcome.report.verdict is not Outcome.PASSED
+    assert outcome.trace.cancel == CancelPoint(2, CancelReason.BEFORE_ITERATION)
+    assert outcome.trace.to_dict()["outcome"]["cancel"] == {"iteration": 2, "reason": "before_iteration"}
+
+
+@pytest.mark.parametrize("when, reason", [("first", CancelReason.BEFORE_ITERATION), ("third", CancelReason.BEFORE_ITERATION),
+                                          ("verification", CancelReason.BEFORE_VERIFICATION)])
+def test_a_cancelled_run_replays_equal(tmp_path, when, reason):
+    """The trace records where the cancel fired; replay cancels there, so it reproduces the whole trace."""
+    problem = to_ir(P.by_id("rastrigin-d5"))
+    records = len(solve(problem, planner=RuleBasedPlanner()).trace.iterations)  # one check before each proposal
+    fire = {"first": 1, "third": 3, "verification": records + 1}[when]
+    checks = []
+    cancel = lambda: checks.append(1) or len(checks) >= fire  # noqa: E731
+    outcome = solve(problem, planner=RuleBasedPlanner(), cancel=cancel)
+    assert outcome.status is RunStatus.CANCELLED and outcome.trace.cancel.reason is reason
+    digest = save_run(outcome, tmp_path)
+    report = replay(tmp_path, expected_manifest_digest=digest)
+    assert report.equal, (report.integrity, report.differences)
+    assert report.replayed_digest == report.recorded_digest == outcome.trace.digest()
+
+
+def test_a_cancel_point_cancels_a_run_exactly_there():
+    problem = to_ir(P.by_id("rastrigin-d5"))
+    outcome = solve(problem, planner=RuleBasedPlanner(), cancel=CancelPoint(1, CancelReason.BEFORE_ITERATION))
+    assert outcome.status is RunStatus.CANCELLED and len(outcome.trace.iterations) == 1
+    assert outcome.trace.cancel == CancelPoint(1, CancelReason.BEFORE_ITERATION)
+    never = solve(problem, planner=RuleBasedPlanner(), cancel=CancelPoint(50, CancelReason.BEFORE_ITERATION))
+    assert never.status is RunStatus.VERIFIED and never.trace.cancel is None
+
+
+def _as_trace_1_0(run: Path) -> dict:
+    """Rewrite a saved run's trace as agent-trace-1.0 (no cancel point) and reseal the manifest."""
+    trace = json.loads((run / "trace.json").read_text())
+    trace["schemaVersion"] = "1.0"
+    del trace["outcome"]["cancel"]
+    trace["digest"] = trace_digest(trace)
+    (run / "trace.json").write_bytes(canonical_json(trace))
+    manifest = json.loads((run / "manifest.json").read_text())
+    manifest["files"]["trace.json"] = file_digest(canonical_json(trace))
+    manifest["trace_digest"] = trace["digest"]
+    (run / "manifest.json").write_bytes(canonical_json(manifest))
+    return trace
+
+
+def test_a_1_0_trace_still_parses_checks_and_replays(tmp_path):
+    outcome = solve(WORKED, planner=RuleBasedPlanner())
+    save_run(outcome, tmp_path)
+    old = _as_trace_1_0(tmp_path)
+    assert load_trace(tmp_path) == old  # validated against agent-trace-1.0.json, returned as recorded
+    assert upgrade_trace(old)["schemaVersion"] == "1.1" and upgrade_trace(old)["outcome"]["cancel"] is None
+    assert check_run(tmp_path).verified
+    report = replay(tmp_path)
+    assert report.equal, (report.integrity, report.differences)
+    assert report.recorded_digest == old["digest"] != report.replayed_digest  # the 1.1 digest covers the 1.1 form
+
+
+def test_a_cancelled_1_0_trace_replays_as_before_without_a_cancel(tmp_path):
+    """A 1.0 trace does not say where the cancel fired: replay runs on as it always did, and so diverges."""
+    checks = []
+    outcome = solve(to_ir(P.by_id("rastrigin-d5")), planner=RuleBasedPlanner(),
+                    cancel=lambda: checks.append(1) or len(checks) > 2)
+    save_run(outcome, tmp_path)
+    _as_trace_1_0(tmp_path)
+    assert check_run(tmp_path).intact
+    report = replay(tmp_path)
+    assert report.integrity == () and report.differences
 
 
 # ------------------------------------------------------------------------------------- tools

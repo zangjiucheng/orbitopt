@@ -29,8 +29,6 @@ from .model import (STATUS_NAMES, ExperimentRecord, Integrity, RunIntegrityError
 
 MANIFEST = "manifest.json"
 SEALED_FILES = ("problem.json", "result.json", "evidence.json", MANIFEST)
-OUTCOME_ONLY = ("/outcome/", "/usage/", "/verifications")
-"""Where the replay of a cancelled run may differ: a cancellation cannot be re-executed, its iterations can."""
 Verify = Literal["check", "replay"]
 
 
@@ -86,8 +84,10 @@ def record_run(db: ExperimentDB, run_dir: str | Path, *, expected_manifest_diges
         check, differences = replayed.check, replayed.differences
     if check.integrity:
         raise RunIntegrityError("the run directory was changed", check.integrity)
+    if differences:
+        raise RunIntegrityError("replay does not reproduce the run", differences)
     trace, files = check.trace, check.files
-    integrity = Integrity.CHECKED if differences is None else _integrity(differences, trace)
+    integrity = Integrity.CHECKED if differences is None else Integrity.REPLAYED
     record = _record(run_id, _json(files[MANIFEST], MANIFEST), trace, check.problem, files, integrity,
                      provider=provider, model=model, family=family, parent_id=parent_id, resumed_from=resumed_from)
     for data in files.values():
@@ -116,15 +116,6 @@ def _json(data: bytes, name: str) -> Any:
         return json.loads(data.decode("utf-8"))
     except (UnicodeDecodeError, ValueError) as exc:
         raise RunIntegrityError(f"{name} is not JSON", (str(exc),)) from None
-
-
-def _integrity(differences: tuple[str, ...], trace: Mapping) -> Integrity:
-    if not differences:
-        return Integrity.REPLAYED
-    if trace["outcome"]["stop_reason"] == StopReason.CANCELLED.value and not trace["verifications"] \
-            and all(d.startswith(OUTCOME_ONLY) for d in differences):
-        return Integrity.ITERATIONS_REPLAYED
-    raise RunIntegrityError("replay does not reproduce the run", differences)
 
 
 # ------------------------------------------------------------------------------------------------ the record

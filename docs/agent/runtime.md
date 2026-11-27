@@ -31,7 +31,7 @@ take faithfully comes back `refused`.
 | `budget` | An IR `Budget` that overrides `problem.budget` field by field. |
 | `policy` | What the planner may change. See [The policy](#the-policy). |
 | `tools` | A `ToolView` or a mapping of resolvers by tool id. |
-| `cancel` | A `threading.Event` or a callable, checked before each iteration. |
+| `cancel` | A `threading.Event` or a callable, checked before each planner proposal and before the final verification. A `CancelPoint` cancels at exactly that point. |
 | `registry` | The solvers. Defaults to `default_registry()`. |
 
 The verification policy is always `problem.verification`. No argument loosens it.
@@ -118,7 +118,7 @@ only values a remedy may loosen.
 
 ## One iteration
 
-1. Check cancellation and every limit.
+1. Check cancellation (`before_iteration`) and every limit.
 2. Ask the planner for a proposal and add its tokens.
 3. Validate it. A refused proposal is recorded and the loop goes on, unless the policy stops it.
 4. A `stop` decision ends the loop.
@@ -163,7 +163,7 @@ and `milp`.
 | `unverified_best` | A feasible best exists, but the guard did not pass it. |
 | `no_feasible` | No eligible candidate. `result` is the honest result with the least violation, if any. |
 | `budget_exhausted` | A limit ended the loop and the best is not verified. |
-| `cancelled` | The cancel check fired. The final verification is skipped. |
+| `cancelled` | The cancel check fired. The final verification is skipped. The trace's `outcome.cancel` says where. |
 | `policy_violation` | The policy ended the run on a refused proposal. The final verification is skipped. |
 | `refused` | Invalid IR, a tool id outside `known_tool_ids(tools)`, a tool binding that fails its unit check, or no solver that can take the problem. Nothing is evaluated. |
 
@@ -229,7 +229,7 @@ uses it.
 | File | Content |
 |---|---|
 | `problem.json` | The problem asked. |
-| `trace.json` | The trace, schema `agent-trace-1.0.json`. |
+| `trace.json` | The trace, schema `agent-trace-1.1.json`. |
 | `results/<label>.json` | Every result of the run, full, by label (`iteration-0003`, `verify-1-scipy.slsqp`). |
 | `sealed/` | `seal_run` of the best result with its final evidence, format `orbitopt.optimization.run/2`. |
 | `tool-calls.json` | The tool call log, when the run used a `ToolView`. |
@@ -299,7 +299,7 @@ reproduces its result.
 
 ## The trace
 
-`Trace.to_dict()` validates against `agent-trace-1.0.json`. Each iteration
+`Trace.to_dict()` validates against `agent-trace-1.1.json`. Each iteration
 record holds the raw proposal, the decision or the violations, a summary of
 the result, the screen (verdict, the four statuses with reasons, the finding
 codes), the diagnosis, and the evaluations and tokens it cost. Each
@@ -309,6 +309,25 @@ digits) of the trace without `wall_s`, `wall_time_s` and `latency_s`
 (`orbitopt.optimization.VOLATILE_KEYS`, which `result_digest` leaves out too). Two
 runs with the same problem, planner, seed and solvers share it. A number that
 straddles a 12th-digit rounding boundary still splits it.
+
+`outcome.cancel` is where a cancellation fired, or `null`: `iteration` is
+the number of iterations completed, and `reason` is the check that fired,
+`before_iteration` (before the next planner proposal) or
+`before_verification`. It is part of the digest. `replay` passes it to
+`solve` as a `CancelPoint`, so a cancelled run replays equal.
+
+### Version 1.0
+
+Version 1.1 added `outcome.cancel`. A 1.0 trace still loads: `load_trace`
+checks each trace against the schema its `schemaVersion` names
+(`TRACE_SCHEMAS`) and returns it as recorded, and its digest is checked as
+recorded. `upgrade_trace` gives the 1.1 shape with `cancel` set to `null`,
+and `check_run` and `replay` work on that. A 1.0 run therefore replays
+without a cancel signal, as it did under 1.0. An uncancelled 1.0 run
+replays equal, since replay does not compare `schemaVersion`, but its
+replayed digest is a 1.1 digest and differs from the recorded one. A
+cancelled 1.0 run does not replay equal, because replay cannot know where
+it stopped. It still passes `check_run`.
 
 ## Measured runs
 
