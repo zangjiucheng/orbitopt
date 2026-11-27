@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zangjiucheng.github.io/orbitopt/schemas/agent-trace-1.0.json",
+  "title": "orbitopt agent iteration trace",
+  "description": "Dict form of orbitopt.agent.runtime.Trace (E14-05): every planner proposal of one bounded optimization run, what the runtime made of it, the final verification and the outcome. digest is the IR's 12-significant-digit canonical digest of every other field, with the wall-clock fields (wall_s, wall_time_s) left out.",
+  "type": "object",
+  "required": ["schemaVersion", "format", "problem_id", "problem_digest", "fingerprint", "planner", "seed", "limits",
+               "policy", "solvers", "iterations", "verifications", "outcome", "usage", "digest"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "format": {"const": "orbitopt.agent.trace"},
+    "problem_id": {"type": "string"},
+    "problem_digest": {"$ref": "#/$defs/digest", "description": "OptimizationProblem.digest() of the problem asked."},
+    "fingerprint": {"$ref": "#/$defs/digest", "description": "hard_constraint_fingerprint() of the problem asked."},
+    "planner": {"type": "string"},
+    "seed": {"type": "integer"},
+    "limits": {
+      "type": "object",
+      "required": ["max_iterations", "max_evaluations", "max_wall_s", "max_tokens"],
+      "additionalProperties": false,
+      "properties": {
+        "max_iterations": {"type": "integer", "minimum": 0},
+        "max_evaluations": {"type": "integer", "minimum": 0},
+        "max_wall_s": {"type": "number", "minimum": 0},
+        "max_tokens": {"type": "integer", "minimum": 0}
+      }
+    },
+    "policy": {
+      "type": "object",
+      "required": ["allowed_solvers", "allow_options", "allow_x0", "on_violation", "max_violations"],
+      "additionalProperties": false,
+      "properties": {
+        "allowed_solvers": {"type": ["array", "null"], "items": {"type": "string"}},
+        "allow_options": {"type": "boolean"},
+        "allow_x0": {"type": "boolean"},
+        "on_violation": {"enum": ["continue", "stop"]},
+        "max_violations": {"type": "integer", "minimum": 1}
+      }
+    },
+    "solvers": {"type": "array", "items": {"type": "string"}, "description": "Solver ids the planner could choose, in ranking order."},
+    "iterations": {"type": "array", "items": {"$ref": "#/$defs/iteration"}},
+    "verifications": {"type": "array", "items": {"$ref": "#/$defs/verification"}},
+    "outcome": {
+      "type": "object",
+      "required": ["status", "stop_reason", "best", "refusal"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {"enum": ["verified", "unverified_best", "no_feasible", "budget_exhausted", "cancelled",
+                            "policy_violation", "refused"]},
+        "stop_reason": {"enum": ["planner_stop", "max_iterations", "max_evaluations", "max_wall_s", "max_tokens",
+                                 "cancelled", "policy_violation", "planner_failed", "refused"]},
+        "best": {"type": ["string", "null"], "description": "Label of the best candidate's result, such as iteration-0003."},
+        "refusal": {"type": "array", "items": {"type": "string"}, "description": "Why the problem was refused before any solve."}
+      }
+    },
+    "usage": {
+      "type": "object",
+      "required": ["iterations", "evaluations", "tokens", "wall_s"],
+      "additionalProperties": false,
+      "properties": {
+        "iterations": {"type": "integer", "minimum": 0},
+        "evaluations": {"type": "integer", "minimum": 0},
+        "tokens": {"type": "integer", "minimum": 0},
+        "wall_s": {"type": "number", "minimum": 0}
+      }
+    },
+    "digest": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "values": {"type": "object", "additionalProperties": {"type": "number"}},
+    "iteration": {
+      "type": "object",
+      "required": ["index", "kind", "proposal", "decision", "violations", "result", "screen", "diagnosis",
+                   "evaluations", "tokens", "wall_s"],
+      "additionalProperties": false,
+      "properties": {
+        "index": {"type": "integer", "minimum": 1},
+        "kind": {"enum": ["solve", "stop", "rejected"]},
+        "proposal": {
+          "type": "object",
+          "required": ["raw", "tokens", "error"],
+          "additionalProperties": false,
+          "properties": {
+            "raw": {"type": ["object", "null"], "description": "The planner's decision object exactly as proposed; untrusted."},
+            "tokens": {"type": "integer", "minimum": 0},
+            "error": {"type": ["string", "null"]}
+          }
+        },
+        "decision": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/decision"}]},
+        "violations": {"type": "array", "items": {"$ref": "#/$defs/violation"}},
+        "result": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/result"}]},
+        "screen": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/report"}]},
+        "diagnosis": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/diagnosis"}]},
+        "evaluations": {"type": "integer", "minimum": 0},
+        "tokens": {"type": "integer", "minimum": 0},
+        "wall_s": {"type": "number", "minimum": 0}
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["action", "solver_id", "options", "x0", "seed", "evaluations", "max_iterations", "rationale"],
+      "additionalProperties": false,
+      "properties": {
+        "action": {"enum": ["solve", "stop"]},
+        "solver_id": {"type": ["string", "null"]},
+        "options": {"type": "object"},
+        "x0": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/values"}]},
+        "seed": {"type": "integer"},
+        "evaluations": {"type": "integer", "minimum": 0},
+        "max_iterations": {"type": ["integer", "null"], "minimum": 1},
+        "rationale": {"type": "string"}
+      }
+    },
+    "violation": {
+      "type": "object",
+      "required": ["code", "path", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {"enum": ["problem_edit", "unknown_field", "malformed", "unknown_solver", "solver_not_allowed",
+                          "invalid_option", "x0_unknown_variable", "x0_out_of_domain", "budget_overreach"]},
+        "path": {"type": "string"},
+        "message": {"type": "string"}
+      }
+    },
+    "result": {
+      "type": "object",
+      "required": ["solver_id", "problem_digest", "termination", "solver_converged", "constraints_satisfied", "x",
+                   "objective_values", "constraint_residuals", "evaluations", "iterations", "message", "wall_time_s"],
+      "additionalProperties": false,
+      "properties": {
+        "solver_id": {"type": "string"},
+        "problem_digest": {"type": "string"},
+        "termination": {"enum": ["converged", "max_iterations", "max_evaluations", "timeout", "infeasible", "error",
+                                 "cancelled", "unbounded", "stalled"]},
+        "solver_converged": {"type": "boolean"},
+        "constraints_satisfied": {"type": "boolean"},
+        "x": {"$ref": "#/$defs/values"},
+        "objective_values": {"$ref": "#/$defs/values"},
+        "constraint_residuals": {"$ref": "#/$defs/values"},
+        "evaluations": {"type": "integer", "minimum": 0},
+        "iterations": {"type": ["integer", "null"]},
+        "message": {"type": "string"},
+        "wall_time_s": {"type": "number"}
+      }
+    },
+    "report": {
+      "type": "object",
+      "required": ["verdict", "statuses", "codes"],
+      "additionalProperties": false,
+      "properties": {
+        "verdict": {"$ref": "#/$defs/outcome"},
+        "statuses": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["outcome", "reason"],
+            "additionalProperties": false,
+            "properties": {"outcome": {"$ref": "#/$defs/outcome"}, "reason": {"type": "string"}}
+          }
+        },
+        "codes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "outcome": {"enum": ["passed", "failed", "not_assessed"]},
+    "diagnosis": {
+      "type": "object",
+      "required": ["kind", "remedies", "detail"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"enum": ["verified_local", "local_optimum", "heuristic_stop", "non_convergence", "stalled",
+                          "infeasible", "unbounded", "evaluation_error", "solver_error", "budget",
+                          "rejected_by_guard"]},
+        "remedies": {"type": "array", "items": {"enum": ["stop", "refine_locally", "restart_global",
+                                                         "restart_perturbed", "switch_solver",
+                                                         "loosen_solver_tolerance", "change_initial_guess"]}},
+        "detail": {"type": "string"}
+      }
+    },
+    "verification": {
+      "type": "object",
+      "required": ["attempt", "candidate", "alternates", "report", "evaluations", "wall_s"],
+      "additionalProperties": false,
+      "properties": {
+        "attempt": {"type": "integer", "minimum": 1},
+        "candidate": {"type": "string"},
+        "alternates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["solver_id", "allocation", "seed", "options", "result"],
+            "additionalProperties": false,
+            "properties": {
+              "solver_id": {"type": "string"},
+              "allocation": {"type": "integer", "minimum": 0},
+              "seed": {"type": "integer"},
+              "options": {"type": "object"},
+              "result": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/result"}]}
+            }
+          }
+        },
+        "report": {"$ref": "#/$defs/report"},
+        "evaluations": {"type": "integer", "minimum": 0},
+        "wall_s": {"type": "number", "minimum": 0}
+      }
+    }
+  }
+}
