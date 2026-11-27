@@ -1,0 +1,75 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://github.com/zangjiucheng/orbitopt/schemas/gnc-sensor-config-1.0.json",
+ "title": "orbitopt GNC relative-measurement sensor task configuration (E13-03)",
+ "description": "One task-configuration document declaring every relative-navigation sensor of a closed-loop GNC run: what it measures (channels), how it errs (white noise, constant bias, declared latency, random and burst data loss), and from where the numbers come (every error parameter carries a source string -- a citation, or 'DESIGN ASSUMPTION: ...'). Timing here is the INPUT to the E13-01 clock: sensor_config_to_sensor_spec() feeds ClockSpec, so the clock stays the single authority over ticks and drops. Parsed by orbitopt.gnc.sensors.sensor_task_config_from_document.",
+ "type": "object",
+ "required": ["schema_version", "kind", "sensors"],
+ "additionalProperties": false,
+ "properties": {
+  "schema_version": {"const": "1.0"},
+  "kind": {"const": "orbitopt.gnc.sensor-config"},
+  "metadata": {"type": "object", "propertyNames": {"type": "string"}},
+  "sensors": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/sensor"}}
+ },
+ "$defs": {
+  "channel": {
+   "enum": ["range_m", "range_rate_m_s", "azimuth_rad", "elevation_rad",
+            "rel_pos_x_m", "rel_pos_y_m", "rel_pos_z_m",
+            "rel_vel_x_m_s", "rel_vel_y_m_s", "rel_vel_z_m_s"],
+   "description": "Measurement channels orbitopt.gnc.sensors implements (the registry CHANNELS; extending the vocabulary means adding a registry entry AND this enum value)."
+  },
+  "channel_error": {
+   "type": "object",
+   "required": ["channel", "sigma", "bias", "source"],
+   "additionalProperties": false,
+   "properties": {
+    "channel": {"$ref": "#/$defs/channel"},
+    "sigma": {"type": "number", "exclusiveMinimum": 0,
+     "description": "1-sigma additive white noise, in the channel's declared unit. Zero is refused: a zero-variance claim is a filter trap, not a perfect sensor."},
+    "bias": {"type": "number",
+     "description": "Constant (time-invariant) bias added to every measurement, channel unit. A bias is deterministic scenario data, not a random draw -- the same every tick of the run."},
+    "source": {"type": "string", "minLength": 1,
+     "description": "Where the numbers come from: a reference, a qualification record, or 'DESIGN ASSUMPTION: <rationale>'."}
+   }
+  },
+  "dropout": {
+   "type": "object",
+   "required": ["random_drop_p", "burst_enter_p", "burst_mean_ticks", "dropped_ticks", "source"],
+   "additionalProperties": false,
+   "properties": {
+    "random_drop_p": {"type": "number", "minimum": 0, "maximum": 1,
+     "description": "Independent per-tick drop probability outside bursts."},
+    "burst_enter_p": {"type": "number", "minimum": 0, "maximum": 1,
+     "description": "Per clear tick, probability of starting a burst of consecutive dropped frames."},
+    "burst_mean_ticks": {"type": "number", "minimum": 1,
+     "description": "Mean burst length in ticks (geometric run length, support >= 1). Ignored when burst_enter_p is 0."},
+    "dropped_ticks": {"type": "array", "items": {"type": "integer", "minimum": 0}, "uniqueItems": true,
+     "description": "Explicit scenario-declared dropped ticks (merged with the stochastic schedule)."},
+    "source": {"type": "string", "minLength": 1}
+   }
+  },
+  "sensor": {
+   "type": "object",
+   "required": ["sensor_id", "kind", "period_s", "phase_s", "latency_s",
+                "bias_covariance_mode", "seed", "channels", "dropout", "source"],
+   "additionalProperties": false,
+   "properties": {
+    "sensor_id": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["polar_range_angle", "cartesian_relnav"],
+     "description": "Sensor profile (SENSOR_KINDS in orbitopt.gnc.sensors): which channel subsets are legal and how measurements map to the Cartesian Observation."},
+    "period_s": {"type": "number", "exclusiveMinimum": 0, "description": "Sensor sampling period -> SensorSpec.period_s."},
+    "phase_s": {"type": "number", "minimum": 0, "description": "First-sample phase within one period -> SensorSpec.phase_s."},
+    "latency_s": {"type": "number", "minimum": 0,
+     "description": "Declared measurement delay (the 'delay' error is modelled as the E13-01 clock declares it: t_available = t_sample + latency, constant per sensor, so replay stays checkable)."},
+    "bias_covariance_mode": {"enum": ["none", "bounded"],
+     "description": "'none': declared covariance covers white noise only -- the filter must model biases (bias states) or its NIS will inflate, which E13-03's consistency tests demonstrate. 'bounded': the declared variance conservatively includes bias^2 (bias sign unknown)."},
+    "seed": {"type": "integer", "minimum": 0,
+     "description": "Reproducibility root: noise draws are keyed (seed, tick), the dropout mask by (seed, n_ticks) -- pure functions, same config same data."},
+    "channels": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/channel_error"}},
+    "dropout": {"$ref": "#/$defs/dropout"},
+    "source": {"type": "string", "minLength": 1, "description": "Provenance for timing + profile + bias mode."}
+   }
+  }
+ }
+}
