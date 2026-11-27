@@ -15,8 +15,8 @@ from typing import Any
 
 from orbitopt.agent.providers import ChatProvider, make_provider
 from orbitopt.optimization import Budget, OptimizationProblem, ToolCall
-from orbitopt.optimization.commands import CommandError, load_problem, read_json, verify_sealed_run
-from orbitopt.optimization.verification import RUN_FORMAT, canonical_json
+from orbitopt.optimization.commands import CommandError, error_dict, load_problem, read_json, verify_sealed_run
+from orbitopt.optimization.verification import RUN_FORMAT
 
 PROVIDERS = ("mock", "openai-compatible", "local", "replay")
 """``--provider`` values. ``replay`` serves a recorded cassette and calls no model."""
@@ -104,28 +104,28 @@ def compile_prompt(prompt_file: str | Path, output: str | Path, provider: ChatPr
         "unsupported": asdict(outcome.reason) if isinstance(outcome, Unsupported) else None,
         "violations": [asdict(v) for v in outcome.violations] if isinstance(outcome, RejectedUnauthorizedChange)
         else [],
-        "errors": [_issue(e) for e in outcome.errors] if isinstance(outcome, CompileFailed) else [],
+        "errors": [error_dict(e) for e in outcome.errors] if isinstance(outcome, CompileFailed) else [],
     }
     draft = None
     if isinstance(outcome, Compiled):
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_bytes(canonical_json(outcome.problem.to_dict()))
+        _write_json(output, outcome.problem.to_dict())
         summary.update(problem_path=str(output), problem_digest=outcome.problem.digest())
     elif allow_draft:
         draft = outcome.partial if isinstance(outcome, NeedsClarification) else \
             _json_or_none(outcome.raw) if isinstance(outcome, CompileFailed) else None
     if draft is not None:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_bytes(canonical_json({"draft": True, "outcome": outcome.outcome, "compiler_output": draft}))
+        _write_json(output, {"draft": True, "outcome": outcome.outcome, "compiler_output": draft})
         summary["draft_path"] = str(output)
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_bytes(canonical_json(summary))
+    _write_json(report_path, summary)
     summary["report_path"] = str(report_path)
     return summary
 
 
-def _issue(issue) -> dict:
-    return {"code": issue.code.value, "path": issue.path, "message": issue.message}
+def _write_json(path: Path, document: Any) -> None:
+    """Readable JSON with sorted keys; ``ValueError`` for NaN or infinity, which no document may hold."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(document, indent=2, sort_keys=True, allow_nan=False, ensure_ascii=False) + "\n",
+                    encoding="utf-8")
 
 
 def _json_or_none(text: str | None) -> Any:
