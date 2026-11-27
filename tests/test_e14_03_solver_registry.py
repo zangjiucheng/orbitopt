@@ -125,7 +125,7 @@ def hypervolume_2d(points, ref) -> float:
 
 
 def front_of(result) -> list[tuple[float, ...]]:
-    return [tuple(p["objectives"].values()) for p in result.evidence[0].data.get("front", [])]
+    return [tuple(p.objective_values.values()) for p in result.front]
 
 
 def correct(inst, result) -> bool:
@@ -497,6 +497,21 @@ def test_an_infeasible_problem_is_reported_infeasible_by_every_solver_that_can_t
         assert not r.solver_converged and not r.constraints_satisfied
 
 
+def test_highs_reports_an_unbounded_lp_as_unbounded():
+    p = problem(Variable("x", lower=0.0), Variable("y", lower=0.0), objective="-x",
+                constraints=[Constraint("c", "x - y", "<=", 1.0)])
+    r = REGISTRY.solve_with(p, "scipy.highs", seed=1)
+    assert r.termination == Termination.UNBOUNDED and not r.solver_converged and not r.constraints_satisfied
+    assert schema_errors(r.to_dict(), RESULT_SCHEMA) == []
+
+
+def test_solver_evidence_names_its_producer_and_problem_and_a_single_objective_result_has_no_front():
+    p = to_ir(by_id("lp-wyndor-d2"))
+    r = REGISTRY.solve_with(p, "scipy.highs", seed=1)
+    assert r.evidence[0].producer == "scipy.highs" and r.evidence[0].problem_digest == p.digest() == r.problem_digest
+    assert r.front == () and "front" not in r.evidence[0].data
+
+
 def test_a_backend_exception_becomes_an_error_result():
     def broken(a):
         raise RuntimeError("tool fell over")
@@ -511,6 +526,7 @@ def test_a_multi_objective_result_carries_a_feasible_non_dominated_front():
     r = REGISTRY.solve_with(to_ir(inst), "pygmo.nsga2", budget=budget_for(inst), seed=1)
     front = front_of(r)
     assert len(front) >= 10 and tuple(r.objective_values.values()) == min(front)
+    assert all(set(p.x) == {"x0", "x1"} for p in r.front) and r.x in [p.x for p in r.front]
     assert not any(all(a <= b for a, b in zip(q, p)) and q != p for p in front for q in front)
 
 

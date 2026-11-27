@@ -105,8 +105,8 @@ class HighsSolver(AdapterSolver):
         if res.status == 1 and wall is not None and "time" in res.message.lower():
             stop = Termination.TIMEOUT
         else:
-            stop = {0: None, 1: Termination.MAX_ITERATIONS,
-                    2: Termination.INFEASIBLE}.get(res.status, Termination.ERROR)
+            stop = {0: None, 1: Termination.MAX_ITERATIONS, 2: Termination.INFEASIBLE,
+                    3: Termination.UNBOUNDED}.get(res.status, Termination.ERROR)
         return Outcome(converged=res.status == 0, stop=stop, message=res.message, points=points)
 
 
@@ -134,8 +134,8 @@ class SlsqpSolver(AdapterSolver):
             options["maxiter"] = run.budget.max_iterations
         res = minimize(ev.objective, run.start, method="SLSQP", bounds=_bounds(run), constraints=cons,
                        options=options)
-        return Outcome(converged=bool(res.success), stop=Termination.MAX_ITERATIONS if res.status == 9 else None,
-                       message=str(res.message), iterations=int(res.nit))
+        stop = {9: Termination.MAX_ITERATIONS, 8: Termination.STALLED}.get(res.status)  # 8: line search failed
+        return Outcome(converged=bool(res.success), stop=stop, message=str(res.message), iterations=int(res.nit))
 
 
 class LbfgsbSolver(AdapterSolver):
@@ -153,8 +153,8 @@ class LbfgsbSolver(AdapterSolver):
         if run.budget.max_iterations is not None:
             options["maxiter"] = run.budget.max_iterations
         res = minimize(run.evaluator.objective, run.start, method="L-BFGS-B", bounds=_bounds(run), options=options)
-        return Outcome(converged=bool(res.success), stop=Termination.MAX_ITERATIONS if res.status == 1 else None,
-                       message=str(res.message), iterations=int(res.nit))
+        stop = {1: Termination.MAX_ITERATIONS, 2: Termination.STALLED}.get(res.status)  # 2: abnormal line search
+        return Outcome(converged=bool(res.success), stop=stop, message=str(res.message), iterations=int(res.nit))
 
 
 class DifferentialEvolutionSolver(AdapterSolver):

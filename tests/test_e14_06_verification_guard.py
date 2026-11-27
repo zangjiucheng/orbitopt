@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 
 from orbitopt.optimization import (
+    Provenance,
     Constraint,
     Evidence,
     Expression,
@@ -41,7 +42,6 @@ from orbitopt.optimization.verification import (
     FindingCode,
     LowerBoundCertificate,
     Outcome,
-    Provenance,
     ReferenceSolution,
     kkt_certificate,
     result_digest,
@@ -163,7 +163,11 @@ def test_translation_agrees_with_the_catalogue_callables():
 
 # ------------------------------------------------------------------------------ benchmark artifact -> guard inputs
 def guard_inputs(artifact: dict, inst):
-    """Map an E14-10 artifact onto (graded problem, result, evidence, provenance), field by field."""
+    """Map an E14-10 artifact onto (graded problem, result, evidence, solved problem), field by field.
+
+    The artifact's cache record becomes the result's ``provenance``, so the result digest the evidence names
+    covers it.
+    """
     reference = IR[inst.id]
     ev = artifact["evidence"]
     names = [v.name for v in reference.variables]
@@ -174,7 +178,8 @@ def guard_inputs(artifact: dict, inst):
         termination="converged" if converged else "error", solver_converged=converged,
         constraints_satisfied=verified, independently_verified=verified,
         x=dict(zip(names, artifact["x"])), objective_values={"f0": artifact["objective"]},
-        constraint_residuals={c.name: r for c, r in zip(reference.constraints, artifact["constraint_residuals"])})
+        constraint_residuals={c.name: r for c, r in zip(reference.constraints, artifact["constraint_residuals"])},
+        provenance=Provenance(cache_key=resolve(ev["cache"]["problem_digest"]) if ev["cache"]["hit"] else None))
     evidence = []
     check = ev.get("independent_check")
     if check is not None:  # the catalogue's stored reference, run by the named verifier
@@ -182,9 +187,7 @@ def guard_inputs(artifact: dict, inst):
             id=check["verifier"], producer=check["verifier"], problem_digest=reference.digest(),
             result_digest=result_digest(result), value=inst.reference.value,
             tolerance=max(1e-9, inst.tolerance.objective_abs), source=inst.reference.derivation))
-    provenance = Provenance(solved_problem=to_ir(ev["solved_problem"]), cache_hit=ev["cache"]["hit"],
-                            cache_key=resolve(ev["cache"]["problem_digest"]))
-    return reference, result, evidence, provenance
+    return reference, result, evidence, to_ir(ev["solved_problem"])
 
 
 def _flip(digest: str) -> str:
@@ -203,16 +206,15 @@ def _params(fault, inst) -> dict:  # as in tests/test_e14_10_benchmark_spec.py
 
 
 def grade_in_memory(artifact, inst, resealed=True):
-    problem, result, evidence, provenance = guard_inputs(artifact, inst)
+    problem, result, evidence, solved = guard_inputs(artifact, inst)
     seal = result_digest(result)
-    return verify_result(problem, result, evidence=evidence, provenance=provenance,
+    return verify_result(problem, result, evidence=evidence, solved_problem=solved,
                          artifact_digest=seal if resealed else _flip(seal))
 
 
 def grade_sealed(artifact, inst, run_dir: Path, resealed=True):
-    problem, result, evidence, provenance = guard_inputs(artifact, inst)
-    seal_run(provenance.solved_problem, result, evidence, run_dir, cache_hit=provenance.cache_hit,
-             cache_key=provenance.cache_key)
+    problem, result, evidence, solved = guard_inputs(artifact, inst)
+    seal_run(solved, result, evidence, run_dir)
     if not resealed:
         manifest = json.loads((run_dir / "manifest.json").read_text())
         manifest["files"]["result.json"] = _flip(manifest["files"]["result.json"])
@@ -340,6 +342,28 @@ def test_feasible_but_not_optimal_result_claiming_optimality_fails():
     assert C.CLAIM_CONTRADICTED in report.codes and report.verdict is Outcome.FAILED
 
 
+def test_a_cache_hit_is_part_of_the_result_and_a_stale_one_fails():
+    point = {"x": 0.5, "y": 0.5}
+    fresh = honest(WORKED, point)
+    cached = replace(fresh, provenance=Provenance(cache_key=WORKED.digest()))
+    assert result_digest(cached) != result_digest(fresh)  # the cache record is pinned by the result digest
+    assert verify_result(WORKED, cached, evidence=[reference(WORKED, cached, 0.5)]).verdict is Outcome.PASSED
+    stale = replace(fresh, provenance=Provenance(cache_key="0" * 64))
+    report = verify_result(WORKED, stale, evidence=[reference(WORKED, stale, 0.5)])
+    assert C.STALE_CACHE in report.codes and report.verdict is Outcome.FAILED
+    swapped = verify_result(WORKED, stale, evidence=[reference(WORKED, fresh, 0.5)])  # evidence for the fresh one
+    assert C.EVIDENCE_MISMATCH in swapped.codes
+
+
+def test_the_results_own_evidence_naming_another_problem_is_noted():
+    spliced = Evidence("solver", "ran", producer="solver.a", problem_digest="0" * 64)
+    result = honest(WORKED, {"x": 0.5, "y": 0.5}, evidence=(spliced,))
+    report = verify_result(WORKED, result, evidence=[reference(WORKED, result, 0.5)])
+    assert any(f.code is C.EVIDENCE_MISMATCH and f.path == "/evidence/0/problem_digest" for f in report.findings)
+    own = replace(result, evidence=(replace(spliced, problem_digest=WORKED.digest()),))
+    assert C.EVIDENCE_MISMATCH not in verify_result(WORKED, own, evidence=[reference(WORKED, own, 0.5)]).codes
+
+
 def test_forged_independent_claim_and_self_attestation_never_pass():
     own = Evidence("analytical", "the solver says its answer is optimal", {"value": 0.5})
     result = honest(WORKED, {"x": 0.5, "y": 0.5}, independently_verified=True, evidence=(own,))
@@ -436,13 +460,13 @@ def test_solved_problem_that_weakens_a_hard_constraint_fails_and_one_that_tighte
     }
     for name, (solved, code) in cases.items():
         result = replace(honest(WORKED, point), problem_digest=solved.digest())
-        report = verify_result(WORKED, result, provenance=Provenance(solved_problem=solved),
+        report = verify_result(WORKED, result, solved_problem=solved,
                                evidence=[reference(WORKED, result, 0.5)])
         assert code in report.codes and report.verdict is Outcome.FAILED, name
     tightened = replace(WORKED, constraints=WORKED.constraints + (
         Constraint("agent_cut", "x - y", "<=", 0.1, origin="agent"),))
     result = replace(honest(WORKED, point), problem_digest=tightened.digest())
-    report = verify_result(WORKED, result, provenance=Provenance(solved_problem=tightened),
+    report = verify_result(WORKED, result, solved_problem=tightened,
                            evidence=[reference(WORKED, result, 0.5)])
     assert report.verdict is Outcome.PASSED and C.REVISED_PROBLEM in report.codes
 

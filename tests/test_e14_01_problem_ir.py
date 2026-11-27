@@ -38,6 +38,8 @@ from orbitopt.optimization import (
     OptimizationProblem,
     OptimizationResult,
     Parameter,
+    ParetoPoint,
+    Provenance,
     Termination,
     ToolCall,
     ToolCallError,
@@ -659,7 +661,10 @@ def test_result_round_trips_and_validates_against_its_schema():
         solver_converged=True, constraints_satisfied=True, x={"x": 0.5, "y": 0.5},
         objective_values={"f": 0.5}, constraint_residuals={"halfplane": 0.0}, evaluations=42, iterations=7,
         wall_time_s=0.01, message="ok",
-        evidence=(Evidence("analytical", "KKT point of a convex QP", {"lambda": 1.0}),),
+        evidence=(Evidence("analytical", "KKT point of a convex QP", {"lambda": 1.0}, producer="kkt",
+                           problem_digest=quadratic().digest()),),
+        front=(ParetoPoint({"x": 0.5, "y": 0.5}, {"f": 0.5}), ParetoPoint({"x": 1.0, "y": 0.0}, {"f": 1.0})),
+        provenance=Provenance(cache_key=quadratic().digest()),
     )
     data = json.loads(json.dumps(result.to_dict()))
     assert schema_errors(data, RESULT_SCHEMA) == []
@@ -709,6 +714,14 @@ def test_domain_violations_name_every_part_of_the_domain_a_value_breaks(variable
     assert variable.domain_violations(value, 1e-6) == reasons
     problem = OptimizationProblem(id="d", variables=(variable,), objectives=(Objective("f", variable.name),))
     assert problem.constraints_satisfied({variable.name: value}, {}) is (reasons == ())
+
+
+@pytest.mark.parametrize("termination", ["unbounded", "stalled"])
+def test_unbounded_and_stalled_are_1_1_terminations(termination):
+    data = OptimizationResult(problem_digest="0" * 64, solver_id="s", termination=termination).to_dict()
+    assert schema_errors(data, RESULT_SCHEMA) == []
+    assert OptimizationResult.from_dict(data).termination is Termination(termination)
+    assert {e.path for e in schema_errors({**data, "schemaVersion": "1.0"}, RESULT_SCHEMAS["1.0"])} >= {"/termination"}
 
 
 def _doc_problem_json():

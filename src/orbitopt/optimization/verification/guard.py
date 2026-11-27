@@ -18,10 +18,10 @@ and an error inside the guard is recorded and never read as a pass.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, fields, replace
+from dataclasses import replace
 from typing import Any, Callable, Mapping, Sequence
 
-from ..problem import (STATUSES, OptimizationProblem, VerificationPolicy, _plain, schema_errors, schema_for,
+from ..problem import (STATUSES, OptimizationProblem, VerificationPolicy, schema_errors, schema_for, to_plain,
                        validate_problem)
 from ..result import RESULT_SCHEMAS, OptimizationResult, Termination
 from . import certificates
@@ -43,39 +43,26 @@ RE_EVALUATION = "guard:re-evaluation"
 KKT = "guard:kkt"
 
 
-@dataclass(frozen=True)
-class Provenance:
-    """How the result was produced, as recorded by the runtime that ran the solver.
-
-    ``solved_problem`` is the problem the solver actually ran when it differs
-    from the graded one (an agent revision, a compiled form). ``cache_hit``
-    and ``cache_key`` record a cache lookup and the problem digest the cached
-    entry was stored under.
-    """
-
-    solved_problem: OptimizationProblem | None = None
-    cache_hit: bool = False
-    cache_key: str | None = None
-
-
 def verify_result(problem: OptimizationProblem, result: OptimizationResult | Mapping[str, Any], *,
                   policy: VerificationPolicy | None = None, evidence: Sequence[EvidenceItem] = (),
-                  artifact_digest: str | None = None, provenance: Provenance | None = None,
+                  artifact_digest: str | None = None, solved_problem: OptimizationProblem | None = None,
                   tools: Tools | None = None, seed: int = 0) -> VerificationReport:
     """Grade ``result`` against ``problem`` and return the four statuses, the findings and a verdict.
 
     ``policy`` defaults to ``problem.verification``. ``result`` may be the
     dict form, which is schema-checked first. ``artifact_digest`` is the
     digest recorded for the result when it was stored; it must equal
-    ``result_digest(result)``. ``tools`` resolves ``ToolCall`` objectives and
+    ``result_digest(result)``. ``solved_problem`` is the problem the solver
+    actually ran when it differs from the graded one (an agent revision, a
+    compiled form); a cache hit is read from ``result.provenance``, which the
+    result digest covers. ``tools`` resolves ``ToolCall`` objectives and
     constraints. ``seed`` fixes the samples a lower-bound certificate is
     checked on. Never raises: an internal error yields a failed verdict with
     a ``guard_error`` finding.
     """
     policy = problem.verification if policy is None else policy
     try:
-        return _Guard(problem, policy, tuple(evidence), provenance or Provenance(), tools, seed).run(
-            result, artifact_digest)
+        return _Guard(problem, policy, tuple(evidence), solved_problem, tools, seed).run(result, artifact_digest)
     except Exception as exc:  # the guard's own failure is never a pass
         return unassessed_report(f"guard error: {exc!r}", [Finding(FindingCode.GUARD_ERROR, "/", repr(exc))],
                                  tuple(getattr(policy, "required", ())))
@@ -83,9 +70,9 @@ def verify_result(problem: OptimizationProblem, result: OptimizationResult | Map
 
 class _Guard:
     def __init__(self, problem: OptimizationProblem, policy: VerificationPolicy, evidence: tuple,
-                 provenance: Provenance, tools: Tools | None, seed: int):
+                 solved_problem: OptimizationProblem | None, tools: Tools | None, seed: int):
         self.problem, self.policy, self.evidence = problem, policy, evidence
-        self.provenance, self.tools, self.seed = provenance, tools, seed
+        self.solved_problem, self.tools, self.seed = solved_problem, tools, seed
         self.findings: list[Finding] = []
 
     def add(self, code: FindingCode, path: str, message: str) -> None:
@@ -170,7 +157,7 @@ class _Guard:
 
     # ------------------------------------------------------------------------------------------- identity
     def check_identity(self, result: OptimizationResult, digest: str) -> None:
-        solved = self.provenance.solved_problem
+        solved = self.solved_problem
         claimed = digest if solved is None else solved.digest()
         if result.problem_digest != claimed:
             which = "the graded problem" if solved is None else "the problem the solver ran"
@@ -178,9 +165,14 @@ class _Guard:
                      f"the result answers {result.problem_digest!r}, not {which} ({claimed!r})")
         if solved is not None and claimed != digest:
             compare_formulations(self.problem, solved, self.add)
-        if self.provenance.cache_hit and self.provenance.cache_key != claimed:
+        cache_key = result.provenance.cache_key
+        if cache_key is not None and cache_key != claimed:
             self.add(FindingCode.STALE_CACHE, "/provenance/cache_key",
-                     f"cache hit on an entry stored under {self.provenance.cache_key!r}, not {claimed!r}")
+                     f"cache hit on an entry stored under {cache_key!r}, not {claimed!r}")
+        for i, item in enumerate(result.evidence):
+            if item.problem_digest is not None and item.problem_digest != result.problem_digest:
+                self.add(FindingCode.EVIDENCE_MISMATCH, f"/evidence/{i}/problem_digest",
+                         f"the result's own {item.kind} evidence names problem {item.problem_digest!r}")
 
     # ------------------------------------------------------------------------------------------- statuses
     def converged(self, result: OptimizationResult) -> StatusOutcome:
@@ -402,7 +394,7 @@ def compare_formulations(reference: OptimizationProblem, solved: OptimizationPro
     tightening constraint, a new initial guess) are noted, not condemned.
     """
     if reference.hard_constraint_fingerprint() == solved.hard_constraint_fingerprint():
-        add(FindingCode.REVISED_PROBLEM, "/provenance/solved_problem",
+        add(FindingCode.REVISED_PROBLEM, "/solved_problem",
             "the solver ran a revision that keeps every hard constraint; the point is graded against the original")
         return
     reported = []
@@ -447,7 +439,7 @@ def compare_formulations(reference: OptimizationProblem, solved: OptimizationPro
         if p.name not in sp or _without_description(p) != _without_description(sp[p.name]):
             report(FindingCode.FORMULATION_MISMATCH, f"/parameters/{p.name}", "parameter changed")
     if not reported:
-        add(FindingCode.FORMULATION_MISMATCH, "/provenance/solved_problem", "the hard-constraint fingerprint differs")
+        add(FindingCode.FORMULATION_MISMATCH, "/solved_problem", "the hard-constraint fingerprint differs")
 
 
 _RELAXES = {"binary": ("integer", "continuous"), "integer": ("continuous",), "discrete": ("continuous",)}
@@ -471,7 +463,7 @@ def _domain_change(ref, other) -> tuple[FindingCode, str] | None:
 
 
 def _without_description(item) -> dict:
-    return {f.name: _plain(getattr(item, f.name)) for f in fields(item) if f.name != "description"}
+    return {key: value for key, value in to_plain(item).items() if key != "description"}
 
 
 def _with_policy(problem: OptimizationProblem, policy: VerificationPolicy) -> OptimizationProblem:

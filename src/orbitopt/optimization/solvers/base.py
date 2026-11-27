@@ -9,12 +9,15 @@ reports the IR's own evaluation of the chosen point, never the backend's
 numbers, and ``constraints_satisfied`` comes only from
 ``OptimizationProblem.constraints_satisfied``.
 
-Termination is decided in this order: an error (a backend exception or a
-backend that reports failure); the adapter's budget; no feasible point found
+Termination is decided in this order: an error (a backend exception, a
+backend that reports failure, or every evaluation failing); a backend's
+proof that the problem is unbounded; the adapter's budget; no feasible point found
 (``INFEASIBLE``, which for a local or heuristic backend means "stopped
 without one", not a proof); the backend's own convergence flag
 (``CONVERGED``, and only then ``solver_converged``); the backend's own
-iteration limit; otherwise ``ERROR`` carrying the backend's message.
+iteration limit or stall (``STALLED``); otherwise ``ERROR`` carrying the
+backend's message. A multi-objective solve reports its whole front in
+``OptimizationResult.front``.
 
 Malformed requests raise: an invalid problem raises ``InvalidProblemError``,
 an unknown option or ``x0`` name raises ``ValueError``. A well-formed request
@@ -38,10 +41,12 @@ from ..classify import Form, ProblemStructure, classify
 from ..errors import InvalidProblemError
 from ..expressions import EvaluationError
 from ..problem import Budget, OptimizationProblem, Variable, validate_problem
-from ..result import Evidence, OptimizationResult, Termination
+from ..result import Evidence, OptimizationResult, ParetoPoint, Termination
 
 Vector = Sequence[float]
 _BUDGET_STOPS = (Termination.MAX_EVALUATIONS, Termination.TIMEOUT, Termination.CANCELLED)
+_DEFINITE_STOPS = (Termination.ERROR, Termination.UNBOUNDED, *_BUDGET_STOPS)
+"""Stops reported as they are, whether or not a feasible point was found."""
 
 Convergence = Literal["certificate", "first_order", "heuristic", "none"]
 CONVERGENCE_MEANINGS: dict[str, str] = {
@@ -398,7 +403,7 @@ def _result(problem: OptimizationProblem, capability: SolverCapability, structur
     else:
         chosen = evaluator.best
     feasible = chosen is not None and chosen.feasible
-    if stop == Termination.ERROR or stop in _BUDGET_STOPS:
+    if stop in _DEFINITE_STOPS:
         termination = stop
     elif not feasible:
         termination = Termination.INFEASIBLE
@@ -419,10 +424,9 @@ def _result(problem: OptimizationProblem, capability: SolverCapability, structur
         "budget": {k: v for k, v in asdict(budget).items() if v is not None},
         "options": dict(options),
     }
-    if capability.multiobjective:
-        data["front"] = [{"x": _finite_values(p.x), "objectives": _finite_values(p.objectives)} for p in front]
+    digest = problem.digest()
     return OptimizationResult(
-        problem_digest=problem.digest(),
+        problem_digest=digest,
         solver_id=capability.solver_id,
         termination=termination,
         solver_converged=termination == Termination.CONVERGED,
@@ -434,7 +438,9 @@ def _result(problem: OptimizationProblem, capability: SolverCapability, structur
         iterations=outcome.iterations,
         wall_time_s=time.perf_counter() - started,
         message=message,
-        evidence=(Evidence("solver", f"{capability.solver_id} stopped: {termination.value}", data),),
+        evidence=(Evidence("solver", f"{capability.solver_id} stopped: {termination.value}", data,
+                           producer=capability.solver_id, problem_digest=digest),),
+        front=tuple(ParetoPoint(_finite_values(p.x), _finite_values(p.objectives)) for p in front),
     )
 
 

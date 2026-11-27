@@ -19,7 +19,7 @@ class CmaEsSolver(AdapterSolver):
 
     Converged when ``cma`` stops on ``tolfun``, ``tolfunhist`` or ``tolx``;
     its own ``maxiter``/``maxfevals`` are ``MAX_ITERATIONS``; any other stop
-    criterion (stagnation, conditioning) is reported as ``ERROR`` with its name.
+    criterion (stagnation, conditioning) is ``STALLED``, with its name in the message.
     ``sigma0`` defaults to 0.3 of the narrowest bound range.
     """
 
@@ -44,6 +44,6 @@ class CmaEsSolver(AdapterSolver):
             es.tell(candidates, [ev.objective(c) for c in candidates])
         reasons = set(es.stop())
         converged = bool(reasons & _CONVERGED)
-        stop = Termination.MAX_ITERATIONS if not converged and reasons & _LIMITS else None
+        stop = None if converged else Termination.MAX_ITERATIONS if reasons & _LIMITS else Termination.STALLED
         return Outcome(converged=converged, stop=stop, message="cma stopped on " + ", ".join(sorted(reasons)),
                        iterations=int(es.countiter))

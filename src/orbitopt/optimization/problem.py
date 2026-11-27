@@ -253,7 +253,7 @@ class OptimizationProblem:
 
     def to_dict(self) -> dict:
         """The JSON-ready dict form; every field is written, defaults included."""
-        return {"schemaVersion": SCHEMA_VERSION, **_plain(self)}
+        return {"schemaVersion": SCHEMA_VERSION, **to_plain(self)}
 
     @classmethod
     def from_dict(cls, data: Mapping) -> "OptimizationProblem":
@@ -305,7 +305,7 @@ class OptimizationProblem:
         """
 
         def entries(items, keep, drop=("description",)):
-            return sorted((_without(_plain(item), *drop) for item in items if keep(item)), key=lambda d: d["name"])
+            return sorted((_without(to_plain(item), *drop) for item in items if keep(item)), key=lambda d: d["name"])
 
         return canonical_digest({
             "objectives": entries(self.objectives, lambda o: o.origin == "user"),
@@ -390,21 +390,25 @@ def _expression_from(data: Any) -> Expression | ToolCall:
     return Expression(data)
 
 
-def _plain(obj: Any) -> Any:
-    """Dataclass IR objects to JSON-ready values (expressions as a string or a tool object)."""
+def to_plain(obj: Any) -> Any:
+    """IR objects as JSON-ready values: dataclasses as dicts, expressions as a string or a tool object.
+
+    This is the form ``to_dict``, the digest and the hard-constraint
+    fingerprint are built from.
+    """
     if isinstance(obj, Enum):
         return obj.value
     if isinstance(obj, Expression):
         return obj.source
     if isinstance(obj, ToolCall):
-        return {"tool_id": obj.tool_id, "args": dict(obj.args), "constants": _plain(dict(obj.constants)),
+        return {"tool_id": obj.tool_id, "args": dict(obj.args), "constants": to_plain(dict(obj.constants)),
                 "output": obj.output}
     if hasattr(obj, "__dataclass_fields__"):
-        return {f.name: _plain(getattr(obj, f.name)) for f in fields(obj)}
+        return {f.name: to_plain(getattr(obj, f.name)) for f in fields(obj)}
     if isinstance(obj, (list, tuple)):
-        return [_plain(item) for item in obj]
+        return [to_plain(item) for item in obj]
     if isinstance(obj, Mapping):
-        return {key: _plain(value) for key, value in obj.items()}
+        return {key: to_plain(value) for key, value in obj.items()}
     return obj
 
 
