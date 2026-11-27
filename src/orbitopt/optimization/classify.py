@@ -91,7 +91,9 @@ class ProblemStructure:
     ``objective_forms`` has one entry per objective; ``constraint_form`` is the
     most general form among the constraints, ``None`` when there are none.
     ``integer`` means some variable is integer, binary or discrete;
-    ``bounded`` that every variable's domain is finite.
+    ``bounded`` that every variable's domain is finite. ``domain_size`` is
+    the number of points of the variables' product domain when every
+    variable takes finitely many values, ``None`` otherwise.
     """
 
     problem_class: ProblemClass
@@ -100,6 +102,7 @@ class ProblemStructure:
     integer: bool
     equality: bool
     bounded: bool
+    domain_size: int | None = None
 
     @property
     def form(self) -> Form:
@@ -329,7 +332,7 @@ def classify(problem: OptimizationProblem) -> ProblemStructure:
     else:
         cls = ProblemClass.NLP
     return ProblemStructure(cls, forms, constraint_form, integer,
-                            any(c.sense == "==" for c in problem.constraints), bounded)
+                            any(c.sense == "==" for c in problem.constraints), bounded, problem.domain_size())
 
 
 def linear_coefficients(problem: OptimizationProblem, item: Objective | Constraint) -> tuple[dict[str, float], float]:

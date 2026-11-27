@@ -1,13 +1,18 @@
-"""Optimality certificates: a KKT check for convex QPs and LPs, and a lower-bound refutation check.
+"""Optimality certificates: a KKT check for convex QPs and LPs, exhaustive enumeration, and a lower-bound check.
 
-``kkt_certificate`` is the only route to a passed ``optimality_certified``.
-It applies to a problem whose single objective is structurally a polynomial
-of degree at most 2 with a positive semidefinite Hessian (negative
-semidefinite when maximising), whose constraints are all structurally affine
-and whose variables are all continuous. For that class the KKT conditions are
-sufficient for global optimality. Everything else (non-convex, mixed-integer,
-multi-objective, tool-evaluated) is not assessed. Global optimality of a
-non-convex problem is never certified here.
+Two certificates can pass ``optimality_certified``, and the guard computes
+both itself. ``kkt_certificate`` applies to a problem whose single objective
+is structurally a polynomial of degree at most 2 with a positive
+semidefinite Hessian (negative semidefinite when maximising), whose
+constraints are all structurally affine and whose variables are all
+continuous. For that class the KKT conditions are sufficient for global
+optimality. ``enumeration_certificate`` applies to a single-objective
+problem whose every variable takes finitely many values, at most
+``MAX_ENUMERATION_POINTS`` points in all: it evaluates every point, which
+proves the optimum for any objective, tools included. Everything else
+(continuous non-convex, multi-objective, a domain too large) is not
+assessed. Global optimality of a continuous non-convex problem is never
+certified here.
 
 ``refute_lower_bound`` re-checks a ``LowerBoundCertificate`` at the point and
 on seeded samples of the feasible set. Sampling can refute a bound and never
@@ -19,15 +24,16 @@ numpy is imported when a certificate is computed, not when this module loads.
 from __future__ import annotations
 
 import ast
+import itertools
 import math
 import random
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
 
 from ..expressions import Expression, ToolCall
-from ..problem import OptimizationProblem, VerificationPolicy, tolerance_scale
+from ..problem import MAX_ENUMERATION_POINTS, OptimizationProblem, VerificationPolicy, tolerance_scale
 from ._point import check_point
-from .evidence import LowerBoundCertificate
+from .evidence import EnumerationCertificate, LowerBoundCertificate
 from .report import Outcome
 
 ACTIVE_FACTOR = 10.0
@@ -186,6 +192,46 @@ def kkt_certificate(problem: OptimizationProblem, x: Mapping[str, float], policy
         return KKTResult(Outcome.FAILED, f"complementarity {worst:.3g} exceeds {comp_tol:.3g}", multipliers)
     return KKTResult(Outcome.PASSED, f"KKT conditions hold for a convex problem: stationarity {stationarity:.3g}, "
                                      f"{len(active)} active constraints, multipliers non-negative", multipliers)
+
+
+def enumeration_certificate(problem: OptimizationProblem, certificate: EnumerationCertificate, objective: str,
+                            value: float, policy: VerificationPolicy,
+                            tools: Mapping[str, Callable[..., Any]] | None) -> tuple[Outcome, str]:
+    """Evaluate every point of the finite domain and compare each feasible one with the result's ``value``.
+
+    ``failed`` when a feasible point beats ``value`` by more than
+    ``objective_rtol * max(1, |value|)`` (in the objective's sense),
+    ``passed`` when none does, and ``not_assessed`` when the domain is not
+    finite, has more than ``min(certificate.max_points,
+    MAX_ENUMERATION_POINTS)`` points, the problem has several objectives,
+    or a point cannot be evaluated (an unresolved or failing tool), since a
+    point skipped could be the better one. A point outside an expression's
+    domain is not feasible, as everywhere in the guard.
+    """
+    if len(problem.objectives) != 1:
+        return Outcome.NOT_ASSESSED, "enumeration certifies single-objective problems only"
+    axes = [v.domain_values() for v in problem.variables]
+    open_ = [v.name for v, values in zip(problem.variables, axes) if values is None]
+    if open_:
+        return Outcome.NOT_ASSESSED, f"variables {open_} are continuous or unbounded: the domain is not finite"
+    size = math.prod(len(values) for values in axes)
+    cap = min(int(certificate.max_points), MAX_ENUMERATION_POINTS)
+    if size > cap:
+        return Outcome.NOT_ASSESSED, f"the domain has {size} points, more than the {cap} enumeration allows"
+    sign = 1.0 if problem.objectives[0].sense == "minimize" else -1.0
+    tol = policy.objective_rtol * max(1.0, abs(value))
+    names = [v.name for v in problem.variables]
+    for combo in itertools.product(*axes):
+        point = dict(zip(names, map(float, combo)))
+        check = check_point(problem, point, policy, tools, "", lambda *_: None)
+        if check.outcome is Outcome.NOT_ASSESSED:
+            return Outcome.NOT_ASSESSED, f"point {point} could not be evaluated ({check.reason}), so it may be better"
+        found = check.objectives[objective] if check.outcome is Outcome.PASSED else math.nan
+        if math.isfinite(found) and sign * (found - value) < -tol:
+            return Outcome.FAILED, (f"feasible point {point} has objective {found:.12g}, better than the result's "
+                                    f"{value:.12g}")
+    return Outcome.PASSED, (f"every one of the {size} points of the finite domain was evaluated; no feasible point "
+                            f"beats {value:.12g}")
 
 
 def refute_lower_bound(problem: OptimizationProblem, certificate: LowerBoundCertificate, objective: str,

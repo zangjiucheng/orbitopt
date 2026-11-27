@@ -38,7 +38,7 @@ from orbitopt.optimization import (
     validate_problem,
 )
 from orbitopt.optimization.classify import Form, ProblemClass, classify, linear_coefficients
-from orbitopt.optimization.solvers import SolverRegistry, default_registry
+from orbitopt.optimization.solvers import DifferentialEvolutionSolver, EnumerationSolver, SolverRegistry, default_registry
 
 REPO = Path(__file__).resolve().parents[1]
 PKG = REPO / "benchmarks/e14_spec"
@@ -303,7 +303,8 @@ def test_every_result_is_schema_valid_and_reports_the_irs_own_evaluation(matrix)
         assert schema_errors(r.to_dict(), RESULT_SCHEMA) == [], (iid, sid)
         assert r.problem_digest == p.digest() and r.solver_id == sid
         assert not r.independently_verified and not r.optimality_certified
-        assert 0 < r.evaluations <= budget_for(inst).max_evaluations
+        refused = r.termination == Termination.MAX_EVALUATIONS and not r.x  # enumeration: the budget cannot cover it
+        assert 0 < r.evaluations <= budget_for(inst).max_evaluations or (refused and r.evaluations == 0), (iid, sid)
         assert r.solver_converged == (r.termination == Termination.CONVERGED)
         if not r.x:
             continue
@@ -316,7 +317,7 @@ def test_every_result_is_schema_valid_and_reports_the_irs_own_evaluation(matrix)
 
 def promises_optimum(capability, problem_class) -> bool:
     """Whether the solver's convergence flag means the global optimum on this class of problem."""
-    return capability.convergence == "certificate" or (
+    return capability.convergence in ("certificate", "exhaustive") or (
         capability.convergence == "first_order" and problem_class in (ProblemClass.LP, ProblemClass.CONVEX_QP))
 
 
@@ -608,3 +609,101 @@ def test_the_registry_and_classifier_import_no_numpy_until_a_solver_runs():
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True,
                          env={**os.environ, "PYTHONPATH": str(REPO / "src")}).stdout
     assert out.strip().endswith("False")
+
+
+# --------------------------------------------------------------------------------------------------- enumeration
+ENUMERATION = REGISTRY.get("orbitopt.enumeration")
+MIXED = problem(Variable("n", "integer", lower=-2, upper=3), Variable("b", "binary"),
+                Variable("d", "discrete", choices=(0.5, 2.0, 7.0)), objective="(n - 1.2)**2 + 3*b - d",
+                constraints=(Constraint("cap", "n + d", "<=", 4.0), Constraint("pick", "b + n", "==", 1.0)))
+
+
+def brute_force(p: OptimizationProblem):
+    """The optimum by a loop written here, from the variables' own domains: (value, point) or None."""
+    import itertools
+
+    values = [range(-2, 4) if v.kind == "integer" else (0.0, 1.0) if v.kind == "binary" else v.choices
+              for v in p.variables]
+    best = None
+    for combo in itertools.product(*values):
+        x = {v.name: float(c) for v, c in zip(p.variables, combo)}
+        ev = p.evaluate(x)
+        if p.constraints_satisfied(x, ev.residuals) and (best is None or ev.objectives["f"] < best[0]):
+            best = (ev.objectives["f"], x)
+    return best
+
+
+def test_enumeration_is_exact_on_a_mixed_finite_domain_and_counts_every_point():
+    assert classify(MIXED).domain_size == 6 * 2 * 3
+    result = ENUMERATION.solve(MIXED, budget=Budget(max_evaluations=36))
+    value, x = brute_force(MIXED)
+    assert result.termination == Termination.CONVERGED and result.solver_converged
+    assert result.evaluations == 36 and result.iterations == 36
+    assert result.x == x and result.objective_values["f"] == pytest.approx(value)
+    assert result.constraints_satisfied and MIXED.constraints_satisfied(result.x, MIXED.evaluate(result.x).residuals)
+
+
+def test_enumeration_refuses_a_budget_that_cannot_cover_the_domain_before_evaluating():
+    for budget, options in ((Budget(max_evaluations=35), None), (Budget(max_evaluations=100), {"max_points": 20})):
+        result = ENUMERATION.solve(MIXED, budget=budget, options=options)
+        assert result.termination == Termination.MAX_EVALUATIONS and result.evaluations == 0 and not result.x
+        assert "36 points" in result.message
+    with pytest.raises(ValueError):
+        ENUMERATION.solve(MIXED, options={"max_points": 0})
+    with pytest.raises(ValueError):
+        ENUMERATION.solve(MIXED, options={"max_points": 2.5})
+    spec = ENUMERATION.capability.options["max_points"]
+    assert (spec.kind, spec.low, spec.high) == (int, 1, 1 << 20)
+
+
+def test_enumeration_takes_finite_domains_only_and_says_why_not():
+    open_integer = problem(Variable("n", "integer", lower=0), objective="n")
+    continuous = problem(Variable("x", lower=0.0, upper=1.0))
+    huge = problem(*(Variable(f"b{i}", "binary") for i in range(21)), objective="b0")
+    for p, words in ((open_integer, "not finite"), (continuous, "not finite"), (huge, "2097152 points")):
+        reason = ENUMERATION.capability.rejection(classify(p))
+        assert reason and words in reason, reason
+        assert ENUMERATION not in REGISTRY.compatible(p)
+    assert ENUMERATION in REGISTRY.compatible(MIXED)
+    assert classify(continuous).domain_size is None and classify(huge).domain_size == 1 << 21
+
+
+def test_enumeration_proves_infeasibility_and_ranks_after_every_other_solver():
+    infeasible = problem(Variable("n", "integer", lower=0, upper=5), objective="n",
+                         constraints=(Constraint("big", "n", ">=", 9.0),))
+    result = ENUMERATION.solve(infeasible)
+    assert result.termination == Termination.INFEASIBLE and result.evaluations == 6 and not result.solver_converged
+    assert [s.capability.solver_id for s in REGISTRY.compatible(MIXED)][-1] == "orbitopt.enumeration"
+    assert ENUMERATION.capability.convergence == "exhaustive" and ENUMERATION.capability.is_global
+
+
+def test_enumeration_evaluates_a_tool_objective_and_a_failing_tool_leaves_it_unproven():
+    calls = []
+
+    def cost(n, d):
+        calls.append((n, d))
+        return (n - 2.0) ** 2 + d
+
+    tooled = problem(Variable("n", "integer", lower=0, upper=4), Variable("d", "discrete", choices=(1.0, 3.0)),
+                     objective=(Objective("f", ToolCall("test.cost.v1", {"n": "n", "d": "d"})),))
+    result = ENUMERATION.solve(tooled, tools={"test.cost.v1": cost})
+    assert result.solver_converged and result.x == {"n": 2.0, "d": 1.0} and len(calls) == result.evaluations == 10
+
+    def flaky(n, d):
+        if n == 3.0:
+            raise RuntimeError("the tool is down")
+        return cost(n, d)
+
+    result = ENUMERATION.solve(tooled, tools={"test.cost.v1": flaky})
+    assert result.termination == Termination.STALLED and not result.solver_converged
+    assert "could not be evaluated" in result.message
+
+
+def test_enumeration_finds_the_knapsack_optimum_differential_evolution_misses():
+    inst = P.by_id("knapsack-p07-n15")
+    p = to_ir(inst)
+    de = DifferentialEvolutionSolver().solve(p, budget=budget_for(inst), seed=1)
+    exact = EnumerationSolver().solve(p, budget=Budget(max_evaluations=1 << 15))
+    assert de.objective_values["f0"] == 1456.0 and de.solver_converged  # a heuristic stop, not the optimum
+    assert exact.objective_values["f0"] == inst.reference.value == 1458.0 and exact.solver_converged
+    assert exact.evaluations == 1 << 15 and correct(inst, exact)

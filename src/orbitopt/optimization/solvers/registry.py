@@ -9,14 +9,19 @@ from ..problem import OptimizationProblem
 from ..result import OptimizationResult
 from .base import Solver, SolverCapability, require_valid
 from .cma_solvers import CmaEsSolver
+from .enumeration import EnumerationSolver
 from .pygmo_solvers import Nsga2Solver
 from .scipy_solvers import DifferentialEvolutionSolver, HighsSolver, LbfgsbSolver, SlsqpSolver
 
 
 def _specialisation(capability: SolverCapability) -> tuple:
-    """Sort key: the least general solver first, then the id, so the order never depends on registration."""
+    """Sort key: the least general solver first, then the id, so the order never depends on registration.
+
+    A solver that walks the whole domain comes after every other solver that takes the same problems.
+    """
     return (capability.max_form, capability.supports_constraints, capability.supports_equality,
-            capability.supports_integers, capability.is_global, capability.solver_id)
+            capability.supports_integers, capability.is_global, capability.max_domain_size is not None,
+            capability.solver_id)
 
 
 class SolverRegistry:
@@ -64,4 +69,4 @@ class SolverRegistry:
 def default_registry() -> SolverRegistry:
     """A registry of every built-in solver, including those whose backend is not installed."""
     return SolverRegistry([HighsSolver(), SlsqpSolver(), LbfgsbSolver(), DifferentialEvolutionSolver(),
-                           CmaEsSolver(), Nsga2Solver()])
+                           CmaEsSolver(), Nsga2Solver(), EnumerationSolver()])

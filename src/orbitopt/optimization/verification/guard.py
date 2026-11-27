@@ -9,7 +9,9 @@ status itself and reports a claim it cannot confirm as a finding:
 * ``independently_verified`` from caller-supplied evidence that names this
   problem and this result and comes from an allowed method other than the
   solver;
-* ``optimality_certified`` from a certificate the guard computes itself.
+* ``optimality_certified`` from a certificate the guard computes itself: the
+  KKT conditions of a convex problem, or, when the caller asks for it with an
+  ``EnumerationCertificate``, every point of a finite domain.
 
 Missing or mismatched evidence leaves a status not assessed, never passed,
 and an error inside the guard is recorded and never read as a pass.
@@ -27,10 +29,11 @@ from ..result import RESULT_SCHEMAS, OptimizationResult, Termination
 from . import certificates
 from ._point import PointCheck, check_point
 from .evidence import (
-    CERTIFICATE_KIND,
+    CERTIFICATE_KINDS,
     INDEPENDENT_KINDS,
     AlternateSolverCheck,
     AnalyticalOptimum,
+    EnumerationCertificate,
     EvidenceItem,
     LowerBoundCertificate,
     ReferenceSolution,
@@ -41,6 +44,7 @@ from .report import Finding, FindingCode, Outcome, StatusOutcome, VerificationRe
 Tools = Mapping[str, Callable[..., Any]]
 RE_EVALUATION = "guard:re-evaluation"
 KKT = "guard:kkt"
+ENUMERATION = "guard:enumeration"
 
 
 def verify_result(problem: OptimizationProblem, result: OptimizationResult | Mapping[str, Any], *,
@@ -206,7 +210,7 @@ class _Guard:
 
     def independent(self, result: OptimizationResult, digest: str, rdigest: str, point: Any) -> StatusOutcome:
         for i, item in enumerate(result.evidence):
-            if item.kind in INDEPENDENT_KINDS or item.kind == CERTIFICATE_KIND:
+            if item.kind in INDEPENDENT_KINDS or item.kind in CERTIFICATE_KINDS:
                 self.add(FindingCode.SELF_ATTESTATION, f"/result/evidence/{i}",
                          f"{item.kind} evidence supplied by the result itself is a claim, not verification")
         agree: dict[str, list[str]] = {}
@@ -268,7 +272,7 @@ class _Guard:
 
     def pinned(self, item, result: OptimizationResult, digest: str, rdigest: str, path: str) -> bool:
         """The item's kind is allowed, its digests name this problem and result, and it is not the solver's."""
-        if item.kind not in self.policy.independent_methods and item.kind != CERTIFICATE_KIND:
+        if item.kind not in self.policy.independent_methods and item.kind not in CERTIFICATE_KINDS:
             self.add(FindingCode.EVIDENCE_NOT_ALLOWED, path, f"the policy does not allow {item.kind!r} evidence")
             return False
         for name, expected in (("problem_digest", digest), ("result_digest", rdigest)):
@@ -345,22 +349,51 @@ class _Guard:
         return value
 
     def optimality(self, result: OptimizationResult, digest: str, rdigest: str, point: Any) -> StatusOutcome:
-        bounds = [e for e in self.evidence if getattr(e, "kind", None) == CERTIFICATE_KIND]
-        if not ("optimality_certified" in self.policy.required or result.optimality_certified is True or bounds):
+        certs = [e for e in self.evidence if getattr(e, "kind", None) in CERTIFICATE_KINDS]
+        if not ("optimality_certified" in self.policy.required or result.optimality_certified is True or certs):
             return StatusOutcome(Outcome.NOT_ASSESSED, "not requested by the policy, claimed or evidenced")
         if not isinstance(point, PointCheck) or point.outcome is not Outcome.PASSED:
             outcome = Outcome.FAILED if getattr(point, "outcome", None) is Outcome.FAILED else Outcome.NOT_ASSESSED
             return StatusOutcome(outcome, "optimality needs a feasible point", (RE_EVALUATION,))
-        for cert in bounds:
-            refuted = self.check_bound(cert, result, digest, rdigest, point)
-            if refuted:
-                return StatusOutcome(Outcome.FAILED, f"lower-bound certificate refuted: {refuted}", (cert.id,))
+        for cert in certs:
+            if isinstance(cert, LowerBoundCertificate):
+                refuted = self.check_bound(cert, result, digest, rdigest, point)
+                if refuted:
+                    return StatusOutcome(Outcome.FAILED, f"lower-bound certificate refuted: {refuted}", (cert.id,))
+        for cert in certs:
+            if isinstance(cert, EnumerationCertificate):
+                enumerated = self.check_enumeration(cert, result, digest, rdigest, point)
+                if enumerated is not None:
+                    return enumerated
         kkt = certificates.kkt_certificate(self.problem, result.x, self.policy)
         if kkt.outcome is Outcome.NOT_ASSESSED:
             self.add(FindingCode.CERTIFICATE_UNSUPPORTED, "/optimality_certified", kkt.reason)
         elif kkt.outcome is Outcome.FAILED:
             self.add(FindingCode.CERTIFICATE_FAILED, "/optimality_certified", kkt.reason)
         return StatusOutcome(kkt.outcome, kkt.reason, (KKT,))
+
+    def check_enumeration(self, cert: EnumerationCertificate, result, digest, rdigest,
+                          point: PointCheck) -> StatusOutcome | None:
+        """The guard's own enumeration of the finite domain; ``None`` when it could not decide."""
+        path = f"/evidence/{getattr(cert, 'id', '?')}"
+        try:
+            if not self.pinned(cert, result, digest, rdigest, path):
+                return None
+            objective = self.objective_name(cert, path)
+            if objective is None:
+                return None
+            outcome, reason = certificates.enumeration_certificate(self.problem, cert, objective,
+                                                                   point.objectives[objective], self.policy,
+                                                                   self.tools)
+        except Exception as exc:  # an evaluation past the budget, or anything else, never counts
+            self.add(FindingCode.EVIDENCE_ERROR, path, f"enumerating the domain raised {exc!r}")
+            return None
+        if outcome is Outcome.NOT_ASSESSED:
+            self.add(FindingCode.CERTIFICATE_UNSUPPORTED, path, reason)
+            return None
+        if outcome is Outcome.FAILED:
+            self.add(FindingCode.CERTIFICATE_FAILED, path, reason)
+        return StatusOutcome(outcome, reason, (ENUMERATION, cert.id))
 
     def check_bound(self, cert: LowerBoundCertificate, result, digest, rdigest, point: PointCheck) -> str | None:
         path = f"/evidence/{getattr(cert, 'id', '?')}"

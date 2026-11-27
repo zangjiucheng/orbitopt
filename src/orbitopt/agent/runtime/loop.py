@@ -8,7 +8,8 @@ not a sum of what solvers report. The meter also refuses any evaluation past
 the current allowance, so even a solver that ignores its ``Budget`` cannot
 overspend. A quarter of the evaluation budget (``VERIFICATION_SHARE``) is
 held back for the final verification, which runs the E14-06 guard with
-alternate solvers as independent evidence.
+alternate solvers as independent evidence and, on a finite domain the budget
+covers, the guard's enumeration certificate.
 """
 
 from __future__ import annotations
@@ -19,16 +20,17 @@ import time
 from typing import Any, Callable, Mapping
 
 from orbitopt.agent.tools import Caller, ToolError, ToolRegistry, ToolView, bind_problem
-from orbitopt.optimization import Budget, OptimizationProblem, OptimizationResult, ToolCall, validate_problem
+from orbitopt.optimization import (MAX_ENUMERATION_POINTS, Budget, OptimizationProblem, OptimizationResult, ToolCall,
+                                   validate_problem)
 from orbitopt.optimization.classify import classify
 from orbitopt.optimization.solvers import SolverCapability, SolverRegistry, default_registry
-from orbitopt.optimization.verification import (AlternateSolverCheck, Outcome, VerificationReport, result_digest,
-                                                unsupported_reason, verify_result)
+from orbitopt.optimization.verification import (AlternateSolverCheck, EnumerationCertificate, EvidenceItem, Outcome,
+                                                VerificationReport, result_digest, unsupported_reason, verify_result)
 
 from .diagnostics import diagnose, distrust, feasible
-from .model import (Action, AlternateRun, BudgetUse, FailureKind, IterationRecord, Limits, Policy, Proposal,
-                    RecordKind, RunOutcome, RunStatus, StopReason, Trace, VerificationRecord, Violation,
-                    ViolationCode)
+from .model import (Action, AlternateRun, BudgetUse, CancelPoint, CancelReason, FailureKind, IterationRecord, Limits,
+                    Policy, Proposal, RecordKind, RunOutcome, RunStatus, StopReason, Trace, VerificationRecord,
+                    Violation, ViolationCode)
 from .planners import Planner, PlannerState, PlannerUnavailable, default_options
 from .validation import validate_proposal
 
@@ -44,7 +46,7 @@ SCREEN_UNGRADED = frozenset({"independently_verified", "optimality_certified"})
 """Statuses a screen leaves to the final verification: it has no independent evidence and asks for no certificate."""
 
 Tools = ToolView | Mapping[str, Callable[..., Any]]
-Cancel = threading.Event | Callable[[], bool]
+Cancel = threading.Event | Callable[[], bool] | CancelPoint
 
 
 class EvaluationBudgetExceeded(Exception):
@@ -105,7 +107,9 @@ def solve(problem: OptimizationProblem, *, planner: Planner, budget: Budget | No
     neither takes the E14-10 default (``Limits.resolve``). ``policy`` says what
     the planner may change. ``tools`` is a ``ToolView`` (its allowlist is the
     set of known tool ids, and every call is logged) or a mapping of resolvers.
-    ``cancel`` is checked between iterations. The verification policy is
+    ``cancel`` is checked before each planner proposal and before the final
+    verification; the trace records where it fired. A ``CancelPoint`` cancels
+    at exactly that point, as ``replay`` does. The verification policy is
     always ``problem.verification``. Never raises for a bad proposal or a
     failing solver; a malformed problem is refused, not raised.
     """
@@ -114,12 +118,14 @@ def solve(problem: OptimizationProblem, *, planner: Planner, budget: Budget | No
     return run.execute()
 
 
-def _cancel_check(cancel: Cancel | None) -> Callable[[], bool]:
+def _cancel_check(cancel: Cancel | None) -> Callable[[int, CancelReason], bool]:
+    """Whether to cancel after ``done`` iterations at the check ``reason`` names."""
     if cancel is None:
-        return lambda: False
-    if isinstance(cancel, threading.Event):
-        return cancel.is_set
-    return cancel
+        return lambda done, reason: False
+    if isinstance(cancel, CancelPoint):
+        return lambda done, reason: (done, reason) == (cancel.iteration, cancel.reason)
+    check = cancel.is_set if isinstance(cancel, threading.Event) else cancel
+    return lambda done, reason: bool(check())
 
 
 class _Run:
@@ -127,7 +133,8 @@ class _Run:
 
     def __init__(self, problem, planner, limits, policy, tools, seed, cancelled, registry):
         self.asked, self.planner, self.limits, self.policy = problem, planner, limits, policy
-        self.seed, self.cancelled, self.registry, self.tools = seed, cancelled, registry, tools
+        self.seed, self.cancel_check, self.registry, self.tools = seed, cancelled, registry, tools
+        self.cancel_point: CancelPoint | None = None
         self.started = time.perf_counter()
         self.meter = EvaluationMeter(problem, limits.max_evaluations)
         self.problem = self.meter.problem
@@ -179,6 +186,13 @@ class _Run:
 
         return min(eligible, key=rank)
 
+    def cancelled(self, reason: CancelReason) -> bool:
+        """Whether the cancel check fires here; the point where it fired goes into the trace."""
+        if not self.cancel_check(len(self.records), reason):
+            return False
+        self.cancel_point = CancelPoint(len(self.records), reason)
+        return True
+
     # ------------------------------------------------------------------------------------------------- the run
     def execute(self) -> RunOutcome:
         refusal = self.admit()
@@ -186,7 +200,7 @@ class _Run:
             return self.finish(StopReason.REFUSED, refusal)
         stop = self.iterate()
         if stop not in (StopReason.CANCELLED, StopReason.POLICY_VIOLATION, StopReason.MAX_WALL_S):
-            if self.cancelled():
+            if self.cancelled(CancelReason.BEFORE_VERIFICATION):
                 stop = StopReason.CANCELLED
             else:
                 self.verify_best()
@@ -217,7 +231,7 @@ class _Run:
 
     def iterate(self) -> StopReason:
         while True:
-            if self.cancelled():
+            if self.cancelled(CancelReason.BEFORE_ITERATION):
                 return StopReason.CANCELLED
             usage = self.usage()
             reason = usage.exhausted(self.limits)
@@ -338,28 +352,46 @@ class _Run:
                 return  # only an alternate's better point is worth another attempt
 
     def alternates(self, result: OptimizationResult, remaining: int, attempt: int,
-                   runs: list[AlternateRun]) -> list[AlternateSolverCheck]:
-        """Alternate solvers for the guard to run, each with an equal share of what verification may spend.
+                   runs: list[AlternateRun]) -> list[EvidenceItem]:
+        """The evidence for the guard: alternate solvers to run, and the guard's own enumeration where it fits.
 
-        They come from every compatible solver except the candidate's own and
-        those the run excluded for a dishonest report or a crash. The policy's
-        solver list does not apply: it limits the planner, and choosing the
-        verification is not the planner's job.
+        Alternates come from every compatible solver except the candidate's
+        own and those the run excluded for a dishonest report or a crash. The
+        policy's solver list does not apply: it limits the planner, and
+        choosing the verification is not the planner's job. An exhaustive
+        solver is the alternate when the evaluations left cover the domain,
+        with exactly the domain as its allocation; it is exact, so it runs
+        alone. Otherwise up to ``MAX_ALTERNATES`` others share what is left
+        equally. On a finite single-objective domain that still fits, an
+        ``EnumerationCertificate`` asks the guard to enumerate it itself,
+        which can pass ``optimality_certified``. The alternates come first:
+        the certificate takes only what they leave.
         """
         policy = self.asked.verification
-        if "independently_verified" not in policy.required or "alternate_solver" not in policy.independent_methods:
-            return []
-        others = [c.solver_id for c in self.capabilities
-                  if c.solver_id != result.solver_id and c.solver_id not in self.excluded][:MAX_ALTERNATES]
-        if not others:
-            return []
-        share = (remaining - self.screen_cost * (1 + len(others))) // len(others)
+        size = self.structure.domain_size
+        wanted = "independently_verified" in policy.required and "alternate_solver" in policy.independent_methods
+        others = [c for c in self.capabilities if wanted and c.solver_id != result.solver_id
+                  and c.solver_id not in self.excluded]
+        spare = remaining - self.screen_cost  # the guard's re-evaluation of the candidate
+        exact = [c for c in others if c.convergence == "exhaustive" and size is not None
+                 and spare - self.screen_cost >= size][:1]
+        rest = [] if exact else [c for c in others if c.convergence != "exhaustive"][:MAX_ALTERNATES]
+        spare -= self.screen_cost * (len(exact) + len(rest)) + sum(size for _ in exact)
+        certify = size is not None and len(self.asked.objectives) == 1 and size <= MAX_ENUMERATION_POINTS \
+            and spare - size >= MIN_ALTERNATE_EVALUATIONS * len(rest)
+        spare -= size if certify else 0
+        share = spare // len(rest) if rest else 0
         if share < MIN_ALTERNATE_EVALUATIONS:
-            return []
+            rest = []
         digest, rdigest = self.asked.digest(), result_digest(result)
-        return [AlternateSolverCheck(id=f"alternate:{sid}", problem_digest=digest, result_digest=rdigest,
-                                     solver_id=sid, solver=self.alternate(sid, share, self.seed + attempt + k, runs))
-                for k, sid in enumerate(others)]
+        plan = [(c.solver_id, size) for c in exact] + [(c.solver_id, share) for c in rest]
+        evidence: list[EvidenceItem] = [
+            AlternateSolverCheck(id=f"alternate:{sid}", problem_digest=digest, result_digest=rdigest, solver_id=sid,
+                                 solver=self.alternate(sid, allocation, self.seed + attempt + k, runs))
+            for k, (sid, allocation) in enumerate(plan)]
+        if certify:
+            evidence.append(EnumerationCertificate(id="enumeration", problem_digest=digest, result_digest=rdigest))
+        return evidence
 
     def alternate(self, solver_id: str, share: int, seed: int, runs: list[AlternateRun]):
         capability = next(c for c in self.capabilities if c.solver_id == solver_id)
@@ -389,7 +421,8 @@ class _Run:
                       self.seed, self.limits, self.policy,
                       tuple(c.solver_id for c in self.capabilities), tuple(self.records),
                       tuple(self.verifications), status, stop, None if best is None else best[0], self.usage(),
-                      refusal)
+                      refusal, self.cancel_point, getattr(self.planner, "provider", None),
+                      getattr(self.planner, "model", None))
         return RunOutcome(status, stop, None if best is None else best[1], report,
                           self.evidence.get(best[0], ()) if best else (), trace, self.asked, dict(self.results),
                           self.tool_log)

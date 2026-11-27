@@ -44,7 +44,7 @@ from typing import Any, Callable, Literal, Mapping, Protocol, Sequence
 
 from ..classify import Form, ProblemStructure, classify
 from ..errors import InvalidProblemError
-from ..expressions import EvaluationError
+from ..expressions import EvaluationError, ToolCallError
 from ..problem import Budget, OptimizationProblem, Variable, validate_problem
 from ..result import Evidence, OptimizationResult, ParetoPoint, Termination
 
@@ -53,9 +53,10 @@ _BUDGET_STOPS = (Termination.MAX_EVALUATIONS, Termination.TIMEOUT, Termination.C
 _DEFINITE_STOPS = (Termination.ERROR, Termination.UNBOUNDED, *_BUDGET_STOPS)
 """Stops reported as they are, whether or not a feasible point was found."""
 
-Convergence = Literal["certificate", "first_order", "heuristic", "none"]
+Convergence = Literal["certificate", "exhaustive", "first_order", "heuristic", "none"]
 CONVERGENCE_MEANINGS: dict[str, str] = {
     "certificate": "the backend proved optimality within its gap tolerance (LP duality, MILP bound)",
+    "exhaustive": "every point of the finite domain was evaluated: the global optimum within the constraint tolerance",
     "first_order": "a first-order stationary (KKT) point; the global optimum only when the problem is convex",
     "heuristic": "the search stagnated; no optimality claim",
     "none": "the solver has no convergence test and never reports converged",
@@ -121,6 +122,9 @@ class SolverCapability:
     ``max_backend_iterations`` sets (generations for NSGA-II). ``options`` maps each option name ``solve``
     accepts to its ``OptionSpec``. ``backend`` is the module the solver
     imports; when it cannot be found, ``unavailable_reason`` says so.
+    ``max_domain_size`` is set by a solver that walks the whole domain: it
+    takes a problem only when every variable has finitely many values and
+    their product has at most this many points.
     """
 
     solver_id: str
@@ -137,6 +141,7 @@ class SolverCapability:
     deterministic_given_seed: bool = True
     iteration_cap: bool = False
     options: Mapping[str, OptionSpec] = field(default_factory=dict)
+    max_domain_size: int | None = None
     unavailable_reason: str | None = None
 
     @property
@@ -154,6 +159,11 @@ class SolverCapability:
             (structure.constrained and not self.supports_constraints, "it has constraints besides variable bounds"),
             (structure.equality and not self.supports_equality, "it has equality constraints"),
             (self.needs_finite_bounds and not structure.bounded, "a variable has an open bound"),
+            (self.max_domain_size is not None and structure.domain_size is None,
+             "a variable is continuous or has an open bound, so the domain is not finite"),
+            (self.max_domain_size is not None and structure.domain_size is not None
+             and structure.domain_size > self.max_domain_size,
+             f"its domain has {structure.domain_size} points, more than the {self.max_domain_size} it enumerates"),
         )
         reasons = [why for failed, why in checks if failed]
         return f"{self.solver_id} cannot take this {structure.problem_class.value} problem: " + "; ".join(reasons) \
@@ -270,6 +280,7 @@ class Evaluator:
         self.deadline = None if budget.max_wall_s is None else started + budget.max_wall_s
         self.count = 0
         self.failures = 0
+        self.tool_failures = 0
         self.last_failure = ""
         self.best: Point | None = None
         self._best_key: tuple | None = None
@@ -310,6 +321,7 @@ class Evaluator:
             ev = problem.evaluate(x, self.tools)
         except EvaluationError as exc:  # undefined here, or a tool failed (ToolCallError): the point is infeasible
             self.failures += 1
+            self.tool_failures += isinstance(exc, ToolCallError)
             self.last_failure = str(exc)
             inf = math.inf
             return Point(x, {}, {}, (inf,) * len(problem.objectives), (inf,) * len(problem.constraints), False, inf,

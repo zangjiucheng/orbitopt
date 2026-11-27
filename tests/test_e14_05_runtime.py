@@ -31,14 +31,20 @@ from orbitopt.agent.runtime import (
     RuleBasedPlanner,
     RunStatus,
     StopReason,
+    UnsafePathError,
     ViolationCode,
+    CancelPoint,
+    CancelReason,
     known_tool_ids,
     load_trace,
+    orbitopt_version,
     loosened,
+    check_run,
     replay,
     save_run,
     solve,
     trace_digest,
+    upgrade_trace,
 )
 from orbitopt.agent.tools import builtin_registry
 from orbitopt.optimization import (
@@ -492,6 +498,74 @@ def test_cancellation_between_iterations_keeps_the_best_so_far_unverified():
     assert outcome.status is RunStatus.CANCELLED and len(outcome.trace.iterations) == 2
     assert outcome.trace.verifications == () and outcome.result is not None
     assert outcome.report.verdict is not Outcome.PASSED
+    assert outcome.trace.cancel == CancelPoint(2, CancelReason.BEFORE_ITERATION)
+    assert outcome.trace.to_dict()["outcome"]["cancel"] == {"iteration": 2, "reason": "before_iteration"}
+
+
+@pytest.mark.parametrize("when, reason", [("first", CancelReason.BEFORE_ITERATION), ("third", CancelReason.BEFORE_ITERATION),
+                                          ("verification", CancelReason.BEFORE_VERIFICATION)])
+def test_a_cancelled_run_replays_equal(tmp_path, when, reason):
+    """The trace records where the cancel fired; replay cancels there, so it reproduces the whole trace."""
+    problem = to_ir(P.by_id("rastrigin-d5"))
+    records = len(solve(problem, planner=RuleBasedPlanner()).trace.iterations)  # one check before each proposal
+    fire = {"first": 1, "third": 3, "verification": records + 1}[when]
+    checks = []
+    cancel = lambda: checks.append(1) or len(checks) >= fire  # noqa: E731
+    outcome = solve(problem, planner=RuleBasedPlanner(), cancel=cancel)
+    assert outcome.status is RunStatus.CANCELLED and outcome.trace.cancel.reason is reason
+    digest = save_run(outcome, tmp_path)
+    report = replay(tmp_path, expected_manifest_digest=digest)
+    assert report.equal, (report.integrity, report.differences)
+    assert report.replayed_digest == report.recorded_digest == outcome.trace.digest()
+
+
+def test_a_cancel_point_cancels_a_run_exactly_there():
+    problem = to_ir(P.by_id("rastrigin-d5"))
+    outcome = solve(problem, planner=RuleBasedPlanner(), cancel=CancelPoint(1, CancelReason.BEFORE_ITERATION))
+    assert outcome.status is RunStatus.CANCELLED and len(outcome.trace.iterations) == 1
+    assert outcome.trace.cancel == CancelPoint(1, CancelReason.BEFORE_ITERATION)
+    never = solve(problem, planner=RuleBasedPlanner(), cancel=CancelPoint(50, CancelReason.BEFORE_ITERATION))
+    assert never.status is RunStatus.VERIFIED and never.trace.cancel is None
+
+
+def _as_trace_1_0(run: Path) -> dict:
+    """Rewrite a saved run's trace as agent-trace-1.0 (no cancel point) and reseal the manifest."""
+    trace = json.loads((run / "trace.json").read_text())
+    trace["schemaVersion"] = "1.0"
+    del trace["outcome"]["cancel"], trace["provider"], trace["model"], trace["orbitopt_version"]
+    trace["digest"] = trace_digest(trace)
+    (run / "trace.json").write_bytes(canonical_json(trace))
+    manifest = json.loads((run / "manifest.json").read_text())
+    manifest["files"]["trace.json"] = file_digest(canonical_json(trace))
+    manifest["trace_digest"] = trace["digest"]
+    (run / "manifest.json").write_bytes(canonical_json(manifest))
+    return trace
+
+
+def test_a_1_0_trace_still_parses_checks_and_replays(tmp_path):
+    outcome = solve(WORKED, planner=RuleBasedPlanner())
+    save_run(outcome, tmp_path)
+    old = _as_trace_1_0(tmp_path)
+    assert load_trace(tmp_path) == old  # validated against agent-trace-1.0.json, returned as recorded
+    upgraded = upgrade_trace(old)
+    assert upgraded["schemaVersion"] == "1.1" and upgraded["outcome"]["cancel"] is None
+    assert (upgraded["provider"], upgraded["model"], upgraded["orbitopt_version"]) == (None, None, None)
+    assert check_run(tmp_path).verified
+    report = replay(tmp_path)
+    assert report.equal, (report.integrity, report.differences)
+    assert report.recorded_digest == old["digest"] != report.replayed_digest  # the 1.1 digest covers the 1.1 form
+
+
+def test_a_cancelled_1_0_trace_replays_as_before_without_a_cancel(tmp_path):
+    """A 1.0 trace does not say where the cancel fired: replay runs on as it always did, and so diverges."""
+    checks = []
+    outcome = solve(to_ir(P.by_id("rastrigin-d5")), planner=RuleBasedPlanner(),
+                    cancel=lambda: checks.append(1) or len(checks) > 2)
+    save_run(outcome, tmp_path)
+    _as_trace_1_0(tmp_path)
+    assert check_run(tmp_path).intact
+    report = replay(tmp_path)
+    assert report.integrity == () and report.differences
 
 
 # ------------------------------------------------------------------------------------- tools
@@ -531,7 +605,9 @@ def test_a_tool_based_problem_through_an_allowlisted_view(tmp_path):
     first = next(n for n in range(1, 20)
                  if abs(sum(w * math.exp(-((t + 1) / 2) ** 2) for t, w in zip(*leggauss(n))) / 2 - exact) <= 1e-12)
     assert outcome.result.x["n"] == first
-    assert outcome.status is RunStatus.UNVERIFIED_BEST  # differential evolution alone: no alternate
+    assert outcome.status is RunStatus.VERIFIED  # n takes 64 values: enumeration is the independent alternate
+    assert [a.solver_id for a in outcome.trace.verifications[-1].alternates] == ["orbitopt.enumeration"]
+    assert outcome.statuses["optimality_certified"] == "passed"  # and the guard enumerated the domain itself
     assert len(view.log) == outcome.trace.usage.evaluations
     save_run(outcome, tmp_path)
     assert (tmp_path / "tool-calls.json").exists()
@@ -639,6 +715,36 @@ def test_a_tampered_run_directory_is_never_replayed_as_equal(target, tmp_path):
         assert report.sealed_verdict != Outcome.PASSED.value
 
 
+@pytest.mark.parametrize("name", ["../outside.json", "results/../../outside.json", "ABSOLUTE", "sealed\\..\\x"])
+@pytest.mark.parametrize("check", [replay, check_run])
+def test_a_manifest_name_that_leaves_the_run_is_refused_before_any_file_is_read(tmp_path, name, check, monkeypatch):
+    run = tmp_path / "run"
+    save_run(solve(WORKED, planner=RuleBasedPlanner()), run)
+    outside = tmp_path / "outside.json"
+    outside.write_bytes(b"{}")
+    manifest = json.loads((run / "manifest.json").read_text())
+    manifest["files"][str(outside) if name == "ABSOLUTE" else name] = file_digest(b"{}")
+    (run / "manifest.json").write_bytes(canonical_json(manifest))
+    read = []
+    real = Path.read_bytes
+    monkeypatch.setattr(Path, "read_bytes", lambda self: read.append(self.name) or real(self))
+    with pytest.raises(UnsafePathError):
+        check(run)
+    assert read == ["manifest.json"]
+
+
+@pytest.mark.parametrize("folder", ["../sealed", "/tmp/sealed"])
+def test_a_sealed_folder_outside_the_run_is_refused(tmp_path, folder):
+    run = tmp_path / "run"
+    save_run(solve(WORKED, planner=RuleBasedPlanner()), run)
+    manifest = json.loads((run / "manifest.json").read_text())
+    manifest["sealed"]["dir"] = folder
+    (run / "manifest.json").write_bytes(canonical_json(manifest))
+    for check in (replay, check_run):
+        with pytest.raises(UnsafePathError):
+            check(run)
+
+
 def test_a_forger_who_recomputes_every_digest_still_fails_replay(tmp_path):
     outcome = solve(WORKED, planner=RuleBasedPlanner())
     save_run(outcome, tmp_path)
@@ -652,9 +758,51 @@ def test_a_forger_who_recomputes_every_digest_still_fails_replay(tmp_path):
     manifest["trace_digest"] = trace["digest"]
     (tmp_path / "manifest.json").write_bytes(canonical_json(manifest))
     report = replay(tmp_path)
-    assert report.integrity == ()
+    assert any("iteration-0001 is not the result in results/iteration-0001.json" in i for i in report.integrity)
     assert any("objective_values/distance_sq" in d for d in report.differences)
     assert report.status == "diverged"
+    assert not check_run(tmp_path).intact  # caught without re-executing anything
+
+
+class Untouchable(SlsqpSolver):
+    """A solver the integrity check must never run."""
+
+    def solve(self, *args, **kwargs):
+        raise AssertionError("check_run ran a solver")
+
+
+def test_check_run_regrades_the_sealed_run_with_recorded_alternates_and_runs_no_solver(tmp_path, monkeypatch):
+    outcome = solve(to_ir(P.by_id("cqp-worked-d2")), planner=RuleBasedPlanner())
+    assert outcome.status is RunStatus.VERIFIED and outcome.trace.verifications[-1].alternates
+    digest = save_run(outcome, tmp_path)
+    calls = []
+    monkeypatch.setattr(DifferentialEvolutionSolver, "solve", lambda *a, **k: calls.append(a) or None)
+    report = check_run(tmp_path, registry=SolverRegistry([Untouchable()]), expected_manifest_digest=digest)
+    assert report.intact and report.verified and report.alternates == "recorded" and calls == []
+    assert report.report.statuses["independently_verified"].outcome is Outcome.PASSED
+    assert report.recorded_status == "verified" and report.trace["digest"] == outcome.trace.digest()
+    assert set(report.files) >= {"manifest.json", "trace.json", "problem.json", "sealed/result.json",
+                                 "sealed/manifest.json"}
+    assert report.files["trace.json"] == (tmp_path / "trace.json").read_bytes()
+
+
+def test_check_run_finds_a_recorded_alternate_that_was_rewritten(tmp_path):
+    """The recorded alternate goes through the guard: a forged one that disagrees fails the re-grade."""
+    outcome = solve(to_ir(P.by_id("cqp-worked-d2")), planner=RuleBasedPlanner())
+    save_run(outcome, tmp_path)
+    label = next(p.stem for p in (tmp_path / "results").glob("verify-*.json"))
+    path = tmp_path / "results" / f"{label}.json"
+    data = json.loads(path.read_text())
+    data["x"] = {k: v + 0.5 for k, v in data["x"].items()}  # a point that is not where the alternate stopped
+    path.write_bytes(canonical_json(data))
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    manifest["files"][f"results/{label}.json"] = file_digest(canonical_json(data))
+    (tmp_path / "manifest.json").write_bytes(canonical_json(manifest))
+    report = check_run(tmp_path)
+    assert not report.intact
+    assert any(label in i for i in report.integrity)
+
+
 
 
 # ------------------------------------------------------------------------------------- persistence and replay
@@ -708,6 +856,30 @@ def test_a_recorded_transcript_reproduces_the_run(tmp_path):
     assert replayed.trace.digest() == recorded.trace.digest()
 
 
+def test_the_trace_names_the_provider_model_and_version_and_only_the_version_is_outside_the_digest(tmp_path):
+    mock = MockProvider([json.dumps({"action": "solve", "solver_id": "scipy.slsqp"}), json.dumps({"action": "stop"})],
+                        model="qwen-test")
+    outcome = solve(WORKED, planner=LLMPlanner(mock))
+    body = outcome.trace.to_dict()
+    assert (body["planner"], body["provider"], body["model"]) == ("llm", "mock", "qwen-test")
+    assert body["orbitopt_version"] == orbitopt_version()
+    rule = solve(WORKED, planner=RuleBasedPlanner()).trace.to_dict()
+    assert (rule["provider"], rule["model"]) == (None, None)
+    assert trace_digest({**body, "orbitopt_version": "9.9.9"}) == body["digest"]  # environmental
+    assert trace_digest({**body, "model": "another-model"}) != body["digest"]  # defines the run
+    assert trace_digest({**body, "provider": "openai_compat"}) != body["digest"]
+    save_run(outcome, tmp_path)
+    trace = json.loads((tmp_path / "trace.json").read_text())
+    trace["orbitopt_version"] = "0.0.1"  # recorded by another version: the digest and the replay still hold
+    (tmp_path / "trace.json").write_bytes(canonical_json(trace))
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    manifest["files"]["trace.json"] = file_digest(canonical_json(trace))
+    (tmp_path / "manifest.json").write_bytes(canonical_json(manifest))
+    report = replay(tmp_path)
+    assert report.equal, (report.integrity, report.differences)
+    assert report.check.trace["orbitopt_version"] == "0.0.1"
+
+
 def test_two_runs_with_the_same_seed_have_the_same_trace_digest():
     problem = to_ir(P.by_id("rastrigin-d5"))
     a = solve(problem, planner=RuleBasedPlanner(), seed=7)
@@ -725,7 +897,8 @@ def test_two_runs_with_the_same_seed_have_the_same_trace_digest():
 
 # ------------------------------------------------------------------------------------- end to end on the catalogue
 E2E = ["cqp-worked-d2", "lp-wyndor-d2", "knapsack-p01-n10", "rastrigin-d5", "rosenbrock-d20", "integ-exp-1e-10"]
-VERIFIES = {"cqp-worked-d2", "lp-wyndor-d2", "knapsack-p01-n10", "rastrigin-d5", "rosenbrock-d20"}
+CERTIFIED = {"knapsack-p01-n10"}
+"""Instances whose final report also passes ``optimality_certified``: the guard's enumeration fits the budget."""
 
 
 def llm_policy(request) -> str:
@@ -757,11 +930,8 @@ def test_catalogue_instances_reach_the_known_optimum(instance, planner_kind):
     assert correct(inst, outcome.result), (outcome.status, outcome.result.objective_values)
     assert outcome.trace.usage.evaluations <= A.BUDGET.evaluations(inst.dimension)
     assert every_result_answers(outcome, problem)
-    if instance in VERIFIES:
-        assert outcome.status is RunStatus.VERIFIED
-    else:  # one solver only: nothing independent can check it, and the runtime says so
-        assert outcome.status is RunStatus.UNVERIFIED_BEST
-        assert outcome.statuses["independently_verified"] == "not_assessed"
+    assert outcome.status is RunStatus.VERIFIED  # the integration instance through the enumeration alternate
+    assert (outcome.statuses["optimality_certified"] == "passed") == (instance in CERTIFIED)
     if planner_kind == "rule":
         assert outcome.trace.usage.tokens == 0
     else:
@@ -786,3 +956,60 @@ def test_the_public_api_is_importable_and_imports_no_backend():
             "if m.split('.')[0] in ('scipy', 'numpy'))")
     subprocess.run([sys.executable, "-c", code], check=True, cwd=REPO,
                    env={"PYTHONPATH": str(REPO / "src"), "PATH": ""})
+
+
+def test_a_recorded_alternate_that_is_not_a_result_is_a_finding_not_a_crash(tmp_path):
+    save_run(solve(to_ir(P.by_id("cqp-worked-d2")), planner=RuleBasedPlanner()), tmp_path)
+    label = next(p.stem for p in (tmp_path / "results").glob("verify-*.json"))
+    (tmp_path / "results" / f"{label}.json").write_bytes(b"{}")
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    manifest["files"][f"results/{label}.json"] = file_digest(b"{}")
+    (tmp_path / "manifest.json").write_bytes(canonical_json(manifest))
+    report = check_run(tmp_path)
+    assert not report.intact and any(f"results/{label}.json: not a result" in i for i in report.integrity)
+    assert not report.verified
+
+
+# ------------------------------------------------------------------------------------- enumeration in verification
+def test_enumeration_verifies_and_certifies_a_knapsack_that_differential_evolution_gets_wrong():
+    """knapsack-p07-n15: differential evolution stops at 1456, the optimum is 1458 (2^15 points)."""
+    inst = P.by_id("knapsack-p07-n15")
+    problem = to_ir(inst)
+    de_first = RecordedPlanner([Proposal({"action": "solve", "solver_id": "scipy.differential_evolution", "seed": 1}),
+                                Proposal({"action": "stop"})])
+    outcome = solve(problem, planner=de_first, budget=Budget(max_evaluations=100_000))
+    first, second = outcome.trace.verifications
+    assert solves(outcome)[0].result.objective_values["f0"] == 1456.0
+    assert [a.solver_id for a in first.alternates] == ["orbitopt.enumeration"]
+    assert first.alternates[0].allocation == first.alternates[0].result.evaluations == 1 << 15
+    assert first.report.statuses["independently_verified"].outcome is Outcome.FAILED  # refuted
+    assert first.report.statuses["optimality_certified"].outcome is Outcome.FAILED  # and the guard's own count agrees
+    assert outcome.status is RunStatus.VERIFIED and outcome.result.objective_values["f0"] == 1458.0
+    assert second.candidate == "verify-1-orbitopt.enumeration" and correct(inst, outcome.result)
+    assert outcome.trace.usage.evaluations <= 100_000
+
+    rule = solve(problem, planner=RuleBasedPlanner(), budget=Budget(max_evaluations=100_000))
+    assert rule.status is RunStatus.VERIFIED and rule.statuses == {
+        "solver_converged": "passed", "constraints_satisfied": "passed", "independently_verified": "passed",
+        "optimality_certified": "passed"}
+    (only,) = rule.trace.verifications
+    assert [a.solver_id for a in only.alternates] == ["orbitopt.enumeration"]
+    assert only.evaluations == 2 * (1 << 15) + 3  # the alternate's points, the guard's own and three re-evaluations
+
+
+def test_enumeration_is_left_out_of_verification_when_the_budget_cannot_cover_the_domain():
+    problem = to_ir(P.by_id("knapsack-p07-n15"))  # 2^15 points, default limit 2000 * 15
+    outcome = solve(problem, planner=RuleBasedPlanner())
+    assert outcome.trace.limits.max_evaluations == 30_000
+    assert outcome.status is RunStatus.VERIFIED and outcome.statuses["optimality_certified"] == "not_assessed"
+    assert "orbitopt.enumeration" not in {a.solver_id for v in outcome.trace.verifications for a in v.alternates}
+    assert outcome.trace.usage.evaluations <= 30_000
+
+
+def test_a_run_verified_by_enumeration_replays_and_checks(tmp_path):
+    outcome = solve(to_ir(P.by_id("knapsack-p02-n5")), planner=RuleBasedPlanner())
+    assert outcome.statuses["optimality_certified"] == "passed"
+    digest = save_run(outcome, tmp_path)
+    check = check_run(tmp_path, expected_manifest_digest=digest)
+    assert check.verified and check.report.statuses["optimality_certified"].outcome is Outcome.PASSED
+    assert replay(tmp_path, expected_manifest_digest=digest).equal

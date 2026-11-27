@@ -28,7 +28,7 @@ failed verdict.
 | Argument | Meaning |
 |---|---|
 | `policy` | Defaults to `problem.verification`. It names the required statuses and the tolerances. |
-| `evidence` | Evidence items for `independently_verified` and lower-bound certificates. The guard checks each item itself. |
+| `evidence` | Evidence items for `independently_verified`, and lower-bound and enumeration certificates. The guard checks each item itself. |
 | `artifact_digest` | The digest recorded for the result when it was stored. It must equal `result_digest(result)`. |
 | `solved_problem` | The problem the solver actually ran, when it differs from the graded one. A cache hit is not an argument: it is `result.provenance.cache_key`, which the result digest covers. |
 | `tools` | Resolvers for `ToolCall` objectives and constraints, by tool id. |
@@ -49,10 +49,11 @@ evidence ids it rests on.
 | `solver_converged` | `termination` is `converged`. | Any other termination. | Never. |
 | `constraints_satisfied` | The guard re-evaluates `result.x` through `OptimizationProblem.evaluate`, and every bound, integrality rule, discrete choice and hard constraint holds within `constraint_tol`. `OptimizationProblem.constraints_satisfied` must agree. | A value is missing, not a number or not finite, or a domain or constraint is violated, or the problem is not defined at the point. | A `ToolCall` has no resolver, or a tool raised. |
 | `independently_verified` | At least one allowed evidence item validates against this result and agrees with the re-evaluated objective. No validated item disagrees. | A validated item disagrees. | No evidence item validates. |
-| `optimality_certified` | The KKT certificate passes and no lower-bound certificate is refuted. | The point is infeasible, the KKT check fails, or a lower-bound certificate is refuted. | Not requested, the problem is outside the certifiable class, or the point could not be evaluated. |
+| `optimality_certified` | The guard's enumeration of a finite domain finds nothing better, or the KKT certificate passes, and no lower-bound certificate is refuted. | The point is infeasible, the enumeration finds a better feasible point, the KKT check fails, or a lower-bound certificate is refuted. | Not requested, the problem is outside the certifiable class, or the point could not be evaluated. |
 
 The guard attempts `optimality_certified` when the policy requires it, when
-the result claims it, or when a lower-bound certificate is supplied.
+the result claims it, or when a lower-bound or enumeration certificate is
+supplied.
 
 ## Verdict
 
@@ -104,6 +105,13 @@ records `self_attestation`.
 | `ReferenceSolution` | `reference_solution` | A non-empty `source`. The tolerance is `min(tolerance, objective_rtol * max(1, abs(value)))`, so a reference can tighten the policy but never loosen it. |
 | `AlternateSolverCheck` | `alternate_solver` | The guard calls `solver(problem)` itself. The returned result must answer the graded problem and come from the declared `solver_id`, which must differ from the graded result's. Its point must be feasible on re-evaluation. A better objective than the result's refutes the result. A worse one is inconclusive. |
 | `LowerBoundCertificate` | `optimality_certificate` | See the next section. |
+| `EnumerationCertificate` | `enumeration_certificate` | A request, not a claim. The guard enumerates the domain itself. See the next section. |
+
+`policy.independent_methods` lists the methods for `independently_verified`.
+It does not apply to the two certificate kinds (`CERTIFICATE_KINDS`), which
+bear on `optimality_certified` only. A certificate's digests must still pin
+this problem and this result, and its `producer` must not be the result's
+solver.
 
 `AlternateSolver` is a protocol: any callable that takes an
 `OptimizationProblem` and returns an `OptimizationResult`. The guard ships no
@@ -111,8 +119,45 @@ solver of its own.
 
 ## What the guard can certify
 
-`optimality_certified` passes only through the KKT certificate
-(`kkt_certificate`). The certificate applies to a problem with these
+`optimality_certified` passes only through a certificate that the guard
+computes itself: the enumeration of a finite domain, or the KKT conditions
+of a convex problem.
+
+### Enumeration
+
+An `EnumerationCertificate(id, problem_digest, result_digest, objective=None, max_points=MAX_ENUMERATION_POINTS)`
+asks the guard to evaluate every point of the domain (`enumeration_certificate`).
+It applies to a single-objective problem whose every variable takes finitely
+many values: binary, discrete, or integer with both bounds
+(`Variable.domain_values`). The product of the domains has at most
+`min(max_points, MAX_ENUMERATION_POINTS)` points, and `MAX_ENUMERATION_POINTS`
+is 1,048,576 (2^20), whatever the item asks. The guard walks every point with
+its own point check, tools included, and compares each feasible point's
+objective with the result's.
+
+- `passed`: no feasible point beats the result by more than
+  `objective_rtol * max(1, abs(f))` in the objective's sense. That is a
+  proof for any objective, a black box included, because nothing was left
+  out.
+- `failed`: a feasible point beats it. The finding names the point.
+- `not_assessed`: a variable is continuous or unbounded, the domain is
+  larger than the cap, the problem has several objectives, or some point
+  could not be evaluated (no resolver, or a tool raised), since that point
+  could be the better one. The guard then goes on to the KKT certificate,
+  which does not apply to a discrete problem either.
+
+A point outside an expression's domain is not feasible, as everywhere else
+in the guard. The enumeration costs one evaluation per point, which is why
+it runs only on request and never on a plain screen.
+
+An enumeration solver's own convergence is never a certificate. Its result
+counts toward `independently_verified` as an `AlternateSolverCheck`, like
+any other alternate solver. Only the guard's own enumeration passes
+`optimality_certified`.
+
+### The KKT conditions
+
+The KKT certificate (`kkt_certificate`) applies to a problem with these
 properties:
 
 - It has exactly one objective, and every variable is continuous.
@@ -136,11 +181,12 @@ passes when the stationarity residual is at most
 `optimality_gap * max(1, abs(f))`. Primal feasibility comes from
 `constraints_satisfied`.
 
-Every other problem is `not_assessed`: non-convex objectives (Rosenbrock,
-Rastrigin, an indefinite quadratic), mixed-integer and discrete problems,
-multi-objective problems and tool-evaluated problems. **This guard never
-certifies global optimality of a non-convex problem**, even when the point is
-the known optimum.
+Every other problem is `not_assessed` by KKT: non-convex objectives
+(Rosenbrock, Rastrigin, an indefinite quadratic), mixed-integer and discrete
+problems, multi-objective problems and tool-evaluated problems. A discrete
+problem whose domain is small enough can still be certified by enumeration.
+**This guard never certifies global optimality of a continuous non-convex
+problem**, even when the point is the known optimum.
 
 A `LowerBoundCertificate` states a bound and its derivation. The guard checks
 that the result attains the bound within `optimality_gap`. It also tries to
@@ -162,7 +208,7 @@ writes four files and returns the manifest digest:
 |---|---|
 | `problem.json` | `problem.to_dict()` for the problem the solver ran. |
 | `result.json` | `result.to_dict()`, whose `provenance` records a cache hit. |
-| `evidence.json` | The evidence items. An `AlternateSolverCheck` is stored without its callable. |
+| `evidence.json` | The evidence items. An `AlternateSolverCheck` is stored without its callable. An `EnumerationCertificate` is stored as it is, so `verify_run` enumerates the domain again. |
 | `manifest.json` | Format `orbitopt.optimization.run/2`, the `sha256:` digest of each file's exact bytes, `problem.digest()` and `result_digest(result)`. Format 1 kept the cache record in `evidence.json`; a format 1 run is refused as malformed. |
 
 Every file is canonical JSON: sorted keys, compact separators, UTF-8, and no
@@ -196,4 +242,21 @@ among its findings. Rerun the matrix with this command:
 
 ```bash
 PYTHONPATH=src python -m pytest -q tests/test_e14_06_verification_guard.py -k "fault_is_never or honest_benchmark"
+```
+
+The enumeration certificate has its own run of the matrix. The three
+catalogue knapsacks with at most 4096 points (`knapsack-p02-n5`,
+`knapsack-p01-n10`, `knapsack-2d-n12`) get every injector, with an
+`EnumerationCertificate` pinned to the faulty result and all four statuses
+required. Each is graded in memory and from a sealed run. Of the 54 cells,
+none passes, and each names the injector's reason. The honest optimum of
+each passes all four statuses, through the certificate. Forged
+certificates never pass `optimality_certified`: one on a feasible point
+that is not optimal fails it, and one pinned to another result or problem,
+one from the result's own solver, one that names an unknown objective, one
+whose cap does not cover the domain, and one on a domain larger than the
+global cap are not assessed.
+
+```bash
+PYTHONPATH=src python -m pytest -q tests/test_e14_06_verification_guard.py -k "enumeration or finite_hosts"
 ```

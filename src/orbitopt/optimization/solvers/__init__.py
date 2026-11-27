@@ -9,12 +9,13 @@ only when a solver runs. See ``docs/optimization/solvers.md``.
 from .base import (CONVERGENCE_MEANINGS, AdapterSolver, BudgetExhausted, OptionSpec, Outcome, Run, Solver,
                    SolverCapability)
 from .cma_solvers import CmaEsSolver
+from .enumeration import EnumerationSolver
 from .pygmo_solvers import Nsga2Solver
 from .registry import SolverRegistry, default_registry
 from .scipy_solvers import DifferentialEvolutionSolver, HighsSolver, LbfgsbSolver, SlsqpSolver
 
 __all__ = [
     "AdapterSolver", "BudgetExhausted", "CONVERGENCE_MEANINGS", "CmaEsSolver", "DifferentialEvolutionSolver",
-    "HighsSolver", "LbfgsbSolver", "Nsga2Solver", "OptionSpec", "Outcome", "Run", "Solver", "SolverCapability", "SolverRegistry",
-    "SlsqpSolver", "default_registry",
+    "EnumerationSolver", "HighsSolver", "LbfgsbSolver", "Nsga2Solver", "OptionSpec", "Outcome", "Run",
+    "SlsqpSolver", "Solver", "SolverCapability", "SolverRegistry", "default_registry",
 ]

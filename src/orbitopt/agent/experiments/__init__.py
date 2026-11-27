@@ -9,21 +9,23 @@ and ``aggregate`` read the records back. Standard library plus the IR and
 the runtime; no LLM SDK. See ``docs/agent/experiments.md``.
 """
 
+from orbitopt.agent.runtime import UnsafePathError
+
 from .analysis import (ORDER_BY, RESUMABLE, Aggregate, Comparison, ComparisonRow, FamilyStats, Page, ResumePlan,
                        aggregate, compare, query, resume_plan)
 from .cache import CacheLookup, Ignored, IgnoredReason, lookup
 from .index import MIGRATIONS, SCHEMA_VERSION, ExperimentDB
-from .ingest import export_run, orbitopt_version, record_run
+from .ingest import export_run, record_run
 from .model import (EXPERIMENT_SCHEMA, ArtifactError, ExperimentError, ExperimentRecord, Integrity, InvalidIdError,
                     MalformedRecordError, RunIntegrityError, SchemaVersionError, SolverStep, UnknownRunError,
-                    UnsafePathError, VersionPolicy, cache_key)
-from .store import ArtifactStore, safe_relative
+                    VersionPolicy, cache_key)
+from .store import ArtifactStore
 
 __all__ = [
-    "Aggregate", "ArtifactError", "ArtifactStore", "CacheLookup", "Comparison", "ComparisonRow", "EXPERIMENT_SCHEMA",
-    "ExperimentDB", "ExperimentError", "ExperimentRecord", "FamilyStats", "Ignored", "IgnoredReason", "Integrity",
-    "InvalidIdError", "MIGRATIONS", "MalformedRecordError", "ORDER_BY", "Page", "RESUMABLE", "ResumePlan",
-    "RunIntegrityError", "SCHEMA_VERSION", "SchemaVersionError", "SolverStep", "UnknownRunError", "UnsafePathError",
-    "VersionPolicy", "aggregate", "cache_key", "compare", "export_run", "lookup", "orbitopt_version", "query",
-    "record_run", "resume_plan", "safe_relative",
+    "Aggregate", "ArtifactError", "ArtifactStore", "CacheLookup", "Comparison", "ComparisonRow",
+    "EXPERIMENT_SCHEMA", "ExperimentDB", "ExperimentError", "ExperimentRecord", "FamilyStats", "Ignored",
+    "IgnoredReason", "Integrity", "InvalidIdError", "MIGRATIONS", "MalformedRecordError", "ORDER_BY", "Page",
+    "RESUMABLE", "ResumePlan", "RunIntegrityError", "SCHEMA_VERSION", "SchemaVersionError", "SolverStep",
+    "UnknownRunError", "UnsafePathError", "VersionPolicy", "aggregate", "cache_key", "compare", "export_run",
+    "lookup", "query", "record_run", "resume_plan",
 ]

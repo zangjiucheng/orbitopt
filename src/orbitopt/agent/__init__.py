@@ -24,8 +24,8 @@ _PROVIDERS = ("BudgetExceededError", "ChatProvider", "LLMProvider", "LocalProvid
               "make_provider")
 _COMPILER = ("CompileFailed", "CompileOutcome", "Compiled", "NeedsClarification", "RejectedUnauthorizedChange",
              "Unsupported", "compile_problem")
-_RUNTIME = ("LLMPlanner", "Policy", "RecordedPlanner", "RegradeReport", "ReplayReport", "RuleBasedPlanner",
-            "RunOutcome", "RunStatus", "StopReason", "load_trace", "regrade", "replay", "save_run", "solve")
+_RUNTIME = ("CheckReport", "LLMPlanner", "Policy", "RecordedPlanner", "ReplayReport", "RuleBasedPlanner",
+            "RunOutcome", "RunStatus", "StopReason", "check_run", "load_trace", "replay", "save_run", "solve")
 _TOOLS = ("CallLog", "ToolRegistry", "ToolView", "bind_problem", "builtin_registry")
 __all__ = list(_PROVIDERS) + list(_COMPILER) + list(_RUNTIME) + list(_TOOLS)
 

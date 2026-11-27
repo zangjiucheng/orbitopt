@@ -98,6 +98,8 @@ def diagnose(result: OptimizationResult | None, report: VerificationReport | Non
             return FailureKind.NON_CONVERGENCE, termination.value
         if capability.convergence == "certificate" and structure.problem_class in CERTIFIED_CLASSES:
             return FailureKind.VERIFIED_LOCAL, "converged with a certificate"
+        if capability.convergence == "exhaustive":
+            return FailureKind.VERIFIED_LOCAL, "evaluated every point of the finite domain"
         if capability.convergence == "first_order" and structure.problem_class in PROVABLY_CONVEX:
             return FailureKind.VERIFIED_LOCAL, "first-order point of a provably convex problem"
         if capability.convergence == "first_order":

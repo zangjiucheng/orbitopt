@@ -28,7 +28,7 @@ from dataclasses import dataclass, field, fields
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Literal, Mapping
+from typing import Any, Callable, Literal, Mapping, Sequence
 
 from jsonschema import Draft202012Validator
 
@@ -49,6 +49,8 @@ STATUSES = ("solver_converged", "constraints_satisfied", "independently_verified
 """The four result statuses; ``OptimizationResult`` has one boolean field per name."""
 INDEPENDENT_METHODS = ("analytical", "reference_solution", "alternate_solver")
 DIGEST_SIGNIFICANT_DIGITS = 12
+MAX_ENUMERATION_POINTS = 1 << 20
+"""The most points (1,048,576) an exhaustive enumeration takes: the enumeration solver's cap and the guard's."""
 
 VariableKind = Literal["continuous", "integer", "binary", "discrete"]
 Origin = Literal["user", "compiler", "agent"]
@@ -120,6 +122,21 @@ class Variable:
         if self.kind in ("integer", "binary") and abs(value - round(value)) > tol:
             found.append("not_integer")
         return tuple(found)
+
+    def domain_values(self) -> Sequence[float] | None:
+        """Every value of a finite domain, in order; ``None`` for a continuous or unbounded variable.
+
+        Binary is (0, 1), discrete its choices, and integer every integer in
+        ``[ceil(lower), floor(upper)]``, as a ``range`` so a wide one costs
+        nothing until it is walked.
+        """
+        if self.kind == "binary":
+            return (0.0, 1.0)
+        if self.kind == "discrete":
+            return tuple(float(c) for c in self.choices)
+        if self.kind == "integer" and self.lower is not None and self.upper is not None:
+            return range(math.ceil(self.lower), math.floor(self.upper) + 1)
+        return None
 
 
 @dataclass(frozen=True)
@@ -285,6 +302,11 @@ class OptimizationProblem:
             verification=VerificationPolicy(**data.get("verification", {})),
             metadata=dict(data.get("metadata", {})),
         )
+
+    def domain_size(self) -> int | None:
+        """The number of points of the variables' product domain; ``None`` when a variable's domain is not finite."""
+        values = [v.domain_values() for v in self.variables]
+        return None if any(v is None for v in values) else math.prod(len(v) for v in values)
 
     def digest(self) -> str:
         """SHA-256 of every semantic field; ``title``, ``description``s and ``metadata`` are excluded.

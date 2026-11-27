@@ -213,12 +213,13 @@ def replay_dir(run_dir: str | Path, *, expected_manifest_digest: str | None = No
 def verify_run_dir(run_dir: str | Path, *, expected_manifest_digest: str | None = None) -> dict:
     """Re-grade a saved run with the guard: an agent run directory, or a bare sealed run.
 
-    An agent run (``orbitopt.agent.run/1``) has every byte checked and its
-    sealed best result re-graded, with the final verification's alternate
-    solvers run again; the loop is not re-run (that is ``replay``). A sealed
+    An agent run (``orbitopt.agent.run/1``) goes through ``check_run``: every
+    byte checked and its sealed best result re-graded, with the final
+    verification's alternate solvers run again; the loop is not re-run (that
+    is ``replay``). A sealed
     run (``orbitopt.optimization.run/2``) is graded from its own files.
     """
-    from orbitopt.agent.runtime import RUN_MANIFEST_FORMAT, regrade
+    from orbitopt.agent.runtime import RUN_MANIFEST_FORMAT, check_run
 
     run_dir = Path(run_dir)
     manifest = read_json(run_dir / "manifest.json")
@@ -228,8 +229,8 @@ def verify_run_dir(run_dir: str | Path, *, expected_manifest_digest: str | None 
     if kind != RUN_MANIFEST_FORMAT:
         raise CommandError(f"{run_dir}: manifest format {kind!r} is neither {RUN_MANIFEST_FORMAT} nor {RUN_FORMAT}")
     problem = _run_problem(run_dir)
-    graded = regrade(run_dir, tools=None if problem is None else tools_for(problem),
-                     expected_manifest_digest=expected_manifest_digest)
+    graded = check_run(run_dir, tools=None if problem is None else tools_for(problem),
+                       expected_manifest_digest=expected_manifest_digest, alternates="rerun")
     return {"run_dir": str(run_dir), "kind": "agent", "verified": graded.verified,
             "integrity": list(graded.integrity), "recorded_status": graded.recorded_status,
             "report": None if graded.report is None else graded.report.to_dict()}

@@ -100,7 +100,10 @@ model call to a cassette. `ReplayProvider("run.jsonl")` serves the recorded
 calls back without calling a model, so an agent run can be re-executed and
 audited later. It goes through the same validation, repair and tool checks
 as the recorded run, and recorded failures (outages, malformed tool
-arguments) are raised again.
+arguments) are raised again. Both wrappers report the recorded provider's
+`name` and `model` (the replay reads them from the cassette header), so a
+run replayed from a cassette names the provider and model that answered it,
+as the [runtime trace](runtime.md#the-trace) records them.
 
 Replay matches each request by a SHA-256 digest of its canonical JSON
 (sorted keys). Identical requests are served in recorded order. A request

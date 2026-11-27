@@ -12,17 +12,36 @@ runs on two machines that made the same choices share a digest.
 
 from __future__ import annotations
 
+import copy
 from dataclasses import asdict, dataclass, field
 from enum import Enum
+from functools import cache
+from importlib import metadata
 from typing import Any, Literal, Mapping
 
 from orbitopt.optimization import Budget, OptimizationResult, canonical_digest, schema_errors, to_plain
 from orbitopt.optimization.result import stable
 from orbitopt.optimization.verification import VerificationReport
 
-TRACE_SCHEMA = "agent-trace-1.0.json"
-TRACE_SCHEMA_VERSION = "1.0"
+TRACE_SCHEMA_VERSION = "1.1"
+TRACE_SCHEMA = "agent-trace-1.1.json"
+TRACE_SCHEMAS = {"1.0": "agent-trace-1.0.json", TRACE_SCHEMA_VERSION: TRACE_SCHEMA}
+"""The trace schema for each ``schemaVersion`` that still parses; ``to_dict`` writes the newest."""
 TRACE_FORMAT = "orbitopt.agent.trace"
+
+ENVIRONMENT_KEYS = frozenset({"orbitopt_version"})
+"""Top-level trace keys that describe the machine that ran, not the run; the digest and replay leave them out."""
+UNKNOWN_VERSION = "0+unknown"
+
+
+@cache
+def orbitopt_version() -> str:
+    """The installed orbitopt version (read once: the metadata lookup costs about 2 ms)."""
+    try:
+        return metadata.version("orbitopt")
+    except metadata.PackageNotFoundError:
+        return UNKNOWN_VERSION
+
 
 DEFAULT_MAX_ITERATIONS = 20
 """Planner proposals per run when neither the caller nor the problem names a limit (E14-10 arm E's call cap)."""
@@ -61,6 +80,32 @@ class StopReason(str, Enum):
         """Whether a budget limit ended the loop."""
         return self in (StopReason.MAX_ITERATIONS, StopReason.MAX_EVALUATIONS, StopReason.MAX_WALL_S,
                         StopReason.MAX_TOKENS)
+
+
+class CancelReason(str, Enum):
+    """Which cancel check fired: the one before the next planner proposal, or the one before the final verification."""
+
+    BEFORE_ITERATION = "before_iteration"
+    BEFORE_VERIFICATION = "before_verification"
+
+
+@dataclass(frozen=True)
+class CancelPoint:
+    """Where a cancellation fired: after ``iteration`` completed iterations, at the check ``reason`` names.
+
+    Passed to ``solve`` as ``cancel``, it cancels a run at exactly that
+    point, which is how ``replay`` reproduces a cancelled run.
+    """
+
+    iteration: int
+    reason: CancelReason
+
+    def to_dict(self) -> dict:
+        return {"iteration": self.iteration, "reason": self.reason.value}
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "CancelPoint":
+        return cls(int(data["iteration"]), CancelReason(data["reason"]))
 
 
 class Action(str, Enum):
@@ -233,7 +278,8 @@ class FailureKind(str, Enum):
     """What a solve's outcome means for the next step (see ``diagnostics``)."""
 
     VERIFIED_LOCAL = "verified_local"
-    """Converged with a certificate, or to a first-order point of a problem that is provably convex."""
+    """Converged with a certificate, after an exhaustive enumeration, or to a first-order point of a problem that is
+    provably convex."""
     LOCAL_OPTIMUM = "local_optimum"
     """Converged to a first-order point of a problem that is not provably convex: possibly only local."""
     HEURISTIC_STOP = "heuristic_stop"
@@ -355,7 +401,14 @@ class VerificationRecord:
 
 @dataclass(frozen=True)
 class Trace:
-    """Everything a run did, in order, with the outcome. ``to_dict`` validates against ``agent-trace-1.0.json``."""
+    """Everything a run did, in order, with the outcome. ``to_dict`` validates against ``agent-trace-1.1.json``.
+
+    ``cancel`` is where a cancellation fired, ``None`` when none did.
+    ``provider`` and ``model`` name the LLM behind the planner (``None``
+    without one) and are part of the digest, since another model is another
+    run. ``orbitopt_version`` is the version that ran it; it describes the
+    machine, so the digest leaves it out (``ENVIRONMENT_KEYS``).
+    """
 
     problem_id: str
     problem_digest: str
@@ -372,16 +425,22 @@ class Trace:
     best: str | None
     usage: BudgetUse
     refusal: tuple[str, ...] = ()
+    cancel: CancelPoint | None = None
+    provider: str | None = None
+    model: str | None = None
+    orbitopt_version: str = field(default_factory=orbitopt_version)
 
     def body(self) -> dict:
         """The trace as JSON-ready data, without its digest."""
         return {"schemaVersion": TRACE_SCHEMA_VERSION, "format": TRACE_FORMAT, "problem_id": self.problem_id,
                 "problem_digest": self.problem_digest, "fingerprint": self.fingerprint, "planner": self.planner,
+                "provider": self.provider, "model": self.model, "orbitopt_version": self.orbitopt_version,
                 "seed": self.seed, "limits": asdict(self.limits), "policy": self.policy.to_dict(),
                 "solvers": list(self.solvers), "iterations": [r.to_dict() for r in self.iterations],
                 "verifications": [v.to_dict() for v in self.verifications],
                 "outcome": {"status": self.status.value, "stop_reason": self.stop_reason.value, "best": self.best,
-                            "refusal": list(self.refusal)},
+                            "refusal": list(self.refusal),
+                            "cancel": None if self.cancel is None else self.cancel.to_dict()},
                 "usage": asdict(self.usage)}
 
     def digest(self) -> str:
@@ -395,9 +454,24 @@ class Trace:
         return data
 
 
+def upgrade_trace(data: Mapping[str, Any]) -> dict:
+    """A parsed trace of any version in the newest version's shape; ``digest`` stays the recorded one.
+
+    A 1.0 trace has no cancel point: ``outcome.cancel`` is ``None``, so a
+    cancelled 1.0 run replays as it did under 1.0, without a cancel signal.
+    It names no provider, model or version either: all three are ``None``.
+    """
+    trace = copy.deepcopy(dict(data))
+    if trace.get("schemaVersion") == "1.0":
+        trace.update(schemaVersion=TRACE_SCHEMA_VERSION, provider=None, model=None, orbitopt_version=None)
+        trace["outcome"] = {**trace["outcome"], "cancel": None}
+    return trace
+
+
 def trace_digest(body: Mapping[str, Any]) -> str:
-    """``canonical_digest`` of a trace body without its digest and its wall-clock fields (``VOLATILE_KEYS``)."""
-    return canonical_digest(stable({k: v for k, v in body.items() if k != "digest"}))
+    """``canonical_digest`` of a trace body without its digest, ``ENVIRONMENT_KEYS`` and wall-clock fields
+    (``VOLATILE_KEYS``)."""
+    return canonical_digest(stable({k: v for k, v in body.items() if k != "digest" and k not in ENVIRONMENT_KEYS}))
 
 
 @dataclass(frozen=True)

@@ -39,6 +39,7 @@ from orbitopt.optimization import (
 from orbitopt.optimization.verification import (
     AlternateSolverCheck,
     AnalyticalOptimum,
+    EnumerationCertificate,
     FindingCode,
     LowerBoundCertificate,
     Outcome,
@@ -731,3 +732,152 @@ def test_fault_inputs_are_not_mutated():
     before = copy.deepcopy(artifact)
     grade_in_memory(artifact, inst)
     assert artifact == before
+
+
+# ------------------------------------------------------------------------------ the enumeration certificate
+FINITE_HOSTS = [i for i in HOSTS if IR[i].domain_size() is not None and IR[i].domain_size() <= 4096]
+
+
+def enumerated(problem, result, **pins):
+    return EnumerationCertificate(id=pins.pop("id", "enum"), problem_digest=pins.pop("problem_digest", problem.digest()),
+                                  result_digest=pins.pop("result_digest", result_digest(result)), **pins)
+
+
+def test_the_finite_hosts_are_the_catalogues_small_knapsacks():
+    assert FINITE_HOSTS == ["knapsack-p02-n5", "knapsack-p01-n10", "knapsack-2d-n12"]
+
+
+@pytest.mark.parametrize("host", FINITE_HOSTS)
+def test_enumeration_certifies_the_reference_optimum_of_every_small_knapsack(host, tmp_path):
+    inst = P.by_id(host)
+    honest_artifact = F.make_result(inst, inst.reference.x)
+    problem, result, evidence, solved = guard_inputs(honest_artifact, inst)
+    evidence = [*evidence, enumerated(problem, result)]
+    report = verify_result(problem, result, policy=replace(problem.verification, required=ALL), evidence=evidence,
+                           solved_problem=solved)
+    assert report.verdict is Outcome.PASSED, report.to_dict()
+    assert report.statuses["optimality_certified"].outcome is Outcome.PASSED
+    assert "guard:enumeration" in report.statuses["optimality_certified"].evidence_ids
+    seal_run(solved, result, evidence, tmp_path)  # the request travels through evidence.json and runs again
+    sealed = verify_run(tmp_path, problem=problem, policy=replace(problem.verification, required=ALL))
+    assert sealed.statuses["optimality_certified"].outcome is Outcome.PASSED
+
+
+@pytest.mark.parametrize("host", FINITE_HOSTS)
+@pytest.mark.parametrize("fault", F.FAULTS, ids=lambda f: f.id)
+def test_no_fault_passes_with_an_enumeration_certificate(fault, host, tmp_path):
+    """The E14-06 fault matrix again, every status required and the certificate pinned to the faulty result."""
+    inst = P.by_id(host)
+    faulty = fault.inject(F.make_result(inst, inst.reference.x), **_params(fault, inst))
+    problem, result, evidence, solved = guard_inputs(faulty, inst)
+    seal = result_digest(result)
+    evidence = [*evidence, enumerated(problem, result)]
+    policy = replace(problem.verification, required=ALL)
+    in_memory = verify_result(problem, result, policy=policy, evidence=evidence, solved_problem=solved,
+                              artifact_digest=seal if fault.resealed else _flip(seal))
+    seal_run(solved, result, evidence, tmp_path)
+    if not fault.resealed:
+        manifest = json.loads((tmp_path / "manifest.json").read_text())
+        manifest["files"]["result.json"] = _flip(manifest["files"]["result.json"])
+        (tmp_path / "manifest.json").write_text(json.dumps(manifest))
+    for path, report in (("verify_result", in_memory), ("verify_run", verify_run(tmp_path, problem=problem,
+                                                                                  policy=policy))):
+        assert report.verdict is not Outcome.PASSED, (path, report.to_dict())
+        assert FindingCode(fault.reason) in report.codes, (path, sorted(report.codes))
+
+
+def knapsack(host="knapsack-p01-n10"):
+    inst = P.by_id(host)
+    return inst, IR[host]
+
+
+def at(problem, bits):
+    return honest(problem, {f"x{i}": float(b) for i, b in enumerate(bits)}, solver="solver.a")
+
+
+def test_a_false_enumeration_certificate_never_certifies():
+    """Fault injection on the certificate itself: every forgery leaves optimality_certified short of passed."""
+    inst, problem = knapsack()
+    optimum = at(problem, inst.reference.x)
+    worse = at(problem, [1, 1, 1, 1, 0, 0, 0, 0, 0, 0])  # feasible, value 266 < 309
+    assert problem.constraints_satisfied(worse.x, problem.evaluate(worse.x).residuals)
+    other = at(problem, [0] * 10)
+    cases = {
+        "a feasible point that is not optimal": (worse, enumerated(problem, worse), Outcome.FAILED, C.CERTIFICATE_FAILED),
+        "pinned to another result": (worse, enumerated(problem, other), Outcome.NOT_ASSESSED, C.EVIDENCE_MISMATCH),
+        "pinned to another problem": (worse, enumerated(problem, worse, problem_digest=WORKED.digest()),
+                                      Outcome.NOT_ASSESSED, C.EVIDENCE_MISMATCH),
+        "produced by the result's own solver": (worse, enumerated(problem, worse, producer="solver.a"),
+                                                Outcome.NOT_ASSESSED, C.FORGED_VERIFICATION),
+        "an objective the problem does not have": (worse, enumerated(problem, worse, objective="profit"),
+                                                   Outcome.NOT_ASSESSED, C.EVIDENCE_INVALID),
+        "a cap too small to cover the domain": (optimum, enumerated(problem, optimum, max_points=1023),
+                                                Outcome.NOT_ASSESSED, C.CERTIFICATE_UNSUPPORTED),
+    }
+    for name, (result, cert, outcome, code) in cases.items():
+        report = verify_result(problem, result, policy=POLICY_ALL, evidence=[cert])
+        status = report.statuses["optimality_certified"]
+        assert status.outcome is outcome and code in report.codes, (name, status, sorted(report.codes))
+        assert report.verdict is not Outcome.PASSED, name
+    claimed = replace(worse, optimality_certified=True)  # claiming it without any certificate is a lie
+    report = verify_result(problem, claimed, policy=POLICY_ALL)
+    assert C.CLAIM_CONTRADICTED in report.codes and report.verdict is Outcome.FAILED
+    assert verify_result(problem, optimum, policy=POLICY_ALL,
+                         evidence=[enumerated(problem, optimum)]).statuses["optimality_certified"].outcome \
+        is Outcome.PASSED
+
+
+def test_the_enumeration_cap_holds_whatever_the_certificate_asks():
+    wide = OptimizationProblem(id="wide", variables=tuple(Variable(f"b{i}", "binary") for i in range(21)),
+                               objectives=(Objective("f", "b0"),))
+    result = honest(wide, {f"b{i}": 0.0 for i in range(21)})
+    report = verify_result(wide, result, policy=POLICY_ALL, evidence=[enumerated(wide, result, max_points=10 ** 9)])
+    assert report.statuses["optimality_certified"].outcome is Outcome.NOT_ASSESSED
+    assert any(f.code is C.CERTIFICATE_UNSUPPORTED and "2097152 points" in f.message for f in report.findings)
+
+
+def test_enumeration_never_certifies_a_continuous_multi_objective_or_unevaluable_problem():
+    two = replace(INTEGER, objectives=INTEGER.objectives + (Objective("g", "n"),))
+    point = {"n": 2.0, "b": 0.0, "d": 0.5}
+    for problem, x in ((WORKED, {"x": 0.5, "y": 0.5}), (two, point)):
+        result = honest(problem, x)
+        report = verify_result(problem, result, policy=POLICY_ALL, evidence=[enumerated(problem, result,
+                                                                                      objective="f" if problem is two
+                                                                                      else None)])
+        if problem is WORKED:  # KKT still certifies the convex example; enumeration only adds a note
+            assert report.statuses["optimality_certified"].outcome is Outcome.PASSED
+            assert C.CERTIFICATE_UNSUPPORTED in report.codes
+        else:
+            assert report.statuses["optimality_certified"].outcome is Outcome.NOT_ASSESSED
+    flaky = OptimizationProblem(
+        id="flaky", variables=(Variable("n", "integer", lower=0, upper=4),),
+        objectives=(Objective("f", ToolCall("test.cost.v1", {"n": "n"})),))
+
+    def cost(n):
+        if n == 3.0:
+            raise RuntimeError("down")  # the point that would beat the result
+        return 10.0 - n
+
+    ok = OptimizationResult(problem_digest=flaky.digest(), solver_id="solver.a", termination="converged",
+                            x={"n": 4.0}, objective_values={"f": 6.0}, constraint_residuals={})
+    worse = replace(ok, x={"n": 2.0}, objective_values={"f": 8.0})
+    for result in (ok, worse):
+        report = verify_result(flaky, result, policy=POLICY_ALL, tools={"test.cost.v1": cost},
+                               evidence=[enumerated(flaky, result)])
+        assert report.statuses["optimality_certified"].outcome is not Outcome.PASSED
+    exact = verify_result(flaky, ok, policy=POLICY_ALL, tools={"test.cost.v1": lambda n: 10.0 - n},
+                          evidence=[enumerated(flaky, ok)])
+    assert exact.statuses["optimality_certified"].outcome is Outcome.PASSED  # a black box, certified by its domain
+
+
+def test_an_exhaustive_solver_result_is_no_certificate_by_itself():
+    """Only the guard's own enumeration passes optimality: an enumeration solver's convergence does not."""
+    from orbitopt.optimization.solvers import EnumerationSolver
+
+    inst, problem = knapsack("knapsack-p02-n5")
+    result = EnumerationSolver().solve(problem)
+    assert result.solver_converged and not result.optimality_certified
+    alternate = AlternateSolverCheck(id="alt", solver_id="orbitopt.enumeration", problem_digest=problem.digest(),
+                                     result_digest=result_digest(result), solver=lambda p: result)
+    report = verify_result(problem, replace(result, solver_id="solver.a"), policy=POLICY_ALL, evidence=[alternate])
+    assert report.statuses["optimality_certified"].outcome is Outcome.NOT_ASSESSED

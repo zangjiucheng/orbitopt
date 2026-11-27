@@ -31,7 +31,7 @@ take faithfully comes back `refused`.
 | `budget` | An IR `Budget` that overrides `problem.budget` field by field. |
 | `policy` | What the planner may change. See [The policy](#the-policy). |
 | `tools` | A `ToolView` or a mapping of resolvers by tool id. |
-| `cancel` | A `threading.Event` or a callable, checked before each iteration. |
+| `cancel` | A `threading.Event` or a callable, checked before each planner proposal and before the final verification. A `CancelPoint` cancels at exactly that point. |
 | `registry` | The solvers. Defaults to `default_registry()`. |
 
 The verification policy is always `problem.verification`. No argument loosens it.
@@ -118,7 +118,7 @@ only values a remedy may loosen.
 
 ## One iteration
 
-1. Check cancellation and every limit.
+1. Check cancellation (`before_iteration`) and every limit.
 2. Ask the planner for a proposal and add its tokens.
 3. Validate it. A refused proposal is recorded and the loop goes on, unless the policy stops it.
 4. A `stop` decision ends the loop.
@@ -151,11 +151,27 @@ runtime verifies it with the whole guard:
 - No alternates run when the policy does not require `independently_verified`
   or does not allow `alternate_solver` evidence.
 
+On a finite domain (`ProblemStructure.domain_size`), enumeration joins the
+final verification:
+
+- An exhaustive solver (`orbitopt.enumeration`) is the alternate when the
+  evaluations left cover the domain. Its allocation is exactly the domain's
+  size. It is exact, so it runs alone and no second alternate is added. A
+  domain that does not fit leaves it out, and the other alternates run as
+  before.
+- On a single-objective problem whose domain still fits after the
+  alternates, the runtime adds an `EnumerationCertificate`, and the guard
+  enumerates the domain itself. That can pass `optimality_certified`.
+  The alternates come first: the certificate takes only what they leave.
+- Both count against `max_evaluations` through the meter. A domain of N
+  points costs about 2N evaluations to verify and certify. A refuted
+  candidate's second attempt needs N more to be certified.
+
 `capability.convergence` decides what a convergence is worth. A
 differential-evolution convergence is a `heuristic_stop`, never an optimum.
 A first-order point is final only on a class that `classify` proves convex
 (`lp`, `convex_qp`). A `certificate` convergence is final on `lp`, `convex_qp`
-and `milp`.
+and `milp`, and an `exhaustive` one on any class.
 
 | Status | When |
 |---|---|
@@ -163,7 +179,7 @@ and `milp`.
 | `unverified_best` | A feasible best exists, but the guard did not pass it. |
 | `no_feasible` | No eligible candidate. `result` is the honest result with the least violation, if any. |
 | `budget_exhausted` | A limit ended the loop and the best is not verified. |
-| `cancelled` | The cancel check fired. The final verification is skipped. |
+| `cancelled` | The cancel check fired. The final verification is skipped. The trace's `outcome.cancel` says where. |
 | `policy_violation` | The policy ended the run on a refused proposal. The final verification is skipped. |
 | `refused` | Invalid IR, a tool id outside `known_tool_ids(tools)`, a tool binding that fails its unit check, or no solver that can take the problem. Nothing is evaluated. |
 
@@ -179,7 +195,7 @@ remedy touches the problem.
 
 | Failure kind | When | Remedies |
 |---|---|---|
-| `verified_local` | A certificate, or a first-order point of a provably convex problem. | stop |
+| `verified_local` | A certificate, an exhaustive enumeration, or a first-order point of a provably convex problem. | stop |
 | `local_optimum` | A first-order point of a problem that is not provably convex. | restart global, restart perturbed, stop |
 | `heuristic_stop` | A heuristic converged. | refine locally, restart global |
 | `non_convergence` | The backend's iteration limit. | refine locally, loosen solver tolerance, switch solver |
@@ -229,7 +245,7 @@ uses it.
 | File | Content |
 |---|---|
 | `problem.json` | The problem asked. |
-| `trace.json` | The trace, schema `agent-trace-1.0.json`. |
+| `trace.json` | The trace, schema `agent-trace-1.1.json`. |
 | `results/<label>.json` | Every result of the run, full, by label (`iteration-0003`, `verify-1-scipy.slsqp`). |
 | `sealed/` | `seal_run` of the best result with its final evidence, format `orbitopt.optimization.run/2`. |
 | `tool-calls.json` | The tool call log, when the run used a `ToolView`. |
@@ -240,14 +256,59 @@ as `seal_run` asks. `save_run` returns the digest of `manifest.json` itself.
 Keep it out of band, since whoever can rewrite the directory can rewrite the
 manifest too.
 
+`check_run(run_dir, *, tools=None, registry=None, expected_manifest_digest=None, alternates="recorded")`
+is the integrity check. It re-executes nothing.
+
+1. Every file name the manifest gives, and the sealed run's folder, go
+   through `safe_relative`. A name with `..`, an absolute path, a backslash
+   or a character outside `[A-Za-z0-9_.-]` raises `UnsafePathError` before
+   any file besides `manifest.json` is read. The sealed run's own manifest
+   names go through it too, before any sealed file is read.
+2. Every file must hash to the digest the manifest records, and the
+   manifest must seal `problem.json` and `trace.json`. With
+   `expected_manifest_digest`, the manifest itself must hash to it.
+3. The trace must match its own digest, name the problem in
+   `problem.json`, and match the manifest's trace digest.
+4. Each result summary in the trace must be the summary of the full result
+   saved under its label, and `sealed/result.json` must be byte for byte the
+   result the trace names as best.
+5. The guard re-grades `sealed/` with `verify_run`, pinned to the sealed
+   manifest digest. A verdict that contradicts the trace's status is a
+   finding.
+
+With `alternates="recorded"` the guard takes each final-verification
+alternate's saved result as that alternate's answer. It re-checks the
+alternate's point and the comparison, and runs no solver. It cannot show
+that the solver produces that point. `alternates="rerun"` runs each
+alternate again with its recorded allocation, seed and options from
+`registry`. The guard re-evaluates points either way, so pass `tools` as the
+run had them.
+
+`CheckReport` holds `integrity` (one line per finding), the guard's
+`report`, the trace's `recorded_status`, the trace, the problem and the
+bytes of every file it checked. `intact` is true with no finding.
+`verified` is true when it is also intact and the guard passes the sealed
+run again. `orbitopt agent verify` runs `check_run` with the alternates run
+again.
+
+What `check_run` catches, and what it does not:
+
+- A changed byte, unless the manifest was rewritten to match. Pin the
+  manifest with `expected_manifest_digest` to catch that too.
+- A forger who rewrites the trace and every digest: the trace no longer
+  summarises the saved results, or the sealed result no longer re-evaluates
+  to its claims.
+- A forger who rewrites a result that is not the best, its trace entry and
+  every digest is not caught, since nothing re-runs that solve. `replay` is.
+
 `replay(run_dir, *, tools=None, registry=None, expected_manifest_digest=None)`
-checks every file's bytes and the trace digest. It then re-executes the
+runs `check_run` with the alternates run again. It then re-executes the
 recorded proposals with a `RecordedPlanner`, on the problem in `problem.json`,
 with the recorded seed, limits and policy. It compares the new trace with
-the recorded one at 12 significant digits, wall-clock fields left out. It
-also re-grades `sealed/` with `verify_run`, and runs the final verification's
-alternate solvers again with their recorded allocation, seed and options.
-`ReplayReport.equal` is true when no file changed and nothing differs. A
+the recorded one at 12 significant digits, wall-clock fields left out.
+`ReplayReport.check` is that check, and `integrity` and `sealed_verdict`
+read from it. `ReplayReport.equal` is true when no file changed and nothing
+differs. A
 forger who edits a result and recomputes every digest still fails, because
 the solvers recompute the result. A solver whose capability sets
 `deterministic_given_seed` to false shows up as a difference unless it
@@ -255,7 +316,7 @@ reproduces its result.
 
 ## The trace
 
-`Trace.to_dict()` validates against `agent-trace-1.0.json`. Each iteration
+`Trace.to_dict()` validates against `agent-trace-1.1.json`. Each iteration
 record holds the raw proposal, the decision or the violations, a summary of
 the result, the screen (verdict, the four statuses with reasons, the finding
 codes), the diagnosis, and the evaluations and tokens it cost. Each
@@ -265,6 +326,41 @@ digits) of the trace without `wall_s`, `wall_time_s` and `latency_s`
 (`orbitopt.optimization.VOLATILE_KEYS`, which `result_digest` leaves out too). Two
 runs with the same problem, planner, seed and solvers share it. A number that
 straddles a 12th-digit rounding boundary still splits it.
+
+Three top-level fields say who and what ran the loop:
+
+| Field | Content | In the digest |
+|---|---|---|
+| `provider` | The chat provider behind an LLM planner (its `name`), `null` for a planner without one. | Yes: another provider is another run. |
+| `model` | The provider's model, `null` when none or unknown. | Yes: another model is another run. |
+| `orbitopt_version` | The installed orbitopt version that ran the loop. | No: it describes the machine (`ENVIRONMENT_KEYS`), and replay does not compare it either. |
+
+A planner declares `provider` and `model`. `LLMPlanner` reads them from its
+chat provider, `RuleBasedPlanner` has neither, and `RecordedPlanner` takes
+them as arguments, which `replay` fills from the trace. A `ReplayProvider`
+reports the provider and model its cassette recorded, so a run replayed from
+a cassette keeps the recorded run's digest.
+
+`outcome.cancel` is where a cancellation fired, or `null`: `iteration` is
+the number of iterations completed, and `reason` is the check that fired,
+`before_iteration` (before the next planner proposal) or
+`before_verification`. It is part of the digest. `replay` passes it to
+`solve` as a `CancelPoint`, so a cancelled run replays equal.
+
+### Version 1.0
+
+Version 1.1 added `outcome.cancel`, `provider`, `model` and
+`orbitopt_version`. A 1.0 trace still loads: `load_trace`
+checks each trace against the schema its `schemaVersion` names
+(`TRACE_SCHEMAS`) and returns it as recorded, and its digest is checked as
+recorded. `upgrade_trace` gives the 1.1 shape with `cancel`, `provider`,
+`model` and `orbitopt_version` set to `null`, and `check_run` and `replay`
+work on that. A 1.0 run therefore replays
+without a cancel signal, as it did under 1.0. An uncancelled 1.0 run
+replays equal, since replay does not compare `schemaVersion`, but its
+replayed digest is a 1.1 digest and differs from the recorded one. A
+cancelled 1.0 run does not replay equal, because replay cannot know where
+it stopped. It still passes `check_run`.
 
 ## Measured runs
 
@@ -281,14 +377,14 @@ from the `orbitopt-py312` environment):
 | cqp-worked-d2 | LLM | verified | 0.5 (0.5) | 1 | 7 | 800 | 4000 | 555 |
 | lp-wyndor-d2 | rule | verified | 36 (36) | 1 | 2 | 393 | 4000 | 0 |
 | lp-wyndor-d2 | LLM | verified | 36 (36) | 1 | 2 | 393 | 4000 | 617 |
-| knapsack-p01-n10 | rule | verified | 309 (309) | 1 | 2 | 1555 | 20000 | 0 |
-| knapsack-p01-n10 | LLM | verified | 309 (309) | 1 | 2 | 1555 | 20000 | 737 |
+| knapsack-p01-n10 | rule | verified | 309 (309) | 1 | 2 | 2051 | 20000 | 0 |
+| knapsack-p01-n10 | LLM | verified | 309 (309) | 1 | 2 | 2051 | 20000 | 769 |
 | rastrigin-d5 | rule | verified | 1.4e-14 (0) | 4 | 5678 | 2170 | 10000 | 0 |
 | rastrigin-d5 | LLM | verified | 1.4e-14 (0) | 2 | 3757 | 3131 | 10000 | 1038 |
 | rosenbrock-d20 | rule | verified | 4.1e-10 (0) | 4 | 26271 | 7926 | 40000 | 0 |
 | rosenbrock-d20 | LLM | verified | 1.5e-9 (0) | 2 | 17500 | 12311 | 40000 | 1578 |
-| integ-exp-1e-10 | rule | unverified_best | 5 (5) | 3 | 479 | 1 | 4000 | 0 |
-| integ-exp-1e-10 | LLM | unverified_best | 5 (5) | 4 | 646 | 1 | 4000 | 1503 |
+| integ-exp-1e-10 | rule | verified | 5 (5) | 3 | 479 | 2051 | 4000 | 0 |
+| integ-exp-1e-10 | LLM | verified | 5 (5) | 4 | 646 | 2051 | 4000 | 1583 |
 
 What limits these numbers:
 
@@ -299,14 +395,28 @@ What limits these numbers:
   differential evolution, half of what is left per global round, because
   the solve ends on the evaluation limit. The rule-based planner's second
   round does not improve, so its restarts end there.
-- The integration instance has one compatible solver, differential
-  evolution, so no alternate solver exists and nothing independent can check
-  the answer. The runtime reports `unverified_best` with the right value.
+- On the two finite domains, enumeration verifies. `knapsack-p01-n10` has
+  1024 points: the enumeration alternate spends 1024, the guard's own
+  enumeration 1024 more, and the final report passes `optimality_certified`
+  too. The integration instance (4 rules times N up to 512, 2048 points)
+  has differential evolution and enumeration. The enumeration alternate
+  confirms N = 5 with 2048 evaluations, so the run is `verified`. The 1470
+  evaluations left cannot cover a second enumeration, so
+  `optimality_certified` stays not assessed. Before enumeration it had no
+  alternate and was `unverified_best`.
+- `knapsack-p07-n15` (32,768 points) under the default limit of 30,000 is
+  verified by differential evolution against HiGHS, without enumeration.
+  With 100,000 evaluations the rule-based run is verified and certified for
+  65,539. A run whose first solve is differential evolution, at 1456,
+  is refuted by the enumeration alternate and the guard's own count, and
+  verified at 1458 on its second attempt.
 - Rastrigin's unshifted optimum is the box centre, where SLSQP starts by
   default. The alternate check there agrees trivially. The shifted variants
   have no such shortcut.
 - Tokens are the mock's word counts, prompt plus reply, so they show how the
-  prompt grows with the history, not what a real model would bill.
+  prompt grows with the history, not what a real model would bill. The
+  enumeration solver's entry in the prompt added 32 tokens on the knapsack
+  and 80 on the integration instance, over two and four calls.
 
 ## Tests
 

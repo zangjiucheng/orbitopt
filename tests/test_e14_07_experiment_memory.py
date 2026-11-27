@@ -26,11 +26,10 @@ from orbitopt.agent.experiments import (MIGRATIONS, SCHEMA_VERSION, ArtifactErro
                                         ExperimentRecord, IgnoredReason, Integrity, InvalidIdError,
                                         MalformedRecordError, RunIntegrityError, SchemaVersionError, UnknownRunError,
                                         UnsafePathError, VersionPolicy, aggregate, cache_key, compare, export_run,
-                                        lookup, orbitopt_version, query, record_run, resume_plan,
-                                        safe_relative)
+                                        lookup, query, record_run, resume_plan)
 from orbitopt.agent.providers import MockProvider
 from orbitopt.agent.runtime import (LLMPlanner, Proposal, RecordedPlanner, RuleBasedPlanner, RunStatus, StopReason,
-                                    replay, save_run, solve, trace_digest)
+                                    orbitopt_version, replay, safe_relative, save_run, solve, trace_digest)
 from orbitopt.optimization import (Budget, Constraint, Objective, OptimizationProblem, Parameter, ToolCall, Variable,
                                    VerificationPolicy)
 from orbitopt.optimization.classify import Form
@@ -117,7 +116,7 @@ def test_a_recorded_run_reads_back_with_the_runs_own_numbers(db, tmp_path):
     record = record_run(db, tmp_path / "run", expected_manifest_digest=digest)
 
     assert record.run_id == digest and record.problem_digest == CQP.digest()
-    assert record.status is RunStatus.VERIFIED and record.integrity is Integrity.REPLAYED
+    assert record.status is RunStatus.VERIFIED and record.integrity is Integrity.CHECKED
     assert record.objective == outcome.result.objective_values["f0"]
     assert abs(record.objective - P.by_id("cqp-worked-d2").reference.value) < 1e-8
     assert record.statuses == outcome.statuses
@@ -125,6 +124,7 @@ def test_a_recorded_run_reads_back_with_the_runs_own_numbers(db, tmp_path):
     assert record.usage == outcome.trace.usage and record.limits == outcome.trace.limits
     assert [s.solver_id for s in record.steps][0] == outcome.trace.iterations[0].decision.solver_id
     assert record.max_violation == 0.0 and record.orbitopt_version == orbitopt_version()
+    assert (record.provider, record.model) == (None, None)
     assert ExperimentRecord.from_dict(record.to_dict()) == record
 
     with ExperimentDB(tmp_path / "db") as reopened:
@@ -142,6 +142,50 @@ def test_recording_the_same_run_twice_gives_one_record(db, tmp_path):
     assert again == first and again.created_at == first.created_at
     assert count(db) == 1
     assert sorted(p.name for p in (tmp_path / "db/artifacts").rglob("*.json")) == blobs
+
+
+class Untouchable(LbfgsbSolver):
+    """A solver that default ingest must never run."""
+
+    CAPABILITY = replace(LbfgsbSolver.CAPABILITY, solver_id="scipy.slsqp")
+
+    def solve(self, *args, **kwargs):
+        raise AssertionError("ingest ran a solver")
+
+
+def test_default_ingest_runs_no_solver_and_replay_is_opt_in(db, tmp_path):
+    save_run(solve(CQP, planner=RuleBasedPlanner()), tmp_path / "run")
+    nothing = SolverRegistry([Untouchable()])
+    checked = record_run(db, tmp_path / "run", registry=nothing)
+    assert checked.integrity is Integrity.CHECKED and checked.verified
+    with ExperimentDB(tmp_path / "db2") as other:
+        replayed = record_run(other, tmp_path / "run", verify="replay")
+        assert replayed.integrity is Integrity.REPLAYED
+        assert {k: v for k, v in replayed.to_dict().items() if k not in ("created_at", "integrity")} == \
+            {k: v for k, v in checked.to_dict().items() if k not in ("created_at", "integrity")}
+        with pytest.raises(ValueError):
+            record_run(other, tmp_path / "run", verify="trust")
+
+
+def test_the_record_names_the_version_that_ran_the_run_not_the_one_that_ingests_it(tmp_path):
+    run = saved(solve(CQP, planner=RuleBasedPlanner()), tmp_path / "run")
+    trace = json.loads((run / "trace.json").read_text())
+    assert trace["orbitopt_version"] == orbitopt_version()
+    trace["orbitopt_version"] = "0.0.1"  # written by an older orbitopt; the version is outside the digest
+    (run / "trace.json").write_bytes(canonical_json(trace))
+    manifest = json.loads((run / "manifest.json").read_text())
+    manifest["files"]["trace.json"] = file_digest(canonical_json(trace))
+    (run / "manifest.json").write_bytes(canonical_json(manifest))
+    for verify in ("check", "replay"):
+        with ExperimentDB(tmp_path / f"db-{verify}") as db:
+            assert record_run(db, run, verify=verify).orbitopt_version == "0.0.1", verify
+
+
+def test_a_checked_record_never_serves_the_cache(db, tmp_path):
+    outcome = solve(CQP, planner=RuleBasedPlanner())
+    record = record_run(db, saved(outcome, tmp_path / "run"))
+    assert record.integrity is Integrity.CHECKED and record.verified
+    assert not _ask(db, CQP, record.best_step).hit
 
 
 def test_an_exported_run_replays_equal_from_the_store_alone(db, tmp_path):
@@ -218,7 +262,7 @@ def test_a_directory_that_is_not_a_run_is_refused(db, tmp_path):
 # ------------------------------------------------------------------------------------- cache
 def _recorded(db, tmp_path, problem=CQP, **solve_args):
     outcome = solve(problem, planner=solve_args.pop("planner", RuleBasedPlanner()), **solve_args)
-    record = record_run(db, saved(outcome, tmp_path / f"run-{len(list(tmp_path.iterdir()))}"),
+    record = record_run(db, saved(outcome, tmp_path / f"run-{len(list(tmp_path.iterdir()))}"), verify="replay",
                         tools=solve_args.get("tools"), registry=solve_args.get("registry"))
     return outcome, record
 
@@ -317,7 +361,7 @@ def test_a_hit_spends_no_solver_evaluation_on_an_independent_counter(db, tmp_pat
     outcome = solve(COUNTED, planner=RuleBasedPlanner(), registry=counted_registry(),
                     tools={"test.counted.v1": counter})
     assert outcome.status is RunStatus.VERIFIED
-    record = record_run(db, saved(outcome, tmp_path / "run"), tools={"test.counted.v1": Counter()},
+    record = record_run(db, saved(outcome, tmp_path / "run"), verify="replay", tools={"test.counted.v1": Counter()},
                         registry=counted_registry())
     counter.calls = 0
     found = _ask(db, COUNTED, record.best_step, tools={"test.counted.v1": counter})
@@ -329,7 +373,7 @@ def test_a_hit_spends_no_solver_evaluation_on_an_independent_counter(db, tmp_pat
 def test_an_entry_whose_tool_now_answers_differently_is_stale(db, tmp_path):
     outcome = solve(COUNTED, planner=RuleBasedPlanner(), registry=counted_registry(),
                     tools={"test.counted.v1": Counter()})
-    record = record_run(db, saved(outcome, tmp_path / "run"), tools={"test.counted.v1": Counter()},
+    record = record_run(db, saved(outcome, tmp_path / "run"), verify="replay", tools={"test.counted.v1": Counter()},
                         registry=counted_registry())
     found = _ask(db, COUNTED, record.best_step, tools={"test.counted.v1": Counter(shift=1.0)})
     assert not found.hit and [i.reason for i in found.ignored] == [IgnoredReason.STALE]
@@ -353,8 +397,10 @@ def test_resume_plan_of_a_cancelled_run_replays_its_completed_iterations(db, tmp
     checks = []
     outcome = solve(RASTRIGIN, planner=RuleBasedPlanner(), cancel=lambda: checks.append(1) or len(checks) > 2)
     assert outcome.status is RunStatus.CANCELLED and len(outcome.trace.iterations) == 2
-    record = record_run(db, saved(outcome, tmp_path / "run"))
-    assert record.integrity is Integrity.ITERATIONS_REPLAYED
+    assert record_run(db, saved(outcome, tmp_path / "run")).integrity is Integrity.CHECKED
+    with ExperimentDB(tmp_path / "db2") as other:
+        record = record_run(other, tmp_path / "run", verify="replay")
+    assert record.integrity is Integrity.REPLAYED  # replay cancels where the run was cancelled
 
     plan = resume_plan(db, record.run_id)
     assert plan.resumable and plan.stop_reason is StopReason.CANCELLED
@@ -385,11 +431,11 @@ def test_resume_plan_of_a_budget_exhausted_run(db, tmp_path):
 
 def test_resume_plan_of_a_token_limited_llm_run_records_the_provider(db, tmp_path):
     planner = LLMPlanner(MockProvider([json.dumps({"action": "solve", "solver_id": "scipy.slsqp"}),
-                                       json.dumps({"action": "stop"})]))
+                                       json.dumps({"action": "stop"})], model="mock-7b"))
     outcome = solve(CQP, planner=planner, budget=Budget(max_tokens=1))
     assert outcome.stop_reason is StopReason.MAX_TOKENS and outcome.trace.usage.tokens > 1
-    record = record_run(db, saved(outcome, tmp_path / "run"), provider="mock", model="mock")
-    assert (record.provider, record.model, record.planner) == ("mock", "mock", "llm")
+    record = record_run(db, saved(outcome, tmp_path / "run"))
+    assert (record.provider, record.model, record.planner) == ("mock", "mock-7b", "llm")  # read from the trace
     assert record.usage.tokens == outcome.trace.usage.tokens
     plan = resume_plan(db, record.run_id)
     assert plan.resumable and plan.remaining.max_tokens == 0 and len(plan.proposals) == 1
@@ -500,6 +546,20 @@ def test_a_v0_database_migrates_to_the_current_version(tmp_path):
         save_run(solve(CQP, planner=RuleBasedPlanner()), tmp_path / "run")
         record_run(db, tmp_path / "run")
         assert count(db) == 1
+
+
+def test_a_version_1_record_of_a_cancelled_run_migrates_to_checked(tmp_path):
+    root = tmp_path / "db"
+    with ExperimentDB(root, migrations=MIGRATIONS[:1]) as db:  # a database written before version 2
+        checks = []
+        outcome = solve(RASTRIGIN, planner=RuleBasedPlanner(), cancel=lambda: checks.append(1) or len(checks) > 2)
+        record = record_run(db, saved(outcome, tmp_path / "run"))
+    with sqlite3.connect(root / "index.sqlite") as conn:  # what the version 1 code stored for it
+        data = {**record.to_dict(), "integrity": "iterations_replayed"}
+        conn.execute("UPDATE experiments SET record = ? WHERE run_id = ?", (json.dumps(data), record.run_id))
+    with ExperimentDB(root) as db:
+        assert db.version == SCHEMA_VERSION == 2
+        assert db.get(record.run_id) == record and record.integrity is Integrity.CHECKED
 
 
 def test_the_migration_hook_runs_new_steps_once_and_rolls_back_a_failing_one(tmp_path):

@@ -51,10 +51,6 @@ class UnknownRunError(ExperimentError, LookupError):
     """No record has this run id."""
 
 
-class UnsafePathError(ExperimentError, ValueError):
-    """A file name would leave its directory (``..``, an absolute path, a drive, a backslash)."""
-
-
 class ArtifactError(ExperimentError):
     """A stored artifact is missing or its bytes no longer match its digest."""
 
@@ -75,16 +71,19 @@ def check_run_id(value: Any) -> str:
 
 
 class Integrity(str, Enum):
-    """How far ingest could re-execute the run.
+    """How ingest verified the run.
 
-    ``replayed``: ``replay`` re-executed every proposal and matched the
-    whole trace. ``iterations_replayed``: a cancelled run; every recorded
-    iteration matched, but a cancellation cannot be re-executed, so the
-    outcome rests on the manifest. Only a ``replayed`` record serves the cache.
+    ``checked``: the runtime's ``check_run`` passed: every byte, the trace
+    digest, the trace against the saved results and the guard's re-grade of
+    the sealed run, with no solve run again. ``replayed``: ``replay``
+    re-executed every proposal as well, a cancelled run up to its recorded
+    cancel point, and matched the whole trace. Only a ``replayed`` record
+    serves the cache, because only re-execution shows that the step it is
+    keyed by produces its result.
     """
 
+    CHECKED = "checked"
     REPLAYED = "replayed"
-    ITERATIONS_REPLAYED = "iterations_replayed"
 
 
 class VersionPolicy(str, Enum):
@@ -159,7 +158,7 @@ class ExperimentRecord:
     best. ``statuses`` are the final report's four statuses, or the best
     candidate's screen when no final verification ran. ``created_at`` is when
     the run was recorded (UTC, ISO 8601); ``orbitopt_version`` is the version
-    that replayed it at ingest. ``files`` maps each run file to its digest in
+    that ran it, from its trace (``0+unknown`` for a 1.0 trace). ``files`` maps each run file to its digest in
     the artifact store.
     """
 

@@ -60,9 +60,15 @@ class PlannerState:
 
 
 class Planner(Protocol):
-    """Proposes the next step. ``name`` is recorded in the trace."""
+    """Proposes the next step. ``name``, ``provider`` and ``model`` are recorded in the trace.
+
+    ``provider`` and ``model`` identify the LLM behind the planner, ``None``
+    for a planner without one.
+    """
 
     name: str
+    provider: str | None
+    model: str | None
 
     def propose(self, state: PlannerState) -> Proposal: ...
 
@@ -91,6 +97,8 @@ class RuleBasedPlanner:
     """
 
     name = "rule"
+    provider = None
+    model = None
 
     def __init__(self, *, max_restarts: int = 3):
         self.max_restarts = max_restarts
@@ -166,6 +174,8 @@ class RuleBasedPlanner:
     def solve(self, state: PlannerState, capability: SolverCapability, budget: int, rationale: str, *,
               x0=None, seed: int | None = None, options: dict | None = None) -> dict:
         share = budget if capability.convergence in ("certificate", "first_order") else max(1, budget // 2)
+        if capability.convergence == "exhaustive":  # exactly the domain, or the whole budget for it to refuse
+            share = min(budget, state.structure.domain_size or budget)
         options = {**default_options(capability, share, len(state.problem.variables)), **(options or {})}
         return {"action": "solve", "solver_id": capability.solver_id, "options": options,
                 "x0": None if x0 is None else dict(x0), "seed": state.seed if seed is None else seed,
@@ -286,11 +296,14 @@ class LLMPlanner:
     replays) and a summary of every earlier iteration. A reply that fails the
     schema twice becomes a malformed proposal, which the runtime records as a
     violation. Any other provider failure raises ``PlannerUnavailable``.
+    ``provider`` is the chat provider's ``name`` and ``model`` its model.
     """
 
     def __init__(self, provider: ChatProvider, *, max_reply_tokens: int = 512, temperature: float = 0.0,
                  name: str = "llm"):
-        self.provider = provider
+        self.chat = provider
+        self.provider = provider.name
+        self.model = getattr(provider, "model", None)
         self.max_reply_tokens = max_reply_tokens
         self.temperature = temperature
         self.name = name
@@ -298,7 +311,7 @@ class LLMPlanner:
     def propose(self, state: PlannerState) -> Proposal:
         messages = (Message("system", SYSTEM_PROMPT), Message("user", json.dumps(prompt_state(state), sort_keys=True)))
         try:
-            response = self.provider.generate_structured(
+            response = self.chat.generate_structured(
                 messages, PROPOSAL_SCHEMA, max_tokens=max(1, min(self.max_reply_tokens, state.remaining.tokens)),
                 temperature=self.temperature, seed=state.seed)
         except StructuredOutputError as exc:
@@ -356,12 +369,16 @@ def _history_entry(record: IterationRecord) -> dict:
 
 
 class RecordedPlanner:
-    """Serves recorded proposals in order; running past the end raises ``PlannerUnavailable``."""
+    """Serves recorded proposals in order; running past the end raises ``PlannerUnavailable``.
 
-    def __init__(self, proposals: Iterable[Proposal], *, name: str = "recorded"):
+    ``name``, ``provider`` and ``model`` are what the trace records, so a replay names the original planner.
+    """
+
+    def __init__(self, proposals: Iterable[Proposal], *, name: str = "recorded", provider: str | None = None,
+                 model: str | None = None):
         self._proposals: Sequence[Proposal] = tuple(proposals)
         self._next = 0
-        self.name = name
+        self.name, self.provider, self.model = name, provider, model
 
     def propose(self, state: PlannerState) -> Proposal:
         if self._next >= len(self._proposals):

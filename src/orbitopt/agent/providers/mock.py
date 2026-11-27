@@ -148,6 +148,7 @@ class RecordingProvider(ChatProvider):
         super().__init__(meter=meter)
         self.inner = inner
         self.name = inner.name
+        self.model = getattr(inner, "model", None)
         self.path = Path(cassette)
         self._lock = threading.Lock()
         if self.path.exists() and self.path.stat().st_size:
@@ -187,7 +188,9 @@ class ReplayProvider(ChatProvider):
     Each request is matched by digest; identical requests are served in
     recorded order. A request with no remaining recorded entry raises
     ``ReplayMismatchError``; ``assert_exhausted`` raises it when recorded
-    entries were never requested.
+    entries were never requested. ``name`` and ``model`` are the recorded
+    provider's, from the cassette header, so a replayed run names the
+    provider that answered it.
     """
 
     name = "replay"
@@ -196,6 +199,7 @@ class ReplayProvider(ChatProvider):
         super().__init__(meter=meter)
         self.path = Path(cassette)
         self.header = _read_header(self.path)
+        self.name = self.header.get("provider") or ReplayProvider.name
         self.model = self.header.get("model")
         self._entries: dict[str, deque] = {}
         with self.path.open(encoding="utf-8") as handle:
