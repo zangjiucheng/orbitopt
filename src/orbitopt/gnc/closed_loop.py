@@ -245,6 +245,23 @@ def simulate_closed_loop(*, run_id: str, clock: ClockSpec, frame: str,
                                      where="closed_loop actuation control input")
         return rho_dot  # an impulse on velocity: its LVLH part is the state jump
 
+    def actuate_at(key: int) -> None:
+        nonlocal y
+        for cmd in pending.pop(key, ()):
+            realized = tuple(float(x) for x in actuator(cmd)) if actuator is not None \
+                else tuple(float(x) for x in cmd.delta_v_eci_m_s)
+            executed = any(x != 0.0 for x in realized)
+            log.append_control_event(ControlEvent(
+                record_id=f"cev-{cmd.record_id}", actuator_id=cmd.actuator_id,
+                t_exec_s=cmd.t_execute_s, executed=executed,
+                commanded_delta_v_m_s=cmd.delta_v_eci_m_s,
+                realized_delta_v_m_s=realized, source_command_id=cmd.record_id))
+            if executed:
+                y[9:12] += np.asarray(realized, dtype=np.float64)
+                fired.append((cmd.t_execute_s,
+                              realized_lvlh(cmd.t_execute_s, realized),
+                              str(cmd.metadata.get("phase", ""))))
+
     t_prev = 0.0
     for key in sorted(moment):
         t_event = moment[key]
@@ -281,20 +298,7 @@ def simulate_closed_loop(*, run_id: str, clock: ClockSpec, frame: str,
                 arrived[tick.sensor_id] = obs
 
         # 4. actuations: the actuator decides what the plant really feels
-        for cmd in pending.pop(key, ()):
-            realized = tuple(float(x) for x in actuator(cmd)) if actuator is not None \
-                else tuple(float(x) for x in cmd.delta_v_eci_m_s)
-            executed = any(x != 0.0 for x in realized)
-            log.append_control_event(ControlEvent(
-                record_id=f"cev-{cmd.record_id}", actuator_id=cmd.actuator_id,
-                t_exec_s=cmd.t_execute_s, executed=executed,
-                commanded_delta_v_m_s=cmd.delta_v_eci_m_s,
-                realized_delta_v_m_s=realized, source_command_id=cmd.record_id))
-            if executed:
-                y[9:12] += np.asarray(realized, dtype=np.float64)
-                fired.append((cmd.t_execute_s,
-                              realized_lvlh(cmd.t_execute_s, realized),
-                              str(cmd.metadata.get("phase", ""))))
+        actuate_at(key)
 
         # 5. filter update: predict across the interval -- executed impulses
         #    enter at their instants -- then consume every arrived observation
@@ -316,9 +320,13 @@ def simulate_closed_loop(*, run_id: str, clock: ClockSpec, frame: str,
                     continue
                 cr, cv = chief.state_at(obs.t_sample_s)
                 model = measurement_models[sid]
+                full6 = (isinstance(model, Stacked)
+                         and tuple(model.components) == ("rho_x", "rho_y", "rho_z",
+                                                         "rho_dot_x", "rho_dot_y", "rho_dot_z"))
                 if isinstance(model, Stacked):
                     filter.update_from_observations(
-                        {type(m).__name__: obs for m in model.models}, model, cr, cv)
+                        {type(m).__name__: obs for m in model.models}, model, cr, cv,
+                        **({"compensate_to": t_event} if full6 else {}))
                 else:
                     filter.update_from_observation(obs, model, cr, cv)
                 arrived[sid] = None  # consumed once: no double-counting
@@ -349,6 +357,9 @@ def simulate_closed_loop(*, run_id: str, clock: ClockSpec, frame: str,
                               metadata=({"phase": phase(est)} if callable(phase) else {}))
                 log.append_command(cmd)
                 pending.setdefault(round(t_exec / _NS), []).append(cmd)
+            if ticks[key][0][1] <= ticks[key][0][0] + 1.0e-9:
+                actuate_at(key)  # zero-latency controller: fire at the tick itself
+    log.config["final_truth"] = {"t_s": float(t_prev), "y12": [float(x) for x in y]}
     log.config["convergence"] = convergence_block(log)
     return log
 

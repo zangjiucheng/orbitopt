@@ -137,6 +137,9 @@ class ManeuverPlan:
     mode: str
     dv_planned_eci_m_s: tuple = (0.0, 0.0, 0.0)
     dv_cap_m_s: float = 12.0
+    #: weight of the terminal-velocity block over the terminal-position block
+    #: in ``retarget`` mode (0 = position-only aiming; a final burn wants >1)
+    velocity_weight: float = 1.0
 
     def __post_init__(self):
         if not isinstance(self.label, str) or not self.label:
@@ -159,9 +162,14 @@ class ManeuverPlan:
         if not math.isfinite(cap) or cap <= 0.0:
             raise GuidanceLawError(f"ManeuverPlan({self.label}).dv_cap_m_s must be > 0, "
                                    f"got {self.dv_cap_m_s!r}")
+        vw = float(self.velocity_weight)
+        if not math.isfinite(vw) or vw < 0.0:
+            raise GuidanceLawError(f"ManeuverPlan({self.label}).velocity_weight must be finite "
+                                   f">= 0, got {self.velocity_weight!r}")
         object.__setattr__(self, "t_fire_s", t)
         object.__setattr__(self, "dv_planned_eci_m_s", dv)
         object.__setattr__(self, "dv_cap_m_s", cap)
+        object.__setattr__(self, "velocity_weight", vw)
 
 
 def _num(name: str, value, *, positive: bool = True) -> float:
@@ -264,9 +272,11 @@ class CwMidCourseLaw:
         dv_lvlh = solve_cw_intercept(self.n, tau, np.concatenate((rho, rho_dot)),
                                      np.concatenate((self.terminal_rho_lvlh_m,
                                                      np.zeros(3))),
+                                     velocity_weight=m.velocity_weight,
                                      rcond_max=self.rcond_max)
         if dv_lvlh is None:
-            self.refusals.append(f"{m.label}: Phi_12(tau={tau:.1f}s) ill-conditioned -- coasted")
+            self.refusals.append(f"{m.label}: intercept normal matrix ill-conditioned at "
+                                 f"tau={tau:.1f}s -- coasted")
             return (0.0, 0.0, 0.0)
         _dr, dv_eci = lvlh_to_eci(cr, cv, np.zeros(3), dv_lvlh,
                                       estimate.relative_state.frame,
@@ -289,22 +299,32 @@ class CwMidCourseLaw:
 
 
 def solve_cw_intercept(n: float, tau_s: float, x_now, x_terminal, *,
+                       velocity_weight: float = 1.0,
                        rcond_max: float = 1.0e6) -> np.ndarray | None:
-    """The CW two-point delta-v that drives LVLH state ``x_now`` to
-    ``x_terminal`` in ``tau_s`` seconds: ``dv = Phi12^-1 (rf - Phi11 x0)``.
-    ``None`` when ``Phi_12`` is singular or ill-conditioned (near integer
-    half-revolutions the position error cannot be priced without an infinite
-    burn) -- the caller decides what coasting means."""
+    """The CW delta-v that aims LVLH state ``x_now`` at ``x_terminal`` in
+    ``tau_s`` seconds, in the terminal-weighted least-squares sense: the
+    three-impulse unknown cannot meet six terminal conditions exactly at one
+    epoch, so the burn minimizes ``|W (xf - Phi (x0 + B dv))|`` with the
+    velocity block weighted ``velocity_weight`` over the position block.
+    Position-only aiming (weight 0 on velocity rows) leaves the closing speed
+    intact at arrival; a terminal burn wants the velocity rows to dominate --
+    with a large ``velocity_weight`` and small ``tau_s`` this degenerates to
+    the classic velocity-nulling final burn. ``None`` when the normal matrix
+    is singular or ill-conditioned -- the caller decides what coasting means."""
     n = _num("n", n)
     tau = _num("tau_s", tau_s)
+    vw = _num("velocity_weight", velocity_weight, positive=False)
     x0 = np.asarray(x_now, dtype=np.float64).reshape(6)
     xf = np.asarray(x_terminal, dtype=np.float64).reshape(6)
     if not (np.all(np.isfinite(x0)) and np.all(np.isfinite(xf))):
         raise GuidanceLawError("intercept states must be finite")
     phi = cw_state_transition(n, tau)
-    p11, p12 = phi[:3, :3], phi[:3, 3:]
-    rhs = xf[:3] - p11 @ x0[:3] - p12 @ x0[3:]
-    cond = float(np.linalg.cond(p12))
+    a = phi[:, 3:]
+    resid = xf - phi @ x0
+    w = np.array([1.0, 1.0, 1.0, vw, vw, vw])
+    w2 = w * w
+    m = a.T @ (w2[:, None] * a)
+    cond = float(np.linalg.cond(m))
     if not math.isfinite(cond) or cond > rcond_max:
         return None
-    return np.linalg.solve(p12, rhs)
+    return np.linalg.solve(m, a.T @ (w2 * resid))
