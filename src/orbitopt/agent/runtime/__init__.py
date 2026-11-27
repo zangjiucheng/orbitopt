@@ -9,6 +9,8 @@ re-executes it without an LLM call. See ``docs/agent/runtime.md``.
 """
 
 from .diagnostics import DISHONEST, REMEDIES, diagnose, distrust, feasible, loosened
+from .loop import (MAX_ALTERNATES, VERIFICATION_SHARE, EvaluationBudgetExceeded, EvaluationMeter, known_tool_ids,
+                   screen_cost, solve)
 from .model import (TRACE_SCHEMA, Action, AlternateRun, BudgetUse, Decision, Diagnosis, FailureKind, IterationRecord,
                     Limits, Policy, Proposal, RecordKind, Remedy, RunOutcome, RunStatus, StopReason, Trace,
                     VerificationRecord, Violation, ViolationCode, trace_digest)
@@ -18,9 +20,10 @@ from .planners import (PROPOSAL_SCHEMA, LLMPlanner, Planner, PlannerState, Plann
 
 __all__ = [
     "Action", "AlternateRun", "BudgetUse", "Decision", "diagnose", "Diagnosis", "DISHONEST", "distrust",
-    "FailureKind", "feasible", "IterationRecord", "Limits", "LLMPlanner", "loosened", "OPTION_SPECS", "OptionSpec",
-    "Planner", "PlannerState", "PlannerUnavailable", "Policy", "PROBLEM_FIELDS", "prompt_state", "Proposal",
-    "PROPOSAL_FIELDS", "PROPOSAL_SCHEMA", "RecordedPlanner", "RecordKind", "REMEDIES", "Remedy", "RuleBasedPlanner",
-    "RunOutcome", "RunStatus", "StopReason", "Trace", "trace_digest", "TRACE_SCHEMA", "validate_proposal",
-    "VerificationRecord", "Violation", "ViolationCode",
+    "EvaluationBudgetExceeded", "EvaluationMeter", "FailureKind", "feasible", "IterationRecord", "known_tool_ids",
+    "Limits", "LLMPlanner", "loosened", "MAX_ALTERNATES", "OPTION_SPECS", "OptionSpec", "Planner", "PlannerState",
+    "PlannerUnavailable", "Policy", "PROBLEM_FIELDS", "prompt_state", "Proposal", "PROPOSAL_FIELDS",
+    "PROPOSAL_SCHEMA", "RecordedPlanner", "RecordKind", "REMEDIES", "Remedy", "RuleBasedPlanner", "RunOutcome",
+    "RunStatus", "screen_cost", "solve", "StopReason", "Trace", "trace_digest", "TRACE_SCHEMA", "validate_proposal",
+    "VERIFICATION_SHARE", "VerificationRecord", "Violation", "ViolationCode",
 ]
