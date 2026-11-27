@@ -53,7 +53,7 @@ def test_workspace_bar_emits_and_mirrors(qapp):
     bar = WorkspaceBar()
     seen = []
     bar.workspace_changed.connect(seen.append)
-    assert [k for k, _l, _t in WORKSPACES] == ["missions", "runs", "vehicles", "compare"]
+    assert [k for k, _l, _t in WORKSPACES] == ["missions", "runs", "vehicles", "compare", "optimize"]
     bar.buttons["missions"].setChecked(True)
     bar.buttons["runs"].click()
     assert seen == ["missions", "runs"] and bar.workspace == "runs"
@@ -138,6 +138,24 @@ def test_window_navigates_through_workspaces_breadcrumb_and_palette(qapp, tmp_pa
         assert window.center_stack.currentWidget() is window.vehicle_page
         assert window.vehicle_page.view.name == "starship-class-public-estimate"
         assert bar.workspace == "vehicles" and "STARSHIP" in window.breadcrumb_label.text()
+
+        # Optimize is built on first visit, hides the list, and gives it back on the way out
+        assert window.optimize_workspace is None
+        bar.buttons["optimize"].click()
+        qapp.processEvents()
+        assert window.center_stack.currentWidget() is window.optimize_host and bar.workspace == "optimize"
+        assert window.optimize_workspace is not None and window.left_stack.isHidden()
+        assert window.breadcrumb_label.text().startswith("OPTIMIZE")
+        bar.buttons["runs"].click()
+        qapp.processEvents()
+        assert window.center_stack.currentIndex() == 0 and not window.left_stack.isHidden()
+        bar.buttons["optimize"].click()
+        qapp.processEvents()
+        window._open_palette()
+        window.palette.query.setText("starship_class")      # the palette leaves Optimize too
+        window.palette._activate()
+        qapp.processEvents()
+        assert window.center_stack.currentWidget() is window.vehicle_page and not window.left_stack.isHidden()
 
         bar.buttons["missions"].click()
         qapp.processEvents()
