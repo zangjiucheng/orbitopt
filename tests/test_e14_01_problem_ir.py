@@ -18,7 +18,9 @@ import pytest
 
 from orbitopt.optimization import (
     PROBLEM_SCHEMA,
+    PROBLEM_SCHEMAS,
     RESULT_SCHEMA,
+    RESULT_SCHEMAS,
     STATUSES,
     SYMBOLS,
     Budget,
@@ -42,6 +44,7 @@ from orbitopt.optimization import (
     parse_problem,
     parse_unit,
     schema_errors,
+    schema_for,
     validate_problem,
 )
 
@@ -115,7 +118,7 @@ def test_round_trip_through_json_is_exact_and_keeps_the_digest():
 
 def test_minimal_dict_takes_defaults_and_locks_user_constraints():
     problem = parse_problem({
-        "schemaVersion": "1.0", "id": "p",
+        "schemaVersion": "1.1", "id": "p",
         "variables": [{"name": "x", "lower": -1, "upper": 1}],
         "objectives": [{"name": "f", "expression": "x**2"}],
         "constraints": [{"name": "c", "expression": "x", "sense": "<=", "rhs": 0.5},
@@ -153,12 +156,46 @@ def test_invalid_problem_error_carries_every_error_at_once():
 
 
 # Pinned: the digest is a cross-machine contract. If the canonical form must
-# change, that is a new IR version, not an edit to this number.
-QUADRATIC_DIGEST = "b246af297af29145749cf2c0cc544e7d50cfefd67ac86293284d151fe787beda"
+# change, that is a new IR version, not an edit to this number. IR 1.0 pinned
+# b246af29...; the 1.1 digest hashes the 1.1 form (schemaVersion "1.1").
+QUADRATIC_DIGEST = "3c09d1026773084a2e7a003cd3dde04439b5359db9f4447211d35e125510016c"
 
 
 def test_digest_is_pinned_across_machines():
     assert quadratic().digest() == QUADRATIC_DIGEST
+
+
+QUADRATIC_1_0 = {
+    "schemaVersion": "1.0", "id": "quadratic",
+    "variables": [{"name": "x", "lower": 0.0}, {"name": "y", "lower": 0.0}],
+    "objectives": [{"name": "f", "expression": "x**2 + y**2"}],
+    "constraints": [{"name": "halfplane", "expression": "x + y", "sense": ">=", "rhs": 1.0}],
+}
+
+
+def test_a_1_0_document_parses_into_the_1_1_problem_and_writes_back_as_1_1():
+    assert schema_for(QUADRATIC_1_0, PROBLEM_SCHEMAS) == "optimization-problem-1.0.json"
+    problem = parse_problem(QUADRATIC_1_0)
+    assert problem == quadratic()
+    assert problem.to_dict()["schemaVersion"] == "1.1"
+    assert problem.digest() == QUADRATIC_DIGEST
+    assert schema_errors(problem.to_dict(), PROBLEM_SCHEMA) == []
+
+
+def test_an_unknown_schema_version_is_a_schema_error():
+    with pytest.raises(InvalidProblemError) as info:
+        parse_problem({**QUADRATIC_1_0, "schemaVersion": "2.0"})
+    assert {(e.code, e.path) for e in info.value.errors} == {(ErrorCode.SCHEMA, "/schemaVersion")}
+
+
+def test_a_1_0_result_document_parses_with_the_1_1_defaults():
+    data = {"schemaVersion": "1.0", "problem_digest": "0" * 64, "solver_id": "s", "termination": "converged",
+            "evidence": [{"kind": "solver", "summary": "ran"}]}
+    assert schema_errors(data, schema_for(data, RESULT_SCHEMAS)) == []
+    result = OptimizationResult.from_dict(data)
+    assert result == OptimizationResult(problem_digest="0" * 64, solver_id="s", termination=Termination.CONVERGED,
+                                        evidence=(Evidence("solver", "ran"),))
+    assert schema_errors(result.to_dict(), RESULT_SCHEMA) == []
 
 
 def test_digest_ignores_key_order_containers_and_last_bit_noise():

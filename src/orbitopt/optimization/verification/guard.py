@@ -21,8 +21,9 @@ import math
 from dataclasses import dataclass, fields, replace
 from typing import Any, Callable, Mapping, Sequence
 
-from ..problem import STATUSES, OptimizationProblem, VerificationPolicy, _plain, schema_errors, validate_problem
-from ..result import RESULT_SCHEMA, OptimizationResult, Termination
+from ..problem import (STATUSES, OptimizationProblem, VerificationPolicy, _plain, schema_errors, schema_for,
+                       validate_problem)
+from ..result import RESULT_SCHEMAS, OptimizationResult, Termination
 from . import certificates
 from ._point import PointCheck, check_point
 from .evidence import (
@@ -144,7 +145,7 @@ class _Guard:
     # ------------------------------------------------------------------------------------------- result shape
     def parse(self, raw: Any) -> OptimizationResult | None:
         if isinstance(raw, Mapping):
-            errors = schema_errors(dict(raw), RESULT_SCHEMA)
+            errors = schema_errors(dict(raw), schema_for(raw, RESULT_SCHEMAS))
             for error in errors:
                 self.add(FindingCode.MALFORMED_RESULT, error.path, error.message)
             if errors:

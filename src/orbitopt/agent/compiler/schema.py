@@ -20,6 +20,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from orbitopt.optimization import SCHEMA_VERSION
+
 from .outcome import Assumption, Question, UnsupportedReason
 
 SOURCES = ("user", "assumed")
@@ -158,7 +160,7 @@ def draft_to_ir_dict(draft: Mapping[str, Any], *, problem_id: str, assumptions: 
         return out
 
     data = {
-        "schemaVersion": "1.0",
+        "schemaVersion": SCHEMA_VERSION,
         "id": problem_id,
         "title": draft.get("title", ""),
         "variables": [variable(v) for v in draft["variables"]],

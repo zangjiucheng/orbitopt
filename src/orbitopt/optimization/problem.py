@@ -10,10 +10,11 @@ proposed) can still be built and asked for all its errors at once:
 ``validate_problem`` returns them as typed ``ProblemError`` values, and
 ``parse_problem`` is the boundary for untrusted dict input that raises one
 ``InvalidProblemError`` carrying all of them. The JSON Schema
-``schemas/optimization-problem-1.0.json`` checks structure only (types,
+``schemas/optimization-problem-1.1.json`` checks structure only (types,
 required fields, enumerations); every value rule lives in ``validate_problem``
 so it reports one specific ``ErrorCode`` whether the problem came from Python
-or JSON.
+or JSON. A 1.0 document still parses: it is checked against the 1.0 schema
+and its missing 1.1 fields take their defaults (see ``docs/optimization/ir.md``).
 """
 
 from __future__ import annotations
@@ -35,8 +36,10 @@ from .errors import ErrorCode, InvalidProblemError, ProblemError
 from .expressions import FUNCTIONS, TOOL_ID_PATTERN, EvaluationError, Expression, ExpressionError, ToolCall
 from .units import Unit, UnitError, format_dims, parse_unit
 
-SCHEMA_VERSION = "1.0"
-PROBLEM_SCHEMA = "optimization-problem-1.0.json"
+SCHEMA_VERSION = "1.1"
+PROBLEM_SCHEMA = "optimization-problem-1.1.json"
+PROBLEM_SCHEMAS = {"1.0": "optimization-problem-1.0.json", SCHEMA_VERSION: PROBLEM_SCHEMA}
+"""The problem schema for each ``schemaVersion`` that still parses; ``to_dict`` writes the newest."""
 VARIABLE_KINDS = ("continuous", "integer", "binary", "discrete")
 OBJECTIVE_SENSES = ("minimize", "maximize")
 CONSTRAINT_SENSES = ("<=", ">=", "==")
@@ -388,13 +391,21 @@ def schema_errors(document: Any, schema_name: str) -> list[ProblemError]:
             for e in found]
 
 
+def schema_for(document: Any, schemas: Mapping[str, str]) -> str:
+    """The schema a document's ``schemaVersion`` names, or the newest when it names no known version."""
+    version = document.get("schemaVersion") if isinstance(document, Mapping) else None
+    return schemas.get(version, schemas[SCHEMA_VERSION])
+
+
 def parse_problem(data: Mapping) -> OptimizationProblem:
     """Parse untrusted dict input: schema, then ``from_dict``, then ``validate_problem``.
 
-    Raises one ``InvalidProblemError`` carrying every error found at the
-    first failing stage.
+    The schema is the one ``data["schemaVersion"]`` names (``PROBLEM_SCHEMAS``),
+    so a 1.0 document parses with every 1.1 field at its default. Raises one
+    ``InvalidProblemError`` carrying every error found at the first failing
+    stage.
     """
-    errors = schema_errors(data, PROBLEM_SCHEMA)
+    errors = schema_errors(data, schema_for(data, PROBLEM_SCHEMAS))
     if errors:
         raise InvalidProblemError(errors)
     problem = OptimizationProblem.from_dict(data)

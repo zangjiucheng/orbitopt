@@ -10,6 +10,8 @@ from .expressions import FUNCTIONS, EvaluationError, Expression, ExpressionError
 from .problem import (
     INDEPENDENT_METHODS,
     PROBLEM_SCHEMA,
+    PROBLEM_SCHEMAS,
+    SCHEMA_VERSION,
     STATUSES,
     Budget,
     Constraint,
@@ -23,15 +25,17 @@ from .problem import (
     load_schema,
     parse_problem,
     schema_errors,
+    schema_for,
     validate_problem,
 )
-from .result import EVIDENCE_KINDS, RESULT_SCHEMA, Evidence, OptimizationResult, Termination
+from .result import EVIDENCE_KINDS, RESULT_SCHEMA, RESULT_SCHEMAS, Evidence, OptimizationResult, Termination
 from .units import SYMBOLS, Unit, UnitError, parse_unit
 
 __all__ = [
     "Budget", "Constraint", "EVIDENCE_KINDS", "ErrorCode", "Evaluation", "EvaluationError", "Evidence",
     "Expression", "ExpressionError", "FUNCTIONS", "INDEPENDENT_METHODS", "InvalidProblemError", "Objective",
-    "OptimizationProblem", "OptimizationResult", "PROBLEM_SCHEMA", "Parameter", "ProblemError", "RESULT_SCHEMA",
-    "STATUSES", "SYMBOLS", "Termination", "ToolCall", "Unit", "UnitError", "Variable", "VerificationPolicy",
-    "canonical_digest", "load_schema", "parse_problem", "parse_unit", "schema_errors", "validate_problem",
+    "OptimizationProblem", "OptimizationResult", "PROBLEM_SCHEMA", "PROBLEM_SCHEMAS", "Parameter", "ProblemError",
+    "RESULT_SCHEMA", "RESULT_SCHEMAS", "SCHEMA_VERSION", "STATUSES", "SYMBOLS", "Termination", "ToolCall", "Unit",
+    "UnitError", "Variable", "VerificationPolicy", "canonical_digest", "load_schema", "parse_problem", "parse_unit",
+    "schema_errors", "schema_for", "validate_problem",
 ]

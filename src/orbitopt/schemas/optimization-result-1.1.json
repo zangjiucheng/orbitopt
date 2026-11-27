@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zangjiucheng.github.io/orbitopt/schemas/optimization-result-1.1.json",
+  "title": "orbitopt optimization result (IR)",
+  "description": "Dict form of orbitopt.optimization.OptimizationResult (E14-01, ADR optimization-0001): the answer to the problem named by problem_digest. The four statuses are independent booleans that default to false and are never derived from each other; evidence lists what supports them.",
+  "type": "object",
+  "required": ["schemaVersion", "problem_digest", "solver_id", "termination"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": "1.1"},
+    "problem_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "OptimizationProblem.digest() of the problem answered."},
+    "solver_id": {"type": "string"},
+    "termination": {"enum": ["converged", "max_iterations", "max_evaluations", "timeout", "infeasible", "error", "cancelled"]},
+    "solver_converged": {"type": "boolean"},
+    "constraints_satisfied": {"type": "boolean"},
+    "independently_verified": {"type": "boolean"},
+    "optimality_certified": {"type": "boolean"},
+    "x": {"$ref": "#/$defs/values", "description": "Best point, by variable name, in each variable's unit."},
+    "objective_values": {"$ref": "#/$defs/values", "description": "By objective name, in each objective's unit and declared sense."},
+    "constraint_residuals": {"$ref": "#/$defs/values", "description": "Canonical residuals by constraint name: g <= 0 for inequalities, h = 0 for equalities."},
+    "evaluations": {"type": "integer", "minimum": 0},
+    "iterations": {"type": ["integer", "null"], "minimum": 0},
+    "wall_time_s": {"type": "number", "minimum": 0},
+    "message": {"type": "string"},
+    "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}}
+  },
+  "$defs": {
+    "values": {"type": "object", "additionalProperties": {"type": "number"}},
+    "evidence": {
+      "type": "object",
+      "required": ["kind", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"enum": ["solver", "analytical", "reference_solution", "alternate_solver", "optimality_certificate"]},
+        "summary": {"type": "string"},
+        "data": {"type": "object"}
+      }
+    }
+  }
+}

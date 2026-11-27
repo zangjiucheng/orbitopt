@@ -16,7 +16,9 @@ from typing import Any, Mapping
 
 from .problem import SCHEMA_VERSION, _plain
 
-RESULT_SCHEMA = "optimization-result-1.0.json"
+RESULT_SCHEMA = "optimization-result-1.1.json"
+RESULT_SCHEMAS = {"1.0": "optimization-result-1.0.json", SCHEMA_VERSION: RESULT_SCHEMA}
+"""The result schema for each ``schemaVersion`` that still parses; ``to_dict`` writes the newest."""
 EVIDENCE_KINDS = ("solver", "analytical", "reference_solution", "alternate_solver", "optimality_certificate")
 """``analytical``, ``reference_solution`` and ``alternate_solver`` match ``INDEPENDENT_METHODS``."""
 
@@ -79,7 +81,10 @@ class OptimizationResult:
 
     @classmethod
     def from_dict(cls, data: Mapping) -> "OptimizationResult":
-        """Inverse of ``to_dict`` for schema-valid input (check with ``schema_errors(data, RESULT_SCHEMA)``)."""
+        """Inverse of ``to_dict`` for schema-valid input of any version in ``RESULT_SCHEMAS``.
+
+        Check it first with ``schema_errors(data, schema_for(data, RESULT_SCHEMAS))``.
+        """
         fields = {k: v for k, v in data.items() if k != "schemaVersion"}
         fields["evidence"] = tuple(Evidence(**e) for e in data.get("evidence", ()))
         for key in ("x", "objective_values", "constraint_residuals"):
