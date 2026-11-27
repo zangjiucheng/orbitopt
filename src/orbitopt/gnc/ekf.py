@@ -79,6 +79,10 @@ NATIVE_COVARIANCE_KEY = "native_measurement_covariance"
 _EPS_ANGULAR = 1.0e-6  # rad; LOS within this of the radial axis: az undefined
 
 
+#: component order of a compensatable full-Cartesian LVLH model
+_FULL_LVLH6 = ("rho_x", "rho_y", "rho_z", "rho_dot_x", "rho_dot_y", "rho_dot_z")
+
+
 def white_noise_acceleration_q(q: float, dt: float) -> np.ndarray:
     """The 6x6 white-noise-acceleration process-noise covariance for density
     ``q`` [m^2/s^3] per axis over interval ``dt`` [s] (piecewise-constant
@@ -635,20 +639,49 @@ class RelativeNavEKF:
         return report
 
     def update_from_observation(self, obs: Observation, model: MeasurementModel,
-                                chief_r=None, chief_v=None) -> UpdateReport:
+                                chief_r=None, chief_v=None, *,
+                                compensate_to=None) -> UpdateReport:
         """Contract seam: consume one gnc-contracts ``Observation`` through
-        its model's :meth:`~MeasurementModel.extract`."""
+        its model's :meth:`~MeasurementModel.extract`. ``compensate_to`` (an
+        epoch in filter seconds) time-compensates a full-Cartesian reading to
+        that instant through the process model before the update: a stale
+        measurement pulled straight into the state injects
+        ``v_rel * staleness`` of systematic error -- tens of metres on a
+        closing pass -- so an estimator ticking later than ``latency`` must
+        ask for it. Only a native full-state (6-dof LVLH) model can be
+        propagated; anything else requesting compensation is a bug, not a
+        judgement call, and raises."""
         z, r = model.extract(obs, chief_r, chief_v)
+        if compensate_to is not None:
+            z, r = self._compensate(z, r, float(compensate_to) - float(obs.t_sample_s),
+                                    model)
         self._pending_ids = [obs.record_id]
         return self.update(z, r, model)
 
     def update_from_observations(self, obs_by_model: Mapping[str, Observation],
-                                 stacked: Stacked, chief_r=None, chief_v=None) -> UpdateReport:
+                                 stacked: Stacked, chief_r=None, chief_v=None, *,
+                                 compensate_to=None) -> UpdateReport:
         """One fused update from a :class:`Stacked` model and one observation
-        per component (keyed by component class name)."""
+        per component (keyed by component class name); see
+        :meth:`update_from_observation` for ``compensate_to``."""
         z, r = stacked.extract_each(obs_by_model, chief_r, chief_v)
+        if compensate_to is not None:
+            z, r = self._compensate(z, r, float(compensate_to)
+                                   - float(next(iter(obs_by_model.values())).t_sample_s),
+                                   stacked)
         self._pending_ids = [obs_by_model[type(m).__name__].record_id for m in stacked.models]
         return self.update(z, r, stacked)
+
+    def _compensate(self, z, r, dt, model):
+        if dt <= 1.0e-9:
+            return z, r
+        if model.dof != 6 or tuple(model.components) != _FULL_LVLH6:
+            raise GNCContractError(
+                f"EKF: measurement compensation was asked for a {model.dof}-dof model "
+                f"{type(model).__name__}; only the full LVLH Cartesian state can be "
+                "propagated through the process model")
+        phi = self.process.propagate_with_jacobian(np.zeros(6), None, dt)[1]
+        return phi @ z, phi @ r @ phi.T + white_noise_acceleration_q(self.q, dt)
 
     @property
     def source_observation_ids(self) -> tuple:
