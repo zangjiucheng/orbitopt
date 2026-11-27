@@ -30,13 +30,19 @@ The declared sensing (a cartesian RelNAV-class measurement, 2 m / 3 mm/s
 1-sigma, 20 s cadence, 2 s latency, no dropouts, zero bias) is a DESIGN
 ASSUMPTION carried with provenance in the run-log config; it is not a
 re-declaration of the campaign's perturbations, which stay bit-identical.
+
+E13-05 adds one seam: an optional ``law_factory`` swaps the guidance law
+for the sample (sensing, plant, actuator and grading untouched) and gives
+any burn phase the law names its own execution draw from slot 101 upward.
+The E13-05 arms (LQR, MPC) fly through this hook; the default law keeps the
+baseline flight bit-identical.
 """
 from __future__ import annotations
 
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
@@ -53,6 +59,7 @@ from orbitopt.gnc.ekf import (
     RelativeVelocity,
     Stacked,
 )
+from orbitopt.gnc.feed import GuidanceLaw
 from orbitopt.gnc.guidance import CwMidCourseLaw, ManeuverPlan, ReferenceEphemeris
 from orbitopt.gnc.recording import GncRunLog
 from orbitopt.gnc.sensors import ChannelErrorConfig, DropoutConfig, RelativeSensorModel
@@ -126,6 +133,51 @@ class ClosedLoopSampleConfig:
     deadband_m_s: float = 0.01
 
 
+@dataclass(frozen=True)
+class GuidanceContext:
+    """Everything a guidance law needs to build itself for one sample, handed
+    to the optional ``law_factory`` of :func:`fly_closed_loop_sample` (E13-05):
+    the plan and its gate/terminal epochs, the paired draws (for provenance
+    only -- a law must never consume them; the actuator owns execution
+    error), and the reference ephemeris. The factory replaces the law ONLY;
+    sensing, filtering, plant, actuator and grading stay the campaign's."""
+
+    cfg: Any
+    campaign: Any
+    clc: Any
+    sol: Any
+    draws: Any
+    reference: ReferenceEphemeris
+    t1_s: float
+    tof_s: float
+    t_f_s: float
+    dv1_eci_m_s: tuple
+
+
+def default_guidance_law(ctx: GuidanceContext):
+    """The E13-04 baseline law (the schedule ``fly_closed_loop_sample`` used
+    to hard-code): planned gate burn, mid-course retarget, position trim,
+    arrival nulling."""
+    cfg, clc = ctx.cfg, ctx.clc
+    dv1 = ctx.dv1_eci_m_s
+    return CwMidCourseLaw(
+        maneuvers=(
+            ManeuverPlan("departure", ctx.t1_s, "planned", dv_planned_eci_m_s=dv1,
+                         dv_cap_m_s=max(1.5 * float(np.linalg.norm(dv1)),
+                                        float(np.linalg.norm(dv1)) + 1.0)),
+            ManeuverPlan("midcourse", ctx.t1_s + clc.midcourse_fraction * ctx.tof_s, "retarget",
+                         dv_cap_m_s=clc.retarget_cap_m_s),
+            ManeuverPlan("terminal_trim", ctx.t_f_s - clc.pre_terminal_lead_s, "retarget",
+                         dv_cap_m_s=clc.trim_cap_m_s,
+                         velocity_weight=clc.pre_terminal_velocity_weight),
+            ManeuverPlan("arrival", ctx.t_f_s - clc.terminal_lead_s, "retarget",
+                         dv_cap_m_s=clc.retarget_cap_m_s,
+                         velocity_weight=clc.terminal_velocity_weight)),
+        reference=ctx.reference, t_terminal_s=ctx.t_f_s,
+        terminal_rho_lvlh_m=cfg.hold_point_rel_lvlh,
+        budget_m_s=float(cfg.delta_v_budget_m_s), deadband_m_s=clc.deadband_m_s)
+
+
 def _sensor(clc: ClosedLoopSampleConfig, seed: int, n_ticks: int):
     chans = tuple(ChannelErrorConfig(c, s, 0.0, SENSOR_SOURCE) for c, s in
                   (("rel_pos_x_m", clc.pos_sigma_m), ("rel_pos_y_m", clc.pos_sigma_m),
@@ -176,7 +228,9 @@ def _execution_draws(model: rb.DisturbanceModel, seed: int, burn_slot: int) -> t
 def fly_closed_loop_sample(cfg: RendezvousMissionConfig, campaign: RobustnessCampaign,
                            tof_s: float, seed_base: int, cluster: int, index: int, *,
                            clc: ClosedLoopSampleConfig | None = None,
-                           run_id: str | None = None) -> tuple[FlightOutcome, dict, GncRunLog | None]:
+                           run_id: str | None = None,
+                           law_factory: "Callable[[GuidanceContext], GuidanceLaw] | None" = None
+                           ) -> tuple[FlightOutcome, dict, GncRunLog | None]:
     """Fly one campaign sample closed-loop. Returns ``(FlightOutcome,
     assessment, run_log)`` -- the FlightOutcome grades exactly like the
     campaign's own (same trajectory checks, budget and arrival tolerances,
@@ -184,7 +238,15 @@ def fly_closed_loop_sample(cfg: RendezvousMissionConfig, campaign: RobustnessCam
     carries the closed-loop deviations: tracking error, the delta-v ledger by
     phase, refusals, and the settle/convergence evidence. A planning failure
     is the same ``planning_infeasible`` outcome the open-loop campaign
-    reports (the plan is the identical ``plan_sample``), with ``None`` log."""
+    reports (the plan is the identical ``plan_sample``), with ``None`` log.
+
+    ``law_factory`` (E13-05) replaces the guidance law only: called once per
+    sample with the :class:`GuidanceContext`, it returns any ``GuidanceLaw``.
+    Default is :func:`default_guidance_law`, the E13-04 schedule, so the
+    baseline flight is bit-identical to the pre-hook behaviour. Execution
+    error for any burn phase the law names beyond the scheduled four draws
+    ``default_rng([seed, slot])`` from slot 101 upward -- still the
+    campaign's model, still never a paired stream."""
     clc = clc or ClosedLoopSampleConfig()
     model = campaign.disturbances
     draws = rb.draw_sample(model, int(seed_base), int(cluster), int(index))
@@ -234,9 +296,12 @@ def fly_closed_loop_sample(cfg: RendezvousMissionConfig, campaign: RobustnessCam
     # departure/arrival reuse the sample's paired burn draws; every NEW burn
     # (midcourse and anything later) gets the campaign's own execution-model
     # stream, default_rng([seed, slot]) -- never touching the paired streams.
+    # The slot for a law-invented burn (E13-05 feedback pulses) is a counter
+    # from 101, so it can never collide with the scheduled slots 2/3.
     phases = {"departure": (draws.burn_factors[0], draws.burn_angle_vectors_rad[0]),
               "arrival": (draws.burn_factors[1], draws.burn_angle_vectors_rad[1])}
     new_burn_slot = {"midcourse": 2, "terminal_trim": 3}
+    slot_state = {"next": 100}
 
     def actuator(command) -> tuple:
         ph = str(command.metadata.get("phase", ""))
@@ -246,6 +311,9 @@ def fly_closed_loop_sample(cfg: RendezvousMissionConfig, campaign: RobustnessCam
             mag, ang = phases["arrival"]
         elif ph in new_burn_slot:
             mag, ang = _execution_draws(model, draws.seed, new_burn_slot[ph])
+        elif ph and ph != "coast":
+            slot_state["next"] += 1
+            mag, ang = _execution_draws(model, draws.seed, slot_state["next"])
         else:
             return (0.0, 0.0, 0.0)  # coast: nothing to misfire
         realized = rb._rotate(np.asarray(command.delta_v_eci_m_s, dtype=float) * mag, ang)
@@ -267,21 +335,9 @@ def fly_closed_loop_sample(cfg: RendezvousMissionConfig, campaign: RobustnessCam
     filt = RelativeNavEKF(CwProcess(ref.mean_motion), np.concatenate((rho0, rhod0)),
                           np.diag(p0_diag), q_accel_m2_s3=clc.q_accel_m2_s3)
     dv1 = tuple(float(x) for x in sol["dv1"])
-    law = CwMidCourseLaw(
-        maneuvers=(
-            ManeuverPlan("departure", t1, "planned", dv_planned_eci_m_s=dv1,
-                         dv_cap_m_s=max(1.5 * float(np.linalg.norm(dv1)),
-                                        float(np.linalg.norm(dv1)) + 1.0)),
-            ManeuverPlan("midcourse", t1 + clc.midcourse_fraction * tof, "retarget",
-                         dv_cap_m_s=clc.retarget_cap_m_s),
-            ManeuverPlan("terminal_trim", t_f - clc.pre_terminal_lead_s, "retarget",
-                         dv_cap_m_s=clc.trim_cap_m_s,
-                         velocity_weight=clc.pre_terminal_velocity_weight),
-            ManeuverPlan("arrival", t_f - clc.terminal_lead_s, "retarget",
-                         dv_cap_m_s=clc.retarget_cap_m_s,
-                         velocity_weight=clc.terminal_velocity_weight)),
-        reference=ref, t_terminal_s=t_f, terminal_rho_lvlh_m=cfg.hold_point_rel_lvlh,
-        budget_m_s=float(cfg.delta_v_budget_m_s), deadband_m_s=clc.deadband_m_s)
+    gctx = GuidanceContext(cfg=cfg, campaign=campaign, clc=clc, sol=sol, draws=draws,
+                           reference=ref, t1_s=t1, tof_s=tof, t_f_s=t_f, dv1_eci_m_s=dv1)
+    law = default_guidance_law(gctx) if law_factory is None else law_factory(gctx)
 
     # ---- fly ---------------------------------------------------------------
     hold = np.asarray(cfg.hold_point_rel_lvlh, dtype=float)
@@ -369,6 +425,7 @@ def fly_closed_loop_sample(cfg: RendezvousMissionConfig, campaign: RobustnessCam
                   "t_f_s": t_f, "grade": grade, "ledger": ledger, "tracking": tracking,
                   "convergence": dict(log.config["convergence"]),
                   "law_refusals": list(law.refusals),
+                  "law_solve_time": dict(getattr(law, "solve_time_stats", {}) or {}),
                   "n_observations": len(log.records["observation"]),
                   "n_estimates": len(log.records["estimate"])}
     assessment["attribution"] = attribute_failure(outcome, assessment, cfg)
