@@ -37,6 +37,7 @@ from orbitopt.agent.runtime import (
     CancelReason,
     known_tool_ids,
     load_trace,
+    orbitopt_version,
     loosened,
     check_run,
     replay,
@@ -531,7 +532,7 @@ def _as_trace_1_0(run: Path) -> dict:
     """Rewrite a saved run's trace as agent-trace-1.0 (no cancel point) and reseal the manifest."""
     trace = json.loads((run / "trace.json").read_text())
     trace["schemaVersion"] = "1.0"
-    del trace["outcome"]["cancel"]
+    del trace["outcome"]["cancel"], trace["provider"], trace["model"], trace["orbitopt_version"]
     trace["digest"] = trace_digest(trace)
     (run / "trace.json").write_bytes(canonical_json(trace))
     manifest = json.loads((run / "manifest.json").read_text())
@@ -546,7 +547,9 @@ def test_a_1_0_trace_still_parses_checks_and_replays(tmp_path):
     save_run(outcome, tmp_path)
     old = _as_trace_1_0(tmp_path)
     assert load_trace(tmp_path) == old  # validated against agent-trace-1.0.json, returned as recorded
-    assert upgrade_trace(old)["schemaVersion"] == "1.1" and upgrade_trace(old)["outcome"]["cancel"] is None
+    upgraded = upgrade_trace(old)
+    assert upgraded["schemaVersion"] == "1.1" and upgraded["outcome"]["cancel"] is None
+    assert (upgraded["provider"], upgraded["model"], upgraded["orbitopt_version"]) == (None, None, None)
     assert check_run(tmp_path).verified
     report = replay(tmp_path)
     assert report.equal, (report.integrity, report.differences)
@@ -849,6 +852,30 @@ def test_a_recorded_transcript_reproduces_the_run(tmp_path):
     replayed = solve(problem, planner=LLMPlanner(again), seed=5)
     again.assert_exhausted()
     assert replayed.trace.digest() == recorded.trace.digest()
+
+
+def test_the_trace_names_the_provider_model_and_version_and_only_the_version_is_outside_the_digest(tmp_path):
+    mock = MockProvider([json.dumps({"action": "solve", "solver_id": "scipy.slsqp"}), json.dumps({"action": "stop"})],
+                        model="qwen-test")
+    outcome = solve(WORKED, planner=LLMPlanner(mock))
+    body = outcome.trace.to_dict()
+    assert (body["planner"], body["provider"], body["model"]) == ("llm", "mock", "qwen-test")
+    assert body["orbitopt_version"] == orbitopt_version()
+    rule = solve(WORKED, planner=RuleBasedPlanner()).trace.to_dict()
+    assert (rule["provider"], rule["model"]) == (None, None)
+    assert trace_digest({**body, "orbitopt_version": "9.9.9"}) == body["digest"]  # environmental
+    assert trace_digest({**body, "model": "another-model"}) != body["digest"]  # defines the run
+    assert trace_digest({**body, "provider": "openai_compat"}) != body["digest"]
+    save_run(outcome, tmp_path)
+    trace = json.loads((tmp_path / "trace.json").read_text())
+    trace["orbitopt_version"] = "0.0.1"  # recorded by another version: the digest and the replay still hold
+    (tmp_path / "trace.json").write_bytes(canonical_json(trace))
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    manifest["files"]["trace.json"] = file_digest(canonical_json(trace))
+    (tmp_path / "manifest.json").write_bytes(canonical_json(manifest))
+    report = replay(tmp_path)
+    assert report.equal, (report.integrity, report.differences)
+    assert report.check.trace["orbitopt_version"] == "0.0.1"
 
 
 def test_two_runs_with_the_same_seed_have_the_same_trace_digest():

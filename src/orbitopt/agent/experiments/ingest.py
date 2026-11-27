@@ -13,12 +13,11 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from functools import cache
-from importlib import metadata
 from pathlib import Path
 from typing import Any, Literal, Mapping
 
-from orbitopt.agent.runtime import BudgetUse, Limits, RunStatus, StopReason, check_run, replay, safe_relative
+from orbitopt.agent.runtime import (UNKNOWN_VERSION, BudgetUse, Limits, RunStatus, StopReason, check_run, replay,
+                                    safe_relative)
 from orbitopt.optimization import OptimizationProblem
 from orbitopt.optimization.solvers import SolverRegistry
 from orbitopt.optimization.verification import file_digest
@@ -32,19 +31,10 @@ SEALED_FILES = ("problem.json", "result.json", "evidence.json", MANIFEST)
 Verify = Literal["check", "replay"]
 
 
-@cache
-def orbitopt_version() -> str:
-    """The installed orbitopt version (read once: the metadata lookup costs about 2 ms)."""
-    try:
-        return metadata.version("orbitopt")
-    except metadata.PackageNotFoundError:
-        return "0+unknown"
-
-
 def record_run(db: ExperimentDB, run_dir: str | Path, *, expected_manifest_digest: str | None = None,
                verify: Verify = "check", tools: Any = None, registry: SolverRegistry | None = None,
-               provider: str | None = None, model: str | None = None, family: str | None = None,
-               parent_id: str | None = None, resumed_from: str | None = None) -> ExperimentRecord:
+               family: str | None = None, parent_id: str | None = None,
+               resumed_from: str | None = None) -> ExperimentRecord:
     """Verify the run directory ``run_dir``, store its files and index it; return its record.
 
     Idempotent: the same run (the same ``manifest.json`` bytes) gives one
@@ -55,8 +45,8 @@ def record_run(db: ExperimentDB, run_dir: str | Path, *, expected_manifest_diges
     re-executes the run as well and records ``replayed``, which only a cache
     entry needs. Pass ``tools`` and ``registry`` as the run used them: the
     guard re-evaluates points, and replay re-runs the solvers.
-    ``provider`` and ``model`` name the LLM behind the planner, which
-    the trace does not hold. ``family`` defaults to ``problem.metadata["family"]``,
+    The provider, the model and the orbitopt version come from the trace
+    (``0+unknown`` for a 1.0 trace). ``family`` defaults to ``problem.metadata["family"]``,
     then to the problem id. ``parent_id`` and ``resumed_from`` must name
     recorded runs.
     """
@@ -89,7 +79,7 @@ def record_run(db: ExperimentDB, run_dir: str | Path, *, expected_manifest_diges
     trace, files = check.trace, check.files
     integrity = Integrity.CHECKED if differences is None else Integrity.REPLAYED
     record = _record(run_id, _json(files[MANIFEST], MANIFEST), trace, check.problem, files, integrity,
-                     provider=provider, model=model, family=family, parent_id=parent_id, resumed_from=resumed_from)
+                     family=family, parent_id=parent_id, resumed_from=resumed_from)
     for data in files.values():
         db.store.put(data)
     return db.add(record, _cache_keys(record))
@@ -146,12 +136,13 @@ def _record(run_id: str, manifest: Mapping, trace: Mapping, problem: Optimizatio
         problem_digest=trace["problem_digest"], fingerprint=trace["fingerprint"], trace_digest=trace["digest"],
         result_digest=None if sealed is None else _sealed_result_digest(files, sealed["dir"]),
         sealed_digest=None if sealed is None else sealed["manifest_digest"], planner=trace["planner"],
+        provider=trace["provider"], model=trace["model"],
         seed=trace["seed"], steps=tuple(steps), best=best, objective_name=objective.name, sense=objective.sense,
         objective=value, max_violation=None if summary is None else _max_violation(problem, summary),
         statuses=_statuses(trace, best), status=RunStatus(trace["outcome"]["status"]),
         stop_reason=StopReason(trace["outcome"]["stop_reason"]), limits=Limits(**trace["limits"]),
         usage=BudgetUse(**trace["usage"]), created_at=datetime.now(timezone.utc).isoformat(timespec="microseconds"),
-        orbitopt_version=orbitopt_version(), integrity=integrity,
+        orbitopt_version=trace["orbitopt_version"] or UNKNOWN_VERSION, integrity=integrity,
         files={name: file_digest(data) for name, data in files.items()}, **links)
 
 

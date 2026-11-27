@@ -158,7 +158,7 @@ class ExperimentRecord:
     best. ``statuses`` are the final report's four statuses, or the best
     candidate's screen when no final verification ran. ``created_at`` is when
     the run was recorded (UTC, ISO 8601); ``orbitopt_version`` is the version
-    that replayed it at ingest. ``files`` maps each run file to its digest in
+    that ran it, from its trace (``0+unknown`` for a 1.0 trace). ``files`` maps each run file to its digest in
     the artifact store.
     """
 

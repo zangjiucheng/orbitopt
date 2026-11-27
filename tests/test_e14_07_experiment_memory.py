@@ -26,10 +26,10 @@ from orbitopt.agent.experiments import (MIGRATIONS, SCHEMA_VERSION, ArtifactErro
                                         ExperimentRecord, IgnoredReason, Integrity, InvalidIdError,
                                         MalformedRecordError, RunIntegrityError, SchemaVersionError, UnknownRunError,
                                         UnsafePathError, VersionPolicy, aggregate, cache_key, compare, export_run,
-                                        lookup, orbitopt_version, query, record_run, resume_plan)
+                                        lookup, query, record_run, resume_plan)
 from orbitopt.agent.providers import MockProvider
 from orbitopt.agent.runtime import (LLMPlanner, Proposal, RecordedPlanner, RuleBasedPlanner, RunStatus, StopReason,
-                                    replay, safe_relative, save_run, solve, trace_digest)
+                                    orbitopt_version, replay, safe_relative, save_run, solve, trace_digest)
 from orbitopt.optimization import (Budget, Constraint, Objective, OptimizationProblem, Parameter, ToolCall, Variable,
                                    VerificationPolicy)
 from orbitopt.optimization.classify import Form
@@ -124,6 +124,7 @@ def test_a_recorded_run_reads_back_with_the_runs_own_numbers(db, tmp_path):
     assert record.usage == outcome.trace.usage and record.limits == outcome.trace.limits
     assert [s.solver_id for s in record.steps][0] == outcome.trace.iterations[0].decision.solver_id
     assert record.max_violation == 0.0 and record.orbitopt_version == orbitopt_version()
+    assert (record.provider, record.model) == (None, None)
     assert ExperimentRecord.from_dict(record.to_dict()) == record
 
     with ExperimentDB(tmp_path / "db") as reopened:
@@ -164,6 +165,20 @@ def test_default_ingest_runs_no_solver_and_replay_is_opt_in(db, tmp_path):
             {k: v for k, v in checked.to_dict().items() if k not in ("created_at", "integrity")}
         with pytest.raises(ValueError):
             record_run(other, tmp_path / "run", verify="trust")
+
+
+def test_the_record_names_the_version_that_ran_the_run_not_the_one_that_ingests_it(tmp_path):
+    run = saved(solve(CQP, planner=RuleBasedPlanner()), tmp_path / "run")
+    trace = json.loads((run / "trace.json").read_text())
+    assert trace["orbitopt_version"] == orbitopt_version()
+    trace["orbitopt_version"] = "0.0.1"  # written by an older orbitopt; the version is outside the digest
+    (run / "trace.json").write_bytes(canonical_json(trace))
+    manifest = json.loads((run / "manifest.json").read_text())
+    manifest["files"]["trace.json"] = file_digest(canonical_json(trace))
+    (run / "manifest.json").write_bytes(canonical_json(manifest))
+    for verify in ("check", "replay"):
+        with ExperimentDB(tmp_path / f"db-{verify}") as db:
+            assert record_run(db, run, verify=verify).orbitopt_version == "0.0.1", verify
 
 
 def test_a_checked_record_never_serves_the_cache(db, tmp_path):
@@ -416,11 +431,11 @@ def test_resume_plan_of_a_budget_exhausted_run(db, tmp_path):
 
 def test_resume_plan_of_a_token_limited_llm_run_records_the_provider(db, tmp_path):
     planner = LLMPlanner(MockProvider([json.dumps({"action": "solve", "solver_id": "scipy.slsqp"}),
-                                       json.dumps({"action": "stop"})]))
+                                       json.dumps({"action": "stop"})], model="mock-7b"))
     outcome = solve(CQP, planner=planner, budget=Budget(max_tokens=1))
     assert outcome.stop_reason is StopReason.MAX_TOKENS and outcome.trace.usage.tokens > 1
-    record = record_run(db, saved(outcome, tmp_path / "run"), provider="mock", model="mock")
-    assert (record.provider, record.model, record.planner) == ("mock", "mock", "llm")
+    record = record_run(db, saved(outcome, tmp_path / "run"))
+    assert (record.provider, record.model, record.planner) == ("mock", "mock-7b", "llm")  # read from the trace
     assert record.usage.tokens == outcome.trace.usage.tokens
     plan = resume_plan(db, record.run_id)
     assert plan.resumable and plan.remaining.max_tokens == 0 and len(plan.proposals) == 1

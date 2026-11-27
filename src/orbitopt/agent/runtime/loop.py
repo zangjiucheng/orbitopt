@@ -401,7 +401,8 @@ class _Run:
                       self.seed, self.limits, self.policy,
                       tuple(c.solver_id for c in self.capabilities), tuple(self.records),
                       tuple(self.verifications), status, stop, None if best is None else best[0], self.usage(),
-                      refusal, self.cancel_point)
+                      refusal, self.cancel_point, getattr(self.planner, "provider", None),
+                      getattr(self.planner, "model", None))
         return RunOutcome(status, stop, None if best is None else best[1], report,
                           self.evidence.get(best[0], ()) if best else (), trace, self.asked, dict(self.results),
                           self.tool_log)

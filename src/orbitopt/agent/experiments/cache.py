@@ -24,12 +24,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping
 
-from orbitopt.agent.runtime import EvaluationMeter, safe_relative, screen_cost
+from orbitopt.agent.runtime import EvaluationMeter, orbitopt_version, safe_relative, screen_cost
 from orbitopt.optimization import OptimizationProblem, OptimizationResult, Provenance, parse_problem
 from orbitopt.optimization.verification import Outcome, result_digest, verify_run
 
 from .index import ExperimentDB
-from .ingest import SEALED_FILES, orbitopt_version
+from .ingest import SEALED_FILES
 from .model import ArtifactError, ExperimentError, ExperimentRecord, Integrity, VersionPolicy, cache_key
 
 

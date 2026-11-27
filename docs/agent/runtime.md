@@ -310,6 +310,20 @@ digits) of the trace without `wall_s`, `wall_time_s` and `latency_s`
 runs with the same problem, planner, seed and solvers share it. A number that
 straddles a 12th-digit rounding boundary still splits it.
 
+Three top-level fields say who and what ran the loop:
+
+| Field | Content | In the digest |
+|---|---|---|
+| `provider` | The chat provider behind an LLM planner (its `name`), `null` for a planner without one. | Yes: another provider is another run. |
+| `model` | The provider's model, `null` when none or unknown. | Yes: another model is another run. |
+| `orbitopt_version` | The installed orbitopt version that ran the loop. | No: it describes the machine (`ENVIRONMENT_KEYS`), and replay does not compare it either. |
+
+A planner declares `provider` and `model`. `LLMPlanner` reads them from its
+chat provider, `RuleBasedPlanner` has neither, and `RecordedPlanner` takes
+them as arguments, which `replay` fills from the trace. A `ReplayProvider`
+reports the provider and model its cassette recorded, so a run replayed from
+a cassette keeps the recorded run's digest.
+
 `outcome.cancel` is where a cancellation fired, or `null`: `iteration` is
 the number of iterations completed, and `reason` is the check that fired,
 `before_iteration` (before the next planner proposal) or
@@ -318,11 +332,13 @@ the number of iterations completed, and `reason` is the check that fired,
 
 ### Version 1.0
 
-Version 1.1 added `outcome.cancel`. A 1.0 trace still loads: `load_trace`
+Version 1.1 added `outcome.cancel`, `provider`, `model` and
+`orbitopt_version`. A 1.0 trace still loads: `load_trace`
 checks each trace against the schema its `schemaVersion` names
 (`TRACE_SCHEMAS`) and returns it as recorded, and its digest is checked as
-recorded. `upgrade_trace` gives the 1.1 shape with `cancel` set to `null`,
-and `check_run` and `replay` work on that. A 1.0 run therefore replays
+recorded. `upgrade_trace` gives the 1.1 shape with `cancel`, `provider`,
+`model` and `orbitopt_version` set to `null`, and `check_run` and `replay`
+work on that. A 1.0 run therefore replays
 without a cancel signal, as it did under 1.0. An uncancelled 1.0 run
 replays equal, since replay does not compare `schemaVersion`, but its
 replayed digest is a 1.1 digest and differs from the recorded one. A

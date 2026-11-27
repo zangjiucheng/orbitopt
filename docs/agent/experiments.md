@@ -58,20 +58,20 @@ Use one `ExperimentDB` per process or thread.
 | `problem_digest`, `fingerprint`, `trace_digest`, `result_digest` | The problem's IR digest and hard-constraint fingerprint, the trace digest, and `result_digest` of the best result. |
 | `sealed_digest` | The manifest digest of the sealed run (`orbitopt.optimization.run/2`). |
 | `problem_id`, `family` | The family is the `family` argument, else `problem.metadata["family"]`, else the problem id. |
-| `planner`, `provider`, `model` | The planner name from the trace. The trace does not hold the provider or the model, so `record_run` takes them as arguments. |
+| `planner`, `provider`, `model` | From the trace: the planner name, and the chat provider and model behind an LLM planner (`None` for the rule-based planner and for a 1.0 trace). |
 | `seed`, `steps` | The run seed and every solver step: each planner decision (`iteration-0003`) and each final-verification alternate (`verify-1-scipy.slsqp`), with its solver, options, seed, start point and evaluation allowance. |
 | `best`, `objective`, `sense`, `max_violation` | The best result's label, its first objective in the declared sense, and its largest hard-constraint violation (0 when the problem has none). |
 | `statuses` | The final report's four statuses, or the best candidate's screen when no final verification ran. |
 | `status`, `stop_reason`, `limits`, `usage` | As in the trace. `usage` holds iterations, evaluations, tokens and wall seconds. |
 | `created_at` | When the run was recorded, UTC, ISO 8601 with microseconds. |
-| `orbitopt_version` | The version that replayed the run at ingest. |
+| `orbitopt_version` | The version that ran the run, from the trace; `0+unknown` for a 1.0 trace, which does not say. The cache keys use it. |
 | `integrity` | `checked` (the default ingest) or `replayed`. See below. |
 | `files` | Each run file by its path in the run directory, to its digest in the store. |
 | `parent_id`, `resumed_from` | Links to recorded runs, or `None`. |
 
 ## Recording a run
 
-`record_run(db, run_dir, *, expected_manifest_digest=None, verify="check", tools=None, registry=None, provider=None, model=None, family=None, parent_id=None, resumed_from=None)`
+`record_run(db, run_dir, *, expected_manifest_digest=None, verify="check", tools=None, registry=None, family=None, parent_id=None, resumed_from=None)`
 trusts nothing in `run_dir`:
 
 1. It reads `manifest.json`. Its digest is the run id. With

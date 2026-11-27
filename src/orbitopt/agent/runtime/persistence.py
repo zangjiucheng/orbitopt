@@ -41,8 +41,8 @@ from orbitopt.optimization.verification import (RUN_FORMAT, Outcome, Verificatio
                                                 seal_run, verify_run)
 
 from .loop import Tools, solve
-from .model import (TRACE_SCHEMA, TRACE_SCHEMAS, CancelPoint, Policy, Proposal, RunOutcome, RunStatus, result_summary,
-                    stable, trace_digest, upgrade_trace)
+from .model import (ENVIRONMENT_KEYS, TRACE_SCHEMA, TRACE_SCHEMAS, CancelPoint, Policy, Proposal, RunOutcome,
+                    RunStatus, result_summary, stable, trace_digest, upgrade_trace)
 from .planners import RecordedPlanner
 
 RUN_MANIFEST_FORMAT = "orbitopt.agent.run/1"
@@ -51,8 +51,9 @@ SEALED = "sealed"
 MAX_DIFFERENCES = 20
 SAFE_PART = re.compile(r"^[A-Za-z0-9_.-]+$")
 Alternates = Literal["recorded", "rerun"]
-UNCOMPARED = frozenset({"digest", "schemaVersion"})
-"""Top-level trace keys replay does not compare: the digest of a 1.0 trace covers its 1.0 form."""
+UNCOMPARED = frozenset({"digest", "schemaVersion", *ENVIRONMENT_KEYS})
+"""Top-level trace keys replay does not compare: the digest of a 1.0 trace covers its 1.0 form, and the version
+that replays may differ from the one that ran."""
 
 
 class UnsafePathError(ValueError):
@@ -244,7 +245,8 @@ def replay(run_dir: str | Path, *, tools: Tools | None = None, registry: SolverR
         return ReplayReport(check, (), None, None)
     proposals = [Proposal.from_dict(r["proposal"]) for r in trace["iterations"]]
     cancel = trace["outcome"]["cancel"]
-    outcome = solve(problem, planner=RecordedPlanner(proposals, name=trace["planner"]),
+    outcome = solve(problem, planner=RecordedPlanner(proposals, name=trace["planner"], provider=trace["provider"],
+                                                     model=trace["model"]),
                     budget=Budget(**trace["limits"]), policy=Policy.from_dict(trace["policy"]), tools=tools,
                     seed=trace["seed"], registry=registry,
                     cancel=None if cancel is None else CancelPoint.from_dict(cancel))
