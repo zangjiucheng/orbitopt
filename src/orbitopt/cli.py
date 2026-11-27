@@ -322,7 +322,8 @@ def _cmd_gnc_studio(args):
         studio, outcome, assessment = fly_leo_rdv_001_studio(
             cluster=args.cluster, index=args.index,
             supervised=not args.no_supervise, verify=not args.no_verify)
-        source = f"LEO-RDV-001 sample {args.cluster}/{args.index} ({outcome.status})"
+        source = (f"LEO-RDV-001 sample {args.cluster}/{args.index} "
+                  f"({'ok' if outcome.ok else f'FAILED ({outcome.failure_class})'})")
     else:
         studio = build_gnc_studio_run(args.run_log, verification_report=args.report)
         source = args.run_log
