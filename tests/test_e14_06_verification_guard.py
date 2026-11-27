@@ -136,6 +136,20 @@ def resolve(bench_digest: str) -> str:
     return BENCH_TO_IR.get(bench_digest) or __import__("hashlib").sha256(bench_digest.encode()).hexdigest()
 
 
+def test_a_tiny_right_hand_side_is_graded_relative_to_itself():
+    """``error <= 1e-10`` means 1e-10: a point with error 1e-9 fails, though it is within 1e-6 absolute."""
+    problem = OptimizationProblem(id="tiny-rhs", variables=(Variable("err", lower=0.0, upper=1.0),),
+                                  objectives=(Objective("f", "err"),),
+                                  constraints=(Constraint("accuracy", "err", "<=", 1e-10),))
+    result = OptimizationResult(problem_digest=problem.digest(), solver_id="s", termination="converged",
+                                solver_converged=True, constraints_satisfied=True, x={"err": 1e-9})
+    report = verify_result(problem, result)
+    assert report.statuses["constraints_satisfied"].outcome is Outcome.FAILED
+    assert FindingCode.CONSTRAINT_VIOLATION in report.codes and FindingCode.CLAIM_CONTRADICTED in report.codes
+    tight = replace(result, x={"err": 1e-10})
+    assert verify_result(problem, tight).statuses["constraints_satisfied"].outcome is Outcome.PASSED
+
+
 def test_translation_agrees_with_the_catalogue_callables():
     assert len(HOSTS) >= 15, HOSTS
     for inst_id in HOSTS:

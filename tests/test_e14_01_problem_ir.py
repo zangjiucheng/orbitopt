@@ -45,6 +45,7 @@ from orbitopt.optimization import (
     Variable,
     VerificationPolicy,
     canonical_digest,
+    tolerance_scale,
     parse_problem,
     parse_unit,
     schema_errors,
@@ -667,6 +668,47 @@ def test_result_round_trips_and_validates_against_its_schema():
     data["problem_digest"] = "not-a-digest"
     data["termination"] = "gave_up"
     assert {e.path for e in schema_errors(data, RESULT_SCHEMA)} == {"/problem_digest", "/termination"}
+
+
+def _error_problem(rhs: float, sense: str = "<=") -> OptimizationProblem:
+    return OptimizationProblem(id="tiny-rhs", variables=(Variable("err"),), objectives=(Objective("f", "err"),),
+                               constraints=(Constraint("accuracy", "err", sense, rhs),))
+
+
+@pytest.mark.parametrize("rhs, sense, value, holds", [
+    (1e-10, "<=", 1e-10 * (1 + 0.5e-6), True),   # within constraint_tol of the bound, relative to it
+    (1e-10, "<=", 1e-10 * (1 + 2e-6), False),
+    (1e-10, "<=", 1e-9, False),                  # IR 1.0 accepted this: 1e-9 - 1e-10 <= 1e-6 * max(1, 1e-10)
+    (-1e-10, ">=", -1e-10 * (1 + 2e-6), False),
+    (0.0, "<=", 0.5e-6, True),                   # a zero rhs has no magnitude: the tolerance is absolute
+    (0.0, "<=", 2e-6, False),
+    (1e3, "<=", 1e3 + 0.5e-3, True),             # large rhs: relative, as in IR 1.0
+    (1e3, "==", 1e3 - 2e-3, False),
+])
+def test_constraint_tolerance_is_relative_to_the_rhs_or_absolute_at_zero(rhs, sense, value, holds):
+    problem = _error_problem(rhs, sense)
+    assert problem.constraints_satisfied({"err": value}, problem.evaluate({"err": value}).residuals) is holds
+    allowance = problem.constraints[0].allowance(problem.verification.constraint_tol)
+    assert allowance == 1e-6 * (abs(rhs) or 1.0) == 1e-6 * tolerance_scale(rhs)
+
+
+@pytest.mark.parametrize("variable, value, reasons", [
+    (Variable("x", lower=1e-9, upper=2.0), 0.9e-9, ("below_lower",)),
+    (Variable("x", lower=1e-9, upper=2.0), 1e-9 * (1 - 0.5e-6), ()),
+    (Variable("x", lower=0.0, upper=2.0), -0.5e-6, ()),
+    (Variable("x", lower=0.0, upper=2.0), 2.1, ("above_upper",)),
+    (Variable("n", kind="integer", lower=0, upper=3), 1.5, ("not_integer",)),
+    (Variable("n", kind="integer", lower=0, upper=3), 4.5, ("above_upper", "not_integer")),
+    (Variable("b", kind="binary"), 1.0, ()),
+    (Variable("b", kind="binary"), -1.0, ("below_lower",)),
+    (Variable("b", kind="binary"), 0.5, ("not_integer",)),
+    (Variable("c", kind="discrete", choices=(1e-6, 2.0)), 1e-6 * (1 + 0.5e-6), ()),
+    (Variable("c", kind="discrete", choices=(1e-6, 2.0)), 2e-6, ("not_a_choice",)),
+])
+def test_domain_violations_name_every_part_of_the_domain_a_value_breaks(variable, value, reasons):
+    assert variable.domain_violations(value, 1e-6) == reasons
+    problem = OptimizationProblem(id="d", variables=(variable,), objectives=(Objective("f", variable.name),))
+    assert problem.constraints_satisfied({variable.name: value}, {}) is (reasons == ())
 
 
 def _doc_problem_json():

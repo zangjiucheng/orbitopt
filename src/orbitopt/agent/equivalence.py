@@ -41,7 +41,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
 from orbitopt.optimization import (EvaluationError, Expression, OptimizationProblem, ToolCall, Variable,
-                                   canonical_digest, parse_unit)
+                                   canonical_digest, parse_unit, tolerance_scale)
 
 SPAN = 10.0
 """Width given to a side that is open in both problems."""
@@ -141,17 +141,6 @@ def sample_points(problem: OptimizationProblem, *, samples: int = 64, seed: int 
                    {n: d[3] for n, d in domains.items()}, samples, seed)
 
 
-def _in_domain(domain: tuple, value: float, tol: float) -> bool:
-    kind, lo, hi, choices = domain
-    if choices:
-        return any(abs(value - c) <= tol * max(1.0, abs(c)) for c in choices)
-    if lo is not None and value < lo - tol * max(1.0, abs(lo)):
-        return False
-    if hi is not None and value > hi + tol * max(1.0, abs(hi)):
-        return False
-    return kind != "integer" or abs(value - round(value)) <= tol
-
-
 def _si(item) -> float:
     return parse_unit(item.unit).scale
 
@@ -212,7 +201,7 @@ def _atoms(problem: OptimizationProblem, label: str, evaluations: Sequence, poin
             continue
         residuals = [ev.residuals[c.name] for ev in evaluations]
         atoms.append(_Atom(f"{label} constraint {c.name!r}", c.sense == "==",
-                           _pattern(residuals, c.sense == "==", tol * max(1.0, abs(c.rhs)))))
+                           _pattern(residuals, c.sense == "==", c.allowance(tol))))
     for v in problem.variables:
         kind, lo, hi, choices = _domain(v, scale[v.name])
         for side, bound in (("lower", lo), ("upper", hi)):
@@ -221,7 +210,7 @@ def _atoms(problem: OptimizationProblem, label: str, evaluations: Sequence, poin
             sign = -1.0 if side == "lower" else 1.0
             residuals = [sign * (p[to_b[v.name]] - bound) for p in points_b]
             atoms.append(_Atom(f"{label} {side} bound of {v.name!r}", False,
-                               _pattern(residuals, False, tol * max(1.0, abs(bound)))))
+                               _pattern(residuals, False, tol * tolerance_scale(bound))))
     return [a for a in atoms if a.equality or not all(a.pattern)]
 
 
@@ -351,8 +340,8 @@ def semantically_equivalent(a: OptimizationProblem, b: OptimizationProblem, *, r
     else:
         tol = b.verification.constraint_tol
         inside = [i for i, (pa, pb) in enumerate(zip(kept_a, kept_b))
-                  if all(_in_domain(_domain(v), pa[v.name], tol) for v in a.variables)
-                  and all(_in_domain(_domain(v), pb[v.name], tol) for v in b.variables)]
+                  if not any(v.domain_violations(pa[v.name], tol) for v in a.variables)
+                  and not any(v.domain_violations(pb[v.name], tol) for v in b.variables)]
         if not inside:
             reasons.append("no probe point lies inside both variable domains")
         unmatched = list(a.objectives)

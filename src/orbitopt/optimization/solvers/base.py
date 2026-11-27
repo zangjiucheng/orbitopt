@@ -260,7 +260,7 @@ class Evaluator:
         residuals = {k: float(v) for k, v in ev.residuals.items()}
         f = tuple(_finite(s * objectives[o.name]) for s, o in zip(self._signs, problem.objectives))
         g = tuple(_finite(residuals[c.name]) for c in problem.constraints)
-        violation = sum(max(abs(r) if c.sense == "==" else r, 0.0) / max(1.0, abs(c.rhs))
+        violation = sum(max(c.violation(r), 0.0) / c.allowance(1.0)
                         for c, r in zip(problem.constraints, g)) if all(map(math.isfinite, g)) else math.inf
         return Point(x, objectives, residuals, f, g, problem.constraints_satisfied(x, residuals), violation)
 

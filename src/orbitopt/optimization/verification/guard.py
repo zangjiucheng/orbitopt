@@ -200,7 +200,7 @@ class _Guard:
         by_constraint = {c.name: c for c in self.problem.constraints}
         groups = (("objective_values", check.objectives, lambda name, ref: self.policy.objective_rtol * max(1.0, abs(ref))),
                   ("constraint_residuals", check.residuals,
-                   lambda name, ref: self.policy.constraint_tol * max(1.0, abs(by_constraint[name].rhs))))
+                   lambda name, ref: by_constraint[name].allowance(self.policy.constraint_tol)))
         for field_name, computed, tolerance in groups:
             code = FindingCode.OBJECTIVE_MISMATCH if field_name == "objective_values" else FindingCode.RESIDUAL_MISMATCH
             for name, claim in getattr(result, field_name).items():

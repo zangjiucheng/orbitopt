@@ -52,6 +52,22 @@ DIGEST_SIGNIFICANT_DIGITS = 12
 
 VariableKind = Literal["continuous", "integer", "binary", "discrete"]
 Origin = Literal["user", "compiler", "agent"]
+DomainViolation = Literal["below_lower", "above_upper", "not_integer", "not_a_choice"]
+DOMAIN_VIOLATIONS = ("below_lower", "above_upper", "not_integer", "not_a_choice")
+"""Every reason ``Variable.domain_violations`` can give."""
+
+
+def tolerance_scale(reference: float) -> float:
+    """What ``constraint_tol`` is relative to for a right-hand side or bound: ``|reference|``, or 1 when it is 0.
+
+    A constraint ``g <sense> rhs`` holds when its violation is at most
+    ``constraint_tol * tolerance_scale(rhs)``, and a bound or discrete choice
+    the same way. IR 1.0 used ``max(1, |rhs|)``, which let a tiny right-hand
+    side drown in the tolerance: ``error <= 1e-10`` accepted errors up to
+    ``1e-6``. Under this rule it accepts up to ``1e-10 * (1 + 1e-6)``. A zero
+    right-hand side carries no magnitude, so its scale stays 1.
+    """
+    return abs(reference) or 1.0
 
 
 def _set(obj: Any, **values: Any) -> None:
@@ -84,6 +100,26 @@ class Variable:
     def __post_init__(self):
         if isinstance(self.choices, list):
             _set(self, choices=tuple(self.choices))
+
+    def domain_violations(self, value: float, tol: float) -> tuple[DomainViolation, ...]:
+        """Why a finite ``value`` lies outside this variable's domain; empty when it lies inside.
+
+        A bound or choice ``r`` is met within ``tol * tolerance_scale(r)``,
+        integrality within ``tol``; a binary variable is an integer in
+        [0, 1]. This is the per-variable half of ``constraints_satisfied``.
+        """
+        if self.kind == "discrete":
+            met = any(abs(value - c) <= tol * tolerance_scale(c) for c in self.choices)
+            return () if met else ("not_a_choice",)
+        lower, upper = (0.0, 1.0) if self.kind == "binary" else (self.lower, self.upper)
+        found: list[DomainViolation] = []
+        if lower is not None and value < lower - tol * tolerance_scale(lower):
+            found.append("below_lower")
+        if upper is not None and value > upper + tol * tolerance_scale(upper):
+            found.append("above_upper")
+        if self.kind in ("integer", "binary") and abs(value - round(value)) > tol:
+            found.append("not_integer")
+        return tuple(found)
 
 
 @dataclass(frozen=True)
@@ -147,6 +183,14 @@ class Constraint:
         """
         return self.rhs - lhs if self.sense == ">=" else lhs - self.rhs
 
+    def violation(self, residual: float) -> float:
+        """How far a canonical residual breaks the constraint: ``|h|`` for an equality, ``g`` otherwise."""
+        return abs(residual) if self.sense == "==" else residual
+
+    def allowance(self, tol: float) -> float:
+        """The largest violation that still satisfies the constraint: ``tol * tolerance_scale(rhs)``."""
+        return tol * tolerance_scale(self.rhs)
+
 
 @dataclass(frozen=True)
 class Budget:
@@ -163,7 +207,8 @@ class VerificationPolicy:
     """Which result statuses must be true for acceptance, and the thresholds behind them.
 
     ``constraint_tol``: a constraint or bound holds when its violation is at
-    most ``constraint_tol * max(1, |rhs or bound|)``. ``objective_rtol``: an
+    most ``constraint_tol * tolerance_scale(rhs or bound)``, that is relative
+    to ``|rhs|``, or absolute when ``rhs`` is 0. ``objective_rtol``: an
     independent check agrees when ``|f - f_ref| <= objective_rtol * max(1, |f_ref|)``.
     ``optimality_gap``: the relative gap an optimality certificate must close.
     ``independent_methods`` are the methods that may set ``independently_verified``.
@@ -308,13 +353,13 @@ class OptimizationProblem:
         using ``verification.constraint_tol`` (see ``VerificationPolicy``).
         """
         tol = self.verification.constraint_tol
-        if not all(v.name in x and _in_domain(v, x[v.name], tol) for v in self.variables):
-            return False
+        for v in self.variables:
+            value = x.get(v.name)
+            if not (_number(value) and math.isfinite(value)) or v.domain_violations(value, tol):
+                return False
         for c in self.constraints:
             r = residuals.get(c.name)
-            if r is None or not math.isfinite(r):
-                return False
-            if (abs(r) if c.sense == "==" else r) > tol * max(1.0, abs(c.rhs)):
+            if r is None or not math.isfinite(r) or c.violation(r) > c.allowance(tol):
                 return False
         return True
 
@@ -444,20 +489,6 @@ def _number(value: Any) -> bool:
     return isinstance(value, numbers.Real) and not isinstance(value, bool)
 
 
-def _in_domain(v: Variable, value: Any, tol: float) -> bool:
-    if not _number(value) or not math.isfinite(value):
-        return False
-    if v.kind == "binary":
-        return min(abs(value), abs(value - 1)) <= tol
-    if v.kind == "discrete":
-        return any(abs(value - c) <= tol * max(1.0, abs(c)) for c in v.choices)
-    if v.lower is not None and value < v.lower - tol * max(1.0, abs(v.lower)):
-        return False
-    if v.upper is not None and value > v.upper + tol * max(1.0, abs(v.upper)):
-        return False
-    return v.kind != "integer" or abs(value - round(value)) <= tol
-
-
 class _Collector:
     def __init__(self):
         self.errors: list[ProblemError] = []
@@ -532,7 +563,7 @@ def _check_variable(err: _Collector, v: Variable, path: str) -> None:
             elif all(err.finite(c, f"{path}/choices/{i}") for i, c in enumerate(v.choices)) \
                     and len(set(v.choices)) != len(v.choices):
                 err(ErrorCode.INVALID_VALUE, f"{path}/choices", "choices must be distinct")
-    if v.initial is not None and err.finite(v.initial, f"{path}/initial") and not _in_domain(v, v.initial, 0.0):
+    if v.initial is not None and err.finite(v.initial, f"{path}/initial") and v.domain_violations(v.initial, 0.0):
         err(ErrorCode.INITIAL_OUT_OF_DOMAIN, f"{path}/initial", f"initial guess {v.initial} is outside the domain")
 
 

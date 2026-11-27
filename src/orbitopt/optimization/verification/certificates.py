@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
 
 from ..expressions import Expression, ToolCall
-from ..problem import OptimizationProblem, VerificationPolicy
+from ..problem import OptimizationProblem, VerificationPolicy, tolerance_scale
 from ._point import check_point
 from .evidence import LowerBoundCertificate
 from .report import Outcome
@@ -160,7 +160,7 @@ def kkt_certificate(problem: OptimizationProblem, x: Mapping[str, float], policy
             rows.append((f"{v.name}.upper", x0[i] - v.upper, np.eye(n)[i], False, v.upper))
     tol = policy.constraint_tol
     active = [k for k, (_, r, _, eq, rhs) in enumerate(rows)
-              if eq or r >= -ACTIVE_FACTOR * tol * max(1.0, abs(rhs))]
+              if eq or r >= -ACTIVE_FACTOR * tol * tolerance_scale(rhs)]
 
     while True:
         if active:

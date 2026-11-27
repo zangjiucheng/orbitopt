@@ -27,8 +27,7 @@ def _bounds(run: Run) -> list[tuple[float | None, float | None]]:
 def _constraint_band(run: Run) -> tuple[list[float], list[float]]:
     """Bounds on each canonical residual: ``g <= tol`` and ``|h| <= tol``, the IR's own feasibility band."""
     problem = run.problem
-    tol = problem.verification.constraint_tol
-    band = [tol * max(1.0, abs(c.rhs)) for c in problem.constraints]
+    band = [c.allowance(problem.verification.constraint_tol) for c in problem.constraints]
     lower = [-b if c.sense == "==" else -math.inf for c, b in zip(problem.constraints, band)]
     return lower, band
 
