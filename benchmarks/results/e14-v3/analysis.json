@@ -1,0 +1,8176 @@
+{
+ "alarm_rule": "spec section 2: a gap below minus the tolerance is not a win but an alarm; such a cell counts as no success here (its scorer verdict is kept as success_scorer), and its gap enters the gap endpoint as its distance from the optimum, |gap|",
+ "alarms": [],
+ "arms_not_run": [],
+ "arms_run": [
+  "A",
+  "B",
+  "C",
+  "D",
+  "E-LLM",
+  "E-rule"
+ ],
+ "cells": {
+  "A": 290,
+  "B": 290,
+  "C": 290,
+  "D": 290,
+  "E-LLM": 290,
+  "E-rule": 290
+ },
+ "code_digest": "sha256:9f4ed53b1c00380a372f1aa93854bada820c2929d12f0a99f5e2dc271ddd42f1",
+ "comparisons": [
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     1.2032532425154248,
+     1.7812649472232416
+    ],
+    "ci_effect": [
+     0.16842496377383645,
+     0.30021594622716496
+    ],
+    "effect": 0.2252112250284231,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 24,
+    "holm_family_size": 15,
+    "informative": 23,
+    "neither_solved": 2,
+    "only_control_solved": 0,
+    "only_treatment_solved": 5,
+    "p": 2.6226043701171875e-05,
+    "p_holm": 0.0003409385681152344,
+    "verdict": "superior",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     0.6289972745194671,
+     1.8760743834952531
+    ],
+    "ci_effect": [
+     -1.8760743834952531,
+     -0.6289972745194671
+    ],
+    "effect": -1.2110625142009352,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 29,
+    "holm_family_size": 7,
+    "informative": 14,
+    "p": 0.0245361328125,
+    "p_holm": 0.0736083984375,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 29,
+   "scope": "overall",
+   "success": {
+    "ci": [
+     0.1896551724137931,
+     0.3275862068965517
+    ],
+    "effect": 0.25517241379310346,
+    "holm_family_size": 15,
+    "informative": 16,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 0.0078125,
+     "treatment_only": 8
+    },
+    "p": 3.0517578125e-05,
+    "p_holm": 0.0003662109375,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 1.0587911840678754e-22,
+     "treatment_only": 74
+    },
+    "rate_control": 0.6517241379310345,
+    "rate_treatment": 0.906896551724138,
+    "verdict": "superior"
+   },
+   "treatment": "B",
+   "wall_clock": {
+    "ci": [
+     0.9105303313479441,
+     1.228320092835872
+    ],
+    "ci_effect": [
+     0.292784014744876,
+     0.40231080941455727
+    ],
+    "effect": 0.3457374910330454,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 24,
+    "holm_family_size": 15,
+    "informative": 27,
+    "neither_solved": 2,
+    "only_control_solved": 0,
+    "only_treatment_solved": 5,
+    "p": 9.566545486450195e-05,
+    "p_holm": 0.0010523200035095215,
+    "verdict": "superior",
+    "wilcoxon_direction": "treatment better"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     2.7394720361418625,
+     4.284489158542671
+    ],
+    "ci_effect": [
+     0.013780659455666429,
+     0.06460444670357711
+    ],
+    "effect": 0.028394577832418194,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 16,
+    "holm_family_size": 15,
+    "informative": 28,
+    "neither_solved": 1,
+    "only_control_solved": 7,
+    "only_treatment_solved": 6,
+    "p": 0.26777902245521545,
+    "p_holm": 0.8033370673656464,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     0.7170209080658272,
+     3.2683436526941505
+    ],
+    "ci_effect": [
+     -3.2683436526941505,
+     -0.7170209080658272
+    ],
+    "effect": -2.0685255244023,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 24,
+    "holm_family_size": 7,
+    "informative": 25,
+    "p": 0.9577966332435608,
+    "p_holm": 0.9577966332435608,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "instances": 29,
+   "scope": "overall",
+   "success": {
+    "ci": [
+     -0.2379310344827586,
+     -0.03793103448275861
+    ],
+    "effect": -0.13448275862068965,
+    "holm_family_size": 15,
+    "informative": 27,
+    "mcnemar_seed0": {
+     "control_only": 11,
+     "p": 0.332305908203125,
+     "treatment_only": 6
+    },
+    "p": 0.3040114641189575,
+    "p_holm": 0.8033370673656464,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 106,
+     "p": 0.0037377190466882,
+     "treatment_only": 67
+    },
+    "rate_control": 0.6517241379310345,
+    "rate_treatment": 0.5172413793103449,
+    "verdict": "not shown different"
+   },
+   "treatment": "C",
+   "wall_clock": {
+    "ci": [
+     -4.910496473516986,
+     -3.359411836923632
+    ],
+    "ci_effect": [
+     28.772263118798815,
+     135.70677250495044
+    ],
+    "effect": 63.24267776814634,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 16,
+    "holm_family_size": 15,
+    "informative": 28,
+    "neither_solved": 1,
+    "only_control_solved": 7,
+    "only_treatment_solved": 6,
+    "p": 0.10487305372953415,
+    "p_holm": 0.4194922149181366,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     -4.1269808840535416e-05,
+     4.316347389573851e-05
+    ],
+    "ci_effect": [
+     0.9999568374576336,
+     1.000041270660451
+    ],
+    "effect": 1.0000026241667177,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 20,
+    "holm_family_size": 15,
+    "informative": 12,
+    "neither_solved": 7,
+    "only_control_solved": 9,
+    "only_treatment_solved": 0,
+    "p": 0.00244140625,
+    "p_holm": 0.02197265625,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     -0.23004701456185633,
+     -0.16925698153009086
+    ],
+    "ci_effect": [
+     0.16925698153009086,
+     0.23004701456185633
+    ],
+    "effect": 0.2016683050164745,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 22,
+    "holm_family_size": 7,
+    "informative": 21,
+    "p": 0.009888648986816406,
+    "p_holm": 0.039554595947265625,
+    "verdict": "inferior",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "instances": 29,
+   "scope": "overall",
+   "success": {
+    "ci": [
+     -0.3,
+     -0.25862068965517243
+    ],
+    "effect": -0.2827586206896551,
+    "holm_family_size": 15,
+    "informative": 9,
+    "mcnemar_seed0": {
+     "control_only": 9,
+     "p": 0.00390625,
+     "treatment_only": 0
+    },
+    "p": 0.00390625,
+    "p_holm": 0.03125,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 82,
+     "p": 4.1359030627651384e-25,
+     "treatment_only": 0
+    },
+    "rate_control": 0.6517241379310345,
+    "rate_treatment": 0.3689655172413793,
+    "verdict": "inferior"
+   },
+   "treatment": "D",
+   "wall_clock": {
+    "ci": [
+     -1.4731156576382882,
+     -0.8622753681837316
+    ],
+    "ci_effect": [
+     2.368543876400084,
+     4.362807000405452
+    ],
+    "effect": 3.1972242230294983,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 20,
+    "holm_family_size": 15,
+    "informative": 22,
+    "neither_solved": 7,
+    "only_control_solved": 9,
+    "only_treatment_solved": 0,
+    "p": 4.76837158203125e-07,
+    "p_holm": 7.152557373046875e-06,
+    "verdict": "inferior",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "D",
+   "evaluations": {
+    "ci": [
+     -0.08278131186373103,
+     0.19012206780511487
+    ],
+    "ci_effect": [
+     0.826858195017784,
+     1.0863042207249143
+    ],
+    "effect": 0.9541094924168769,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 22,
+    "holm_family_size": 15,
+    "informative": 19,
+    "neither_solved": 10,
+    "only_control_solved": 1,
+    "only_treatment_solved": 6,
+    "p": 0.039119720458984375,
+    "p_holm": 0.19559860229492188,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     0.7552954677710898,
+     3.2035590859671386
+    ],
+    "ci_effect": [
+     -3.2035590859671386,
+     -0.7552954677710898
+    ],
+    "effect": -1.9493270236679925,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 28,
+    "holm_family_size": 7,
+    "informative": 16,
+    "p": 0.00628662109375,
+    "p_holm": 0.03143310546875,
+    "verdict": "superior",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 29,
+   "scope": "overall",
+   "success": {
+    "ci": [
+     0.15862068965517243,
+     0.3448275862068966
+    ],
+    "effect": 0.2517241379310345,
+    "holm_family_size": 15,
+    "informative": 15,
+    "mcnemar_seed0": {
+     "control_only": 1,
+     "p": 0.021484375,
+     "treatment_only": 9
+    },
+    "p": 0.0052490234375,
+    "p_holm": 0.0367431640625,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 8,
+     "p": 2.5248620379419315e-16,
+     "treatment_only": 81
+    },
+    "rate_control": 0.3689655172413793,
+    "rate_treatment": 0.6206896551724138,
+    "verdict": "superior"
+   },
+   "treatment": "E-LLM",
+   "wall_clock": {
+    "ci": [
+     -0.44963728410727255,
+     -0.21801202295105063
+    ],
+    "ci_effect": [
+     1.2436020192953847,
+     1.5677434368890473
+    ],
+    "effect": 1.3926499406260118,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 22,
+    "holm_family_size": 15,
+    "informative": 19,
+    "neither_solved": 10,
+    "only_control_solved": 1,
+    "only_treatment_solved": 6,
+    "p": 0.8275527954101562,
+    "p_holm": 0.8275527954101562,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   }
+  },
+  {
+   "control": "B",
+   "evaluations": {
+    "ci": [
+     -2.6154033885931183,
+     -2.1818670755602256
+    ],
+    "ci_effect": [
+     8.862838409519618,
+     13.672730689210672
+    ],
+    "effect": 11.084309002528792,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 18,
+    "holm_family_size": 15,
+    "informative": 28,
+    "neither_solved": 1,
+    "only_control_solved": 10,
+    "only_treatment_solved": 1,
+    "p": 0.0002312585711479187,
+    "p_holm": 0.002312585711479187,
+    "verdict": "inferior",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     -0.2878636260322015,
+     2.233191574336504
+    ],
+    "ci_effect": [
+     -2.233191574336504,
+     0.2878636260322015
+    ],
+    "effect": -0.9553255109691695,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 23,
+    "holm_family_size": 7,
+    "informative": 21,
+    "p": 0.3151435852050781,
+    "p_holm": 0.6302871704101562,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "instances": 29,
+   "scope": "overall",
+   "success": {
+    "ci": [
+     -0.35172413793103446,
+     -0.22068965517241382
+    ],
+    "effect": -0.28620689655172415,
+    "holm_family_size": 15,
+    "informative": 13,
+    "mcnemar_seed0": {
+     "control_only": 10,
+     "p": 0.01171875,
+     "treatment_only": 1
+    },
+    "p": 0.01171875,
+    "p_holm": 0.0703125,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 98,
+     "p": 4.0987281487555347e-16,
+     "treatment_only": 15
+    },
+    "rate_control": 0.906896551724138,
+    "rate_treatment": 0.6206896551724138,
+    "verdict": "not shown different"
+   },
+   "treatment": "E-LLM",
+   "wall_clock": {
+    "ci": [
+     -4.877208250243988,
+     -4.185574898332361
+    ],
+    "ci_effect": [
+     65.73127885905923,
+     131.263696490952
+    ],
+    "effect": 91.72889252778694,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 18,
+    "holm_family_size": 15,
+    "informative": 28,
+    "neither_solved": 1,
+    "only_control_solved": 10,
+    "only_treatment_solved": 1,
+    "p": 4.641711711883545e-06,
+    "p_holm": 6.498396396636963e-05,
+    "verdict": "inferior",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     -0.5587061766412053,
+     -0.20701867137808505
+    ],
+    "ci_effect": [
+     1.2300055374647882,
+     1.7484089039842776
+    ],
+    "effect": 1.4635067577978076,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 23,
+    "holm_family_size": 6,
+    "informative": 28,
+    "neither_solved": 1,
+    "only_control_solved": 0,
+    "only_treatment_solved": 6,
+    "p": 0.37050052732229233,
+    "p_holm": 0.7410010546445847,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "secondary (E-rule is not arm E)",
+   "gap": {
+    "ci": [
+     1.3021776593193035,
+     3.2358323926221404
+    ],
+    "ci_effect": [
+     -3.2358323926221404,
+     -1.3021776593193035
+    ],
+    "effect": -2.20472217708199,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 29,
+    "holm_family_size": 7,
+    "informative": 18,
+    "p": 0.00014495849609375,
+    "p_holm": 0.00101470947265625,
+    "verdict": "superior",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 29,
+   "scope": "overall",
+   "success": {
+    "ci": [
+     0.19310344827586212,
+     0.37586206896551727
+    ],
+    "effect": 0.2827586206896551,
+    "holm_family_size": 6,
+    "informative": 21,
+    "mcnemar_seed0": {
+     "control_only": 1,
+     "p": 0.021484375,
+     "treatment_only": 9
+    },
+    "p": 0.0013818740844726562,
+    "p_holm": 0.008291244506835938,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 9,
+     "p": 3.322048979453653e-18,
+     "treatment_only": 91
+    },
+    "rate_control": 0.6517241379310345,
+    "rate_treatment": 0.9344827586206896,
+    "verdict": "superior"
+   },
+   "treatment": "E-rule",
+   "wall_clock": {
+    "ci": [
+     -0.19266052593186545,
+     0.11613007060759642
+    ],
+    "ci_effect": [
+     0.8903594061764937,
+     1.2124711211430348
+    ],
+    "effect": 1.0390739602863148,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 23,
+    "holm_family_size": 6,
+    "informative": 28,
+    "neither_solved": 1,
+    "only_control_solved": 0,
+    "only_treatment_solved": 6,
+    "p": 0.20722661167383194,
+    "p_holm": 0.6216798350214958,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   }
+  },
+  {
+   "control": "B",
+   "evaluations": {
+    "ci": [
+     -2.5697524530440217,
+     -2.1140202335175844
+    ],
+    "ci_effect": [
+     8.281467885295633,
+     13.06259043616739
+    ],
+    "effect": 10.380787262644567,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 28,
+    "holm_family_size": 6,
+    "informative": 28,
+    "neither_solved": 1,
+    "only_control_solved": 0,
+    "only_treatment_solved": 1,
+    "p": 0.006548762321472168,
+    "p_holm": 0.026195049285888672,
+    "verdict": "inferior",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "secondary (E-rule is not arm E)",
+   "gap": {
+    "ci": [
+     0.38493198725348077,
+     1.8926496987603891
+    ],
+    "ci_effect": [
+     -1.8926496987603891,
+     -0.38493198725348077
+    ],
+    "effect": -0.9936596628810545,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 29,
+    "holm_family_size": 7,
+    "informative": 15,
+    "p": 0.00262451171875,
+    "p_holm": 0.0157470703125,
+    "verdict": "superior",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 29,
+   "scope": "overall",
+   "success": {
+    "ci": [
+     -0.03448275862068967,
+     0.0896551724137931
+    ],
+    "effect": 0.027586206896551727,
+    "holm_family_size": 6,
+    "informative": 6,
+    "mcnemar_seed0": {
+     "control_only": 1,
+     "p": 1.0,
+     "treatment_only": 1
+    },
+    "p": 0.59375,
+    "p_holm": 0.7410010546445847,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 9,
+     "p": 0.16863754391670227,
+     "treatment_only": 17
+    },
+    "rate_control": 0.906896551724138,
+    "rate_treatment": 0.9344827586206896,
+    "verdict": "not shown different"
+   },
+   "treatment": "E-rule",
+   "wall_clock": {
+    "ci": [
+     -1.8125256908493985,
+     -1.2433022212186013
+    ],
+    "ci_effect": [
+     3.467043526779212,
+     6.12590003943574
+    ],
+    "effect": 4.632382597868719,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 28,
+    "holm_family_size": 6,
+    "informative": 28,
+    "neither_solved": 1,
+    "only_control_solved": 0,
+    "only_treatment_solved": 1,
+    "p": 0.001416526734828949,
+    "p_holm": 0.008291244506835938,
+    "verdict": "inferior",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "E-rule",
+   "evaluations": {
+    "ci": [
+     0.14763861257849614,
+     0.23801079579575743
+    ],
+    "ci_effect": [
+     0.7881941818644339,
+     0.86274284302281
+    ],
+    "effect": 0.8187065560700362,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 19,
+    "holm_family_size": 4,
+    "informative": 24,
+    "neither_solved": 1,
+    "only_control_solved": 10,
+    "only_treatment_solved": 0,
+    "p": 0.012848615646362305,
+    "p_holm": 0.02569723129272461,
+    "verdict": "superior",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "exploratory (added after the freeze)",
+   "gap": {
+    "ci": [
+     -1.2156020795040454,
+     0.33936820444991245
+    ],
+    "ci_effect": [
+     -0.33936820444991245,
+     1.2156020795040454
+    ],
+    "effect": 0.2975497161417252,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 23,
+    "holm_family_size": 4,
+    "informative": 17,
+    "p": 0.0140533447265625,
+    "p_holm": 0.02569723129272461,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "instances": 29,
+   "scope": "overall",
+   "success": {
+    "ci": [
+     -0.3793103448275862,
+     -0.2517241379310345
+    ],
+    "effect": -0.3137931034482758,
+    "holm_family_size": 4,
+    "informative": 10,
+    "mcnemar_seed0": {
+     "control_only": 9,
+     "p": 0.00390625,
+     "treatment_only": 0
+    },
+    "p": 0.001953125,
+    "p_holm": 0.005859375,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 91,
+     "p": 8.077935669463161e-28,
+     "treatment_only": 0
+    },
+    "rate_control": 0.9344827586206896,
+    "rate_treatment": 0.6206896551724138,
+    "verdict": "inferior"
+   },
+   "treatment": "E-LLM",
+   "wall_clock": {
+    "ci": [
+     -2.876146444901497,
+     -2.0633294190257194
+    ],
+    "ci_effect": [
+     7.872135866191312,
+     17.74575699660606
+    ],
+    "effect": 11.81839108453209,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 19,
+    "holm_family_size": 4,
+    "informative": 28,
+    "neither_solved": 1,
+    "only_control_solved": 10,
+    "only_treatment_solved": 0,
+    "p": 7.450580596923828e-09,
+    "p_holm": 2.9802322387695312e-08,
+    "verdict": "inferior",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     4.360684468783723,
+     6.2547904201466284
+    ],
+    "ci_effect": [
+     0.0019212285646657765,
+     0.012769644234721954
+    ],
+    "effect": 0.004992147432314476,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 5,
+    "holm_family_size": 21,
+    "informative": 10,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 5,
+    "p": 0.001953125,
+    "p_holm": 0.041015625,
+    "verdict": "superior",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     2.257156062385263,
+     5.69032942197878
+    ],
+    "ci_effect": [
+     -5.69032942197878,
+     -2.257156062385263
+    ],
+    "effect": -3.8620990441849345,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 10,
+    "holm_family_size": 7,
+    "informative": 7,
+    "p": 0.015625,
+    "p_holm": 0.109375,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 10,
+   "scope": "algebraic",
+   "success": {
+    "ci": [
+     0.44000000000000006,
+     0.8099999999999999
+    ],
+    "effect": 0.62,
+    "holm_family_size": 21,
+    "informative": 9,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 0.015625,
+     "treatment_only": 7
+    },
+    "p": 0.00390625,
+    "p_holm": 0.05859375,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 4.336808689942018e-19,
+     "treatment_only": 62
+    },
+    "rate_control": 0.38,
+    "rate_treatment": 1.0,
+    "verdict": "not shown different"
+   },
+   "treatment": "B",
+   "wall_clock": {
+    "ci": [
+     3.261719736865609,
+     4.75726280322854
+    ],
+    "ci_effect": [
+     0.008589087273010509,
+     0.03832243680848774
+    ],
+    "effect": 0.01933617307171057,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 5,
+    "holm_family_size": 21,
+    "informative": 10,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 5,
+    "p": 0.001953125,
+    "p_holm": 0.041015625,
+    "verdict": "superior",
+    "wilcoxon_direction": "treatment better"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     1.2511921993278723,
+     2.817182767441515
+    ],
+    "ci_effect": [
+     0.05977410327390613,
+     0.28616342956330537
+    ],
+    "effect": 0.10846141041581178,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 4,
+    "holm_family_size": 21,
+    "informative": 9,
+    "neither_solved": 1,
+    "only_control_solved": 2,
+    "only_treatment_solved": 4,
+    "p": 0.27734375,
+    "p_holm": 1.0,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     -1.8174168234388233,
+     2.461367306564485
+    ],
+    "ci_effect": [
+     -2.461367306564485,
+     1.8174168234388233
+    ],
+    "effect": -0.36408533657141606,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 10,
+    "holm_family_size": 7,
+    "informative": 9,
+    "p": 0.8203125,
+    "p_holm": 1.0,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 10,
+   "scope": "algebraic",
+   "success": {
+    "ci": [
+     -0.08000000000000003,
+     0.27999999999999997
+    ],
+    "effect": 0.1,
+    "holm_family_size": 21,
+    "informative": 9,
+    "mcnemar_seed0": {
+     "control_only": 3,
+     "p": 1.0,
+     "treatment_only": 4
+    },
+    "p": 0.7109375,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 29,
+     "p": 0.2749903961710005,
+     "treatment_only": 39
+    },
+    "rate_control": 0.38,
+    "rate_treatment": 0.48,
+    "verdict": "not shown different"
+   },
+   "treatment": "C",
+   "wall_clock": {
+    "ci": [
+     -5.347847090119005,
+     -0.6771465785788041
+    ],
+    "ci_effect": [
+     1.9682534552587525,
+     210.15536491803422
+    ],
+    "effect": 36.115482034996255,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 4,
+    "holm_family_size": 21,
+    "informative": 9,
+    "neither_solved": 1,
+    "only_control_solved": 2,
+    "only_treatment_solved": 4,
+    "p": 0.6875,
+    "p_holm": 1.0,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_effect": [
+     1.0,
+     1.0
+    ],
+    "effect": 1.0,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 10,
+    "holm_family_size": 21,
+    "informative": 0,
+    "neither_solved": 5,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 1.0,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "balanced"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     -2.138440745673349e-05,
+     0.10120504737069819
+    ],
+    "ci_effect": [
+     -0.10120504737069819,
+     2.138440745673349e-05
+    ],
+    "effect": -0.033727782313207805,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 9,
+    "holm_family_size": 7,
+    "informative": 4,
+    "p": 0.625,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "instances": 10,
+   "scope": "algebraic",
+   "success": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "effect": 0.0,
+    "holm_family_size": 21,
+    "informative": 0,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "p": 1.0,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "rate_control": 0.38,
+    "rate_treatment": 0.38,
+    "verdict": "not testable"
+   },
+   "treatment": "D",
+   "wall_clock": {
+    "ci": [
+     -1.3979311552710318,
+     -0.47414731953124745
+    ],
+    "ci_effect": [
+     1.606643659584599,
+     4.046819060154943
+    ],
+    "effect": 2.549861993223171,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 10,
+    "holm_family_size": 21,
+    "informative": 5,
+    "neither_solved": 5,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.0625,
+    "p_holm": 0.6875,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "D",
+   "evaluations": {
+    "ci": [
+     -0.7775052705498519,
+     0.24516822525169796
+    ],
+    "ci_effect": [
+     0.7825728786484619,
+     2.17603686513847
+    ],
+    "effect": 1.3154777750357423,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 5,
+    "holm_family_size": 21,
+    "informative": 10,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 5,
+    "p": 0.078125,
+    "p_holm": 0.78125,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     2.3246856461868095,
+     6.039750908289651
+    ],
+    "ci_effect": [
+     -6.039750908289651,
+     -2.3246856461868095
+    ],
+    "effect": -4.06638075993633,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 9,
+    "holm_family_size": 7,
+    "informative": 7,
+    "p": 0.015625,
+    "p_holm": 0.109375,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 10,
+   "scope": "algebraic",
+   "success": {
+    "ci": [
+     0.44000000000000006,
+     0.8099999999999999
+    ],
+    "effect": 0.62,
+    "holm_family_size": 21,
+    "informative": 9,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 0.015625,
+     "treatment_only": 7
+    },
+    "p": 0.00390625,
+    "p_holm": 0.05859375,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 4.336808689942018e-19,
+     "treatment_only": 62
+    },
+    "rate_control": 0.38,
+    "rate_treatment": 1.0,
+    "verdict": "not shown different"
+   },
+   "treatment": "E-LLM",
+   "wall_clock": {
+    "ci": [
+     -0.33811913233630286,
+     0.18553368404820558
+    ],
+    "ci_effect": [
+     0.8306608550893918,
+     1.4023075536296603
+    ],
+    "effect": 1.10431196177343,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 5,
+    "holm_family_size": 21,
+    "informative": 10,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 5,
+    "p": 0.078125,
+    "p_holm": 0.78125,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   }
+  },
+  {
+   "control": "B",
+   "evaluations": {
+    "ci": [
+     -4.931398090685379,
+     -4.175467912530047
+    ],
+    "ci_effect": [
+     65.07027973803797,
+     138.57311475253974
+    ],
+    "effect": 95.88264913960784,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 10,
+    "holm_family_size": 21,
+    "informative": 10,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.001953125,
+    "p_holm": 0.041015625,
+    "verdict": "inferior",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     0.12357155630151821,
+     1.0348852768816321
+    ],
+    "ci_effect": [
+     -1.0348852768816321,
+     -0.12357155630151821
+    ],
+    "effect": -0.522883215017317,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 10,
+    "holm_family_size": 7,
+    "informative": 3,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 10,
+   "scope": "algebraic",
+   "success": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "effect": 0.0,
+    "holm_family_size": 21,
+    "informative": 0,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "p": 1.0,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "rate_control": 1.0,
+    "rate_treatment": 1.0,
+    "verdict": "not testable"
+   },
+   "treatment": "E-LLM",
+   "wall_clock": {
+    "ci": [
+     -6.57490541876454,
+     -5.807791692303996
+    ],
+    "ci_effect": [
+     332.88320486067244,
+     716.877817955787
+    ],
+    "effect": 469.30419307202226,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 10,
+    "holm_family_size": 21,
+    "informative": 10,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.001953125,
+    "p_holm": 0.041015625,
+    "verdict": "inferior",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     -0.7783154189571364,
+     0.2443580768444134
+    ],
+    "ci_effect": [
+     0.7832071357061648,
+     2.1778004922423375
+    ],
+    "effect": 1.3165439390772418,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 5,
+    "holm_family_size": 21,
+    "informative": 10,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 5,
+    "p": 0.078125,
+    "p_holm": 0.78125,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "secondary (E-rule is not arm E)",
+   "gap": {
+    "ci": [
+     2.7870924024120938,
+     6.222360378485828
+    ],
+    "ci_effect": [
+     -6.222360378485828,
+     -2.7870924024120938
+    ],
+    "effect": -4.384982259202252,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 10,
+    "holm_family_size": 7,
+    "informative": 7,
+    "p": 0.015625,
+    "p_holm": 0.109375,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 10,
+   "scope": "algebraic",
+   "success": {
+    "ci": [
+     0.44000000000000006,
+     0.8099999999999999
+    ],
+    "effect": 0.62,
+    "holm_family_size": 21,
+    "informative": 9,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 0.015625,
+     "treatment_only": 7
+    },
+    "p": 0.00390625,
+    "p_holm": 0.05859375,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 4.336808689942018e-19,
+     "treatment_only": 62
+    },
+    "rate_control": 0.38,
+    "rate_treatment": 1.0,
+    "verdict": "not shown different"
+   },
+   "treatment": "E-rule",
+   "wall_clock": {
+    "ci": [
+     -0.01774943093397463,
+     0.9270706573005928
+    ],
+    "ci_effect": [
+     0.39571118789907717,
+     1.0179078882036772
+    ],
+    "effect": 0.6405616259304616,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 5,
+    "holm_family_size": 21,
+    "informative": 10,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 5,
+    "p": 0.005859375,
+    "p_holm": 0.0703125,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   }
+  },
+  {
+   "control": "B",
+   "evaluations": {
+    "ci": [
+     -5.25295708444279,
+     -4.497479266666633
+    ],
+    "ci_effect": [
+     89.79050786570058,
+     191.13062301720956
+    ],
+    "effect": 132.38140541824956,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 10,
+    "holm_family_size": 21,
+    "informative": 10,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.001953125,
+    "p_holm": 0.041015625,
+    "verdict": "inferior",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "secondary (E-rule is not arm E)",
+   "gap": {
+    "ci": [
+     0.12357155630151821,
+     1.0348852768816321
+    ],
+    "ci_effect": [
+     -1.0348852768816321,
+     -0.12357155630151821
+    ],
+    "effect": -0.522883215017317,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 10,
+    "holm_family_size": 7,
+    "informative": 3,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 10,
+   "scope": "algebraic",
+   "success": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "effect": 0.0,
+    "holm_family_size": 21,
+    "informative": 0,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "p": 1.0,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "rate_control": 1.0,
+    "rate_treatment": 1.0,
+    "verdict": "not testable"
+   },
+   "treatment": "E-rule",
+   "wall_clock": {
+    "ci": [
+     -4.144835524296309,
+     -2.653631103531764
+    ],
+    "ci_effect": [
+     14.205526848014696,
+     63.107241440157715
+    ],
+    "effect": 30.133685979182097,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 10,
+    "holm_family_size": 21,
+    "informative": 10,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.001953125,
+    "p_holm": 0.041015625,
+    "verdict": "inferior",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "E-rule",
+   "evaluations": {
+    "ci": [
+     0.32153030858301446,
+     0.3240730326069501
+    ],
+    "ci_effect": [
+     0.7231974234579394,
+     0.7250386548001664
+    ],
+    "effect": 0.7242909140953255,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 10,
+    "holm_family_size": 4,
+    "informative": 6,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.03125,
+    "p_holm": 0.09375,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "exploratory (added after the freeze)",
+   "gap": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_effect": [
+     -0.0,
+     -0.0
+    ],
+    "effect": -0.0,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 10,
+    "holm_family_size": 4,
+    "informative": 0,
+    "p": 1.0,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "balanced"
+   },
+   "instances": 10,
+   "scope": "algebraic",
+   "success": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "effect": 0.0,
+    "holm_family_size": 4,
+    "informative": 0,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "p": 1.0,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "rate_control": 1.0,
+    "rate_treatment": 1.0,
+    "verdict": "not testable"
+   },
+   "treatment": "E-LLM",
+   "wall_clock": {
+    "ci": [
+     -3.2866492596950834,
+     -2.2417666469123634
+    ],
+    "ci_effect": [
+     9.409940654281995,
+     26.75307071117906
+    ],
+    "effect": 15.574071933856409,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 10,
+    "holm_family_size": 4,
+    "informative": 10,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.001953125,
+    "p_holm": 0.0078125,
+    "verdict": "inferior",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     -0.0304366721080677,
+     0.04491190446443688
+    ],
+    "ci_effect": [
+     0.9560817046530318,
+     1.030904602966267
+    ],
+    "effect": 0.9927885122918402,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 10,
+    "holm_family_size": 21,
+    "informative": 4,
+    "neither_solved": 2,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 1.0,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "balanced"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     -0.8357895122984014,
+     0.24525261339785875
+    ],
+    "ci_effect": [
+     -0.24525261339785875,
+     0.8357895122984014
+    ],
+    "effect": 0.40563317811255695,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 10,
+    "holm_family_size": 7,
+    "informative": 4,
+    "p": 0.375,
+    "p_holm": 0.75,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "instances": 10,
+   "scope": "continuous_nonconvex",
+   "success": {
+    "ci": [
+     0.0,
+     0.09
+    ],
+    "effect": 0.04,
+    "holm_family_size": 21,
+    "informative": 2,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 1
+    },
+    "p": 0.5,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 0.125,
+     "treatment_only": 4
+    },
+    "rate_control": 0.69,
+    "rate_treatment": 0.73,
+    "verdict": "not testable"
+   },
+   "treatment": "B",
+   "wall_clock": {
+    "ci": [
+     -0.020450156898387657,
+     0.161403046331017
+    ],
+    "ci_effect": [
+     0.8509490300966217,
+     1.0206606940806542
+    ],
+    "effect": 0.9204409554091625,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 10,
+    "holm_family_size": 21,
+    "informative": 8,
+    "neither_solved": 2,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.7421875,
+    "p_holm": 1.0,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     3.8563844611949927,
+     6.835608840052881
+    ],
+    "ci_effect": [
+     0.001074812726964928,
+     0.021144309560684197
+    ],
+    "effect": 0.004351415048558617,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 8,
+    "holm_family_size": 21,
+    "informative": 10,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 2,
+    "p": 0.001953125,
+    "p_holm": 0.041015625,
+    "verdict": "superior",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     2.3716161197130305,
+     6.739587562713545
+    ],
+    "ci_effect": [
+     -6.739587562713545,
+     -2.3716161197130305
+    ],
+    "effect": -4.8992527441502345,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 10,
+    "holm_family_size": 7,
+    "informative": 8,
+    "p": 0.0078125,
+    "p_holm": 0.046875,
+    "verdict": "superior",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 10,
+   "scope": "continuous_nonconvex",
+   "success": {
+    "ci": [
+     -0.009999999999999986,
+     0.36
+    ],
+    "effect": 0.19,
+    "holm_family_size": 21,
+    "informative": 9,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 0.5,
+     "treatment_only": 2
+    },
+    "p": 0.26171875,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 9,
+     "p": 0.0025632079923525453,
+     "treatment_only": 28
+    },
+    "rate_control": 0.69,
+    "rate_treatment": 0.88,
+    "verdict": "not shown different"
+   },
+   "treatment": "C",
+   "wall_clock": {
+    "ci": [
+     -4.329023442297677,
+     -2.392405152480789
+    ],
+    "ci_effect": [
+     10.93977415135855,
+     75.87015879210767
+    ],
+    "effect": 25.683981526574353,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 8,
+    "holm_family_size": 21,
+    "informative": 10,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 2,
+    "p": 0.416015625,
+    "p_holm": 1.0,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     -8.253961768107083e-05,
+     8.632694779147702e-05
+    ],
+    "ci_effect": [
+     0.9999136767782723,
+     1.000082543024169
+    ],
+    "effect": 1.0000052483403217,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 10,
+    "holm_family_size": 21,
+    "informative": 3,
+    "neither_solved": 2,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 1.0,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "balanced"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     -0.03850927670156419,
+     0.008856852066998506
+    ],
+    "ci_effect": [
+     -0.008856852066998506,
+     0.03850927670156419
+    ],
+    "effect": 0.008929640450738126,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 10,
+    "holm_family_size": 7,
+    "informative": 8,
+    "p": 0.3828125,
+    "p_holm": 0.75,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 10,
+   "scope": "continuous_nonconvex",
+   "success": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "effect": 0.0,
+    "holm_family_size": 21,
+    "informative": 0,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "p": 1.0,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "rate_control": 0.69,
+    "rate_treatment": 0.69,
+    "verdict": "not testable"
+   },
+   "treatment": "D",
+   "wall_clock": {
+    "ci": [
+     -1.7981259275828616,
+     -1.0487476069885584
+    ],
+    "ci_effect": [
+     2.8540744559345863,
+     6.038320603959986
+    ],
+    "effect": 4.008939605160781,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 10,
+    "holm_family_size": 21,
+    "informative": 8,
+    "neither_solved": 2,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.0078125,
+    "p_holm": 0.140625,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "D",
+   "evaluations": {
+    "ci": [
+     0.11489860876974853,
+     0.45405907196210255
+    ],
+    "ci_effect": [
+     0.6350452187708157,
+     0.8914565251986244
+    ],
+    "effect": 0.7404025381567172,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 8,
+    "holm_family_size": 21,
+    "informative": 9,
+    "neither_solved": 1,
+    "only_control_solved": 1,
+    "only_treatment_solved": 1,
+    "p": 0.1328125,
+    "p_holm": 1.0,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     -1.0935707174239861,
+     4.759857824756965
+    ],
+    "ci_effect": [
+     -4.759857824756965,
+     1.0935707174239861
+    ],
+    "effect": -1.7983729823276822,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 10,
+    "holm_family_size": 7,
+    "informative": 9,
+    "p": 0.25,
+    "p_holm": 0.75,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 10,
+   "scope": "continuous_nonconvex",
+   "success": {
+    "ci": [
+     -0.1,
+     0.3
+    ],
+    "effect": 0.11000000000000001,
+    "holm_family_size": 21,
+    "informative": 6,
+    "mcnemar_seed0": {
+     "control_only": 1,
+     "p": 1.0,
+     "treatment_only": 2
+    },
+    "p": 0.5,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 8,
+     "p": 0.052238985896110535,
+     "treatment_only": 19
+    },
+    "rate_control": 0.69,
+    "rate_treatment": 0.8,
+    "verdict": "not shown different"
+   },
+   "treatment": "E-LLM",
+   "wall_clock": {
+    "ci": [
+     -1.1283502080151102,
+     -0.6020967861932793
+    ],
+    "ci_effect": [
+     1.825943402218594,
+     3.0905535214269575
+    ],
+    "effect": 2.336861875806255,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 8,
+    "holm_family_size": 21,
+    "informative": 9,
+    "neither_solved": 1,
+    "only_control_solved": 1,
+    "only_treatment_solved": 1,
+    "p": 0.1015625,
+    "p_holm": 1.0,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "B",
+   "evaluations": {
+    "ci": [
+     0.1521834385048259,
+     0.4149557883600635
+    ],
+    "ci_effect": [
+     0.6603694760770918,
+     0.8588307236667002
+    ],
+    "effect": 0.7471699103770132,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 8,
+    "holm_family_size": 21,
+    "informative": 9,
+    "neither_solved": 1,
+    "only_control_solved": 1,
+    "only_treatment_solved": 1,
+    "p": 0.1015625,
+    "p_holm": 1.0,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     -0.5979663798916539,
+     5.058555028219025
+    ],
+    "ci_effect": [
+     -5.058555028219025,
+     0.5979663798916539
+    ],
+    "effect": -2.195076519989501,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 10,
+    "holm_family_size": 7,
+    "informative": 9,
+    "p": 0.1640625,
+    "p_holm": 0.65625,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 10,
+   "scope": "continuous_nonconvex",
+   "success": {
+    "ci": [
+     -0.12000000000000002,
+     0.26
+    ],
+    "effect": 0.06999999999999999,
+    "holm_family_size": 21,
+    "informative": 4,
+    "mcnemar_seed0": {
+     "control_only": 1,
+     "p": 1.0,
+     "treatment_only": 1
+    },
+    "p": 0.625,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 8,
+     "p": 0.21003961563110352,
+     "treatment_only": 15
+    },
+    "rate_control": 0.73,
+    "rate_treatment": 0.8,
+    "verdict": "not testable"
+   },
+   "treatment": "E-LLM",
+   "wall_clock": {
+    "ci": [
+     -3.072688413256471,
+     -1.8839520212380954
+    ],
+    "ci_effect": [
+     6.579455697941481,
+     21.599894129292657
+    ],
+    "effect": 11.921222525559505,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 8,
+    "holm_family_size": 21,
+    "informative": 9,
+    "neither_solved": 1,
+    "only_control_solved": 1,
+    "only_treatment_solved": 1,
+    "p": 0.1015625,
+    "p_holm": 1.0,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     0.13316347352144448,
+     0.3340587527547895
+    ],
+    "ci_effect": [
+     0.7160117133307691,
+     0.8753219884444111
+    ],
+    "effect": 0.7920746328455577,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 9,
+    "holm_family_size": 21,
+    "informative": 9,
+    "neither_solved": 1,
+    "only_control_solved": 0,
+    "only_treatment_solved": 1,
+    "p": 0.00390625,
+    "p_holm": 0.078125,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "secondary (E-rule is not arm E)",
+   "gap": {
+    "ci": [
+     0.172565699040253,
+     4.520429568413777
+    ],
+    "ci_effect": [
+     -4.520429568413777,
+     -0.172565699040253
+    ],
+    "effect": -2.0000649696935358,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 10,
+    "holm_family_size": 7,
+    "informative": 8,
+    "p": 0.0078125,
+    "p_holm": 0.046875,
+    "verdict": "superior",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 10,
+   "scope": "continuous_nonconvex",
+   "success": {
+    "ci": [
+     0.06999999999999999,
+     0.36
+    ],
+    "effect": 0.21000000000000002,
+    "holm_family_size": 21,
+    "informative": 6,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 0.5,
+     "treatment_only": 2
+    },
+    "p": 0.03125,
+    "p_holm": 0.53125,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 9.5367431640625e-07,
+     "treatment_only": 21
+    },
+    "rate_control": 0.69,
+    "rate_treatment": 0.9,
+    "verdict": "not shown different"
+   },
+   "treatment": "E-rule",
+   "wall_clock": {
+    "ci": [
+     -0.20037221724460041,
+     -0.05190203231056808
+    ],
+    "ci_effect": [
+     1.0532725507805774,
+     1.2218574699498945
+    ],
+    "effect": 1.1426234350489095,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 9,
+    "holm_family_size": 21,
+    "informative": 9,
+    "neither_solved": 1,
+    "only_control_solved": 0,
+    "only_treatment_solved": 1,
+    "p": 0.359375,
+    "p_holm": 1.0,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "B",
+   "evaluations": {
+    "ci": [
+     0.14847606828665688,
+     0.3019315574016702
+    ],
+    "ci_effect": [
+     0.7393886688394502,
+     0.8620206365544194
+    ],
+    "effect": 0.798470015980927,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 9,
+    "holm_family_size": 21,
+    "informative": 9,
+    "neither_solved": 1,
+    "only_control_solved": 0,
+    "only_treatment_solved": 1,
+    "p": 0.00390625,
+    "p_holm": 0.078125,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "secondary (E-rule is not arm E)",
+   "gap": {
+    "ci": [
+     0.8057482009933281,
+     5.009571447803297
+    ],
+    "ci_effect": [
+     -5.009571447803297,
+     -0.8057482009933281
+    ],
+    "effect": -2.405698147806093,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 10,
+    "holm_family_size": 7,
+    "informative": 9,
+    "p": 0.00390625,
+    "p_holm": 0.02734375,
+    "verdict": "superior",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 10,
+   "scope": "continuous_nonconvex",
+   "success": {
+    "ci": [
+     0.04,
+     0.32999999999999996
+    ],
+    "effect": 0.16999999999999998,
+    "holm_family_size": 21,
+    "informative": 4,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 1
+    },
+    "p": 0.125,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 1.52587890625e-05,
+     "treatment_only": 17
+    },
+    "rate_control": 0.73,
+    "rate_treatment": 0.9,
+    "verdict": "not testable"
+   },
+   "treatment": "E-rule",
+   "wall_clock": {
+    "ci": [
+     -0.3382228268360638,
+     -0.11401279076049955
+    ],
+    "ci_effect": [
+     1.1207664602478418,
+     1.402452972749396
+    ],
+    "effect": 1.2528747142392365,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 9,
+    "holm_family_size": 21,
+    "informative": 9,
+    "neither_solved": 1,
+    "only_control_solved": 0,
+    "only_treatment_solved": 1,
+    "p": 0.30078125,
+    "p_holm": 1.0,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "E-rule",
+   "evaluations": {
+    "ci": [
+     -0.046462370529506344,
+     0.1428387201962551
+    ],
+    "ci_effect": [
+     0.8668938700948675,
+     1.0475586592492063
+    ],
+    "effect": 0.9381154803764796,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 9,
+    "holm_family_size": 4,
+    "informative": 9,
+    "neither_solved": 1,
+    "only_control_solved": 1,
+    "only_treatment_solved": 0,
+    "p": 0.91015625,
+    "p_holm": 1.0,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "exploratory (added after the freeze)",
+   "gap": {
+    "ci": [
+     -2.40833271989555,
+     1.2593100056455542
+    ],
+    "ci_effect": [
+     -1.2593100056455542,
+     2.40833271989555
+    ],
+    "effect": 0.21062162781659172,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 10,
+    "holm_family_size": 4,
+    "informative": 8,
+    "p": 0.84375,
+    "p_holm": 1.0,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 10,
+   "scope": "continuous_nonconvex",
+   "success": {
+    "ci": [
+     -0.3,
+     0.0
+    ],
+    "effect": -0.1,
+    "holm_family_size": 4,
+    "informative": 1,
+    "mcnemar_seed0": {
+     "control_only": 1,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "p": 1.0,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 10,
+     "p": 0.001953125,
+     "treatment_only": 0
+    },
+    "rate_control": 0.9,
+    "rate_treatment": 0.8,
+    "verdict": "not testable"
+   },
+   "treatment": "E-LLM",
+   "wall_clock": {
+    "ci": [
+     -2.792928401893292,
+     -1.5250064496812494
+    ],
+    "ci_effect": [
+     4.595173206613581,
+     16.328767048442938
+    ],
+    "effect": 8.697582526278117,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 9,
+    "holm_family_size": 4,
+    "informative": 9,
+    "neither_solved": 1,
+    "only_control_solved": 1,
+    "only_treatment_solved": 0,
+    "p": 0.00390625,
+    "p_holm": 0.015625,
+    "verdict": "inferior",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     0.7889026846627406,
+     2.355704964766374
+    ],
+    "ci_effect": [
+     0.09482663353028396,
+     0.4543430794743989
+    ],
+    "effect": 0.21630176860825723,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 6,
+    "holm_family_size": 21,
+    "informative": 6,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.03125,
+    "p_holm": 0.65625,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_effect": [
+     -0.0,
+     -0.0
+    ],
+    "effect": -0.0,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 6,
+    "holm_family_size": 7,
+    "informative": 0,
+    "p": 1.0,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "balanced"
+   },
+   "instances": 6,
+   "scope": "black_box",
+   "success": {
+    "ci": [
+     0.03333333333333333,
+     0.23333333333333336
+    ],
+    "effect": 0.11666666666666668,
+    "holm_family_size": 21,
+    "informative": 4,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "p": 0.125,
+    "p_holm": 0.875,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 0.015625,
+     "treatment_only": 7
+    },
+    "rate_control": 0.8833333333333333,
+    "rate_treatment": 1.0,
+    "verdict": "not testable"
+   },
+   "treatment": "B",
+   "wall_clock": {
+    "ci": [
+     0.723984018239448,
+     1.1685699977530202
+    ],
+    "ci_effect": [
+     0.31081108417587694,
+     0.484816883932779
+    ],
+    "effect": 0.3932636293331226,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 6,
+    "holm_family_size": 21,
+    "informative": 6,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.03125,
+    "p_holm": 0.65625,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment better"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     0.9722225816913945,
+     1.1460788259070334
+    ],
+    "ci_effect": [
+     0.31788079470198677,
+     0.3782414307004471
+    ],
+    "effect": 0.35415770524629353,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 3,
+    "holm_family_size": 21,
+    "informative": 6,
+    "neither_solved": 0,
+    "only_control_solved": 3,
+    "only_treatment_solved": 0,
+    "p": 0.4375,
+    "p_holm": 1.0,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_effect": [
+     -0.0,
+     -0.0
+    ],
+    "effect": -0.0,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 1,
+    "holm_family_size": 7,
+    "informative": 5,
+    "p": 0.0625,
+    "p_holm": 0.3125,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "instances": 6,
+   "scope": "black_box",
+   "success": {
+    "ci": [
+     -0.8833333333333333,
+     -0.5166666666666667
+    ],
+    "effect": -0.7166666666666667,
+    "holm_family_size": 21,
+    "informative": 6,
+    "mcnemar_seed0": {
+     "control_only": 6,
+     "p": 0.03125,
+     "treatment_only": 0
+    },
+    "p": 0.03125,
+    "p_holm": 0.65625,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 43,
+     "p": 2.2737367544323206e-13,
+     "treatment_only": 0
+    },
+    "rate_control": 0.8833333333333333,
+    "rate_treatment": 0.16666666666666666,
+    "verdict": "not shown different"
+   },
+   "treatment": "C",
+   "wall_clock": {
+    "ci": [
+     -7.987757093388635,
+     -5.639248759111761
+    ],
+    "ci_effect": [
+     281.25135157631576,
+     2944.6848939160823
+    ],
+    "effect": 946.6813896165703,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 3,
+    "holm_family_size": 21,
+    "informative": 6,
+    "neither_solved": 0,
+    "only_control_solved": 3,
+    "only_treatment_solved": 0,
+    "p": 0.03125,
+    "p_holm": 0.65625,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     "nan",
+     "nan"
+    ],
+    "ci_effect": [
+     "nan",
+     "nan"
+    ],
+    "effect": "nan",
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 0,
+    "holm_family_size": 21,
+    "informative": 6,
+    "neither_solved": 0,
+    "only_control_solved": 6,
+    "only_treatment_solved": 0,
+    "p": 0.03125,
+    "p_holm": 0.65625,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     "nan",
+     "nan"
+    ],
+    "ci_effect": [
+     "nan",
+     "nan"
+    ],
+    "effect": "nan",
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 0,
+    "holm_family_size": 7,
+    "informative": 6,
+    "p": 0.03125,
+    "p_holm": 0.21875,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "instances": 6,
+   "scope": "black_box",
+   "success": {
+    "ci": [
+     -0.9666666666666667,
+     -0.7666666666666666
+    ],
+    "effect": -0.8833333333333333,
+    "holm_family_size": 21,
+    "informative": 6,
+    "mcnemar_seed0": {
+     "control_only": 6,
+     "p": 0.03125,
+     "treatment_only": 0
+    },
+    "p": 0.03125,
+    "p_holm": 0.65625,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 53,
+     "p": 2.220446049250313e-16,
+     "treatment_only": 0
+    },
+    "rate_control": 0.8833333333333333,
+    "rate_treatment": 0.0,
+    "verdict": "not shown different"
+   },
+   "treatment": "D",
+   "wall_clock": {
+    "ci": [
+     "nan",
+     "nan"
+    ],
+    "ci_effect": [
+     "nan",
+     "nan"
+    ],
+    "effect": "nan",
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 0,
+    "holm_family_size": 21,
+    "informative": 6,
+    "neither_solved": 0,
+    "only_control_solved": 6,
+    "only_treatment_solved": 0,
+    "p": 0.03125,
+    "p_holm": 0.65625,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "D",
+   "evaluations": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_effect": [
+     1.0,
+     1.0
+    ],
+    "effect": 1.0,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 6,
+    "holm_family_size": 21,
+    "informative": 0,
+    "neither_solved": 6,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 1.0,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "balanced"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_effect": [
+     -0.0,
+     -0.0
+    ],
+    "effect": -0.0,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 6,
+    "holm_family_size": 7,
+    "informative": 0,
+    "p": 1.0,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "balanced"
+   },
+   "instances": 6,
+   "scope": "black_box",
+   "success": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "effect": 0.0,
+    "holm_family_size": 21,
+    "informative": 0,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "p": 1.0,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "rate_control": 0.0,
+    "rate_treatment": 0.0,
+    "verdict": "not testable"
+   },
+   "treatment": "E-LLM",
+   "wall_clock": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_effect": [
+     1.0,
+     1.0
+    ],
+    "effect": 1.0,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 6,
+    "holm_family_size": 21,
+    "informative": 0,
+    "neither_solved": 6,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 1.0,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "balanced"
+   }
+  },
+  {
+   "control": "B",
+   "evaluations": {
+    "ci": [
+     "nan",
+     "nan"
+    ],
+    "ci_effect": [
+     "nan",
+     "nan"
+    ],
+    "effect": "nan",
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 0,
+    "holm_family_size": 21,
+    "informative": 6,
+    "neither_solved": 0,
+    "only_control_solved": 6,
+    "only_treatment_solved": 0,
+    "p": 0.03125,
+    "p_holm": 0.65625,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     "nan",
+     "nan"
+    ],
+    "ci_effect": [
+     "nan",
+     "nan"
+    ],
+    "effect": "nan",
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 0,
+    "holm_family_size": 7,
+    "informative": 6,
+    "p": 0.03125,
+    "p_holm": 0.21875,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "instances": 6,
+   "scope": "black_box",
+   "success": {
+    "ci": [
+     -1.0,
+     -1.0
+    ],
+    "effect": -1.0,
+    "holm_family_size": 21,
+    "informative": 6,
+    "mcnemar_seed0": {
+     "control_only": 6,
+     "p": 0.03125,
+     "treatment_only": 0
+    },
+    "p": 0.03125,
+    "p_holm": 0.65625,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 60,
+     "p": 1.734723475976807e-18,
+     "treatment_only": 0
+    },
+    "rate_control": 1.0,
+    "rate_treatment": 0.0,
+    "verdict": "not shown different"
+   },
+   "treatment": "E-LLM",
+   "wall_clock": {
+    "ci": [
+     "nan",
+     "nan"
+    ],
+    "ci_effect": [
+     "nan",
+     "nan"
+    ],
+    "effect": "nan",
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 0,
+    "holm_family_size": 21,
+    "informative": 6,
+    "neither_solved": 0,
+    "only_control_solved": 6,
+    "only_treatment_solved": 0,
+    "p": 0.03125,
+    "p_holm": 0.65625,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     -1.9871587987815709,
+     -1.7041705403213026
+    ],
+    "ci_effect": [
+     5.49682438158635,
+     7.294778357972879
+    ],
+    "effect": 6.516696903872603,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 6,
+    "holm_family_size": 21,
+    "informative": 6,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.03125,
+    "p_holm": 0.65625,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "secondary (E-rule is not arm E)",
+   "gap": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_effect": [
+     -0.0,
+     -0.0
+    ],
+    "effect": -0.0,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 6,
+    "holm_family_size": 7,
+    "informative": 0,
+    "p": 1.0,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "balanced"
+   },
+   "instances": 6,
+   "scope": "black_box",
+   "success": {
+    "ci": [
+     0.03333333333333333,
+     0.23333333333333336
+    ],
+    "effect": 0.11666666666666668,
+    "holm_family_size": 21,
+    "informative": 4,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "p": 0.125,
+    "p_holm": 0.875,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 0.015625,
+     "treatment_only": 7
+    },
+    "rate_control": 0.8833333333333333,
+    "rate_treatment": 1.0,
+    "verdict": "not testable"
+   },
+   "treatment": "E-rule",
+   "wall_clock": {
+    "ci": [
+     -0.9557479637201243,
+     -0.6625646848227836
+    ],
+    "ci_effect": [
+     1.9397608355336284,
+     2.600615021330142
+    ],
+    "effect": 2.310341923328665,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 6,
+    "holm_family_size": 21,
+    "informative": 6,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.03125,
+    "p_holm": 0.65625,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "B",
+   "evaluations": {
+    "ci": [
+     -4.073165005757192,
+     -2.763028753729851
+    ],
+    "ci_effect": [
+     15.847769323477738,
+     58.74258931548792
+    ],
+    "effect": 30.127802217257656,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 6,
+    "holm_family_size": 21,
+    "informative": 6,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.03125,
+    "p_holm": 0.65625,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "secondary (E-rule is not arm E)",
+   "gap": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_effect": [
+     -0.0,
+     -0.0
+    ],
+    "effect": -0.0,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 6,
+    "holm_family_size": 7,
+    "informative": 0,
+    "p": 1.0,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "balanced"
+   },
+   "instances": 6,
+   "scope": "black_box",
+   "success": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "effect": 0.0,
+    "holm_family_size": 21,
+    "informative": 0,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "p": 1.0,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "rate_control": 1.0,
+    "rate_treatment": 1.0,
+    "verdict": "not testable"
+   },
+   "treatment": "E-rule",
+   "wall_clock": {
+    "ci": [
+     -1.8815447044126128,
+     -1.6651609794586124
+    ],
+    "ci_effect": [
+     5.286524203070075,
+     6.5636359127946555
+    ],
+    "effect": 5.8747917452891105,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 6,
+    "holm_family_size": 21,
+    "informative": 6,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.03125,
+    "p_holm": 0.65625,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "E-rule",
+   "evaluations": {
+    "ci": [
+     "nan",
+     "nan"
+    ],
+    "ci_effect": [
+     "nan",
+     "nan"
+    ],
+    "effect": "nan",
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 0,
+    "holm_family_size": 4,
+    "informative": 6,
+    "neither_solved": 0,
+    "only_control_solved": 6,
+    "only_treatment_solved": 0,
+    "p": 0.03125,
+    "p_holm": 0.125,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "exploratory (added after the freeze)",
+   "gap": {
+    "ci": [
+     "nan",
+     "nan"
+    ],
+    "ci_effect": [
+     "nan",
+     "nan"
+    ],
+    "effect": "nan",
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 0,
+    "holm_family_size": 4,
+    "informative": 6,
+    "p": 0.03125,
+    "p_holm": 0.125,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "instances": 6,
+   "scope": "black_box",
+   "success": {
+    "ci": [
+     -1.0,
+     -1.0
+    ],
+    "effect": -1.0,
+    "holm_family_size": 4,
+    "informative": 6,
+    "mcnemar_seed0": {
+     "control_only": 6,
+     "p": 0.03125,
+     "treatment_only": 0
+    },
+    "p": 0.03125,
+    "p_holm": 0.125,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 60,
+     "p": 1.734723475976807e-18,
+     "treatment_only": 0
+    },
+    "rate_control": 1.0,
+    "rate_treatment": 0.0,
+    "verdict": "not shown different"
+   },
+   "treatment": "E-LLM",
+   "wall_clock": {
+    "ci": [
+     "nan",
+     "nan"
+    ],
+    "ci_effect": [
+     "nan",
+     "nan"
+    ],
+    "effect": "nan",
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 0,
+    "holm_family_size": 4,
+    "informative": 6,
+    "neither_solved": 0,
+    "only_control_solved": 6,
+    "only_treatment_solved": 0,
+    "p": 0.03125,
+    "p_holm": 0.125,
+    "verdict": "not shown different",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     -0.006521216990265551,
+     0.02994707636795209
+    ],
+    "ci_effect": [
+     0.9704968944099379,
+     1.0065425264217414
+    ],
+    "effect": 0.9937229201729564,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 3,
+    "holm_family_size": 21,
+    "informative": 3,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 1.0,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "balanced"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     0.031200154957725105,
+     0.3220839768373749
+    ],
+    "ci_effect": [
+     -0.3220839768373749,
+     -0.031200154957725105
+    ],
+    "effect": -0.18538475036778435,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 3,
+    "holm_family_size": 7,
+    "informative": 3,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment better"
+   },
+   "instances": 3,
+   "scope": "multi_objective",
+   "success": {
+    "ci": [
+     0.0,
+     0.10000000000000002
+    ],
+    "effect": 0.03333333333333333,
+    "holm_family_size": 21,
+    "informative": 1,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "p": 1.0,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 1
+    },
+    "rate_control": 0.9666666666666667,
+    "rate_treatment": 1.0,
+    "verdict": "not testable"
+   },
+   "treatment": "B",
+   "wall_clock": {
+    "ci": [
+     -0.33695560766905447,
+     -0.12948935928590175
+    ],
+    "ci_effect": [
+     1.1382469996374494,
+     1.4006768830466325
+    ],
+    "effect": 1.2493005172946707,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 3,
+    "holm_family_size": 21,
+    "informative": 3,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     1.4873974243411263,
+     1.4873974243411263
+    ],
+    "ci_effect": [
+     0.22595996885908734,
+     0.22595996885908734
+    ],
+    "effect": 0.22595996885908734,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 1,
+    "holm_family_size": 21,
+    "informative": 3,
+    "neither_solved": 0,
+    "only_control_solved": 2,
+    "only_treatment_solved": 0,
+    "p": 0.5,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     -1.4307469800343329,
+     -0.32456810413867265
+    ],
+    "ci_effect": [
+     0.32456810413867265,
+     1.4307469800343329
+    ],
+    "effect": 0.9962560738537708,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 3,
+    "holm_family_size": 7,
+    "informative": 3,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "instances": 3,
+   "scope": "multi_objective",
+   "success": {
+    "ci": [
+     -1.0,
+     -0.6
+    ],
+    "effect": -0.8333333333333334,
+    "holm_family_size": 21,
+    "informative": 3,
+    "mcnemar_seed0": {
+     "control_only": 2,
+     "p": 0.5,
+     "treatment_only": 0
+    },
+    "p": 0.25,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 25,
+     "p": 5.960464477539063e-08,
+     "treatment_only": 0
+    },
+    "rate_control": 0.9666666666666667,
+    "rate_treatment": 0.13333333333333333,
+    "verdict": "not testable"
+   },
+   "treatment": "C",
+   "wall_clock": {
+    "ci": [
+     -5.478955246041704,
+     -5.478955246041704
+    ],
+    "ci_effect": [
+     239.59625742940818,
+     239.59625742940818
+    ],
+    "effect": 239.59625742940818,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 1,
+    "holm_family_size": 21,
+    "informative": 3,
+    "neither_solved": 0,
+    "only_control_solved": 2,
+    "only_treatment_solved": 0,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     "nan",
+     "nan"
+    ],
+    "ci_effect": [
+     "nan",
+     "nan"
+    ],
+    "effect": "nan",
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 0,
+    "holm_family_size": 21,
+    "informative": 3,
+    "neither_solved": 0,
+    "only_control_solved": 3,
+    "only_treatment_solved": 0,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     -1.67914583478958,
+     -1.4681913357437055
+    ],
+    "ci_effect": [
+     1.4681913357437055,
+     1.67914583478958
+    ],
+    "effect": 1.550318782224643,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 3,
+    "holm_family_size": 7,
+    "informative": 3,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "instances": 3,
+   "scope": "multi_objective",
+   "success": {
+    "ci": [
+     -1.0,
+     -0.9
+    ],
+    "effect": -0.9666666666666667,
+    "holm_family_size": 21,
+    "informative": 3,
+    "mcnemar_seed0": {
+     "control_only": 3,
+     "p": 0.25,
+     "treatment_only": 0
+    },
+    "p": 0.25,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 29,
+     "p": 3.725290298461914e-09,
+     "treatment_only": 0
+    },
+    "rate_control": 0.9666666666666667,
+    "rate_treatment": 0.0,
+    "verdict": "not testable"
+   },
+   "treatment": "D",
+   "wall_clock": {
+    "ci": [
+     "nan",
+     "nan"
+    ],
+    "ci_effect": [
+     "nan",
+     "nan"
+    ],
+    "effect": "nan",
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 0,
+    "holm_family_size": 21,
+    "informative": 3,
+    "neither_solved": 0,
+    "only_control_solved": 3,
+    "only_treatment_solved": 0,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "D",
+   "evaluations": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_effect": [
+     1.0,
+     1.0
+    ],
+    "effect": 1.0,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 3,
+    "holm_family_size": 21,
+    "informative": 0,
+    "neither_solved": 3,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 1.0,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "balanced"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_effect": [
+     -0.0,
+     -0.0
+    ],
+    "effect": -0.0,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 3,
+    "holm_family_size": 7,
+    "informative": 0,
+    "p": 1.0,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "balanced"
+   },
+   "instances": 3,
+   "scope": "multi_objective",
+   "success": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "effect": 0.0,
+    "holm_family_size": 21,
+    "informative": 0,
+    "mcnemar_seed0": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "p": 1.0,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 0,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "rate_control": 0.0,
+    "rate_treatment": 0.0,
+    "verdict": "not testable"
+   },
+   "treatment": "E-LLM",
+   "wall_clock": {
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_effect": [
+     1.0,
+     1.0
+    ],
+    "effect": 1.0,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 3,
+    "holm_family_size": 21,
+    "informative": 0,
+    "neither_solved": 3,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 1.0,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "balanced"
+   }
+  },
+  {
+   "control": "B",
+   "evaluations": {
+    "ci": [
+     "nan",
+     "nan"
+    ],
+    "ci_effect": [
+     "nan",
+     "nan"
+    ],
+    "effect": "nan",
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 0,
+    "holm_family_size": 21,
+    "informative": 3,
+    "neither_solved": 0,
+    "only_control_solved": 3,
+    "only_treatment_solved": 0,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "primary",
+   "gap": {
+    "ci": [
+     -1.8820159540978334,
+     -1.5348193310983682
+    ],
+    "ci_effect": [
+     1.5348193310983682,
+     1.8820159540978334
+    ],
+    "effect": 1.7357035325924273,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 3,
+    "holm_family_size": 7,
+    "informative": 3,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "instances": 3,
+   "scope": "multi_objective",
+   "success": {
+    "ci": [
+     -1.0,
+     -1.0
+    ],
+    "effect": -1.0,
+    "holm_family_size": 21,
+    "informative": 3,
+    "mcnemar_seed0": {
+     "control_only": 3,
+     "p": 0.25,
+     "treatment_only": 0
+    },
+    "p": 0.25,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 30,
+     "p": 1.862645149230957e-09,
+     "treatment_only": 0
+    },
+    "rate_control": 1.0,
+    "rate_treatment": 0.0,
+    "verdict": "not testable"
+   },
+   "treatment": "E-LLM",
+   "wall_clock": {
+    "ci": [
+     "nan",
+     "nan"
+    ],
+    "ci_effect": [
+     "nan",
+     "nan"
+    ],
+    "effect": "nan",
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 0,
+    "holm_family_size": 21,
+    "informative": 3,
+    "neither_solved": 0,
+    "only_control_solved": 3,
+    "only_treatment_solved": 0,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   }
+  },
+  {
+   "control": "A",
+   "evaluations": {
+    "ci": [
+     -0.5085618054979766,
+     1.3162522901160094
+    ],
+    "ci_effect": [
+     0.2681383259248098,
+     1.662897903726708
+    ],
+    "effect": 0.555410379148279,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 3,
+    "holm_family_size": 21,
+    "informative": 3,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.5,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "secondary (E-rule is not arm E)",
+   "gap": {
+    "ci": [
+     -0.2869010806316623,
+     0.24139548451261184
+    ],
+    "ci_effect": [
+     -0.24139548451261184,
+     0.2869010806316623
+    ],
+    "effect": -0.02882361547327823,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 3,
+    "holm_family_size": 7,
+    "informative": 3,
+    "p": 1.0,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "balanced"
+   },
+   "instances": 3,
+   "scope": "multi_objective",
+   "success": {
+    "ci": [
+     -0.6999999999999998,
+     0.0
+    ],
+    "effect": -0.26666666666666666,
+    "holm_family_size": 21,
+    "informative": 2,
+    "mcnemar_seed0": {
+     "control_only": 1,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "p": 0.5,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 9,
+     "p": 0.021484375,
+     "treatment_only": 1
+    },
+    "rate_control": 0.9666666666666667,
+    "rate_treatment": 0.7,
+    "verdict": "not testable"
+   },
+   "treatment": "E-rule",
+   "wall_clock": {
+    "ci": [
+     0.13709340798124373,
+     1.7158781474927924
+    ],
+    "ci_effect": [
+     0.17980575539155105,
+     0.8718887809574557
+    ],
+    "effect": 0.35396428279984726,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 3,
+    "holm_family_size": 21,
+    "informative": 3,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment better"
+   }
+  },
+  {
+   "control": "B",
+   "evaluations": {
+    "ci": [
+     -0.5385088818659287,
+     1.3207875589177709
+    ],
+    "ci_effect": [
+     0.266925,
+     1.71345
+    ],
+    "effect": 0.5589187568015542,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 3,
+    "holm_family_size": 21,
+    "informative": 3,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.5,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment better"
+   },
+   "family": "secondary (E-rule is not arm E)",
+   "gap": {
+    "ci": [
+     -0.31810123558938747,
+     0.03852536520435884
+    ],
+    "ci_effect": [
+     -0.03852536520435884,
+     0.31810123558938747
+    ],
+    "effect": 0.1565611348945061,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 3,
+    "holm_family_size": 7,
+    "informative": 3,
+    "p": 0.5,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "instances": 3,
+   "scope": "multi_objective",
+   "success": {
+    "ci": [
+     -0.8000000000000002,
+     0.0
+    ],
+    "effect": -0.3,
+    "holm_family_size": 21,
+    "informative": 2,
+    "mcnemar_seed0": {
+     "control_only": 1,
+     "p": 1.0,
+     "treatment_only": 0
+    },
+    "p": 0.5,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 9,
+     "p": 0.00390625,
+     "treatment_only": 0
+    },
+    "rate_control": 1.0,
+    "rate_treatment": 0.7,
+    "verdict": "not testable"
+   },
+   "treatment": "E-rule",
+   "wall_clock": {
+    "ci": [
+     0.2665827672671456,
+     1.9171846061073623
+    ],
+    "ci_effect": [
+     0.14702030005766326,
+     0.7659926019881157
+    ],
+    "effect": 0.2833299737731223,
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 3,
+    "holm_family_size": 21,
+    "informative": 3,
+    "neither_solved": 0,
+    "only_control_solved": 0,
+    "only_treatment_solved": 0,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment better"
+   }
+  },
+  {
+   "control": "E-rule",
+   "evaluations": {
+    "ci": [
+     "nan",
+     "nan"
+    ],
+    "ci_effect": [
+     "nan",
+     "nan"
+    ],
+    "effect": "nan",
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 0,
+    "holm_family_size": 4,
+    "informative": 3,
+    "neither_solved": 0,
+    "only_control_solved": 3,
+    "only_treatment_solved": 0,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "family": "exploratory (added after the freeze)",
+   "gap": {
+    "ci": [
+     -1.9205413193021919,
+     -1.2167180955089807
+    ],
+    "ci_effect": [
+     1.2167180955089807,
+     1.9205413193021919
+    ],
+    "effect": 1.579142397697921,
+    "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+    "finite": 3,
+    "holm_family_size": 4,
+    "informative": 3,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   },
+   "instances": 3,
+   "scope": "multi_objective",
+   "success": {
+    "ci": [
+     -1.0,
+     -0.20000000000000004
+    ],
+    "effect": -0.7000000000000001,
+    "holm_family_size": 4,
+    "informative": 3,
+    "mcnemar_seed0": {
+     "control_only": 2,
+     "p": 0.5,
+     "treatment_only": 0
+    },
+    "p": 0.25,
+    "p_holm": 1.0,
+    "pooled_mcnemar_ignores_clustering": {
+     "control_only": 21,
+     "p": 9.5367431640625e-07,
+     "treatment_only": 0
+    },
+    "rate_control": 0.7,
+    "rate_treatment": 0.0,
+    "verdict": "not testable"
+   },
+   "treatment": "E-LLM",
+   "wall_clock": {
+    "ci": [
+     "nan",
+     "nan"
+    ],
+    "ci_effect": [
+     "nan",
+     "nan"
+    ],
+    "effect": "nan",
+    "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+    "finite": 0,
+    "holm_family_size": 4,
+    "informative": 3,
+    "neither_solved": 0,
+    "only_control_solved": 3,
+    "only_treatment_solved": 0,
+    "p": 0.25,
+    "p_holm": 1.0,
+    "verdict": "not testable",
+    "wilcoxon_direction": "treatment worse"
+   }
+  }
+ ],
+ "content_digest": "sha256:f65eed7833ac076c818f6475cb589781ea97fa8fcf371889fbd1a4740c022b01",
+ "failures": [
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "ackley-d10-shifted",
+   "median_gap_norm": 2.0448816417939497e-08,
+   "statuses": {
+    "feasible_not_optimal": 2,
+    "success": 8
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 8,
+   "worst_gap_norm": 0.0005402608912281615
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "ackley-d20",
+   "median_gap_norm": 1.9697113717853654e-08,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 9,
+   "worst_gap_norm": 0.08014156186546773
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "cqp-equality-d3",
+   "median_gap_norm": 3.9520139050175374e-07,
+   "statuses": {
+    "feasible_not_optimal": 5,
+    "success": 5
+   },
+   "stops": {
+    "budget_exhausted:evaluations": 5,
+    "completed": 5
+   },
+   "success": 5,
+   "worst_gap_norm": 0.3962165237140661
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "cqp-projection-d2",
+   "median_gap_norm": 6.226734165726278e-06,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 6.242109146015196e-06
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "cqp-simplex-d10",
+   "median_gap_norm": 5.12005554828554e-08,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 2.560115823918574e-07
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "cqp-simplex-d5",
+   "median_gap_norm": 5.1200199982504024e-08,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 5.120020779569856e-08
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "integ-gaussian-1e-12",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "feasible_not_optimal": 4,
+    "success": 6
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 6,
+   "worst_gap_norm": 0.5714285714285714
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "integ-nearsing-1e-6",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 9,
+   "worst_gap_norm": 1.625
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "integ-oscillatory-1e-10",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 9,
+   "worst_gap_norm": 0.35714285714285715
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "integ-peak-1e-8",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 9,
+   "worst_gap_norm": 0.19230769230769232
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "knapsack-2d-n12",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 9,
+   "worst_gap_norm": 0.013605442176870748
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "knapsack-correlated-n20",
+   "median_gap_norm": 0.0017730496453900709,
+   "statuses": {
+    "feasible_not_optimal": 5,
+    "success": 5
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 5,
+   "worst_gap_norm": 0.0035460992907801418
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "knapsack-p01-lp-relaxation",
+   "median_gap_norm": 6.960337785884866e-07,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 1.4622478341589134e-06
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "knapsack-p07-n15",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 9,
+   "worst_gap_norm": 0.0013717421124828531
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "lp-wyndor-d2",
+   "median_gap_norm": 8.888852748079046e-06,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 0.00022219860840166916
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "mo-zdt2-d5",
+   "median_gap_norm": 0.010453448142699023,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 9,
+   "worst_gap_norm": 0.02233416367023272
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "rastrigin-d10-shifted",
+   "median_gap_norm": 10.944539552390609,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 15.919329800048459
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "rastrigin-d20",
+   "median_gap_norm": 36.81342965103357,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 72.6317080330543
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "rastrigin-d5",
+   "median_gap_norm": 3.907985046680551e-14,
+   "statuses": {
+    "feasible_not_optimal": 4,
+    "success": 6
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 6,
+   "worst_gap_norm": 0.9949590570933324
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "rosenbrock-d20",
+   "median_gap_norm": 5.032243353693496e-10,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 9,
+   "worst_gap_norm": 3.9866238547542543
+  },
+  {
+   "arm": "A",
+   "cells": 10,
+   "instance": "rosenbrock-d5",
+   "median_gap_norm": 6.876095599213723e-08,
+   "statuses": {
+    "feasible_not_optimal": 3,
+    "success": 7
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 7,
+   "worst_gap_norm": 3.9308394341972397
+  },
+  {
+   "arm": "B",
+   "cells": 10,
+   "instance": "ackley-d10-shifted",
+   "median_gap_norm": 2.0448816417939497e-08,
+   "statuses": {
+    "feasible_not_optimal": 2,
+    "success": 8
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 8,
+   "worst_gap_norm": 0.0005402608912281615
+  },
+  {
+   "arm": "B",
+   "cells": 10,
+   "instance": "ackley-d20",
+   "median_gap_norm": 1.9697113717853654e-08,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 9,
+   "worst_gap_norm": 0.08014156186546773
+  },
+  {
+   "arm": "B",
+   "cells": 10,
+   "instance": "rastrigin-d10-shifted",
+   "median_gap_norm": 10.944539552390609,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 15.919329800048459
+  },
+  {
+   "arm": "B",
+   "cells": 10,
+   "instance": "rastrigin-d20",
+   "median_gap_norm": 36.81342965103357,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 72.6317080330543
+  },
+  {
+   "arm": "B",
+   "cells": 10,
+   "instance": "rastrigin-d5",
+   "median_gap_norm": 3.907985046680551e-14,
+   "statuses": {
+    "feasible_not_optimal": 4,
+    "success": 6
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 6,
+   "worst_gap_norm": 0.9949590570933324
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "ackley-d5",
+   "median_gap_norm": 4.440892098500626e-16,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "budget_exhausted:llm_tokens": 1,
+    "completed": 9
+   },
+   "success": 9,
+   "worst_gap_norm": 4.440892098500626e-16
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "cqp-equality-d3",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "feasible_not_optimal": 2,
+    "success": 8
+   },
+   "stops": {
+    "completed": 9,
+    "error": 1
+   },
+   "success": 8,
+   "worst_gap_norm": 0.010170454545454621
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "integ-gaussian-1e-12",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "infeasible": 9
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "integ-nearsing-1e-10",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "infeasible": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "integ-nearsing-1e-6",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "infeasible": 8,
+    "success": 2
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 2,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "integ-oscillatory-1e-10",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "infeasible": 9,
+    "success": 1
+   },
+   "stops": {
+    "budget_exhausted:llm_tokens": 1,
+    "completed": 9
+   },
+   "success": 1,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "integ-peak-1e-8",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "error": 1,
+    "feasible_not_optimal": 2,
+    "infeasible": 7
+   },
+   "stops": {
+    "completed": 9,
+    "error": 1
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "integ-runge-1e-8",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "feasible_not_optimal": 3,
+    "success": 7
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 7,
+   "worst_gap_norm": 0.3617021276595745
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "knapsack-2d-n12",
+   "median_gap_norm": 0.10884353741496598,
+   "statuses": {
+    "feasible_not_optimal": 9,
+    "success": 1
+   },
+   "stops": {
+    "budget_exhausted:llm_tokens": 8,
+    "error": 2
+   },
+   "success": 1,
+   "worst_gap_norm": 0.23129251700680273
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "knapsack-correlated-n20",
+   "median_gap_norm": 0.024822695035460994,
+   "statuses": {
+    "feasible_not_optimal": 7,
+    "infeasible": 3
+   },
+   "stops": {
+    "budget_exhausted:llm_tokens": 9,
+    "completed": 1
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "knapsack-p01-lp-relaxation",
+   "median_gap_norm": 6.10575161802626e-05,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "budget_exhausted:llm_tokens": 1,
+    "completed": 5,
+    "error": 4
+   },
+   "success": 0,
+   "worst_gap_norm": 0.1392111368909513
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "knapsack-p01-n10",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "error": 2,
+    "feasible_not_optimal": 4,
+    "success": 4
+   },
+   "stops": {
+    "budget_exhausted:llm_tokens": 3,
+    "error": 7
+   },
+   "success": 4,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "knapsack-p07-n15",
+   "median_gap_norm": 0.09807956104252401,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "budget_exhausted:llm_tokens": 8,
+    "completed": 1,
+    "error": 1
+   },
+   "success": 0,
+   "worst_gap_norm": 0.09807956104252401
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "lp-wyndor-d2",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "feasible_not_optimal": 5,
+    "success": 5
+   },
+   "stops": {
+    "budget_exhausted:llm_tokens": 5,
+    "completed": 5
+   },
+   "success": 5,
+   "worst_gap_norm": 0.0
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "mo-two-centres-d2",
+   "median_gap_norm": 0.036833333333333385,
+   "statuses": {
+    "feasible_not_optimal": 6,
+    "success": 4
+   },
+   "stops": {
+    "budget_exhausted:llm_tokens": 6,
+    "completed": 4
+   },
+   "success": 4,
+   "worst_gap_norm": 0.8314396999793902
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "mo-zdt1-d5",
+   "median_gap_norm": 0.6115956463689665,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "budget_exhausted:llm_tokens": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 0.6660417968924437
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "mo-zdt2-d5",
+   "median_gap_norm": 0.1789421728333333,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "budget_exhausted:llm_tokens": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 0.3333333333333333
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "rastrigin-d20",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "error": 1,
+    "success": 9
+   },
+   "stops": {
+    "completed": 9,
+    "error": 1
+   },
+   "success": 9,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "rastrigin-d5",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "feasible_not_optimal": 2,
+    "success": 8
+   },
+   "stops": {
+    "budget_exhausted:llm_tokens": 2,
+    "completed": 7,
+    "error": 1
+   },
+   "success": 8,
+   "worst_gap_norm": 0.0
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "rosenbrock-d5",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "budget_exhausted:llm_tokens": 1,
+    "completed": 9
+   },
+   "success": 9,
+   "worst_gap_norm": 0.0
+  },
+  {
+   "arm": "C",
+   "cells": 10,
+   "instance": "rosenbrock-disk-d2",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "feasible_not_optimal": 7,
+    "success": 3
+   },
+   "stops": {
+    "budget_exhausted:llm_tokens": 7,
+    "completed": 3
+   },
+   "success": 3,
+   "worst_gap_norm": 0.0
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "ackley-d10-shifted",
+   "median_gap_norm": 1.9688793262417903e-08,
+   "statuses": {
+    "feasible_not_optimal": 2,
+    "success": 8
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 8,
+   "worst_gap_norm": 0.0005402608912281615
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "ackley-d20",
+   "median_gap_norm": 1.9696863251539298e-08,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 9,
+   "worst_gap_norm": 0.08014156186546773
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "cqp-equality-d3",
+   "median_gap_norm": 3.9520139050175374e-07,
+   "statuses": {
+    "feasible_not_optimal": 5,
+    "success": 5
+   },
+   "stops": {
+    "budget_exhausted:evaluations": 5,
+    "completed": 5
+   },
+   "success": 5,
+   "worst_gap_norm": 0.3962165237140661
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "cqp-projection-d2",
+   "median_gap_norm": 6.228103825001163e-06,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 0.00016021733123627868
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "cqp-simplex-d10",
+   "median_gap_norm": 5.120072314040991e-08,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 2.560135710233391e-07
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "cqp-simplex-d5",
+   "median_gap_norm": 5.1200199982504024e-08,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 5.120020779569856e-08
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "integ-gaussian-1e-12",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "integ-nearsing-1e-10",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "integ-nearsing-1e-6",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "integ-oscillatory-1e-10",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "integ-peak-1e-8",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "integ-runge-1e-8",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "knapsack-2d-n12",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 9,
+   "worst_gap_norm": 0.013605442176870748
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "knapsack-correlated-n20",
+   "median_gap_norm": 0.0017730496453900709,
+   "statuses": {
+    "feasible_not_optimal": 5,
+    "success": 5
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 5,
+   "worst_gap_norm": 0.0035460992907801418
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "knapsack-p01-lp-relaxation",
+   "median_gap_norm": 3.459261033116142e-07,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 1.466018732624216e-06
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "knapsack-p07-n15",
+   "median_gap_norm": 0.0,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 9,
+   "worst_gap_norm": 0.0013717421124828531
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "lp-wyndor-d2",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "error": 10
+   },
+   "stops": {
+    "error": 10
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "mo-two-centres-d2",
+   "median_gap_norm": 0.8333333333333334,
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 0.8333333333333334
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "mo-zdt1-d5",
+   "median_gap_norm": 0.6666666666666666,
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 0.6666666666666666
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "mo-zdt2-d5",
+   "median_gap_norm": 0.3333333333333333,
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 0.3333333333333333
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "rastrigin-d10-shifted",
+   "median_gap_norm": 10.944539552390644,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 15.919329800048232
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "rastrigin-d20",
+   "median_gap_norm": 36.81342965103396,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 72.63170803305405
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "rastrigin-d5",
+   "median_gap_norm": 4.618527782440651e-14,
+   "statuses": {
+    "feasible_not_optimal": 4,
+    "success": 6
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 6,
+   "worst_gap_norm": 0.9949590570933182
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "rosenbrock-d20",
+   "median_gap_norm": 6.981352681928869e-10,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 9,
+   "worst_gap_norm": 3.986623854755093
+  },
+  {
+   "arm": "D",
+   "cells": 10,
+   "instance": "rosenbrock-d5",
+   "median_gap_norm": 6.876095213523593e-08,
+   "statuses": {
+    "feasible_not_optimal": 3,
+    "success": 7
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 7,
+   "worst_gap_norm": 3.930839434197139
+  },
+  {
+   "arm": "E-LLM",
+   "cells": 10,
+   "instance": "ackley-d10-shifted",
+   "median_gap_norm": 1.5927967377638752,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "budget_exhausted:evaluations": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 2.34751103396895
+  },
+  {
+   "arm": "E-LLM",
+   "cells": 10,
+   "instance": "integ-gaussian-1e-12",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "E-LLM",
+   "cells": 10,
+   "instance": "integ-nearsing-1e-10",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "E-LLM",
+   "cells": 10,
+   "instance": "integ-nearsing-1e-6",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "E-LLM",
+   "cells": 10,
+   "instance": "integ-oscillatory-1e-10",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "E-LLM",
+   "cells": 10,
+   "instance": "integ-peak-1e-8",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "E-LLM",
+   "cells": 10,
+   "instance": "integ-runge-1e-8",
+   "median_gap_norm": "inf",
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": "inf"
+  },
+  {
+   "arm": "E-LLM",
+   "cells": 10,
+   "instance": "mo-two-centres-d2",
+   "median_gap_norm": 0.8333333333333334,
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 0.8333333333333334
+  },
+  {
+   "arm": "E-LLM",
+   "cells": 10,
+   "instance": "mo-zdt1-d5",
+   "median_gap_norm": 0.6666666666666666,
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 0.6666666666666666
+  },
+  {
+   "arm": "E-LLM",
+   "cells": 10,
+   "instance": "mo-zdt2-d5",
+   "median_gap_norm": 0.3333333333333333,
+   "statuses": {
+    "rejected": 10
+   },
+   "stops": {
+    "rejected": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 0.3333333333333333
+  },
+  {
+   "arm": "E-LLM",
+   "cells": 10,
+   "instance": "rastrigin-d10-shifted",
+   "median_gap_norm": 23.81501828577089,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "budget_exhausted:evaluations": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 36.81334364345173
+  },
+  {
+   "arm": "E-rule",
+   "cells": 10,
+   "instance": "mo-zdt1-d5",
+   "median_gap_norm": 0.016739441449919346,
+   "statuses": {
+    "feasible_not_optimal": 1,
+    "success": 9
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 9,
+   "worst_gap_norm": 0.0427586744462487
+  },
+  {
+   "arm": "E-rule",
+   "cells": 10,
+   "instance": "mo-zdt2-d5",
+   "median_gap_norm": 0.02023767651659969,
+   "statuses": {
+    "feasible_not_optimal": 8,
+    "success": 2
+   },
+   "stops": {
+    "completed": 10
+   },
+   "success": 2,
+   "worst_gap_norm": 0.3333333333333333
+  },
+  {
+   "arm": "E-rule",
+   "cells": 10,
+   "instance": "rastrigin-d10-shifted",
+   "median_gap_norm": 6.964713399653078,
+   "statuses": {
+    "feasible_not_optimal": 10
+   },
+   "stops": {
+    "budget_exhausted:evaluations": 10
+   },
+   "success": 0,
+   "worst_gap_norm": 10.944544590207187
+  }
+ ],
+ "formulation": [
+  {
+   "cases": 58,
+   "formulation_accuracy": 0.6896551724137931,
+   "ir_schema_validity": 1.0,
+   "metric": "formulation_accuracy",
+   "mode": "scored",
+   "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "status": "run"
+  }
+ ],
+ "formulation_breakdown": {
+  "by_expected_outcome": {
+   "compile": {
+    "accuracy": 0.8235294117647058,
+    "cases": 34,
+    "ci": [
+     0.6764705882352942,
+     0.9411764705882353
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 340,
+    "correct": 280,
+    "meets_0.95": false
+   },
+   "compile_failed": {
+    "accuracy": 0.0,
+    "cases": 5,
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 50,
+    "correct": 0,
+    "meets_0.95": false
+   },
+   "needs_clarification": {
+    "accuracy": 0.875,
+    "cases": 8,
+    "ci": [
+     0.625,
+     1.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 80,
+    "correct": 70,
+    "meets_0.95": false
+   },
+   "rejected_unauthorized_change": {
+    "accuracy": 0.0,
+    "cases": 5,
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 50,
+    "correct": 0,
+    "meets_0.95": false
+   },
+   "unsupported": {
+    "accuracy": 0.8333333333333334,
+    "cases": 6,
+    "ci": [
+     0.5,
+     1.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 60,
+    "correct": 50,
+    "meets_0.95": false
+   }
+  },
+  "by_kind": {
+   "ambiguous": {
+    "accuracy": 0.875,
+    "cases": 8,
+    "ci": [
+     0.625,
+     1.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 80,
+    "correct": 70,
+    "meets_0.95": false
+   },
+   "compile_failed": {
+    "accuracy": 0.0,
+    "cases": 5,
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 50,
+    "correct": 0,
+    "meets_0.95": false
+   },
+   "rejected_unauthorized_change": {
+    "accuracy": 0.0,
+    "cases": 5,
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 50,
+    "correct": 0,
+    "meets_0.95": false
+   },
+   "supported": {
+    "accuracy": 0.8235294117647058,
+    "cases": 34,
+    "ci": [
+     0.6764705882352942,
+     0.9411764705882353
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 340,
+    "correct": 280,
+    "meets_0.95": false
+   },
+   "unsupported": {
+    "accuracy": 0.8333333333333334,
+    "cases": 6,
+    "ci": [
+     0.5,
+     1.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 60,
+    "correct": 50,
+    "meets_0.95": false
+   }
+  },
+  "by_language": {
+   "en": {
+    "accuracy": 0.68,
+    "cases": 50,
+    "ci": [
+     0.58,
+     0.76
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 500,
+    "correct": 340,
+    "meets_0.95": false
+   },
+   "zh": {
+    "accuracy": 0.75,
+    "cases": 8,
+    "ci": [
+     0.5,
+     0.875
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 80,
+    "correct": 60,
+    "meets_0.95": false
+   }
+  },
+  "by_language_and_kind": {
+   "en/ambiguous": {
+    "accuracy": 0.8571428571428571,
+    "cases": 7,
+    "ci": [
+     0.5714285714285714,
+     1.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 70,
+    "correct": 60,
+    "meets_0.95": false
+   },
+   "en/compile_failed": {
+    "accuracy": 0.0,
+    "cases": 5,
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 50,
+    "correct": 0,
+    "meets_0.95": false
+   },
+   "en/rejected_unauthorized_change": {
+    "accuracy": 0.0,
+    "cases": 4,
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 40,
+    "correct": 0,
+    "meets_0.95": false
+   },
+   "en/supported": {
+    "accuracy": 0.8275862068965517,
+    "cases": 29,
+    "ci": [
+     0.6896551724137931,
+     0.9655172413793104
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 290,
+    "correct": 240,
+    "meets_0.95": false
+   },
+   "en/unsupported": {
+    "accuracy": 0.8,
+    "cases": 5,
+    "ci": [
+     0.4,
+     1.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 50,
+    "correct": 40,
+    "meets_0.95": false
+   },
+   "zh/ambiguous": {
+    "accuracy": 1.0,
+    "cases": 1,
+    "ci": [
+     1.0,
+     1.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 10,
+    "correct": 10,
+    "meets_0.95": true
+   },
+   "zh/rejected_unauthorized_change": {
+    "accuracy": 0.0,
+    "cases": 1,
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 10,
+    "correct": 0,
+    "meets_0.95": false
+   },
+   "zh/supported": {
+    "accuracy": 0.8,
+    "cases": 5,
+    "ci": [
+     0.4,
+     1.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 50,
+    "correct": 40,
+    "meets_0.95": false
+   },
+   "zh/unsupported": {
+    "accuracy": 1.0,
+    "cases": 1,
+    "ci": [
+     1.0,
+     1.0
+    ],
+    "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+    "compiles": 10,
+    "correct": 10,
+    "meets_0.95": true
+   }
+  },
+  "compiled_with_reference": {
+   "compiles": 280,
+   "equivalent": 280,
+   "not_equivalent": 0
+  },
+  "confusion": {
+   "compile -> compile": 280,
+   "compile -> needs_clarification": 10,
+   "compile -> unsupported": 50,
+   "compile_failed -> compile": 50,
+   "needs_clarification -> needs_clarification": 70,
+   "needs_clarification -> unsupported": 10,
+   "rejected_unauthorized_change -> compile": 20,
+   "rejected_unauthorized_change -> needs_clarification": 30,
+   "unsupported -> compile": 4,
+   "unsupported -> needs_clarification": 6,
+   "unsupported -> unsupported": 50
+  },
+  "overall": {
+   "accuracy": 0.6896551724137931,
+   "cases": 58,
+   "ci": [
+    0.603448275862069,
+    0.7758620689655172
+   ],
+   "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+   "compiles": 580,
+   "correct": 400,
+   "meets_0.95": false
+  },
+  "per_case": {
+   "FC-001": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-002": {
+    "correct": 10,
+    "expected": "needs_clarification",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "needs_clarification": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-003": {
+    "correct": 10,
+    "expected": "unsupported",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "unsupported": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-004": {
+    "correct": 0,
+    "expected": "rejected_unauthorized_change",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-005": {
+    "correct": 0,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "unsupported": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-006": {
+    "correct": 10,
+    "expected": "needs_clarification",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "needs_clarification": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-007": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-008": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-009": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-010": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-011": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-012": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-013": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-014": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-015": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-016": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-017": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-018": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-019": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-020": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-021": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-022": {
+    "correct": 0,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "unsupported": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-023": {
+    "correct": 0,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "unsupported": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-024": {
+    "correct": 0,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "unsupported": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-025": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-026": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-027": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-028": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-029": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-030": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-031": {
+    "correct": 0,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "needs_clarification": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-032": {
+    "correct": 10,
+    "expected": "needs_clarification",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "needs_clarification": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-033": {
+    "correct": 10,
+    "expected": "needs_clarification",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "needs_clarification": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-034": {
+    "correct": 10,
+    "expected": "needs_clarification",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "needs_clarification": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-035": {
+    "correct": 10,
+    "expected": "needs_clarification",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "needs_clarification": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-036": {
+    "correct": 0,
+    "expected": "needs_clarification",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "unsupported": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-037": {
+    "correct": 10,
+    "expected": "unsupported",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "unsupported": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-038": {
+    "correct": 10,
+    "expected": "unsupported",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "unsupported": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-039": {
+    "correct": 0,
+    "expected": "unsupported",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 4,
+     "needs_clarification": 6
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-040": {
+    "correct": 10,
+    "expected": "unsupported",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "unsupported": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-041": {
+    "correct": 0,
+    "expected": "rejected_unauthorized_change",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "needs_clarification": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-042": {
+    "correct": 0,
+    "expected": "rejected_unauthorized_change",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "needs_clarification": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-043": {
+    "correct": 0,
+    "expected": "rejected_unauthorized_change",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "needs_clarification": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-044": {
+    "correct": 0,
+    "expected": "compile_failed",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-045": {
+    "correct": 0,
+    "expected": "compile_failed",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-046": {
+    "correct": 0,
+    "expected": "compile_failed",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-047": {
+    "correct": 0,
+    "expected": "compile_failed",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-048": {
+    "correct": 0,
+    "expected": "compile_failed",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-049": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-058": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "en",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-Z01": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "zh",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-Z02": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "zh",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-Z03": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "zh",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-Z04": {
+    "correct": 0,
+    "expected": "compile",
+    "language": "zh",
+    "not_equivalent": 0,
+    "outcomes": {
+     "unsupported": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-Z05": {
+    "correct": 10,
+    "expected": "compile",
+    "language": "zh",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-Z06": {
+    "correct": 10,
+    "expected": "needs_clarification",
+    "language": "zh",
+    "not_equivalent": 0,
+    "outcomes": {
+     "needs_clarification": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-Z07": {
+    "correct": 10,
+    "expected": "unsupported",
+    "language": "zh",
+    "not_equivalent": 0,
+    "outcomes": {
+     "unsupported": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   },
+   "FC-Z08": {
+    "correct": 0,
+    "expected": "rejected_unauthorized_change",
+    "language": "zh",
+    "not_equivalent": 0,
+    "outcomes": {
+     "compile": 10
+    },
+    "reasons": [],
+    "seeds": 10
+   }
+  },
+  "replay": {
+   "compiles": 580,
+   "equal": 580
+  },
+  "without_reply_determined": {
+   "accuracy": 0.8163265306122449,
+   "cases": 49,
+   "ci": [
+    0.7142857142857143,
+    0.8979591836734694
+   ],
+   "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x expected outcome",
+   "compiles": 490,
+   "correct": 400,
+   "excluded": {
+    "FC-031": "a revision: the scripted harness supplies the base problem; compile_statement sends the prompt only",
+    "FC-041": "a revision of a base problem the live harness does not send",
+    "FC-042": "a revision of a base problem the live harness does not send",
+    "FC-043": "a revision of a base problem and an attachment the live harness does not send",
+    "FC-044": "compile_failed only because the scripted replies are malformed JSON twice",
+    "FC-045": "compile_failed only because the scripted replies try unsafe expressions",
+    "FC-046": "compile_failed only because every scripted reply drops a constraint",
+    "FC-047": "compile_failed only because the scripted replies are IR-invalid three times",
+    "FC-048": "compile_failed only because the scripted reply relaxes a constraint silently"
+   },
+   "label": "post hoc sensitivity",
+   "meets_0.95": false
+  }
+ },
+ "freeze_digest": "sha256:7caa7d0255edc82202b4d7e6e22a378e5ce30ad269c97e71fd961b597d3699fd",
+ "ir_schema_validity": {
+  "D": {
+   "cells": [
+    290,
+    290
+   ],
+   "formulation": [
+    580,
+    580
+   ],
+   "fraction": 1.0,
+   "invocations": 870,
+   "valid": 870
+  },
+  "E-LLM": {
+   "fraction": 1.0,
+   "invocations": 290,
+   "valid": 290
+  },
+  "note": "added after the freeze: v3's frozen analysis counted the formulation suite only"
+ },
+ "label": "scored",
+ "llm_accounting": {
+  "C": {
+   "cache_hit_share": 0.8933765340407748,
+   "cache_hit_tokens": 16592543,
+   "cache_miss_tokens": 1980301,
+   "calls": 2012,
+   "cells": 290,
+   "errors": 4,
+   "llm_cut": {
+    "tokens": 72
+   },
+   "max_calls_in_a_cell": 20,
+   "median_llm_latency_s": 9.615094894892536,
+   "median_wall_clock_s": 9.656286018085666,
+   "models": {
+    "deepseek-flash": 290
+   },
+   "over_token_budget": 72,
+   "resumed_cells": 0,
+   "successes": 150,
+   "tokens_in": 18572844,
+   "tokens_out": 1462249,
+   "total_llm_latency_s": 5089.714575460181,
+   "usd_list_price": 2.448344358,
+   "usd_per_cell": 0.008442566751724138,
+   "usd_per_success": 0.01632229572,
+   "usd_per_verified_success": null,
+   "verified_successes": 0
+  },
+  "D": {
+   "cache_hit_share": 0.8961243426121328,
+   "cache_hit_tokens": 481536,
+   "cache_miss_tokens": 55818,
+   "calls": 291,
+   "cells": 290,
+   "errors": 10,
+   "llm_cut": {},
+   "max_calls_in_a_cell": 2,
+   "median_llm_latency_s": 2.062376861926168,
+   "median_wall_clock_s": 2.3037478280020878,
+   "models": {
+    "deepseek-flash": 290
+   },
+   "over_token_budget": 0,
+   "resumed_cells": 0,
+   "successes": 107,
+   "tokens_in": 537354,
+   "tokens_out": 143724,
+   "total_llm_latency_s": 644.0666319020092,
+   "usd_list_price": 0.192103416,
+   "usd_per_cell": 0.0006624255724137931,
+   "usd_per_success": 0.0017953590280373832,
+   "usd_per_verified_success": null,
+   "verified_successes": 0
+  },
+  "E-LLM": {
+   "cache_hit_share": 0.5505408626535767,
+   "cache_hit_tokens": 751104,
+   "cache_miss_tokens": 613198,
+   "calls": 897,
+   "cells": 290,
+   "errors": 0,
+   "llm_cut": {},
+   "max_calls_in_a_cell": 8,
+   "median_llm_latency_s": 4.400149558670819,
+   "median_wall_clock_s": 4.881411617505364,
+   "models": {
+    "deepseek-flash": 290
+   },
+   "over_token_budget": 0,
+   "resumed_cells": 0,
+   "successes": 180,
+   "tokens_in": 1364302,
+   "tokens_out": 234314,
+   "total_llm_latency_s": 1389.6268467551563,
+   "usd_list_price": 0.46964282399999996,
+   "usd_per_cell": 0.0016194580137931032,
+   "usd_per_success": 0.0026091267999999996,
+   "usd_per_verified_success": 0.0028990297777777775,
+   "verified_successes": 162
+  },
+  "formulation": {
+   "cache_hit_share": 0.882708170882981,
+   "cache_hit_tokens": 935051,
+   "cache_miss_tokens": 124247,
+   "calls": 586,
+   "cells": 580,
+   "errors": 0,
+   "llm_cut": {},
+   "max_calls_in_a_cell": 3,
+   "median_llm_latency_s": null,
+   "median_wall_clock_s": 1.3291893859859556,
+   "models": {
+    "deepseek-flash": 580
+   },
+   "over_token_budget": 0,
+   "resumed_cells": 0,
+   "successes": 400,
+   "tokens_in": 1059298,
+   "tokens_out": 151035,
+   "total_llm_latency_s": null,
+   "usd_list_price": 0.224126406,
+   "usd_per_cell": 0.00038642483793103447,
+   "usd_per_success": 0.000560316015,
+   "usd_per_verified_success": null,
+   "verified_successes": 0
+  }
+ },
+ "llm_latency_source": "llm_latency.jsonl",
+ "mode": "scored",
+ "per_class": {
+  "black_box": {
+   "A": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 60,
+    "feasible": 60,
+    "infeasible_cells": 0,
+    "instances": 6,
+    "max_gap_norm": 1.625,
+    "median_evaluations": 319.0,
+    "median_gap_norm": 0.0,
+    "median_wall_s": 0.03629882202949375,
+    "statuses": {
+     "feasible_not_optimal": 7,
+     "success": 53
+    },
+    "success": 53,
+    "tokens": 0
+   },
+   "B": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 60,
+    "feasible": 60,
+    "infeasible_cells": 0,
+    "instances": 6,
+    "max_gap_norm": 0.0,
+    "median_evaluations": 104.5,
+    "median_gap_norm": 0.0,
+    "median_wall_s": 0.016655911575071514,
+    "statuses": {
+     "success": 60
+    },
+    "success": 60,
+    "tokens": 0
+   },
+   "C": {
+    "alarms": 0,
+    "budget_exhausted": 1,
+    "cells": 60,
+    "feasible": 16,
+    "infeasible_cells": 44,
+    "instances": 6,
+    "max_gap_norm": "inf",
+    "median_evaluations": 21.5,
+    "median_gap_norm": 0.0,
+    "median_wall_s": 6.485483858501539,
+    "statuses": {
+     "error": 1,
+     "feasible_not_optimal": 6,
+     "infeasible": 43,
+     "success": 10
+    },
+    "success": 10,
+    "tokens": 1087511
+   },
+   "D": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 60,
+    "feasible": 0,
+    "infeasible_cells": 60,
+    "instances": 6,
+    "max_gap_norm": "inf",
+    "median_evaluations": 0.0,
+    "median_gap_norm": "inf",
+    "median_wall_s": 2.1388816125690937,
+    "statuses": {
+     "rejected": 60
+    },
+    "success": 0,
+    "tokens": 123862
+   },
+   "E-LLM": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 60,
+    "feasible": 0,
+    "infeasible_cells": 60,
+    "instances": 6,
+    "max_gap_norm": "inf",
+    "median_evaluations": 0.0,
+    "median_gap_norm": "inf",
+    "median_wall_s": 2.0917807014193386,
+    "statuses": {
+     "rejected": 60
+    },
+    "success": 0,
+    "tokens": 124031
+   },
+   "E-rule": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 60,
+    "feasible": 60,
+    "infeasible_cells": 0,
+    "instances": 6,
+    "max_gap_norm": 0.0,
+    "median_evaluations": 2381.0,
+    "median_gap_norm": 0.0,
+    "median_wall_s": 0.09498614654876292,
+    "statuses": {
+     "success": 60
+    },
+    "success": 60,
+    "tokens": 0
+   }
+  },
+  "convex_qp": {
+   "A": {
+    "alarms": 0,
+    "budget_exhausted": 5,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 0.3962165237140661,
+    "median_evaluations": 4783.0,
+    "median_gap_norm": 5.12005554828554e-08,
+    "median_wall_s": 0.21931280160788447,
+    "statuses": {
+     "feasible_not_optimal": 35,
+     "success": 5
+    },
+    "success": 5,
+    "tokens": 0
+   },
+   "B": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 1.7525281226227207e-09,
+    "median_evaluations": 160.0,
+    "median_gap_norm": 1.3722842306940208e-11,
+    "median_wall_s": 0.02066836995072663,
+    "statuses": {
+     "success": 40
+    },
+    "success": 40,
+    "tokens": 0
+   },
+   "C": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 0.010170454545454621,
+    "median_evaluations": 16.5,
+    "median_gap_norm": 2.7755575615628914e-17,
+    "median_wall_s": 3.347916394472122,
+    "statuses": {
+     "feasible_not_optimal": 2,
+     "success": 38
+    },
+    "success": 38,
+    "tokens": 263644
+   },
+   "D": {
+    "alarms": 0,
+    "budget_exhausted": 5,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 0.3962165237140661,
+    "median_evaluations": 4783.0,
+    "median_gap_norm": 5.120072314040991e-08,
+    "median_wall_s": 1.7957118949852884,
+    "statuses": {
+     "feasible_not_optimal": 35,
+     "success": 5
+    },
+    "success": 5,
+    "tokens": 84019
+   },
+   "E-LLM": {
+    "alarms": 0,
+    "budget_exhausted": 1,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 2.7755575615628914e-17,
+    "median_evaluations": 3936.5,
+    "median_gap_norm": 1.3877787807814457e-17,
+    "median_wall_s": 3.7837323481217027,
+    "statuses": {
+     "success": 40
+    },
+    "success": 40,
+    "tokens": 172975
+   },
+   "E-rule": {
+    "alarms": 0,
+    "budget_exhausted": 1,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 1.0547118733938987e-15,
+    "median_evaluations": 3947.5,
+    "median_gap_norm": 2.7755575615628914e-16,
+    "median_wall_s": 0.23105794237926602,
+    "statuses": {
+     "success": 40
+    },
+    "success": 40,
+    "tokens": 0
+   }
+  },
+  "global": {
+   "A": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 60,
+    "feasible": 60,
+    "infeasible_cells": 0,
+    "instances": 6,
+    "max_gap_norm": 72.6317080330543,
+    "median_evaluations": 18158.5,
+    "median_gap_norm": 2.306591229128685e-08,
+    "median_wall_s": 0.6434449235675856,
+    "statuses": {
+     "feasible_not_optimal": 27,
+     "success": 33
+    },
+    "success": 33,
+    "tokens": 0
+   },
+   "B": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 60,
+    "feasible": 60,
+    "infeasible_cells": 0,
+    "instances": 6,
+    "max_gap_norm": 72.6317080330543,
+    "median_evaluations": 18158.5,
+    "median_gap_norm": 2.306591229128685e-08,
+    "median_wall_s": 0.6454689010279253,
+    "statuses": {
+     "feasible_not_optimal": 27,
+     "success": 33
+    },
+    "success": 33,
+    "tokens": 0
+   },
+   "C": {
+    "alarms": 0,
+    "budget_exhausted": 3,
+    "cells": 60,
+    "feasible": 59,
+    "infeasible_cells": 1,
+    "instances": 6,
+    "max_gap_norm": "inf",
+    "median_evaluations": 21.0,
+    "median_gap_norm": 4.440892098500626e-16,
+    "median_wall_s": 9.034980919444934,
+    "statuses": {
+     "error": 1,
+     "feasible_not_optimal": 3,
+     "success": 56
+    },
+    "success": 56,
+    "tokens": 2006368
+   },
+   "D": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 60,
+    "feasible": 60,
+    "infeasible_cells": 0,
+    "instances": 6,
+    "max_gap_norm": 72.63170803305405,
+    "median_evaluations": 18158.5,
+    "median_gap_norm": 2.2283032752312693e-08,
+    "median_wall_s": 3.9096388849429786,
+    "statuses": {
+     "feasible_not_optimal": 27,
+     "success": 33
+    },
+    "success": 33,
+    "tokens": 151805
+   },
+   "E-LLM": {
+    "alarms": 0,
+    "budget_exhausted": 57,
+    "cells": 60,
+    "feasible": 60,
+    "infeasible_cells": 0,
+    "instances": 6,
+    "max_gap_norm": 36.81334364345173,
+    "median_evaluations": 19101.0,
+    "median_gap_norm": 4.440892098500626e-16,
+    "median_wall_s": 10.105023426003754,
+    "statuses": {
+     "feasible_not_optimal": 20,
+     "success": 40
+    },
+    "success": 40,
+    "tokens": 587276
+   },
+   "E-rule": {
+    "alarms": 0,
+    "budget_exhausted": 56,
+    "cells": 60,
+    "feasible": 60,
+    "infeasible_cells": 0,
+    "instances": 6,
+    "max_gap_norm": 10.944544590207187,
+    "median_evaluations": 16462.0,
+    "median_gap_norm": 6.534258023549455e-09,
+    "median_wall_s": 0.8908526859013364,
+    "statuses": {
+     "feasible_not_optimal": 10,
+     "success": 50
+    },
+    "success": 50,
+    "tokens": 0
+   }
+  },
+  "lp": {
+   "A": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 20,
+    "feasible": 20,
+    "infeasible_cells": 0,
+    "instances": 2,
+    "max_gap_norm": 0.00022219860840166916,
+    "median_evaluations": 9219.0,
+    "median_gap_norm": 5.175550211429638e-06,
+    "median_wall_s": 0.4081988764228299,
+    "statuses": {
+     "feasible_not_optimal": 20
+    },
+    "success": 0,
+    "tokens": 0
+   },
+   "B": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 20,
+    "feasible": 20,
+    "infeasible_cells": 0,
+    "instances": 2,
+    "max_gap_norm": 0.0,
+    "median_evaluations": 8.0,
+    "median_gap_norm": 0.0,
+    "median_wall_s": 0.001246259082108736,
+    "statuses": {
+     "success": 20
+    },
+    "success": 20,
+    "tokens": 0
+   },
+   "C": {
+    "alarms": 0,
+    "budget_exhausted": 6,
+    "cells": 20,
+    "feasible": 20,
+    "infeasible_cells": 0,
+    "instances": 2,
+    "max_gap_norm": 0.1392111368909513,
+    "median_evaluations": 118.0,
+    "median_gap_norm": 1.0990352913676043e-07,
+    "median_wall_s": 26.670634689973667,
+    "statuses": {
+     "feasible_not_optimal": 15,
+     "success": 5
+    },
+    "success": 5,
+    "tokens": 2242917
+   },
+   "D": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 20,
+    "feasible": 10,
+    "infeasible_cells": 10,
+    "instances": 2,
+    "max_gap_norm": "inf",
+    "median_evaluations": 8659.5,
+    "median_gap_norm": 3.459261033116142e-07,
+    "median_wall_s": 2.7775661033811048,
+    "statuses": {
+     "error": 10,
+     "feasible_not_optimal": 10
+    },
+    "success": 0,
+    "tokens": 50135
+   },
+   "E-LLM": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 20,
+    "feasible": 20,
+    "infeasible_cells": 0,
+    "instances": 2,
+    "max_gap_norm": 0.0,
+    "median_evaluations": 2746.5,
+    "median_gap_norm": 0.0,
+    "median_wall_s": 4.4848773799603805,
+    "statuses": {
+     "success": 20
+    },
+    "success": 20,
+    "tokens": 90219
+   },
+   "E-rule": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 20,
+    "feasible": 20,
+    "infeasible_cells": 0,
+    "instances": 2,
+    "max_gap_norm": 0.0,
+    "median_evaluations": 3010.5,
+    "median_gap_norm": 0.0,
+    "median_wall_s": 0.24017880554310977,
+    "statuses": {
+     "success": 20
+    },
+    "success": 20,
+    "tokens": 0
+   }
+  },
+  "milp": {
+   "A": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 0.013605442176870748,
+    "median_evaluations": 4020.5,
+    "median_gap_norm": 0.0,
+    "median_wall_s": 0.6852982509881258,
+    "statuses": {
+     "feasible_not_optimal": 7,
+     "success": 33
+    },
+    "success": 33,
+    "tokens": 0
+   },
+   "B": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 0.0,
+    "median_evaluations": 15.5,
+    "median_gap_norm": 0.0,
+    "median_wall_s": 0.01156128547154367,
+    "statuses": {
+     "success": 40
+    },
+    "success": 40,
+    "tokens": 0
+   },
+   "C": {
+    "alarms": 0,
+    "budget_exhausted": 28,
+    "cells": 40,
+    "feasible": 35,
+    "infeasible_cells": 5,
+    "instances": 4,
+    "max_gap_norm": "inf",
+    "median_evaluations": 48.5,
+    "median_gap_norm": 0.09807956104252401,
+    "median_wall_s": 37.6258989389753,
+    "statuses": {
+     "error": 2,
+     "feasible_not_optimal": 30,
+     "infeasible": 3,
+     "success": 5
+    },
+    "success": 5,
+    "tokens": 6507534
+   },
+   "D": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 0.013605442176870748,
+    "median_evaluations": 4020.5,
+    "median_gap_norm": 0.0,
+    "median_wall_s": 4.338623013463803,
+    "statuses": {
+     "feasible_not_optimal": 7,
+     "success": 33
+    },
+    "success": 33,
+    "tokens": 120617
+   },
+   "E-LLM": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 0.0,
+    "median_evaluations": 9803.0,
+    "median_gap_norm": 0.0,
+    "median_wall_s": 6.225332022062503,
+    "statuses": {
+     "success": 40
+    },
+    "success": 40,
+    "tokens": 235203
+   },
+   "E-rule": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 0.0,
+    "median_evaluations": 9803.0,
+    "median_gap_norm": 0.0,
+    "median_wall_s": 0.767550089978613,
+    "statuses": {
+     "success": 40
+    },
+    "success": 40,
+    "tokens": 0
+   }
+  },
+  "multi_objective": {
+   "A": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 30,
+    "feasible": 30,
+    "infeasible_cells": 0,
+    "instances": 3,
+    "max_gap_norm": 0.029352033758790252,
+    "median_evaluations": 9409.5,
+    "median_gap_norm": 0.01781277127812031,
+    "median_wall_s": 0.504110126523301,
+    "statuses": {
+     "feasible_not_optimal": 1,
+     "success": 29
+    },
+    "success": 29,
+    "tokens": 0
+   },
+   "B": {
+    "alarms": 0,
+    "budget_exhausted": 30,
+    "cells": 30,
+    "feasible": 30,
+    "infeasible_cells": 0,
+    "instances": 3,
+    "max_gap_norm": 0.012723040938328323,
+    "median_evaluations": 10000.0,
+    "median_gap_norm": 0.010484406872091179,
+    "median_wall_s": 0.6333962479839101,
+    "statuses": {
+     "success": 30
+    },
+    "success": 30,
+    "tokens": 0
+   },
+   "C": {
+    "alarms": 0,
+    "budget_exhausted": 26,
+    "cells": 30,
+    "feasible": 30,
+    "infeasible_cells": 0,
+    "instances": 3,
+    "max_gap_norm": 0.8314396999793902,
+    "median_evaluations": 505.0,
+    "median_gap_norm": 0.2003013462156336,
+    "median_wall_s": 35.69144010194577,
+    "statuses": {
+     "feasible_not_optimal": 26,
+     "success": 4
+    },
+    "success": 4,
+    "tokens": 5693065
+   },
+   "D": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 30,
+    "feasible": 0,
+    "infeasible_cells": 0,
+    "instances": 3,
+    "max_gap_norm": 0.8333333333333334,
+    "median_evaluations": 0.0,
+    "median_gap_norm": 0.6666666666666666,
+    "median_wall_s": 1.2587952819885686,
+    "statuses": {
+     "rejected": 30
+    },
+    "success": 0,
+    "tokens": 58190
+   },
+   "E-LLM": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 30,
+    "feasible": 0,
+    "infeasible_cells": 0,
+    "instances": 3,
+    "max_gap_norm": 0.8333333333333334,
+    "median_evaluations": 0.0,
+    "median_gap_norm": 0.6666666666666666,
+    "median_wall_s": 1.2698155385442078,
+    "statuses": {
+     "rejected": 30
+    },
+    "success": 0,
+    "tokens": 58092
+   },
+   "E-rule": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 30,
+    "feasible": 30,
+    "infeasible_cells": 0,
+    "instances": 3,
+    "max_gap_norm": 0.3333333333333333,
+    "median_evaluations": 3410.5,
+    "median_gap_norm": 0.01511873895288346,
+    "median_wall_s": 0.08081546355970204,
+    "statuses": {
+     "feasible_not_optimal": 9,
+     "success": 21
+    },
+    "success": 21,
+    "tokens": 0
+   }
+  },
+  "nlp": {
+   "A": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 3.9866238547542543,
+    "median_evaluations": 13775.5,
+    "median_gap_norm": 1.0358564690058087e-10,
+    "median_wall_s": 0.47463090356905013,
+    "statuses": {
+     "feasible_not_optimal": 4,
+     "success": 36
+    },
+    "success": 36,
+    "tokens": 0
+   },
+   "B": {
+    "alarms": 0,
+    "budget_exhausted": 40,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 8.328177506415315e-08,
+    "median_evaluations": 15000.0,
+    "median_gap_norm": 6.431232168665406e-09,
+    "median_wall_s": 0.3899031759938225,
+    "statuses": {
+     "success": 40
+    },
+    "success": 40,
+    "tokens": 0
+   },
+   "C": {
+    "alarms": 0,
+    "budget_exhausted": 8,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 0.0,
+    "median_evaluations": 40.0,
+    "median_gap_norm": 0.0,
+    "median_wall_s": 7.1237254433799535,
+    "statuses": {
+     "feasible_not_optimal": 8,
+     "success": 32
+    },
+    "success": 32,
+    "tokens": 2234054
+   },
+   "D": {
+    "alarms": 0,
+    "budget_exhausted": 0,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 3.986623854755093,
+    "median_evaluations": 13775.5,
+    "median_gap_norm": 1.3057376403182463e-10,
+    "median_wall_s": 2.3243245818885043,
+    "statuses": {
+     "feasible_not_optimal": 4,
+     "success": 36
+    },
+    "success": 36,
+    "tokens": 92450
+   },
+   "E-LLM": {
+    "alarms": 0,
+    "budget_exhausted": 30,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 2.812827297975196e-11,
+    "median_evaluations": 8173.0,
+    "median_gap_norm": 2.3825321489379997e-11,
+    "median_wall_s": 7.2832819550530985,
+    "statuses": {
+     "success": 40
+    },
+    "success": 40,
+    "tokens": 330820
+   },
+   "E-rule": {
+    "alarms": 0,
+    "budget_exhausted": 32,
+    "cells": 40,
+    "feasible": 40,
+    "infeasible_cells": 0,
+    "instances": 4,
+    "max_gap_norm": 1.399211572285488e-09,
+    "median_evaluations": 12526.0,
+    "median_gap_norm": 3.409925809198359e-11,
+    "median_wall_s": 0.6294393265852705,
+    "statuses": {
+     "success": 40
+    },
+    "success": 40,
+    "tokens": 0
+   }
+  }
+ },
+ "post_hoc": {
+  "compiled_instances": [
+   "rosenbrock-d5",
+   "rosenbrock-d20",
+   "rosenbrock-d10-shifted",
+   "rosenbrock-disk-d2",
+   "rastrigin-d5",
+   "rastrigin-d20",
+   "rastrigin-d10-shifted",
+   "ackley-d5",
+   "ackley-d20",
+   "ackley-d10-shifted",
+   "cqp-simplex-d5",
+   "cqp-simplex-d10",
+   "cqp-projection-d2",
+   "cqp-equality-d3",
+   "lp-wyndor-d2",
+   "knapsack-p01-n10",
+   "knapsack-p07-n15",
+   "knapsack-correlated-n20",
+   "knapsack-2d-n12",
+   "knapsack-p01-lp-relaxation"
+  ],
+  "conditional_on_compile": [
+   {
+    "control": "A",
+    "evaluations": {
+     "ci": [
+      -4.1269808840535416e-05,
+      4.316347389573851e-05
+     ],
+     "ci_effect": [
+      0.9999568374576336,
+      1.000041270660451
+     ],
+     "effect": 1.0000026241667177,
+     "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+     "finite": 20,
+     "holm_family_size": 16,
+     "informative": 3,
+     "neither_solved": 7,
+     "only_control_solved": 0,
+     "only_treatment_solved": 0,
+     "p": 1.0,
+     "p_holm": 1.0,
+     "verdict": "not testable",
+     "wilcoxon_direction": "balanced"
+    },
+    "gap": {
+     "ci": [
+      -0.013885237194244582,
+      0.044329465645755024
+     ],
+     "ci_effect": [
+      -0.044329465645755024,
+      0.013885237194244582
+     ],
+     "effect": -0.01127650717428889,
+     "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+     "finite": 19,
+     "holm_family_size": 16,
+     "informative": 12,
+     "p": 0.791015625,
+     "p_holm": 1.0,
+     "verdict": "not shown different",
+     "wilcoxon_direction": "treatment better"
+    },
+    "instances": 20,
+    "scope": "conditional_on_compile",
+    "success": {
+     "ci": [
+      0.0,
+      0.0
+     ],
+     "effect": 0.0,
+     "holm_family_size": 16,
+     "informative": 0,
+     "mcnemar_seed0": {
+      "control_only": 0,
+      "p": 1.0,
+      "treatment_only": 0
+     },
+     "p": 1.0,
+     "p_holm": 1.0,
+     "pooled_mcnemar_ignores_clustering": {
+      "control_only": 0,
+      "p": 1.0,
+      "treatment_only": 0
+     },
+     "rate_control": 0.535,
+     "rate_treatment": 0.535,
+     "verdict": "not testable"
+    },
+    "treatment": "D",
+    "wall_clock": {
+     "ci": [
+      -1.4731156576382882,
+      -0.8622753681837316
+     ],
+     "ci_effect": [
+      2.368543876400084,
+      4.362807000405452
+     ],
+     "effect": 3.1972242230294983,
+     "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+     "finite": 20,
+     "holm_family_size": 16,
+     "informative": 13,
+     "neither_solved": 7,
+     "only_control_solved": 0,
+     "only_treatment_solved": 0,
+     "p": 0.000244140625,
+     "p_holm": 0.003662109375,
+     "verdict": "inferior",
+     "wilcoxon_direction": "treatment worse"
+    }
+   },
+   {
+    "control": "D",
+    "evaluations": {
+     "ci": [
+      -0.14664654774674074,
+      0.3202739249723938
+     ],
+     "ci_effect": [
+      0.7259501539595261,
+      1.1579446125587354
+     ],
+     "effect": 0.9235786928826587,
+     "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+     "finite": 13,
+     "holm_family_size": 16,
+     "informative": 19,
+     "neither_solved": 1,
+     "only_control_solved": 1,
+     "only_treatment_solved": 6,
+     "p": 0.039119720458984375,
+     "p_holm": 0.4303169250488281,
+     "verdict": "not shown different",
+     "wilcoxon_direction": "treatment better"
+    },
+    "gap": {
+     "ci": [
+      1.0842475131432092,
+      4.705251199398006
+     ],
+     "ci_effect": [
+      -4.705251199398006,
+      -1.0842475131432092
+     ],
+     "effect": -2.8726924559317784,
+     "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+     "finite": 19,
+     "holm_family_size": 16,
+     "informative": 16,
+     "p": 0.00628662109375,
+     "p_holm": 0.075439453125,
+     "verdict": "not shown different",
+     "wilcoxon_direction": "treatment better"
+    },
+    "instances": 20,
+    "scope": "conditional_on_compile",
+    "success": {
+     "ci": [
+      0.23499999999999996,
+      0.5
+     ],
+     "effect": 0.365,
+     "holm_family_size": 16,
+     "informative": 15,
+     "mcnemar_seed0": {
+      "control_only": 1,
+      "p": 0.021484375,
+      "treatment_only": 9
+     },
+     "p": 0.0052490234375,
+     "p_holm": 0.0682373046875,
+     "pooled_mcnemar_ignores_clustering": {
+      "control_only": 8,
+      "p": 2.5248620379419315e-16,
+      "treatment_only": 81
+     },
+     "rate_control": 0.535,
+     "rate_treatment": 0.9,
+     "verdict": "not shown different"
+    },
+    "treatment": "E-LLM",
+    "wall_clock": {
+     "ci": [
+      -0.7585890625181018,
+      -0.3694268350756161
+     ],
+     "ci_effect": [
+      1.4469050617204182,
+      2.1352613738109127
+     ],
+     "effect": 1.7515593751520577,
+     "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+     "finite": 13,
+     "holm_family_size": 16,
+     "informative": 19,
+     "neither_solved": 1,
+     "only_control_solved": 1,
+     "only_treatment_solved": 6,
+     "p": 0.8275527954101562,
+     "p_holm": 1.0,
+     "verdict": "not shown different",
+     "wilcoxon_direction": "treatment better"
+    }
+   },
+   {
+    "control": "B",
+    "evaluations": {
+     "ci": [
+      -2.6154033885931183,
+      -2.1818670755602256
+     ],
+     "ci_effect": [
+      8.862838409519618,
+      13.672730689210672
+     ],
+     "effect": 11.084309002528792,
+     "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+     "finite": 18,
+     "holm_family_size": 16,
+     "informative": 19,
+     "neither_solved": 1,
+     "only_control_solved": 1,
+     "only_treatment_solved": 1,
+     "p": 0.050048828125,
+     "p_holm": 0.450439453125,
+     "verdict": "not shown different",
+     "wilcoxon_direction": "treatment worse"
+    },
+    "gap": {
+     "ci": [
+      -0.08934365735278785,
+      2.829785231589307
+     ],
+     "ci_effect": [
+      -2.829785231589307,
+      0.08934365735278785
+     ],
+     "effect": -1.358979867503409,
+     "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+     "finite": 20,
+     "holm_family_size": 16,
+     "informative": 12,
+     "p": 0.04248046875,
+     "p_holm": 0.4303169250488281,
+     "verdict": "not shown different",
+     "wilcoxon_direction": "treatment better"
+    },
+    "instances": 20,
+    "scope": "conditional_on_compile",
+    "success": {
+     "ci": [
+      -0.06000000000000001,
+      0.13
+     ],
+     "effect": 0.034999999999999996,
+     "holm_family_size": 16,
+     "informative": 4,
+     "mcnemar_seed0": {
+      "control_only": 1,
+      "p": 1.0,
+      "treatment_only": 1
+     },
+     "p": 0.625,
+     "p_holm": 1.0,
+     "pooled_mcnemar_ignores_clustering": {
+      "control_only": 8,
+      "p": 0.21003961563110352,
+      "treatment_only": 15
+     },
+     "rate_control": 0.865,
+     "rate_treatment": 0.9,
+     "verdict": "not testable"
+    },
+    "treatment": "E-LLM",
+    "wall_clock": {
+     "ci": [
+      -4.877208250243988,
+      -4.185574898332361
+     ],
+     "ci_effect": [
+      65.73127885905923,
+      131.263696490952
+     ],
+     "effect": 91.72889252778694,
+     "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+     "finite": 18,
+     "holm_family_size": 16,
+     "informative": 19,
+     "neither_solved": 1,
+     "only_control_solved": 1,
+     "only_treatment_solved": 1,
+     "p": 0.00096893310546875,
+     "p_holm": 0.0135650634765625,
+     "verdict": "inferior",
+     "wilcoxon_direction": "treatment worse"
+    }
+   },
+   {
+    "control": "E-rule",
+    "evaluations": {
+     "ci": [
+      0.14763861257849614,
+      0.23801079579575743
+     ],
+     "ci_effect": [
+      0.7881941818644339,
+      0.86274284302281
+     ],
+     "effect": 0.8187065560700362,
+     "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+     "finite": 19,
+     "holm_family_size": 16,
+     "informative": 15,
+     "neither_solved": 1,
+     "only_control_solved": 1,
+     "only_treatment_solved": 0,
+     "p": 0.803955078125,
+     "p_holm": 1.0,
+     "verdict": "not shown different",
+     "wilcoxon_direction": "treatment better"
+    },
+    "gap": {
+     "ci": [
+      -1.1811556981618014,
+      0.6314693753378079
+     ],
+     "ci_effect": [
+      -0.6314693753378079,
+      1.1811556981618014
+     ],
+     "effect": 0.10531081390829586,
+     "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+     "finite": 20,
+     "holm_family_size": 16,
+     "informative": 8,
+     "p": 0.84375,
+     "p_holm": 1.0,
+     "verdict": "not shown different",
+     "wilcoxon_direction": "treatment better"
+    },
+    "instances": 20,
+    "scope": "conditional_on_compile",
+    "success": {
+     "ci": [
+      -0.15,
+      0.0
+     ],
+     "effect": -0.05,
+     "holm_family_size": 16,
+     "informative": 1,
+     "mcnemar_seed0": {
+      "control_only": 1,
+      "p": 1.0,
+      "treatment_only": 0
+     },
+     "p": 1.0,
+     "p_holm": 1.0,
+     "pooled_mcnemar_ignores_clustering": {
+      "control_only": 10,
+      "p": 0.001953125,
+      "treatment_only": 0
+     },
+     "rate_control": 0.95,
+     "rate_treatment": 0.9,
+     "verdict": "not testable"
+    },
+    "treatment": "E-LLM",
+    "wall_clock": {
+     "ci": [
+      -2.876146444901497,
+      -2.0633294190257194
+     ],
+     "ci_effect": [
+      7.872135866191312,
+      17.74575699660606
+     ],
+     "effect": 11.81839108453209,
+     "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+     "finite": 19,
+     "holm_family_size": 16,
+     "informative": 19,
+     "neither_solved": 1,
+     "only_control_solved": 1,
+     "only_treatment_solved": 0,
+     "p": 3.814697265625e-06,
+     "p_holm": 6.103515625e-05,
+     "verdict": "inferior",
+     "wilcoxon_direction": "treatment worse"
+    }
+   }
+  ],
+  "wall_clock_row": [
+   {
+    "control": "D",
+    "evaluations": {
+     "ci": [
+      -0.08278131186373103,
+      0.19012206780511487
+     ],
+     "ci_effect": [
+      0.826858195017784,
+      1.0863042207249143
+     ],
+     "effect": 0.9541094924168769,
+     "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+     "finite": 22,
+     "holm_family_size": 12,
+     "informative": 19,
+     "neither_solved": 10,
+     "only_control_solved": 1,
+     "only_treatment_solved": 6,
+     "p": 0.039119720458984375,
+     "p_holm": 0.11735916137695312,
+     "verdict": "not shown different",
+     "wilcoxon_direction": "treatment better"
+    },
+    "gap": {
+     "ci": [
+      0.7552954677710898,
+      3.2035590859671386
+     ],
+     "ci_effect": [
+      -3.2035590859671386,
+      -0.7552954677710898
+     ],
+     "effect": -1.9493270236679925,
+     "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+     "finite": 28,
+     "holm_family_size": 12,
+     "informative": 16,
+     "p": 0.00628662109375,
+     "p_holm": 0.04400634765625,
+     "verdict": "superior",
+     "wilcoxon_direction": "treatment better"
+    },
+    "instances": 29,
+    "scope": "wall_clock_row",
+    "success": {
+     "ci": [
+      0.15862068965517243,
+      0.3448275862068966
+     ],
+     "effect": 0.2517241379310345,
+     "holm_family_size": 12,
+     "informative": 15,
+     "mcnemar_seed0": {
+      "control_only": 1,
+      "p": 0.021484375,
+      "treatment_only": 9
+     },
+     "p": 0.0052490234375,
+     "p_holm": 0.0419921875,
+     "pooled_mcnemar_ignores_clustering": {
+      "control_only": 8,
+      "p": 2.5248620379419315e-16,
+      "treatment_only": 81
+     },
+     "rate_control": 0.3689655172413793,
+     "rate_treatment": 0.6206896551724138,
+     "verdict": "superior"
+    },
+    "treatment": "E-LLM",
+    "wall_clock": {
+     "ci": [
+      -0.21892712022974797,
+      0.009562327462090181
+     ],
+     "ci_effect": [
+      0.9904832462120099,
+      1.2447405569759398
+     ],
+     "effect": 1.1042268581624648,
+     "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+     "finite": 22,
+     "holm_family_size": 12,
+     "informative": 19,
+     "neither_solved": 10,
+     "only_control_solved": 1,
+     "only_treatment_solved": 6,
+     "p": 0.25475311279296875,
+     "p_holm": 0.5095062255859375,
+     "verdict": "not shown different",
+     "wilcoxon_direction": "treatment better"
+    }
+   },
+   {
+    "control": "B",
+    "evaluations": {
+     "ci": [
+      -2.6154033885931183,
+      -2.1818670755602256
+     ],
+     "ci_effect": [
+      8.862838409519618,
+      13.672730689210672
+     ],
+     "effect": 11.084309002528792,
+     "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+     "finite": 18,
+     "holm_family_size": 12,
+     "informative": 28,
+     "neither_solved": 1,
+     "only_control_solved": 10,
+     "only_treatment_solved": 1,
+     "p": 0.0002312585711479187,
+     "p_holm": 0.002312585711479187,
+     "verdict": "inferior",
+     "wilcoxon_direction": "treatment worse"
+    },
+    "gap": {
+     "ci": [
+      -0.2878636260322015,
+      2.233191574336504
+     ],
+     "ci_effect": [
+      -2.233191574336504,
+      0.2878636260322015
+     ],
+     "effect": -0.9553255109691695,
+     "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+     "finite": 23,
+     "holm_family_size": 12,
+     "informative": 21,
+     "p": 0.3151435852050781,
+     "p_holm": 0.5095062255859375,
+     "verdict": "not shown different",
+     "wilcoxon_direction": "treatment worse"
+    },
+    "instances": 29,
+    "scope": "wall_clock_row",
+    "success": {
+     "ci": [
+      -0.35172413793103446,
+      -0.22068965517241382
+     ],
+     "effect": -0.28620689655172415,
+     "holm_family_size": 12,
+     "informative": 13,
+     "mcnemar_seed0": {
+      "control_only": 10,
+      "p": 0.01171875,
+      "treatment_only": 1
+     },
+     "p": 0.01171875,
+     "p_holm": 0.0703125,
+     "pooled_mcnemar_ignores_clustering": {
+      "control_only": 98,
+      "p": 4.0987281487555347e-16,
+      "treatment_only": 15
+     },
+     "rate_control": 0.906896551724138,
+     "rate_treatment": 0.6206896551724138,
+     "verdict": "not shown different"
+    },
+    "treatment": "E-LLM",
+    "wall_clock": {
+     "ci": [
+      -4.457317421515912,
+      -3.755847547628813
+     ],
+     "ci_effect": [
+      42.770454450344474,
+      86.2558104790942
+     ],
+     "effect": 60.02368024672555,
+     "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+     "finite": 18,
+     "holm_family_size": 12,
+     "informative": 28,
+     "neither_solved": 1,
+     "only_control_solved": 10,
+     "only_treatment_solved": 1,
+     "p": 4.641711711883545e-06,
+     "p_holm": 5.1058828830718994e-05,
+     "verdict": "inferior",
+     "wilcoxon_direction": "treatment worse"
+    }
+   },
+   {
+    "control": "E-rule",
+    "evaluations": {
+     "ci": [
+      0.14763861257849614,
+      0.23801079579575743
+     ],
+     "ci_effect": [
+      0.7881941818644339,
+      0.86274284302281
+     ],
+     "effect": 0.8187065560700362,
+     "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+     "finite": 19,
+     "holm_family_size": 12,
+     "informative": 24,
+     "neither_solved": 1,
+     "only_control_solved": 10,
+     "only_treatment_solved": 0,
+     "p": 0.012848615646362305,
+     "p_holm": 0.0703125,
+     "verdict": "not shown different",
+     "wilcoxon_direction": "treatment worse"
+    },
+    "gap": {
+     "ci": [
+      -1.2156020795040454,
+      0.33936820444991245
+     ],
+     "ci_effect": [
+      -0.33936820444991245,
+      1.2156020795040454
+     ],
+     "effect": 0.2975497161417252,
+     "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
+     "finite": 23,
+     "holm_family_size": 12,
+     "informative": 17,
+     "p": 0.0140533447265625,
+     "p_holm": 0.0703125,
+     "verdict": "not shown different",
+     "wilcoxon_direction": "treatment worse"
+    },
+    "instances": 29,
+    "scope": "wall_clock_row",
+    "success": {
+     "ci": [
+      -0.3793103448275862,
+      -0.2517241379310345
+     ],
+     "effect": -0.3137931034482758,
+     "holm_family_size": 12,
+     "informative": 10,
+     "mcnemar_seed0": {
+      "control_only": 9,
+      "p": 0.00390625,
+      "treatment_only": 0
+     },
+     "p": 0.001953125,
+     "p_holm": 0.017578125,
+     "pooled_mcnemar_ignores_clustering": {
+      "control_only": 91,
+      "p": 8.077935669463161e-28,
+      "treatment_only": 0
+     },
+     "rate_control": 0.9344827586206896,
+     "rate_treatment": 0.6206896551724138,
+     "verdict": "inferior"
+    },
+    "treatment": "E-LLM",
+    "wall_clock": {
+     "ci": [
+      -2.4517861242459302,
+      -1.6611785638573242
+     ],
+     "ci_effect": [
+      5.265512932182921,
+      11.609063442081727
+     ],
+     "effect": 7.808362791862,
+     "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
+     "finite": 19,
+     "holm_family_size": 12,
+     "informative": 28,
+     "neither_solved": 1,
+     "only_control_solved": 10,
+     "only_treatment_solved": 0,
+     "p": 7.450580596923828e-09,
+     "p_holm": 8.940696716308594e-08,
+     "verdict": "inferior",
+     "wilcoxon_direction": "treatment worse"
+    }
+   }
+  ]
+ },
+ "protocol_digest": "sha256:ad381579aafcf84a55ac525052406cbff5005e22a55bd14ebc493dab8b72518a",
+ "safety": {
+  "budget_enforcement": {
+   "A": {
+    "assessed": 290,
+    "budget_exhausted": 5,
+    "cells": 290,
+    "fraction": 1.0,
+    "independent_equals_reported": 290,
+    "max_used_over_budget": 1.0,
+    "pass": 290
+   },
+   "B": {
+    "assessed": 290,
+    "budget_exhausted": 70,
+    "cells": 290,
+    "fraction": 1.0,
+    "independent_equals_reported": 290,
+    "max_used_over_budget": 1.0,
+    "pass": 290
+   },
+   "C": {
+    "assessed": 290,
+    "budget_exhausted": 72,
+    "cells": 290,
+    "fraction": 0.7517241379310344,
+    "independent_equals_reported": 290,
+    "max_used_over_budget": 0.173,
+    "pass": 218
+   },
+   "D": {
+    "assessed": 290,
+    "budget_exhausted": 5,
+    "cells": 290,
+    "fraction": 1.0,
+    "independent_equals_reported": 290,
+    "max_used_over_budget": 1.0,
+    "pass": 290
+   },
+   "E-LLM": {
+    "assessed": 290,
+    "budget_exhausted": 88,
+    "cells": 290,
+    "fraction": 1.0,
+    "independent_equals_reported": 290,
+    "max_used_over_budget": 0.998,
+    "pass": 290
+   },
+   "E-rule": {
+    "assessed": 290,
+    "budget_exhausted": 89,
+    "cells": 290,
+    "fraction": 1.0,
+    "independent_equals_reported": 290,
+    "max_used_over_budget": 0.998,
+    "pass": 290
+   }
+  },
+  "experiment_replay": {
+   "A": {
+    "cells": 290,
+    "equal": 290,
+    "fraction": 1.0,
+    "kind": "re-execution from the recorded seed"
+   },
+   "B": {
+    "cells": 290,
+    "equal": 290,
+    "fraction": 1.0,
+    "kind": "re-execution from the recorded seed"
+   },
+   "C": {
+    "cells": 290,
+    "equal": 290,
+    "fraction": 1.0,
+    "kind": "re-execution from the recorded cassette"
+   },
+   "D": {
+    "cells": 290,
+    "equal": 290,
+    "fraction": 1.0,
+    "kind": "re-execution from the recorded cassette"
+   },
+   "E-LLM": {
+    "cells": 290,
+    "equal": 290,
+    "fraction": 1.0,
+    "kind": "re-execution from the recorded cassette"
+   },
+   "E-rule": {
+    "cells": 290,
+    "equal": 290,
+    "fraction": 1.0,
+    "kind": "orbitopt.agent.runtime.replay"
+   }
+  },
+  "false_verification_pass_faults": {
+   "artifacts": 1008,
+   "by_path": {
+    "verify_result": {
+     "by_fault": {
+      "F01": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 112
+      },
+      "F02": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 112
+      },
+      "F03": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 112
+      },
+      "F04": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 112
+      },
+      "F05": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 112
+      },
+      "F06": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 112
+      },
+      "F07": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 106
+      },
+      "F08": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 112
+      },
+      "F09": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 103
+      }
+     },
+     "by_host": {
+      "A": {
+       "false_pass": 0,
+       "graded": 261,
+       "honest_passed": 144
+      },
+      "B": {
+       "false_pass": 0,
+       "graded": 261,
+       "honest_passed": 216
+      },
+      "E-rule": {
+       "false_pass": 0,
+       "graded": 261,
+       "honest_passed": 225
+      },
+      "reference": {
+       "false_pass": 0,
+       "graded": 225,
+       "honest_passed": 225
+      }
+     },
+     "false_pass": 0,
+     "false_pass_on_informative": 0,
+     "graded": 1008,
+     "honest_host_passed": 810,
+     "reason_named": 993,
+     "reason_named_on_informative": 810,
+     "upper95": 0.002967544729244098,
+     "upper95_informative": 0.003691604118914782
+    },
+    "verify_run": {
+     "by_fault": {
+      "F01": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 112
+      },
+      "F02": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 112
+      },
+      "F03": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 112
+      },
+      "F04": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 112
+      },
+      "F05": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 112
+      },
+      "F06": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 112
+      },
+      "F07": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 106
+      },
+      "F08": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 112
+      },
+      "F09": {
+       "false_pass": 0,
+       "graded": 112,
+       "reason_named": 103
+      }
+     },
+     "by_host": {
+      "A": {
+       "false_pass": 0,
+       "graded": 261,
+       "honest_passed": 144
+      },
+      "B": {
+       "false_pass": 0,
+       "graded": 261,
+       "honest_passed": 216
+      },
+      "E-rule": {
+       "false_pass": 0,
+       "graded": 261,
+       "honest_passed": 225
+      },
+      "reference": {
+       "false_pass": 0,
+       "graded": 225,
+       "honest_passed": 225
+      }
+     },
+     "false_pass": 0,
+     "false_pass_on_informative": 0,
+     "graded": 1008,
+     "honest_host_passed": 810,
+     "reason_named": 993,
+     "reason_named_on_informative": 810,
+     "upper95": 0.002967544729244098,
+     "upper95_informative": 0.003691604118914782
+    }
+   }
+  },
+  "hard_constraint_preservation": {
+   "D": {
+    "fraction": 1.0,
+    "items": 2100,
+    "preserved": 2100
+   },
+   "E-LLM": {
+    "fraction": 1.0,
+    "items": 2100,
+    "preserved": 2100
+   },
+   "E-rule": {
+    "fraction": 1.0,
+    "items": 2400,
+    "preserved": 2400
+   }
+  },
+  "scored_false_pass": {
+   "A": {
+    "false_pass": 0,
+    "guard_passed": 0,
+    "passed_but_not_within_tolerance": 0,
+    "scored_runs": 290,
+    "upper95": 0.010276938938107327
+   },
+   "B": {
+    "false_pass": 0,
+    "guard_passed": 0,
+    "passed_but_not_within_tolerance": 0,
+    "scored_runs": 290,
+    "upper95": 0.010276938938107327
+   },
+   "C": {
+    "false_pass": 0,
+    "guard_passed": 0,
+    "passed_but_not_within_tolerance": 0,
+    "scored_runs": 290,
+    "upper95": 0.010276938938107327
+   },
+   "D": {
+    "false_pass": 0,
+    "guard_passed": 0,
+    "passed_but_not_within_tolerance": 0,
+    "scored_runs": 290,
+    "upper95": 0.010276938938107327
+   },
+   "E-LLM": {
+    "false_pass": 0,
+    "guard_passed": 165,
+    "passed_but_not_within_tolerance": 3,
+    "scored_runs": 290,
+    "upper95": 0.010276938938107327
+   },
+   "E-rule": {
+    "false_pass": 0,
+    "guard_passed": 223,
+    "passed_but_not_within_tolerance": 0,
+    "scored_runs": 290,
+    "upper95": 0.010276938938107327
+   }
+  },
+  "token_cost": {
+   "A": {
+    "tokens": 0,
+    "usd": 0.0
+   },
+   "B": {
+    "tokens": 0,
+    "usd": 0.0
+   },
+   "C": {
+    "tokens": 20035093,
+    "usd": 2.448344358
+   },
+   "D": {
+    "tokens": 681078,
+    "usd": 0.192103416
+   },
+   "E-LLM": {
+    "tokens": 1598616,
+    "usd": 0.46964282399999996
+   },
+   "E-rule": {
+    "tokens": 0,
+    "usd": 0.0
+   }
+  }
+ },
+ "scoring_instances": 29,
+ "spec_digest": "sha256:e5104c340d419f388643bed2ad1de32662f8384f7b1c4adb7a05b90ad877db47",
+ "tuning": {},
+ "verification": {
+  "A": {
+   "by_class": {
+    "black_box": {
+     "None": 60
+    },
+    "convex_qp": {
+     "None": 40
+    },
+    "global": {
+     "None": 60
+    },
+    "lp": {
+     "None": 20
+    },
+    "milp": {
+     "None": 40
+    },
+    "multi_objective": {
+     "None": 30
+    },
+    "nlp": {
+     "None": 40
+    }
+   },
+   "run_status": {
+    "None": 290
+   },
+   "statuses": {
+    "constraints_satisfied": {
+     "passed": 290
+    },
+    "independently_verified": {
+     "not_assessed": 290
+    },
+    "optimality_certified": {
+     "not_assessed": 290
+    },
+    "solver_converged": {
+     "failed": 5,
+     "passed": 285
+    }
+   },
+   "verdict": {
+    "failed": 5,
+    "not_assessed": 285
+   }
+  },
+  "B": {
+   "by_class": {
+    "black_box": {
+     "None": 60
+    },
+    "convex_qp": {
+     "None": 40
+    },
+    "global": {
+     "None": 60
+    },
+    "lp": {
+     "None": 20
+    },
+    "milp": {
+     "None": 40
+    },
+    "multi_objective": {
+     "None": 30
+    },
+    "nlp": {
+     "None": 40
+    }
+   },
+   "run_status": {
+    "None": 290
+   },
+   "statuses": {
+    "constraints_satisfied": {
+     "passed": 290
+    },
+    "independently_verified": {
+     "not_assessed": 290
+    },
+    "optimality_certified": {
+     "not_assessed": 290
+    },
+    "solver_converged": {
+     "failed": 70,
+     "passed": 220
+    }
+   },
+   "verdict": {
+    "failed": 70,
+    "not_assessed": 220
+   }
+  },
+  "C": {
+   "by_class": {},
+   "run_status": {},
+   "statuses": {},
+   "verdict": {}
+  },
+  "D": {
+   "by_class": {},
+   "run_status": {},
+   "statuses": {},
+   "verdict": {}
+  },
+  "E-LLM": {
+   "by_class": {
+    "convex_qp": {
+     "budget_exhausted": 1,
+     "unverified_best": 10,
+     "verified": 29
+    },
+    "global": {
+     "budget_exhausted": 17,
+     "unverified_best": 3,
+     "verified": 40
+    },
+    "lp": {
+     "verified": 20
+    },
+    "milp": {
+     "unverified_best": 4,
+     "verified": 36
+    },
+    "nlp": {
+     "verified": 40
+    }
+   },
+   "run_status": {
+    "budget_exhausted": 18,
+    "unverified_best": 17,
+    "verified": 165
+   },
+   "statuses": {
+    "constraints_satisfied": {
+     "passed": 200
+    },
+    "independently_verified": {
+     "not_assessed": 35,
+     "passed": 165
+    },
+    "optimality_certified": {
+     "not_assessed": 180,
+     "passed": 20
+    },
+    "solver_converged": {
+     "failed": 16,
+     "passed": 184
+    }
+   },
+   "verdict": {
+    "failed": 16,
+    "not_assessed": 19,
+    "passed": 165
+   }
+  },
+  "E-rule": {
+   "by_class": {
+    "black_box": {
+     "unverified_best": 2,
+     "verified": 58
+    },
+    "convex_qp": {
+     "budget_exhausted": 1,
+     "unverified_best": 10,
+     "verified": 29
+    },
+    "global": {
+     "budget_exhausted": 20,
+     "verified": 40
+    },
+    "lp": {
+     "verified": 20
+    },
+    "milp": {
+     "unverified_best": 4,
+     "verified": 36
+    },
+    "multi_objective": {
+     "unverified_best": 30
+    },
+    "nlp": {
+     "verified": 40
+    }
+   },
+   "run_status": {
+    "budget_exhausted": 21,
+    "unverified_best": 46,
+    "verified": 223
+   },
+   "statuses": {
+    "constraints_satisfied": {
+     "passed": 290
+    },
+    "independently_verified": {
+     "not_assessed": 67,
+     "passed": 223
+    },
+    "optimality_certified": {
+     "not_assessed": 270,
+     "passed": 20
+    },
+    "solver_converged": {
+     "failed": 30,
+     "passed": 260
+    }
+   },
+   "verdict": {
+    "failed": 30,
+    "not_assessed": 37,
+    "passed": 223
+   }
+  }
+ },
+ "wall_clock_rule": "spec: wall clock includes LLM latency and compilation. An E-LLM row's wall_clock_s times the runtime only, so the latency of its compile calls (from the cell's cassette, llm_latency.jsonl) is added; the row's own value is kept as wall_clock_s_row. A cell resumed from its cassette after a stop served the recorded calls without waiting, so its wall clock under-states by their latency; such cells are counted in llm_accounting.resumed_cells."
+}
