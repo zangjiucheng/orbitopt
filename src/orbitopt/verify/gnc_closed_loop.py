@@ -683,6 +683,21 @@ def _frame_rotation(log_frame: str) -> np.ndarray:
                      "rotation into ECLIPJ2000 (supported: GCRS, ECLIPJ2000)")
 
 
+def _state_before_impulse(dense: HermiteDenseOutput, t: float) -> np.ndarray:
+    """Dense state at ``t``, taken from the interval that ENDS at ``t`` when ``t`` sits on a node.
+
+    The run records a truth sample at an actuation instant BEFORE the impulse
+    (:func:`closed_loop_replay` states the same priority). ``HermiteDenseOutput``
+    evaluates a seam epoch on the interval that STARTS there, i.e. after the
+    burn, so asking it for ``t`` unpinned would compare the recorded pre-burn
+    sample with a post-burn state and report the burn's own delta-v as an error.
+    At a node that is not a seam both sides agree, so this is exact there too.
+    """
+    i = int(np.searchsorted(dense.epochs, t - 1e-9, side="left")) - 1
+    on_node = 0 <= i < dense.epochs.size - 1 and abs(float(dense.epochs[i + 1]) - t) <= 1e-9
+    return dense(t, interval=i) if on_node else dense(t)
+
+
 def independent_reflight(log: GncRunLog, *, tol_position_m: float = REFLIGHT_TOL_POSITION_M,
                          tol_velocity_m_s: float = REFLIGHT_TOL_VELOCITY_M_S) -> dict:
     """Re-fly the Truth initial state + recorded ControlEvents in TudatPy.
@@ -744,7 +759,7 @@ def independent_reflight(log: GncRunLog, *, tol_position_m: float = REFLIGHT_TOL
         if t > dense_t.t1 + 1e-9 or t > dense_c.t1 + 1e-9:
             return {"available": False, "reason": "REFLIGHT_HISTORY_SHORT",
                     "t_last_truth": t}
-        s_t, s_c = dense_t(t), dense_c(t)
+        s_t, s_c = _state_before_impulse(dense_t, t), _state_before_impulse(dense_c, t)
         r_t = rot @ np.asarray(rec_t.r_m, dtype=np.float64)
         v_t = rot @ np.asarray(rec_t.v_m_s, dtype=np.float64)
         r_c = rot @ np.asarray(rec_c.r_m, dtype=np.float64)

@@ -208,3 +208,18 @@ def test_missing_truth_is_recorded_not_scored():
     line = rep["inputs"]["error_classes"]["numerical_error"]
     assert line["result"] == "not_checked"
     assert line["reason"] == gl.TRUTH_TRACK_TOO_SHORT
+
+
+@pytest.mark.skipif(not HAS_TUDATPY, reason="the independent re-flight needs tudatpy")
+def test_reflight_compares_a_burn_instant_sample_before_the_impulse(log):
+    """A truth sample taken at an actuation instant is the PRE-impulse state (the run's event
+    priority, as closed_loop_replay states). Reading the dense output unpinned at a seam gave the
+    post-impulse state and reported the burn's own delta-v (~0.45 m/s here) as a model error."""
+    burns = [e for e in log.records["control_event"] if e.executed]
+    on_grid = [e for e in burns if any(abs(r.t_s - e.t_exec_s) < 1e-9 for r in log.records["truth"])]
+    assert on_grid  # the scenario must put a burn on a truth sample, or this test checks nothing
+    fly = gl.independent_reflight(log)
+    assert fly["available"]
+    biggest_burn = max(float(np.linalg.norm(e.realized_delta_v_m_s)) for e in on_grid)
+    assert biggest_burn > 10 * fly["max_relative_velocity_error_m_s"]
+    assert fly["within_tolerance"]

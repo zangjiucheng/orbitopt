@@ -5,6 +5,7 @@ tracks, report-consistent error/covariance/NEES curves, dropped-frame events,
 covariance ellipsoid scenes, and two evidence lines that are never blended --
 the local replay digest and the E13-07 independent report stand on their own,
 and a not-checked error class is shown as not-checked, never as a pass."""
+import importlib.util
 import json
 import math
 
@@ -19,6 +20,9 @@ from orbitopt.flightlab.contract import read_run
 from orbitopt.mission.contract import Epoch
 
 T0 = Epoch(9300.0, "TDB")
+
+
+HAS_TUDATPY = importlib.util.find_spec("tudatpy") is not None
 
 
 def make_clock():
@@ -91,13 +95,19 @@ def test_replay_digest_and_report_digest_are_separate_evidence_lines(studio_dir,
 def test_missing_independent_backend_never_reads_as_pass(studio_dir):
     sc = json.loads((studio_dir / "gnc.json").read_text(encoding="utf-8"))
     model = sc["independent_verification"]["error_classes"]["model_error"]
-    assert model["result"] == "not_checked"
-    assert model.get("reason")
     run = read_run(studio_dir)
     check = next(c for c in run.verification.checks if c.id == "gnc-model-error")
-    assert check.passed is False
-    assert check.reason_code == "not_checked"
-    assert run.verification.physics_verified is None
+    if HAS_TUDATPY:
+        # the independent re-flight ran: the line is a real verdict, never a placeholder
+        assert model["result"] == "passed"
+        assert check.passed is True
+        assert run.verification.physics_verified is True
+    else:
+        assert model["result"] == "not_checked"
+        assert model.get("reason")
+        assert check.passed is False
+        assert check.reason_code == "not_checked"
+        assert run.verification.physics_verified is None
 
 
 def test_curves_are_the_report_rows_to_the_bit(studio_dir, log):
@@ -163,7 +173,8 @@ def test_panel_rows_keep_the_two_evidence_lines(studio_dir):
     sc = json.loads((studio_dir / "gnc.json").read_text(encoding="utf-8"))
     rows = dict(((label, value) for label, value, _ in gnc_rows(sc)))
     assert rows["Run log (local replay)"].startswith("e13-08-run")
-    assert "NOT CHECKED" in rows["Model error (independent re-flight)"]
+    model_row = rows["Model error (independent re-flight)"]
+    assert ("PASS" in model_row) if HAS_TUDATPY else ("NOT CHECKED" in model_row)
     assert "none consumed" not in rows["Verification report (independent)"]
 
 
