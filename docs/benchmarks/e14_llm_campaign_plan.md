@@ -6,8 +6,9 @@ E as `E-LLM` (LLM compiler plus the LLM planner in the runtime), and the formula
 `formulation_accuracy` and the compiler's `ir_schema_validity`. The rule arms A, B and E-rule run again as in
 [campaign v2](e14_qualification_report_v2.md), because the code digest moved.
 
-**Status: Phase A done, Phase B not started.** Phase A prepared and froze the campaign and ran a 30-call tuning dry
-run. No scored shard has run. Phase B runs only after the estimate below is approved.
+**Status: Phase A and Phase B done.** Phase A prepared and froze the campaign and ran a 30-call tuning dry run.
+Phase B ran on 2026-11-28 under a $5 hard stop in three stages and cost $3.33 at list price; its results are in the
+[campaign v3 report](e14_qualification_report_v3.md).
 
 ## 1. What is frozen
 

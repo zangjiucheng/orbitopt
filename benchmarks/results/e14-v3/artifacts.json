@@ -1,0 +1,43 @@
+{
+ "analysis_content_digest": "sha256:f65eed7833ac076c818f6475cb589781ea97fa8fcf371889fbd1a4740c022b01",
+ "campaign": "e14-10-campaign/3",
+ "cassettes_sample": {
+  "cells.scoring.C.rastrigin/C/rastrigin-d10-shifted/seed-0.cassette.jsonl": "sha256:335358bfc7444762fac7a1cf8d818237be33152dea47f1da6bdf18c6d0f24d50",
+  "cells.scoring.D.linear_program/D/lp-wyndor-d2/seed-0.cassette.jsonl": "sha256:7b7a2861825990db83c1e8c9e2ea99d95cf79e9058c09f1bde746933183c2bf8",
+  "cells.scoring.E-LLM.ackley/E-LLM/ackley-d10-shifted/seed-0.cassette.jsonl": "sha256:4c3626747a717829e8b1c8a7256be6a7ed9e26d1c2b3769beb2cbdc79b8462cf",
+  "cells.scoring.E-LLM.rastrigin/E-LLM/rastrigin-d10-shifted/seed-5.cassette.jsonl": "sha256:12f0e61d3f12d5c670e4f4d2412f63d9c248f9feed8fbbba1905c41b9f8d3f59",
+  "formulation.scoring/FC-004/seed-0.cassette.jsonl": "sha256:4e9708c3dde3396b7446543f19c75cef84775424ca19c6348301e3e42682d4eb",
+  "formulation.scoring/FC-039/seed-0.cassette.jsonl": "sha256:63baf2c8fe36ab301dc055a455afb00d48df3c5446e80a3ba35b37aae0fdc1b6",
+  "formulation.scoring/FC-Z01/seed-0.cassette.jsonl": "sha256:9c292385be6c3e61282a75fb622d5d785be8569a68a07e20432f226f028db6a5",
+  "formulation.scoring/FC-Z04/seed-0.cassette.jsonl": "sha256:3e0ff917d9de87b6272daab83d0ac3a2715902044d8dc499ec945d40ee6ec351"
+ },
+ "code_commit_shipped": "7661026",
+ "formulation_shard": {
+  "file": "formulation.scoring.json",
+  "matches_manifest": true,
+  "sha256": "sha256:e1210203333899ac8bdf3db1c269f9d45163eac6d4c6c25d6a9dfe7940d2289b"
+ },
+ "freeze_commit": "2c34539",
+ "key_handling": "the key reached the server only as ~/.llm_env (mode 600), sourced by the launcher; removed with shred -u after the last provider shard and checked absent; no file in the server workspace or in this directory contains the key value (grep -F with the key read from stdin, never from a command line)",
+ "ledger": {
+  "committed_as": "llm_ledger.jsonl.gz",
+  "gz_sha256": "sha256:5e56e0594fb6b30203d943b352174c5cb4645272e8ad898262457146cdaba70e",
+  "lines": 7572,
+  "server_path": "~/e14-10-campaign-v3/out/llm_ledger.jsonl",
+  "sha256": "sha256:60800a8a339378c393eaa6c632bfba3c06ca9f49b8ddb87f9ae9f552f8880042"
+ },
+ "llm_latency": {
+  "file": "llm_latency.jsonl",
+  "made_by": "python benchmarks/e14_analysis.py --llm-latency out > out/llm_latency.jsonl (reads the cassettes)",
+  "sha256": "sha256:96e7a14fa6568123f8f3df1d6b9ae2a996ae8ae67135307ee07af8b708631c05"
+ },
+ "runs_tarball": {
+  "bytes": 69529600,
+  "cassettes": 1450,
+  "contents": "out/runs: every cassette (870 scored provider cells, 580 formulation compiles) and the E-rule and E-LLM run directories",
+  "path": "~/e14-10-campaign-v3/runs-7661026.tar",
+  "sha256": "sha256:8589fc41f00868ba384f5340e62559253aac930e0d8180de0eca864ded7f4fe7"
+ },
+ "schema": "orbitopt.e14-campaign.artifacts/1",
+ "server_workspace": "~/e14-10-campaign-v3 on j7zang (every shard ran on host ubuntu2404-008)"
+}
