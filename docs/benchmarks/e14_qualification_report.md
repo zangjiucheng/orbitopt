@@ -1,5 +1,7 @@
 # E14-10 qualification report: first campaign
 
+> Superseded by [campaign v2](e14_qualification_report_v2.md), which reran these arms after the runtime fixes for budget typing and tolerance-edge selection. This report and its results stay as recorded.
+
 This is the first scored run of the [E14-10 benchmark specification](e14_benchmark_spec.md). It ran the three arms
 that need no language model on all 29 scoring instances with the spec's 10 seeds, and checked the safety metrics.
 The four arms and metrics that need a model were not run, because no provider was configured.
