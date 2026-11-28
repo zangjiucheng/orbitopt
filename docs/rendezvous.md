@@ -26,3 +26,20 @@ describes the independent checks on selected dispersed cases.
 A precomputed Mission Studio run of LEO-RDV-001 is committed under
 `examples/runs/leo-rdv-001`; the [quickstart](rendezvous-quickstart.md)
 shows how to open it with no compute stack.
+
+## Closed-loop guidance (E13)
+
+E13 adds relative navigation with an extended Kalman filter, feedback guidance,
+constrained control and a safety supervisor. The [GNC run contract](gnc-contract.md)
+defines the shared clock and the records for truth, observations, estimates,
+commands and executed control events.
+
+| Recorded study | Result under its declared conditions |
+|---|---|
+| [Feedback guidance](benchmarks/e13_04_closed_loop_guidance.md) | **258/264** hold-out cases passed with feedback and **13/264** passed open loop on the same draws. |
+| [Constrained control](benchmarks/e13_05_constrained_control.md) | The baseline, LQR and MPC passed **258**, **260** and **255** of 264 cases. The paired comparisons found no statistically significant difference. |
+| [Safety supervisor](benchmarks/e13_06_safety_supervisor.md) | The injected navigation-fault arm missed none of the 247 truth violations. **155/264** post-abort checks passed. |
+
+These are simulation results for the declared stress cases. The E12 sealed
+reference and its independent evidence remain described in the
+[verification report](rendezvous-verification-report.md).

@@ -14,7 +14,11 @@ guard does, from evidence.
 | [Tools](tools.md) | The scientific tool registry an IR `ToolCall` reaches, logged and replayable. |
 | [Runtime](runtime.md) | The bounded loop: limits, policy, planners, diagnostics, run directories and replay. |
 | [Optimize workspace](studio.md) | Mission Control's page: words in, the IR as editable math, a watched run, four statuses, replay. |
-| [Benchmark specification](../benchmarks/e14_benchmark_spec.md) | The pre-registered E14-10 design that will measure whether the LLM helps. |
+| [Qualification results](../benchmarks/e14_qualification_report_v2.md) | The deterministic solver and runtime comparison, including verification, budget enforcement and replay. |
+| [Provider campaign plan](../benchmarks/e14_llm_campaign_plan.md) | The E14-10 v3 dry run and the frozen design for scored model comparisons. |
+
+The recorded v2 campaign used the rule-based planner. The v3 provider
+campaign has a tuning dry run and no scored provider results in the archive.
 
 ## Install
 

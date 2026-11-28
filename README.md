@@ -43,6 +43,8 @@ and viewer-only options. Use `orbitopt --help` for commands.
 - [Flight Lab](docs/flightlab.md): ascent, recovery and run comparisons;
   [Vehicle view](docs/flightlab.md#vehicle-view) shows the catalog and flight overlays.
 - [Orbital rendezvous](docs/rendezvous-quickstart.md): open the precomputed target and chaser replay, or build one from a sealed plan.
+- [Closed-loop rendezvous](docs/rendezvous.md#closed-loop-guidance-e13): see navigation, feedback and safety-supervisor results.
+- [Optimization Studio](docs/agent/studio.md): build an optimization problem, run solvers and inspect verification evidence.
 - [Computed mission](docs/computed-mission.md): replay ascent and recovery,
   then propagate across TudatPy and G-FOLD environments;
   [Kourou/Starbase designs](docs/e5-08-new-vehicle-report.md) report remaining qualification gaps.

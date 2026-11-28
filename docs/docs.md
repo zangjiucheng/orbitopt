@@ -17,7 +17,7 @@ results and explore them in Mission Control.
 | [Flight Lab](flightlab.md) | Simulate ascent and recovery, compare runs and inspect vehicle definitions against flown data. |
 | [Computed missions](computed-mission.md) | Replay the RTLS references and choose the right evidence checks. |
 | [Verification](verification.md) | Reports, kinds of evidence, benchmarks and convergence studies. |
-| [Rendezvous](rendezvous.md) | Two-impulse rendezvous: quickstart, theory, configuration and verification. |
+| [Rendezvous](rendezvous.md) | Two-impulse replay, verification and closed-loop GNC studies. |
 | [Optimization](optimization/index.md) | The optimization IR, its solvers and the verification guard. |
 | [LLM-assisted optimization](agent/index.md) | Compile a statement into a problem, solve it in a verified loop, replay the run. |
 | [Missions and examples](missions.md) | Explore modeled missions, validation and source data. |
@@ -27,4 +27,5 @@ results and explore them in Mission Control.
 The [repository](https://github.com/zangjiucheng/orbitopt) contains the source,
 schemas and examples.
 
-For the latest recovery and guidance results, see the [E10 study index](computed-mission.md#e10-recovery-and-guidance-studies).
+See the [RTLS study index](computed-mission.md#e11-aerodynamic-rtls-closure)
+for recovery results and their evidence limits.
