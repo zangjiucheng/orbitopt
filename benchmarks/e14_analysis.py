@@ -159,6 +159,26 @@ def _median_gap(cells: dict[int, dict]) -> float:
     return statistics.median(vals)
 
 
+def wilcoxon_direction(diffs: list[float]) -> str:
+    """Which side carries the larger signed-rank sum (positive = treatment costlier or further from the optimum).
+
+    Added after the v3 freeze: the frozen verdict combines a Wilcoxon p over every instance (an arm that never
+    succeeded ranks as infinitely worse) with a CI over the finite ratios only, so a significant p can come from
+    the opposite side to the CI. This names the side the p comes from; the verdict itself is unchanged."""
+    vals = sorted((v for v in diffs if v != 0 and not (isinstance(v, float) and math.isnan(v))), key=abs)
+    plus = minus = 0.0
+    i = 0
+    while i < len(vals):
+        j = i
+        while j + 1 < len(vals) and abs(vals[j + 1]) == abs(vals[i]):
+            j += 1
+        rank = (i + j + 2) / 2
+        for v in vals[i:j + 1]:
+            plus, minus = (plus + rank, minus) if v > 0 else (plus, minus + rank)
+        i = j + 1
+    return "treatment worse" if plus > minus else "treatment better" if minus > plus else "balanced"
+
+
 def compare(rows: list[dict], treat: str, ctrl: str, instance_ids: list[str], strata: dict) -> dict:
     """Every endpoint of one paired comparison, clustered by instance; p raw (Holm is applied by the caller)."""
     T, Cc = per_instance(rows, treat), per_instance(rows, ctrl)
@@ -199,6 +219,7 @@ def compare(rows: list[dict], treat: str, ctrl: str, instance_ids: list[str], st
                          "ci_effect": [math.exp(-ci[1]), math.exp(-ci[0])],
                          "effect_unit": "geometric mean ERT ratio treatment/control over instances both solved",
                          "informative": sum(1 for v in d.values() if v != 0),
+                         "wilcoxon_direction": wilcoxon_direction(list(d.values())),
                          "finite": len(finite), "only_treatment_solved": sum(1 for v in d.values() if v == -math.inf),
                          "only_control_solved": sum(1 for v in d.values() if v == math.inf),
                          "neither_solved": sum(1 for i in ids if math.isinf(ert(T[i], field))
@@ -210,7 +231,8 @@ def compare(rows: list[dict], treat: str, ctrl: str, instance_ids: list[str], st
                   "effect": -sum(finite.values()) / len(finite) if finite else math.nan,
                   "ci_effect": [-ci[1], -ci[0]],
                   "effect_unit": "mean log10(median gap treatment / median gap control), gaps floored at 1e-12",
-                  "informative": sum(1 for v in gd.values() if v != 0), "finite": len(finite)}
+                  "informative": sum(1 for v in gd.values() if v != 0), "finite": len(finite),
+                  "wilcoxon_direction": wilcoxon_direction(list(gd.values()))}
     return res
 
 
@@ -303,6 +325,7 @@ def analyze(out: Path, allow_smoke: bool = False) -> dict:
     analysis["llm_accounting"] = llm_accounting(rows, form_rows)
     analysis["wall_clock_rule"] = WALL_CLOCK_RULE
     analysis["llm_latency_source"] = "llm_latency.jsonl" if latency else None
+    analysis["post_hoc"] = post_hoc_comparisons(rows, ran, scoring_ids, strata) if latency else None
     analysis["alarms"] = [{k: r[k] for k in ("arm_id", "instance_id", "seed", "gap", "max_violation")}
                           for r in rows if r.get("alarm")]
     analysis["failures"] = failures(rows)
@@ -581,6 +604,27 @@ def ir_schema_validity(rows: list[dict], form_rows: list[dict]) -> dict:
             "note": "added after the freeze: v3's frozen analysis counted the formulation suite only"}
 
 
+def post_hoc_comparisons(rows: list[dict], ran: list[str], scoring_ids: list[str], strata: dict) -> dict:
+    """Descriptive reruns of comparisons, each set its own Holm family; none is a pre-registered test.
+
+    ``conditional_on_compile``: only the instances whose every D and E-LLM cell compiled, which separates what the
+    solver or planner did from what the compiler refused. ``wall_clock_row``: the E-LLM comparisons with the row's
+    own wall clock (runtime only), to show what the compile-latency correction moves."""
+    compiled = [i for i in scoring_ids if all(r.get("compile_outcome") == "compile" for r in rows
+                                              if r["instance_id"] == i and r["arm_id"] in ("D", "E-LLM"))]
+    out: dict = {"compiled_instances": compiled}
+    sets = {"conditional_on_compile": (rows, compiled, (("D", "A"), ("E-LLM", "D"), ("E-LLM", "B"),
+                                                         ("E-LLM", "E-rule"))),
+            "wall_clock_row": ([dict(r, wall_clock_s=r.get("wall_clock_s_row", r["wall_clock_s"])) for r in rows],
+                               scoring_ids, (("E-LLM", "D"), ("E-LLM", "B"), ("E-LLM", "E-rule")))}
+    for name, (rs, ids, pairs) in sets.items():
+        comps = [dict(compare(rs, t, c, ids, strata), scope=name) for t, c in pairs if t in ran and c in ran]
+        comps = [c for c in comps if "not_run" not in c]
+        _holm_into(comps, [(n, e) for n in range(len(comps)) for e in ENDPOINTS + (SECONDARY_ENDPOINT,)])
+        out[name] = comps
+    return out
+
+
 def llm_accounting(rows: list[dict], form_rows: list[dict]) -> dict:
     """Calls, tokens, cache share, list-price USD, models returned, caps hit, and cost per solution, per arm."""
     out: dict = {}
@@ -649,12 +693,13 @@ def render_tables(an: dict) -> str:
                          f"{fmt(C.num(t['median_gap_norm']))} | {t['budget_exhausted']} | "
                          f"{fmt(C.num(t['median_evaluations']))} | {fmt(C.num(t['median_wall_s']))} |")
     lines += ["", "### Comparisons", "", "| scope | treatment vs control | family | endpoint | effect | 95% CI | "
-              "informative | p | p Holm (m) | verdict |", "|---|---|---|---|---|---|---|---|---|---|"]
+              "informative | p | p Holm (m) | verdict | Wilcoxon side |",
+              "|---|---|---|---|---|---|---|---|---|---|---|"]
     for c in an["comparisons"]:
         name = f"{c['treatment']} vs {c['control']}"
         if "not_run" in c:
             lines.append(f"| {c['scope']} | {name} | {c['family']} | all | - | - | - | - | - | not run: "
-                         f"{c['not_run']} |")
+                         f"{c['not_run']} | - |")
             continue
         for e in ENDPOINTS + (SECONDARY_ENDPOINT,):
             s = c[e]
@@ -664,7 +709,23 @@ def render_tables(an: dict) -> str:
             lines.append(f"| {c['scope']} | {name} | {c['family']} | {e} ({label}) | {fmt(C.num(s['effect']))} | "
                          f"[{fmt(C.num(ci[0]))}, {fmt(C.num(ci[1]))}] | {s['informative']} | "
                          f"{fmt(C.num(s['p']))} | {fmt(C.num(s.get('p_holm')))} ({s.get('holm_family_size', '-')}) | "
-                         f"{s.get('verdict', '-')} |")
+                         f"{s.get('verdict', '-')} | {s.get('wilcoxon_direction', '-')} |")
+    post = an.get("post_hoc")
+    if post:
+        lines += ["", "### Post hoc comparisons (descriptive; each set is its own Holm family)", "",
+                  f"Instances where every D and E-LLM cell compiled: {len(post['compiled_instances'])}.", "",
+                  "| set | treatment vs control | endpoint | effect | 95% CI | informative | p | p Holm (m) | verdict | "
+                  "Wilcoxon side |", "|---|---|---|---|---|---|---|---|---|---|"]
+        for name in ("conditional_on_compile", "wall_clock_row"):
+            for c in post[name]:
+                for e in ENDPOINTS + (SECONDARY_ENDPOINT,):
+                    s = c[e]
+                    ci = s.get("ci_effect", s["ci"])
+                    lines.append(f"| {name} | {c['treatment']} vs {c['control']} | {e} | {fmt(C.num(s['effect']))} | "
+                                 f"[{fmt(C.num(ci[0]))}, {fmt(C.num(ci[1]))}] | {s['informative']} | "
+                                 f"{fmt(C.num(s['p']))} | {fmt(C.num(s.get('p_holm')))} "
+                                 f"({s.get('holm_family_size', '-')}) | {s.get('verdict', '-')} | "
+                                 f"{s.get('wilcoxon_direction', '-')} |")
     sensitivity = an.get("sensitivity_scorer_success", {"comparisons": []})["comparisons"]
     if sensitivity:
         lines += ["", "### Sensitivity: success as the frozen scorer counts it (alarm cells as successes)", "",
