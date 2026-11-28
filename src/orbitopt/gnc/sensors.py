@@ -486,7 +486,7 @@ class RelativeSensorModel:
 class SensorFix:
     """One raw measurement set at one tick: native channel values plus the
     declared per-channel variances and the validity flag (the explicit
-    ``有效标志``; it is the input to :meth:`RelativeSensorModel.observe`,
+    ``valid`` flag; it is the input to :meth:`RelativeSensorModel.observe`,
     which is where the E13-01 presence/absence discipline applies)."""
 
     sensor_id: str

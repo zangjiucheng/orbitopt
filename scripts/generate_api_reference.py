@@ -25,6 +25,7 @@ GROUPS = {
     "dynamics": "Dynamics",
     "agent": "LLM agent runtime",
     "flightlab": "Flight Lab",
+    "gnc": "GNC closed-loop simulation",
     "lambert": "Lambert solvers",
     "mission": "Mission integration",
     "optimization": "Optimization problems and solvers (IR)",
