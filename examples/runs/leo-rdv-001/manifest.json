@@ -15,19 +15,19 @@
     "keep-out sphere radius 500 m centred on the target at arrival (config safety block); the check grades the live chaser-to-centre distance, not an observed zone crossing."
   ],
   "toolchain": {
-    "python": "3.12.13",
+    "python": "3.13.18",
     "orbitopt": "0.1.0",
     "numpy": "2.5.4",
     "scipy": "1.18.1",
     "astropy": "8.0.2",
-    "tudatpy": "1.1.0",
-    "gfold": "0.3.2",
+    "tudatpy": "absent",
+    "gfold": "absent",
     "jsbsim": "1.3.3",
-    "cvxpy": "1.9.3",
+    "cvxpy": "absent",
     "jsonschema": "4.26.0",
     "pyyaml": "6.0.3",
     "opentsiolkovsky": "1.0.0",
-    "opentsiolkovsky_sha256": "binary absent; pinned asset 8b08ac464dd435bf0e814b03d9cd3cfcb88133851e5d150e819de63e419233f4"
+    "opentsiolkovsky_sha256": "binary absent; pinned asset e39da128a084a8782e0159f26e777048dac5c49b9855d50030ba5a2e5dca7e06"
   },
   "bodies": [
     {

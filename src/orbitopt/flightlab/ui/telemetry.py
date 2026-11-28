@@ -30,6 +30,16 @@ RENDEZVOUS_SERIES = (
     ("rel_y_lvlh", ("rel_y_lvlh_m",), "LVLH y (along-track)", "m"),
     ("rel_z_lvlh", ("rel_z_lvlh_m",), "LVLH z (cross-track)", "m"),
 )
+#: E13-08: (channel id, CSV aliases, label, unit) of the closed-loop GNC replay
+#: series a studio run carries as chaser_est extra columns -- the
+#: navigation_consistency rows of the verification report, verbatim.
+GNC_SERIES = (
+    ("gnc_est_pos_err", ("gnc_est_pos_err_m",), "Est. position error", "m"),
+    ("gnc_est_vel_err", ("gnc_est_vel_err_m_s",), "Est. velocity error", "m/s"),
+    ("gnc_nees_per_dof", ("gnc_nees_per_dof",), "NEES per dof", "-"),
+    ("gnc_cov_trace", ("gnc_cov_pos_trace_m2",), "Pos. cov. trace", "m^2"),
+    ("gnc_cov_1sigma", ("gnc_cov_1sigma_rho_m",), "1-sigma range", "m"),
+)
 DYNAMIC_PRESSURE_ALIASES = ("dynamic_pressure_pa", "q_pa", "q")
 G_LOAD_ALIASES = ("axial_accel_g", "accel_g", "g_load", "gload", "acceleration_g")
 ENGINES_LIT_ALIASES = ("engines_lit", "engines_on", "n_engines")
@@ -318,7 +328,7 @@ def build_telemetry_channels(
                 fins.append(TelemetrySeries("grid_fins", label, "deg", color, track.body_id, points))
     channels.append(TelemetryChannel("grid_fins", "Grid Fins", "deg",
                                      "no recorded grid-fin telemetry" if not fins else "", tuple(fins)))
-    for channel_id, aliases, label, unit in RENDEZVOUS_SERIES:
+    for channel_id, aliases, label, unit in (*RENDEZVOUS_SERIES, *GNC_SERIES):
         series = []
         for index, track in enumerate(run.tracks):
             extra = _extra_values(track, aliases)
@@ -434,8 +444,17 @@ def load_run_scene(run_dir: Path | str, *, earth_texture: bool = True) -> tuple[
                 doc = None
             if isinstance(doc, dict) and doc.get("schema_version") == "rendezvous-studio-1.0":
                 rendezvous = doc
+        gnc = None
+        side = path / "gnc.json"
+        if side.is_file():
+            try:
+                doc = json.loads(side.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                doc = None
+            if isinstance(doc, dict) and doc.get("schema_version") == "gnc-studio-1.0":
+                gnc = doc
         scene = run_to_scene(run, earth_texture=earth_texture, target=target,
-                             mission_scenario=scenario, rendezvous=rendezvous)
+                             mission_scenario=scenario, rendezvous=rendezvous, gnc=gnc)
         # The run's own verification (checks recorded in verification.json, incl. the orbit re-fly) as a
         # verification-report-1.0 on the scene: without it the Verification panel says NOT CHECKED for a run
         # that was in fact verified. A run with no assessed verdict still reports not_checked.

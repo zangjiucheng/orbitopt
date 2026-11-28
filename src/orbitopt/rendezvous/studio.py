@@ -295,7 +295,7 @@ def build_studio_run(cfg: RendezvousMissionConfig, *, sample_dt_s: float = DEFAU
         events=(),
         verification=Verification(
             optimizer_converged=bool(ver.position_error_m <= cfg.optimizer.newton_tol_m),
-            physics_verified=physics_verdict_from_refly_report(refly_report, plan),
+            physics_verified=physics_verdict_from_refly_report(refly_report, cfg, plan),
             mission_constraints_passed=bool(ver.passed and (safety is None
                                                             or safety.get("passed"))),
             backend_self_check=None,
@@ -350,8 +350,10 @@ def build_studio_run(cfg: RendezvousMissionConfig, *, sample_dt_s: float = DEFAU
         "initial_states_sha256": sealed.initial_states_sha256,
         "maneuvers_sha256": sealed.maneuvers_sha256,
         "sealed_plan": {"passed": sealed.passed,
+                        "verification_digest": sealed.verification_digest,
                         "canonical_planner": "plan_rendezvous_safe (E12-04) when the config "
                                              "carries a safety block, else plan_rendezvous"},
+        "refly_evidence": _refly_evidence_block(refly_report),
         "safety": safety_summary,
         "epoch_utc": MISSION_EPOCH_UTC,
         "timeline_end_s": t2,
@@ -390,6 +392,30 @@ def build_studio_run(cfg: RendezvousMissionConfig, *, sample_dt_s: float = DEFAU
     }
     return StudioRun(run=run, mission_doc=mission_to_dict(mission), replay_doc=replay_doc,
                      sidecar=sidecar, keepout_min_range_m=keepout_min)
+
+
+def _refly_evidence_block(refly_report):
+    """E13-00: what independent evidence this run consumed, identified well
+    enough to audit -- the report's own digest, the environment the worker
+    recorded, and (for a path) the raw artifact bytes' sha256, so a later
+    reader can tell whether the file on disk is still the file consumed."""
+    if refly_report is None:
+        return None
+    from orbitopt.verify.report import report_digest
+
+    doc = (refly_report if isinstance(refly_report, Mapping)
+           else json.loads(Path(str(refly_report)).read_text(encoding="utf-8")))
+    main_model = doc.get("inputs", {}).get("main_model", {})
+    block = {
+        "report_kind": doc.get("kind"),
+        "report_digest": str(doc.get("digest", report_digest(doc))),
+        "worker_environment_digest": str(
+            main_model.get("worker", {}).get("environment_digest", "")),
+    }
+    if isinstance(refly_report, (str, Path)):
+        block["artifact_sha256"] = hashlib.sha256(
+            Path(str(refly_report)).read_bytes()).hexdigest()
+    return block
 
 
 def _check_against_report(rho: np.ndarray, rho_dot: np.ndarray, hold: np.ndarray,

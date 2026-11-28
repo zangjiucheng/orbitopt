@@ -20,7 +20,7 @@ The decisions behind each layer are ADRs:
 (independent re-flight),
 [rendezvous-0004](adr/rendezvous-0004-mission-studio-flightlab-replay.md)
 (studio replay), [rendezvous-0005](adr/rendezvous-0005-dispersion-campaign-not-a-safety-factor.md)
-(dispersion campaign). The [E12-10 re-flight ADR](adr/rendezvous-0004-independent-robustness-reflight.md)
+(dispersion campaign). The [E12-10 re-flight ADR](adr/rendezvous-0006-independent-robustness-reflight.md)
 describes the independent checks on selected dispersed cases.
 
 A precomputed Mission Studio run of LEO-RDV-001 is committed under

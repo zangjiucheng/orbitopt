@@ -135,6 +135,7 @@ class RunBundle:
     montecarlo: Mapping[str, Any] | None = None
     montecarlo_path: Path | None = None
     rendezvous: Mapping[str, Any] | None = None
+    gnc: Mapping[str, Any] | None = None
 
     @property
     def label(self) -> str:
@@ -195,6 +196,9 @@ def load_side_files(run_dir: Path | str) -> dict[str, Any]:
     rdv = _read_json(run_dir / "rendezvous.json")
     if rdv is not None and rdv.get("schema_version") == "rendezvous-studio-1.0":
         side["rendezvous"] = rdv
+    gnc = _read_json(run_dir / "gnc.json")
+    if gnc is not None and gnc.get("schema_version") == "gnc-studio-1.0":
+        side["gnc"] = gnc
     return side
 
 

@@ -47,7 +47,7 @@ tolerances, plan digests and dispersion intervals for each result.
 | Evidence | LEO-RDV-001 result |
 |---|---|
 | Nominal plan | **10.345 m/s** total Δv. The arrival, Δv budget and whole-trajectory safety checks pass. [Safety constraints](adr/rendezvous-0002-safety-constraints-whole-trajectory.md). |
-| Independent re-flight | TudatPy passes the nominal checks on the sealed plan. Closest approach is about **913 m**. [Re-flight report](benchmarks/e12_05_independent_refly.json). |
+| Independent re-flight | TudatPy passes the nominal checks on the sealed plan. Arrival is at the Hold Point, 1000 m from the target; the closest approach over the whole trajectory is **913.03 m** (the transfer coasts inside the arrival distance). [Re-flight report](benchmarks/e12_05_independent_refly.json). |
 | Dispersion campaign | **14 of 264** hold-out cases pass under the declared stress levels (5.3%). [Campaign design](adr/rendezvous-0005-dispersion-campaign-not-a-safety-factor.md). |
 | Independent robustness re-flight | **13 of 264** hold-out cases pass when passive contingency checks are included (4.9%). TudatPy agrees with all **23** selected per-sample verdicts. [Re-flight report](benchmarks/e12_10_independent_reflight.json). |
 

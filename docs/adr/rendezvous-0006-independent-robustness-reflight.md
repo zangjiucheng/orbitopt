@@ -1,4 +1,4 @@
-# ADR rendezvous-0004: independent per-sample robustness re-flight (E12-10)
+# ADR rendezvous-0006: independent per-sample robustness re-flight (E12-10)
 
 - **Status:** Accepted
 - **Date:** 2026-11-26

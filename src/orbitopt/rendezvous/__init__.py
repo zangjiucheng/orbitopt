@@ -38,9 +38,11 @@ from orbitopt.rendezvous.canonical import (
     maneuvers_sha256,
     read_sealed_plan,
     rendezvous_plan_digest,
+    sealed_artifact_sha256,
     sealed_from_document,
     seal_plan,
     verify_seal,
+    verification_digest,
     write_sealed_plan,
 )
 from orbitopt.rendezvous.config import (
@@ -117,12 +119,14 @@ __all__ = [
     "read_sealed_plan",
     "rendezvous_plan_digest",
     "run_campaign",
+    "sealed_artifact_sha256",
     "sealed_from_document",
     "seal_plan",
     "validate_rendezvous_config",
     "verify_plan",
     "verify_plan_safety",
     "verify_seal",
+    "verification_digest",
     "write_sealed_plan",
     "write_studio_run",
 ]
