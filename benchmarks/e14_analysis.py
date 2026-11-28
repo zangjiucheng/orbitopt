@@ -23,7 +23,11 @@ SECONDARY_ENDPOINT = "gap"
 #: the spec's arm ids for the five primary comparisons; E-rule stands for no pre-registered arm
 PRIMARY = tuple(tuple("E-LLM" if a == "E" else a for a in pair) for pair in A.PRIMARY_COMPARISONS)
 SECONDARY = (("E-rule", "A"), ("E-rule", "B"))
-
+#: added after the v3 freeze: the LLM planner against the rule planner, a Holm family of its own so that no
+#: pre-registered family changes size
+EXPLORATORY = (("E-LLM", "E-rule"),)
+FAMILY_PRIMARY, FAMILY_SECONDARY = "primary", "secondary (E-rule is not arm E)"
+FAMILY_EXPLORATORY = "exploratory (added after the freeze)"
 
 
 class MixedDigestError(RuntimeError):
@@ -243,31 +247,36 @@ def comparisons(rows: list[dict], ran: list[str], scoring_ids: list[str], strata
         scopes[group] = [i for i in scoring_ids if P.by_id(i).problem_class in classes]
     comps = []
     for scope, ids in scopes.items():
-        for treat, ctrl in PRIMARY + SECONDARY:
+        for treat, ctrl in PRIMARY + SECONDARY + EXPLORATORY:
             c = compare(rows, treat, ctrl, ids, strata) if treat in ran and ctrl in ran else {
                 "treatment": treat, "control": ctrl, "not_run": "an arm of this comparison was not run"}
             c["scope"] = scope
-            c["family"] = "primary" if (treat, ctrl) in PRIMARY else "secondary (E-rule is not arm E)"
+            c["family"] = (FAMILY_PRIMARY if (treat, ctrl) in PRIMARY else
+                           FAMILY_SECONDARY if (treat, ctrl) in SECONDARY else FAMILY_EXPLORATORY)
             comps.append(c)
     tested = [n for n, c in enumerate(comps) if "not_run" not in c]
     over = [n for n in tested if comps[n]["scope"] == "overall"]
-    prim = [n for n in over if comps[n]["family"] == "primary"]
+    prim = [n for n in over if comps[n]["family"] == FAMILY_PRIMARY]
     _holm_into(comps, [(n, e) for n in prim for e in ENDPOINTS],
                extra_untested=len(PRIMARY) * len(ENDPOINTS) - len(prim) * len(ENDPOINTS))
-    sec = [n for n in over if comps[n]["family"] != "primary"]
+    sec = [n for n in over if comps[n]["family"] == FAMILY_SECONDARY]
     _holm_into(comps, [(n, e) for n in sec for e in ENDPOINTS])
-    _holm_into(comps, [(n, SECONDARY_ENDPOINT) for n in over])
+    _holm_into(comps, [(n, SECONDARY_ENDPOINT) for n in over if comps[n]["family"] != FAMILY_EXPLORATORY])
     for group in M.ANALYSIS_GROUPS:
-        g = [n for n in tested if comps[n]["scope"] == group]
+        g = [n for n in tested if comps[n]["scope"] == group and comps[n]["family"] != FAMILY_EXPLORATORY]
         _holm_into(comps, [(n, e) for n in g for e in ENDPOINTS])
         _holm_into(comps, [(n, SECONDARY_ENDPOINT) for n in g])
+    for scope in scopes:
+        x = [n for n in tested if comps[n]["scope"] == scope and comps[n]["family"] == FAMILY_EXPLORATORY]
+        _holm_into(comps, [(n, e) for n in x for e in ENDPOINTS + (SECONDARY_ENDPOINT,)])
     return comps
 
 
 def analyze(out: Path, allow_smoke: bool = False) -> dict:
     docs = load_shards(out)
     scored, digests, mode = _rows_for_analysis(docs, allow_smoke)
-    rows = [apply_alarm_rule(r) for d in scored for r in d["rows"]]
+    latency = load_llm_latency(out)
+    rows = [with_spec_wall_clock(apply_alarm_rule(r), latency) for d in scored for r in d["rows"]]
     faults = [f for d in scored for f in d["faults"]]
     formulation = [d["formulation"] for d in scored if d["formulation"]]
     strata = {i.id: i.family for i in P.INSTANCES}
@@ -288,6 +297,12 @@ def analyze(out: Path, allow_smoke: bool = False) -> dict:
     analysis["safety"] = safety(rows, faults)
     analysis["verification"] = verification_distribution(rows)
     analysis["formulation"] = [{k: v for k, v in f.items() if k != "rows"} for f in formulation]
+    form_rows = [r for f in formulation for r in f.get("rows", [])]
+    analysis["formulation_breakdown"] = formulation_breakdown(form_rows) if form_rows else None
+    analysis["ir_schema_validity"] = ir_schema_validity(rows, form_rows)
+    analysis["llm_accounting"] = llm_accounting(rows, form_rows)
+    analysis["wall_clock_rule"] = WALL_CLOCK_RULE
+    analysis["llm_latency_source"] = "llm_latency.jsonl" if latency else None
     analysis["alarms"] = [{k: r[k] for k in ("arm_id", "instance_id", "seed", "gap", "max_violation")}
                           for r in rows if r.get("alarm")]
     analysis["failures"] = failures(rows)
@@ -416,6 +431,194 @@ def failures(rows: list[dict]) -> list[dict]:
     return out
 
 
+# ------------------------------------------------------------------- v3 additions, outside the frozen analysis
+# Everything in this section was added after the v3 freeze. None of it changes a row; it reads the rows, and the
+# cassettes through llm_latency.jsonl.
+
+WALL_CLOCK_RULE = ("spec: wall clock includes LLM latency and compilation. An E-LLM row's wall_clock_s times the "
+                   "runtime only, so the latency of its compile calls (from the cell's cassette, llm_latency.jsonl) "
+                   "is added; the row's own value is kept as wall_clock_s_row. A cell resumed from its cassette after "
+                   "a stop served the recorded calls without waiting, so its wall clock under-states by their "
+                   "latency; such cells are counted in llm_accounting.resumed_cells.")
+
+
+def llm_latency_records(out: Path) -> list[dict]:
+    """Per provider cell, the recorded latency of every call in its cassette, split into compile calls (the
+    compiler's response schema) and the rest. Reads ``runs/`` (the cassettes stay on the server)."""
+    from orbitopt.agent.compiler.schema import COMPILER_OUTPUT_SCHEMA
+    compiler = C.canonical(COMPILER_OUTPUT_SCHEMA)
+    out_rows = []
+    for cas in sorted(Path(out).glob("runs/cells.scoring.*/*/*/seed-*.cassette.jsonl")):
+        arm, inst, seed = cas.parts[-3], cas.parts[-2], int(cas.name.split(".")[0].removeprefix("seed-"))
+        compile_s = other_s = 0.0
+        calls = 0
+        models: Counter = Counter()
+        for line in cas.read_text().splitlines()[1:]:
+            rec = json.loads(line)
+            lat = float(rec["response"].get("latency_s") or 0.0)
+            calls += 1
+            models[str(rec["response"].get("model"))] += 1
+            if C.canonical(rec["request"].get("response_schema")) == compiler:
+                compile_s += lat
+            else:
+                other_s += lat
+        out_rows.append({"arm_id": arm, "instance_id": inst, "seed": seed, "calls": calls,
+                         "compile_latency_s": compile_s, "other_latency_s": other_s, "models": dict(models)})
+    return out_rows
+
+
+def load_llm_latency(out: Path) -> dict:
+    path = Path(out) / "llm_latency.jsonl"
+    if not path.exists():
+        return {}
+    recs = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return {(r["arm_id"], r["instance_id"], r["seed"]): r for r in recs}
+
+
+def with_spec_wall_clock(row: dict, latency: dict) -> dict:
+    rec = latency.get((row["arm_id"], row["instance_id"], row["seed"]))
+    if rec is None or row["status"] == "not_run":
+        return row
+    out = dict(row, wall_clock_s_row=row["wall_clock_s"],
+               llm_latency_s=rec["compile_latency_s"] + rec["other_latency_s"])
+    if row["arm_id"] == "E-LLM":
+        out["wall_clock_s"] = float(row["wall_clock_s"]) + rec["compile_latency_s"]
+    live = {"C": float(row["wall_clock_s"]), "D": float(row.get("llm_wall_clock_s") or 0.0),
+            "E-LLM": float(row["wall_clock_s"])}.get(row["arm_id"])
+    timed = {"C": out["llm_latency_s"], "D": rec["compile_latency_s"], "E-LLM": rec["other_latency_s"]}.get(
+        row["arm_id"])
+    out["resumed"] = live is not None and timed is not None and live + 0.05 < timed
+    return out
+
+
+#: Formulation cases whose expected outcome the live harness cannot produce from the prompt alone, classified from
+#: each case's notes BEFORE any v3 formulation outcome was read. They stay in the frozen metric; the breakdown also
+#: reports the metric without them.
+REPLY_DETERMINED = {
+    "FC-044": "compile_failed only because the scripted replies are malformed JSON twice",
+    "FC-045": "compile_failed only because the scripted replies try unsafe expressions",
+    "FC-046": "compile_failed only because every scripted reply drops a constraint",
+    "FC-047": "compile_failed only because the scripted replies are IR-invalid three times",
+    "FC-048": "compile_failed only because the scripted reply relaxes a constraint silently",
+    "FC-031": "a revision: the scripted harness supplies the base problem; compile_statement sends the prompt only",
+    "FC-041": "a revision of a base problem the live harness does not send",
+    "FC-042": "a revision of a base problem the live harness does not send",
+    "FC-043": "a revision of a base problem and an attachment the live harness does not send",
+}
+
+
+def _case_kind(row: dict) -> str:
+    return {"compile": "supported", "unsupported": "unsupported", "needs_clarification": "ambiguous"}.get(
+        row["expected_outcome"], row["expected_outcome"])
+
+
+def _accuracy(rows: list[dict], strata_of) -> dict:
+    per_case: dict = defaultdict(list)
+    for r in rows:
+        per_case[r["case_id"]].append(bool(r["correct"]))
+    means = {c: sum(v) / len(v) for c, v in per_case.items()}
+    strata = {c: strata_of(c) for c in means}
+    lo, hi = M.cluster_bootstrap_ci(means, strata) if means else (math.nan, math.nan)
+    n = len(rows)
+    return {"compiles": n, "cases": len(means), "correct": sum(bool(r["correct"]) for r in rows),
+            "accuracy": sum(bool(r["correct"]) for r in rows) / n if n else math.nan, "ci": [lo, hi],
+            "ci_rule": "cluster bootstrap over cases (seeds of a case are one cluster), strata = language x "
+                       "expected outcome", "meets_0.95": None if not n else (lo >= 0.95)}
+
+
+def formulation_breakdown(rows: list[dict]) -> dict:
+    """Formulation accuracy overall and by case type, with case-clustered CIs, and the outcome confusion."""
+    kinds = {r["case_id"]: (r.get("language"), r["expected_outcome"]) for r in rows}
+    strata_of = lambda c: "/".join(map(str, kinds[c]))  # noqa: E731
+    out: dict = {"overall": _accuracy(rows, strata_of)}
+    out["by_language"] = {lang: _accuracy([r for r in rows if r.get("language") == lang], strata_of)
+                          for lang in sorted({str(r.get("language")) for r in rows})}
+    out["by_expected_outcome"] = {e: _accuracy([r for r in rows if r["expected_outcome"] == e], strata_of)
+                                  for e in sorted({r["expected_outcome"] for r in rows})}
+    out["by_kind"] = {k: _accuracy([r for r in rows if _case_kind(r) == k], strata_of)
+                      for k in sorted({_case_kind(r) for r in rows})}
+    out["by_language_and_kind"] = {f"{lang}/{k}": _accuracy(
+        [r for r in rows if str(r.get("language")) == lang and _case_kind(r) == k], strata_of)
+        for lang in sorted({str(r.get("language")) for r in rows}) for k in sorted({_case_kind(r) for r in rows})
+        if any(str(r.get("language")) == lang and _case_kind(r) == k for r in rows)}
+    prompt_rows = [r for r in rows if r["case_id"] not in REPLY_DETERMINED]
+    out["without_reply_determined"] = {**_accuracy(prompt_rows, strata_of),
+                                       "excluded": REPLY_DETERMINED, "label": "post hoc sensitivity"}
+    out["confusion"] = {f"{e} -> {o}": n for (e, o), n in sorted(Counter(
+        (r["expected_outcome"], r["outcome"]) for r in rows).items())}
+    compiled = [r for r in rows if r["outcome"] == "compile" and r["equivalent"] is not None]
+    out["compiled_with_reference"] = {"compiles": len(compiled),
+                                      "equivalent": sum(bool(r["equivalent"]) for r in compiled),
+                                      "not_equivalent": sum(r["equivalent"] is False for r in compiled)}
+    out["replay"] = {"compiles": len(rows), "equal": sum(bool((r.get("replay") or {}).get("equal")) for r in rows)}
+    per_case = defaultdict(list)
+    for r in rows:
+        per_case[r["case_id"]].append(r)
+    out["per_case"] = {c: {"language": rs[0].get("language"), "expected": rs[0]["expected_outcome"],
+                           "correct": sum(bool(r["correct"]) for r in rs), "seeds": len(rs),
+                           "outcomes": dict(Counter(r["outcome"] for r in rs)),
+                           "not_equivalent": sum(r["equivalent"] is False for r in rs),
+                           "reasons": sorted({x for r in rs for x in r.get("reasons") or []})[:5]}
+                       for c, rs in sorted(per_case.items())}
+    return out
+
+
+def ir_schema_validity(rows: list[dict], form_rows: list[dict]) -> dict:
+    """The spec's denominator: (formulation cases + scoring instances) x scoring seeds. Arm D's cell rows carry
+    ``schema_valid`` (a budget-cut compile, None there, counts as not valid); an E-LLM row's compile is valid unless
+    its outcome is compile_failed or the budget cut it."""
+    d_cells = [r for r in rows if r["arm_id"] == "D" and r["status"] != "not_run"]
+    e_cells = [r for r in rows if r["arm_id"] == "E-LLM" and r["status"] != "not_run"]
+    f_valid = sum(bool(r["schema_valid"]) for r in form_rows)
+    d_valid = sum(bool(r.get("schema_valid")) for r in d_cells)
+    e_valid = sum(r.get("compile_outcome") not in (None, "compile_failed", "budget_exhausted") for r in e_cells)
+    n_d = len(form_rows) + len(d_cells)
+    return {"D": {"formulation": [f_valid, len(form_rows)], "cells": [d_valid, len(d_cells)],
+                  "valid": f_valid + d_valid, "invocations": n_d,
+                  "fraction": (f_valid + d_valid) / n_d if n_d else math.nan},
+            "E-LLM": {"valid": e_valid, "invocations": len(e_cells),
+                      "fraction": e_valid / len(e_cells) if e_cells else math.nan},
+            "note": "added after the freeze: v3's frozen analysis counted the formulation suite only"}
+
+
+def llm_accounting(rows: list[dict], form_rows: list[dict]) -> dict:
+    """Calls, tokens, cache share, list-price USD, models returned, caps hit, and cost per solution, per arm."""
+    out: dict = {}
+    groups = {arm: [r for r in rows if r["arm_id"] == arm and r["status"] != "not_run"] for arm in C.PROVIDER_ARMS}
+    groups["formulation"] = form_rows
+    for arm, rs in groups.items():
+        if not rs:
+            continue
+        hit = sum(int(r.get("cache_hit_tokens") or 0) for r in rs)
+        miss = sum(int(r.get("cache_miss_tokens") or 0) for r in rs)
+        usd = math.fsum(float(r.get("cost_usd") or 0.0) for r in rs)
+        succ = sum(bool(r.get("success")) for r in rs) if arm != "formulation" else sum(bool(r["correct"]) for r in rs)
+        verified = sum(1 for r in rs if (r.get("verification") or {}).get("verdict") == "passed"
+                       and r.get("success"))
+        lat = [float(r["llm_latency_s"]) for r in rs if r.get("llm_latency_s") is not None]
+        out[arm] = {
+            "cells": len(rs), "calls": sum(int(r.get("llm_calls") or 0) for r in rs),
+            "max_calls_in_a_cell": max(int(r.get("llm_calls") or 0) for r in rs),
+            "tokens_in": sum(int(r.get("tokens_in") or 0) for r in rs),
+            "tokens_out": sum(int(r.get("tokens_out") or 0) for r in rs),
+            "cache_hit_tokens": hit, "cache_miss_tokens": miss,
+            "cache_hit_share": hit / (hit + miss) if hit + miss else math.nan,
+            "usd_list_price": usd, "usd_per_cell": usd / len(rs),
+            "models": dict(Counter(m for r in rs for m in r.get("llm_models") or [])),
+            "llm_cut": dict(Counter(str(r.get("llm_cut")) for r in rs if r.get("llm_cut"))),
+            "over_token_budget": sum(bool(r.get("llm_over_budget")) for r in rs),
+            "errors": sum(r.get("status") == "error" for r in rs),
+            "successes": succ, "usd_per_success": usd / succ if succ else math.inf,
+            "verified_successes": verified,
+            "usd_per_verified_success": (usd / verified if verified else math.inf) if arm == "E-LLM" else None,
+            "median_llm_latency_s": statistics.median(lat) if lat else None,
+            "total_llm_latency_s": math.fsum(lat) if lat else None,
+            "median_wall_clock_s": statistics.median(float(r["wall_clock_s"]) for r in rs),
+            "resumed_cells": sum(bool(r.get("resumed")) for r in rs),
+        }
+    return out
+
+
 # ----------------------------------------------------------------------------------------------------- report
 def fmt(v, digits: int = 3) -> str:
     if v is None:
@@ -493,11 +696,52 @@ def render_tables(an: dict) -> str:
         lines.append(f"| {path} | {v['graded']} | {v['false_pass']} | {fmt(C.num(v['upper95']))} | "
                      f"{v['reason_named']} | {v['honest_host_passed']} | {v['false_pass_on_informative']} | "
                      f"{v['reason_named_on_informative']} | {fmt(C.num(v['upper95_informative']))} |")
-    lines += ["", "### Verification status (rule arms)", "", "| arm | run status | guard verdict | "
+    lines += ["", "### Verification status", "", "| arm | run status | guard verdict | "
               "optimality_certified |", "|---|---|---|---|"]
     for arm, v in an["verification"].items():
         lines.append(f"| {arm} | {v['run_status']} | {v['verdict']} | "
                      f"{v['statuses'].get('optimality_certified', {})} |")
+    acc = an.get("llm_accounting") or {}
+    if acc:
+        lines += ["", "### LLM accounting (list price)", "", "| arm | cells | calls | max calls/cell | tokens in | "
+                  "tokens out | cache hit share | USD | USD/cell | successes | USD/success | verified successes | "
+                  "USD/verified success | models | caps hit | errors | median LLM s | median wall s | resumed |",
+                  "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+        for arm, a in acc.items():
+            lines.append(f"| {arm} | {a['cells']} | {a['calls']} | {a['max_calls_in_a_cell']} | {a['tokens_in']} | "
+                         f"{a['tokens_out']} | {fmt(C.num(a['cache_hit_share']))} | {a['usd_list_price']:.4f} | "
+                         f"{fmt(C.num(a['usd_per_cell']))} | {a['successes']} | {fmt(C.num(a['usd_per_success']))} | "
+                         f"{a['verified_successes']} | {fmt(a['usd_per_verified_success'])} | {a['models']} | "
+                         f"{a['llm_cut']} | {a['errors']} | {fmt(a['median_llm_latency_s'])} | "
+                         f"{fmt(C.num(a['median_wall_clock_s']))} | {a['resumed_cells']} |")
+    sv = an.get("ir_schema_validity")
+    if sv:
+        lines += ["", "### IR schema validity", "", "| arm | valid | invocations | fraction |", "|---|---|---|---|",
+                  f"| D (formulation {sv['D']['formulation'][0]}/{sv['D']['formulation'][1]}, cells "
+                  f"{sv['D']['cells'][0]}/{sv['D']['cells'][1]}) | {sv['D']['valid']} | {sv['D']['invocations']} | "
+                  f"{fmt(C.num(sv['D']['fraction']))} |",
+                  f"| E-LLM | {sv['E-LLM']['valid']} | {sv['E-LLM']['invocations']} | "
+                  f"{fmt(C.num(sv['E-LLM']['fraction']))} |"]
+    fb = an.get("formulation_breakdown")
+    if fb:
+        lines += ["", "### Formulation accuracy", "", "| slice | compiles | cases | correct | accuracy | 95% CI |",
+                  "|---|---|---|---|---|---|"]
+        slices = [("overall", fb["overall"])] + [(f"language {k}", v) for k, v in fb["by_language"].items()] + [
+            (f"kind {k}", v) for k, v in fb["by_kind"].items()] + [
+            (f"expected {k}", v) for k, v in fb["by_expected_outcome"].items()] + [
+            (k, v) for k, v in fb["by_language_and_kind"].items()] + [
+            ("without reply-determined cases (post hoc)", fb["without_reply_determined"])]
+        for name, s in slices:
+            lines.append(f"| {name} | {s['compiles']} | {s['cases']} | {s['correct']} | {fmt(C.num(s['accuracy']))} "
+                         f"| [{fmt(C.num(s['ci'][0]))}, {fmt(C.num(s['ci'][1]))}] |")
+        lines += ["", "| expected -> outcome | compiles |", "|---|---|"]
+        lines += [f"| {k} | {v} |" for k, v in fb["confusion"].items()]
+        lines += ["", "| case | language | expected | correct | outcomes | not equivalent | reasons |",
+                  "|---|---|---|---|---|---|---|"]
+        for cid, p in fb["per_case"].items():
+            if p["correct"] < p["seeds"]:
+                lines.append(f"| {cid} | {p['language']} | {p['expected']} | {p['correct']}/{p['seeds']} | "
+                             f"{p['outcomes']} | {p['not_equivalent']} | {'; '.join(p['reasons'])[:160]} |")
     lines += ["", "### Instances not solved on every seed", "", "| arm | instance | success | statuses | stops | "
               "median gap | worst gap |", "|---|---|---|---|---|---|---|"]
     for f in an["failures"]:
@@ -528,6 +772,10 @@ def evaluation_split(out: Path) -> list[dict]:
 
 if __name__ == "__main__":
     import sys
+    if sys.argv[1] == "--llm-latency":  # python e14_analysis.py --llm-latency OUT > OUT/llm_latency.jsonl
+        for line in llm_latency_records(Path(sys.argv[2])):
+            print(json.dumps(line, sort_keys=True))
+        sys.exit(0)
     for line in evaluation_split(Path(sys.argv[1])):
         print(json.dumps(line))
 
