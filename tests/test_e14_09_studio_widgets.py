@@ -3,7 +3,6 @@ offline mock provider. The states are the ones ``scripts/capture_optimization_st
 from __future__ import annotations
 
 import json
-import os
 import runpy
 from pathlib import Path
 
@@ -11,7 +10,6 @@ import pytest
 
 pytest.importorskip("PySide6")
 pytest.importorskip("scipy")
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "capture_optimization_studio.py"
 CAPTURE = runpy.run_path(str(SCRIPT))

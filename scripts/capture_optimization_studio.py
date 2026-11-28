@@ -23,8 +23,6 @@ import threading
 import time
 from pathlib import Path
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("QT_API", "pyside6")
 SIZE = (1600, 940)
 
 
@@ -193,6 +191,10 @@ def finish(app, ws) -> None:
 
 
 def main(argv=None) -> int:
+    # Keep the headless backend local to the capture command. Tests load the
+    # reusable drivers with runpy, alongside GUI tests that need native Qt.
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    os.environ.setdefault("QT_API", "pyside6")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, default=Path("docs/assets"))
     parser.add_argument("--states", nargs="*", default=list(STATES))
