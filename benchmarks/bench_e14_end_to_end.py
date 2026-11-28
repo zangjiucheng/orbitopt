@@ -206,8 +206,8 @@ def run_one(arm: str, inst, seed: int, runs_dir: Path, mode: str) -> dict:
     if cassette.exists():  # replay: the same cell again, every model call served from the cassette
         shutil.rmtree(run_dir, ignore_errors=True)
         started = time.perf_counter()
-        again = provider_cell(arm, inst, seed, ReplayProvider(str(cassette)), run_dir.with_name(run_dir.name + "-replay"),
-                              mode)
+        again = provider_cell(arm, inst, seed, ReplayProvider(str(cassette)),
+                              run_dir.with_name(run_dir.name + "-replay"), mode)
         again["transcript_digest"] = row["transcript_digest"]
         row["replay"] = {"kind": "re-execution from the recorded cassette", "equal": C.row_digest(again) ==
                          row["row_digest"], "differences": [], "integrity": []}
@@ -434,6 +434,7 @@ def main(argv=None) -> int:
             p.add_argument("--all", action="store_true")
             p.add_argument("--split", choices=("tuning", "scoring"), default=None)
             p.add_argument("--kind", choices=("cells", "faults", "formulation"), default=None)
+            p.add_argument("--family", default=None, help="only the shards of this instance family")
             p.add_argument("--runs", type=Path, default=None)
         if name == "analyze":
             p.add_argument("--allow-smoke", action="store_true")
@@ -468,8 +469,8 @@ def main(argv=None) -> int:
         return 0
     if args.cmd == "run":
         chosen = [shard_by_id(shards, s) for s in args.shard] if args.shard else [
-            s for s in shards if args.all and (args.split is None or s["split"] == args.split)
-            and (args.kind is None or s["kind"] == args.kind)]
+            s for s in shards
+            if args.all and all(getattr(args, k) in (None, s[k]) for k in ("split", "kind", "family"))]
         runs = args.runs or args.out / "runs"
         for s in chosen:
             t = time.perf_counter()

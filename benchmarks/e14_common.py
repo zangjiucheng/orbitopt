@@ -58,6 +58,8 @@ PROTOCOL = {
     "seeds": {"scoring": list(M.SCORING_SEEDS), "tuning": list(M.TUNING_SEEDS),
               "why": "the spec's own seeds (section 5): 10 scoring seeds, 5 tuning seeds"},
     "shard": "arm x family x every seed of the split; fault-matrix shards per family",
+    "jobs": "one process per family runs that family's shards for every arm in turn (A, B, E-rule, C, D, E-LLM), so "
+            "the arms of one instance share a host and its load; at most four such processes at once",
     "arm_A": {"solver": "scipy.optimize.differential_evolution", "rng": "cell seed", "polish": True,
               "popsize": 15, "tol": 0.01, "init": "latinhypercube",
               "maxiter": "floor(0.9 * budget / (popsize * d)) - 1, so the polish has about a tenth of the budget",
@@ -88,6 +90,10 @@ PROTOCOL = {
         {"arm": "B", "rule": "nlp", "instance": "rosenbrock-d2", "seeds": [1000],
          "before": "SLSQP default ftol 1e-6: five starts end at f = 7e-9 to 2.5e-7, all within the 1e-6 tolerance",
          "after": "kept the default"},
+        {"arm": "all rule arms", "rule": "budgets", "instance": "the 8 tuning instances", "seeds": "1000-1004",
+         "before": "tuning dry run of code 63c30a2 (120 cells): every cell within budget and replayed EQUAL; the "
+                   "budget bound only where the rule spends all of it by design (B nlp and B multi_objective)",
+         "after": "no parameter changed"},
     ],
     "evaluation": "one evaluation = objectives and constraints at one point; an exact repeat of a point inside a "
                   "cell is served from the cell's cache at no cost (the IR adapters' rule)",
