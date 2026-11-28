@@ -108,6 +108,10 @@ A provider is configured only from the environment:
 | `E14_LLM_MODEL` | the model id, recorded in each shard's provenance |
 | `E14_LLM_API_KEY` | the key for `openai_compat`; the provider reads it at call time and never stores it |
 
+Historical names: these are the variables v1 read. From campaign v3 on, the campaign, the CLI and Mission
+Studio read one set, `LLM_KIND`, `LLM_MODEL`, `LLM_BASE_URL` and `LLM_API_KEY`
+([providers](../agent/providers.md#configuration-from-the-environment)); the `E14_LLM_*` names are gone.
+
 The provider arms record every model call to a cassette, and their replay re-runs the cell from it. The pipeline is
 tested in `tests/test_e14_10_campaign.py` with mock providers, labelled `pipeline-smoke`. Analysis refuses those rows
 unless told it is a pipeline test, and then labels every number "not evidence".

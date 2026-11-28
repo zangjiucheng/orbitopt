@@ -189,6 +189,8 @@ defaults:
     values: { title: "Qualification report v1", parent: "LLM-assisted optimization", nav_order: 8 }
   - scope: { path: "benchmarks/e14_qualification_report_v2.md" }
     values: { title: "Qualification report v2", parent: "LLM-assisted optimization", nav_order: 9 }
+  - scope: { path: "benchmarks/e14_llm_campaign_plan.md" }
+    values: { title: "LLM campaign plan (v3)", parent: "LLM-assisted optimization", nav_order: 10 }
 
   # Missions
   - scope: { path: "mars_mission_plan.md" }

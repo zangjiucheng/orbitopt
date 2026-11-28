@@ -1,0 +1,60 @@
+{"id": "55663c9a6cf14cceb3fd272f08b1c3da", "op": "reserve", "usd": 0.0059870999999999995, "utc": 1795846181.1458209}
+{"attempts": 1, "calls": 1, "id": "55663c9a6cf14cceb3fd272f08b1c3da", "model": "deepseek-flash", "op": "settle", "tokens": 2056, "usd": 0.0008391, "utc": 1795846182.581019}
+{"id": "c48f5702ba6d4005869bfdbd26aeee42", "op": "reserve", "usd": 0.005985299999999999, "utc": 1795846182.868254}
+{"attempts": 1, "calls": 1, "id": "c48f5702ba6d4005869bfdbd26aeee42", "model": "deepseek-flash", "op": "settle", "tokens": 2022, "usd": 0.00038884799999999996, "utc": 1795846183.978367}
+{"id": "de61656778234796a8a7afc58da44d5b", "op": "reserve", "usd": 0.005990099999999999, "utc": 1795846184.1744}
+{"attempts": 1, "calls": 1, "id": "de61656778234796a8a7afc58da44d5b", "model": "deepseek-flash", "op": "settle", "tokens": 2026, "usd": 0.00038464799999999997, "utc": 1795846185.434416}
+{"id": "605400649c694a98aa1329aa0f70b7a5", "op": "reserve", "usd": 0.0059754, "utc": 1795846185.68535}
+{"attempts": 1, "calls": 1, "id": "605400649c694a98aa1329aa0f70b7a5", "model": "deepseek-flash", "op": "settle", "tokens": 1975, "usd": 0.000350448, "utc": 1795846186.659884}
+{"id": "8f2c01a2258945e0962f76ac38a438e0", "op": "reserve", "usd": 0.006001349999999999, "utc": 1795846186.83459}
+{"attempts": 1, "calls": 1, "id": "8f2c01a2258945e0962f76ac38a438e0", "model": "deepseek-flash", "op": "settle", "tokens": 2317, "usd": 0.000720348, "utc": 1795846188.614948}
+{"id": "f56e063017244780a683688e82924e9a", "op": "reserve", "usd": 0.0059973, "utc": 1795846188.805314}
+{"attempts": 1, "calls": 1, "id": "f56e063017244780a683688e82924e9a", "model": "deepseek-flash", "op": "settle", "tokens": 2243, "usd": 0.0006306479999999999, "utc": 1795846190.290303}
+{"id": "d895f72af37b42ff88f3cde9812cce1b", "op": "reserve", "usd": 0.006010649999999999, "utc": 1795846190.503825}
+{"attempts": 1, "calls": 1, "id": "d895f72af37b42ff88f3cde9812cce1b", "model": "deepseek-flash", "op": "settle", "tokens": 2049, "usd": 0.000392448, "utc": 1795846192.384542}
+{"id": "8df6350cb8cc4f66a7c06e3bb7a16c22", "op": "reserve", "usd": 0.005984099999999999, "utc": 1795846192.454734}
+{"attempts": 1, "calls": 1, "id": "8df6350cb8cc4f66a7c06e3bb7a16c22", "model": "deepseek-flash", "op": "settle", "tokens": 1910, "usd": 0.000267948, "utc": 1795846194.534698}
+{"id": "da3bc6bb59954ce0840380b7cfdfb8c0", "op": "reserve", "usd": 0.0059754, "utc": 1795846217.411365}
+{"attempts": 1, "calls": 1, "id": "da3bc6bb59954ce0840380b7cfdfb8c0", "model": "deepseek-flash", "op": "settle", "tokens": 1975, "usd": 0.000312816, "utc": 1795846218.749737}
+{"id": "ae7d7779f26e400bbedafaad71132496", "op": "reserve", "usd": 0.00104925, "utc": 1795846218.755021}
+{"attempts": 1, "calls": 1, "id": "ae7d7779f26e400bbedafaad71132496", "model": "deepseek-flash", "op": "settle", "tokens": 950, "usd": 0.0003831, "utc": 1795846219.788775}
+{"id": "6d16cc97a45341709a6c6ffe9614033b", "op": "reserve", "usd": 0.0011013, "utc": 1795846219.7934132}
+{"attempts": 1, "calls": 1, "id": "6d16cc97a45341709a6c6ffe9614033b", "model": "deepseek-flash", "op": "settle", "tokens": 1010, "usd": 0.00031126799999999996, "utc": 1795846220.530229}
+{"id": "5ab138c4ea094b64b54495860db28281", "op": "reserve", "usd": 0.006001349999999999, "utc": 1795846220.929407}
+{"attempts": 1, "calls": 1, "id": "5ab138c4ea094b64b54495860db28281", "model": "deepseek-flash", "op": "settle", "tokens": 2314, "usd": 0.000641484, "utc": 1795846222.674001}
+{"id": "9ab96d9b179a49f1ad69d3c531b5d25b", "op": "reserve", "usd": 0.0011097, "utc": 1795846222.6809542}
+{"attempts": 1, "calls": 1, "id": "9ab96d9b179a49f1ad69d3c531b5d25b", "model": "deepseek-flash", "op": "settle", "tokens": 1077, "usd": 0.00037096799999999995, "utc": 1795846223.481083}
+{"id": "34653d4b2aac4971b1798e4afc5dbf72", "op": "reserve", "usd": 0.00116235, "utc": 1795846223.486469}
+{"attempts": 1, "calls": 1, "id": "34653d4b2aac4971b1798e4afc5dbf72", "model": "deepseek-flash", "op": "settle", "tokens": 1145, "usd": 0.00034456799999999996, "utc": 1795846224.326493}
+{"id": "6c9ed9afee6444f29f0ec527bb6668dc", "op": "reserve", "usd": 0.010006949999999999, "utc": 1795846242.080666}
+{"attempts": 1, "calls": 1, "id": "6c9ed9afee6444f29f0ec527bb6668dc", "model": "deepseek-flash", "op": "settle", "tokens": 390, "usd": 0.000207, "utc": 1795846242.943985}
+{"id": "61685021e37d42daa237c1baff43ec62", "op": "reserve", "usd": 0.01012575, "utc": 1795846242.945994}
+{"attempts": 1, "calls": 1, "id": "61685021e37d42daa237c1baff43ec62", "model": "deepseek-flash", "op": "settle", "tokens": 710, "usd": 0.000181104, "utc": 1795846243.8334668}
+{"id": "e1d82af6f0864dd8845351230771e42a", "op": "reserve", "usd": 0.01001685, "utc": 1795846259.714632}
+{"attempts": 1, "calls": 1, "id": "e1d82af6f0864dd8845351230771e42a", "model": "deepseek-flash", "op": "settle", "tokens": 742, "usd": 0.0006114, "utc": 1795846261.380519}
+{"id": "ad68f8f7a44e4f7ea3b9c0b3a34690bf", "op": "reserve", "usd": 0.010538699999999998, "utc": 1795846261.383392}
+{"attempts": 1, "calls": 1, "id": "ad68f8f7a44e4f7ea3b9c0b3a34690bf", "model": "deepseek-flash", "op": "settle", "tokens": 2304, "usd": 0.0009476399999999999, "utc": 1795846262.969652}
+{"id": "84e7218c578e476d840649a69d53bca2", "op": "reserve", "usd": 0.01115745, "utc": 1795846262.972497}
+{"attempts": 1, "calls": 1, "id": "84e7218c578e476d840649a69d53bca2", "model": "deepseek-flash", "op": "settle", "tokens": 4047, "usd": 0.000981324, "utc": 1795846264.903145}
+{"id": "30c333c19e2c4eab80f49569d45cdc47", "op": "reserve", "usd": 0.011816099999999998, "utc": 1795846264.906286}
+{"attempts": 1, "calls": 1, "id": "30c333c19e2c4eab80f49569d45cdc47", "model": "deepseek-flash", "op": "settle", "tokens": 5922, "usd": 0.001141008, "utc": 1795846266.757629}
+{"id": "c4ed80cdfc1c4c7f860c7bcfbdc08b86", "op": "reserve", "usd": 0.012514949999999999, "utc": 1795846266.760913}
+{"attempts": 1, "calls": 1, "id": "c4ed80cdfc1c4c7f860c7bcfbdc08b86", "model": "deepseek-flash", "op": "settle", "tokens": 7937, "usd": 0.001181028, "utc": 1795846269.0111842}
+{"id": "d9bd8a98e37b4cd885956680b0ede7f8", "op": "reserve", "usd": 0.0132261, "utc": 1795846269.0142348}
+{"attempts": 1, "calls": 1, "id": "d9bd8a98e37b4cd885956680b0ede7f8", "model": "deepseek-flash", "op": "settle", "tokens": 10154, "usd": 0.0015401759999999999, "utc": 1795846271.2389278}
+{"id": "afa36685d05f4a3c8075d13af1363d09", "op": "reserve", "usd": 0.01393575, "utc": 1795846271.2419279}
+{"attempts": 1, "calls": 1, "id": "afa36685d05f4a3c8075d13af1363d09", "model": "deepseek-flash", "op": "settle", "tokens": 11785, "usd": 0.0005751719999999999, "utc": 1795846271.938814}
+{"id": "d0cd7da72aed40879eb1d876d89de332", "op": "reserve", "usd": 0.010029, "utc": 1795846271.958357}
+{"attempts": 1, "calls": 1, "id": "d0cd7da72aed40879eb1d876d89de332", "model": "deepseek-flash", "op": "settle", "tokens": 1094, "usd": 0.0010104, "utc": 1795846274.115442}
+{"id": "4d16343fa47f4e4ead497e0bc3aebb45", "op": "reserve", "usd": 0.0105906, "utc": 1795846274.119081}
+{"attempts": 1, "calls": 1, "id": "4d16343fa47f4e4ead497e0bc3aebb45", "model": "deepseek-flash", "op": "settle", "tokens": 3168, "usd": 0.001331544, "utc": 1795846276.327413}
+{"id": "0afa85ede0bb45189ded37856d0628ca", "op": "reserve", "usd": 0.0111522, "utc": 1795846276.3426828}
+{"attempts": 1, "calls": 1, "id": "0afa85ede0bb45189ded37856d0628ca", "model": "deepseek-flash", "op": "settle", "tokens": 4507, "usd": 0.000469632, "utc": 1795846277.098906}
+{"id": "4e436fd13d0645d694bcdf033b90de92", "op": "reserve", "usd": 0.005985299999999999, "utc": 1795846289.976193}
+{"attempts": 1, "calls": 1, "id": "4e436fd13d0645d694bcdf033b90de92", "model": "deepseek-flash", "op": "settle", "tokens": 2022, "usd": 0.00031358399999999994, "utc": 1795846291.3052711}
+{"id": "904dd5f982c14084ab77396ea09e19a5", "op": "reserve", "usd": 0.0010839, "utc": 1795846291.311064}
+{"attempts": 1, "calls": 1, "id": "904dd5f982c14084ab77396ea09e19a5", "model": "deepseek-flash", "op": "settle", "tokens": 1078, "usd": 0.00042436799999999995, "utc": 1795846292.352181}
+{"id": "7d3acae5d6d34f26a206b2f52a5563aa", "op": "reserve", "usd": 0.00116175, "utc": 1795846292.842279}
+{"attempts": 1, "calls": 1, "id": "7d3acae5d6d34f26a206b2f52a5563aa", "model": "deepseek-flash", "op": "settle", "tokens": 1239, "usd": 0.0004627679999999999, "utc": 1795846293.9027772}
+{"id": "61a6975f3d9b4938a1edcc31edeca006", "op": "reserve", "usd": 0.00121305, "utc": 1795846293.909091}
+{"attempts": 1, "calls": 1, "id": "61a6975f3d9b4938a1edcc31edeca006", "model": "deepseek-flash", "op": "settle", "tokens": 1254, "usd": 0.000345936, "utc": 1795846294.9089642}
