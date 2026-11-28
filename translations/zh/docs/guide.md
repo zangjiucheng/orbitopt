@@ -7,7 +7,7 @@ description: Use the 3D view, timeline and verification reports in Mission Contr
 
 # 使用 Mission Control
 
-Mission Control将3的视图,时间表,图表和验证的报告链接起来. [Install orbitopt](https://github.com/zangjiucheng/orbitopt/blob/main/docs/quickstart.md#installation),然后运行`orbitopt`,并在侧边栏选择一个任务.
+Mission Control链接到3 D视图,时间表,图表和验证报告. [Install orbitopt](https://github.com/zangjiucheng/orbitopt/blob/main/docs/quickstart.md#installation),然后运行`orbitopt`,并在**特派团**工作空间选择一个任务.
 
 <figure>
 <img src="assets/mission-control-starship-landing.png" alt="Mission Control showing a Starship landing scene and its timeline" />
@@ -16,25 +16,33 @@ Mission Control将3的视图,时间表,图表和验证的报告链接起来. [In
 
 ## 安装和打开
 
-由包装数据打开的内置场景. 标题栏提议,如果一个场景是用旧代码制作的,则重新计算;计算场景会被缓存. 以 *文件 QQ 打开场景文件...* 打开 JSON 场景,或使用 `orbitopt view <mission>` 进行单景查看.
+从包装数据打开的内置场景. 标题栏提议,如果一个场景是用旧代码制作的,则重新计算;计算场景则被缓存. 以 *文件 QQ 打开场景文件...* 打开 JSON 场景,或使用 `orbitopt view <mission>` 进行单景查看.
 
 ## 窗户
 
-- **边栏 :**选择任务或切换到[Flight Lab](flightlab.md).
-- **3 D视图 :**选择一个机构;使用**CENTER**改变参考机构.
-- **图:** 点击或拖动距离图以改变时间; 发射窗口
+- **Workspace bar:** switch between **Missions**, **Runs**, **Vehicles** and
+  **比较**. 运行,车辆和比较是[Flight Lab](flightlab.md)视图.
+- **背景列表 :** 选择任务,保存运行或编目车辆.
+- **3 D视图 :**选择一个机构;使用**CENTER**来改变参考机构.
+- **图:** 点击或拖动距离图以更改时间; 发射窗口
   图表显示有经过筛选的候选人。
-- **探长:**检查身体,动作和选定的候选人. 内容
-  验证标签显示支票及其耐受性.
+- **探长:**在特派团,检查尸体,动作和选定的人员
+  候选人。 运行使用**飞行**进行飞行数据. **验证**显示
+  两个工作空间的检查和容忍度。
 - **时间线 :**在任务中演奏,洗涤和放大.
+- **地块上方有尸体:** 聚焦并跟随一个机构或站点没有
+  更改督察标签 。 在 Runs 中,双击一个遥测图以扩展它;
+  卷轴到缩放,右擦拭到平板 并徘徊在准确的值。
 
-小组分享选定的机构和任务时间。 用头条折叠它们; `I` 切换右面板.
+小组分享选定的机构和任务时间。 面包屑显示了当前的工作空间和选择. 使用顶栏面板按钮显示或隐藏上下文列表和检查器;`I`也切换检查器.
+
+按**指挥/Ctrl+K**搜索任务,运行,车辆和工作空间. **Command/Ctrl+1–4**按顺序选择四个工作空间;**指挥/Ctrl+B**切换上下文列表,**指挥/Ctrl+Shift+B**检查官. 车辆和比较 隐藏现场控制和检查。 剖面图和飞行覆盖图见[Vehicle view](https://github.com/zangjiucheng/orbitopt/blob/main/docs/flightlab.md#vehicle-view).
 
 ## Moving around in 3D
 
 | 控件 | 行动 |
 |---|---|
-| 左撇子 | 旋转 |
+| 左边的破烂 | 旋转 |
 | 滚动或右擦拭 | 缩放 |
 | Shift- Drag 或 中间拖曳 | 笔 |
 | 单击天体 | 选择它 |
@@ -42,13 +50,13 @@ Mission Control将3的视图,时间表,图表和验证的报告链接起来. [In
 | 标签/ Shift+标签 | 下一个重点/前一个机构 |
 | `T` / `M` / `R` | 轨迹/ 焦点/ 重置相机 |
 
-*视图*菜单也提供固定相机角度. 选择动作跳转到并设定其燃烧范围 。
+*视图*菜单也提供固定镜头角度. 选择一个动作跳到并设定其燃烧。
 
 ## 时间和时间表
 
 ### 正在播放
 
-`Space`前奏或暂停;`Shift+Space`后奏. 将 `Shift+Left/Right` 用于上一个或下一个事件, 并 `Home` 重新启动 。
+`Space`演奏或暂停向前;`Shift+Space`演奏向后. 将 `Shift+Left/Right` 用于上一个或下一个事件, 并 `Home` 重新启动 。
 
 ### 赛道
 
@@ -65,11 +73,11 @@ Mission Control将3的视图,时间表,图表和验证的报告链接起来. [In
 
 ### 到一个时候
 
-点击 MET读出或按 `G`. 输入 `T+22:32:34`, `6m35s`或 `1d 02:00:00`; 使用 `+30s`进行相对跳跃, 或使用日历 历元 输入 UTC 任务日期 。 一个赤裸的号码使用时间轴的单位. 无效的输入以红色概括 。
+点击 MET读出或按 `G`. 输入 `T+22:32:34` , `6m35s` 或 `1d 02:00:00` ; 使用 `+30s` 进行相对跳跃, 或用日历 历元 输入 UTC 日期 。 一个赤裸的号码使用时间轴的单位. 无效的输入以红色概括 。
 
 ## 时间曲速
 
-梯形选择一个速率,从0.1×到10,000,000×;1×是实时的. 使用`,`和`.`在关卡之间踩踏,`[`和`]`微调,`/`返回到1×. 时钟可以自动缓冲近事件。
+梯形选择一个速率,从0.1×到10,000,000×;1×是实时的. 使用`,`和`.`在关卡间继位,`[`和`]`微调,`/`返回1×. 时钟可以自动缓冲近事件。
 
 ## 看飞机
 
@@ -86,40 +94,42 @@ and the current burn.
 
 ### 图表
 
-距离图跟随播放头;点击或拖动任务时间. 发射窗口图显示受支助飞行任务的候选者。
+距离图跟随播放头;点击或拖动任务时间. 发射窗口图显示受支助飞行任务的候选人。
 
 ## 地球图像
 
-*查看高分辨率地球图像*使流星的哨兵-2瓷砖靠近地球. 它们在macOS上的`~/Library/Caches/orbitopt/tiles`或Linux上的`~/.cache/orbitopt/tiles`下被缓存. 设定 `ORBITOPT_TILE_CACHE` 以更改缓存位置或 `ORBITOPT_EARTH_TILES=off` 以禁用下载 。
+*查看高分辨率地球图像*使流纹的哨兵-2瓷砖靠近地球. 它们是在macOS上的`~/Library/Caches/orbitopt/tiles`或Linux上的`~/.cache/orbitopt/tiles`的缓存. 设定 `ORBITOPT_TILE_CACHE` 以更改缓存位置或 `ORBITOPT_EARTH_TILES=off` 以禁用下载 。
 
 {: . 注释}
-> Sentinel-2 cloudless 2024 by EOX IT Services GmbH contains modified
-> 哥白尼哨兵数据2024并持有执照
+> -2无云 2024 by EOX IT 服务GmbH 包含修改
+> 哥白尼哨兵数据2024并持有执照.
 > [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 > 非商业用途。 显示瓷砖时显示归属 。
 
 ## 候选人和验证
 
-对于优化后的飞行任务,选择轨迹检查其筛选弧和验证. 徽章为**VERIFIED**,**VERIFY FAILED**或**未检查**. GOES打开不受限制;使用其验证标签运行tudatpy复飞. 验证以模型和宽容为条件.
+对于优化后的飞行任务,选择轨迹检查其筛选弧和验证. 徽章读作**VERIFIED**,**VERIFY FAILED**或**未检查**. GOES打开不受限制;使用其验证标签运行tudatpy复飞. 验证以模型和宽容为条件.
 
-验证标签中的每张支票标签为数值一致性,模型一致性或历史数据验证;没有支票的一类证据读作**未检查**,从未通过. 见[verification](verification.md).
+验证标签中的每张支票标注为数值一致性,模型一致性或历史数据验证;没有支票的一类证据读作**未检查**,从未通过. 见[verification](verification.md).
 
-"星舰飞行15"报告包括独立复飞,恢复散射,载荷和时序检查. 假设的10%升降率失败. 假设和预测与历史比较的区别,见[mission examples](examples.md).
+Starship Flight 15报告包括独立复飞,恢复散射,载荷和时间检查. 假设的10%升降率失败. 假设和预测与历史比较的区别见[mission examples](examples.md).
 
 ## 发射任务
 
-A Flight Lab run can also open as a mission in the main view, one continuous
-timeline from the pad to orbit: export it with `orbitopt flight to-scene
-run/ -o scene.json`, or run a `flight-lab` or `two-stage-leo` config with
-`orbitopt run`, then open the scene with *File › Open scene file…*.
+Flight Lab运行也可以作为任务在主视图中打开,一个从垫到轨道的连续时间线:用它导出. `orbitopt flight to-scene
+run/ -o scene.json`,或运行 `flight-lab` 或 `two-stage-leo` 配置 `orbitopt run` ,然后用 *文件 QQ 打开场景文件...* 打开现场.
 
 - **阶段行**牌 整个任务: 在垫,助推,中转,
-  末级燃烧,然后停放轨道和轨道传播(双体显示)
-  引擎截断后的海岸,标签为显示数据,而不是验证.
-- 每个**阶段交接**都有判决. 分离国家与群众
+  末级燃烧,然后停车轨道和轨道传播(双体显示)
+  coast after engine cutoff, labelled as display data, not verification).
+- 每个**阶段交接**都有判决. 国家与大众分离时
   各个阶段之间必须是连续的;在引擎截断时,插入是
-  对照目标轨道检查 。 判决出现在事件笔记中
-  在时间线和验证标签中的**MISSION HANDOFFS**部分.
+  对照目标轨道检查 。 判决出现在事件记录中
+  验证标签中的**MISSION HANDOFFS**部分。
+- 分离叉增加了**高级**和**第一阶段**的时间轨.
+  宣布的回收阶段用飞行器取代助推器碎片弧
+  返回时。 [full-mission gate](https://github.com/zangjiucheng/orbitopt/blob/main/docs/verification.md#full-mission-verification-gate-e2-03-task-256)
+  列表插入,轨道传播和达阵判决分别进行.
 
 大门见[Flight Lab](https://github.com/zangjiucheng/orbitopt/blob/main/docs/flightlab.md#mission-pipeline).
 
@@ -131,19 +141,19 @@ orbitopt run my_mission.yaml
 orbitopt view my_mission.yaml
 ```
 
-见[mission configs](https://github.com/zangjiucheng/orbitopt/blob/main/docs/quickstart.md#mission-configs). 编辑代码后,使用标题栏**重新装入**按钮或Command/Ctrl+R重启计算工人,并重算当前的任务.
+见[mission configs](https://github.com/zangjiucheng/orbitopt/blob/main/docs/quickstart.md#mission-configs). 在编辑代码后,使用标题栏**重新装入**按钮或Command/Ctrl+R重新启动计算工人,并重算当前的任务.
 
 ## 键盘快捷键
 
-按 `F1` 在应用程序中完整引用. 除了上述控制外,`I`还切换督察和指挥/Ctrl+QX退出.
+按 `F1` 在应用程序中进行完整引用. 除了上述控制外,`I`还切换督察和指挥/Ctrl+QX退出.
 
 ## 解决问题
 
-- **任务需要几分钟时间:** 一个自定义或重算的场景是
-  计算;之后的负载可以使用缓存.
-- **无卫星图像 :**检查视图设置,网络连接和
-  `ORBITOPT_EARTH_TILES`;瓷砖只出现在地球附近.
+- **任务需要几分钟时间:** 一个自定义或重编的场景是
+  计算;随后的负载可以使用缓存.
+- **无卫星图像 :** 检查视图设置,网络连接和
+  `ORBITOPT_EARTH_TILES`;瓷砖只在地球附近出现.
 - **黑色 3 截图中的 D 区域 :**使用`scripts/capture_screenshots.py`,
-  它捕捉和复合 OpenGL 视图。
+  用于捕捉和复合 OpenGL 视图。
 - 关于其他问题,[open an issue](https://github.com/zangjiucheng/orbitopt/issues)
-  任务和繁衍的步骤
+  与使命和步骤复制。
