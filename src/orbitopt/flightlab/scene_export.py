@@ -625,7 +625,8 @@ def _earth_body(earth_texture: bool, orientation_basis: list | None) -> dict:
 def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
                  coast_orbits: float = 0.0, coast_samples: int = 120, target=None,
                  mission_scenario: TwoStageLeoScenario | None = None,
-                 rendezvous: dict | None = None) -> dict:
+                 rendezvous: dict | None = None,
+                 gnc: dict | None = None) -> dict:
     """Convert a FlightResult v1 run into a scene-1.0 document (Earth scene,
     one trailed body per track, contract events as timeline markers, a
     continuous phase row and a per-boundary ``handoffs`` verdict block).
@@ -651,6 +652,11 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
     (E12-06): its events join the timeline and its markers become Earth-orbit
     site-kind bodies (keep-out centre, hold point). Sidecar data is display
     metadata only; it never alters tracks or verification.
+
+    ``gnc`` optionally is a ``gnc-studio-1.0`` sidecar document (E13-08): its
+    events join the timeline and its sampled covariance ellipsoids become
+    translucent bodies living between their sample instants. Display metadata
+    only, same rule as ``rendezvous``.
     """
     if coast_orbits < 0.0:
         raise ValueError(f"coast_orbits must be >= 0, got {coast_orbits!r}")
@@ -721,6 +727,17 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
                            "time": t_s,
                            "note": "E12-06 mission studio sidecar",
                            "bodyId": str(sidecar_event.get("body_id", ""))})
+    if gnc:
+        for sidecar_event in gnc.get("events", ()):
+            try:
+                t_s = float(sidecar_event["t_s"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            events.append({"label": str(sidecar_event.get("title")
+                                             or sidecar_event.get("kind") or "GNC event"),
+                           "time": t_s,
+                           "note": "E13-08 mission studio sidecar",
+                           "bodyId": str(sidecar_event.get("body_id", ""))})
 
     t_max = max([float(track.t_end_s) for track in run.tracks]
                 + [float(event.t_s) for event in run.events]
@@ -729,6 +746,8 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
         bodies.extend(_site_bodies(target, epoch, t_max))
     if rendezvous:
         bodies.extend(_rendezvous_marker_bodies(rendezvous))
+    if gnc:
+        bodies.extend(_gnc_ellipsoid_bodies(gnc, t_max))
     timeline = {
         "unitLabel": "seconds",
         "min": 0.0,
@@ -778,10 +797,59 @@ def run_to_scene(run: FlightRun, *, earth_texture: bool = True,
             "timeline past SECO is a two-body display coast (orbitopt.flightlab.coast) "
             "seeded at the SECO state -- not verification data; Gate-B's re-fly remains "
             "the authority on the insertion orbit")
-    if orientation_note or coast is not None:
+    if orientation_note or coast is not None or (gnc and gnc.get("ellipsoids")):
+        if gnc and gnc.get("ellipsoids"):
+            assumptions.append(str(gnc.get("ellipsoid_note")
+                                   or "covariance ellipsoids are sampled display metadata"))
         scene["sceneAssumptions"] = assumptions
     validate_scene(scene)
     return scene
+
+
+def _gnc_ellipsoid_bodies(gnc: dict, t_max: float) -> list[dict]:
+    """Sampled covariance ellipsoids from a ``gnc-studio-1.0`` sidecar
+    (E13-08) as translucent trailed bodies. Each sample lives on the timeline
+    from its update instant to the next sample's (last one: to the timeline
+    end), so playback shows the ellipsoid current at the cursor, not a pile of
+    stale ones. Malformed samples are skipped; tracks and verification are
+    untouched."""
+    samples = sorted((s for s in gnc.get("ellipsoids", ())
+                      if isinstance(s, dict)), key=lambda s: float(s.get("t_s", 0.0)))
+    samples = [s for s in samples if _f(s.get("t_s")) is not None]
+    bodies: list[dict] = []
+    for i, s in enumerate(samples):
+        t = float(s["t_s"])
+        try:
+            center = [float(x) for x in s["center_eci_m"]]
+            axes = [float(x) for x in s["semi_axes_m"]]
+            basis = [[float(c) for c in row] for row in s["orientationBasis"]]
+        except (KeyError, TypeError, ValueError):
+            continue
+        if len(center) != 3 or len(axes) != 3 or len(basis) != 3 \
+                or any(len(row) != 3 for row in basis) or t >= t_max:
+            continue
+        t_end = float(samples[i + 1]["t_s"]) if i + 1 < len(samples) else t_max
+        t_end = max(min(t_end, t_max), t + 1.0e-6)
+        pos_km = [[_km(c) for c in center], [_km(c) for c in center]]
+        bodies.append({
+            "id": f"gnc_cov_{i:02d}", "name": f"Covariance ellipsoid @ {t:,.0f} s",
+            "color": "#7fb2ff", "kind": "site", "radiusDisplay": 4.0, "hideTrail": True,
+            "trail": {"times": [t, t_end], "positions": pos_km},
+            "semiAxesKm": [_km(a) for a in axes],
+            "orientationBasis": basis,
+            "tStart": t, "tEnd": t_end,
+            "info": [{"label": "3-sigma position axes",
+                      "value": " x ".join(f"{a:,.0f}" for a in axes) + " m"},
+                     {"label": "Update", "value": f"t = {t:,.1f} s"}],
+        })
+    return bodies
+
+
+def _f(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _site_bodies(target, epoch, end: float) -> list[dict]:

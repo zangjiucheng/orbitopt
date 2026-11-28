@@ -312,6 +312,54 @@ def _cmd_rendezvous_studio(args):
     print("  open in Flight Lab with `orbitopt view` or pass the dir to the UI")
 
 
+def _cmd_gnc_studio(args):
+    """E13-08: replay a sealed closed-loop GNC run as a Flight Lab run dir."""
+    from orbitopt.gnc.studio import build_gnc_studio_run, write_gnc_studio_run
+
+    assessment = None
+    if args.leo_rdv_001:
+        from orbitopt.gnc.studio import fly_leo_rdv_001_studio
+        studio, outcome, assessment = fly_leo_rdv_001_studio(
+            cluster=args.cluster, index=args.index,
+            supervised=not args.no_supervise, verify=not args.no_verify)
+        source = (f"LEO-RDV-001 sample {args.cluster}/{args.index} "
+                  f"({'ok' if outcome.ok else f'FAILED ({outcome.failure_class})'})")
+    else:
+        studio = build_gnc_studio_run(args.run_log, verification_report=args.report)
+        source = args.run_log
+    root = write_gnc_studio_run(args.output, studio)
+    sc = studio.sidecar
+    indep = sc["independent_verification"] or {}
+    classes = {cls: (line.get("result"), line.get("reason"))
+               for cls, line in (indep.get("error_classes") or {}).items()}
+    drops = sum(int(s["dropped"]) for s in (sc["measurement"] or {}).get("sensors", {}).values())
+    if args.json:
+        import json
+        print(json.dumps({"run_dir": str(root), "run_id": studio.run.run_id,
+                          "run_digest": sc["local_replay"]["run_digest"],
+                          "source": source,
+                          "independent_report": indep.get("report_digest"),
+                          "error_classes": classes,
+                          "frames_dropped": drops,
+                          "supervisor_final_state": (sc.get("supervision") or {}).get("final_state")},
+                         indent=2))
+        return
+    print(f"GNC studio run: {root}")
+    print(f"  source       {source}")
+    print(f"  run digest   {sc['local_replay']['run_digest']}")
+    if indep:
+        print(f"  report       {indep.get('report_digest')}")
+        for cls, (result, reason) in classes.items():
+            extra = f" ({reason})" if result == "not_checked" and reason else ""
+            print(f"    {result.upper():<12} {cls}{extra}")
+    else:
+        print("  report       none consumed -- independent evidence line is EMPTY, "
+              "not a pass")
+    sup = (sc.get("supervision") or {}).get("final_state")
+    print(f"  frames       {drops} dropped · supervisor final state {sup or 'n/a'}")
+    print("  open in Flight Lab with `orbitopt view` or pass the dir to the UI")
+
+
 def _cmd_flight(args):
     """`orbitopt flight ...`: the Flight Lab tools (orbitopt.flightlab) --
     readable pass/fail or a written scene JSON, no compute stack, no GUI
@@ -409,9 +457,17 @@ def _cmd_flight_to_scene(args):
                 rendezvous = json.loads(sidecar.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 rendezvous = None
+        sidecar = Path(args.run_dir) / "gnc.json"
+        gnc = None
+        if sidecar.exists():  # E13-08 studio run: sidecar events/ellipsoids into the scene
+            try:
+                doc = json.loads(sidecar.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                doc = None
+            gnc = doc if isinstance(doc, dict) and doc.get("schema_version") == "gnc-studio-1.0" else None
         scene = run_to_scene(run, earth_texture=not args.no_earth_texture,
                              mission_scenario=replay_mission_scenario(run),
-                             rendezvous=rendezvous)
+                             rendezvous=rendezvous, gnc=gnc)
     except (jsonschema.ValidationError, ValueError) as exc:
         print(f"REJECTED: {args.run_dir}\n  {exc}")
         raise SystemExit(1) from None
@@ -884,6 +940,37 @@ def build_parser() -> argparse.ArgumentParser:
                                         "physics_verified (same plan digest required)")
     rendezvous_studio.add_argument("--json", action="store_true", help="print the verdict as JSON")
 
+    gnc = sub.add_parser(
+        "gnc", help="E13-08 closed-loop GNC tools (Mission Studio replay runs)")
+    gnc_sub = gnc.add_subparsers(dest="gnc_command", required=True)
+    gnc_studio = gnc_sub.add_parser(
+        "studio",
+        help="replay a sealed GNC closed-loop run as a Flight Lab run dir: truth/estimate "
+             "tracks, covariance ellipsoids, measurement/control/supervision events and the "
+             "two evidence lines (local replay vs E13-07 report); opens with `orbitopt view`")
+    gnc_studio_mode = gnc_studio.add_mutually_exclusive_group(required=True)
+    gnc_studio_mode.add_argument("--run-log", default=None, metavar="PATH",
+                                 help="sealed gnc-run-log-1.0 JSON to replay")
+    gnc_studio_mode.add_argument("--leo-rdv-001", action="store_true",
+                                 help="fly the reference LEO-RDV-001 closed-loop sample "
+                                      "(supervised) and replay it, verified")
+    gnc_studio.add_argument("--report", default=None, metavar="PATH",
+                            help="verification-report-1.0 JSON (kind gnc-closed-loop) to "
+                                 "consume as the independent evidence line; bound-checked "
+                                 "against the log")
+    gnc_studio.add_argument("--cluster", type=int, default=1, metavar="N",
+                            help="--leo-rdv-001: campaign cluster (default 1)")
+    gnc_studio.add_argument("--index", type=int, default=5, metavar="N",
+                            help="--leo-rdv-001: cluster index (default 5)")
+    gnc_studio.add_argument("--no-supervise", action="store_true",
+                            help="--leo-rdv-001: fly without the safety supervisor")
+    gnc_studio.add_argument("--no-verify", action="store_true",
+                            help="--leo-rdv-001: skip the E13-07 report (honest gap: the "
+                                 "studio then shows no independent evidence line)")
+    gnc_studio.add_argument("-o", "--output", required=True, metavar="DIR",
+                            help="output run dir (manifest.json + trajectories/ + gnc.json)")
+    gnc_studio.add_argument("--json", action="store_true", help="print the summary as JSON")
+
     flight = sub.add_parser("flight", help="Flight Lab contract tools (FlightTarget / FlightResult)")
     flight_sub = flight.add_subparsers(dest="flight_command", required=True)
     flight_validate = flight_sub.add_parser(
@@ -1097,6 +1184,9 @@ def main(argv=None):
     elif args.command == "rendezvous":
         if args.rendezvous_command == "studio":
             _cmd_rendezvous_studio(args)
+    elif args.command == "gnc":
+        if args.gnc_command == "studio":
+            _cmd_gnc_studio(args)
     elif args.command == "flight":
         _cmd_flight(args)
     elif args.command == "crossenv":

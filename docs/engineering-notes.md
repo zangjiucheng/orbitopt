@@ -188,3 +188,28 @@ silently move the goalposts. `benchmark_report()` emits the suite as a
 verification-report-1.0 document (no new schema); `orbitopt benchmarks` runs
 it from the command line (exit 1 on failure).
 
+
+## Closed-loop GNC data contracts and the simulation clock (task #418)
+
+`orbitopt.gnc` defines the five records a closed-loop run exchanges — truth, observation,
+estimate, command, control event — under one versioned schema bundle (`gnc-contracts-1.0.json`),
+and a `ClockSpec` that makes every sample/update/tick instant a pure function of its tick index,
+so a dropped frame deletes a record and never retimes a later one. Plant truth flows only into the
+append-only `GncRunLog`: guidance sees a `GuidanceInput` exposing one `Estimate`, the guidance-side
+module contains no truth/plant identifier (AST-enforced), and the run log's causal gates plus the
+E12-08-policy run digest make a sealed log replayable, tamper-evident evidence. Rationale:
+ADR gnc-0001; usage: `docs/gnc-contract.md`.
+
+## Relative-navigation EKF (task #419)
+
+`orbitopt.gnc.ekf` adds the navigation state the closed loop estimates: a 6-vector LVLH EKF whose
+process models delegate to E12-02 (`CwProcess` → `propagate_cw`, `NonlinearRelativeProcess` →
+`propagate_pair`, reference chief advanced with the Jacobian batch) and whose measurement models
+extract from E13-01 `Observation` records -- Cartesian readings rotated through the caller's chief
+state, native range/angle/rate observables read from the record metadata, never re-derived from the
+Cartesian field (that would double-count the noise). Every update returns the innovation/NIS report
+the consistency gates consume, and `make_estimate` publishes onto the contract with the LVLH
+covariance mapped inertially by `frame_covariance`. `orbitopt.gnc.nav_metrics` is the acceptance
+toolkit: chi-square bands, NEES/NIS, k-sigma coverage, per-cluster stats, and the R-weighted
+stacked-observability sweep. Evidence: `docs/benchmarks/e13_02_relative_nav_ekf.{json,md}` --
+gates in `tests/test_e13_02_relative_nav_ekf.py`; rationale: ADR gnc-0002.

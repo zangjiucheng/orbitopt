@@ -137,6 +137,22 @@ def environment_record(env_label: str) -> dict:
     }
 
 
+def environment_digest_of(record: dict) -> str:
+    """E13-00: sha256 over an :func:`environment_record` minus its
+    per-invocation ``argv`` -- a stable identity for the environment that
+    produced it (interpreter, platform, toolchain matrix), so a verification
+    artifact can bind WHICH environment certified it without pinning the
+    command line that happened to run the check."""
+    stable = {k: v for k, v in record.items() if k != "argv"}
+    return hashlib.sha256(
+        json.dumps(stable, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def environment_digest(env_label: str = "seal") -> str:
+    """The current environment's :func:`environment_digest_of` identity."""
+    return environment_digest_of(environment_record(env_label))
+
+
 def write_envelope(exchange_dir, *, stage: str, runner: str, env_label: str,
                    payloads: list[dict], created_utc: str | None = None) -> Path:
     """Seal ``exchange_dir`` (``<stage-dir>/exchange``) with the manifest

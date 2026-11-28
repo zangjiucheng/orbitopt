@@ -285,13 +285,28 @@ class TestPhysicsVerifiedFromEvidence:
 
     @staticmethod
     def _report(plan, result="passed"):
+        from orbitopt.rendezvous.canonical import (canonical_config_sha256,
+                                                   initial_states_sha256,
+                                                   rendezvous_plan_digest)
+        from orbitopt.rendezvous.config import load_reference_config
         from orbitopt.verify.rendezvous_refly import REPORT_KIND, maneuvers_digest
+        from orbitopt.verify.report import report_digest
 
-        return {"schemaVersion": "1.0", "kind": REPORT_KIND,
-                "inputs": {"mission_id": plan.mission_id,
-                           "main_model": {"maneuvers_sha256": maneuvers_digest(plan)},
-                           "error_sources": {
-                               "independent_model_agreement": {"result": result}}}}
+        cfg = load_reference_config()
+        doc = {"schemaVersion": "1.0", "kind": REPORT_KIND,
+               "inputs": {"mission_id": plan.mission_id,
+                          "main_model": {
+                              "maneuvers_sha256": maneuvers_digest(plan),
+                              "sealed_plan": {
+                                  "config_sha256": canonical_config_sha256(cfg),
+                                  "initial_states_sha256": initial_states_sha256(cfg),
+                                  "maneuvers_sha256": maneuvers_digest(plan),
+                                  "plan_digest": rendezvous_plan_digest(cfg, plan)},
+                              "worker": {"environment_digest": "e13-00-stub-env"}},
+                          "error_sources": {
+                              "independent_model_agreement": {"result": result}}}}
+        doc["digest"] = report_digest(doc)  # E13-00: an artifact must verify itself
+        return doc
 
     @staticmethod
     def _build(refly_report):

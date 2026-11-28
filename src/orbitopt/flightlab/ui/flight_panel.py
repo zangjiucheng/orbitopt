@@ -46,6 +46,7 @@ from orbitopt.flightlab.reasons import explain_all
 from orbitopt.flightlab.run_index import KeyEvent, SummaryRow, key_events, launch_summary
 from orbitopt.flightlab.ui.charts import _fmt_clock, _TelemetryChart, link_charts
 from orbitopt.flightlab.ui.engine_hud import EngineHud
+from orbitopt.flightlab.ui.gnc_panel import GncPanel
 from orbitopt.flightlab.ui.rendezvous_panel import RendezvousPanel
 from orbitopt.flightlab.ui.recovery_panel import (
     FLIGHTLAB_PANEL_QSS,
@@ -172,6 +173,7 @@ class FlightRunPanel(QWidget):
         self.reason_panel.clear_entries()
         self.recovery_panel = RecoveryPanel()
         self.rendezvous_panel = RendezvousPanel()
+        self.gnc_panel = GncPanel()
         self.detail_tabs = QTabWidget()
         self.detail_tabs.setObjectName("flightLabDetailTabs")
         self.detail_tabs.setStyleSheet(FLIGHTLAB_PANEL_QSS)
@@ -179,6 +181,7 @@ class FlightRunPanel(QWidget):
         self.detail_tabs.addTab(self.reason_panel, "Why")
         self.detail_tabs.addTab(self.recovery_panel, "Recovery")
         self.detail_tabs.addTab(self.rendezvous_panel, "Rendezvous")
+        self.detail_tabs.addTab(self.gnc_panel, "GNC")
         self.engine_hud = EngineHud()                      # SpaceX-webcast-style: both vehicles, engines + propellant
         self.detail_tabs.addTab(self.engine_hud, "Engines")
         self._time = 0.0
@@ -199,6 +202,7 @@ class FlightRunPanel(QWidget):
         self.reason_panel.clear_entries()
         self.recovery_panel.clear()
         self.rendezvous_panel.clear()
+        self.gnc_panel.clear()
         self.engine_hud.clear()
 
     def set_run(self, bundle: RunBundle, target=None,
@@ -216,8 +220,16 @@ class FlightRunPanel(QWidget):
                          body_id=str(ev.get("body_id", "")), altitude_km=None, speed_km_s=None)
                 for ev in bundle.rendezvous.get("events", ()) if "t_s" in ev)
             self.events = tuple(sorted(self.events + sidecar_events, key=lambda e: e.t_s))
+        if bundle.gnc:
+            gnc_events = tuple(
+                KeyEvent(t_s=float(ev["t_s"]), kind=str(ev.get("kind", "gnc")),
+                         title=str(ev.get("title", "GNC event")),
+                         body_id=str(ev.get("body_id", "")), altitude_km=None, speed_km_s=None)
+                for ev in bundle.gnc.get("events", ()) if "t_s" in ev)
+            self.events = tuple(sorted(self.events + gnc_events, key=lambda e: e.t_s))
         self._populate_events()
         self.rendezvous_panel.set_doc(bundle.rendezvous)
+        self.gnc_panel.set_doc(bundle.gnc)
         self._populate_checks(run.verification)
         summary = recovery_summary(bundle)
         self.recovery_panel.set_summary(summary)

@@ -12,6 +12,15 @@ The sealed plan: canonical planner `plan_rendezvous_safe` on
 It spends **10.345 m/s** of a 25 m/s budget (Δv margin 14.65 m/s), time of
 flight 3416.7 s, arrival 3977.3 s after the shared epoch.
 
+Four digests, four questions (E13-00). `plan_digest` (8 significant digits,
+rounding intentional): is this the same plan in the numerical sense?
+`artifact_sha256` (raw file bytes): was the stored artifact modified?
+`verification_digest`: do the recorded verdict and safety record belong to
+this plan and model version? `environment_digest`: on which compute
+environment and dependency set was it produced? `verify_seal()` recomputes
+all of these and rejects a stored verdict that does not follow from the
+checks.
+
 ## 1. Nominal verification (same model — not independent)
 
 The acceptance propagator re-runs the sealed plan and grades the config's
@@ -46,10 +55,19 @@ A TudatPy two-spacecraft nonlinear re-flight in a separate environment is
 the independent line
 ([ADR rendezvous-0003](adr/rendezvous-0003-independent-refly-tudatpy.md),
 [report](benchmarks/e12_05_independent_refly.json)). The recorded run
-**passed** its declared checks, closest approach ≈ 913 m.
+**passed** its declared checks. The two distances to keep apart: the arrival
+gate is the Hold Point at **1000 m** from the target, while the closest
+approach over the WHOLE trajectory is **913.03 m** — the transfer coasts
+inside the arrival distance before the final insertion, so the safety check
+grades the live chaser-to-centre distance, never the Hold Point figure.
 
-Digest discipline (fail-closed): the re-flight is graded against the plan whose maneuver digest it matches. The
-recorded evidence carries maneuvers sha256 `d10771e1…8b9e5d` — the sealed plan's (10.3454 m/s) — so the studio
+Digest discipline (fail-closed, E13-00): the re-flight is graded against the
+whole sealed plan, not just the maneuvers. The physics verdict recomputes the
+report's own digest, then requires the report's embedded sealed-plan identity
+(config, initial states, maneuvers and plan digests) to match the plan being
+graded, and a non-empty worker `environment_digest` — evidence from a
+different config, initial state, plan or unrecorded environment is rejected.
+The recorded evidence carries maneuvers sha256 `d10771e1…8b9e5d` — the sealed plan's (10.3454 m/s) — so the studio
 run built with `--refly-report` reports `physics_verified: true`, derived from that match. Evidence whose digest
 does not match, or no report at all, gives `physics_verified: null` (**not assessed**, not failure). The
 re-flight covers the *nominal* sealed plan; §5 re-flies perturbed samples of it.
@@ -82,7 +100,7 @@ document is wrong either way.
 ## 5. Independent robustness re-flight (E12-10 — the same sealed plan, perturbed)
 
 The E12-10 benchmark
-([ADR rendezvous-0004](adr/rendezvous-0004-independent-robustness-reflight.md),
+([ADR rendezvous-0006](adr/rendezvous-0006-independent-robustness-reflight.md),
 [data](benchmarks/e12_10_independent_reflight.json)) re-grades the E12-07 hold-out with the passive contingency
 releases (no-burn at t0, gate abort at t1, hold-point coast) counted in success, and re-flies a declared selection
 of 23 samples in TudatPy, each with its own perturbation. Its ground plan is the sealed plan above (same
