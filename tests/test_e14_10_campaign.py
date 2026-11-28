@@ -134,16 +134,16 @@ def test_scored_plan_cannot_be_narrowed_outside_smoke_mode(capsys):
 
 
 def test_provider_arms_are_not_run_without_credentials(monkeypatch):
-    for var in ("E14_LLM_BASE_URL", "E14_LLM_MODEL", "E14_LLM_API_KEY", "E14_LLM_KIND"):
+    for var in ("LLM_BASE_URL", "LLM_MODEL", "LLM_API_KEY", "LLM_KIND"):
         monkeypatch.delenv(var, raising=False)
     assert C.provider_from_env() is None
-    monkeypatch.setenv("E14_LLM_BASE_URL", "https://example.invalid/v1")
-    monkeypatch.setenv("E14_LLM_MODEL", "some-model")
+    monkeypatch.setenv("LLM_BASE_URL", "https://example.invalid/v1")
+    monkeypatch.setenv("LLM_MODEL", "some-model")
     assert C.provider_from_env() is None  # an openai-compatible endpoint without a key is not a provider
 
 
-def test_the_provider_from_the_e14_variables_talks_to_an_openai_compatible_endpoint(monkeypatch):
-    """The path the provider arms take (E14_LLM_KIND, E14_LLM_BASE_URL, E14_LLM_MODEL, E14_LLM_API_KEY), against
+def test_the_provider_from_the_llm_variables_talks_to_an_openai_compatible_endpoint(monkeypatch):
+    """The path the provider arms take (LLM_KIND, LLM_BASE_URL, LLM_MODEL, LLM_API_KEY), against
     a fake OpenAI-compatible server on 127.0.0.1: no network, no real model, no key outside this test."""
     import threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -173,10 +173,10 @@ def test_the_provider_from_the_e14_variables_talks_to_an_openai_compatible_endpo
     threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
     try:
         monkeypatch.setenv("NO_PROXY", "*")
-        monkeypatch.setenv("E14_LLM_KIND", "openai_compat")
-        monkeypatch.setenv("E14_LLM_BASE_URL", f"http://127.0.0.1:{server.server_address[1]}/v1")
-        monkeypatch.setenv("E14_LLM_MODEL", "deepseek-chat")
-        monkeypatch.setenv("E14_LLM_API_KEY", "sk-test-not-a-key")
+        monkeypatch.setenv("LLM_KIND", "openai_compat")
+        monkeypatch.setenv("LLM_BASE_URL", f"http://127.0.0.1:{server.server_address[1]}/v1")
+        monkeypatch.setenv("LLM_MODEL", "deepseek-chat")
+        monkeypatch.setenv("LLM_API_KEY", "sk-test-not-a-key")
         provider = C.provider_from_env()
         assert provider is not None
         reply = provider.generate([Message("user", "Say ok.")], max_tokens=8, seed=3)

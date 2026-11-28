@@ -510,7 +510,7 @@ def test_make_provider_builds_each_kind(tmp_path):
     local = make_provider({"kind": "local", "model": "m", "base_url": "http://127.0.0.1:1/v1"})
     assert isinstance(local, LocalProvider) and local.api_key_env is None
     remote = make_provider({"kind": "openai_compat", "base_url": "https://example.invalid/v1", "model": "m"})
-    assert remote.api_key_env == "OPENAI_API_KEY"
+    assert remote.api_key_env == "LLM_API_KEY"
     cassette = tmp_path / "c.jsonl"
     recorder = make_provider({"kind": "mock", "script": ["hi"], "record": str(cassette)})
     assert isinstance(recorder, RecordingProvider)

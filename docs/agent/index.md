@@ -97,7 +97,8 @@ rewrite its manifest too.
 
 | `--provider` | Needs | Notes |
 |---|---|---|
-| `openai-compatible` | `--base-url`, `--model` | Reads the API key from the environment variable `--api-key-env` names (default `OPENAI_API_KEY`), at call time. |
+| `env` | the `LLM_*` variables | The provider the environment configures ([providers](providers.md#configuration-from-the-environment)); `orbitopt --env-file .env agent ...` loads them from a file. |
+| `openai-compatible` | `--base-url`, `--model` | Reads the API key from the environment variable `--api-key-env` names (default `LLM_API_KEY`), at call time. |
 | `local` | `--model` | Ollama by default; `--base-url` for llama.cpp or vLLM. No key. |
 | `mock` | `--mock-replies FILE` | A JSON list of replies, each a string or a JSON object sent as its JSON text. |
 | `replay` | `--cassette FILE` | Serves a recorded cassette; any request it did not record is an error. |
@@ -108,7 +109,7 @@ model call there, and `--provider replay --cassette FILE` serves the same
 calls back later:
 
 ```bash
-export OPENAI_API_KEY=...        # set in the environment, never on the command line
+export LLM_API_KEY=...           # set in the environment, never on the command line
 orbitopt agent compile --prompt-file prompt.txt -o problem.json \
     --provider openai-compatible --base-url https://api.openai.com/v1 --model gpt-4o-mini \
     --cassette compile.jsonl

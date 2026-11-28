@@ -87,7 +87,7 @@ class OpenAICompatProvider(ChatProvider):
 
     name = "openai_compat"
 
-    def __init__(self, base_url: str, model: str, *, api_key_env: str | None = "OPENAI_API_KEY",
+    def __init__(self, base_url: str, model: str, *, api_key_env: str | None = "LLM_API_KEY",
                  timeout_s: float = 60.0, supports_json_schema: bool = True,
                  max_retries: int = 3, backoff_s: float = 1.0, max_backoff_s: float = 8.0,
                  meter: UsageMeter | None = None):

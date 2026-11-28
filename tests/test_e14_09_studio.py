@@ -387,19 +387,21 @@ def test_views_mark_infeasible_points_and_step_through():
 def test_providers_come_from_the_environment_and_never_carry_a_key(session, tmp_path):
     assert backend.provider_choices({}) == (backend.MOCK,)
     assert "No LLM provider is configured" in backend.provider_banner(backend.MOCK, (backend.MOCK,), {})
-    env = {"ORBITOPT_LLM_MODEL": "gpt-test", "ORBITOPT_LLM_BASE_URL": "https://llm.example/v1",
-           "OPENAI_API_KEY": "sk-not-for-the-ui"}
+    banner = backend.provider_banner(backend.MOCK, (backend.MOCK,), {})
+    assert "LLM_MODEL" in banner and "LLM_BASE_URL" in banner and "LLM_API_KEY" in banner
+    env = {"LLM_MODEL": "gpt-test", "LLM_BASE_URL": "https://llm.example/v1", "LLM_API_KEY": "sk-not-for-the-ui"}
     real = backend.provider_choices(env)[1]
-    assert real.real and real.api_key_env == "OPENAI_API_KEY"
+    assert real.real and real.kind == "openai_compat" and real.api_key_env == "LLM_API_KEY"
     banner = backend.provider_banner(real, backend.provider_choices(env), env)
-    assert "OPENAI_API_KEY (set)" in banner and "sk-not-for-the-ui" not in banner
+    assert "LLM_API_KEY (set)" in banner and "sk-not-for-the-ui" not in banner
+    assert backend.provider_choices({"LLM_KIND": "no-such-kind", "LLM_MODEL": "m"}) == (backend.MOCK,)
     studio = StudioSession(root=tmp_path / "env-runs", environ=env, scratch=tmp_path / "s2")
     studio.set_provider("env")
     studio.start_blank()
     studio.confirm()
     finish(studio, studio.run())
     text = (studio.result.experiment_dir / "studio.json").read_text()
-    assert "gpt-test" in text and "sk-not-for-the-ui" not in text and "OPENAI_API_KEY" not in text
+    assert "gpt-test" in text and "sk-not-for-the-ui" not in text and "LLM_API_KEY" not in text
 
 
 def test_the_workspace_imports_no_agent_or_llm_sdk_until_a_job_runs():

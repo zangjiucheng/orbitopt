@@ -88,10 +88,10 @@ def provenance(command: list[str]) -> dict:
 
 
 def provider_record() -> dict | None:
-    if not os.environ.get("E14_LLM_BASE_URL") or not os.environ.get("E14_LLM_MODEL"):
-        return None
-    return {"kind": os.environ.get("E14_LLM_KIND", "openai_compat"), "base_url": os.environ["E14_LLM_BASE_URL"],
-            "model_id": os.environ["E14_LLM_MODEL"], "temperature": 0.0}
+    """The provider configuration of this shard, from the LLM_* variables: never the key, only its variable name."""
+    from orbitopt.llm_env import provider_spec
+    spec = provider_spec()
+    return None if spec is None else {**spec, "temperature": 0.0}
 
 
 def warm_quadrature() -> None:
@@ -429,6 +429,9 @@ def main(argv=None) -> int:
         p.add_argument("--instances", default=None, help="comma-separated instance ids (smoke runs only)")
         p.add_argument("--seeds", default=None, help="comma-separated seeds (smoke runs only)")
         p.add_argument("--json", action="store_true")
+        p.add_argument("--env-file", type=Path, default=None,
+                       help="read KEY=VALUE lines (the LLM_* variables) into the environment first; a variable "
+                            "that is already set wins, and no value is ever printed")
         if name == "run":
             p.add_argument("--shard", action="append", default=[])
             p.add_argument("--all", action="store_true")
@@ -441,6 +444,9 @@ def main(argv=None) -> int:
         if name == "report":
             p.add_argument("--tables", type=Path, default=None)
     args = ap.parse_args(argv)
+    if args.env_file is not None:
+        from orbitopt.llm_env import load_env_file
+        print(f"{args.env_file}: {len(load_env_file(args.env_file))} variables set", file=sys.stderr)
     if (args.instances or args.seeds) and args.mode != SMOKE:
         ap.error("--instances and --seeds change the pre-registered plan; they are allowed in pipeline-smoke only")
     shards = plan(args.instances.split(",") if args.instances else None,

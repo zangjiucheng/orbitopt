@@ -3,7 +3,7 @@
 ``E-rule`` runs ``orbitopt.agent.runtime.solve`` with the deterministic ``RuleBasedPlanner``: no model, no tokens.
 It is NOT the pre-registered arm E (which compiles the natural-language statement and plans with an LLM), so
 E-rule against A or B says nothing about what an LLM adds. ``E-LLM`` is the same loop with ``LLMPlanner`` on a
-provider from the E14_LLM_* variables (``e14_common.provider_from_env``); without one it is not run.
+provider from the LLM_* variables (``e14_common.provider_from_env``); without one it is not run.
 
 Every cell is saved with ``save_run`` and replayed with ``replay`` right away; the row records whether the replay
 was EQUAL. Evaluations are counted twice: by the runtime's own meter (the trace) and by an independent counter that

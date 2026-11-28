@@ -123,7 +123,7 @@ PROTOCOL = {
     "fault_hosts": "the seed-0 result of every rule arm on every scoring instance, plus the stored reference "
                    "optimum where the catalogue has one; graded in memory (verify_result) and as a sealed run "
                    "(verify_run)",
-    "llm_provider_env": ["E14_LLM_BASE_URL", "E14_LLM_MODEL", "E14_LLM_API_KEY", "E14_LLM_KIND"],
+    "llm_provider_env": ["LLM_KIND", "LLM_MODEL", "LLM_BASE_URL", "LLM_API_KEY", "LLM_TIMEOUT_S"],
     "statistics": {"success": "cluster sign-flip on per-instance discordance (spec); exact McNemar on seed 0 "
                               "as a check", "cost": "exact Wilcoxon on per-instance log ERT ratio (spec)",
                    "gap": "exact Wilcoxon on per-instance log10 median gap (secondary)",
@@ -447,25 +447,10 @@ class Evaluator:
 
 
 # ------------------------------------------------------------------------------------------------- LLM provider
-def provider_from_env(environ=os.environ):
-    """A chat provider from the E14_LLM_* variables, or None when none is configured. Never reads a key itself.
-
-    E14_LLM_KIND        openai_compat (default) or local
-    E14_LLM_BASE_URL    e.g. https://api.openai.com/v1, or http://127.0.0.1:11434/v1 for a local server
-    E14_LLM_MODEL       the model id, pinned per run
-    E14_LLM_API_KEY     the key (openai_compat only); the provider reads it at call time and never stores it
-    """
-    base_url, model = environ.get("E14_LLM_BASE_URL"), environ.get("E14_LLM_MODEL")
-    if not base_url or not model:
-        return None
-    from orbitopt.agent.providers import make_provider
-    kind = environ.get("E14_LLM_KIND", "openai_compat")
-    if kind == "local":
-        return make_provider({"kind": "local", "model": model, "base_url": base_url})
-    if not environ.get("E14_LLM_API_KEY"):
-        return None
-    return make_provider({"kind": "openai_compat", "base_url": base_url, "model": model,
-                          "api_key_env": "E14_LLM_API_KEY"})
+def provider_from_env(environ=None):
+    """The chat provider the LLM_* variables configure (``orbitopt.llm_env``), or None."""
+    from orbitopt.llm_env import provider_from_env as from_env
+    return from_env(environ)
 
 
 # --------------------------------------------------------------------------------------------------------- rows

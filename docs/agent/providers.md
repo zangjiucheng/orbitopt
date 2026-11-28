@@ -51,7 +51,7 @@ Repair retries count as calls.
 from orbitopt.agent.providers import OpenAICompatProvider
 
 provider = OpenAICompatProvider("https://api.openai.com/v1", "gpt-4o-mini",
-                                api_key_env="OPENAI_API_KEY", timeout_s=60)
+                                api_key_env="LLM_API_KEY", timeout_s=60)
 ```
 
 The provider sends `POST {base_url}/chat/completions` through `urllib`. It
@@ -92,6 +92,32 @@ make_provider({"kind": "openai_compat", "base_url": "...", "model": "...",
 make_provider({"kind": "replay", "cassette": "runs/plan-001.jsonl"})
 make_provider({"kind": "mock", "script": ['{"dv_mps": 12.5}']})
 ```
+
+## Configuration from the environment
+
+The E14 campaign, the CLI's `--provider env` and Mission Studio all read one
+set of variables, through `orbitopt.llm_env`:
+
+| Variable | Meaning |
+|---|---|
+| `LLM_KIND` | A `make_provider` kind: `openai_compat` (default) or `local`. |
+| `LLM_MODEL` | The model id. Without it no provider is configured. |
+| `LLM_BASE_URL` | The endpoint. Required for `openai_compat`; `local` defaults to Ollama. |
+| `LLM_API_KEY` | The key, for keyed kinds. Read at call time, never stored or recorded. |
+| `LLM_TIMEOUT_S` | Optional request timeout in seconds. |
+
+`provider_spec()` returns the `make_provider` dict, which names the key
+variable but never holds the key, and `provider_from_env()` builds the
+provider (None when a keyed kind has no key). Sampling settings are not
+environment variables: each caller fixes them, and the campaign freezes them.
+
+`load_env_file(path)` reads `KEY=VALUE` lines into the environment. It skips
+blank lines and `#` comments and strips one pair of quotes. It expands and
+executes nothing: `export`, `$VAR` and backticks stay literal or are refused.
+A variable that is already set wins. An error names the line number, never
+the line, because the file may hold a key. `orbitopt --env-file FILE ...`
+and the campaign's `--env-file FILE` call it. In a shell,
+`set -a; . ./.env; set +a` does the same for a file of plain assignments.
 
 ## Record and replay
 

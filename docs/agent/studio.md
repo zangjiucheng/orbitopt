@@ -33,10 +33,16 @@ appears only when the environment configures one:
 
 | Variable | Meaning |
 |---|---|
-| `ORBITOPT_LLM_MODEL` | The model name. Without it, no real provider is listed. |
-| `ORBITOPT_LLM_BASE_URL` | The endpoint, required for `openai-compatible`. |
-| `ORBITOPT_LLM_PROVIDER` | `openai-compatible` (default) or `local`. |
-| `ORBITOPT_LLM_API_KEY_ENV` | The name of the variable that holds the key (default `OPENAI_API_KEY`). |
+| `LLM_MODEL` | The model name. Without it, no real provider is listed. |
+| `LLM_BASE_URL` | The endpoint, required for `openai_compat`. |
+| `LLM_KIND` | `openai_compat` (default) or `local`. |
+| `LLM_API_KEY` | The key. The provider reads it at call time. |
+| `LLM_TIMEOUT_S` | Optional request timeout in seconds. |
+
+These are the same variables the CLI's `--provider env` and the E14 campaign
+read ([providers](providers.md#configuration-from-the-environment)). To load
+them from a file, start Mission Control with `orbitopt --env-file .env app`,
+or export them in the shell first with `set -a; . ./.env; set +a`.
 
 The workspace never asks for a key, never shows one and never stores one.
 The banner names the key variable and says whether it is set. On the mock,
