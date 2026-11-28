@@ -532,7 +532,8 @@ def _as_trace_1_0(run: Path) -> dict:
     """Rewrite a saved run's trace as agent-trace-1.0 (no cancel point) and reseal the manifest."""
     trace = json.loads((run / "trace.json").read_text())
     trace["schemaVersion"] = "1.0"
-    del trace["outcome"]["cancel"], trace["provider"], trace["model"], trace["orbitopt_version"]
+    del trace["outcome"]["cancel"], trace["outcome"]["budget"], trace["provider"], trace["model"]
+    del trace["orbitopt_version"]
     trace["digest"] = trace_digest(trace)
     (run / "trace.json").write_bytes(canonical_json(trace))
     manifest = json.loads((run / "manifest.json").read_text())
@@ -548,12 +549,12 @@ def test_a_1_0_trace_still_parses_checks_and_replays(tmp_path):
     old = _as_trace_1_0(tmp_path)
     assert load_trace(tmp_path) == old  # validated against agent-trace-1.0.json, returned as recorded
     upgraded = upgrade_trace(old)
-    assert upgraded["schemaVersion"] == "1.1" and upgraded["outcome"]["cancel"] is None
+    assert upgraded["schemaVersion"] == "1.2" and upgraded["outcome"]["cancel"] is None
     assert (upgraded["provider"], upgraded["model"], upgraded["orbitopt_version"]) == (None, None, None)
     assert check_run(tmp_path).verified
     report = replay(tmp_path)
     assert report.equal, (report.integrity, report.differences)
-    assert report.recorded_digest == old["digest"] != report.replayed_digest  # the 1.1 digest covers the 1.1 form
+    assert report.recorded_digest == old["digest"] != report.replayed_digest  # the 1.2 digest covers the 1.2 form
 
 
 def test_a_cancelled_1_0_trace_replays_as_before_without_a_cancel(tmp_path):

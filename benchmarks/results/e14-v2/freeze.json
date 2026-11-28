@@ -1,0 +1,121 @@
+{
+ "code_digest": "sha256:d7a8ed51c21c5ba57e1ba08eb53b3ba2121850e706acbd90f21cd0354e6af5bb",
+ "content_digest": "sha256:4c4560dc73a5b72f8252aeaca0227c39c777e3bd82098d6a5239a73966c44841",
+ "protocol": {
+  "arm_A": {
+   "constraints": "NonlinearConstraint over the catalogue callables (le: g <= 0, eq: h == 0)",
+   "init": "latinhypercube",
+   "integrality": "from the variable type",
+   "maxiter": "floor(0.9 * budget / (popsize * d)) - 1, so the polish has about a tenth of the budget",
+   "multi_objective": "Tchebycheff scalarisation over 50 weights, each by the same DE with 1/50 of the budget; the two extreme weights first, the ideal point is the best value seen",
+   "polish": true,
+   "popsize": 15,
+   "rng": "cell seed",
+   "solver": "scipy.optimize.differential_evolution",
+   "tol": 0.01
+  },
+  "arm_B": {
+   "black_box": "exhaustive enumeration of the integer grid sorted by the objective expression (the stated cost, read without a black-box call), stopping at the first feasible point; differential evolution with integrality when the grid exceeds the budget",
+   "convex_qp": "minimize(method='trust-constr') from the box centre, 3-point finite differences, BFGS Hessians, TRUST_CONSTR_OPTIONS (tuning_adjustments)",
+   "global": "the arm-A differential evolution",
+   "lp": "linprog(method='highs') on coefficients probed from the callables (d + 1 evaluations)",
+   "milp": "milp (HiGHS) on probed coefficients, integrality 1 on every variable",
+   "multi_objective": "Tchebycheff over 50 weights in epigraph form, each by the nlp rule with 1/50 of the budget",
+   "nlp": "minimize(method='SLSQP') from seeded uniform starts until the evaluation budget is spent"
+  },
+  "arm_E_rule": {
+   "budget": "max_evaluations = spec budget, max_wall_s = 600; a cut of the loop, the final verification or the run (outcome.budget) types the row's stop as budget_exhausted:<resource>",
+   "planner": "RuleBasedPlanner(max_restarts=3)",
+   "policy": "Policy() defaults",
+   "registry": "default_registry()",
+   "runtime": "orbitopt.agent.runtime.solve",
+   "verification": "IR default VerificationPolicy, constraint_tol = max(constraint_abs, 1e-15)"
+  },
+  "changes_from_v1": [
+   "runtime: every budget cut of a run is typed in the trace (agent-trace-1.2 outcome.budget); a run that is not verified after a cut of the loop, the final verification or the run is budget_exhausted",
+   "solver adapters: clean points (no constraint past 1e-6 of its tolerance band) rank before band points, and the best band point is restored onto the constraints before it is reported; the runtime's incumbent ranks clean candidates first; the verification guard and every tolerance are unchanged",
+   "scorer: a gap below minus the tolerance is an alarm and no success (spec section 2); v1 flagged it and counted it a success",
+   "E-rule rows: stop is budget_exhausted:<resource> when the run's budget section has a cut of the loop, the final verification or the run, and budget_typed reads that stop as for A and B"
+  ],
+  "evaluation": "one evaluation = objectives and constraints at one point; an exact repeat of a point inside a cell is served from the cell's cache at no cost (the IR adapters' rule)",
+  "fault_hosts": "the seed-0 result of every rule arm on every scoring instance, plus the stored reference optimum where the catalogue has one; graded in memory (verify_result) and as a sealed run (verify_run)",
+  "jobs": "one process per family runs that family's shards for every arm in turn (A, B, E-rule, C, D, E-LLM), so the arms of one instance share a host and its load; at most four such processes at once",
+  "llm_provider_env": [
+   "E14_LLM_BASE_URL",
+   "E14_LLM_MODEL",
+   "E14_LLM_API_KEY",
+   "E14_LLM_KIND"
+  ],
+  "scoring": "catalogue callables; violation adds |x - round(x)| for integer and binary variables; a front keeps at most 50 points and only points inside the bounds; a gap below minus the tolerance (less 1e-12) is an alarm and never a success (spec section 2)",
+  "seeds": {
+   "scoring": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "tuning": [
+    1000,
+    1001,
+    1002,
+    1003,
+    1004
+   ],
+   "why": "the spec's own seeds (section 5): 10 scoring seeds, 5 tuning seeds"
+  },
+  "shard": "arm x family x every seed of the split; fault-matrix shards per family",
+  "statistics": {
+   "ci": "cluster bootstrap, 10000 resamples, seed 1410, strata = family",
+   "cost": "exact Wilcoxon on per-instance log ERT ratio (spec)",
+   "gap": "exact Wilcoxon on per-instance log10 median gap (secondary)",
+   "holm": "primary family of the spec's 15 hypotheses, not-run hypotheses count as p = 1; E-rule comparisons as a separate secondary family",
+   "success": "cluster sign-flip on per-instance discordance (spec); exact McNemar on seed 0 as a check"
+  },
+  "tuning_adjustments": [
+   {
+    "after": "jac and constraint jac '3-point', hess BFGS, gtol = xtol = barrier_tol = 1e-12, initial_barrier_parameter = 1e-6: gap 8.7e-13 after 85 evaluations",
+    "arm": "B",
+    "before": "trust-constr scipy defaults: gtol termination at gap 1.6e-4 after 27 evaluations",
+    "instance": "cqp-worked-d2",
+    "rule": "convex_qp",
+    "seeds": "deterministic (no seed)"
+   },
+   {
+    "after": "kept the default",
+    "arm": "B",
+    "before": "SLSQP default ftol 1e-6: five starts end at f = 7e-9 to 2.5e-7, all within the 1e-6 tolerance",
+    "instance": "rosenbrock-d2",
+    "rule": "nlp",
+    "seeds": [
+     1000
+    ]
+   },
+   {
+    "after": "no parameter changed",
+    "arm": "all rule arms",
+    "before": "tuning dry run of code 63c30a2 (120 cells): every cell within budget and replayed EQUAL; the budget bound only where the rule spends all of it by design (B nlp and B multi_objective)",
+    "instance": "the 8 tuning instances",
+    "rule": "budgets",
+    "seeds": "1000-1004"
+   },
+   {
+    "after": "no parameter changed; the v1 entries above still hold",
+    "arm": "all rule arms",
+    "before": "tuning dry run of the v2 code (commit e46e2eb plus this protocol, 120 rule-arm cells): every cell within budget, budget typed and replayed EQUAL, no alarm; success A 30/40, B 40/40, E-rule 40/40",
+    "instance": "the 8 tuning instances",
+    "rule": "v2 runtime fixes",
+    "seeds": "1000-1004"
+   }
+  ],
+  "version": "e14-10-campaign/2"
+ },
+ "protocol_digest": "sha256:9cd233d3dc127da9765bc2b322d2480e5a49f2c5b8b61ff3652826ce4464ed8f",
+ "spec_digest": "sha256:e5104c340d419f388643bed2ad1de32662f8384f7b1c4adb7a05b90ad877db47",
+ "spec_version": "e14-10/0.1-proposed"
+}

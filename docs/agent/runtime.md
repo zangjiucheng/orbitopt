@@ -137,8 +137,14 @@ the guard failed, or any claim to `independently_verified` or
 `optimality_certified`, which only the guard sets. A claim the guard could
 not assess, such as a tool that raised, is not a lie.
 
-The best eligible candidate has the best objective in its sense, then a
-passed `solver_converged`, then the earliest iteration. After the loop the
+The best eligible candidate is clean first (no constraint uses more than
+`SELECTION_FRACTION` of its tolerance band), then has the best objective in
+its sense, then a passed `solver_converged`, then the earliest iteration. A
+candidate deeper in the band can beat the exact optimum by what its
+violation buys, so it never outranks a clean one on objective. The solver
+adapters restore their best band point before they report it, so a band
+candidate here is one that could not be restored
+([solvers](../optimization/solvers.md#the-tolerance-band-is-not-room-to-optimise)). After the loop the
 runtime verifies it with the whole guard:
 
 - Up to two alternate solvers, every compatible solver except the candidate's
@@ -178,7 +184,7 @@ and `milp`, and an `exhaustive` one on any class.
 | `verified` | The final guard report passed. |
 | `unverified_best` | A feasible best exists, but the guard did not pass it. |
 | `no_feasible` | No eligible candidate. `result` is the honest result with the least violation, if any. |
-| `budget_exhausted` | A limit ended the loop and the best is not verified. |
+| `budget_exhausted` | The best is not verified, and a limit ended the loop, cut or skipped part of the final verification, or was used up by the run (`outcome.budget` says where). |
 | `cancelled` | The cancel check fired. The final verification is skipped. The trace's `outcome.cancel` says where. |
 | `policy_violation` | The policy ended the run on a refused proposal. The final verification is skipped. |
 | `refused` | Invalid IR, a tool id outside `known_tool_ids(tools)`, a tool binding that fails its unit check, or no solver that can take the problem. Nothing is evaluated. |
@@ -186,6 +192,47 @@ and `milp`, and an `exhaustive` one on any class.
 `outcome.report` is the final verification of `outcome.result`, or its
 screen when no final verification ran. `outcome.statuses` gives its four
 statuses.
+
+### Where a limit cut the run
+
+`outcome.budget` (the trace's `outcome.budget`) lists every place a limit
+cut the run short, whatever the status. Each `BudgetEvent` names the
+stage, the resource (`iterations`, `evaluations`, `tokens`, `wall_s`),
+whether the stage ran out (`stopped`) or did not run (`skipped`), the label
+of the stage's result, and the allowance it had.
+
+| Stage | When |
+|---|---|
+| `loop` | The planner loop ended on a limit. The stop reason names it. |
+| `solve` | A planner's solve stopped at its allowance: termination `max_evaluations` or `timeout`. |
+| `alternate` | A final-verification alternate stopped at its allocation, or the evaluations left could not give any alternate `MIN_ALTERNATE_EVALUATIONS` (`skipped`). |
+| `certificate` | The policy requires `optimality_certified` and the enumeration did not fit what the alternates left (`skipped`). |
+| `verification` | A verification attempt was skipped: the evaluations left did not cover the guard's re-evaluation. |
+| `run` | The run used all of its iterations, evaluations or tokens. |
+
+A cut never decides `verified` on its own. The guard grades the evidence the
+cut stage did produce: an alternate that stopped at its allocation and still
+agrees with the candidate is independent evidence, and the run is `verified`
+with the cut listed. A run that is not verified after a cut of the loop, the
+final verification or the run is `budget_exhausted`, not
+`unverified_best`. A `solve` cut alone leaves the status to the final
+verification, since the planner chose that allowance and went on.
+
+The first E14-10 campaign showed why the list is needed: four
+`rosenbrock-disk-d2` cells used 4000 of 4000 evaluations and ended `verified`
+with stop reason `planner_stop`, because the differential-evolution
+alternate spent the last evaluations and stopped on its allocation. The
+trace said so only inside the alternate's result. Those runs now carry an
+`alternate` and a `run` event.
+
+`loop`, `solve`, `alternate` and `run` events follow from the trace's own
+records (`derive_budget`), so an old trace gets them on upgrade. A `skipped`
+event leaves no other record, and the runtime adds it after the derived
+ones. A run-level wall-clock event is not derived, since `usage.wall_s` is
+left out of the digest; a wall-clock stop shows as a `timeout` termination
+or the `max_wall_s` stop reason. `orbitopt agent solve` prints one `budget`
+line per event, the Studio run panel lists them under the status, and the
+experiment record keeps them.
 
 ## Diagnostics and remedies
 
@@ -245,7 +292,7 @@ uses it.
 | File | Content |
 |---|---|
 | `problem.json` | The problem asked. |
-| `trace.json` | The trace, schema `agent-trace-1.1.json`. |
+| `trace.json` | The trace, schema `agent-trace-1.2.json`. |
 | `results/<label>.json` | Every result of the run, full, by label (`iteration-0003`, `verify-1-scipy.slsqp`). |
 | `sealed/` | `seal_run` of the best result with its final evidence, format `orbitopt.optimization.run/2`. |
 | `tool-calls.json` | The tool call log, when the run used a `ToolView`. |
@@ -316,7 +363,7 @@ reproduces its result.
 
 ## The trace
 
-`Trace.to_dict()` validates against `agent-trace-1.1.json`. Each iteration
+`Trace.to_dict()` validates against `agent-trace-1.2.json`. Each iteration
 record holds the raw proposal, the decision or the violations, a summary of
 the result, the screen (verdict, the four statuses with reasons, the finding
 codes), the diagnosis, and the evaluations and tokens it cost. Each
@@ -347,18 +394,25 @@ the number of iterations completed, and `reason` is the check that fired,
 `before_verification`. It is part of the digest. `replay` passes it to
 `solve` as a `CancelPoint`, so a cancelled run replays equal.
 
-### Version 1.0
+### Versions 1.0 and 1.1
+
+Version 1.2 added `outcome.budget`. A 1.1 trace still loads against
+`agent-trace-1.1.json`, and `upgrade_trace` gives it the events its own
+records show (`derive_budget`). A run that the current runtime reproduces
+replays equal, unless it had a stage skipped for lack of evaluations, which
+the old trace could not record.
+
 
 Version 1.1 added `outcome.cancel`, `provider`, `model` and
 `orbitopt_version`. A 1.0 trace still loads: `load_trace`
 checks each trace against the schema its `schemaVersion` names
 (`TRACE_SCHEMAS`) and returns it as recorded, and its digest is checked as
-recorded. `upgrade_trace` gives the 1.1 shape with `cancel`, `provider`,
-`model` and `orbitopt_version` set to `null`, and `check_run` and `replay`
-work on that. A 1.0 run therefore replays
+recorded. `upgrade_trace` gives the 1.2 shape with `cancel`, `provider`,
+`model` and `orbitopt_version` set to `null` and the derived budget events,
+and `check_run` and `replay` work on that. A 1.0 run therefore replays
 without a cancel signal, as it did under 1.0. An uncancelled 1.0 run
 replays equal, since replay does not compare `schemaVersion`, but its
-replayed digest is a 1.1 digest and differs from the recorded one. A
+replayed digest is a 1.2 digest and differs from the recorded one. A
 cancelled 1.0 run does not replay equal, because replay cannot know where
 it stopped. It still passes `check_run`.
 
@@ -369,13 +423,15 @@ planner. The scripted LLM is a `MockProvider` whose function reads the
 runtime's prompt and answers: a global or specialised solve first, a local
 refinement from the incumbent, restarts with new seeds for a heuristic, then
 stop. Measured with seed 0 on one machine (macOS arm64, Python 3.12, scipy
-from the `orbitopt-py312` environment):
+from the `orbitopt-py312` environment). The rule-based rows were re-measured after the solver adapters
+started to restore band points; the two that moved gained 1 and 3 verification evaluations, and the LLM
+rows were not re-measured:
 
 | Instance | Planner | Status | Objective (reference) | Solves | Evaluations, loop | Evaluations, verification | Limit | Tokens |
 |---|---|---|---|---|---|---|---|---|
-| cqp-worked-d2 | rule | verified | 0.5 (0.5) | 1 | 7 | 800 | 4000 | 0 |
+| cqp-worked-d2 | rule | verified | 0.5 (0.5) | 1 | 7 | 801 | 4000 | 0 |
 | cqp-worked-d2 | LLM | verified | 0.5 (0.5) | 1 | 7 | 800 | 4000 | 555 |
-| lp-wyndor-d2 | rule | verified | 36 (36) | 1 | 2 | 393 | 4000 | 0 |
+| lp-wyndor-d2 | rule | verified | 36 (36) | 1 | 2 | 396 | 4000 | 0 |
 | lp-wyndor-d2 | LLM | verified | 36 (36) | 1 | 2 | 393 | 4000 | 617 |
 | knapsack-p01-n10 | rule | verified | 309 (309) | 1 | 2 | 2051 | 20000 | 0 |
 | knapsack-p01-n10 | LLM | verified | 309 (309) | 1 | 2 | 2051 | 20000 | 769 |

@@ -103,7 +103,7 @@ records `self_attestation`.
 |---|---|---|
 | `AnalyticalOptimum` | `analytical` | A non-empty `derivation`. When `x` is given, the guard checks that `x` is feasible and attains `value`. Then it compares `value` with the re-evaluated objective within `objective_rtol * max(1, abs(value))`. |
 | `ReferenceSolution` | `reference_solution` | A non-empty `source`. The tolerance is `min(tolerance, objective_rtol * max(1, abs(value)))`, so a reference can tighten the policy but never loosen it. |
-| `AlternateSolverCheck` | `alternate_solver` | The guard calls `solver(problem)` itself. The returned result must answer the graded problem and come from the declared `solver_id`, which must differ from the graded result's. Its point must be feasible on re-evaluation. A better objective than the result's refutes the result. A worse one is inconclusive. |
+| `AlternateSolverCheck` | `alternate_solver` | The guard calls `solver(problem)` itself. The returned result must answer the graded problem and come from the declared `solver_id`, which must differ from the graded result's. Its point must be feasible on re-evaluation. A better objective than the result's refutes the result. A worse one is inconclusive. The guard compares the objectives as given; the solver adapters report a band point only when they cannot restore it (see below). |
 | `LowerBoundCertificate` | `optimality_certificate` | See the next section. |
 | `EnumerationCertificate` | `enumeration_certificate` | A request, not a claim. The guard enumerates the domain itself. See the next section. |
 
@@ -116,6 +116,27 @@ solver.
 `AlternateSolver` is a protocol: any callable that takes an
 `OptimizationProblem` and returns an `OptimizationResult`. The guard ships no
 solver of its own.
+
+### An alternate in the tolerance band
+
+`constraint_tol` is the verification tolerance and stays the only one the
+guard uses. A feasible point that uses the band can beat the exact optimum
+by its multiplier times its violation, so an alternate that presses against
+the band can refute an exact result. In the first E14-10 campaign the
+differential-evolution alternate on `cqp-equality-d3` found
+f = 0.5454535 at violation 9.54e-7, which is f* - (12/11)(9.54e-7), and
+refuted SLSQP's exact 6/11.
+
+The guard's rule did not change. Refutation is the safe direction: it can
+fail a correct result, never pass a wrong one, and telling a bought gain
+from a real one needs the multiplier, which the guard would have to
+estimate. The solver adapters fix the comparison at its source instead: they
+rank clean points first and restore their best band point onto the
+constraints before they report it
+([solvers](solvers.md#the-tolerance-band-is-not-room-to-optimise)). The
+restored alternate on that instance answers 0.54545454545465, within
+1e-13 of 6/11, and agrees. An alternate that cannot restore its point (no
+evaluations left, a failed evaluation) still refutes as before.
 
 ## What the guard can certify
 

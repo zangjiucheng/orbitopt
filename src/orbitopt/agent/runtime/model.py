@@ -23,9 +23,9 @@ from orbitopt.optimization import Budget, OptimizationResult, canonical_digest, 
 from orbitopt.optimization.result import stable
 from orbitopt.optimization.verification import VerificationReport
 
-TRACE_SCHEMA_VERSION = "1.1"
-TRACE_SCHEMA = "agent-trace-1.1.json"
-TRACE_SCHEMAS = {"1.0": "agent-trace-1.0.json", TRACE_SCHEMA_VERSION: TRACE_SCHEMA}
+TRACE_SCHEMA_VERSION = "1.2"
+TRACE_SCHEMA = "agent-trace-1.2.json"
+TRACE_SCHEMAS = {"1.0": "agent-trace-1.0.json", "1.1": "agent-trace-1.1.json", TRACE_SCHEMA_VERSION: TRACE_SCHEMA}
 """The trace schema for each ``schemaVersion`` that still parses; ``to_dict`` writes the newest."""
 TRACE_FORMAT = "orbitopt.agent.trace"
 
@@ -57,6 +57,7 @@ class RunStatus(str, Enum):
     UNVERIFIED_BEST = "unverified_best"
     NO_FEASIBLE = "no_feasible"
     BUDGET_EXHAUSTED = "budget_exhausted"
+    """Not verified, and a limit ended the loop, cut the final verification short, or was used up by the run."""
     CANCELLED = "cancelled"
     POLICY_VIOLATION = "policy_violation"
     REFUSED = "refused"
@@ -80,6 +81,127 @@ class StopReason(str, Enum):
         """Whether a budget limit ended the loop."""
         return self in (StopReason.MAX_ITERATIONS, StopReason.MAX_EVALUATIONS, StopReason.MAX_WALL_S,
                         StopReason.MAX_TOKENS)
+
+
+class BudgetStage(str, Enum):
+    """The part of a run a limit stopped or skipped (see ``BudgetEvent``)."""
+
+    LOOP = "loop"
+    """The planner loop ended on a limit: the stop reason names it."""
+    SOLVE = "solve"
+    """A planner's solve stopped at its allowance (termination ``max_evaluations`` or ``timeout``)."""
+    ALTERNATE = "alternate"
+    """A final-verification alternate stopped at its allocation, or none could be given one."""
+    CERTIFICATE = "certificate"
+    """The policy requires ``optimality_certified``, and the enumeration did not fit what was left."""
+    VERIFICATION = "verification"
+    """A final-verification attempt was skipped: the evaluations left did not cover the guard's own re-evaluation."""
+    RUN = "run"
+    """The run used all of a countable limit (iterations, evaluations or tokens)."""
+
+
+class BudgetResource(str, Enum):
+    ITERATIONS = "iterations"
+    EVALUATIONS = "evaluations"
+    TOKENS = "tokens"
+    WALL_S = "wall_s"
+
+
+class BudgetEffect(str, Enum):
+    STOPPED = "stopped"
+    """The stage ran and its allowance ran out."""
+    SKIPPED = "skipped"
+    """The stage did not run, because what was left could not pay for it."""
+
+
+@dataclass(frozen=True)
+class BudgetEvent:
+    """One place where a limit cut a run short: the stage, the resource, and the allowance that ran out.
+
+    ``label`` names the result of the stage (``iteration-0003``,
+    ``verify-1-scipy.differential_evolution``) or the candidate a skipped
+    verification was for, and is ``None`` for the loop and the run.
+    ``allowance`` is what the stage was given, ``None`` when no single
+    number applies (the loop, a wall-clock stop).
+    """
+
+    stage: BudgetStage
+    resource: BudgetResource
+    effect: BudgetEffect = BudgetEffect.STOPPED
+    label: str | None = None
+    allowance: float | None = None
+
+    @property
+    def run_level(self) -> bool:
+        """Whether the event cut the loop, the final verification or the run, not one planner solve: the planner
+        chose a solve's allowance and went on after it."""
+        return self.stage is not BudgetStage.SOLVE
+
+    def to_dict(self) -> dict:
+        return {"stage": self.stage.value, "resource": self.resource.value, "effect": self.effect.value,
+                "label": self.label, "allowance": self.allowance}
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "BudgetEvent":
+        return cls(BudgetStage(data["stage"]), BudgetResource(data["resource"]), BudgetEffect(data["effect"]),
+                   data["label"], data["allowance"])
+
+    def describe(self) -> str:
+        """One line for a person: which stage, which resource, what it had."""
+        resource = self.resource.value
+        if self.stage is BudgetStage.LOOP:
+            return f"the loop stopped on its {resource} limit"
+        if self.stage is BudgetStage.RUN:
+            return f"the run used all {self.allowance:g} {resource}"
+        what = self.stage.value if self.label is None else f"{self.stage.value} {self.label}"
+        if self.effect is BudgetEffect.SKIPPED:
+            return f"{what} skipped: {self.allowance:g} {resource} left"
+        if self.allowance is None:
+            return f"{what} ran out of {resource}"
+        return f"{what} stopped at its allowance of {self.allowance:g} {resource}"
+
+
+_STOP_RESOURCE = {"max_iterations": BudgetResource.ITERATIONS, "max_evaluations": BudgetResource.EVALUATIONS,
+                  "max_tokens": BudgetResource.TOKENS, "max_wall_s": BudgetResource.WALL_S}
+_TERMINATION_RESOURCE = {"max_evaluations": BudgetResource.EVALUATIONS, "timeout": BudgetResource.WALL_S}
+_COUNTED = (BudgetResource.ITERATIONS, BudgetResource.EVALUATIONS, BudgetResource.TOKENS)
+
+
+def derive_budget(iterations: list[Mapping[str, Any]], verifications: list[Mapping[str, Any]], stop_reason: str,
+                  usage: Mapping[str, Any], limits: Mapping[str, Any]) -> list[BudgetEvent]:
+    """The budget events a trace's own records show, in trace order: the loop's stop, every solve and alternate
+    that stopped at its allowance, then each countable limit the run used up.
+
+    It reads only trace fields, so a 1.0 or 1.1 trace gets the same events
+    on upgrade that the runtime records for the same run. What the records
+    cannot show (a stage skipped for lack of evaluations) the runtime adds
+    after these. A run-level wall-clock event is not derived: ``usage.wall_s``
+    is left out of the digest, and a wall-clock stop shows as a ``timeout``
+    termination or the ``max_wall_s`` stop reason instead.
+    """
+    events = []
+    if stop_reason in _STOP_RESOURCE:
+        events.append(BudgetEvent(BudgetStage.LOOP, _STOP_RESOURCE[stop_reason]))
+    for item in iterations:
+        result, decision = item.get("result"), item.get("decision")
+        resource = None if result is None else _TERMINATION_RESOURCE.get(result["termination"])
+        if resource is not None:
+            allowance = decision["evaluations"] if resource is BudgetResource.EVALUATIONS and decision else None
+            events.append(BudgetEvent(BudgetStage.SOLVE, resource, label=f"iteration-{item['index']:04d}",
+                                      allowance=allowance))
+    for attempt in verifications:
+        for run in attempt["alternates"]:
+            result = run["result"]
+            resource = None if result is None else _TERMINATION_RESOURCE.get(result["termination"])
+            if resource is not None:
+                events.append(BudgetEvent(
+                    BudgetStage.ALTERNATE, resource, label=f"verify-{attempt['attempt']}-{run['solver_id']}",
+                    allowance=run["allocation"] if resource is BudgetResource.EVALUATIONS else None))
+    for resource in _COUNTED:
+        limit = limits[f"max_{resource.value}"]
+        if usage[resource.value] >= limit:
+            events.append(BudgetEvent(BudgetStage.RUN, resource, allowance=limit))
+    return events
 
 
 class CancelReason(str, Enum):
@@ -401,9 +523,11 @@ class VerificationRecord:
 
 @dataclass(frozen=True)
 class Trace:
-    """Everything a run did, in order, with the outcome. ``to_dict`` validates against ``agent-trace-1.1.json``.
+    """Everything a run did, in order, with the outcome. ``to_dict`` validates against ``agent-trace-1.2.json``.
 
     ``cancel`` is where a cancellation fired, ``None`` when none did.
+    ``budget`` lists every place a limit cut the run short, whatever the
+    status (``derive_budget`` plus the stages skipped for lack of evaluations).
     ``provider`` and ``model`` name the LLM behind the planner (``None``
     without one) and are part of the digest, since another model is another
     run. ``orbitopt_version`` is the version that ran it; it describes the
@@ -428,6 +552,7 @@ class Trace:
     cancel: CancelPoint | None = None
     provider: str | None = None
     model: str | None = None
+    budget: tuple[BudgetEvent, ...] = ()
     orbitopt_version: str = field(default_factory=orbitopt_version)
 
     def body(self) -> dict:
@@ -440,7 +565,8 @@ class Trace:
                 "verifications": [v.to_dict() for v in self.verifications],
                 "outcome": {"status": self.status.value, "stop_reason": self.stop_reason.value, "best": self.best,
                             "refusal": list(self.refusal),
-                            "cancel": None if self.cancel is None else self.cancel.to_dict()},
+                            "cancel": None if self.cancel is None else self.cancel.to_dict(),
+                            "budget": [e.to_dict() for e in self.budget]},
                 "usage": asdict(self.usage)}
 
     def digest(self) -> str:
@@ -460,11 +586,20 @@ def upgrade_trace(data: Mapping[str, Any]) -> dict:
     A 1.0 trace has no cancel point: ``outcome.cancel`` is ``None``, so a
     cancelled 1.0 run replays as it did under 1.0, without a cancel signal.
     It names no provider, model or version either: all three are ``None``.
+    A 1.0 or 1.1 trace has no ``outcome.budget``: it gets the events its own
+    records show (``derive_budget``). A stage skipped for lack of
+    evaluations left no record, so an old trace cannot show one.
     """
     trace = copy.deepcopy(dict(data))
-    if trace.get("schemaVersion") == "1.0":
-        trace.update(schemaVersion=TRACE_SCHEMA_VERSION, provider=None, model=None, orbitopt_version=None)
+    version = trace.get("schemaVersion")
+    if version == "1.0":
+        trace.update(provider=None, model=None, orbitopt_version=None)
         trace["outcome"] = {**trace["outcome"], "cancel": None}
+    if version in ("1.0", "1.1"):
+        events = derive_budget(trace["iterations"], trace["verifications"], trace["outcome"]["stop_reason"],
+                               trace["usage"], trace["limits"])
+        trace["schemaVersion"] = TRACE_SCHEMA_VERSION
+        trace["outcome"] = {**trace["outcome"], "budget": [e.to_dict() for e in events]}
     return trace
 
 
@@ -499,6 +634,11 @@ class RunOutcome:
     @property
     def verified(self) -> bool:
         return self.status is RunStatus.VERIFIED
+
+    @property
+    def budget(self) -> tuple[BudgetEvent, ...]:
+        """Every place a limit cut the run short; empty when none did. Present whatever the status."""
+        return self.trace.budget
 
     @property
     def statuses(self) -> dict[str, str]:

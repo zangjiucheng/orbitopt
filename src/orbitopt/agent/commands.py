@@ -185,6 +185,7 @@ def solve_file(problem_file: str | Path, output: str | Path, *, budget: Budget, 
         "x": None if result is None else dict(result.x),
         "objective_values": None if result is None else dict(result.objective_values),
         "usage": asdict(outcome.trace.usage), "iterations": len(outcome.trace.iterations),
+        "budget": [e.to_dict() for e in outcome.budget],
     }
 
 

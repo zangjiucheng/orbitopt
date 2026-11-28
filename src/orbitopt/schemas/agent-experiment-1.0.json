@@ -67,6 +67,22 @@
         "wall_s": {"type": "number", "minimum": 0}
       }
     },
+    "budget": {
+      "type": "array",
+      "description": "The trace's outcome.budget (agent-trace-1.2): every place a limit cut the run short. Optional, so a record written before it existed still parses, as an empty list; a 1.0 or 1.1 trace gives the events its records show.",
+      "items": {
+        "type": "object",
+        "required": ["stage", "resource", "effect", "label", "allowance"],
+        "additionalProperties": false,
+        "properties": {
+          "stage": {"enum": ["loop", "solve", "alternate", "certificate", "verification", "run"]},
+          "resource": {"enum": ["iterations", "evaluations", "tokens", "wall_s"]},
+          "effect": {"enum": ["stopped", "skipped"]},
+          "label": {"type": ["string", "null"]},
+          "allowance": {"type": ["number", "null"]}
+        }
+      }
+    },
     "created_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?\\+00:00$"},
     "orbitopt_version": {"type": "string", "minLength": 1, "description": "The orbitopt version that ran the run, from its trace; 0+unknown for a 1.0 trace."},
     "integrity": {"enum": ["checked", "replayed"], "description": "How ingest verified the run: checked (bytes, trace and the sealed re-grade, no solve re-run) or replayed (re-executed as well)."},

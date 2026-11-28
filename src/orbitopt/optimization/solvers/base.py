@@ -4,7 +4,10 @@ An adapter never trusts a backend with the budget. Every point the backend
 asks about goes through one ``Evaluator``, which counts it, refuses the call
 that would exceed ``max_evaluations`` or ``max_wall_s`` by raising
 ``BudgetExhausted`` before evaluating, and remembers the best point so far
-among those the IR evaluated without error.
+among those the IR evaluated without error: clean feasible points first
+(``SELECTION_FRACTION``), then the rest of the tolerance band, each by
+objective. Before it reports, the adapter restores its best band point onto
+the constraints (``Evaluator.restore``) with evaluations it kept back for that.
 A maximised objective is negated here and nowhere else. The result always
 reports the IR's own evaluation of the chosen point, never the backend's
 numbers, and ``constraints_satisfied`` comes only from
@@ -49,6 +52,33 @@ from ..problem import Budget, OptimizationProblem, Variable, validate_problem
 from ..result import Evidence, OptimizationResult, ParetoPoint, Termination
 
 Vector = Sequence[float]
+SELECTION_FRACTION = 1e-6
+"""A feasible point is *clean* when no constraint uses more than this fraction of its tolerance band.
+
+The verification tolerance (``constraint_tol``) decides what is feasible. It
+does not make two feasible points comparable by objective: a point that uses
+the band can beat the exact optimum by up to ``lambda * allowance``, where
+``lambda`` is the constraint's Lagrange multiplier. A clean point can gain at
+most ``lambda * SELECTION_FRACTION * allowance``, a millionth of that. The best
+point ranks clean points before band points, and the band point is restored
+onto the constraints before it competes (``RESTORE_STEPS``)."""
+
+
+def band_fraction(problem: OptimizationProblem, residuals: Mapping[str, float]) -> float:
+    """The largest fraction of a constraint's tolerance band ``residuals`` use: 0 when every constraint holds,
+    above 1 when one is violated, ``inf`` when a residual is missing or not finite."""
+    tol = problem.verification.constraint_tol
+    worst = 0.0
+    for c in problem.constraints:
+        r = residuals.get(c.name)
+        if not isinstance(r, (int, float)) or not math.isfinite(r):
+            return math.inf
+        worst = max(worst, max(c.violation(r), 0.0) / c.allowance(tol))
+    return worst
+
+
+RESTORE_STEPS = 3
+"""Gauss-Newton steps that move the best band point onto its active constraints, each ``n + 1`` evaluations."""
 _BUDGET_STOPS = (Termination.MAX_EVALUATIONS, Termination.TIMEOUT, Termination.CANCELLED)
 _DEFINITE_STOPS = (Termination.ERROR, Termination.UNBOUNDED, *_BUDGET_STOPS)
 """Stops reported as they are, whether or not a feasible point was found."""
@@ -263,6 +293,20 @@ class Point:
     feasible: bool
     violation: float
     failed: bool = False
+    vector: tuple[float, ...] = ()
+    band: float = 0.0
+    """The largest fraction of a constraint's tolerance band the point uses (0 when every constraint holds)."""
+
+    @property
+    def clean(self) -> bool:
+        """Feasible, and no constraint uses more than ``SELECTION_FRACTION`` of its band."""
+        return self.feasible and self.band <= SELECTION_FRACTION
+
+    def rank(self) -> tuple:
+        """Clean points by objective, then band points by objective, then infeasible points by violation."""
+        if self.clean:
+            return (0, *self.f)
+        return (1, *self.f) if self.feasible else (2, self.violation)
 
 
 class Evaluator:
@@ -283,6 +327,8 @@ class Evaluator:
         self.tool_failures = 0
         self.last_failure = ""
         self.best: Point | None = None
+        self.band_best: Point | None = None
+        """The best feasible point that is not clean, by objective: the one ``restore`` moves onto the constraints."""
         self._best_key: tuple | None = None
         self._cache: OrderedDict[tuple[float, ...], Point] = OrderedDict()
         self._cache_size = None if archive else 4 * (len(space.variables) + 2)
@@ -302,9 +348,11 @@ class Evaluator:
         self._cache[key] = point
         if self._cache_size is not None and len(self._cache) > self._cache_size:
             self._cache.popitem(last=False)
-        rank = (0, *point.f) if point.feasible else (1, point.violation)
+        rank = point.rank()
         if not point.failed and (self._best_key is None or rank < self._best_key):
             self.best, self._best_key = point, rank
+        if point.feasible and not point.clean and (self.band_best is None or point.f < self.band_best.f):
+            self.band_best = point
         return point
 
     def objective(self, vector: Vector) -> float:
@@ -325,14 +373,58 @@ class Evaluator:
             self.last_failure = str(exc)
             inf = math.inf
             return Point(x, {}, {}, (inf,) * len(problem.objectives), (inf,) * len(problem.constraints), False, inf,
-                         failed=True)
+                         failed=True, vector=key, band=inf)
         objectives = {k: float(v) for k, v in ev.objectives.items()}
         residuals = {k: float(v) for k, v in ev.residuals.items()}
         f = tuple(_finite(s * objectives[o.name]) for s, o in zip(self._signs, problem.objectives))
         g = tuple(_finite(residuals[c.name]) for c in problem.constraints)
         violation = sum(max(c.violation(r), 0.0) / c.allowance(1.0)
                         for c, r in zip(problem.constraints, g)) if all(map(math.isfinite, g)) else math.inf
-        return Point(x, objectives, residuals, f, g, problem.constraints_satisfied(x, residuals), violation)
+        return Point(x, objectives, residuals, f, g, problem.constraints_satisfied(x, residuals), violation,
+                     vector=key, band=band_fraction(problem, residuals))
+
+    def restore(self) -> None:
+        """Move the best band point onto its constraints when it beats every clean point, so it competes on what
+        it costs to be feasible, not on the band.
+
+        Each step solves ``J dx = -g`` for the least-norm ``dx`` over the
+        continuous coordinates, where ``g`` holds every equality residual and
+        every inequality residual past ``SELECTION_FRACTION`` of its band, and
+        ``J`` comes from forward differences (one evaluation per coordinate).
+        A coordinate the step would push past a bound is clipped and held
+        there. Every point goes through this evaluator, so ``best`` takes the
+        restored point exactly when it is clean and beats the clean best.
+        Stops after ``RESTORE_STEPS`` steps, on a clean point, on a failed
+        evaluation, or when the budget runs out (``BudgetExhausted``).
+        """
+        point = self.band_best
+        if point is None or (self.best is not None and self.best.clean and self.best.f <= point.f):
+            return
+        import numpy as np
+
+        space, constraints = self.space, self.problem.constraints
+        free = [i for i, integral in enumerate(space.integral) if not integral]
+        tol = self.problem.verification.constraint_tol
+        for _ in range(RESTORE_STEPS):
+            rows = [j for j, c in enumerate(constraints) if c.sense == "==" or
+                    max(point.g[j], 0.0) > SELECTION_FRACTION * c.allowance(tol)]
+            if point.failed or point.clean or not rows or not free:
+                return
+            x = list(point.vector)
+            jacobian = np.zeros((len(rows), len(free)))
+            for k, i in enumerate(free):
+                h = math.sqrt(2.220446049250313e-16) * max(1.0, abs(x[i]))
+                h = -h if x[i] + h > space.upper[i] else h
+                probe = self(x[:i] + [x[i] + h] + x[i + 1:])
+                if probe.failed:
+                    return
+                jacobian[:, k] = [(probe.g[j] - point.g[j]) / h for j in rows]
+            step = np.linalg.lstsq(jacobian, -np.array([point.g[j] for j in rows]), rcond=None)[0]
+            for k, i in enumerate(list(free)):
+                x[i] = min(max(x[i] + float(step[k]), space.lower[i]), space.upper[i])
+                if x[i] in (space.lower[i], space.upper[i]):
+                    free.remove(i)
+            point = self(x)
 
 
 def _finite(value: float) -> float:
@@ -440,6 +532,10 @@ class AdapterSolver:
         start = space.start(x0)
         structure = classify(problem)
         evaluator = Evaluator(problem, space, budget, started, tools, archive=capability.multiobjective)
+        restorable = not capability.multiobjective and bool(problem.constraints) and not all(space.integral)
+        reserve = restoration_reserve(space, budget) if restorable else 0
+        if reserve:
+            evaluator.max_evaluations -= reserve
         refusal = capability.unavailable_reason or capability.rejection(structure)
         if refusal:
             outcome = Outcome(stop=Termination.ERROR, message=refusal)
@@ -454,8 +550,9 @@ class AdapterSolver:
                 outcome = Outcome(stop=stop.termination, message=str(stop))
             except Exception as exc:  # noqa: BLE001 - any backend failure becomes an honest ERROR result
                 outcome = Outcome(stop=Termination.ERROR, message=f"{type(exc).__name__}: {exc}")
+        evaluator.max_evaluations = budget.max_evaluations
         return _result(problem, capability, structure, evaluator, outcome, budget, seed, options, started,
-                       max_backend_iterations)
+                       max_backend_iterations, restorable and not refusal)
 
     def _run(self, run: Run) -> Outcome:
         raise NotImplementedError
@@ -466,14 +563,31 @@ def _non_dominated(points: list[Point]) -> list[Point]:
             if not any(all(a <= b for a, b in zip(q.f, p.f)) and q.f != p.f for q in points)]
 
 
+def restoration_reserve(space: Space, budget: Budget) -> int:
+    """Evaluations a solve keeps back from its backend for ``Evaluator.restore``: ``RESTORE_STEPS`` steps of
+    one evaluation per continuous coordinate plus the step's point. Nothing is kept from a budget under four
+    times that, where the restoration takes what the backend leaves."""
+    need = RESTORE_STEPS * (sum(not integral for integral in space.integral) + 1)
+    return need if budget.max_evaluations is not None and budget.max_evaluations >= 4 * need else 0
+
+
 def _result(problem: OptimizationProblem, capability: SolverCapability, structure: ProblemStructure,
             evaluator: Evaluator, outcome: Outcome, budget: Budget, seed: int, options: Mapping[str, Any],
-            started: float, max_backend_iterations: int | None) -> OptimizationResult:
+            started: float, max_backend_iterations: int | None, restorable: bool = False) -> OptimizationResult:
     stop, message = outcome.stop, outcome.message
     try:
         reported = [evaluator(p) for p in outcome.points]
     except BudgetExhausted as exhausted:
         reported, stop, message = [], exhausted.termination, f"{message}; {exhausted}"
+    if restorable:
+        before, source = evaluator.best, evaluator.band_best
+        try:
+            evaluator.restore()
+        except BudgetExhausted:
+            pass  # the restoration takes only what is left; the best point so far stands
+        if evaluator.best is not before:
+            message = (f"{message}; " if message else "") + \
+                f"restored onto the constraints from a point using {source.band:.3g} of a tolerance band"
     if evaluator.count and evaluator.failures == evaluator.count:
         stop = Termination.ERROR
         message = f"all {evaluator.count} evaluations failed, the last with: {evaluator.last_failure}" + (

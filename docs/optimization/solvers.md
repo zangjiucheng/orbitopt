@@ -128,8 +128,9 @@ answer.
 **Values come from the IR.** A maximised objective is negated for the
 backend and reported un-negated. `objective_values`, `constraint_residuals`
 and `x` are the IR's own evaluation of the reported point. For one objective
-that point is the best evaluated point: feasible first, then lowest
-objective, else least violation. A point whose evaluation failed is never
+that point is the best evaluated point: clean feasible points by objective,
+then the other feasible points by objective, else least violation (see
+[the tolerance band](#the-tolerance-band-is-not-room-to-optimise)). A point whose evaluation failed is never
 chosen, so when every evaluation fails the result has an empty `x` and
 `constraints_satisfied` is false, even on a problem with no constraints.
 Otherwise `constraints_satisfied` comes only from
@@ -157,6 +158,69 @@ which is the optimum only on a convex problem. `heuristic` means the population 
 point can be wrong: with seed 1, differential evolution converges at 1456 on
 `knapsack-p07-n15`, whose optimum is 1458. `none` means NSGA-II has no convergence test and
 never reports converged.
+
+## The tolerance band is not room to optimise
+
+`constraint_tol` decides which points are feasible. It does not make two
+feasible points comparable by objective. A point that uses the band beats
+the exact constrained optimum by what its violation buys: to first order,
+the constraint's Lagrange multiplier times the violation. Differential
+evolution sees the band as its constraint (`g <= tol`, `|h| <= tol`), so it
+presses against the band's edge. SLSQP can stop a finite-difference step
+outside the constraint. The first E14-10 campaign measured both:
+
+| Instance | Point | Violation | Multiplier | Multiplier x violation | Objective - optimum |
+|---|---|---|---|---|---|
+| `cqp-projection-d2`: min (x-2)^2+(y-1)^2, x+y <= 1, f* = 2 at (1, 0) | SLSQP, (1 + 2^-26, 0) | 1.49e-8 | 2 | 2.98e-8 | -2.98e-8 |
+| `cqp-equality-d3`: x+y+z = 1, f* = 6/11 at (6, 3, 2)/11 | differential evolution | 9.54e-7 | 12/11 | 1.04e-6 | -1.04e-6 |
+
+Both "beat" the optimum by exactly what the band let them buy. The second
+gap is larger than the guard's agreement tolerance (`objective_rtol = 1e-6`
+times max(1, 6/11)), so the alternate's band point refuted SLSQP's exact
+point. Two rules stop this, in every adapter:
+
+1. **Clean first.** A feasible point is clean when no constraint uses more
+   than `SELECTION_FRACTION = 1e-6` of its band (`band_fraction`). The best
+   point ranks clean points by objective, then band points by objective. A
+   clean point can buy at most a millionth of what the band edge can:
+   2.98e-14 on `cqp-projection-d2` and 1.04e-12 on `cqp-equality-d3`, both
+   below the 1e-8 the spec asks of a QP.
+2. **Restore, then compete.** When the best band point beats every clean
+   one, the adapter moves it onto its constraints before it reports:
+   `RESTORE_STEPS = 3` Gauss-Newton steps, each solving `J dx = -g` for the
+   least-norm `dx` over the continuous coordinates. `g` holds every equality
+   residual and every inequality residual past the clean threshold, and `J`
+   comes from forward differences, one evaluation per coordinate. A
+   coordinate the step would push past a bound is clipped and held there.
+   The restored point goes through the same `Evaluator`, so it is reported
+   exactly when it is clean and beats the clean best, and its objective
+   includes what feasibility costs. On a linear constraint one step is exact
+   to rounding.
+
+A solve keeps `restoration_reserve` evaluations, `3 x (n + 1)` for `n`
+continuous variables, back from its backend for the restoration, and only
+on a problem with constraints and a continuous variable, one objective, and
+a budget of at least four times the reserve. A smaller budget leaves the
+restoration what the backend leaves. A restored result says so in
+`message`. Integer coordinates are never moved, and a bound is not treated
+as a band: every backend here keeps its points inside the bounds.
+
+Measured on the two instances, 10 seeds each, E-rule as in the campaign
+(laptop, `benchmarks/bench_e14_agent_iteration.py`):
+
+| Instance | Before: alarms, verified | After: alarms, verified | After: max violation | After: gap |
+|---|---|---|---|---|
+| `cqp-projection-d2` | 10, 0 | 0, 0 | 0 | 0 |
+| `cqp-equality-d3` | 9, 0 | 0, 9 | 0 | 2.2e-16 |
+
+`cqp-projection-d2` stays unverified because its only alternate,
+differential evolution, converges at 2.00001, which proves nothing. The
+tenth `cqp-equality-d3` seed is `budget_exhausted`: its alternate stopped at
+its allocation at 0.54552. A restoration cost 4 evaluations in each case
+measured: on the SLSQP solve of `cqp-projection-d2` (6 evaluations before,
+10 after) and on the differential-evolution alternate of `cqp-equality-d3`
+(one step: three difference points and the step's point, out of a reserve of
+12).
 
 ## Enumeration
 

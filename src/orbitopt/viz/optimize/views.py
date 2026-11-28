@@ -34,7 +34,7 @@ RUN_STATUS_TEXT = {
     "verified": "Verified: the guard passed the final answer",
     "unverified_best": "Unverified best: a feasible point the guard did not pass",
     "no_feasible": "No feasible point found",
-    "budget_exhausted": "Budget exhausted before a verified answer",
+    "budget_exhausted": "Budget exhausted: a limit cut the run or its verification short, and the answer is not verified",
     "cancelled": "Cancelled: the best point so far is not verified",
     "policy_violation": "Stopped on a policy violation",
     "refused": "Refused: the runtime could not take this problem",
@@ -281,6 +281,8 @@ class RunView:
     sense: str
     fingerprint: str | None
     live: bool
+    budget: tuple[Mapping[str, Any], ...] = ()
+    """The trace's ``outcome.budget``: every place a limit cut the run short (empty while live)."""
 
     @property
     def verified(self) -> bool:
@@ -395,7 +397,7 @@ def run_view(iterations: Sequence[Mapping[str, Any]], *, limits: Mapping[str, An
     return RunView(tuple(rows), tuple(points), tuple(best_path), best_label, (outcome or {}).get("status"),
                    (outcome or {}).get("stop_reason"), statuses, source, (report or {}).get("verdict"),
                    tuple((report or {}).get("codes", ())), tuple(violations), meters, best_result, objective_name,
-                   sense, fingerprint, outcome is None)
+                   sense, fingerprint, outcome is None, tuple((outcome or {}).get("budget") or ()))
 
 
 def run_view_from_trace(trace: Mapping[str, Any], *, objective_name: str, sense: str,
@@ -434,6 +436,7 @@ def report_document(view: RunView, *, problem: Mapping[str, Any], meta: Mapping[
                                                 ("solver_id", "x", "objective_values", "termination")},
         "policy_violations": [asdict(v) for v in view.violations],
         "budget": [asdict(m) for m in view.meters],
+        "budget_events": [dict(e) for e in view.budget],
         "iterations": [asdict(r) for r in view.rows],
     }
 
