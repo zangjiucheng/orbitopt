@@ -660,15 +660,23 @@ class RelativeNavEKF:
 
     def update_from_observations(self, obs_by_model: Mapping[str, Observation],
                                  stacked: Stacked, chief_r=None, chief_v=None, *,
-                                 compensate_to=None) -> UpdateReport:
+                                 compensate_to=None, executed_impulses=()) -> UpdateReport:
         """One fused update from a :class:`Stacked` model and one observation
         per component (keyed by component class name); see
         :meth:`update_from_observation` for ``compensate_to``."""
         z, r = stacked.extract_each(obs_by_model, chief_r, chief_v)
         if compensate_to is not None:
+            sample_s = float(next(iter(obs_by_model.values())).t_sample_s)
             z, r = self._compensate(z, r, float(compensate_to)
-                                   - float(next(iter(obs_by_model.values())).t_sample_s),
-                                   stacked)
+                                   - sample_s, stacked)
+            # The reading is pre-impulse when its sample coincides with execution.
+            for t_exec, delta_v in executed_impulses:
+                if sample_s - 1e-9 <= t_exec <= compensate_to + 1e-9:
+                    lag = max(0.0, compensate_to - t_exec)
+                    impulse = _B_u(delta_v)
+                    if lag > 1e-9:
+                        impulse = self.process.jacobian(np.zeros(6), np.zeros(3), lag) @ impulse
+                    z = z + impulse
         self._pending_ids = [obs_by_model[type(m).__name__].record_id for m in stacked.models]
         return self.update(z, r, stacked)
 

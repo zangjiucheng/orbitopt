@@ -246,6 +246,15 @@ class StudioSession:
         self.planner = kind
         self._changed()
 
+    def set_connection(self, provider: backend.ProviderChoice, planner: str) -> None:
+        """Apply the workspace settings together for subsequent jobs."""
+        self._idle_input()
+        if planner not in ("rule", "llm"):
+            raise ValueError("Choose a rule-based or LLM planner.")
+        self.provider = provider
+        self.planner = planner
+        self._changed()
+
     def _compile_provider(self):
         if self.provider.real:
             return backend.build_chat_provider(self.provider)

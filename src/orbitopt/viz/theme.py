@@ -45,9 +45,9 @@ MEASURE_DIM = "#161c24"  # --verify-dim
 # with the OS: "DIN Alternate" on macOS, "Bahnschrift" on Windows 10+, then
 # Barlow / Inter and the platform UI face. Readouts use a monospace.
 FONT_SANS = ('"D-DIN", "DIN Alternate", "Bahnschrift", "Barlow", "Inter", '
-             '"Helvetica Neue", -apple-system, "Segoe UI", sans-serif')
+             '"Helvetica Neue", "Segoe UI", "Noto Sans", "DejaVu Sans"')
 FONT_MONO = ('"JetBrains Mono", "SF Mono", "IBM Plex Mono", "Cascadia Code", '
-             '"Menlo", "Consolas", monospace')
+             '"Menlo", "Consolas", "DejaVu Sans Mono"')
 
 
 def load_bundled_fonts() -> list[str]:
@@ -81,34 +81,22 @@ def resolve_family(stack: str = FONT_SANS) -> str:
     return ""
 
 
-_GENERIC_FAMILIES = {"serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui"}
-
-
 def installed_stack(stack: str) -> str:
-    """``stack`` without the families Qt does not have (needs a QGuiApplication).
-
-    A QSS ``font-family`` list that names a family the machine lacks makes Qt rebuild
-    its font-alias table when it polishes widgets -- ``qt.qpa.fonts: Populating font
-    family aliases took 144 ms. Replace uses of missing font family "D-DIN"`` -- and
-    the stack leads with D-DIN, which is not bundled. Only installed families (and the
-    generic CSS ones) stay; CSS-only keywords such as ``-apple-system`` are dropped too."""
+    """Return only named Qt families. Cocoa can treat CSS generics as missing faces."""
     from PySide6.QtGui import QFontDatabase
 
     have = set(QFontDatabase.families())
-    keep = []
-    for part in stack.split(","):
-        name = part.strip()
-        bare = name.strip('"')
-        if (name.startswith('"') and bare in have) or bare in _GENERIC_FAMILIES:
-            keep.append(name)
-    return ", ".join(keep) if keep else "sans-serif"
+    return ", ".join(part.strip() for part in stack.split(",") if part.strip().strip('"') in have)
 
 
 def stylesheet() -> str:
     """:data:`STYLESHEET` with its two font stacks cut to the installed families (call it
     after ``load_bundled_fonts``, once a QApplication exists)."""
-    return (STYLESHEET.replace(FONT_SANS, installed_stack(FONT_SANS))
-            .replace(FONT_MONO, installed_stack(FONT_MONO)))
+    css = STYLESHEET
+    for stack in (FONT_SANS, FONT_MONO):
+        family = installed_stack(stack)
+        css = css.replace(f"font-family: {stack};", f"font-family: {family};" if family else "")
+    return css
 
 
 STYLESHEET = f"""

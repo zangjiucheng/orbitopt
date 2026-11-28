@@ -220,6 +220,8 @@ def _sidecar_events(log: GncRunLog, supervision: Mapping | None, drops: dict) ->
     for ev in log.records.get("control_event", ()):
         cmd = float(np.linalg.norm(ev.commanded_delta_v_m_s))
         real = float(np.linalg.norm(ev.realized_delta_v_m_s))
+        if cmd == 0.0 and real == 0.0:
+            continue
         state = "executed" if ev.executed else "MISFIRED"
         events.append({"t_s": float(ev.t_exec_s), "kind": "gnc_burn", "body_id": "chaser",
                        "title": f"Burn {state} ({real:.3f} m/s of {cmd:.3f} commanded)"})
@@ -256,7 +258,8 @@ def _independent_evidence_block(report: Mapping | None) -> dict | None:
     did not run is reported with its reason, never as a pass."""
     if report is None:
         return None
-    classes = {cls: {"result": line.get("result"), "reason": line.get("reason")}
+    classes = {cls: {"result": line.get("result"), "reason": line.get("reason"),
+                     "checks": dict(line.get("checks") or {})}
                for cls, line in (report.get("inputs", {}).get("error_classes") or {}).items()}
     return {
         "source": "E13-07 verification-report-1.0, produced by orbitopt.verify."
@@ -557,7 +560,7 @@ def fly_leo_rdv_001_studio(*, tof_s: float = 3416.666, seed_base: int = 20000000
     independent block -- an honest gap, never a fake green)."""
     from orbitopt.rendezvous import load_reference_config
     from orbitopt.rendezvous import robustness as rb
-    from orbitopt.rendezvous.gnc_campaign import fly_closed_loop_sample
+    from orbitopt.rendezvous.gnc_campaign import ClosedLoopSampleConfig, fly_closed_loop_sample
     from orbitopt.verify.gnc_closed_loop import verify_gnc_closed_loop
 
     cfg = load_reference_config()
@@ -569,8 +572,11 @@ def fly_leo_rdv_001_studio(*, tof_s: float = 3416.666, seed_base: int = 20000000
     if supervised:
         from orbitopt.gnc.supervisor import SupervisorConfig
         supervisor = SupervisorConfig()
+    # The CW predictor omits differential J2 and nonlinear relative acceleration.
+    # Allow roughly 14 mm/s of unmodelled velocity change over the 20 s sensor cadence.
+    replay_filter = ClosedLoopSampleConfig(q_accel_m2_s3=1.0e-5)
     outcome, assessment, log = fly_closed_loop_sample(
-        cfg, campaign, tof_s, seed_base, cluster, index, supervisor=supervisor)
+        cfg, campaign, tof_s, seed_base, cluster, index, clc=replay_filter, supervisor=supervisor)
     if log is None:
         raise ValueError(f"fly_leo_rdv_001_studio: the sample failed to plan ({outcome.reason})")
     report = verify_gnc_closed_loop(log) if verify else None

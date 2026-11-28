@@ -79,6 +79,12 @@ def idle(app, ws) -> None:
     _choose(app, ws, "halfplane")
 
 
+def settings(app, ws) -> None:
+    ws.pages.setCurrentIndex(1)
+    ws.resize(960, 430)
+    ws.settings_page.provider_combo.setCurrentIndex(ws.settings_page.provider_combo.findData("local"))
+
+
 def clarification(app, ws) -> None:
     _compile(app, ws, "clarify")
     ws.answer_edits[0].setText("c = 3")
@@ -102,7 +108,8 @@ def finished_unverified(app, ws) -> None:
 
 def policy_violation(app, ws) -> None:
     _compile(app, ws, "halfplane")
-    ws.planner_combo.setCurrentIndex(ws.planner_combo.findData("llm"))
+    ws.settings_page.planner_combo.setCurrentIndex(1)
+    ws.settings_page.apply_button.click()
     pump(app, lambda: ws.session.planner == "llm")
     ws.session.set_planner_replies([
         {"action": "solve", "solver_id": "scipy.slsqp", "constraints": [], "rationale": "drop the constraint"},
@@ -128,7 +135,8 @@ class HeldPlanner:
 
 def _start_held_run(app, ws) -> HeldPlanner:
     _compile(app, ws, "halfplane")
-    ws.planner_combo.setCurrentIndex(ws.planner_combo.findData("llm"))
+    ws.settings_page.planner_combo.setCurrentIndex(1)
+    ws.settings_page.apply_button.click()
     pump(app, lambda: ws.session.planner == "llm")
     held = HeldPlanner()
     ws.session.set_planner_replies(held)
@@ -161,6 +169,7 @@ def replay(app, ws) -> None:
 
 STATES = {
     "idle": (idle, "idle"),
+    "settings": (settings, "idle"),
     "clarification": (clarification, "needs_clarification"),
     "editing-error": (editing_error, "editing"),
     "running": (running, "running"),

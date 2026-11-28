@@ -83,6 +83,23 @@ def test_studio_run_round_trips_as_flight_run(studio_dir):
             "gnc-model-error", "gnc-optimizer-control-nonconvergence"} <= ids
 
 
+def test_leo_reference_replay_uses_the_campaign_physics_and_estimate_timing():
+    from orbitopt.gnc.studio import fly_leo_rdv_001_studio
+
+    studio, outcome, _ = fly_leo_rdv_001_studio()
+    report = studio.verification_report
+    assert outcome.ok and outcome.failure_class is None
+    assert report["inputs"]["run"]["j2"] != 0.0
+    assert report["inputs"]["run"]["truth_drag"] is not None
+    classes = report["inputs"]["error_classes"]
+    assert {key: line["result"] for key, line in classes.items()} == {
+        "numerical_error": "passed",
+        "model_error": "passed" if HAS_TUDATPY else "not_checked",
+        "navigation_inconsistency": "passed",
+        "optimizer_control_nonconvergence": "passed",
+    }
+
+
 def test_replay_digest_and_report_digest_are_separate_evidence_lines(studio_dir, log, report):
     sc = json.loads((studio_dir / "gnc.json").read_text(encoding="utf-8"))
     assert sc["schema_version"] == "gnc-studio-1.0"

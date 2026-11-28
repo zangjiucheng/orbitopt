@@ -203,3 +203,27 @@ def test_key_events_table_is_themed_dark(qapp):
 
     panel = FlightRunPanel()
     assert panel.event_table.styleSheet() == FLIGHTLAB_PANEL_QSS
+
+
+def test_detail_panel_visibility_is_saved_and_gnc_appears_only_for_a_gnc_run(qapp, tmp_path):
+    from dataclasses import replace
+    from pathlib import Path
+
+    from PySide6.QtCore import QSettings
+
+    from orbitopt.flightlab.compare import load_bundle
+    from orbitopt.flightlab.ui.flight_panel import FlightRunPanel
+
+    settings = QSettings(str(tmp_path / "panels.ini"), QSettings.IniFormat)
+    panel = FlightRunPanel(settings=settings)
+    gnc_index = panel.detail_tabs.indexOf(panel.gnc_panel)
+    assert not panel.detail_tabs.isTabVisible(gnc_index)
+    panel._detail_actions["Why"].setChecked(False)
+    reopened = FlightRunPanel(settings=settings)
+    assert not reopened.detail_tabs.isTabVisible(reopened.detail_tabs.indexOf(reopened.reason_panel))
+    run = Path(__file__).resolve().parents[1] / "examples" / "runs" / "leo-rdv-001"
+    panel.set_run(replace(load_bundle(run), gnc={"title": "GNC sample"}), channels=())
+    assert panel.detail_tabs.isTabVisible(gnc_index)
+    assert panel.detail_tabs.currentWidget() is panel.gnc_panel
+    panel.clear()
+    assert not panel.detail_tabs.isTabVisible(gnc_index)

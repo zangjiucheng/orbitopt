@@ -103,6 +103,7 @@ CONVERGENCE_ASSERTION_ABSENT = "PRODUCER_CONVERGENCE_ASSERTION_ABSENT"
 #: a truth stream too short to interpolate or replay against is an honest
 #: absence, recorded as such.
 TRUTH_TRACK_TOO_SHORT = "TRUTH_TRACK_TOO_SHORT"
+TRUTH_DYNAMICS_UNDECLARED = "TRUTH_DYNAMICS_UNDECLARED"
 
 #: The four error classes task #424 requires listed separately.
 ERROR_CLASSES = ("numerical_error", "model_error", "navigation_inconsistency",
@@ -266,14 +267,18 @@ class _TruthRel:
             return None
         return max(t_t.t0, t_c.t0), min(t_t.t1, t_c.t1)
 
-    def __call__(self, t_s: float) -> np.ndarray | None:
+    def __call__(self, t_s: float, *, before_impulse: bool = False) -> np.ndarray | None:
         """(r_rel, v_rel) at ``t_s``, or ``None`` outside the truth span."""
         span = self.span
         t_s = float(t_s)
         if span is None or not span[0] - 1e-9 <= t_s <= span[1] + 1e-9:
             return None
         st_t = self.tracks[self.target_id](t_s)
-        st_c = self.tracks[self.chaser_id](t_s)
+        chaser = self.tracks[self.chaser_id]
+        if before_impulse:
+            st_c = _state_before_impulse(chaser, t_s)
+        else:
+            st_c = chaser.states[-1] if abs(t_s - chaser.t1) <= 1e-9 else chaser(t_s)
         return np.concatenate([st_c[:3] - st_t[:3], st_c[3:] - st_t[3:]])
 
 
@@ -325,7 +330,7 @@ def navigation_consistency(log: GncRunLog, *, gate_prob: float = NIS_GATE_PROB,
 
     def obs_rows():
         for ob in log.records.get("observation", ()):
-            truth = rel(ob.t_sample_s)
+            truth = rel(ob.t_sample_s, before_impulse=True)
             if truth is None:
                 continue
             rs = ob.relative_state
@@ -346,11 +351,23 @@ def navigation_consistency(log: GncRunLog, *, gate_prob: float = NIS_GATE_PROB,
                    "position_error_m": float(np.linalg.norm(delta_r)),
                    "velocity_error_m_s": float(np.linalg.norm(delta_v))}
 
+    late_impulses = {}
+    if log.config.get("instant_actuation_after_estimate", "closed_loop" in log.config):
+        commands = {cmd.record_id: cmd for cmd in log.records.get("command", ())}
+        for event in log.records.get("control_event", ()):
+            cmd = commands.get(event.source_command_id)
+            if event.executed and cmd is not None and abs(cmd.t_tick_s - event.t_exec_s) <= 1e-9:
+                t = round(event.t_exec_s, 9)
+                late_impulses.setdefault(t, np.zeros(3))[:] += event.realized_delta_v_m_s
+
     def est_rows():
         for es in log.records.get("estimate", ()):
             truth = rel(es.t_update_s)
             if truth is None:
                 continue
+            late = late_impulses.get(round(es.t_update_s, 9))
+            if late is not None:
+                truth[3:] -= late
             delta = np.concatenate([np.asarray(es.relative_state.r_rel_m, dtype=np.float64) - truth[:3],
                                     np.asarray(es.relative_state.v_rel_m_s, dtype=np.float64) - truth[3:]])
             nis, dof = nis_quadratic_form(delta, es.covariance_rel_m2)
@@ -434,6 +451,17 @@ def maneuver_execution(log: GncRunLog, *, settle_fraction: float = 0.25,
     assertion = log.config.get("convergence")
     assertion_value = bool(assertion["converged"]) if isinstance(assertion, Mapping) \
         and "converged" in assertion else None
+    if isinstance(assertion, Mapping) and "settle_window_s" in assertion:
+        # The closed-loop producer measures the quiet tail after the last executed burn.
+        commands = log.records.get("command", ())
+        executed = [event for event in events if event.executed]
+        last_burn = float(executed[-1].t_exec_s) if executed else math.inf
+        tail = [cmd for cmd in commands if cmd.t_tick_s > last_burn + 1.0e-9]
+        window = tail
+        nonzero = [cmd for cmd in tail if np.linalg.norm(cmd.delta_v_eci_m_s) > settle_tol_m_s]
+        width = assertion["settle_window_s"]
+        settled = (bool(executed) and width is not None and not nonzero
+                   and last_burn >= float(log.config["t_end_s"]) - float(width))
     if assertion_value is None:
         assertion_check: bool | None = None
         assertion_reason: str | None = CONVERGENCE_ASSERTION_ABSENT
@@ -478,6 +506,53 @@ def _pair_from_truth(log: GncRunLog):
     return t_t, t_c
 
 
+def _truth_drag(log: GncRunLog):
+    spec = log.config.get("truth_drag")
+    if spec is None:
+        return None, 1.0
+    from orbitopt.rendezvous.robustness import DragError
+
+    return DragError(**spec["model"]), float(spec["density_factor"])
+
+
+def _replay_integrator(log: GncRunLog):
+    frame = str(log.config["frame"])
+    mu = float(log.config.get("mu_m3_s2", EARTH_MU))
+    j2 = float(log.config.get("j2", 0.0))
+    drag, factor = _truth_drag(log)
+    if drag is None:
+        def coast(state, grid, sub_dt=None):
+            traj = propagate_pair(state[:3], state[3:6], state[6:9], state[9:12], grid,
+                                  frame=frame, mu=mu, j2=j2, sub_dt=sub_dt,
+                                  where="gnc_closed_loop.replay")
+            return np.column_stack((traj.chief_r[0], traj.chief_v[0],
+                                    traj.deputy_r[0], traj.deputy_v[0]))
+    else:
+        from orbitopt.rendezvous.robustness import _integrate_pair, _truth_deriv
+
+        # Convert [r_t, v_t, r_c, v_c] to the campaign integrator's [r_t, r_c, v_t, v_c].
+        pair_order = [0, 1, 2, 6, 7, 8, 3, 4, 5, 9, 10, 11]
+
+        def deriv(state):
+            return _truth_deriv(state, mu, j2, drag, factor)
+
+        def coast(state, grid, sub_dt=None):
+            if sub_dt is None:
+                sub_dt = 2.0 * math.pi * math.sqrt(float(np.linalg.norm(state[:3])) ** 3 / mu) / 500.0
+            states = _integrate_pair(state[pair_order], grid, deriv, sub_dt=sub_dt, integrator="rk4")
+            return states[:, pair_order]
+    return coast
+
+
+def _impulses(log: GncRunLog, end_s: float) -> dict[float, np.ndarray]:
+    impulses: dict[float, np.ndarray] = {}
+    for ev in log.records.get("control_event", ()):
+        t = round(float(ev.t_exec_s), 9)
+        if ev.executed and t <= end_s and any(ev.realized_delta_v_m_s):
+            impulses.setdefault(t, np.zeros(3))[:] += ev.realized_delta_v_m_s
+    return impulses
+
+
 def closed_loop_replay(log: GncRunLog, *, sub_dt_s: float | None = None) -> dict:
     """Re-integrate the pair under the RECORDED control events: coast with
     ``propagate_pair`` between actuation instants, add each realized delta-v
@@ -485,57 +560,30 @@ def closed_loop_replay(log: GncRunLog, *, sub_dt_s: float | None = None) -> dict
     priority: a truth sample at an actuation instant is the PRE-impulse
     state). Returns the re-flown states at the recorded truth instants and
     the max errors against the recorded truth."""
+    if "closed_loop" in log.config and "truth_drag" not in log.config:
+        return {"available": False, "reason": TRUTH_DYNAMICS_UNDECLARED}
     pair = _pair_from_truth(log)
     if pair is None:
         return {"available": False, "reason": TRUTH_TRACK_TOO_SHORT}
     t_t, t_c = pair
-    times = [r.t_s for r in t_t]
+    times = [round(r.t_s, 9) for r in t_t]
     truth_t = np.array([[*r.r_m, *r.v_m_s] for r in t_t], dtype=np.float64)
     truth_c = np.array([[*r.r_m, *r.v_m_s] for r in t_c], dtype=np.float64)
-
-    frame = str(log.config["frame"])
-    mu = float(log.config.get("mu_m3_s2", EARTH_MU))
-    j2 = float(log.config.get("j2", 0.0))
-    impulse: dict[float, np.ndarray] = {}
-    for ev in log.records.get("control_event", ()):
-        if not ev.executed or float(np.linalg.norm(ev.realized_delta_v_m_s)) == 0.0:
-            continue
-        t = float(ev.t_exec_s)
-        if t > times[-1] + 1e-9:
-            continue  # an actuation after the last truth instant moves no recorded sample
-        key = round(t, 6)
-        impulse[key] = impulse.get(key, np.zeros(3)) + np.asarray(ev.realized_delta_v_m_s,
-                                                                  dtype=np.float64)
-
-    bounds = sorted({0.0, times[-1]} | set(impulse))
+    coast = _replay_integrator(log)
+    impulse = _impulses(log, times[-1])
+    bounds = sorted({times[0], times[-1]} | {t for t in impulse if t >= times[0]})
     state = np.concatenate([truth_t[0], truth_c[0]])
-    samples: dict[float, np.ndarray] = {0.0: state.copy()}
-    imp0 = impulse.get(0.0)
-    if imp0 is not None:  # a burn at t=0: the recorded sample there is the pre-impulse state
-        state = state.copy()
-        state[9:12] += imp0
+    samples = {times[0]: state.copy()}
     for a, b in zip(bounds, bounds[1:]):
-        want = [t for t in times if a < t < b]
-        grid = np.array([0.0] + [t - a for t in want] + [b - a])
-        traj = propagate_pair(state[:3], state[3:6], state[6:9], state[9:12], grid,
-                              frame=frame, mu=mu, j2=j2, sub_dt=sub_dt_s,
-                              where="gnc_closed_loop.closed_loop_replay")
-        for j, t in enumerate(grid):
-            key = round(a + float(t), 6)
-            if j == 0 and key in samples:
-                continue  # do not overwrite the pre-impulse state stored at an actuation instant
-            samples[key] = np.concatenate(
-                [traj.chief_r[0, j], traj.chief_v[0, j],
-                 traj.deputy_r[0, j], traj.deputy_v[0, j]])
-        state = samples[round(b, 6)].copy()
-        imp = impulse.get(round(b, 6))
-        if imp is not None:
-            state[9:12] += imp  # chaser velocity, applied after the pre-impulse sample at b
+        state = samples[a].copy()
+        if a in impulse:
+            state[9:12] += impulse[a]
+        nodes = [a, *(t for t in times if a < t < b), b]
+        states = coast(state, np.asarray(nodes) - a, sub_dt_s)
+        samples.update(zip(nodes[1:], states[1:]))
 
-    rep_t = np.array([samples[round(t, 6)][:3] for t in times])
-    rep_tv = np.array([samples[round(t, 6)][3:6] for t in times])
-    rep_c = np.array([samples[round(t, 6)][6:9] for t in times])
-    rep_cv = np.array([samples[round(t, 6)][9:12] for t in times])
+    states = np.array([samples[t] for t in times])
+    rep_t, rep_tv, rep_c, rep_cv = np.split(states, 4, axis=1)
     err_pos = np.maximum(np.linalg.norm(rep_t - truth_t[:, :3], axis=1),
                          np.linalg.norm(rep_c - truth_c[:, :3], axis=1))
     err_vel = np.maximum(np.linalg.norm(rep_tv - truth_t[:, 3:], axis=1),
@@ -563,52 +611,36 @@ def replay_reference_tracks(log: GncRunLog, *,
     if pair is None:
         return {}
     t_t, t_c = pair
-    times = [r.t_s for r in t_t]
-    truth_t = np.array([[*r.r_m, *r.v_m_s] for r in t_t], dtype=np.float64)
-    truth_c = np.array([[*r.r_m, *r.v_m_s] for r in t_c], dtype=np.float64)
-    frame = str(log.config["frame"])
-    mu = float(log.config.get("mu_m3_s2", EARTH_MU))
-    j2 = float(log.config.get("j2", 0.0))
-    impulse: dict[float, np.ndarray] = {}
-    for ev in log.records.get("control_event", ()):
-        if not ev.executed or float(np.linalg.norm(ev.realized_delta_v_m_s)) == 0.0:
-            continue
-        t = float(ev.t_exec_s)
-        if t > times[-1] + 1e-9:
-            continue
-        key = round(t, 6)
-        impulse[key] = impulse.get(key, np.zeros(3)) + np.asarray(ev.realized_delta_v_m_s,
-                                                                  dtype=np.float64)
+    truth = {round(t.t_s, 9): np.array([*t.r_m, *t.v_m_s, *c.r_m, *c.v_m_s])
+             for t, c in zip(t_t, t_c)}
+    first, last = min(truth), max(truth)
+    coast = _replay_integrator(log)
+    impulse = _impulses(log, last)
     h = max(float(refine_dt_s), 1.0e-6)
-    bounds = sorted({0.0, float(times[-1])} | set(impulse)
-                    | {round(float(t), 6) for t in times})
-    state = np.concatenate([truth_t[0], truth_c[0]])
-    nodes: dict[float, np.ndarray] = {0.0: state.copy()}
-    imp0 = impulse.get(0.0)
-    if imp0 is not None:
-        state = state.copy()
-        state[9:12] += imp0
+    bounds = sorted(set(truth) | {t for t in impulse if t >= first})
+    state = truth[first]
+    epochs = [first]
+    nodes = [state]
     for a, b in zip(bounds, bounds[1:]):
+        if a in impulse:
+            state = state.copy()
+            state[9:12] += impulse[a]
+            epochs.append(a)
+            nodes.append(state)
         n = max(1, math.ceil((b - a) / h))
         grid = np.linspace(0.0, b - a, n + 1)
-        traj = propagate_pair(state[:3], state[3:6], state[6:9], state[9:12], grid,
-                              frame=frame, mu=mu, j2=j2,
-                              where="gnc_closed_loop.replay_reference_tracks")
-        for j, t in enumerate(grid):
-            key = round(a + float(t), 6)
-            if j == 0 and key in nodes:
-                continue
-            nodes[key] = np.concatenate([traj.chief_r[0, j], traj.chief_v[0, j],
-                                         traj.deputy_r[0, j], traj.deputy_v[0, j]])
-        state = nodes[round(b, 6)].copy()
-        imp = impulse.get(round(b, 6))
-        if imp is not None:
-            state = state.copy()
-            state[9:12] += imp
-    epochs = np.array(sorted(nodes), dtype=np.float64)
-    states = np.array([nodes[float(t)] for t in epochs], dtype=np.float64)
-    if len(epochs) < 2:
-        return {}
+        states = coast(state, grid)
+        state = truth.get(b, states[-1])
+        epochs.extend(a + grid[1:-1])
+        nodes.extend(states[1:-1])
+        epochs.append(b)
+        nodes.append(state)
+    if last in impulse:
+        state = state.copy()
+        state[9:12] += impulse[last]
+        epochs.append(last)
+        nodes.append(state)
+    states = np.asarray(nodes)
     return {str(log.config["target_id"]): HermiteDenseOutput(epochs, states[:, 0:6]),
             str(log.config["chaser_id"]): HermiteDenseOutput(epochs, states[:, 6:12])}
 
@@ -649,14 +681,14 @@ def numerical_convergence(log: GncRunLog, *, period_s: float | None = None,
     floor = REPLAY_FLOOR_POSITION_M
     at_floor = bool(e[-1] <= floor)
     monotone = all(e[i + 1] <= max(e[i], floor) * 1.05 for i in range(len(e) - 1))
-    order = math.log(e[0] / e[1]) / math.log(2.0) if e[1] > floor and e[0] > e[1] else math.inf
-    converged = bool(monotone and (order >= 2.0 or at_floor))
+    order = math.log(e[0] / e[1]) / math.log(2.0) if e[1] > floor and e[0] > 0 else None
+    converged = bool(monotone and (at_floor or (order is not None and order >= 2.0)))
     return {"checks": {
                 "numerical_error.replay_step_convergence": converged,
                 "numerical_error.replay_matches_recorded_truth":
                     bool(e[-1] <= REPLAY_TOL_POSITION_M
                          and errors[-1]["max_velocity_error_m_s"] <= REPLAY_TOL_VELOCITY_M_S)},
-            "errors": errors, "observed_order": None if order == math.inf else order,
+            "errors": errors, "observed_order": order,
             "at_float_floor": at_floor,
             "period_s": float(period_s), "step_divisors": [float(n) for n in step_divisors]}
 
@@ -693,6 +725,8 @@ def _state_before_impulse(dense: HermiteDenseOutput, t: float) -> np.ndarray:
     sample with a post-burn state and report the burn's own delta-v as an error.
     At a node that is not a seam both sides agree, so this is exact there too.
     """
+    if abs(t - dense.t0) <= 1e-9:
+        return dense.states_left[0].copy()
     i = int(np.searchsorted(dense.epochs, t - 1e-9, side="left")) - 1
     on_node = 0 <= i < dense.epochs.size - 1 and abs(float(dense.epochs[i + 1]) - t) <= 1e-9
     return dense(t, interval=i) if on_node else dense(t)
@@ -704,6 +738,8 @@ def independent_reflight(log: GncRunLog, *, tol_position_m: float = REFLIGHT_TOL
     Without tudatpy in this interpreter: ``not_checked`` with
     :data:`REFLIGHT_BACKEND_MISSING` -- the independent line is recorded
     absent, never imputed (task #261's rule, the E12-05 policy)."""
+    if "closed_loop" in log.config and "truth_drag" not in log.config:
+        return {"available": False, "reason": TRUTH_DYNAMICS_UNDECLARED}
     if importlib.util.find_spec("tudatpy") is None:
         return {"available": False, "reason": REFLIGHT_BACKEND_MISSING}
     pair = _pair_from_truth(log)
@@ -728,8 +764,21 @@ def independent_reflight(log: GncRunLog, *, tol_position_m: float = REFLIGHT_TOL
               earth_spherical_harmonic=(2, 0) if j2 else None,
               integrator="dop853", rtol=VERIFY_RTOL, atol=VERIFY_ATOL,
               central_gravity=gravity, frame="ECLIPJ2000")
+    drag, factor = _truth_drag(log)
+
+    def drag_spec(coefficient):
+        if drag is None or coefficient == 0.0 or factor == 0.0:
+            return None
+        return {
+            "atmosphere": {"surface_density_kg_m3": drag.atmosphere.density_sea_level_kg_m3 * factor,
+                           "scale_height_m": drag.scale_height_m, "body_radius_m": EARTH_RE},
+            "ballistic_coefficient_m2_per_kg": coefficient,
+        }
+
+    target_drag = drag_spec(drag.chief_ballistic_coefficient_m2_per_kg) if drag else None
+    chaser_drag = drag_spec(drag.ballistic_coefficient_m2_per_kg) if drag else None
     target = propagate_multi_arc(st0_t[0], st0_t[1], 0.0,
-                                 [{"type": "coast", "duration": t_fly}], **kw)
+                                 [{"type": "coast", "duration": t_fly}], drag=target_drag, **kw)
     events = sorted((e for e in log.records.get("control_event", ()) if e.executed),
                     key=lambda e: e.t_exec_s)
     arcs: list[dict] = []
@@ -746,7 +795,7 @@ def independent_reflight(log: GncRunLog, *, tol_position_m: float = REFLIGHT_TOL
         arcs.append({"type": "coast", "duration": t_fly - t_prev})
     elif not any(a["type"] == "coast" for a in arcs):
         arcs.append({"type": "coast", "duration": 1.0e-9})
-    chaser = propagate_multi_arc(st0_c[0], st0_c[1], 0.0, arcs, **kw)
+    chaser = propagate_multi_arc(st0_c[0], st0_c[1], 0.0, arcs, drag=chaser_drag, **kw)
 
     dense_t = HermiteDenseOutput(np.asarray(target.epochs, dtype=np.float64),
                                  np.asarray(target.states, dtype=np.float64))
@@ -978,7 +1027,7 @@ def verify_gnc_closed_loop(log: GncRunLog | str | Path | Mapping, *,
         "run": {"run_id": log.run_id, "frame": log.config.get("frame"),
                 "target_id": log.config.get("target_id"), "chaser_id": log.config.get("chaser_id"),
                 "mu_m3_s2": log.config.get("mu_m3_s2"), "j2": log.config.get("j2"),
-                "t_end_s": log.config.get("t_end_s"),
+                "t_end_s": log.config.get("t_end_s"), "truth_drag": log.config.get("truth_drag"),
                 "record_counts": {k: len(v) for k, v in log.records.items()}},
         "error_classes": error_classes,
         "sections": {

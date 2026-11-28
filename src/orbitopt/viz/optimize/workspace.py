@@ -47,6 +47,7 @@ from orbitopt.viz.charts import _CachedChart, nice_ticks
 from orbitopt.viz.optimize import backend
 from orbitopt.viz.optimize.editing import FIELDS, SECTIONS
 from orbitopt.viz.optimize.session import Action, Phase, StudioSession
+from orbitopt.viz.optimize.settings import OptimizationSettings
 from orbitopt.viz.optimize.views import (OUTCOME_BADGE, RUN_STATUS_BADGE, RUN_STATUS_TEXT, STATUS_LABELS, RunView,
                                          problem_html, report_document, report_html)
 from orbitopt.viz.theme import (ACCENT, BG_VOID, DANGER, HAIRLINE, INFO, INK_MUTED, INK_PRIMARY, INK_SECONDARY, PANEL,
@@ -61,7 +62,8 @@ PHASE_BADGE = {Phase.IDLE: "idle", Phase.COMPILING: "loading", Phase.CLARIFYING:
 KINDS = ("continuous", "integer", "binary", "discrete")
 SENSES = {"objectives": ("minimize", "maximize"), "constraints": ("<=", ">=", "==")}
 _QSS = f"""
-#optimizeWorkspace, #optimizeColumn {{ background: {BG_VOID}; }}
+#optimizeWorkspace, #optimizeColumn, #optimizeSettings {{ background: {BG_VOID}; }}
+#optimizeViewport {{ background: {BG_VOID}; }}
 #optimizeWorkspace QLabel {{ background: transparent; }}
 QScrollArea {{ border: none; background: transparent; }}
 QTextBrowser, QTableWidget, QComboBox, QComboBox QAbstractItemView, QPlainTextEdit, QLineEdit {{
@@ -72,13 +74,18 @@ QPlainTextEdit, QLineEdit {{ color: {INK_PRIMARY}; padding: 4px; }}
 QHeaderView::section {{ background: {PANEL_RAISED}; color: {INK_MUTED}; border: none;
     border-bottom: 1px solid {HAIRLINE}; padding: 3px 6px; }}
 QTableWidget {{ gridline-color: {HAIRLINE}; }}
+QScrollBar:horizontal {{ background: {PANEL}; height: 8px; }}
+QScrollBar::handle:horizontal {{ background: {HAIRLINE}; min-width: 24px; }}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0px; }}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: none; }}
 QTabWidget::pane {{ border: 1px solid {HAIRLINE}; background: {PANEL}; }}
 QTabBar::tab {{ background: {PANEL}; color: {INK_MUTED}; padding: 5px 12px; border: none; }}
 QTabBar::tab:selected {{ color: {ACCENT}; border-bottom: 2px solid {ACCENT}; }}
 QPushButton:disabled {{ color: #4a4a4a; border-color: #1f1f1f; }}
 QPushButton#primaryAction {{ color: {INK_PRIMARY}; border-color: {INK_SECONDARY}; }}
 QPushButton#primaryAction:disabled {{ color: #4a4a4a; border-color: #1f1f1f; }}
-QFrame#mathCard {{ background: {PANEL}; border: 1px solid {HAIRLINE}; }}
+QWidget#mathCard {{ background: {PANEL}; border: 1px solid {HAIRLINE}; }}
+#optimizePages::pane {{ border: none; border-top: 1px solid {HAIRLINE}; background: {BG_VOID}; }}
 QLabel#optimizeBanner {{ padding: 6px 12px; border-bottom: 1px solid {HAIRLINE}; background: {PANEL}; }}
 QLabel#optimizeBanner[offline="true"] {{ color: {WARNING}; }}
 QLabel#optimizeBanner[offline="false"] {{ color: {INK_SECONDARY}; }}
@@ -151,7 +158,7 @@ class ConvergenceChart(_CachedChart):
     ring is amber and labelled ``unverified``.
     """
 
-    MARGINS = (62, 30, 18, 34)
+    MARGINS = (62, 59, 18, 34)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -168,12 +175,8 @@ class ConvergenceChart(_CachedChart):
         ys = [p.objective for p in v.points] + [y for _, y in v.best_path]
         x_hi = max(xs) if xs else 1.0
         lo, hi = (min(ys), max(ys)) if ys else (0.0, 1.0)
-        if hi <= lo:
-            pad = max(abs(lo) * 0.1, 1e-3)
-            lo, hi = lo - pad, hi + pad
-        else:
-            pad = (hi - lo) * 0.08
-            lo, hi = lo - pad, hi + pad
+        pad = max((hi - lo) * 0.08, max(abs(lo), abs(hi)) * 1e-6, 1e-9)
+        lo, hi = lo - pad, hi + pad
         return 0.0, max(float(x_hi), 1.0) * 1.04, lo, hi
 
     def paint_static(self, p: QPainter):
@@ -184,6 +187,7 @@ class ConvergenceChart(_CachedChart):
         p.setPen(QColor(INK_SECONDARY))
         name = self.view.objective_name if self.view else ""
         title = " ".join(f"Objective {name} vs evaluations".split()) + (f" ({self.view.sense})" if self.view else "")
+        title = p.fontMetrics().elidedText(title, Qt.ElideRight, max(0, self.width() - 16))
         p.drawText(QRectF(8, 4, self.width() - 16, 18), Qt.AlignLeft | Qt.AlignVCenter, title)
         self._legend(p)
         p.setPen(QPen(QColor(HAIRLINE), 1))
@@ -270,20 +274,20 @@ class ConvergenceChart(_CachedChart):
         from orbitopt.viz.charts import _font
 
         p.setFont(_font(8.5))
-        x = float(self.width() - 18)
-        for kind, text in reversed((("feasible", "feasible"), ("infeasible", "infeasible"),
-                                    ("not_assessed", "not graded"), ("alternate", "alternate solver"))):
-            width = p.fontMetrics().horizontalAdvance(text)
-            x -= width
+        column_width = (self.width() - 24) / 2
+        entries = (("feasible", "feasible"), ("infeasible", "infeasible"),
+                   ("not_assessed", "not graded"), ("alternate", "alternate solver"))
+        for i, (kind, text) in enumerate(entries):
+            x = 12 + column_width * (i % 2)
+            y = 25 + 14 * (i // 2)
+            self._mark(p, QPointF(x, y + 7), kind)
             p.setPen(QColor(INK_MUTED))
-            p.drawText(QRectF(x, 4, width + 2, 18), Qt.AlignLeft | Qt.AlignVCenter, text)
-            self._mark(p, QPointF(x - 9, 13), kind)
-            x -= 24
+            p.drawText(QRectF(x + 10, y, column_width - 10, 14), Qt.AlignLeft | Qt.AlignVCenter, text)
 
 
 # ------------------------------------------------------------------------------------------- the workspace
 class OptimizationWorkspace(QWidget):
-    """The page. ``session`` defaults to a fresh one; ``settings`` keeps the manifest digests out of band."""
+    """The workspace and its model settings. Manifest digests are kept out of band."""
 
     def __init__(self, session: StudioSession | None = None, *, settings=None, parent: QWidget | None = None):
         super().__init__(parent)
@@ -312,9 +316,17 @@ class OptimizationWorkspace(QWidget):
         self.session = session or StudioSession()
         self.banner = QLabel()
         self.banner.setObjectName("optimizeBanner")
+        self.banner.setTextFormat(Qt.PlainText)
         self.banner.setWordWrap(True)
         outer.addWidget(self.banner)
-        outer.addWidget(self._build_header())
+        self.pages = QTabWidget()
+        self.pages.setObjectName("optimizePages")
+        outer.addWidget(self.pages, 1)
+        workspace = QWidget()
+        work = QVBoxLayout(workspace)
+        work.setContentsMargins(0, 0, 0, 0)
+        work.setSpacing(0)
+        work.addWidget(self._build_header())
         splitter = QSplitter(Qt.Horizontal)
         splitter.setObjectName("mainSplitter")
         splitter.setChildrenCollapsible(False)
@@ -324,7 +336,10 @@ class OptimizationWorkspace(QWidget):
         splitter.setSizes([330, 560, 640])
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 1)
-        outer.addWidget(splitter, 1)
+        work.addWidget(splitter, 1)
+        self.settings_page = OptimizationSettings(self.session, settings)
+        self.pages.addTab(workspace, "Experiment")
+        self.pages.addTab(self._scroll(self.settings_page), "Settings")
         self._filling = False
         self.session.subscribe(self.refresh)
         self.refresh()
@@ -335,6 +350,7 @@ class OptimizationWorkspace(QWidget):
         area.setWidgetResizable(True)
         area.setFrameShape(QFrame.NoFrame)
         area.setWidget(widget)
+        area.viewport().setObjectName("optimizeViewport")
         area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         area.setMinimumWidth(260)
         return area
@@ -345,31 +361,12 @@ class OptimizationWorkspace(QWidget):
         row = QHBoxLayout(bar)
         row.setContentsMargins(12, 6, 12, 6)
         row.setSpacing(10)
-        title = QLabel("OPTIMIZE")
-        title.setObjectName("sectionHeader")
-        row.addWidget(title)
         self.phase_badge = StatusBadge("idle", "IDLE")
-        self.phase_badge.setMinimumWidth(190)
+        self.phase_badge.setMinimumWidth(138)
         self.phase_badge.setToolTip("Where the workspace is: idle, compiling, editing, confirmed, running, ...")
         row.addWidget(self.phase_badge)
         self.message_label = _muted("", wrap=False, color=DANGER)
         row.addWidget(self.message_label, 1)
-        row.addWidget(QLabel("Provider"))
-        self.provider_combo = QComboBox()
-        self.provider_combo.setToolTip("The model that compiles the prompt (and plans, with the LLM planner). "
-                                       "Credentials come from environment variables only.")
-        for choice in self.session.choices:
-            self.provider_combo.addItem(choice.label, choice.key)
-        self.provider_combo.currentIndexChanged.connect(
-            lambda i: self._input(self.session.set_provider, self.provider_combo.itemData(i)))
-        row.addWidget(self.provider_combo)
-        row.addWidget(QLabel("Planner"))
-        self.planner_combo = QComboBox()
-        self.planner_combo.addItem("Rule-based (no LLM)", "rule")
-        self.planner_combo.addItem("LLM planner (selected provider)", "llm")
-        self.planner_combo.currentIndexChanged.connect(
-            lambda i: self._input(self.session.set_planner, self.planner_combo.itemData(i)))
-        row.addWidget(self.planner_combo)
         self.open_button = _button("Open run…", "Replay a saved experiment or run directory, with no model call")
         self.open_button.clicked.connect(self._open_run)
         row.addWidget(self.open_button)
@@ -390,6 +387,7 @@ class OptimizationWorkspace(QWidget):
         column, col = self._column()
         col.addWidget(_header("Problem in words"))
         self.example_combo = QComboBox()
+        self.example_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.example_combo.addItem("Your own text", None)
         for ex in backend.EXAMPLES:
             self.example_combo.addItem(f"Example: {ex.title}", ex.key)
@@ -410,9 +408,10 @@ class OptimizationWorkspace(QWidget):
         self.blank_button.clicked.connect(lambda: self._safely(self.session.start_blank))
         self.replies_button = _button("Load replies…", "Script the offline mock with a JSON list of replies")
         self.replies_button.clicked.connect(self._load_replies)
-        for b in (self.compile_button, self.blank_button, self.replies_button):
+        for b in (self.compile_button, self.blank_button):
             buttons.addWidget(b)
         col.addLayout(buttons)
+        col.addWidget(self.replies_button, alignment=Qt.AlignLeft)
         col.addWidget(_header("Compiler"))
         self.compile_label = _muted("Not compiled yet.")
         col.addWidget(self.compile_label)
@@ -731,7 +730,11 @@ class OptimizationWorkspace(QWidget):
 
     def _render_header(self) -> None:
         s = self.session
-        self.banner.setText(s.banner)
+        provider = s.provider
+        connection = f"{provider.model} ({provider.kind.replace('_', ' ')})" if provider.real else "OFFLINE · Mock"
+        planner = "Rule-based planner" if s.planner == "rule" else "LLM planner"
+        self.banner.setText(f"{connection}   /   {planner}")
+        self.banner.setToolTip(s.banner)
         self.banner.setProperty("offline", "false" if s.real_provider else "true")
         self.banner.style().unpolish(self.banner)
         self.banner.style().polish(self.banner)
@@ -741,10 +744,8 @@ class OptimizationWorkspace(QWidget):
         self.phase_badge.set_state(PHASE_BADGE[s.phase], text)
         self.message_label.setText(_esc(s.error) if s.error else "")
         idle = s.phase not in (Phase.COMPILING, Phase.RUNNING, Phase.REPLAYING)
-        for widget in (self.provider_combo, self.planner_combo, self.open_button, self.reset_button):
+        for widget in (self.settings_page, self.open_button, self.reset_button):
             widget.setEnabled(idle)
-        self.provider_combo.setCurrentIndex(max(0, self.provider_combo.findData(s.provider.key)))
-        self.planner_combo.setCurrentIndex(max(0, self.planner_combo.findData(s.planner)))
 
     def _render_problem(self) -> None:
         s = self.session
@@ -757,6 +758,7 @@ class OptimizationWorkspace(QWidget):
         self.compile_button.setEnabled(s.can(Action.COMPILE))
         self.compile_button.setText("Recompile (revision)" if s.phase is Phase.EDITING else "Compile")
         self.blank_button.setEnabled(Action.EDIT in _legal(s))
+        self.replies_button.setVisible(not s.real_provider)
         self.replies_button.setEnabled(idle)
         self.compile_label.setText(self._compile_html())
         clarifying = s.phase is Phase.CLARIFYING and s.compile_view is not None

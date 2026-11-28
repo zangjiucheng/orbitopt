@@ -513,6 +513,8 @@ def propagate_multi_arc(
     atol=VERIFY_ATOL,
     central_gravity=None,
     frame="ECLIPJ2000",
+    *,
+    drag=None,
 ) -> PropagationResult:
     """Propagate a spacecraft through a sequence of ``arcs`` -- coasts and
     instantaneous impulsive burns -- meant for a multi-phase mission like
@@ -540,12 +542,14 @@ def propagate_multi_arc(
     ``integrator``: ``"dop853"`` (default; adaptive RKDP 8(7), ``step_size``
     is the maximum step so the saved history is never coarser than before) or
     ``"rk4"`` (legacy fixed step).
+    ``drag`` describes an exponential atmosphere and ballistic coefficient
+    using :class:`ReusableCoastPropagator`'s input format.
     """
     propagator = ReusableCoastPropagator(
         central_body=central_body, perturbing_bodies=perturbing_bodies,
         step_size=step_size, earth_spherical_harmonic=earth_spherical_harmonic,
         integrator=integrator, rtol=rtol, atol=atol, central_gravity=central_gravity,
-        frame=frame,
+        frame=frame, drag=drag,
     )
 
     current_state = np.concatenate([np.asarray(r0, dtype=float), np.asarray(v0, dtype=float)])

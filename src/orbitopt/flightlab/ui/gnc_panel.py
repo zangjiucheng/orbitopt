@@ -9,7 +9,8 @@ verifier actually ran (a not-checked line is shown as such, never as a pass).
 """
 from __future__ import annotations
 
-from typing import Mapping
+from collections.abc import Mapping
+from html import escape
 
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -68,12 +69,13 @@ def gnc_rows(doc: Mapping) -> tuple[tuple[str, str, str], ...]:
         if result == "not_checked" and line.get("reason"):
             value += f" ({line['reason']})"
         rows.append((label, value, result))
+    scored_nav = (classes.get("navigation_inconsistency") or {}).get("checks") or {}
     est = nav.get("estimates") or {}
     if est:
         rows += [
             ("Estimates scored / gate violations",
              f"{est.get('scored', 0)} / {est.get('gate_violations', 0)}",
-             "failed" if est.get("gate_violations") else "passed"),
+             scored_nav.get("navigation_inconsistency.estimate_nees", "N/A")),
             ("NEES max / mean per DoF",
              _f(est.get("max_nis", 0.0), ".1f") + " / "
              + _f(est.get("mean_nis_per_dof", 0.0), ".2f"), "N/A"),
@@ -82,19 +84,18 @@ def gnc_rows(doc: Mapping) -> tuple[tuple[str, str, str], ...]:
     if obs:
         rows.append(("Observations scored / gate violations",
                      f"{obs.get('scored', 0)} / {obs.get('gate_violations', 0)}",
-                     "failed" if obs.get("gate_violations") else "passed"))
+                     scored_nav.get("navigation_inconsistency.observation_nis", "N/A")))
     if ctl:
         rows += [
-            ("Burn events executed", _f(ctl.get("events", 0), ".0f"), "N/A"),
+            ("Control events recorded", _f(ctl.get("events", 0), ".0f"), "N/A"),
             ("Execution error max",
              _f(ctl.get("execution_error_max_m_s", 0.0), ".3e") + " m/s", "N/A"),
         ]
     if tracking:
-        rows.append(("Estimate-vs-truth RMSE (pos)",
+        rows.append(("Held-estimate position RMSE",
                      _f(tracking.get("rmse_pos_m", 0.0), ".3e") + " m", "N/A"))
     drops = sum(int(s.get("dropped", 0)) for s in (meas.get("sensors") or {}).values())
-    rows.append(("Measurement frames dropped", _f(drops, ".0f"),
-                 "N/A" if not drops else "failed"))
+    rows.append(("Measurement frames dropped", _f(drops, ".0f"), "N/A"))
     if supervision:
         rows.append(("Supervisor final state", str(supervision.get("final_state", "?")),
                      "N/A"))
@@ -111,7 +112,7 @@ class GncPanel(QWidget):
         self.setObjectName("flightLabGncPanel")
         self.setStyleSheet(FLIGHTLAB_PANEL_QSS)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
         self.verdict_label = QLabel("No GNC run loaded.")
         self.verdict_label.setWordWrap(True)
@@ -126,12 +127,11 @@ class GncPanel(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        layout.addWidget(self.table)
+        layout.addWidget(self.table, 1)
         self.note_label = QLabel("")
         self.note_label.setWordWrap(True)
         self.note_label.setObjectName("flightLabGncNote")
         layout.addWidget(self.note_label)
-        layout.addStretch(1)
         self.clear()
 
     def set_doc(self, doc: Mapping | None) -> None:
@@ -147,18 +147,21 @@ class GncPanel(QWidget):
                      if str(line.get("result")) not in ("passed", "failed")]
         if failed:
             head, color = "FAIL", DANGER
+        elif any(line.get("result") == "passed" for line in classes.values()):
+            head, color = ("PASS (checked lines)" if unchecked else "PASS"), SUCCESS
         elif indep:
-            head, color = "PASS (checked lines)", SUCCESS
+            head, color = "NOT CHECKED", INK_SECONDARY
         else:
             head, color = "REPLAY ONLY — no independent report", INK_SECONDARY
         self.verdict_label.setText(
             f'<span style="color:{color}; font-weight:600">{head}</span>'
-            f' · <span style="color:{INK_SECONDARY}">{doc.get("title", "GNC replay")}</span>')
+            f' · <span style="color:{INK_SECONDARY}">{escape(str(doc.get("title", "GNC replay")))}</span>')
         self.table.setRowCount(len(rows))
         for row, (label, value, result) in enumerate(rows):
             for column, text in enumerate((label, value, result.upper()
                                            if result in RESULT_WORDS else result)):
                 item = QTableWidgetItem(text)
+                item.setToolTip(text)
                 if column == 2:
                     item.setForeground(_brush(RESULT_COLORS.get(result, INK_MUTED)))
                 self.table.setItem(row, column, item)

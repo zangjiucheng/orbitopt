@@ -207,7 +207,8 @@ def test_the_widgets_light_the_engines_each_vehicle_reports_and_paint():
     hud.resize(600, 420)
     hud.set_run((booster, ship), ch)
     hud.set_time(1.5)
-    assert len(hud.superheavy.lit_indices) == 13 and len(hud.starship.lit_indices) == 6
+    assert len(hud.superheavy.lit_indices) == 13
+    assert not hud.starship.lit_indices and hud.starship.readout.engines.on
     img13 = QImage(hud.size(), QImage.Format_ARGB32); img13.fill(0); hud.render(img13)
     hud.set_time(4.5)
     assert len(hud.superheavy.lit_indices) == 5 and hud.starship.lit_indices == frozenset()
@@ -236,6 +237,21 @@ def test_the_flight_tab_has_an_engines_tab_that_follows_the_replay_time():
     assert tabs[-1] == "Engines" and panel.detail_tabs.widget(tabs.index("Engines")) is panel.engine_hud
     panel.set_time(12.0)                                  # no run loaded: nothing to show, nothing breaks
     assert panel.engine_hud.state is None
+
+
+def test_engine_rows_follow_a_multistage_run_and_do_not_guess_unknown_counts():
+    from orbitopt.flightlab.ui.engine_hud import stage_specs
+
+    pos, vel = [(6.4e6, 0, 0)] * 2, [(0, 100, 0)] * 2
+    tracks = {
+        "stage1": _Track("stage1", [0, 1], {"engines_lit": [7, 4]}, pos, vel),
+        "stage3": _Track("stage3", [8, 9], {"throttle": [0, 1]}, pos, vel),
+    }
+    specs = stage_specs(tracks, {"name": "test-launcher", "stages": [{}, {}, {"engine": {"count": 2}}]})
+    assert list(specs) == [1, 3]
+    assert (specs[1].total, specs[1].observed_only) == (7, True)
+    assert (specs[3].total, specs[3].observed_only, specs[3].kind) == (2, False, "generic")
+    assert stage_specs(tracks, None)[3].total == 0
 
 
 def test_a_rocket_standing_on_the_pad_points_straight_up_even_in_an_inertial_frame():

@@ -23,6 +23,19 @@ because the run directory holds a `rendezvous.json` sidecar; it reads the
 same sealed plan the scene was exported from, and its `plan_digest` matches
 `leo-rdv-001-sealed-plan.json`.
 
+## Open the E13 closed-loop replay
+
+```bash
+orbitopt gnc studio --leo-rdv-001 -o runs/e13-leo-rdv-001
+```
+
+In Mission Control, choose **Runs → Refresh → e13-leo-rdv-001**.
+The **Bodies** strip lets you follow the chaser truth or estimate.
+**Telemetry** shows navigation error and uncertainty, and **GNC**
+lists the replay and verification results. The default Studio sample uses
+its own declared navigation process noise and checks the recorded gravity,
+drag and maneuvers. Independent re-flight requires TudatPy.
+
 ## Compute a plan and verify it
 
 From Python, with the conda compute stack (see the

@@ -9,7 +9,7 @@ curve and the [verification guard](../optimization/verification.md)'s four
 statuses one by one. A saved run replays without any model call.
 
 Open it from the workspace bar (**Optimize**, or Ctrl/Cmd+5) or from the
-command palette. The page has three columns. The left column holds the
+command palette. **Experiment** has three columns. The left column holds the
 problem in words, the centre column the compiled problem, and the right
 column the run.
 
@@ -28,31 +28,22 @@ the install hint and the missing modules. Mission Control imports nothing
 from `orbitopt.agent` until the page first opens, and no LLM SDK is ever
 imported.
 
-The **Provider** list always starts with the offline mock. A real provider
-appears only when the environment configures one:
+Open **Optimize → Settings** to select a provider and a solver planner.
+**Offline mock** compiles bundled examples or a JSON replies file loaded in
+**Experiment**. **Environment (LLM_*)** uses the same
+[variables as the CLI](providers.md#configuration-from-the-environment).
+Start with `orbitopt --env-file .env app` to load them from a file.
 
-| Variable | Meaning |
-|---|---|
-| `LLM_MODEL` | The model name. Without it, no real provider is listed. |
-| `LLM_BASE_URL` | The endpoint, required for `openai_compat` (`deepseek` and `local` have defaults). |
-| `LLM_KIND` | `openai_compat` (default), `deepseek` or `local`. |
-| `LLM_API_KEY` | The key. The provider reads it at call time. |
-| `LLM_TIMEOUT_S` | Optional request timeout in seconds. |
+For **Local server**, **OpenAI-compatible** or **DeepSeek**, enter the model
+ID and any required API base URL. You can also set a per-request timeout.
+Keyed providers read `LLM_API_KEY` at call time. **Apply settings** saves the
+connection details and planner locally without saving credentials.
 
-These are the same variables the CLI's `--provider env` and the E14 campaign
-read ([providers](providers.md#configuration-from-the-environment)). To load
-them from a file, start Mission Control with `orbitopt --env-file .env app`,
-or export them in the shell first with `set -a; . ./.env; set +a`.
+The **Rule-based** planner selects solvers without model calls. Choose
+**LLM** to use the selected provider for that step too. The banner shows
+the active model and planner in both pages.
 
-The workspace never asks for a key, never shows one and never stores one.
-The banner names the key variable and says whether it is set. On the mock,
-the amber banner says that only the bundled examples or a loaded replies file
-can be compiled. **Load replies…** takes the same JSON list as the CLI's
-`--mock-replies`.
-
-The **Planner** list picks the rule-based planner (no LLM, the default) or
-the LLM planner on the selected provider. On the mock, the LLM planner solves
-once with the most specialised solver offered and then stops.
+[![The Optimize Settings page with local server fields and the solver planner](../assets/optimization-studio-settings.png)](../assets/optimization-studio-settings.png)
 
 ## Compile
 

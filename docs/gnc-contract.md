@@ -135,6 +135,11 @@ columns of the estimate track are the `navigation_consistency` rows of the verif
 verbatim, on the scored-estimate schedule — no re-interpolation, so the curves and the report
 agree to the bit.
 
+The campaign log records the gravity constants and drag model used by the
+truth plant. The verifier uses pre-burn truth for observations and accounts
+for whether a same-tick impulse fired before or after an estimate. Regenerate
+older campaign logs that lack the recorded force model to run those checks.
+
 The two evidence lines stay separate in the sidecar and in the GNC tab: `local_replay` carries the
 run-log digest and says in words that the replay is NOT independent of itself;
 `independent_verification` carries the E13-07 report digest and the four error-class verdicts,

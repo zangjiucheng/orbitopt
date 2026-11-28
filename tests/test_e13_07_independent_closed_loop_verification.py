@@ -178,6 +178,15 @@ def test_producer_convergence_assertion_is_cross_checked_not_trusted(log):
         "optimizer_control_nonconvergence.convergence_assertion"] is False
 
 
+def test_step_sweep_does_not_accept_a_flat_large_residual(log, monkeypatch):
+    monkeypatch.setattr(gl, "closed_loop_replay",
+                        lambda *_a, **_k: {"available": True, "max_position_error_m": 60_000.0,
+                                            "max_velocity_error_m_s": 65.0})
+    result = gl.numerical_convergence(log)
+    assert result["observed_order"] == 0.0
+    assert not any(result["checks"].values())
+
+
 # --------------------------------------------------------------------------- evidence binding
 
 def test_verification_digest_round_trips_and_rebinds(report, log):

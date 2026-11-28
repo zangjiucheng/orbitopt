@@ -48,6 +48,9 @@ def test_every_state_renders(workspace, name):
     if name == "idle":
         assert not ws.run_button.isEnabled() and not ws.confirm_button.isEnabled()
         assert ws.prompt_edit.toPlainText().startswith("Minimize x squared")
+    elif name == "settings":
+        assert ws.settings_page.apply_button.isVisible()
+        assert ws.settings_page.endpoint.placeholderText() == "Default Ollama endpoint"
     elif name == "clarification":
         assert ws.questions_box.isVisibleTo(ws) and len(ws.answer_edits) == 1
         assert "unit cost" in ws.questions_form.itemAt(0).widget().text()
@@ -59,7 +62,7 @@ def test_every_state_renders(workspace, name):
     elif name == "running":
         assert ws.cancel_button.isEnabled() and not ws.run_button.isEnabled()
         assert _badge(ws.run_badge) == "RUNNING" and ws.iteration_table.rowCount() == 2
-        assert not ws.provider_combo.isEnabled() and not ws.compile_button.isEnabled()
+        assert not ws.settings_page.provider_combo.isEnabled() and not ws.compile_button.isEnabled()
     elif name == "finished-verified":
         assert _badge(ws.run_badge) == "VERIFIED"
         assert statuses == {"solver_converged": "PASSED", "constraints_satisfied": "PASSED",
@@ -84,6 +87,40 @@ def test_a_cancelled_run_replays_equal_from_the_ui(workspace):
     ws.replay_button.click()
     CAPTURE["pump"](app, lambda: not ws.busy)
     assert ws.session.replay_result.equal and _badge(ws.replay_badge) == "EQUAL"
+
+
+def test_model_settings_validate_and_restore_without_storing_credentials(workspace, tmp_path):
+    app, ws = workspace
+    ws.pages.setCurrentIndex(1)
+    page = ws.settings_page
+    page.provider_combo.setCurrentIndex(page.provider_combo.findData("openai_compat"))
+    page.model.setText("test-model")
+    page.endpoint.setText("https://user:secret@example.test/v1")
+    page.apply_button.click()
+    assert "without credentials" in page.result.text()
+    assert not ws.session.real_provider
+    assert not ws._settings.contains("optimize/connection")
+
+    page.endpoint.setText("https://example.test/v1")
+    page.timeout.setText("nan")
+    page.apply_button.click()
+    assert "positive timeout" in page.result.text()
+    page.timeout.setText("15")
+    page.planner_combo.setCurrentIndex(page.planner_combo.findData("llm"))
+    page.apply_button.click()
+    assert ws.session.provider.model == "test-model" and ws.session.planner == "llm"
+    assert "test-model" in ws.banner.text() and "LLM planner" in ws.banner.text()
+    assert not ws.replies_button.isVisibleTo(ws.pages.widget(0))
+    ws._settings.sync()
+    assert "secret" not in (tmp_path / "settings.ini").read_text()
+
+    _, reopened = CAPTURE["make_workspace"](tmp_path)
+    try:
+        assert reopened.session.provider == ws.session.provider
+        assert reopened.session.provider.timeout_s == 15.0
+        assert reopened.session.planner == "llm"
+    finally:
+        CAPTURE["finish"](app, reopened)
 
 
 def test_the_table_editor_round_trips_through_the_validator(workspace):

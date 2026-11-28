@@ -185,6 +185,7 @@ def simulate_closed_loop(*, run_id: str, clock: ClockSpec, frame: str,
         "t_end_s": float(t_end_s),
         "event_priority": ["plant", "truth", "observation", "control_event",
                            "estimate", "command"],
+        "instant_actuation_after_estimate": True,
         "sensors": {sid: {"kind": s.kind, "period_s": s.period_s, "phase_s": s.phase_s,
                           "latency_s": s.latency_s, "seed": int(s.seed),
                           "bias_covariance_mode": s.bias_covariance_mode}
@@ -236,6 +237,7 @@ def simulate_closed_loop(*, run_id: str, clock: ClockSpec, frame: str,
     pending: dict = {}
     arrived: dict = {}   # sensor_id -> newest unconsumed Observation (None = consumed)
     fired: list = []     # (t_exec, realized delta-v in LVLH) since the last predict
+    executed_impulses: list = []   # retained for delayed sensor updates
     est_n = cmd_n = truth_n = 0
 
     def integrate_to(t_to: float, t_from: float) -> None:
@@ -265,9 +267,9 @@ def simulate_closed_loop(*, run_id: str, clock: ClockSpec, frame: str,
                 realized_delta_v_m_s=realized, source_command_id=cmd.record_id))
             if executed:
                 y[9:12] += np.asarray(realized, dtype=np.float64)
-                fired.append((cmd.t_execute_s,
-                              realized_lvlh(cmd.t_execute_s, realized),
-                              str(cmd.metadata.get("phase", ""))))
+                delta_v = realized_lvlh(cmd.t_execute_s, realized)
+                fired.append((cmd.t_execute_s, delta_v, str(cmd.metadata.get("phase", ""))))
+                executed_impulses.append((cmd.t_execute_s, delta_v))
 
     t_prev = 0.0
     for key in sorted(moment):
@@ -335,7 +337,8 @@ def simulate_closed_loop(*, run_id: str, clock: ClockSpec, frame: str,
                 if isinstance(model, Stacked):
                     filter.update_from_observations(
                         {type(m).__name__: obs for m in model.models}, model, cr, cv,
-                        **({"compensate_to": t_event} if full6 else {}))
+                        **({"compensate_to": t_event,
+                            "executed_impulses": executed_impulses} if full6 else {}))
                 else:
                     filter.update_from_observation(obs, model, cr, cv)
                 arrived[sid] = None  # consumed once: no double-counting

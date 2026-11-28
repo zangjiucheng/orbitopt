@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any, Callable
 
 import numpy as np
@@ -372,6 +372,10 @@ def fly_closed_loop_sample(cfg: RendezvousMissionConfig, campaign: RobustnessCam
         observation_hook=observation_hook,
         mission=_mission_doc(cfg),
         config_extra={
+            "mu_m3_s2": mu,
+            "j2": j2_truth,
+            "truth_drag": (None if drag_on is None else
+                           {"model": asdict(drag_on), "density_factor": draws.drag_factor}),
             "closed_loop": {"campaign": campaign.mission_id, "seed_base": int(seed_base),
                             "cluster": int(cluster), "index": int(index), "seed": draws.seed,
                             "sensor": {"pos_sigma_m": clc.pos_sigma_m,

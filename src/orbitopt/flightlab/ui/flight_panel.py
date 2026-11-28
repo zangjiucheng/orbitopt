@@ -57,7 +57,7 @@ from orbitopt.flightlab.ui.recovery_panel import (
     reason_tooltip,
 )
 from orbitopt.flightlab.ui.telemetry import TelemetryChannel, build_telemetry_channels
-from orbitopt.viz.theme import ACCENT, DANGER, INK_MUTED, INK_SECONDARY, PANEL, SUCCESS, WARNING
+from orbitopt.viz.theme import ACCENT, DANGER, HAIRLINE, INK_MUTED, INK_SECONDARY, PANEL, SUCCESS, WARNING
 
 #: (channel id, label, unit) of the telemetry grid, in display order.
 TELEMETRY_CHARTS = (
@@ -121,9 +121,17 @@ class FlightRunPanel(QWidget):
 
     time_requested = Signal(float)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, settings=None):
         super().__init__(parent)
         self.setObjectName("flightRunPanel")
+        self.setAttribute(Qt.WA_StyledBackground)
+        self.setStyleSheet(f"""
+            #flightRunPanel {{ background: {PANEL}; }}
+            QScrollBar:vertical {{ background: {PANEL}; width: 8px; }}
+            QScrollBar::handle:vertical {{ background: {HAIRLINE}; min-height: 24px; }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0px; }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
+        """)
         self.bundle: RunBundle | None = None
         self.events: tuple[KeyEvent, ...] = ()
         layout = QVBoxLayout(self)
@@ -132,6 +140,9 @@ class FlightRunPanel(QWidget):
 
         splitter = QSplitter(Qt.Vertical)
         splitter.setChildrenCollapsible(False)
+        self.detail_splitter = splitter
+        self._normal_sizes = None
+        self._detail_settings = settings if settings is not None else QSettings("orbitopt", "Mission Control")
         self.summary = QTextBrowser()
         self.summary.setObjectName("flightSummary")
         self.summary.setOpenLinks(False)
@@ -177,13 +188,31 @@ class FlightRunPanel(QWidget):
         self.detail_tabs = QTabWidget()
         self.detail_tabs.setObjectName("flightLabDetailTabs")
         self.detail_tabs.setStyleSheet(FLIGHTLAB_PANEL_QSS)
-        self.detail_tabs.addTab(self.check_table, "Checks")
-        self.detail_tabs.addTab(self.reason_panel, "Why")
-        self.detail_tabs.addTab(self.recovery_panel, "Recovery")
-        self.detail_tabs.addTab(self.rendezvous_panel, "Rendezvous")
-        self.detail_tabs.addTab(self.gnc_panel, "GNC")
-        self.engine_hud = EngineHud()                      # SpaceX-webcast-style: both vehicles, engines + propellant
-        self.detail_tabs.addTab(self.engine_hud, "Engines")
+        self.detail_tabs.setUsesScrollButtons(True)
+        self.detail_tabs.tabBar().setExpanding(False)
+        self.engine_hud = EngineHud()
+        self._details = {
+            "Checks": self.check_table, "Why": self.reason_panel, "Recovery": self.recovery_panel,
+            "Rendezvous": self.rendezvous_panel, "GNC": self.gnc_panel, "Engines": self.engine_hud,
+        }
+        self._detail_actions = {}
+        options = QPushButton("Panels")
+        menu = QMenu(options)
+        stored = self._detail_settings.value("flightlab/hidden_detail_panels", "", type=str)
+        for name, widget in self._details.items():
+            self.detail_tabs.addTab(widget, name)
+            action = menu.addAction(name)
+            action.setCheckable(True)
+            action.setChecked(name not in stored.split(","))
+            action.toggled.connect(self._save_detail_panels)
+            self._detail_actions[name] = action
+        menu.addSeparator()
+        self._expand_details = menu.addAction("Expand details")
+        self._expand_details.setCheckable(True)
+        self._expand_details.toggled.connect(self._resize_details)
+        options.setMenu(menu)
+        self.detail_tabs.setCornerWidget(options)
+        self._available_details = {"Checks", "Why"}
         self._time = 0.0
         splitter.addWidget(self.detail_tabs)
         splitter.setStretchFactor(0, 3)
@@ -204,6 +233,8 @@ class FlightRunPanel(QWidget):
         self.rendezvous_panel.clear()
         self.gnc_panel.clear()
         self.engine_hud.clear()
+        self._available_details = {"Checks", "Why"}
+        self._update_detail_panels()
 
     def set_run(self, bundle: RunBundle, target=None,
                 channels: Sequence[TelemetryChannel] | None = None) -> None:
@@ -233,14 +264,48 @@ class FlightRunPanel(QWidget):
         self._populate_checks(run.verification)
         summary = recovery_summary(bundle)
         self.recovery_panel.set_summary(summary)
-        # the engine HUD: Super Heavy (stage 1, then the recovering booster) and Starship, each with its engines,
-        # speed and propellant -- the telemetry channels carry the speed and the propellant series
         fins = ((bundle.vehicle or {}).get("booster") or {}).get("grid_fins") or {}
         # fixed (never folded) unless the vehicle's grid_fins block says it can stow: Super Heavy's fins are always out
         fixed = (not fins) or not bool(fins.get("stowable", True))
         self.engine_hud.set_run(run.tracks, channels if channels is not None else build_telemetry_channels(run),
-                                summary.engine_burns, fin_count=fins.get("count"), fins_fixed=fixed)
+                                summary.engine_burns, fin_count=fins.get("count"), fins_fixed=fixed,
+                                vehicle=bundle.vehicle)
         self.engine_hud.set_time(self._time)
+        self._available_details = {"Checks", "Why"}
+        if summary.state != "none":
+            self._available_details.add("Recovery")
+        if bundle.rendezvous:
+            self._available_details.add("Rendezvous")
+        if bundle.gnc:
+            self._available_details.add("GNC")
+        if self.engine_hud.has_stages:
+            self._available_details.add("Engines")
+        self._update_detail_panels()
+        preferred = "GNC" if bundle.gnc else "Rendezvous" if bundle.rendezvous else None
+        if preferred and self._detail_actions[preferred].isChecked():
+            self.detail_tabs.setCurrentWidget(self._details[preferred])
+
+    def _update_detail_panels(self) -> None:
+        shown = {name for name, action in self._detail_actions.items()
+                 if action.isChecked() and name in self._available_details}
+        for name, widget in self._details.items():
+            self._detail_actions[name].setEnabled(name in self._available_details and shown != {name})
+            self.detail_tabs.setTabVisible(self.detail_tabs.indexOf(widget), name in shown or (not shown and name == "Checks"))
+
+    def _save_detail_panels(self, _checked: bool) -> None:
+        hidden = ",".join(name for name, action in self._detail_actions.items() if not action.isChecked())
+        self._detail_settings.setValue("flightlab/hidden_detail_panels", hidden)
+        self._update_detail_panels()
+
+    def _resize_details(self, expanded: bool) -> None:
+        if expanded:
+            self._normal_sizes = self.detail_splitter.sizes()
+            self.detail_splitter.setChildrenCollapsible(True)
+            self.detail_splitter.setCollapsible(2, False)
+            self.detail_splitter.setSizes([0, 0, sum(self._normal_sizes)])
+        elif self._normal_sizes is not None:
+            self.detail_splitter.setChildrenCollapsible(False)
+            self.detail_splitter.setSizes(self._normal_sizes)
 
     def set_time(self, t: float) -> None:
         """Highlight the latest event at or before ``t``; the engine HUD follows the same clock."""

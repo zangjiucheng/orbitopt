@@ -38,8 +38,12 @@ lists all options.
   Verification tab. Returning to **Missions** restores the previous mission.
 - **Flight tab:** launch inputs, target and achieved orbit, and seekable events.
   **Recovery** lists each booster burn, its throttle range, propellant used
-  and recorded engine staging. **Engines** follows the replay clock with
-  engine, throttle, propellant and orientation displays for both stages.
+  and recorded engine staging. **Engines** follows the replay clock and
+  displays the stages in the run. Counts come from the vehicle definition
+  or recorded telemetry. Engine layouts are schematic.
+- **Panels:** choose which detail tabs to show and use **Expand details**
+  for more space. The viewer remembers tab visibility, and shows **GNC**
+  and **Rendezvous** when the selected run contains that data.
 - **Verification:** shows the checks saved with the run, including orbit
   re-flight when present. A run without an assessed verdict shows **Not checked**.
 - **Telemetry:** click a chart to seek the timeline. **Compare** opens two

@@ -280,14 +280,44 @@ def row_layout(width: float, height: float, label_h: float = 30.0) -> tuple[floa
 @dataclass(frozen=True)
 class VehicleSpec:
     name: str
-    kind: str                 # "superheavy" | "starship"
+    kind: str                 # "superheavy" | "starship" | "generic"
     total: int                # engines in the map
     bodies: tuple[str, ...]   # track body ids to follow, in preference order, as the flight goes on
     attached: tuple[str, ...] = ()   # before its own track exists the vehicle rides on these (the stack)
+    observed_only: bool = False
 
 
 SUPER_HEAVY = VehicleSpec("SUPER HEAVY", "superheavy", 33, ("booster", "stage1", "stage1_debris"))
 STARSHIP = VehicleSpec("STARSHIP", "starship", 6, ("stage2",), ("stage1",))
+
+
+def stage_specs(tracks: Mapping[str, object], vehicle: Mapping | None) -> dict[int, VehicleSpec]:
+    """Use the stage tracks and matching vehicle document to build the HUD rows."""
+    vehicle = vehicle or {}
+    starship_class = str(vehicle.get("name", "")).startswith("starship-class")
+    stages = vehicle.get("stages") or ()
+    numbers = {int(body[5:]) for body in tracks if body.startswith("stage") and body[5:].isdigit()}
+    if "booster" in tracks or "stage1_debris" in tracks:
+        numbers.add(1)
+    specs = {}
+    for number in sorted(numbers - {0}):
+        track_id = f"stage{number}"
+        bodies = ("booster", track_id, "stage1_debris") if number == 1 else (track_id,)
+        attached = (f"stage{number - 1}",) if number > 1 else ()
+        declared = stages[number - 1] if number <= len(stages) else {}
+        engine = declared.get("engine") or {}
+        count = declared.get("engine_count", engine.get("count"))
+        peak = max((int(value) for body in bodies if body in tracks
+                    for key, values in tracks[body].extra_columns.items() if key.lower() == "engines_lit"
+                    for value in values if math.isfinite(value) and value >= 0), default=0)
+        layout = {1: SUPER_HEAVY, 2: STARSHIP}.get(number) if starship_class else None
+        total = count if type(count) is int and count > 0 else layout.total if layout else 0
+        if layout is not None and total == layout.total and peak <= total:
+            specs[number] = layout
+        else:
+            name = "BOOSTER / STAGE 1" if number == 1 and "booster" in tracks else f"STAGE {number}"
+            specs[number] = VehicleSpec(name, "generic", max(total, peak), bodies, attached, peak > total)
+    return specs
 
 
 def starship_layout() -> tuple[tuple[float, float, float, str], ...]:
@@ -480,9 +510,10 @@ def readout_at(spec: VehicleSpec, tracks: Mapping[str, object], speed: Mapping[s
 try:                                                       # the module stays importable without Qt
     from PySide6.QtCore import QPointF, QRectF, Qt
     from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF
-    from PySide6.QtWidgets import QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
 except Exception:                                          # pragma: no cover
     QWidget = object  # type: ignore[assignment,misc]
+    QScrollArea = object  # type: ignore[assignment,misc]
 
 _DIM = "#2c2c2c"
 
@@ -526,7 +557,7 @@ class VehicleHud(QWidget):                                 # type: ignore[misc,v
         super().__init__(parent)
         self.spec = spec
         self.setObjectName("flightLabVehicleHud" + spec.kind.capitalize())
-        self.setMinimumSize(280, 84)                      # shrinks with the tab: the painting scales to the space
+        self.setMinimumSize(280, 134)                     # keep the gauges legible in a short details pane
         self._r: VehicleReadout | None = None
         self._lit: frozenset[int] = frozenset()
         from orbitopt.flightlab.ui.plot_export import ExportButton
@@ -543,7 +574,9 @@ class VehicleHud(QWidget):                                 # type: ignore[misc,v
         if st is None or not st.on:
             self._lit = frozenset()
         elif st.lit is None:
-            self._lit = frozenset(range(self.spec.total))          # count not recorded: the set as firing
+            self._lit = frozenset()
+        elif self.spec.kind == "generic":
+            self._lit = frozenset(_spread(self.spec.total)[:st.lit])
         else:
             self._lit = lit_engines(self.spec.total, st.lit)
         self.update()
@@ -615,11 +648,19 @@ class VehicleHud(QWidget):                                 # type: ignore[misc,v
             for i, (x, y, rad, _k) in enumerate(starship_layout()):
                 p.setBrush(QBrush(QColor(INK_PRIMARY if i in self._lit else _DIM)))
                 p.drawEllipse(QPointF(c.x() + x * inner, c.y() - y * inner), rad * inner, rad * inner)
-        else:
+        elif self.spec.kind == "superheavy":
             er = ENGINE_RADIUS * inner * 1.3
             for i, (x, y, _ring) in enumerate(engine_layout(self.spec.total)):
                 p.setBrush(QBrush(QColor(INK_PRIMARY if i in self._lit else _DIM)))
                 p.drawEllipse(QPointF(c.x() + x * inner, c.y() - y * inner), er, er)
+        else:
+            total = self.spec.total
+            er = inner * min(0.12, 1.7 / max(total, 1))
+            ring = 0.0 if total == 1 else 0.68 * inner
+            for i in range(total):
+                a = -math.pi / 2 + 2 * math.pi * i / total
+                p.setBrush(QBrush(QColor(INK_PRIMARY if i in self._lit else _DIM)))
+                p.drawEllipse(QPointF(c.x() + ring * math.cos(a), c.y() + ring * math.sin(a)), er, er)
         p.setPen(QColor(INK_SECONDARY)); p.setFont(_font(self, 8.5))
         if st is None:
             line = "no data"
@@ -630,7 +671,8 @@ class VehicleHud(QWidget):                                 # type: ignore[misc,v
             elif st.on and not st.count_known:
                 line = "FIRING" + (f"  THR ~{st.throttle * 100:.0f}%" if st.throttle_est else "")   # count not recorded
             else:
-                line = f"{lit}/{st.total}" + (f"  THR {st.throttle * 100:.0f}%" if st.on else "")
+                count = f"{lit} lit" if self.spec.observed_only or not st.total else f"{lit}/{st.total}"
+                line = count + (f"  THR {st.throttle * 100:.0f}%" if st.on else "")
         p.drawText(QRectF(c.x() - r * 1.2, c.y() + r * 1.1, r * 2.4, 14), Qt.AlignCenter, line)
 
     def _paint_globe(self, p, c, r, rd) -> None:
@@ -693,19 +735,30 @@ class VehicleHud(QWidget):                                 # type: ignore[misc,v
         p.drawText(QRectF(c.x() - r * 1.3, c.y() + bar_h / 2 + 20, 2.6 * r, 12), Qt.AlignCenter, sub)
 
 
-class EngineHud(QWidget):                                  # type: ignore[misc,valid-type]
-    """Both vehicles, one row each, following the replay clock."""
+class EngineHud(QScrollArea):                              # type: ignore[misc,valid-type]
+    """A row for each recorded launch stage, following the replay clock."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        from orbitopt.viz.theme import PANEL
+
         self.setObjectName("flightLabEngineHud")
-        lay = QVBoxLayout(self)
+        self.setWidgetResizable(True)
+        self.setFrameShape(QScrollArea.NoFrame)
+        content = QWidget()
+        content.setObjectName("flightLabEngineContent")
+        content.setAttribute(Qt.WA_StyledBackground)
+        content.setStyleSheet(f"#flightLabEngineContent {{ background: {PANEL}; }}")
+        self.setWidget(content)
+        lay = self._rows = QVBoxLayout(content)
         lay.setContentsMargins(0, 6, 0, 6)
         lay.setSpacing(22)                                  # air between the two vehicles
         from orbitopt.flightlab.ui.grid_fin_hud import GridFinHud
 
         self.superheavy = VehicleHud(SUPER_HEAVY)
         self.starship = VehicleHud(STARSHIP)
+        self._stage_huds = {1: self.superheavy, 2: self.starship}
+        self._active_stages: tuple[int, ...] = ()
         self.gridfins = GridFinHud()                        # the booster's grid fins: layout, deflection, airflow
         lay.addWidget(self.superheavy, 1)
         lay.addWidget(self.starship, 1)
@@ -719,19 +772,38 @@ class EngineHud(QWidget):                                  # type: ignore[misc,v
 
     def clear(self) -> None:
         self._tracks, self._speed, self._prop, self._flow, self._burns = {}, {}, {}, {}, ()
-        self.superheavy.set_readout(None)
-        self.starship.set_readout(None)
+        self._active_stages = ()
+        for hud in self._stage_huds.values():
+            hud.set_readout(None)
+            hud.hide()
         self.gridfins.set_readout(None)
+        self.gridfins.hide()
+
+    @property
+    def has_stages(self) -> bool:
+        return bool(self._active_stages)
 
     def set_run(self, tracks: Sequence, channels: Sequence, burns: Sequence = (),
-                fin_count: int | None = None, fins_fixed: bool = True) -> None:
+                fin_count: int | None = None, fins_fixed: bool = True, *, vehicle: Mapping | None = None) -> None:
         """``tracks`` are the run's BodyTracks; ``channels`` the telemetry channels (speed and propellant);
         ``fin_count`` the booster's grid fins when its vehicle declares them (else the V3 three); ``fins_fixed``
         whether they never fold (Super Heavy's do not; a vehicle that stows them says ``stowable``)."""
-        if fin_count:
-            self.gridfins.set_fin_count(fin_count)
+        self.clear()
+        self.gridfins.set_fin_count(fin_count if fin_count is not None else 3)
         self.gridfins.set_fixed(fins_fixed)
         self._tracks = {t.body_id: t for t in tracks}
+        specs = stage_specs(self._tracks, vehicle)
+        for position, (number, spec) in enumerate(specs.items()):
+            if number not in self._stage_huds:
+                self._stage_huds[number] = VehicleHud(spec)
+            hud = self._stage_huds[number]
+            hud.spec = spec
+            self._rows.insertWidget(position, hud, 1)
+            hud.show()
+        self._active_stages = tuple(specs)
+        booster = self._tracks.get("booster")
+        self.gridfins.setVisible(booster is not None and (fin_count is not None or
+                                 any("fin" in key.lower() for key in booster.extra_columns)))
         self._burns = tuple(burns)
         self._speed, self._prop, self._flow = {}, {}, {}
         for body_id, tr in self._tracks.items():                # speed against the ground, like the webcast
@@ -748,8 +820,9 @@ class EngineHud(QWidget):                                  # type: ignore[misc,v
         self._t = float(t)
         if not self._tracks:
             return
-        for hud, spec in ((self.superheavy, SUPER_HEAVY), (self.starship, STARSHIP)):
-            hud.set_readout(readout_at(spec, self._tracks, self._speed, self._prop, self._t, self._burns, self._flow))
+        for number in self._active_stages:
+            hud = self._stage_huds[number]
+            hud.set_readout(readout_at(hud.spec, self._tracks, self._speed, self._prop, self._t, self._burns, self._flow))
         from orbitopt.flightlab.ui.grid_fin_hud import gridfin_readout_at
 
         booster = self._tracks.get("booster")
