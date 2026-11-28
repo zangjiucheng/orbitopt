@@ -27,6 +27,7 @@ def words(messages) -> int:
 class FakeDeepSeek:
     def __init__(self, answer, key: str):
         self.answer, self.key = answer, key
+        self.models = dict(MODELS)  # requested name -> the name the server answers under
         self.failures: deque = deque()
         self.requests: list[dict] = []
         self.seen_prefixes: set[str] = set()
@@ -73,7 +74,7 @@ class FakeDeepSeek:
         if self.failures:
             status, extra = self.failures.popleft()
             return status, extra, self.error(status, f"scripted {status}")
-        if body.get("model") not in MODELS:
+        if body.get("model") not in self.models:
             return 400, {}, self.error(400, f"Model Not Exist: {body.get('model')}")
         fmt = (body.get("response_format") or {}).get("type", "text")
         if fmt not in ("text", "json_object"):
@@ -93,7 +94,7 @@ class FakeDeepSeek:
         prompt = words(messages)
         completion = len(str(content or "").split())
         payload = {"id": f"ds-{len(self.requests)}", "object": "chat.completion", "created": 1764288000,
-                   "model": MODELS[body["model"]], "system_fingerprint": "fp_fake",
+                   "model": self.models[body["model"]], "system_fingerprint": "fp_fake",
                    "choices": [{"index": 0, "finish_reason": finish, "logprobs": None,
                                 "message": {"role": "assistant", "content": content}}],
                    "usage": {"prompt_tokens": prompt, "completion_tokens": completion,

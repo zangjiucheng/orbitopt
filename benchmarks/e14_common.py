@@ -150,7 +150,7 @@ def protocol_digest() -> str:
     return digest(PROTOCOL)
 
 
-CODE_GLOBS = ("benchmarks/e14_common.py", "benchmarks/bench_e14_*.py", "benchmarks/e14_spec/*.py",
+CODE_GLOBS = ("benchmarks/e14_common.py", "benchmarks/e14_llm.py", "benchmarks/bench_e14_*.py", "benchmarks/e14_spec/*.py",
               "src/orbitopt/**/*.py", "src/orbitopt/**/*.json")
 
 

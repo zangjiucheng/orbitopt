@@ -1,7 +1,8 @@
 """E14-10 compiler arms: arm D (LLM problem compiler + the fixed solver) and the formulation-accuracy suite.
 
-Both need a real model. With no provider configured (``e14_common.provider_from_env``) every cell is recorded as
-``not_run: no provider``; nothing is guessed. ``--mode pipeline-smoke`` runs the suite on the scripted replies of
+Both need a real model. With no provider configured (the LLM_* variables, ``e14_llm.context_from_env``) every
+cell is recorded as ``not_run: no provider``; nothing is guessed. Each compile runs under arm D's per-cell call
+cap and token budget, and every call is recorded in a cassette under the run directory. ``--mode pipeline-smoke`` runs the suite on the scripted replies of
 ``tests/data/agent/formulation_cases.json`` through a ``MockProvider``: that exercises the pipeline only, says
 nothing about any model, and every row it writes is labelled ``pipeline-smoke`` and kept out of every statistic.
 
@@ -18,6 +19,7 @@ from pathlib import Path
 from typing import Callable
 
 import e14_common as C
+import e14_llm as L
 
 CASES_PATH = C.REPO / "tests" / "data" / "agent" / "formulation_cases.json"
 
@@ -117,19 +119,27 @@ def not_run_row(arm: str, inst, seed: int, reason: str = "no provider", mode: st
 
 
 def run_cell_d(inst, seed: int, provider, mode: str = "scored") -> dict:
-    """Arm D: compile the statement, solve the compiled problem with the arm-A solver, score x on the reference."""
+    """Arm D: compile the statement, solve the compiled problem with the arm-A solver, score x on the reference.
+
+    ``provider`` carries the cell's meter: the spec allows arm D 3 calls, so a compile whose repair rounds would
+    need a fourth call stops there, typed ``budget_exhausted:llm_calls``."""
     import bench_e14_solver_selection as S
+    from orbitopt.agent.providers import BudgetExceededError
     started = time.perf_counter()
-    outcome, view = compile_statement(inst.statement, provider, seed, inst.id)
+    try:
+        outcome, view = compile_statement(inst.statement, provider, seed, inst.id)
+    except BudgetExceededError:
+        outcome, view = None, None
     llm_wall = time.perf_counter() - started
     row = C.base_row("D", inst, seed, mode)
-    usage = outcome.usage
-    row.update({"compile_outcome": outcome.outcome, "llm_calls": outcome.attempts, "llm_wall_clock_s": llm_wall,
-                "tokens_in": usage.prompt_tokens, "tokens_out": usage.completion_tokens,
-                "cost_usd": usage.cost_usd or 0.0, "solvers": [], "messages": []})
+    compiled = "budget_exhausted" if outcome is None else outcome.outcome
+    row.update({"compile_outcome": compiled, "compile_attempts": None if outcome is None else outcome.attempts,
+                "schema_valid": None if outcome is None else outcome.outcome != "compile_failed",
+                "llm_wall_clock_s": llm_wall, "solvers": [], "messages": [], **L.llm_fields(provider.meter)})
     x = None
-    stop, error, evaluations = "rejected", None, 0
-    if outcome.outcome == "compile":
+    stop, error, evaluations = ("rejected" if outcome is not None else
+                                f"budget_exhausted:llm_{provider.meter.cut}"), None, 0
+    if compiled == "compile":
         try:
             adapter = adapt(outcome.problem, resolvers(outcome.problem, view))
             budget = C.A.BUDGET.evaluations(adapter.dimension)
@@ -147,15 +157,19 @@ def run_cell_d(inst, seed: int, provider, mode: str = "scored") -> dict:
             stop, error = "error", f"{type(exc).__name__}: {exc}"
     if x is not None and len(x) != inst.dimension:
         error, x = f"compiled dimension {len(x)} != reference {inst.dimension}", None
-    if outcome.outcome == "compile":
+    if compiled == "compile":
         row["hard_constraints"] = hard_constraints(outcome.problem, inst)
     sc = C.score(inst, x=x)
+    if row["llm_over_budget"]:
+        sc = {**sc, "success": False}
+    status = ("rejected" if stop == "rejected" else "budget_exhausted" if outcome is None
+              else C.outcome_status(sc, stop, x is not None))
     row.update({"stop": stop, "error": error, "x": x, "front": None,
                 **{k: sc[k] for k in ("objective", "hypervolume", "max_violation", "gap", "gap_norm", "feasible",
                                       "success", "alarm")},
-                "status": "rejected" if stop == "rejected" else C.outcome_status(sc, stop, x is not None),
-                "n_evaluations": evaluations, "n_evaluations_independent": evaluations,
-                "within_budget": evaluations <= C.A.BUDGET.evaluations(inst.dimension),
+                "status": status, "n_evaluations": evaluations, "n_evaluations_independent": evaluations,
+                "within_budget": (evaluations <= C.A.BUDGET.evaluations(inst.dimension)
+                                  and not row["llm_over_budget"]),
                 "budget_typed": True, "wall_clock_s": time.perf_counter() - started, "verification": None})
     row["row_digest"] = C.row_digest(row)
     return row
@@ -166,36 +180,83 @@ def load_cases() -> list[dict]:
     return json.loads(CASES_PATH.read_text())["cases"]
 
 
+def variable_matching(compiled, reference, case_aliases: dict | None) -> tuple[dict | None, str]:
+    """How a compiled problem's variables are matched to the reference's: the case's alias table when every
+    alias names a compiled variable (the scripted replies), else declared order when the counts match (as arm D
+    maps x back), else by name. A model names its variables freely, so matching by name alone would fail a
+    correct formulation."""
+    names = [v.name for v in compiled.variables]
+    if case_aliases and set(case_aliases) <= set(names):
+        return dict(case_aliases), "case aliases"
+    if len(names) == len(reference.variables):
+        return {a: b.name for a, b in zip(names, reference.variables) if a != b.name}, "declared order"
+    return None, "name"
+
+
+D_CALLS = C.A.ARMS[C.A.ARM_IDS.index("D")].llm_calls_max
+
+
 def case_row(case: dict, seed: int, provider, mode: str) -> dict:
-    """One formulation case: does the outcome match, and is a compiled problem equivalent to the reference IR?"""
+    """One formulation case: does the outcome match, and is a compiled problem equivalent to the reference IR?
+
+    ``provider`` carries arm D's per-cell meter; a compile it cuts is not schema-valid and not correct."""
     from orbitopt.agent.equivalence import semantically_equivalent
+    from orbitopt.agent.providers import BudgetExceededError
     from orbitopt.optimization import parse_problem
     started = time.perf_counter()
-    outcome, _ = compile_statement(case["prompt"], provider, seed, case["id"])
+    try:
+        outcome, _ = compile_statement(case["prompt"], provider, seed, case["id"])
+    except BudgetExceededError:
+        outcome = None
+    llm = L.llm_fields(provider.meter)
     row = {"case_id": case["id"], "seed": seed, "mode": mode, "language": case.get("language"),
-           "expected_outcome": case["expected_outcome"], "outcome": outcome.outcome,
-           "schema_valid": outcome.outcome != "compile_failed", "equivalent": None, "reasons": [],
-           "tokens": outcome.usage.total, "calls": outcome.attempts,
+           "expected_outcome": case["expected_outcome"],
+           "outcome": "budget_exhausted" if outcome is None else outcome.outcome,
+           "schema_valid": outcome is not None and outcome.outcome != "compile_failed", "equivalent": None,
+           "reasons": [], "tokens": llm["tokens_in"] + llm["tokens_out"], "calls": llm["llm_calls"],
+           "compile_attempts": None if outcome is None else outcome.attempts, **llm,
            "wall_clock_s": time.perf_counter() - started}
-    if outcome.outcome == "compile" and case.get("reference_ir"):
-        report = semantically_equivalent(outcome.problem, parse_problem(case["reference_ir"]), seed=seed)
+    if outcome is not None and outcome.outcome == "compile" and case.get("reference_ir"):
+        reference = parse_problem(case["reference_ir"])
+        aliases, row["variable_matching"] = variable_matching(outcome.problem, reference, case.get("aliases"))
+        report = semantically_equivalent(outcome.problem, reference, seed=seed, aliases=aliases)
         row["equivalent"], row["reasons"] = report.equivalent, list(report.reasons)[:5]
     row["correct"] = row["outcome"] == row["expected_outcome"] and (row["equivalent"] is not False)
     return row
 
 
-def run_suite(provider, seeds, mode: str) -> dict:
+def case_digest(row: dict) -> str:
+    return C.digest(C.jsonable({k: v for k, v in row.items() if k not in ("wall_clock_s", "replay")}))
+
+
+def run_suite(llm: L.LLMContext | None, seeds, mode: str, runs_dir: Path) -> dict:
+    """Every formulation case at every seed. Live, each (case, seed) has its own cassette under ``runs_dir`` and
+    is replayed from it right away; in pipeline-smoke mode the case's scripted replies stand in for a model."""
+    import bench_e14_end_to_end as E2E
+    from orbitopt.agent.providers import MockProvider
     cases = load_cases()
-    if provider is None and mode != "pipeline-smoke":
+    if llm is None and mode != "pipeline-smoke":
         return {"metric": "formulation_accuracy", "mode": mode, "status": "not_run", "not_run": "no provider",
                 "cases": len(cases), "seeds": list(seeds), "rows": []}
+    runs_dir = Path(runs_dir)
+    caps = (D_CALLS, C.A.BUDGET.llm_tokens_max)
     rows = []
     for case in cases:
         for seed in seeds:
+            cassette = runs_dir / case["id"] / f"seed-{seed}.cassette.jsonl"
+            context = llm
             if mode == "pipeline-smoke":
-                from orbitopt.agent.providers import MockProvider
-                provider = MockProvider(list(case.get("replies", [])) or ["{}"])
-            rows.append(case_row(case, seed, provider, mode))
+                context = L.LLMContext(MockProvider(list(case.get("replies", [])) or ["{}"]), None)
+                cassette.unlink(missing_ok=True)
+            cassette.parent.mkdir(parents=True, exist_ok=True)
+            row = case_row(case, seed, context.cell(cassette, *caps), mode)
+            row["transcript_digest"] = C.file_sha256(cassette) if cassette.exists() else None
+            if cassette.exists():
+                again = case_row(case, seed, E2E.replay_provider(cassette, caps), mode)
+                again["transcript_digest"] = row["transcript_digest"]
+                row["replay"] = {"kind": "re-execution from the recorded cassette",
+                                 "equal": case_digest(again) == case_digest(row)}
+            rows.append(row)
     n = len(rows)
     return {"metric": "formulation_accuracy", "mode": mode, "status": "run", "cases": len(cases),
             "seeds": list(seeds), "rows": rows,
@@ -209,7 +270,7 @@ def main(argv=None) -> None:
     ap.add_argument("-o", "--out", type=Path, required=True)
     args = ap.parse_args(argv)
     seeds = [0] if args.mode == "pipeline-smoke" else list(C.M.SCORING_SEEDS)
-    doc = run_suite(C.provider_from_env(), seeds, args.mode)
+    doc = run_suite(L.context_from_env(args.out.parent), seeds, args.mode, args.out.parent / "runs" / "formulation")
     doc.update(spec_digest=C.SPEC.spec_digest(), protocol_digest=C.protocol_digest())
     C.write_json_atomic(args.out, C.sealed(C.jsonable(doc)))
     print(json.dumps({k: v for k, v in doc.items() if k != "rows"}, indent=1, default=str))
