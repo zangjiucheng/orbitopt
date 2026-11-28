@@ -24,7 +24,8 @@ from orbitopt.agent.tools import Caller, ToolError, ToolRegistry, ToolView, bind
 from orbitopt.optimization import (MAX_ENUMERATION_POINTS, Budget, OptimizationProblem, OptimizationResult, ToolCall,
                                    validate_problem)
 from orbitopt.optimization.classify import classify
-from orbitopt.optimization.solvers import SolverCapability, SolverRegistry, default_registry
+from orbitopt.optimization.solvers import (SELECTION_FRACTION, SolverCapability, SolverRegistry, band_fraction,
+                                           default_registry)
 from orbitopt.optimization.verification import (AlternateSolverCheck, EnumerationCertificate, EvidenceItem, Outcome,
                                                 VerificationReport, result_digest, unsupported_reason, verify_result)
 
@@ -169,9 +170,15 @@ class _Run:
 
     def incumbent(self, *, skip: frozenset[str] = frozenset(),
                   verifiable: bool = False) -> tuple[str, OptimizationResult] | None:
-        """The best result the guard found feasible and honest: objectives in their senses, then converged first,
-        then earliest. ``verifiable`` keeps only results whose screen passed every required status that the
-        screen can grade (all but ``independently_verified`` and ``optimality_certified``)."""
+        """The best result the guard found feasible and honest: clean points first, then objectives in their
+        senses, then converged first, then earliest. ``verifiable`` keeps only results whose screen passed every
+        required status that the screen can grade (all but ``independently_verified`` and
+        ``optimality_certified``).
+
+        A clean point uses at most ``SELECTION_FRACTION`` of any constraint's tolerance band. A point deeper in
+        the band can beat the exact optimum by what its violation buys (multiplier times violation), so it
+        never outranks a clean point on objective. The solver adapters restore their best band point onto the
+        constraints before they report it, so a band point here is one that could not be restored."""
         signs = [-1.0 if o.sense == "maximize" else 1.0 for o in self.asked.objectives]
         graded = [s for s in self.asked.verification.required if s not in SCREEN_UNGRADED]
         eligible = [(label, r) for label, r in self.results.items() if label not in skip
@@ -184,8 +191,9 @@ class _Run:
         def rank(item):
             label, result = item
             converged = self.screens[label].statuses["solver_converged"].outcome is Outcome.PASSED
-            return [s * result.objective_values.get(o.name, float("inf"))
-                    for s, o in zip(signs, self.asked.objectives)] + [not converged]
+            band = band_fraction(self.asked, result.constraint_residuals) > SELECTION_FRACTION
+            return [band] + [s * result.objective_values.get(o.name, float("inf"))
+                             for s, o in zip(signs, self.asked.objectives)] + [not converged]
 
         return min(eligible, key=rank)
 

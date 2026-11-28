@@ -137,8 +137,14 @@ the guard failed, or any claim to `independently_verified` or
 `optimality_certified`, which only the guard sets. A claim the guard could
 not assess, such as a tool that raised, is not a lie.
 
-The best eligible candidate has the best objective in its sense, then a
-passed `solver_converged`, then the earliest iteration. After the loop the
+The best eligible candidate is clean first (no constraint uses more than
+`SELECTION_FRACTION` of its tolerance band), then has the best objective in
+its sense, then a passed `solver_converged`, then the earliest iteration. A
+candidate deeper in the band can beat the exact optimum by what its
+violation buys, so it never outranks a clean one on objective. The solver
+adapters restore their best band point before they report it, so a band
+candidate here is one that could not be restored
+([solvers](../optimization/solvers.md#the-tolerance-band-is-not-room-to-optimise)). After the loop the
 runtime verifies it with the whole guard:
 
 - Up to two alternate solvers, every compatible solver except the candidate's
@@ -417,13 +423,15 @@ planner. The scripted LLM is a `MockProvider` whose function reads the
 runtime's prompt and answers: a global or specialised solve first, a local
 refinement from the incumbent, restarts with new seeds for a heuristic, then
 stop. Measured with seed 0 on one machine (macOS arm64, Python 3.12, scipy
-from the `orbitopt-py312` environment):
+from the `orbitopt-py312` environment). The rule-based rows were re-measured after the solver adapters
+started to restore band points; the two that moved gained 1 and 3 verification evaluations, and the LLM
+rows were not re-measured:
 
 | Instance | Planner | Status | Objective (reference) | Solves | Evaluations, loop | Evaluations, verification | Limit | Tokens |
 |---|---|---|---|---|---|---|---|---|
-| cqp-worked-d2 | rule | verified | 0.5 (0.5) | 1 | 7 | 800 | 4000 | 0 |
+| cqp-worked-d2 | rule | verified | 0.5 (0.5) | 1 | 7 | 801 | 4000 | 0 |
 | cqp-worked-d2 | LLM | verified | 0.5 (0.5) | 1 | 7 | 800 | 4000 | 555 |
-| lp-wyndor-d2 | rule | verified | 36 (36) | 1 | 2 | 393 | 4000 | 0 |
+| lp-wyndor-d2 | rule | verified | 36 (36) | 1 | 2 | 396 | 4000 | 0 |
 | lp-wyndor-d2 | LLM | verified | 36 (36) | 1 | 2 | 393 | 4000 | 617 |
 | knapsack-p01-n10 | rule | verified | 309 (309) | 1 | 2 | 2051 | 20000 | 0 |
 | knapsack-p01-n10 | LLM | verified | 309 (309) | 1 | 2 | 2051 | 20000 | 769 |

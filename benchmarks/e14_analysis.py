@@ -279,9 +279,11 @@ def analyze(out: Path, allow_smoke: bool = False) -> dict:
                       "cells": dict(Counter(r["arm_id"] for r in rows)), "scoring_instances": len(scoring_ids)}
     analysis["alarm_rule"] = ALARM_RULE
     analysis["comparisons"] = comparisons(rows, ran, scoring_ids, strata)
-    analysis["sensitivity_scorer_success"] = {
-        "why": "the frozen scorer counts an alarm cell as a success; this repeats every comparison that way",
-        "comparisons": comparisons([dict(r, success=r["success_scorer"]) for r in rows], ran, scoring_ids, strata)}
+    if any(r.get("alarm") and r["success_scorer"] for r in rows):  # only a v1 scorer counted an alarm a success
+        analysis["sensitivity_scorer_success"] = {
+            "why": "the frozen scorer counts an alarm cell as a success; this repeats every comparison that way",
+            "comparisons": comparisons([dict(r, success=r["success_scorer"]) for r in rows], ran, scoring_ids,
+                                       strata)}
     analysis["per_class"] = per_class_table(rows)
     analysis["safety"] = safety(rows, faults)
     analysis["verification"] = verification_distribution(rows)
@@ -460,10 +462,12 @@ def render_tables(an: dict) -> str:
                          f"[{fmt(C.num(ci[0]))}, {fmt(C.num(ci[1]))}] | {s['informative']} | "
                          f"{fmt(C.num(s['p']))} | {fmt(C.num(s.get('p_holm')))} ({s.get('holm_family_size', '-')}) | "
                          f"{s.get('verdict', '-')} |")
-    lines += ["", "### Sensitivity: success as the frozen scorer counts it (alarm cells as successes)", "",
-              "| scope | treatment vs control | effect | 95% CI | informative | p | p Holm (m) | verdict |",
-              "|---|---|---|---|---|---|---|---|"]
-    for c in an["sensitivity_scorer_success"]["comparisons"]:
+    sensitivity = an.get("sensitivity_scorer_success", {"comparisons": []})["comparisons"]
+    if sensitivity:
+        lines += ["", "### Sensitivity: success as the frozen scorer counts it (alarm cells as successes)", "",
+                  "| scope | treatment vs control | effect | 95% CI | informative | p | p Holm (m) | verdict |",
+                  "|---|---|---|---|---|---|---|---|"]
+    for c in sensitivity:
         if "not_run" not in c:
             s_ = c["success"]
             lines.append(f"| {c['scope']} | {c['treatment']} vs {c['control']} | {fmt(C.num(s_['effect']))} | "

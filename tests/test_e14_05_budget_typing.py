@@ -118,19 +118,26 @@ def test_alternates_skipped_for_lack_of_evaluations_are_typed():
 
 
 # ------------------------------------------------------------------------------------- the campaign case
-@pytest.mark.parametrize("seed", [2, 3, 7, 8])
-def test_rosenbrock_disk_d2_cells_that_spend_the_budget_say_where_it_ran_out(seed, tmp_path):
-    """The exact E14-10 v1 cells: 4000 of 4000 evaluations, ``planner_stop``, and nothing typed the exhaustion."""
+def test_rosenbrock_disk_d2_cells_say_where_the_verification_ran_out(tmp_path):
+    """The E14-10 v1 cells (seeds 2, 3, 7, 8): the differential-evolution alternate stopped at its allocation, the
+    run said ``planner_stop`` and ``verified``, and nothing typed the cut. In v1 they also used 4000 of 4000; the
+    restoration reserve of the adapters now leaves a few evaluations unspent, but on seeds 3, 7 and 8 the
+    alternate still stops at its allocation, so the case stays exercised."""
     inst = C.P.by_id("rosenbrock-disk-d2")
-    row = ERULE.run_cell("E-rule", inst, seed, tmp_path / "run")
-    assert row["n_evaluations_independent"] == row["n_evaluations"] == row["budget_evaluations"] == 4000
-    trace = load_trace(tmp_path / "run")
-    used = [e for e in trace["outcome"]["budget"] if e["resource"] == "evaluations" and e["stage"] != "solve"]
-    assert used, trace["outcome"]["budget"]
-    assert row["budget_typed"] is True
-    assert row["replay"]["equal"]
-    if row["verification"]["run_status"] == "verified":
-        assert row["verification"]["verdict"] == "passed"
+    cut_seeds = []
+    for seed in (2, 3, 7, 8):
+        row = ERULE.run_cell("E-rule", inst, seed, tmp_path / f"run-{seed}")
+        trace = load_trace(tmp_path / f"run-{seed}")
+        cut = [f"verify-{v['attempt']}-{a['solver_id']}" for v in trace["verifications"] for a in v["alternates"]
+               if a["result"] and a["result"]["termination"] == "max_evaluations"]
+        typed = [e["label"] for e in trace["outcome"]["budget"] if e["stage"] == "alternate"]
+        assert typed == cut
+        if row["n_evaluations_independent"] >= row["budget_evaluations"] or cut:
+            assert row["budget_typed"] is True and row["stop"] == "budget_exhausted:evaluations"
+        assert row["verification"]["run_status"] == "verified" and row["verification"]["verdict"] == "passed"
+        assert row["replay"]["equal"]
+        cut_seeds += [seed] if cut else []
+    assert cut_seeds  # 3, 7 and 8 on the machines measured so far
 
 
 # ------------------------------------------------------------------------------------- old traces

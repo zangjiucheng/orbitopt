@@ -300,6 +300,10 @@ def hypervolume_2d(points, ref) -> float:
                for i, (f1, f2) in enumerate(front))
 
 
+ALARM_SLACK = 1e-12
+"""Rounding room below minus the tolerance before a gap is an alarm."""
+
+
 def allowed_gap(inst) -> float:
     tol = inst.tolerance
     return tol.objective_abs + tol.objective_rel * abs(inst.reference.value)
@@ -310,7 +314,8 @@ def score(inst, x: Sequence[float] | None = None, front: Sequence[Sequence[float
 
     ``gap`` is the raw oriented gap (0 optimal, positive worse); ``gap_norm`` divides by max(1, |f*|) as
     ``metrics.optimality_gap`` does. ``alarm`` flags a gap below minus the tolerance: a wrong reference or a missed
-    violation, which the spec says stops the analysis until explained.
+    violation, which the spec says stops the analysis until explained. Spec section 2: such a gap "is not a win",
+    so an alarm cell is never a success (``SCORER_ALARM_RULE``).
     """
     ref, tol = inst.reference, inst.tolerance
     if ref.indicator == "hypervolume":
@@ -319,10 +324,11 @@ def score(inst, x: Sequence[float] | None = None, front: Sequence[Sequence[float
         values = [tuple(o(p) for o in inst.objectives) for p in kept]
         hv = hypervolume_2d(values, ref.reference_point) if values else 0.0
         gap = ref.value - hv
+        alarm = gap < -allowed_gap(inst) - ALARM_SLACK
         return {"objective": None, "hypervolume": hv, "front_size": len(pts), "front_feasible": len(kept),
                 "max_violation": 0.0 if kept or not pts else min(violation(inst, p) for p in pts),
                 "gap": gap, "gap_norm": gap / max(1.0, abs(ref.value)), "feasible": bool(kept),
-                "success": bool(kept) and gap <= allowed_gap(inst), "alarm": gap < -allowed_gap(inst) - 1e-12}
+                "success": bool(kept) and gap <= allowed_gap(inst) and not alarm, "alarm": alarm}
     if x is None or len(x) != inst.dimension:
         return {"objective": None, "hypervolume": None, "max_violation": math.inf, "gap": math.inf,
                 "gap_norm": math.inf, "feasible": False, "success": False, "alarm": False}
@@ -332,9 +338,10 @@ def score(inst, x: Sequence[float] | None = None, front: Sequence[Sequence[float
     raw = (f - ref.value) if inst.sense == "minimize" else (ref.value - f)
     feasible = viol <= tol.constraint_abs
     gap = raw if feasible else math.inf
+    alarm = feasible and raw < -allowed_gap(inst) - ALARM_SLACK
     return {"objective": f, "hypervolume": None, "max_violation": viol, "gap": gap,
             "gap_norm": gap / max(1.0, abs(ref.value)), "feasible": feasible,
-            "success": feasible and raw <= allowed_gap(inst), "alarm": feasible and raw < -allowed_gap(inst) - 1e-12}
+            "success": feasible and raw <= allowed_gap(inst) and not alarm, "alarm": alarm}
 
 
 # ---------------------------------------------------------------------------------------- the baseline evaluator
