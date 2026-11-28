@@ -28,6 +28,7 @@ from typing import Union
 from orbitopt.agent.providers.base import (
     ChatProvider,
     ChatRequest,
+    ProviderAccountError,
     ProviderError,
     ProviderResponse,
     ProviderUnavailableError,
@@ -43,7 +44,8 @@ from orbitopt.agent.providers.base import (
 CASSETTE_FORMAT = "orbitopt.llm-cassette"
 CASSETTE_VERSION = 1
 _RECORDED_ERRORS = {cls.__name__: cls for cls in
-                    (ProviderError, ProviderUnavailableError, StructuredOutputError, ToolCallError)}
+                    (ProviderError, ProviderUnavailableError, ProviderAccountError, StructuredOutputError,
+                     ToolCallError)}
 
 
 @dataclass(frozen=True)
@@ -229,6 +231,11 @@ class ReplayProvider(ChatProvider):
         if "error" in entry:
             raise _error_from_record(entry["error"])
         return ProviderResponse.from_dict(entry["response"])
+
+    def pending(self, request: ChatRequest) -> bool:
+        """True when a recorded entry for ``request`` has not been served yet."""
+        with self._lock:
+            return bool(self._entries.get(request.digest()))
 
     def remaining(self) -> int:
         """Number of recorded entries not yet served."""

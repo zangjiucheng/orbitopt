@@ -3,7 +3,7 @@
 ``E-rule`` runs ``orbitopt.agent.runtime.solve`` with the deterministic ``RuleBasedPlanner``: no model, no tokens.
 It is NOT the pre-registered arm E (which compiles the natural-language statement and plans with an LLM), so
 E-rule against A or B says nothing about what an LLM adds. ``E-LLM`` is the same loop with ``LLMPlanner`` on a
-provider from the E14_LLM_* variables (``e14_common.provider_from_env``); without one it is not run.
+provider from the LLM_* variables (``orbitopt.llm_env``); without one it is not run.
 
 Every cell is saved with ``save_run`` and replayed with ``replay`` right away; the row records whether the replay
 was EQUAL. Evaluations are counted twice: by the runtime's own meter (the trace) and by an independent counter that
@@ -68,11 +68,12 @@ def planner_for(arm: str, provider=None):
 
 
 def run_cell(arm: str, inst, seed: int, run_dir: Path, *, provider=None, mode: str = "scored", problem=None,
-             tools=None) -> dict:
+             tools=None, max_tokens: int | None = None) -> dict:
     """One cell of E-rule or E-LLM: solve, save, replay, score the returned x with the catalogue callables.
 
     ``problem`` defaults to the reference IR; E-LLM passes its compiled problem (and its tool view), whose x is
-    mapped back to the reference by variable order."""
+    mapped back to the reference by variable order, and ``max_tokens``, what its compile left of the cell's
+    token budget."""
     from orbitopt.agent.runtime import replay, save_run, solve
     from orbitopt.optimization import Budget
     if problem is None:
@@ -80,7 +81,8 @@ def run_cell(arm: str, inst, seed: int, run_dir: Path, *, provider=None, mode: s
     budget = C.A.BUDGET.evaluations(inst.dimension)
     run_dir = Path(run_dir)
     planner = planner_for(arm, provider)
-    limits = Budget(max_evaluations=budget, max_wall_s=C.A.BUDGET.wall_clock_s, max_tokens=C.A.BUDGET.llm_tokens_max,
+    limits = Budget(max_evaluations=budget, max_wall_s=C.A.BUDGET.wall_clock_s,
+                    max_tokens=C.A.BUDGET.llm_tokens_max if max_tokens is None else max_tokens,
                     max_iterations=C.A.BUDGET.llm_calls_max)
     started = time.perf_counter()
     with independent_count() as counter:

@@ -18,8 +18,8 @@ tool log's ``replay``) are not re-exported; import them from their part.
 
 from __future__ import annotations
 
-_PROVIDERS = ("BudgetExceededError", "ChatProvider", "LLMProvider", "LocalProvider", "Message", "MockProvider",
-              "OpenAICompatProvider", "ProviderError", "ProviderUnavailableError", "RecordingProvider",
+_PROVIDERS = ("BudgetExceededError", "ChatProvider", "DeepSeekProvider", "LLMProvider", "LocalProvider", "Message",
+              "MockProvider", "OpenAICompatProvider", "ProviderAccountError", "ProviderError", "ProviderUnavailableError", "RecordingProvider",
               "ReplayMismatchError", "ReplayProvider", "StructuredOutputError", "Usage", "UsageMeter",
               "make_provider")
 _COMPILER = ("CompileFailed", "CompileOutcome", "Compiled", "NeedsClarification", "RejectedUnauthorizedChange",

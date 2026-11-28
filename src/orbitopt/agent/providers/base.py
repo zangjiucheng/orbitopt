@@ -32,6 +32,10 @@ class ProviderUnavailableError(ProviderError):
     """The provider could not be reached or kept failing after bounded retries."""
 
 
+class ProviderAccountError(ProviderError):
+    """The server refused the account itself (bad key, no balance): no later request can succeed either."""
+
+
 class StructuredOutputError(ProviderError):
     """The model output did not validate, even after the repair retry.
 
@@ -123,25 +127,45 @@ class ToolSpec:
                 "parameters_schema": self.parameters_schema}
 
 
+USAGE_DETAILS = ("cache_hit_tokens", "cache_miss_tokens", "reasoning_tokens")
+
+
+def _add_optional(a: int | None, b: int | None) -> int | None:
+    return None if a is None and b is None else (a or 0) + (b or 0)
+
+
 @dataclass(frozen=True)
 class Usage:
-    """Token counts for one or more calls; ``cost_usd`` is None when unknown."""
+    """Token counts for one or more calls; ``cost_usd`` is None when unknown.
+
+    ``cache_hit_tokens`` and ``cache_miss_tokens`` split ``prompt_tokens`` by
+    the server's prompt cache, and ``reasoning_tokens`` is the part of
+    ``completion_tokens`` spent thinking; each is None when the server does
+    not report it.
+    """
 
     prompt_tokens: int
     completion_tokens: int
     total: int
     cost_usd: float | None = None
+    cache_hit_tokens: int | None = None
+    cache_miss_tokens: int | None = None
+    reasoning_tokens: int | None = None
 
     def __add__(self, other: Usage) -> Usage:
         costs = [c for c in (self.cost_usd, other.cost_usd) if c is not None]
         return Usage(self.prompt_tokens + other.prompt_tokens,
                      self.completion_tokens + other.completion_tokens,
                      self.total + other.total,
-                     sum(costs) if costs else None)
+                     sum(costs) if costs else None,
+                     *(_add_optional(getattr(self, k), getattr(other, k)) for k in USAGE_DETAILS))
 
     def to_dict(self) -> dict:
-        return {"prompt_tokens": self.prompt_tokens, "completion_tokens": self.completion_tokens,
+        """The four base counts always; a detail count only when the server reported it."""
+        data = {"prompt_tokens": self.prompt_tokens, "completion_tokens": self.completion_tokens,
                 "total": self.total, "cost_usd": self.cost_usd}
+        data.update({k: getattr(self, k) for k in USAGE_DETAILS if getattr(self, k) is not None})
+        return data
 
 
 @dataclass(frozen=True)
@@ -149,7 +173,9 @@ class ProviderResponse:
     """The result of one provider call.
 
     ``parsed`` is set only by ``generate_structured`` and only after the value
-    validated against the requested schema.
+    validated against the requested schema. ``model`` is the model the server
+    says answered. ``attempts`` counts the HTTP attempts this call took,
+    retries included.
     """
 
     text: str | None
@@ -160,13 +186,17 @@ class ProviderResponse:
     finish_reason: str | None
     latency_s: float
     raw_id: str | None
+    attempts: int = 1
 
     def to_dict(self) -> dict:
-        return {"text": self.text, "parsed": self.parsed,
+        data = {"text": self.text, "parsed": self.parsed,
                 "tool_calls": [call.to_dict() for call in self.tool_calls],
                 "usage": self.usage.to_dict(), "model": self.model,
                 "finish_reason": self.finish_reason, "latency_s": self.latency_s,
                 "raw_id": self.raw_id}
+        if self.attempts != 1:
+            data["attempts"] = self.attempts
+        return data
 
     @classmethod
     def from_dict(cls, data: dict) -> ProviderResponse:
@@ -174,7 +204,7 @@ class ProviderResponse:
                    tool_calls=tuple(ToolCall.from_dict(c) for c in data["tool_calls"]),
                    usage=Usage(**data["usage"]), model=data["model"],
                    finish_reason=data["finish_reason"], latency_s=data["latency_s"],
-                   raw_id=data["raw_id"])
+                   raw_id=data["raw_id"], attempts=data.get("attempts", 1))
 
 
 def canonical_json(value: Any) -> str:

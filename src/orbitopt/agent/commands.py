@@ -18,8 +18,9 @@ from orbitopt.optimization import Budget, OptimizationProblem, ToolCall
 from orbitopt.optimization.commands import CommandError, error_dict, load_problem, read_json, verify_sealed_run
 from orbitopt.optimization.verification import RUN_FORMAT
 
-PROVIDERS = ("mock", "openai-compatible", "local", "replay")
-"""``--provider`` values. ``replay`` serves a recorded cassette and calls no model."""
+PROVIDERS = ("mock", "env", "openai-compatible", "local", "replay")
+"""``--provider`` values. ``env`` is the provider the ``LLM_*`` variables configure; ``replay`` serves a recorded
+cassette and calls no model."""
 PLANNERS = ("rule", "llm")
 
 
@@ -29,9 +30,10 @@ def build_provider(kind: str, *, model: str | None = None, base_url: str | None 
     """The provider a command talks to; with ``cassette`` every call is recorded there (served, for ``replay``).
 
     ``mock`` replies from ``mock_replies``, a JSON list whose items are reply
-    strings or JSON objects (sent as their JSON text). ``openai-compatible``
+    strings or JSON objects (sent as their JSON text). ``env`` reads the
+    ``LLM_*`` variables (``orbitopt.llm_env``). ``openai-compatible``
     needs ``base_url`` and ``model`` and reads its key from the environment
-    variable ``api_key_env`` (default ``OPENAI_API_KEY``) at call time.
+    variable ``api_key_env`` (default ``LLM_API_KEY``) at call time.
     ``local`` needs ``model`` and takes no key.
     """
     if kind == "replay":
@@ -46,11 +48,21 @@ def build_provider(kind: str, *, model: str | None = None, base_url: str | None 
             raise CommandError(f"{mock_replies}: the mock replies must be a JSON list")
         spec: dict[str, Any] = {"kind": "mock", "script": [r if isinstance(r, str) else json.dumps(r, sort_keys=True)
                                                            for r in replies]}
+    elif kind == "env":
+        from orbitopt import llm_env
+        try:
+            spec = llm_env.provider_spec()
+        except llm_env.ProviderConfigError as exc:
+            raise CommandError(str(exc)) from None
+        if spec is None:
+            raise CommandError(f"--provider env: set {llm_env.MODEL} (and {llm_env.BASE_URL} for openai_compat)")
+        if llm_env.key_missing(spec):
+            raise CommandError(f"--provider env: {spec['api_key_env']} is not set")
     elif kind == "openai-compatible":
         if not base_url or not model:
             raise CommandError("--provider openai-compatible needs --base-url and --model")
         spec = {"kind": "openai_compat", "base_url": base_url, "model": model,
-                "api_key_env": api_key_env or "OPENAI_API_KEY"}
+                "api_key_env": api_key_env or "LLM_API_KEY"}
     elif kind == "local":
         if not model:
             raise CommandError("--provider local needs --model")

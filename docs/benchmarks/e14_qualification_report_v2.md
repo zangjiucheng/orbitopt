@@ -272,6 +272,10 @@ fake local endpoint with no network (`tests/test_e14_10_campaign.py`).
 | `E14_LLM_MODEL` | the model id, recorded in each shard's provenance | `deepseek-chat` |
 | `E14_LLM_API_KEY` | the key for `openai_compat`; read at call time, never stored | the key |
 
+Historical names: these are the variables v2 read. From campaign v3 on, the campaign, the CLI and Mission
+Studio read one set, `LLM_KIND`, `LLM_MODEL`, `LLM_BASE_URL` and `LLM_API_KEY`
+([providers](../agent/providers.md#configuration-from-the-environment)); the `E14_LLM_*` names are gone.
+
 Running the provider arms means rerunning the `cells.*.C.*`, `cells.*.D.*`, `cells.*.E-LLM.*` and
 `formulation.scoring` shards. A provider changes no frozen digest, but the shards already written as `not_run`
 would have to be removed by hand or written to a new output directory.

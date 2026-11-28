@@ -951,6 +951,9 @@ def build_parser() -> argparse.ArgumentParser:
         prog="orbitopt",
         description="orbitopt -- orbital trajectory optimization + Mission Control 3D viewer",
     )
+    parser.add_argument("--env-file", default=None, metavar="FILE",
+                        help="read KEY=VALUE lines (e.g. the LLM_* provider variables) into the environment "
+                             "first; variables already set win and no value is printed")
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("app", help="launch the Mission Control desktop app (default)")
@@ -1331,13 +1334,13 @@ def build_parser() -> argparse.ArgumentParser:
                                help="compile report JSON (default: <output stem>.compile.json)")
     agent_compile.add_argument("--allow-draft", action="store_true",
                                help="on a refused compile, write the model's raw draft (not IR) to --output")
-    agent_compile.add_argument("--provider", required=True, choices=["mock", "openai-compatible", "local", "replay"],
-                               help="LLM provider")
+    agent_compile.add_argument("--provider", required=True, choices=["mock", "env", "openai-compatible", "local", "replay"],
+                               help="LLM provider; env: the one the LLM_* variables configure")
     agent_compile.add_argument("--model", default=None, help="model name (openai-compatible, local)")
     agent_compile.add_argument("--base-url", default=None, metavar="URL",
                                help="API base URL (openai-compatible; local defaults to Ollama)")
     agent_compile.add_argument("--api-key-env", default=None, metavar="NAME",
-                               help="environment variable holding the API key (default OPENAI_API_KEY); "
+                               help="environment variable holding the API key (default LLM_API_KEY); "
                                     "the key itself is never a command-line argument")
     agent_compile.add_argument("--mock-replies", default=None, metavar="FILE",
                                help="mock provider: JSON list of replies, strings or objects")
@@ -1360,13 +1363,13 @@ def build_parser() -> argparse.ArgumentParser:
     agent_solve.add_argument("--planner", default="rule", choices=["rule", "llm"],
                              help="rule (deterministic, no LLM) or llm (needs --provider)")
     agent_solve.add_argument("--seed", type=int, default=0, metavar="K", help="run seed (default 0)")
-    agent_solve.add_argument("--provider", default=None, choices=["mock", "openai-compatible", "local", "replay"],
-                             help="LLM provider for --planner llm")
+    agent_solve.add_argument("--provider", default=None, choices=["mock", "env", "openai-compatible", "local", "replay"],
+                             help="LLM provider for --planner llm; env: the one the LLM_* variables configure")
     agent_solve.add_argument("--model", default=None, help="model name (openai-compatible, local)")
     agent_solve.add_argument("--base-url", default=None, metavar="URL",
                              help="API base URL (openai-compatible; local defaults to Ollama)")
     agent_solve.add_argument("--api-key-env", default=None, metavar="NAME",
-                             help="environment variable holding the API key (default OPENAI_API_KEY); "
+                             help="environment variable holding the API key (default LLM_API_KEY); "
                                   "the key itself is never a command-line argument")
     agent_solve.add_argument("--mock-replies", default=None, metavar="FILE",
                              help="mock provider: JSON list of replies, strings or objects")
@@ -1385,6 +1388,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    if args.env_file is not None:
+        from orbitopt.llm_env import load_env_file
+        load_env_file(args.env_file)
     if args.command in (None, "app"):
         _cmd_app(args)
     elif args.command == "view":

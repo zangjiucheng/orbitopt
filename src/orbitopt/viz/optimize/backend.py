@@ -19,8 +19,9 @@ Replaying an experiment re-runs every compile round from the cassette (no
 model is called), re-applies the recorded edits and checks that the result
 is the problem the run solved, then replays the run itself with the runtime.
 
-Credentials never pass through here: a real provider reads its key from the
-environment variable that ``ORBITOPT_LLM_API_KEY_ENV`` names, at call time.
+Credentials never pass through here: the provider comes from the ``LLM_*``
+variables (``orbitopt.llm_env``) and reads its key from
+``LLM_API_KEY`` at call time.
 """
 
 from __future__ import annotations
@@ -42,8 +43,6 @@ EXPERIMENT_FILE = "studio.json"
 COMPILE_CASSETTE = "compile.cassette.jsonl"
 RUN_SUBDIR = "run"
 ENV_ROOT = "ORBITOPT_OPTIMIZATION_RUNS"
-ENV_PROVIDER, ENV_MODEL, ENV_BASE_URL, ENV_KEY_ENV = (
-    "ORBITOPT_LLM_PROVIDER", "ORBITOPT_LLM_MODEL", "ORBITOPT_LLM_BASE_URL", "ORBITOPT_LLM_API_KEY_ENV")
 REQUIRED_MODULES = ("numpy", "scipy")
 INSTALL_HINT = ("The Optimize workspace runs the E14 solvers, which need the agent extras:\n\n"
                 "    pip install 'orbitopt[agent]'\n\n"
@@ -70,10 +69,11 @@ class ProviderChoice:
     """A provider the user can pick. Only its kind, model and endpoint are known here, never its key."""
 
     key: str                  # "mock" or "env"
-    kind: str                 # mock | openai-compatible | local
+    kind: str                 # mock, or a make_provider kind (openai_compat, local)
     model: str | None = None
     base_url: str | None = None
     api_key_env: str | None = None
+    timeout_s: float | None = None
 
     @property
     def real(self) -> bool:
@@ -95,27 +95,31 @@ MOCK = ProviderChoice("mock", "mock")
 
 
 def provider_choices(environ: Mapping[str, str] | None = None) -> tuple[ProviderChoice, ...]:
-    """The offline mock, plus the provider the environment configures (``ORBITOPT_LLM_*``), if any."""
-    env = os.environ if environ is None else environ
-    kind = env.get(ENV_PROVIDER, "").strip() or "openai-compatible"
-    model = env.get(ENV_MODEL, "").strip()
-    base_url = env.get(ENV_BASE_URL, "").strip() or None
-    if not model or kind not in ("openai-compatible", "local") or (kind == "openai-compatible" and not base_url):
+    """The offline mock, plus the provider the ``LLM_*`` variables configure, if any."""
+    from orbitopt.llm_env import ProviderConfigError, provider_spec
+
+    try:
+        spec = provider_spec(environ)
+    except ProviderConfigError:
+        spec = None
+    if spec is None:
         return (MOCK,)
-    key_env = (env.get(ENV_KEY_ENV, "").strip() or "OPENAI_API_KEY") if kind == "openai-compatible" else None
-    return (MOCK, ProviderChoice("env", kind, model, base_url, key_env))
+    return (MOCK, ProviderChoice("env", spec["kind"], spec["model"], spec.get("base_url"), spec.get("api_key_env"),
+                                 spec.get("timeout_s")))
 
 
 def provider_banner(choice: ProviderChoice, choices: Sequence[ProviderChoice],
                     environ: Mapping[str, str] | None = None) -> str:
     """The sentence above the workspace that says which model answers, and where its key would come from."""
+    from orbitopt import llm_env
+
     env = os.environ if environ is None else environ
     if not choice.real:
         configured = any(c.real for c in choices)
         tail = ("A configured provider is available in the list." if configured else
-                f"No LLM provider is configured. Set {ENV_MODEL} and {ENV_BASE_URL} (and {ENV_PROVIDER}=local "
-                f"for a local server); the API key is read from the variable {ENV_KEY_ENV} names "
-                "(default OPENAI_API_KEY), never typed here or stored.")
+                f"No LLM provider is configured. Set {llm_env.MODEL} and {llm_env.BASE_URL} (and "
+                f"{llm_env.KIND}=local for a local server); the API key is read from {llm_env.API_KEY}, "
+                "never typed here or stored.")
         return "OFFLINE · The mock provider answers the bundled examples or a loaded replies file only. " + tail
     if choice.api_key_env:
         state = "set" if env.get(choice.api_key_env) else "NOT SET"
@@ -128,12 +132,13 @@ def build_chat_provider(choice: ProviderChoice, *, script: Any = None):
     from orbitopt.agent.providers import make_provider
 
     if choice.real:
-        spec: dict[str, Any] = {"kind": "openai_compat" if choice.kind == "openai-compatible" else "local",
-                                "model": choice.model}
+        spec: dict[str, Any] = {"kind": choice.kind, "model": choice.model}
         if choice.base_url:
             spec["base_url"] = choice.base_url
         if choice.api_key_env:
             spec["api_key_env"] = choice.api_key_env
+        if choice.timeout_s is not None:
+            spec["timeout_s"] = choice.timeout_s
     else:
         if script is None:
             raise ValueError("the offline mock needs scripted replies: pick an example or load a replies file")
