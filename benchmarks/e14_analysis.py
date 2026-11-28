@@ -223,20 +223,21 @@ def _holm_into(comparisons: list[dict], keys: list[tuple[int, str]], extra_untes
                                  c["informative"])
 
 
-def analyze(out: Path, allow_smoke: bool = False) -> dict:
-    docs = load_shards(out)
-    scored, digests, mode = _rows_for_analysis(docs, allow_smoke)
-    rows = [r for d in scored for r in d["rows"]]
-    faults = [f for d in scored for f in d["faults"]]
-    formulation = [d["formulation"] for d in scored if d["formulation"]]
-    strata = {i.id: i.family for i in P.INSTANCES}
-    ran = sorted({r["arm_id"] for r in rows if r["status"] != "not_run"})
-    scoring_ids = [i.id for i in P.INSTANCES if i.split == "scoring" and any(r["instance_id"] == i.id for r in rows)]
-    analysis: dict = {"mode": mode, "label": "PIPELINE SMOKE: not evidence" if mode == SMOKE else "scored",
-                      **digests, "arms_run": ran,
-                      "arms_not_run": sorted({r["arm_id"] for r in rows if r["status"] == "not_run"}),
-                      "cells": dict(Counter(r["arm_id"] for r in rows)), "scoring_instances": len(scoring_ids)}
-    # comparisons: overall (primary, secondary) and per analysis group
+ALARM_RULE = ("spec section 2: a gap below minus the tolerance is not a win but an alarm; such a cell counts as no "
+              "success here (its scorer verdict is kept as success_scorer), and its gap enters the gap endpoint as "
+              "its distance from the optimum, |gap|")
+
+
+def apply_alarm_rule(row: dict) -> dict:
+    out = dict(row, success_scorer=row.get("success"))
+    if row.get("alarm"):
+        out["success"] = False
+        out["gap_norm"] = abs(C.num(row["gap_norm"]))
+    return out
+
+
+def comparisons(rows: list[dict], ran: list[str], scoring_ids: list[str], strata: dict) -> list[dict]:
+    """Every comparison overall and per analysis group, with Holm applied family by family."""
     scopes = {"overall": scoring_ids}
     for group, classes in M.ANALYSIS_GROUPS.items():
         scopes[group] = [i for i in scoring_ids if P.by_id(i).problem_class in classes]
@@ -260,7 +261,27 @@ def analyze(out: Path, allow_smoke: bool = False) -> dict:
         g = [n for n in tested if comps[n]["scope"] == group]
         _holm_into(comps, [(n, e) for n in g for e in ENDPOINTS])
         _holm_into(comps, [(n, SECONDARY_ENDPOINT) for n in g])
-    analysis["comparisons"] = comps
+    return comps
+
+
+def analyze(out: Path, allow_smoke: bool = False) -> dict:
+    docs = load_shards(out)
+    scored, digests, mode = _rows_for_analysis(docs, allow_smoke)
+    rows = [apply_alarm_rule(r) for d in scored for r in d["rows"]]
+    faults = [f for d in scored for f in d["faults"]]
+    formulation = [d["formulation"] for d in scored if d["formulation"]]
+    strata = {i.id: i.family for i in P.INSTANCES}
+    ran = sorted({r["arm_id"] for r in rows if r["status"] != "not_run"})
+    scoring_ids = [i.id for i in P.INSTANCES if i.split == "scoring" and any(r["instance_id"] == i.id for r in rows)]
+    analysis: dict = {"mode": mode, "label": "PIPELINE SMOKE: not evidence" if mode == SMOKE else "scored",
+                      **digests, "arms_run": ran,
+                      "arms_not_run": sorted({r["arm_id"] for r in rows if r["status"] == "not_run"}),
+                      "cells": dict(Counter(r["arm_id"] for r in rows)), "scoring_instances": len(scoring_ids)}
+    analysis["alarm_rule"] = ALARM_RULE
+    analysis["comparisons"] = comparisons(rows, ran, scoring_ids, strata)
+    analysis["sensitivity_scorer_success"] = {
+        "why": "the frozen scorer counts an alarm cell as a success; this repeats every comparison that way",
+        "comparisons": comparisons([dict(r, success=r["success_scorer"]) for r in rows], ran, scoring_ids, strata)}
     analysis["per_class"] = per_class_table(rows)
     analysis["safety"] = safety(rows, faults)
     analysis["verification"] = verification_distribution(rows)
@@ -268,7 +289,8 @@ def analyze(out: Path, allow_smoke: bool = False) -> dict:
     analysis["alarms"] = [{k: r[k] for k in ("arm_id", "instance_id", "seed", "gap", "max_violation")}
                           for r in rows if r.get("alarm")]
     analysis["failures"] = failures(rows)
-    analysis["tuning"] = per_class_table([r for d in docs if d["shard"]["split"] == "tuning" for r in d["rows"]])
+    analysis["tuning"] = per_class_table([apply_alarm_rule(r) for d in docs if d["shard"]["split"] == "tuning"
+                                            for r in d["rows"]])
     C.write_json_atomic(out / "analysis.json", C.sealed(C.jsonable(analysis)))
     return analysis
 
@@ -285,6 +307,7 @@ def per_class_table(rows: list[dict]) -> dict:
         table[klass][arm] = {
             "cells": len(rs), "instances": len({r["instance_id"] for r in rs}),
             "success": sum(bool(r["success"]) for r in rs), "feasible": sum(bool(r["feasible"]) for r in rs),
+            "alarms": sum(bool(r.get("alarm")) for r in rs),
             "median_gap_norm": statistics.median(finite) if finite else math.inf,
             "max_gap_norm": max(gaps) if gaps else math.nan, "infeasible_cells": len(gaps) - len(finite),
             "median_evaluations": statistics.median(r["n_evaluations"] for r in rs),
@@ -341,6 +364,7 @@ def safety(rows: list[dict], faults: list[dict]) -> dict:
             "graded": len(fs), "false_pass": sum(f["verdict"] == "passed" for f in fs), "upper95": _upper95(len(fs)),
             "reason_named": sum(f["reason_named"] for f in fs), "honest_host_passed": len(informative),
             "false_pass_on_informative": sum(f["verdict"] == "passed" for f in informative),
+            "reason_named_on_informative": sum(f["reason_named"] for f in informative),
             "upper95_informative": _upper95(len(informative)),
             "by_fault": {fid: {"graded": sum(1 for f in fs if f["fault"] == fid),
                                "false_pass": sum(1 for f in fs if f["fault"] == fid and f["verdict"] == "passed"),
@@ -412,11 +436,11 @@ def render_tables(an: dict) -> str:
     lines = [f"<!-- generated by bench_e14_end_to_end.py report from analysis.json {an['content_digest']} -->", ""]
     if an["mode"] == SMOKE:
         lines += ["**PIPELINE SMOKE: every number below comes from mock providers and is not evidence.**", ""]
-    lines += ["### Per class", "", "| class | arm | cells | success | feasible | median gap | budget exhausted | "
-              "median evaluations | median wall s |", "|---|---|---|---|---|---|---|---|---|"]
+    lines += ["### Per class", "", "| class | arm | cells | success | feasible | alarms | median gap | "
+              "budget exhausted | median evaluations | median wall s |", "|---|---|---|---|---|---|---|---|---|---|"]
     for klass, arms in an["per_class"].items():
         for arm, t in arms.items():
-            lines.append(f"| {klass} | {arm} | {t['cells']} | {t['success']} | {t['feasible']} | "
+            lines.append(f"| {klass} | {arm} | {t['cells']} | {t['success']} | {t['feasible']} | {t['alarms']} | "
                          f"{fmt(C.num(t['median_gap_norm']))} | {t['budget_exhausted']} | "
                          f"{fmt(C.num(t['median_evaluations']))} | {fmt(C.num(t['median_wall_s']))} |")
     lines += ["", "### Comparisons", "", "| scope | treatment vs control | family | endpoint | effect | 95% CI | "
@@ -436,6 +460,16 @@ def render_tables(an: dict) -> str:
                          f"[{fmt(C.num(ci[0]))}, {fmt(C.num(ci[1]))}] | {s['informative']} | "
                          f"{fmt(C.num(s['p']))} | {fmt(C.num(s.get('p_holm')))} ({s.get('holm_family_size', '-')}) | "
                          f"{s.get('verdict', '-')} |")
+    lines += ["", "### Sensitivity: success as the frozen scorer counts it (alarm cells as successes)", "",
+              "| scope | treatment vs control | effect | 95% CI | informative | p | p Holm (m) | verdict |",
+              "|---|---|---|---|---|---|---|---|"]
+    for c in an["sensitivity_scorer_success"]["comparisons"]:
+        if "not_run" not in c:
+            s_ = c["success"]
+            lines.append(f"| {c['scope']} | {c['treatment']} vs {c['control']} | {fmt(C.num(s_['effect']))} | "
+                         f"[{fmt(C.num(s_['ci'][0]))}, {fmt(C.num(s_['ci'][1]))}] | {s_['informative']} | "
+                         f"{fmt(C.num(s_['p']))} | {fmt(C.num(s_.get('p_holm')))} "
+                         f"({s_.get('holm_family_size', '-')}) | {s_.get('verdict', '-')} |")
     sf = an["safety"]
     lines += ["", "### Safety metrics", "", "| arm | budget enforcement | independent = reported | replay EQUAL | "
               "hard constraints preserved | guard passed | false pass (scored) | passed, outside tolerance | tokens |",
@@ -449,10 +483,12 @@ def render_tables(an: dict) -> str:
                      f"{sf['token_cost'][arm]['tokens']} |")
     fv = sf["false_verification_pass_faults"]["by_path"]
     lines += ["", "### Fault injection", "", "| path | graded | false pass | 95% upper bound | reason named | "
-              "honest host passed | false pass on those |", "|---|---|---|---|---|---|---|"]
+              "honest host passed | false pass on those | reason named on those | 95% upper bound on those |",
+              "|---|---|---|---|---|---|---|---|---|"]
     for path, v in fv.items():
         lines.append(f"| {path} | {v['graded']} | {v['false_pass']} | {fmt(C.num(v['upper95']))} | "
-                     f"{v['reason_named']} | {v['honest_host_passed']} | {v['false_pass_on_informative']} |")
+                     f"{v['reason_named']} | {v['honest_host_passed']} | {v['false_pass_on_informative']} | "
+                     f"{v['reason_named_on_informative']} | {fmt(C.num(v['upper95_informative']))} |")
     lines += ["", "### Verification status (rule arms)", "", "| arm | run status | guard verdict | "
               "optimality_certified |", "|---|---|---|---|"]
     for arm, v in an["verification"].items():
@@ -464,5 +500,31 @@ def render_tables(an: dict) -> str:
         lines.append(f"| {f['arm']} | {f['instance']} | {f['success']}/{f['cells']} | {f['statuses']} | {f['stops']} | "
                      f"{fmt(C.num(f['median_gap_norm']))} | {fmt(C.num(f['worst_gap_norm']))} |")
     return "\n".join(lines) + "\n"
+
+
+# ------------------------------------------------------------------------------------- post-hoc, descriptive only
+def evaluation_split(out: Path) -> list[dict]:
+    """Per instance, the median E-rule evaluations spent in the planner loop and in the final verification.
+
+    Read from the saved run directories of the scored E-rule shards (they stay on the server). Descriptive only:
+    added after the scored run to explain the E-rule evaluation counts, and not part of any test."""
+    split: dict = defaultdict(lambda: defaultdict(list))
+    for trace_path in sorted(Path(out).glob("runs/cells.scoring.E-rule.*/E-rule/*/seed-*/trace.json")):
+        trace = json.loads(trace_path.read_text())
+        s = split[trace_path.parts[-3]]
+        s["loop"].append(sum(it["evaluations"] for it in trace["iterations"]))
+        s["verification"].append(sum(v["evaluations"] for v in trace.get("verifications", [])))
+        s["total"].append(trace["usage"]["evaluations"])
+        s["solves"].append(sum(1 for it in trace["iterations"] if it.get("kind") == "solve"))
+    return [{"instance": inst, "runs": len(s["loop"]), "median_loop": statistics.median(s["loop"]),
+             "median_verification": statistics.median(s["verification"]),
+             "median_solves": statistics.median(s["solves"]), "median_total": statistics.median(s["total"])}
+            for inst, s in sorted(split.items())]
+
+
+if __name__ == "__main__":
+    import sys
+    for line in evaluation_split(Path(sys.argv[1])):
+        print(json.dumps(line))
 
 
