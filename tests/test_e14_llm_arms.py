@@ -228,3 +228,30 @@ def test_a_compiled_problem_is_matched_by_declared_order_when_its_names_are_its_
                          .replace("x0", "a").replace("x1", "b"))
     aliases, how = FM.variable_matching(parse_problem(renamed), reference, case["aliases"])
     assert how == "declared order" and aliases == {"a": "x0", "b": "x1"}
+
+
+def test_a_scored_provider_shard_refuses_a_provider_that_is_not_the_frozen_one(deepseek, tmp_path):
+    import e14_common as C
+    freeze = tmp_path / "freeze.json"
+    assert E2E.main(["freeze", "--freeze-path", str(freeze)]) == 0
+    shard = next(s for s in E2E.plan(["lp-wyndor-d2"], [0]) if s["arm"] == "D" and s["split"] == "scoring")
+    llm = L.context_from_env(tmp_path)  # deepseek-flash, but at the local fake's URL
+    with pytest.raises(C.FreezeError, match="base_url"):
+        E2E.run_shard(shard, tmp_path, tmp_path / "runs", "scored", freeze, ["test"], llm)
+    assert deepseek.requests == []
+    C.check_provider({"kind": "deepseek", "model": "deepseek-flash"})  # the frozen provider at its default URL
+
+
+def test_the_protocol_pins_the_caps_the_runner_enforces_and_the_price_it_charges():
+    import e14_common as C
+    assert C.LLM_PROTOCOL["per_cell"]["calls"] == E2E.ARM_CALLS == {"C": 20, "D": 3, "E-LLM": 20}
+    assert C.LLM_PROTOCOL["price_table"]["usd_per_mtok"] is L.PRICES_USD_PER_MTOK
+    assert C.PROTOCOL["llm_provider_env"][:4] == ["LLM_KIND", "LLM_MODEL", "LLM_BASE_URL", "LLM_API_KEY"]
+
+
+def test_the_committed_v3_freeze_is_sealed_and_holds_this_protocol():
+    """The protocol may not move after the freeze; the code digest is checked by every scored shard instead."""
+    import e14_common as C
+    frozen = C.load_freeze(C.FREEZE_PATH)
+    assert C.FREEZE_PATH.parent.name == "e14-v3" and frozen["protocol"]["version"] == "e14-10-campaign/3"
+    assert frozen["protocol_digest"] == C.protocol_digest() and frozen["spec_digest"] == C.SPEC.spec_digest()

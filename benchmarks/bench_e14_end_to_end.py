@@ -48,8 +48,7 @@ import e14_llm as L  # noqa: E402
 
 P, A, M, F = C.P, C.A, C.M, C.F
 SMOKE = "pipeline-smoke"
-ARM_CALLS = {"C": A.ARMS[A.ARM_IDS.index("C")].llm_calls_max, "D": A.ARMS[A.ARM_IDS.index("D")].llm_calls_max,
-             "E-LLM": A.ARMS[A.ARM_IDS.index("E")].llm_calls_max}
+ARM_CALLS = C.LLM_PROTOCOL["per_cell"]["calls"]
 """The spec's per-cell call cap of each provider arm; every arm also has the per-cell token budget."""
 L_ARMS = ("C", "D", "E-LLM")
 """Arms whose shards call a model (the formulation shard is arm D's)."""
@@ -464,6 +463,8 @@ def run_shard(shard: dict, out: Path, runs_dir: Path, mode: str, freeze_path: Pa
     """Run one shard and write its sealed file; ``llm`` is the live provider context (None: provider arms are
     ``not_run``). A ``CampaignHardStop`` leaves the shard unwritten; its cassettes let a rerun resume it."""
     freeze = C.check_freeze(freeze_path) if shard["split"] == "scoring" else C.load_freeze(freeze_path)
+    if shard["split"] == "scoring" and llm is not None and mode != SMOKE and shard["arm"] in L_ARMS:
+        C.check_provider(llm.spec)
     digests = current_digests(freeze)
     path = shard_path(out, shard["id"])
     if done(path, digests):

@@ -22,10 +22,13 @@ from typing import Callable, Sequence
 
 import numpy as np
 
+import e14_llm as L
+
 REPO = Path(__file__).resolve().parents[1]
 SPEC_PKG = REPO / "benchmarks" / "e14_spec"
-RESULTS_DIR = REPO / "benchmarks" / "results" / "e14-v2"
-"""Campaign v2. v1's results and freeze stay in ``benchmarks/results/e14`` and are never rewritten."""
+RESULTS_DIR = REPO / "benchmarks" / "results" / "e14-v3"
+"""Campaign v3: v2's rule arms plus the provider arms. v1's results and freeze stay in ``benchmarks/results/e14``
+and v2's in ``benchmarks/results/e14-v2``; neither is ever rewritten."""
 FREEZE_PATH = RESULTS_DIR / "freeze.json"
 
 
@@ -53,9 +56,76 @@ SCHEMA = "orbitopt.e14-campaign.shard/1"
 #: row fields that a replay does not compare (wall clock is not reproducible)
 TIMING_FIELDS = ("wall_clock_s", "llm_wall_clock_s", "replay_wall_clock_s")
 
+def _prompt_digests() -> dict:
+    import hashlib as _h
+
+    def d(text: str) -> str:
+        return "sha256:" + _h.sha256(text.encode()).hexdigest()
+
+    from orbitopt.agent.compiler.prompts import SYSTEM_PROMPT as COMPILER
+    from orbitopt.agent.compiler.schema import COMPILER_OUTPUT_SCHEMA
+    from orbitopt.agent.providers.openai_compat import json_instruction
+    from orbitopt.agent.runtime.planners import PROPOSAL_SCHEMA, SYSTEM_PROMPT as PLANNER
+    return {"compiler_system": d(COMPILER), "compiler_schema_instruction": d(json_instruction(COMPILER_OUTPUT_SCHEMA)),
+            "planner_system": d(PLANNER), "planner_schema_instruction": d(json_instruction(PROPOSAL_SCHEMA))}
+
+
+LLM_PROTOCOL = {
+    "provider": {"kind": "deepseek", "model": "deepseek-flash", "base_url": "https://api.deepseek.com",
+                 "path": "/chat/completions", "temperature": 0.0, "thinking": "disabled",
+                 "structured_output": "response_format json_object, the JSON Schema in the system instruction, the "
+                                      "reply validated locally with one repair turn (DeepSeek has no json_schema)",
+                 "seed": "not sent (DeepSeek documents none); the cell seed stays in each request and its digest",
+                 "retries": "429, 5xx, timeouts, connection errors and finish_reason insufficient_system_resource: "
+                            "at most 3 retries, backoff 1 s doubling to 8 s or Retry-After up to 60 s; 401, 402, "
+                            "403 stop the campaign; other 4xx fail the call",
+                 "timeout_s": 120.0,
+                 "recorded": "the model each response names, its usage (cache hit and miss), latency and attempts"},
+    "reproduction": "DeepSeek's outputs may differ between identical calls even at temperature 0, so the cassette "
+                    "of every cell, not a re-run, is the reproduction artifact; experiment_replay reruns each cell "
+                    "from its cassette with no model call",
+    "per_cell": {"calls": {arm: next(a.llm_calls_max for a in A.ARMS if a.id == arm[0])
+                           for arm in ("C", "D", "E-LLM")},
+                 "tokens": A.BUDGET.llm_tokens_max,
+                 "counted": "every call made through the cell's provider: structured-output repairs, compiler "
+                            "repair rounds and planner iterations; a call past a cap is refused before it is made; "
+                            "the call whose tokens cross the budget makes the cell budget_exhausted and, for C, a "
+                            "failure"},
+    "arm_C": {"max_tokens_per_reply": 8192, "points_per_reply": "at most 50", "feedback": "objective values, worst "
+              "violation and the budget left", "stop": "the model's stop flag, or a cap", "scored": "the best "
+              "evaluated point, feasible first; for two objectives the last 50 points"},
+    "arm_D": {"compiler": "compile_problem, max_tokens 4096, at most 3 rounds, inside D's 3 calls",
+              "solver": "the arm-A differential evolution on the compiled problem", "x": "mapped to the reference "
+              "by declared variable order"},
+    "arm_E_LLM": {"compiler": "as arm D, sharing the cell's 20 calls", "planner": "LLMPlanner, max_reply_tokens "
+                  "512, temperature 0", "runtime": "Budget(max_evaluations = spec, max_wall_s = 600, max_tokens = "
+                  "what the compile left, max_iterations = 20)"},
+    "formulation": {"cases": "tests/data/agent/formulation_cases.json (58: 50 English, 8 Chinese)",
+                    "seeds": "the 10 scoring seeds", "caps": "arm D's per cell"},
+    "price_table": {"source": L.PRICE_SOURCE, "usd_per_mtok": L.PRICES_USD_PER_MTOK,
+                    "basis": "peak (list) price; off-peak is half"},
+    "hard_stop": "campaign-wide calls and estimated USD in <out>/llm_ledger.jsonl, reserved at a worst-case cost "
+                 "before every network call (--max-llm-calls, --max-llm-usd)",
+    "prompt_digests": _prompt_digests(),
+}
+"""The provider arms' choices. A scored shard refuses a provider whose kind, model or base URL differ."""
+
+
 #: Every choice the spec leaves to the runner, fixed before the first scored run and digested into the freeze.
 PROTOCOL = {
-    "version": "e14-10-campaign/2",
+    "version": "e14-10-campaign/3",
+    "changes_from_v2": [
+        "provider arms C, D and E-LLM and the formulation suite run on the provider in llm.provider; every rule-arm "
+        "choice below is v2's, and v2's frozen results stay as recorded",
+        "one provider configuration (the LLM_* variables, orbitopt.llm_env) replaces the campaign's own variables",
+        "arm C: the proposer may set stop, is told the budget left after each reply, and a cell whose calls passed "
+        "the token budget is a failure",
+        "arms D and E-LLM: every HTTP-level call is metered against the spec's per-cell call cap (D 3, C and "
+        "E-LLM 20, the E-LLM compile included) and the 200,000-token budget, refused before the call",
+        "formulation suite: compiled variables are matched to the reference by the case's alias table when it "
+        "names compiled variables, else by declared order (v2 matched by name only, which fails a correct "
+        "formulation with its own names)",
+    ],
     "changes_from_v1": [
         "runtime: every budget cut of a run is typed in the trace (agent-trace-1.2 outcome.budget); a run that is "
         "not verified after a cut of the loop, the final verification or the run is budget_exhausted",
@@ -114,6 +184,14 @@ PROTOCOL = {
                    "cell within budget, budget typed and replayed EQUAL, no alarm; success A 30/40, B 40/40, "
                    "E-rule 40/40",
          "after": "no parameter changed; the v1 entries above still hold"},
+        {"arm": "C, D, E-LLM", "rule": "provider plumbing (v3)", "seeds": [1000],
+         "instance": "D: the 8 tuning instances; E-LLM: cqp-worked-d2, lp-diet-d2, rastrigin-d2; C: cqp-worked-d2, "
+                     "knapsack-p02-n5, rastrigin-d2",
+         "before": "tuning dry run on deepseek-flash (2026-11-28) of this code with the protocol not yet final: 30 "
+                   "calls, 83,422 tokens, $0.0181 at list price, under a 40-call hard stop; every response named "
+                   "deepseek-flash; no retry, no error, no repair; every cell replayed EQUAL from its cassette; a "
+                   "rerun after deleting a shard made no call",
+         "after": "no parameter changed"},
     ],
     "evaluation": "one evaluation = objectives and constraints at one point; an exact repeat of a point inside a "
                   "cell is served from the cell's cache at no cost (the IR adapters' rule)",
@@ -124,6 +202,7 @@ PROTOCOL = {
                    "optimum where the catalogue has one; graded in memory (verify_result) and as a sealed run "
                    "(verify_run)",
     "llm_provider_env": ["LLM_KIND", "LLM_MODEL", "LLM_BASE_URL", "LLM_API_KEY", "LLM_TIMEOUT_S"],
+    "llm": LLM_PROTOCOL,
     "statistics": {"success": "cluster sign-flip on per-instance discordance (spec); exact McNemar on seed 0 "
                               "as a check", "cost": "exact Wilcoxon on per-instance log ERT ratio (spec)",
                    "gap": "exact Wilcoxon on per-instance log10 median gap (secondary)",
@@ -229,6 +308,17 @@ def load_freeze(path: Path = FREEZE_PATH) -> dict | None:
     if not seal_ok(doc):
         raise FreezeError(f"{path}: content digest does not match")
     return doc
+
+
+def check_provider(spec: dict | None) -> None:
+    """Refuse a scored provider shard whose provider is not the frozen one (``LLM_PROTOCOL["provider"]``)."""
+    frozen = LLM_PROTOCOL["provider"]
+    have = {k: (spec or {}).get(k, "https://api.deepseek.com" if k == "base_url" else None)
+            for k in ("kind", "model", "base_url")}
+    moved = sorted(k for k, v in have.items() if v != frozen[k])
+    if moved:
+        raise FreezeError(f"the provider is not the frozen one: {moved} differ ({have} vs {frozen['kind']}, "
+                          f"{frozen['model']}, {frozen['base_url']})")
 
 
 def check_freeze(path: Path = FREEZE_PATH) -> dict:
@@ -444,13 +534,6 @@ class Evaluator:
 
     def best_x(self) -> list[float] | None:
         return None if self.best is None else self.best[1]
-
-
-# ------------------------------------------------------------------------------------------------- LLM provider
-def provider_from_env(environ=None):
-    """The chat provider the LLM_* variables configure (``orbitopt.llm_env``), or None."""
-    from orbitopt.llm_env import provider_from_env as from_env
-    return from_env(environ)
 
 
 # --------------------------------------------------------------------------------------------------------- rows
