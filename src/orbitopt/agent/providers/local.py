@@ -18,7 +18,6 @@ class LocalProvider(OpenAICompatProvider):
     name = "local"
 
     def __init__(self, model: str, base_url: str = DEFAULT_LOCAL_BASE_URL, *,
-                 timeout_s: float = 300.0, supports_json_schema: bool = False, **kwargs):
+                 timeout_s: float = 300.0, structured_output: str = "instruction", **kwargs):
         kwargs.setdefault("api_key_env", None)
-        super().__init__(base_url, model, timeout_s=timeout_s,
-                         supports_json_schema=supports_json_schema, **kwargs)
+        super().__init__(base_url, model, timeout_s=timeout_s, structured_output=structured_output, **kwargs)

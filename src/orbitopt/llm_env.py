@@ -1,9 +1,10 @@
 """The one provider configuration that the campaign, the CLI and Mission Studio read: the ``LLM_*`` variables.
 
-    LLM_KIND       openai_compat (default) or local: a make_provider kind
+    LLM_KIND       openai_compat (default), deepseek or local: a make_provider kind
     LLM_MODEL      the model id; without it no provider is configured
-    LLM_BASE_URL   the endpoint; required for openai_compat, local defaults to Ollama
-    LLM_API_KEY    the key (openai_compat); the provider reads it at call time and never stores it
+    LLM_BASE_URL   the endpoint; required for openai_compat, deepseek defaults to https://api.deepseek.com and
+                   local to Ollama
+    LLM_API_KEY    the key (openai_compat, deepseek); the provider reads it at call time and never stores it
     LLM_TIMEOUT_S  optional per-request timeout in seconds
 
 Sampling settings (temperature, reply length) are not configured here: each caller fixes them, and the campaign
@@ -20,8 +21,8 @@ from typing import Mapping, MutableMapping
 
 KIND, MODEL, BASE_URL, API_KEY, TIMEOUT_S = "LLM_KIND", "LLM_MODEL", "LLM_BASE_URL", "LLM_API_KEY", "LLM_TIMEOUT_S"
 VARIABLES = (KIND, MODEL, BASE_URL, API_KEY, TIMEOUT_S)
-KINDS = ("openai_compat", "local")
-KEYED_KINDS = ("openai_compat",)
+KINDS = ("openai_compat", "deepseek", "local")
+KEYED_KINDS = ("openai_compat", "deepseek")
 """Kinds that send ``Authorization: Bearer $LLM_API_KEY``."""
 
 

@@ -34,8 +34,8 @@ appears only when the environment configures one:
 | Variable | Meaning |
 |---|---|
 | `LLM_MODEL` | The model name. Without it, no real provider is listed. |
-| `LLM_BASE_URL` | The endpoint, required for `openai_compat`. |
-| `LLM_KIND` | `openai_compat` (default) or `local`. |
+| `LLM_BASE_URL` | The endpoint, required for `openai_compat` (`deepseek` and `local` have defaults). |
+| `LLM_KIND` | `openai_compat` (default), `deepseek` or `local`. |
 | `LLM_API_KEY` | The key. The provider reads it at call time. |
 | `LLM_TIMEOUT_S` | Optional request timeout in seconds. |
 

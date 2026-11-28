@@ -12,6 +12,7 @@ from orbitopt.agent.providers.base import (
     ChatRequest,
     LLMProvider,
     Message,
+    ProviderAccountError,
     ProviderError,
     ProviderResponse,
     ProviderUnavailableError,
@@ -22,6 +23,7 @@ from orbitopt.agent.providers.base import (
     Usage,
     UsageMeter,
 )
+from orbitopt.agent.providers.deepseek import DeepSeekProvider
 from orbitopt.agent.providers.local import LocalProvider
 from orbitopt.agent.providers.mock import (
     MockProvider,
@@ -33,8 +35,8 @@ from orbitopt.agent.providers.mock import (
 from orbitopt.agent.providers.openai_compat import OpenAICompatProvider
 
 __all__ = [
-    "BudgetExceededError", "ChatProvider", "ChatRequest", "LLMProvider", "LocalProvider",
-    "Message", "MockProvider", "MockReply", "OpenAICompatProvider", "ProviderError",
+    "BudgetExceededError", "ChatProvider", "ChatRequest", "DeepSeekProvider", "LLMProvider", "LocalProvider",
+    "Message", "MockProvider", "MockReply", "OpenAICompatProvider", "ProviderAccountError", "ProviderError",
     "ProviderResponse", "ProviderUnavailableError", "RecordingProvider", "ReplayMismatchError",
     "ReplayProvider", "StructuredOutputError", "ToolCall", "ToolCallError", "ToolSpec", "Usage",
     "UsageMeter", "make_provider",
@@ -45,6 +47,7 @@ PROVIDER_KINDS = {
     "replay": ReplayProvider,
     "openai_compat": OpenAICompatProvider,
     "local": LocalProvider,
+    "deepseek": DeepSeekProvider,
 }
 
 

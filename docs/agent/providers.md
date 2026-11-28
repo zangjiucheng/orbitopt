@@ -57,17 +57,66 @@ provider = OpenAICompatProvider("https://api.openai.com/v1", "gpt-4o-mini",
 The provider sends `POST {base_url}/chat/completions` through `urllib`. It
 reads the key from the named environment variable at call time and never
 stores it; the key does not appear in `repr`, and any response text quoted in
-an error has it redacted. HTTP 429, HTTP 5xx, timeouts and connection
-failures are retried up to `max_retries` times (default 3) with capped
-exponential backoff. Other HTTP errors fail at once. Function names on the
+an error has it redacted. HTTP 429, HTTP 5xx, timeouts, connection failures
+and a reply with `finish_reason` `insufficient_system_resource` are retried
+up to `max_retries` times (default 3). Each wait is the capped exponential
+backoff or the server's `Retry-After`, whichever is longer, but never more
+than 60 seconds. A failed attempt reports no usage, so it costs no tokens;
+`ProviderResponse.attempts` says how many attempts a call took, and a
+cassette records it. HTTP 401, 402 and 403 raise `ProviderAccountError`
+(no later call from this account can succeed); other HTTP errors raise
+`ProviderError`. Neither is retried.
+
+`ProviderResponse.model` is the model the server says answered, which can
+differ from the one requested: an alias answers under its real name.
+`Usage` adds `cache_hit_tokens`, `cache_miss_tokens` and `reasoning_tokens`
+when the server reports them, at the top level of `usage` or under
+`prompt_tokens_details` and `completion_tokens_details`. Function names on the
 wire must match `^[a-zA-Z0-9_-]{1,64}$`, which rejects the dots in tool ids
 such as `math.erf.v1`. `wire_name` sends each `.` as `-` (tool ids never
 contain `-`), and the provider maps a returned name back to the tool offered.
 Two tools that would share a wire name, or a name longer than 64 characters,
-raise `ProviderError` before anything is sent. Pass
-`supports_json_schema=False` for a server that rejects `response_format`
-`json_schema`; the provider then asks for JSON in a system instruction and
-validates the reply the same way.
+raise `ProviderError` before anything is sent.
+
+`structured_output` says how a JSON reply is asked for: `json_schema` (the
+default, `response_format` `json_schema`), `json_object` (the server's JSON
+mode, with the schema in a system instruction) or `instruction` (the
+instruction alone). The reply is validated locally in every mode, with the
+same repair round. `send_seed=False` keeps the request's seed off the wire
+for a server that has no seed parameter; the seed stays in the canonical
+request and its digest. `extra_body` adds server-specific fields and may not
+replace one the client sets.
+
+## DeepSeek
+
+```python
+from orbitopt.agent.providers import DeepSeekProvider
+
+provider = DeepSeekProvider("deepseek-flash")   # https://api.deepseek.com, key from LLM_API_KEY
+```
+
+or `LLM_KIND=deepseek LLM_MODEL=deepseek-flash` with the key in `LLM_API_KEY`.
+The preset follows DeepSeek's API documentation (read 2026-11-28):
+
+| DeepSeek | the preset |
+|---|---|
+| `response_format` is `text` or `json_object`; no `json_schema` | `structured_output="json_object"`; the schema goes in the system instruction and the reply is validated locally |
+| JSON mode can return blank content | blank content fails validation and gets the repair round, whose tokens count |
+| thinking is on by default, and `temperature` has no effect while it is | sends `thinking: {"type": "disabled"}`, so the caller's temperature applies |
+| thinking with tools needs every earlier `reasoning_content` sent back | not supported here; thinking stays off |
+| no documented `seed` | `send_seed=False` |
+| `usage.prompt_cache_hit_tokens`, `prompt_cache_miss_tokens` | read into `Usage` |
+| 429 rate or concurrency limit; 500, 503, 504 | retried with backoff and `Retry-After` |
+| 401 bad key, 402 no balance | `ProviderAccountError`, not retried |
+| keep-alive blank lines before a non-streaming body | skipped by the JSON parser |
+| the alias `deepseek-chat` answers as `deepseek-flash` | `ProviderResponse.model` records `deepseek-flash` |
+
+Tool calls use the OpenAI shape. DeepSeek's strict tool mode needs the
+`/beta` base URL and a restricted schema dialect; the preset does not use it,
+and tool arguments are validated locally as for every provider. Outputs can
+still vary between identical calls at temperature 0, which is why a cassette,
+not a re-run, is the reproduction artifact. The offline tests run against a
+local server that answers in DeepSeek's shapes (`tests/fake_deepseek.py`).
 
 ## Local servers
 
@@ -87,6 +136,7 @@ provider = LocalProvider("my-model", "http://127.0.0.1:8080/v1")  # llama.cpp or
 
 ```python
 make_provider({"kind": "local", "model": "qwen2.5:7b"})
+make_provider({"kind": "deepseek", "model": "deepseek-flash"})
 make_provider({"kind": "openai_compat", "base_url": "...", "model": "...",
                "record": "runs/plan-001.jsonl"})
 make_provider({"kind": "replay", "cassette": "runs/plan-001.jsonl"})
@@ -100,9 +150,9 @@ set of variables, through `orbitopt.llm_env`:
 
 | Variable | Meaning |
 |---|---|
-| `LLM_KIND` | A `make_provider` kind: `openai_compat` (default) or `local`. |
+| `LLM_KIND` | A `make_provider` kind: `openai_compat` (default), `deepseek` or `local`. |
 | `LLM_MODEL` | The model id. Without it no provider is configured. |
-| `LLM_BASE_URL` | The endpoint. Required for `openai_compat`; `local` defaults to Ollama. |
+| `LLM_BASE_URL` | The endpoint. Required for `openai_compat`; `deepseek` defaults to `https://api.deepseek.com`, `local` to Ollama. |
 | `LLM_API_KEY` | The key, for keyed kinds. Read at call time, never stored or recorded. |
 | `LLM_TIMEOUT_S` | Optional request timeout in seconds. |
 
