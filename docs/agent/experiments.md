@@ -63,6 +63,7 @@ Use one `ExperimentDB` per process or thread.
 | `best`, `objective`, `sense`, `max_violation` | The best result's label, its first objective in the declared sense, and its largest hard-constraint violation (0 when the problem has none). |
 | `statuses` | The final report's four statuses, or the best candidate's screen when no final verification ran. |
 | `status`, `stop_reason`, `limits`, `usage` | As in the trace. `usage` holds iterations, evaluations, tokens and wall seconds. |
+| `budget` | The trace's `outcome.budget`: every place a limit cut the run short (stage, resource, effect, label, allowance). A record stored before the field existed reads as an empty list. |
 | `created_at` | When the run was recorded, UTC, ISO 8601 with microseconds. |
 | `orbitopt_version` | The version that ran the run, from the trace; `0+unknown` for a 1.0 trace, which does not say. The cache keys use it. |
 | `integrity` | `checked` (the default ingest) or `replayed`. See below. |

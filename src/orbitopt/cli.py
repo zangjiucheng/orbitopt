@@ -824,6 +824,7 @@ def _agent_provider(args):
 def _cmd_agent(args):
     """`orbitopt agent compile|solve|replay`: the E14 compiler and agent runtime."""
     from orbitopt.agent import commands
+    from orbitopt.agent.runtime import BudgetEvent
 
     if args.agent_command == "compile":
         summary = _e14_call(commands.compile_prompt, args.prompt_file, args.output, _agent_provider(args),
@@ -869,6 +870,8 @@ def _cmd_agent(args):
                 print(f"  best         {summary['solver_id']}: {summary['objective_values']} at {summary['x']}")
             for name, outcome in summary["statuses"].items():
                 print(f"  {name:<24} {outcome}")
+            for event in summary["budget"]:
+                print(f"  budget       {BudgetEvent.from_dict(event).describe()}")
             print(f"  run          {summary['run_dir']}")
             print(f"  manifest     {summary['manifest_digest']}  (keep it; pass it to replay --expect-digest)")
         raise SystemExit(0 if summary["verified"] else 1)

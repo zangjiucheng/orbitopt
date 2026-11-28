@@ -17,6 +17,7 @@ from __future__ import annotations
 import copy
 import threading
 import time
+from dataclasses import asdict
 from typing import Any, Callable, Mapping
 
 from orbitopt.agent.tools import Caller, ToolError, ToolRegistry, ToolView, bind_problem
@@ -28,9 +29,10 @@ from orbitopt.optimization.verification import (AlternateSolverCheck, Enumeratio
                                                 VerificationReport, result_digest, unsupported_reason, verify_result)
 
 from .diagnostics import diagnose, distrust, feasible
-from .model import (Action, AlternateRun, BudgetUse, CancelPoint, CancelReason, FailureKind, IterationRecord, Limits,
-                    Policy, Proposal, RecordKind, RunOutcome, RunStatus, StopReason, Trace, VerificationRecord,
-                    Violation, ViolationCode)
+from .model import (Action, AlternateRun, BudgetEffect, BudgetEvent, BudgetResource, BudgetStage, BudgetUse,
+                    CancelPoint, CancelReason, FailureKind, IterationRecord, Limits, Policy, Proposal, RecordKind,
+                    RunOutcome, RunStatus, StopReason, Trace, VerificationRecord, Violation, ViolationCode,
+                    derive_budget)
 from .planners import Planner, PlannerState, PlannerUnavailable, default_options
 from .validation import validate_proposal
 
@@ -140,6 +142,7 @@ class _Run:
         self.problem = self.meter.problem
         self.records: list[IterationRecord] = []
         self.verifications: list[VerificationRecord] = []
+        self.skipped: list[BudgetEvent] = []
         self.results: dict[str, OptimizationResult] = {}
         self.screens: dict[str, VerificationReport] = {}
         self.labels: dict[str, IterationRecord] = {}
@@ -330,6 +333,8 @@ class _Run:
             tried.add(label)
             remaining = self.limits.max_evaluations - self.meter.count
             if remaining < self.screen_cost:
+                self.skipped.append(BudgetEvent(BudgetStage.VERIFICATION, BudgetResource.EVALUATIONS,
+                                                BudgetEffect.SKIPPED, label, remaining))
                 return
             before, started = self.meter.count, time.perf_counter()
             runs: list[AlternateRun] = []
@@ -379,9 +384,15 @@ class _Run:
         spare -= self.screen_cost * (len(exact) + len(rest)) + sum(size for _ in exact)
         certify = size is not None and len(self.asked.objectives) == 1 and size <= MAX_ENUMERATION_POINTS \
             and spare - size >= MIN_ALTERNATE_EVALUATIONS * len(rest)
+        if not certify and "optimality_certified" in policy.required and size is not None \
+                and len(self.asked.objectives) == 1 and size <= MAX_ENUMERATION_POINTS:
+            self.skipped.append(BudgetEvent(BudgetStage.CERTIFICATE, BudgetResource.EVALUATIONS,
+                                            BudgetEffect.SKIPPED, allowance=max(spare, 0)))
         spare -= size if certify else 0
         share = spare // len(rest) if rest else 0
-        if share < MIN_ALTERNATE_EVALUATIONS:
+        if share < MIN_ALTERNATE_EVALUATIONS and rest:
+            self.skipped.append(BudgetEvent(BudgetStage.ALTERNATE, BudgetResource.EVALUATIONS, BudgetEffect.SKIPPED,
+                                            allowance=max(share, 0)))
             rest = []
         digest, rdigest = self.asked.digest(), result_digest(result)
         plan = [(c.solver_id, size) for c in exact] + [(c.solver_id, share) for c in rest]
@@ -416,13 +427,17 @@ class _Run:
             best = self.best_effort()
             if best is not None:
                 report = self.screens.get(best[0])
-        status = _status(stop, bool(passed), best is not None and feasible(best[1], self.screens.get(best[0])))
+        usage = self.usage()
+        budget = tuple(derive_budget([r.to_dict() for r in self.records], [v.to_dict() for v in self.verifications],
+                                     stop.value, asdict(usage), asdict(self.limits))) + tuple(self.skipped)
+        status = _status(stop, bool(passed), best is not None and feasible(best[1], self.screens.get(best[0])),
+                         any(e.run_level for e in budget))
         trace = Trace(self.asked.id, self.asked.digest(), self.asked.hard_constraint_fingerprint(), self.planner.name,
                       self.seed, self.limits, self.policy,
                       tuple(c.solver_id for c in self.capabilities), tuple(self.records),
-                      tuple(self.verifications), status, stop, None if best is None else best[0], self.usage(),
+                      tuple(self.verifications), status, stop, None if best is None else best[0], usage,
                       refusal, self.cancel_point, getattr(self.planner, "provider", None),
-                      getattr(self.planner, "model", None))
+                      getattr(self.planner, "model", None), budget)
         return RunOutcome(status, stop, None if best is None else best[1], report,
                           self.evidence.get(best[0], ()) if best else (), trace, self.asked, dict(self.results),
                           self.tool_log)
@@ -442,7 +457,10 @@ class _Run:
         return min(honest, key=lambda item: violation(item[1]))
 
 
-def _status(stop: StopReason, verified: bool, feasible_best: bool) -> RunStatus:
+def _status(stop: StopReason, verified: bool, feasible_best: bool, verification_cut: bool) -> RunStatus:
+    """``verified`` only on the guard's pass, which a budget cut never overrides: the guard grades the evidence
+    the cut stage did produce. Otherwise a limit that ended the loop, cut or skipped part of the final
+    verification, or was used up by the run makes the status ``budget_exhausted``."""
     if stop is StopReason.REFUSED:
         return RunStatus.REFUSED
     if stop is StopReason.CANCELLED:
@@ -451,7 +469,7 @@ def _status(stop: StopReason, verified: bool, feasible_best: bool) -> RunStatus:
         return RunStatus.POLICY_VIOLATION
     if verified:
         return RunStatus.VERIFIED
-    if stop.budget:
+    if stop.budget or verification_cut:
         return RunStatus.BUDGET_EXHAUSTED
     return RunStatus.UNVERIFIED_BEST if feasible_best else RunStatus.NO_FEASIBLE
 

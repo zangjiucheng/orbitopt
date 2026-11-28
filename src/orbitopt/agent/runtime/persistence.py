@@ -5,7 +5,7 @@ A run directory holds:
 | File | Content |
 |---|---|
 | ``problem.json`` | The problem asked. |
-| ``trace.json`` | The ``agent-trace-1.1`` trace (a 1.0 trace still loads). |
+| ``trace.json`` | The ``agent-trace-1.2`` trace (a 1.0 or 1.1 trace still loads). |
 | ``results/<label>.json`` | Every result of the run, full, by the label the trace uses. |
 | ``sealed/`` | The E14-06 sealed run (``orbitopt.optimization.run/2``) of the best result and its final evidence. |
 | ``tool-calls.json`` | The hash-chained tool call log, when the run evaluated tools through a ``ToolView``. |
@@ -102,7 +102,7 @@ def save_run(outcome: RunOutcome, run_dir: str | Path) -> str:
 def load_trace(run_dir: str | Path) -> dict:
     """The run's trace as recorded, checked against the schema its ``schemaVersion`` names; ``ValueError`` otherwise.
 
-    ``upgrade_trace`` turns a 1.0 trace into the 1.1 shape.
+    ``upgrade_trace`` turns a 1.0 or 1.1 trace into the 1.2 shape.
     """
     return _parse_trace((Path(run_dir) / "trace.json").read_bytes())
 

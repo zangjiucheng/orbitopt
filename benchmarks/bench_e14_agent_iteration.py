@@ -113,7 +113,9 @@ def run_cell(arm: str, inst, seed: int, run_dir: Path, *, provider=None, mode: s
         "n_evaluations": usage["evaluations"], "n_evaluations_independent": counter[0],
         "within_budget": (counter[0] <= budget and usage["evaluations"] == counter[0]
                           and wall <= C.A.BUDGET.wall_clock_s and usage["tokens"] <= C.A.BUDGET.llm_tokens_max),
-        "budget_typed": outcome.stop_reason.budget if counter[0] >= budget else True,
+        "budget_typed": (any(e.resource.value == "evaluations" for e in outcome.budget)
+                         if counter[0] >= budget else True),
+        "budget_events": [e.to_dict() for e in outcome.budget],
         "wall_clock_s": wall, "tokens_in": usage["tokens"] if arm == "E-LLM" else 0,
         "iterations": usage["iterations"],
         "verification": {"verdict": None if outcome.report is None else outcome.report.verdict.value,

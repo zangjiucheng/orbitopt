@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Mapping
 
-from orbitopt.agent.runtime import BudgetUse, Limits, RunStatus, StopReason
+from orbitopt.agent.runtime import BudgetEvent, BudgetUse, Limits, RunStatus, StopReason
 from orbitopt.optimization import canonical_digest, schema_errors
 
 EXPERIMENT_SCHEMA = "agent-experiment-1.0.json"
@@ -159,7 +159,8 @@ class ExperimentRecord:
     candidate's screen when no final verification ran. ``created_at`` is when
     the run was recorded (UTC, ISO 8601); ``orbitopt_version`` is the version
     that ran it, from its trace (``0+unknown`` for a 1.0 trace). ``files`` maps each run file to its digest in
-    the artifact store.
+    the artifact store. ``budget`` is the trace's ``outcome.budget``; a record stored before it existed reads
+    as an empty tuple.
     """
 
     run_id: str
@@ -191,6 +192,7 @@ class ExperimentRecord:
     files: Mapping[str, str]
     parent_id: str | None = None
     resumed_from: str | None = None
+    budget: tuple[BudgetEvent, ...] = ()
 
     @property
     def verified(self) -> bool:
@@ -217,7 +219,7 @@ class ExperimentRecord:
                 "stop_reason": self.stop_reason.value, "limits": asdict(self.limits), "usage": asdict(self.usage),
                 "created_at": self.created_at, "orbitopt_version": self.orbitopt_version,
                 "integrity": self.integrity.value, "files": dict(self.files), "parent_id": self.parent_id,
-                "resumed_from": self.resumed_from}
+                "resumed_from": self.resumed_from, "budget": [e.to_dict() for e in self.budget]}
         _validate(data)
         return data
 
@@ -229,7 +231,8 @@ class ExperimentRecord:
         return cls(**{**fields, "steps": tuple(SolverStep(**s) for s in data["steps"]),
                       "status": RunStatus(data["status"]), "stop_reason": StopReason(data["stop_reason"]),
                       "limits": Limits(**data["limits"]), "usage": BudgetUse(**data["usage"]),
-                      "integrity": Integrity(data["integrity"])})
+                      "integrity": Integrity(data["integrity"]),
+                      "budget": tuple(BudgetEvent.from_dict(e) for e in data.get("budget", ()))})
 
 
 def _validate(data: Mapping[str, Any]) -> None:

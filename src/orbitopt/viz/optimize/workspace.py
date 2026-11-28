@@ -935,8 +935,12 @@ class OptimizationWorkspace(QWidget):
             self.run_badge.set_state(RUN_STATUS_BADGE.get(view.status, "idle"), view.status.replace("_", " "))
             where = f" · saved as <tt>{_esc(s.result.experiment_dir.name)}</tt>" if s.result else ""
             self.run_text.setToolTip(str(s.result.experiment_dir) if s.result else "")
+            cut = ""
+            if view.budget:  # only a trace from the runtime has events, so orbitopt[agent] is installed
+                from orbitopt.agent.runtime import BudgetEvent
+                cut = "".join(f"<br>Budget: {_esc(BudgetEvent.from_dict(e).describe())}" for e in view.budget)
             self.run_text.setText(_esc(RUN_STATUS_TEXT.get(view.status, view.status)) + f" (stop: "
-                                  f"{_esc(view.stop_reason)})" + where)
+                                  f"{_esc(view.stop_reason)})" + where + cut)
         elif s.phase is Phase.FAILED:
             self.run_badge.set_state("failed", "failed")
             self.run_text.setText(_esc(s.error))

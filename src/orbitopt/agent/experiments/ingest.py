@@ -16,8 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Mapping
 
-from orbitopt.agent.runtime import (UNKNOWN_VERSION, BudgetUse, Limits, RunStatus, StopReason, check_run, replay,
-                                    safe_relative)
+from orbitopt.agent.runtime import (UNKNOWN_VERSION, BudgetEvent, BudgetUse, Limits, RunStatus, StopReason, check_run,
+                                    replay, safe_relative)
 from orbitopt.optimization import OptimizationProblem
 from orbitopt.optimization.solvers import SolverRegistry
 from orbitopt.optimization.verification import file_digest
@@ -143,7 +143,8 @@ def _record(run_id: str, manifest: Mapping, trace: Mapping, problem: Optimizatio
         stop_reason=StopReason(trace["outcome"]["stop_reason"]), limits=Limits(**trace["limits"]),
         usage=BudgetUse(**trace["usage"]), created_at=datetime.now(timezone.utc).isoformat(timespec="microseconds"),
         orbitopt_version=trace["orbitopt_version"] or UNKNOWN_VERSION, integrity=integrity,
-        files={name: file_digest(data) for name, data in files.items()}, **links)
+        files={name: file_digest(data) for name, data in files.items()},
+        budget=tuple(BudgetEvent.from_dict(e) for e in trace["outcome"]["budget"]), **links)
 
 
 def _sealed_result_digest(files: Mapping[str, bytes], folder: str) -> str:
