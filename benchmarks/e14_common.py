@@ -24,7 +24,8 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parents[1]
 SPEC_PKG = REPO / "benchmarks" / "e14_spec"
-RESULTS_DIR = REPO / "benchmarks" / "results" / "e14"
+RESULTS_DIR = REPO / "benchmarks" / "results" / "e14-v2"
+"""Campaign v2. v1's results and freeze stay in ``benchmarks/results/e14`` and are never rewritten."""
 FREEZE_PATH = RESULTS_DIR / "freeze.json"
 
 
@@ -54,7 +55,18 @@ TIMING_FIELDS = ("wall_clock_s", "llm_wall_clock_s", "replay_wall_clock_s")
 
 #: Every choice the spec leaves to the runner, fixed before the first scored run and digested into the freeze.
 PROTOCOL = {
-    "version": "e14-10-campaign/1",
+    "version": "e14-10-campaign/2",
+    "changes_from_v1": [
+        "runtime: every budget cut of a run is typed in the trace (agent-trace-1.2 outcome.budget); a run that is "
+        "not verified after a cut of the loop, the final verification or the run is budget_exhausted",
+        "solver adapters: clean points (no constraint past 1e-6 of its tolerance band) rank before band points, and "
+        "the best band point is restored onto the constraints before it is reported; the runtime's incumbent "
+        "ranks clean candidates first; the verification guard and every tolerance are unchanged",
+        "scorer: a gap below minus the tolerance is an alarm and no success (spec section 2); v1 flagged it and "
+        "counted it a success",
+        "E-rule rows: stop is budget_exhausted:<resource> when the run's budget section has a cut of the loop, "
+        "the final verification or the run, and budget_typed reads that stop as for A and B",
+    ],
     "seeds": {"scoring": list(M.SCORING_SEEDS), "tuning": list(M.TUNING_SEEDS),
               "why": "the spec's own seeds (section 5): 10 scoring seeds, 5 tuning seeds"},
     "shard": "arm x family x every seed of the split; fault-matrix shards per family",
@@ -81,7 +93,9 @@ PROTOCOL = {
     "arm_E_rule": {"runtime": "orbitopt.agent.runtime.solve", "planner": "RuleBasedPlanner(max_restarts=3)",
                    "policy": "Policy() defaults", "registry": "default_registry()",
                    "verification": "IR default VerificationPolicy, constraint_tol = max(constraint_abs, 1e-15)",
-                   "budget": "max_evaluations = spec budget, max_wall_s = 600"},
+                   "budget": "max_evaluations = spec budget, max_wall_s = 600; a cut of the loop, the final "
+                             "verification or the run (outcome.budget) types the row's stop as "
+                             "budget_exhausted:<resource>"},
     "tuning_adjustments": [
         {"arm": "B", "rule": "convex_qp", "instance": "cqp-worked-d2", "seeds": "deterministic (no seed)",
          "before": "trust-constr scipy defaults: gtol termination at gap 1.6e-4 after 27 evaluations",
@@ -94,11 +108,18 @@ PROTOCOL = {
          "before": "tuning dry run of code 63c30a2 (120 cells): every cell within budget and replayed EQUAL; the "
                    "budget bound only where the rule spends all of it by design (B nlp and B multi_objective)",
          "after": "no parameter changed"},
+        {"arm": "all rule arms", "rule": "v2 runtime fixes", "instance": "the 8 tuning instances",
+         "seeds": "1000-1004",
+         "before": "tuning dry run of the v2 code (commit e46e2eb plus this protocol, 120 rule-arm cells): every "
+                   "cell within budget, budget typed and replayed EQUAL, no alarm; success A 30/40, B 40/40, "
+                   "E-rule 40/40",
+         "after": "no parameter changed; the v1 entries above still hold"},
     ],
     "evaluation": "one evaluation = objectives and constraints at one point; an exact repeat of a point inside a "
                   "cell is served from the cell's cache at no cost (the IR adapters' rule)",
     "scoring": "catalogue callables; violation adds |x - round(x)| for integer and binary variables; a front keeps "
-               "at most 50 points and only points inside the bounds",
+               "at most 50 points and only points inside the bounds; a gap below minus the tolerance (less "
+               "1e-12) is an alarm and never a success (spec section 2)",
     "fault_hosts": "the seed-0 result of every rule arm on every scoring instance, plus the stored reference "
                    "optimum where the catalogue has one; graded in memory (verify_result) and as a sealed run "
                    "(verify_run)",

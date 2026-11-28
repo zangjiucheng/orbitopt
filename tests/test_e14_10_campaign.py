@@ -140,3 +140,51 @@ def test_provider_arms_are_not_run_without_credentials(monkeypatch):
     monkeypatch.setenv("E14_LLM_BASE_URL", "https://example.invalid/v1")
     monkeypatch.setenv("E14_LLM_MODEL", "some-model")
     assert C.provider_from_env() is None  # an openai-compatible endpoint without a key is not a provider
+
+
+def test_the_provider_from_the_e14_variables_talks_to_an_openai_compatible_endpoint(monkeypatch):
+    """The path the provider arms take (E14_LLM_KIND, E14_LLM_BASE_URL, E14_LLM_MODEL, E14_LLM_API_KEY), against
+    a fake OpenAI-compatible server on 127.0.0.1: no network, no real model, no key outside this test."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from orbitopt.agent.providers import Message
+
+    seen = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            seen.append((self.path, dict(self.headers), body))
+            data = json.dumps({"id": "c1", "model": "deepseek-chat", "object": "chat.completion",
+                               "choices": [{"index": 0, "finish_reason": "stop",
+                                            "message": {"role": "assistant", "content": "ok"}}],
+                               "usage": {"prompt_tokens": 4, "completion_tokens": 1, "total_tokens": 5}}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
+    try:
+        monkeypatch.setenv("NO_PROXY", "*")
+        monkeypatch.setenv("E14_LLM_KIND", "openai_compat")
+        monkeypatch.setenv("E14_LLM_BASE_URL", f"http://127.0.0.1:{server.server_address[1]}/v1")
+        monkeypatch.setenv("E14_LLM_MODEL", "deepseek-chat")
+        monkeypatch.setenv("E14_LLM_API_KEY", "sk-test-not-a-key")
+        provider = C.provider_from_env()
+        assert provider is not None
+        reply = provider.generate([Message("user", "Say ok.")], max_tokens=8, seed=3)
+    finally:
+        server.shutdown()
+        server.server_close()
+    path, headers, body = seen[0]
+    assert path == "/v1/chat/completions"
+    assert headers["Authorization"] == "Bearer sk-test-not-a-key"
+    assert body["model"] == "deepseek-chat" and body["seed"] == 3
+    assert reply.text == "ok"
