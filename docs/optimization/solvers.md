@@ -1,0 +1,277 @@
+# Solvers
+
+`orbitopt.optimization.solvers` puts every solver behind one call. You hand
+the same [IR problem](ir.md) to any compatible solver and always get back an
+`OptimizationResult`. Each solver declares what it can take, and
+`orbitopt.optimization.classify` derives the problem's structure from the IR,
+so the agent runtime and a rule-based selector can choose among solvers
+without running anything.
+
+```python
+from orbitopt.optimization import Budget, parse_problem
+from orbitopt.optimization.solvers import default_registry
+
+registry = default_registry()
+problem = parse_problem(data)
+for solver in registry.compatible(problem):            # installed and capable, most specialised first
+    result = solver.solve(problem, budget=Budget(max_evaluations=4000), seed=1)
+    print(solver.capability.solver_id, result.termination.value, result.objective_values)
+
+registry.solve_with(problem, "scipy.highs")            # the same call, by id
+```
+
+`solve(problem, *, budget=None, seed=0, x0=None, options=None, tools=None)`
+takes `problem.budget` when `budget` is `None`. `x0` maps variable names to a
+start, and `tools` maps `ToolCall` ids to callables, as
+`OptimizationProblem.evaluate` takes them.
+
+## Structure: what `classify` decides
+
+`classify(problem)` returns a `ProblemStructure`: one `Form` per objective,
+the most general constraint form, and whether the problem has integer,
+binary or discrete variables, equality constraints and finite bounds on every
+variable. `domain_size` is the number of points of the variables' product
+domain when every variable takes finitely many values (binary, discrete, or
+integer with both bounds), and `None` otherwise. The decision is exact on the expression syntax tree. Each
+expression is expanded into a polynomial with rational coefficients. Any
+subtree that is not a polynomial in the variables stays an opaque atom. No
+function is ever sampled.
+
+| Form | Meaning | Examples |
+|---|---|---|
+| `LINEAR` | degree at most 1 after expansion | `x/2`, `(x+1)**2 - x**2`, `sin(x) - sin(x)` |
+| `QUADRATIC` | degree 2 | `x*y`, `x**k` with parameter `k = 2` |
+| `SMOOTH` | higher-degree polynomial, or atoms built only from functions smooth on the interior of their domain | `x**3`, `1/x`, `x**0.5`, `exp(x)` |
+| `NONSMOOTH` | an atom applies `abs`, `min` or `max` to a variable | `abs(x)`, `max(x, 1)` |
+| `BLACK_BOX` | a `ToolCall` | |
+
+The headline `ProblemClass` follows this precedence: `multi_objective`,
+`black_box`, then `milp` or `minlp` for integer problems, then `nonsmooth`,
+`lp`, `convex_qp` (a quadratic objective whose Hessian passes an exact
+rational positive-semidefinite test in its sense, with linear constraints),
+`box_smooth` (no constraints besides bounds) and `nlp`.
+
+Decidable, and reported: linearity, quadraticity, convexity of a quadratic
+objective, variable kinds, bounds, constraint senses and the objective count.
+Not decidable, and never claimed: whether a nonlinear problem is convex or
+multimodal, and what a tool computes. There is no "global" class, so the
+benchmark's Rastrigin and Ackley instances classify as `box_smooth`. Two
+limits keep the answer conservative but never wrong. Transcendental
+identities are not used, so `sin(x)**2 + cos(x)**2` reads as `SMOOTH`. An
+expansion beyond `MAX_TERMS` (2000) terms becomes an atom. `SMOOTH` does not
+promise a derivative where an argument reaches a domain boundary:
+`sqrt(x**2)` reads as smooth although it equals `abs(x)`.
+
+## Built-in solvers
+
+| `solver_id` | Takes | Integers | Constraints | Bounds needed | Convergence means |
+|---|---|---|---|---|---|
+| `scipy.highs` | linear, one objective | yes (discrete expanded to binaries) | yes, with equalities | no | `certificate` |
+| `scipy.slsqp` | smooth, one objective | no | yes, with equalities | no | `first_order` |
+| `scipy.lbfgsb` | smooth, one objective | no | bounds only | no | `first_order` |
+| `scipy.differential_evolution` | anything, one objective | yes | yes, with equalities | yes | `heuristic` |
+| `cma.cma_es` | anything, one objective | no | bounds only | yes | `heuristic` |
+| `pygmo.nsga2` | anything, several objectives | yes | bounds only | yes | `none` |
+| `orbitopt.enumeration` | anything, one objective, every variable finite-domain, at most 2^20 points | yes | yes, with equalities | yes (a finite domain) | `exhaustive` |
+
+`SolverCapability` carries these columns plus `needs_gradients`, `is_global`,
+`deterministic_given_seed`, `iteration_cap` (the backend has its own
+iteration limit), `options`, `max_domain_size` (set by a solver that walks
+the whole domain: it takes a problem only when `domain_size` is at most this)
+and `unavailable_reason`. A solver whose backend
+module cannot be found stays registered. Its `unavailable_reason` names the module, `compatible` leaves it
+out, and calling it returns `Termination.ERROR` rather than raising. `cma` is
+not vendored, so `cma.cma_es` is unavailable until `pip install cma`.
+`rejection(structure)` says in words why a solver cannot take a problem.
+
+**Iteration limits.** Every adapter enforces `Budget.max_evaluations` and
+`Budget.max_wall_s`. `Budget.max_iterations` is the agent runtime's loop cap
+and no solver reads it. A backend's own iteration limit is a separate
+argument, `solve(..., max_backend_iterations=N)`: `maxiter` for SLSQP,
+L-BFGS-B, differential evolution and CMA-ES, and generations for NSGA-II.
+Passing it to a solver without `iteration_cap` (HiGHS) raises `ValueError`.
+
+`options` maps each option `solve` accepts to an `OptionSpec`: its type
+(`bool`, `int`, `float` or `str`), its closed range `[low, high]` or its
+`choices`, and `tolerance`, which marks a convergence tolerance of the solver
+(never a problem tolerance) together with the `default` the backend runs
+with. `solve` raises `ValueError` for an option the solver does not declare
+or a value outside its spec. The agent runtime validates a planner's options
+against the same specs and loosens only the options marked `tolerance`.
+
+| Solver | Options (tolerances in bold) |
+|---|---|
+| `scipy.highs` | **`mip_rel_gap`** [0, 1e-4], default 1e-9; `presolve` |
+| `scipy.slsqp` | **`ftol`** [1e-16, 1e-2], default 1e-10 |
+| `scipy.lbfgsb` | **`ftol`** [1e-16, 1e-2], default 2.2e-9; **`gtol`** [1e-16, 1e-2], default 1e-5 |
+| `scipy.differential_evolution` | `popsize` 4-100; **`tol`** [0, 0.1], default 0.01; `atol` [0, 0.1]; `mutation` [0.1, 1.9]; `recombination` [0, 1]; `polish`; `strategy`; `init` |
+| `cma.cma_es` | `sigma0` [1e-12, 1e12]; `popsize` 4-100; **`tolfun`**, **`tolx`** [1e-16, 1e-2], default 1e-11 |
+| `pygmo.nsga2` | `population` 8-1000 (a multiple of 4); `cr` [0, 0.99]; `eta_c` [1, 99]; `m` [0, 1]; `eta_m` [1, 99] |
+| `orbitopt.enumeration` | `max_points` 1 to 2^20, an integer: a lower cap for one solve |
+
+`compatible` ranks the capable solvers from least to most general by
+`max_form`, constraint, equality and integer support, `is_global`, whether
+the solver walks the whole domain (it comes last), then `solver_id`. The order does not depend on the order of registration. A
+multimodal problem cannot be detected, so for one the first-ranked solver
+may be a local method. Choosing a global solver there is the caller's job.
+
+## The contract every adapter keeps
+
+**One evaluation is one point.** Every point a backend asks about goes
+through the adapter's `Evaluator`. It refuses the call that would exceed
+`max_evaluations` or `max_wall_s` and raises before evaluating, so a budget
+is never exceeded by even one evaluation. Finite-difference points count.
+The objective and the constraints at the same point count once. HiGHS reads
+coefficients, so it spends exactly one evaluation: the IR's evaluation of its
+answer.
+
+**Values come from the IR.** A maximised objective is negated for the
+backend and reported un-negated. `objective_values`, `constraint_residuals`
+and `x` are the IR's own evaluation of the reported point. For one objective
+that point is the best evaluated point: clean feasible points by objective,
+then the other feasible points by objective, else least violation (see
+[the tolerance band](#the-tolerance-band-is-not-room-to-optimise)). A point whose evaluation failed is never
+chosen, so when every evaluation fails the result has an empty `x` and
+`constraints_satisfied` is false, even on a problem with no constraints.
+Otherwise `constraints_satisfied` comes only from
+`OptimizationProblem.constraints_satisfied`. `independently_verified` and
+`optimality_certified` stay false; the verification guard sets them.
+
+**Termination, in order:** `error` (a backend exception, a backend that
+reports failure, or every evaluation failing), then `unbounded` (HiGHS
+proved the objective unbounded), then the adapter's budget
+(`max_evaluations`, `timeout`), then `infeasible` (no feasible point found),
+then `converged` (the backend's own flag), then the backend's own iteration
+limit or `stalled` (an SLSQP or L-BFGS-B line search that failed, or a
+CMA-ES stop that is neither convergence nor a limit), and otherwise `error`
+with the backend's message. `solver_converged` is true exactly when the
+termination is `converged`. A backend that claims success at an infeasible
+point is reported `infeasible`. From HiGHS, `infeasible` is a proof. From
+the other solvers it means they stopped without finding a feasible point.
+
+**What `solver_converged` is worth** depends on `capability.convergence`.
+`certificate` means HiGHS proved optimality within its gap (default
+`mip_rel_gap` 1e-9). `exhaustive` means every point of the finite domain was
+evaluated, so the reported point is the global optimum within the
+constraint tolerance, for any objective. `first_order` means a KKT point,
+which is the optimum only on a convex problem. `heuristic` means the population stagnated, so the
+point can be wrong: with seed 1, differential evolution converges at 1456 on
+`knapsack-p07-n15`, whose optimum is 1458. `none` means NSGA-II has no convergence test and
+never reports converged.
+
+## The tolerance band is not room to optimise
+
+`constraint_tol` decides which points are feasible. It does not make two
+feasible points comparable by objective. A point that uses the band beats
+the exact constrained optimum by what its violation buys: to first order,
+the constraint's Lagrange multiplier times the violation. Differential
+evolution sees the band as its constraint (`g <= tol`, `|h| <= tol`), so it
+presses against the band's edge. SLSQP can stop a finite-difference step
+outside the constraint. The first E14-10 campaign measured both:
+
+| Instance | Point | Violation | Multiplier | Multiplier x violation | Objective - optimum |
+|---|---|---|---|---|---|
+| `cqp-projection-d2`: min (x-2)^2+(y-1)^2, x+y <= 1, f* = 2 at (1, 0) | SLSQP, (1 + 2^-26, 0) | 1.49e-8 | 2 | 2.98e-8 | -2.98e-8 |
+| `cqp-equality-d3`: x+y+z = 1, f* = 6/11 at (6, 3, 2)/11 | differential evolution | 9.54e-7 | 12/11 | 1.04e-6 | -1.04e-6 |
+
+Both "beat" the optimum by exactly what the band let them buy. The second
+gap is larger than the guard's agreement tolerance (`objective_rtol = 1e-6`
+times max(1, 6/11)), so the alternate's band point refuted SLSQP's exact
+point. Two rules stop this, in every adapter:
+
+1. **Clean first.** A feasible point is clean when no constraint uses more
+   than `SELECTION_FRACTION = 1e-6` of its band (`band_fraction`). The best
+   point ranks clean points by objective, then band points by objective. A
+   clean point can buy at most a millionth of what the band edge can:
+   2.98e-14 on `cqp-projection-d2` and 1.04e-12 on `cqp-equality-d3`, both
+   below the 1e-8 the spec asks of a QP.
+2. **Restore, then compete.** When the best band point beats every clean
+   one, the adapter moves it onto its constraints before it reports:
+   `RESTORE_STEPS = 3` Gauss-Newton steps, each solving `J dx = -g` for the
+   least-norm `dx` over the continuous coordinates. `g` holds every equality
+   residual and every inequality residual past the clean threshold, and `J`
+   comes from forward differences, one evaluation per coordinate. A
+   coordinate the step would push past a bound is clipped and held there.
+   The restored point goes through the same `Evaluator`, so it is reported
+   exactly when it is clean and beats the clean best, and its objective
+   includes what feasibility costs. On a linear constraint one step is exact
+   to rounding.
+
+A solve keeps `restoration_reserve` evaluations, `3 x (n + 1)` for `n`
+continuous variables, back from its backend for the restoration, and only
+on a problem with constraints and a continuous variable, one objective, and
+a budget of at least four times the reserve. A smaller budget leaves the
+restoration what the backend leaves. A restored result says so in
+`message`. Integer coordinates are never moved, and a bound is not treated
+as a band: every backend here keeps its points inside the bounds.
+
+Measured on the two instances, 10 seeds each, E-rule as in the campaign
+(laptop, `benchmarks/bench_e14_agent_iteration.py`):
+
+| Instance | Before: alarms, verified | After: alarms, verified | After: max violation | After: gap |
+|---|---|---|---|---|
+| `cqp-projection-d2` | 10, 0 | 0, 0 | 0 | 0 |
+| `cqp-equality-d3` | 9, 0 | 0, 9 | 0 | 2.2e-16 |
+
+`cqp-projection-d2` stays unverified because its only alternate,
+differential evolution, converges at 2.00001, which proves nothing. The
+tenth `cqp-equality-d3` seed is `budget_exhausted`: its alternate stopped at
+its allocation at 0.54552. A restoration cost 4 evaluations in each case
+measured: on the SLSQP solve of `cqp-projection-d2` (6 evaluations before,
+10 after) and on the differential-evolution alternate of `cqp-equality-d3`
+(one step: three difference points and the step's point, out of a reserve of
+12).
+
+## Enumeration
+
+`orbitopt.enumeration` evaluates every point of a finite domain through the
+`Evaluator`, so every point counts against the budget, a `ToolCall`
+objective or constraint is evaluated as for any other solver, and the best
+point is chosen by the IR's own feasibility. Discrete coordinates walk the
+choices' indices, as in every adapter's search vector.
+
+- The domain must be finite and at most `MAX_ENUMERATION_POINTS` (1,048,576,
+  2^20) points. Otherwise `rejection` says why and `compatible` leaves the
+  solver out: `a variable is continuous or has an open bound`, or `its
+  domain has N points, more than the 1048576 it enumerates`.
+- A domain larger than `budget.max_evaluations` or than `max_points` is
+  refused before the first evaluation: termination `max_evaluations`, zero
+  evaluations, no point. A partial enumeration would prove nothing.
+- Having evaluated every point, it reports `converged`. With no feasible
+  point the termination is `infeasible`, which is then a proof.
+- A tool that raised at any point leaves the enumeration unproven: the
+  termination is `stalled`, not `converged`. A point outside an expression's
+  domain is just infeasible.
+
+On `knapsack-p07-n15` (15 binaries, 32,768 points) it costs 32,768
+evaluations and returns 1458, the optimum. Differential evolution with seed
+1 converges at 1456 under the catalogue budget of 30,000.
+
+**Seeds.** The same problem, seed and budget give the identical result for
+every built-in solver. The deterministic ones ignore the seed.
+
+**Malformed requests raise.** An invalid problem raises
+`InvalidProblemError`, and an unknown option or `x0` name raises
+`ValueError`. A well-formed request that cannot be carried out (backend
+missing, structure outside the capability) returns `Termination.ERROR` with
+the reason and zero evaluations.
+
+**Multi-objective results.** NSGA-II reports the front member with the
+lexicographically smallest objective vector as `x`. The whole non-dominated,
+feasible front is `OptimizationResult.front`, one `ParetoPoint(x,
+objective_values)` per member.
+
+**Evaluation failures.** A point where the problem is undefined, or where a
+tool raised (`ToolCallError`), counts as an evaluation and is infeasible, so
+the backend moves on. The solver evidence names its `producer` (the solver
+id) and the `problem_digest` it solved.
+
+## Acceptance corpus
+
+`tests/test_e14_03_solver_registry.py` translates the 37 E14-10 catalogue
+instances into the IR. It runs every compatible available solver on each one
+under the catalogue's budget (2000 evaluations per dimension) and scores the
+answer with the catalogue's own callables and tolerances. The translation
+keeps the catalogue's indexed sums: it inlines `n` and the scalar data and
+declares each data vector `s` as parameters `s0, s1, ...`. All 37 instances
+are valid IR, `rosenbrock-d20` among them as one indexed sum.

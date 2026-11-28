@@ -21,6 +21,11 @@ the single-scene 3D viewer directly, without going through examples/.
     orbitopt launch --site kourou --vehicle synthetic_two_stage --orbit 400x400@51.6 \
         --date 2026-11-10 -o runs/launch   # M-04: window -> ascent optimization ->
                                         # injection verification, one command
+    orbitopt agent compile --prompt-file p.txt -o problem.json --provider local --model qwen2.5:7b
+    orbitopt optimization validate problem.json   # E14 IR check: digest, class, solvers
+    orbitopt agent solve problem.json --max-iterations 20 --max-evaluations 4000 -o runs/exp-001
+    orbitopt optimization verify runs/exp-001     # re-grade the sealed answer
+    orbitopt agent replay runs/exp-001            # re-execute without any LLM call
 
 The same commands work as ``python -m orbitopt ...``. Installed as the
 ``orbitopt`` and ``orbitopt-app`` console scripts (see pyproject.toml), so
@@ -802,6 +807,143 @@ def _cmd_flight_optimize(args):
     print(f"  report: {Path(args.output) / 'optimization.json'}")
 
 
+# E14 LLM-assisted optimization. Each handler hands the argparse namespace to
+# a pure function in orbitopt.optimization.commands or orbitopt.agent.commands,
+# imported inside the handler so that `import orbitopt.cli` pulls in neither
+# package. Exit codes: 0 accepted/verified/equal, 1 the
+# command ran and the answer is no, 2 the request itself is wrong.
+def _e14_call(function, *args, **kwargs):
+    from orbitopt.optimization.commands import CommandError
+
+    try:
+        return function(*args, **kwargs)
+    except CommandError as exc:
+        import sys
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from None
+
+
+def _print_statuses(report):
+    if report is None:
+        print("  no sealed result to grade")
+        return
+    print(f"  verdict      {report['verdict']}  (required: {', '.join(report['required']) or 'none'})")
+    for name, status in report["statuses"].items():
+        print(f"  {name:<24} {status['outcome']:<13} {status['reason']}")
+    for finding in report["findings"]:
+        print(f"  finding      [{finding['code']}] {finding['path'] or '/'}: {finding['message']}"
+              + ("  (fatal)" if finding["fatal"] else ""))
+
+
+def _cmd_optimization(args):
+    """`orbitopt optimization validate|verify`: the E14 IR and the verification guard, no LLM."""
+    if args.optimization_command == "validate":
+        from orbitopt.optimization.commands import validate_file
+        summary = _e14_call(validate_file, args.problem)
+        if args.json:
+            print(json.dumps(summary, indent=2))
+        elif summary["valid"]:
+            s = summary["structure"]
+            print(f"VALID {summary['id']} (IR {summary['schemaVersion']})")
+            print(f"  digest       {summary['digest']}")
+            print(f"  structure    {s['class']} ({s['form']}): {s['variables']} variable(s), {s['objectives']} "
+                  f"objective(s), {s['constraints']} constraint(s)")
+            print(f"  solvers      {', '.join(summary['compatible_solvers']) or 'none installed'}")
+            for solver_id, why in summary["unavailable_solvers"].items():
+                print(f"  unavailable  {solver_id}: {why}")
+        else:
+            print(f"INVALID {args.problem}")
+            for e in summary["errors"]:
+                print(f"  {e['path'] or '/'}: [{e['code']}] {e['message']}")
+        raise SystemExit(0 if summary["valid"] else 1)
+    from orbitopt.agent.commands import verify_run_dir
+    summary = _e14_call(verify_run_dir, args.run_dir, expected_manifest_digest=args.expect_digest)
+    if args.json:
+        print(json.dumps(summary, indent=2))
+    else:
+        print(f"{'VERIFIED' if summary['verified'] else 'NOT VERIFIED'} {summary['run_dir']} ({summary['kind']} run"
+              + (f", recorded status {summary['recorded_status']}" if summary["recorded_status"] else "") + ")")
+        for problem in summary["integrity"]:
+            print(f"  integrity    {problem}")
+        _print_statuses(summary["report"])
+    raise SystemExit(0 if summary["verified"] else 1)
+
+
+def _agent_provider(args):
+    if args.provider is None:
+        return None
+    from orbitopt.agent.commands import build_provider
+    return _e14_call(build_provider, args.provider, model=args.model, base_url=args.base_url,
+                     api_key_env=args.api_key_env, mock_replies=args.mock_replies, cassette=args.cassette)
+
+
+def _cmd_agent(args):
+    """`orbitopt agent compile|solve|replay`: the E14 compiler and agent runtime."""
+    from orbitopt.agent import commands
+    from orbitopt.agent.runtime import BudgetEvent
+
+    if args.agent_command == "compile":
+        summary = _e14_call(commands.compile_prompt, args.prompt_file, args.output, _agent_provider(args),
+                            report=args.report, allow_draft=args.allow_draft)
+        if args.json:
+            print(json.dumps(summary, indent=2))
+        else:
+            print(f"{summary['outcome'].upper()} after {summary['attempts']} round(s), "
+                  f"{summary['usage']['total']} tokens")
+            if summary["problem_path"]:
+                print(f"  problem      {summary['problem_path']}  ({summary['problem_digest']})")
+            for a in summary["assumptions"]:
+                print(f"  assumption   {a['about']}: {a['text']}")
+            for key, label in (("missing_parameters", "missing"), ("ambiguities", "ambiguous"),
+                               ("questions", "question")):
+                for q in summary[key]:
+                    print(f"  {label:<12} {q['text']}" + (f" ({q['about']})" if q["about"] else ""))
+            if summary["unsupported"]:
+                print(f"  unsupported  {summary['unsupported']['category']}: {summary['unsupported']['explanation']}")
+            for v in summary["violations"]:
+                print(f"  violation    {v['kind']} {v['item']}: {v['message']}")
+            for e in summary["errors"]:
+                print(f"  error        {e['path'] or '/'}: [{e['code']}] {e['message']}")
+            if summary["draft_path"]:
+                print(f"  draft        {summary['draft_path']} (not an IR problem)")
+            elif not summary["accepted"]:
+                print("  no problem written" + ("; the model returned no draft" if args.allow_draft
+                                                else " (--allow-draft writes the model's draft)"))
+            print(f"  report       {summary['report_path']}")
+        raise SystemExit(0 if summary["accepted"] else 1)
+    if args.agent_command == "solve":
+        from orbitopt.optimization import Budget
+        budget = Budget(max_evaluations=args.max_evaluations, max_iterations=args.max_iterations,
+                        max_wall_s=args.max_seconds, max_tokens=args.max_tokens)
+        summary = _e14_call(commands.solve_file, args.problem, args.output, budget=budget, seed=args.seed,
+                            planner=args.planner, provider=_agent_provider(args))
+        if args.json:
+            print(json.dumps(summary, indent=2))
+        else:
+            print(f"{summary['status'].upper()} ({summary['stop_reason']}) after {summary['iterations']} "
+                  f"iteration(s), {summary['usage']['evaluations']} evaluations, {summary['usage']['tokens']} tokens")
+            if summary["solver_id"]:
+                print(f"  best         {summary['solver_id']}: {summary['objective_values']} at {summary['x']}")
+            for name, outcome in summary["statuses"].items():
+                print(f"  {name:<24} {outcome}")
+            for event in summary["budget"]:
+                print(f"  budget       {BudgetEvent.from_dict(event).describe()}")
+            print(f"  run          {summary['run_dir']}")
+            print(f"  manifest     {summary['manifest_digest']}  (keep it; pass it to replay --expect-digest)")
+        raise SystemExit(0 if summary["verified"] else 1)
+    summary = _e14_call(commands.replay_dir, args.run_dir, expected_manifest_digest=args.expect_digest)
+    if args.json:
+        print(json.dumps(summary, indent=2))
+    else:
+        print(f"{summary['status'].upper()} {summary['run_dir']} (sealed verdict: {summary['sealed_verdict']})")
+        print(f"  trace        recorded {summary['recorded_digest']}, replayed {summary['replayed_digest']}")
+        for problem in summary["integrity"]:
+            print(f"  integrity    {problem}")
+        for difference in summary["differences"]:
+            print(f"  differs      {difference}")
+    raise SystemExit(0 if summary["equal"] else 1)
+
+
 def build_parser() -> argparse.ArgumentParser:
     mission_ids = ", ".join(m.id for m in list_missions())
 
@@ -809,6 +951,9 @@ def build_parser() -> argparse.ArgumentParser:
         prog="orbitopt",
         description="orbitopt -- orbital trajectory optimization + Mission Control 3D viewer",
     )
+    parser.add_argument("--env-file", default=None, metavar="FILE",
+                        help="read KEY=VALUE lines (e.g. the LLM_* provider variables) into the environment "
+                             "first; variables already set win and no value is printed")
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("app", help="launch the Mission Control desktop app (default)")
@@ -1157,11 +1302,95 @@ def build_parser() -> argparse.ArgumentParser:
     crossenv_stage.add_argument("--plan", required=True)
     crossenv_stage.add_argument("--stage", required=True)
     crossenv_stage.add_argument("--out", required=True)
+
+    # E14 LLM-assisted optimization. Declared here so
+    # scripts/generate_api_reference.py extracts them; execution lives in
+    # orbitopt.optimization.commands and orbitopt.agent.commands. The
+    # provider options are repeated per command because the reference
+    # generator reads only direct add_argument calls.
+    optimization = sub.add_parser(
+        "optimization", help="E14 optimization IR tools: validate a problem, re-grade a saved run (no LLM)")
+    optimization_sub = optimization.add_subparsers(dest="optimization_command", required=True)
+    opt_validate = optimization_sub.add_parser(
+        "validate", help="validate an IR problem JSON: errors, or its digest, structure class and compatible solvers")
+    opt_validate.add_argument("problem", metavar="PROBLEM_JSON")
+    opt_validate.add_argument("--json", action="store_true", help="print the summary as JSON")
+    opt_verify = optimization_sub.add_parser(
+        "verify", help="re-grade a saved run (agent run dir or sealed run) with the verification guard; "
+                       "exit 0 only when it is verified")
+    opt_verify.add_argument("run_dir", metavar="RUN_DIR")
+    opt_verify.add_argument("--expect-digest", default=None, metavar="SHA256",
+                            help="the manifest digest `agent solve` printed; a different manifest fails")
+    opt_verify.add_argument("--json", action="store_true", help="print the summary as JSON")
+
+    agent = sub.add_parser("agent", help="E14 LLM-assisted optimization: compile a statement, solve, replay")
+    agent_sub = agent.add_subparsers(dest="agent_command", required=True)
+    agent_compile = agent_sub.add_parser(
+        "compile", help="compile a natural-language statement into an IR problem plus a compile report")
+    agent_compile.add_argument("--prompt-file", required=True, metavar="FILE", help="the problem statement")
+    agent_compile.add_argument("-o", "--output", required=True, metavar="PROBLEM_JSON",
+                               help="where the problem goes; written only when the compile is accepted")
+    agent_compile.add_argument("--report", default=None, metavar="FILE",
+                               help="compile report JSON (default: <output stem>.compile.json)")
+    agent_compile.add_argument("--allow-draft", action="store_true",
+                               help="on a refused compile, write the model's raw draft (not IR) to --output")
+    agent_compile.add_argument("--provider", required=True, choices=["mock", "env", "openai-compatible", "local", "replay"],
+                               help="LLM provider; env: the one the LLM_* variables configure")
+    agent_compile.add_argument("--model", default=None, help="model name (openai-compatible, local)")
+    agent_compile.add_argument("--base-url", default=None, metavar="URL",
+                               help="API base URL (openai-compatible; local defaults to Ollama)")
+    agent_compile.add_argument("--api-key-env", default=None, metavar="NAME",
+                               help="environment variable holding the API key (default LLM_API_KEY); "
+                                    "the key itself is never a command-line argument")
+    agent_compile.add_argument("--mock-replies", default=None, metavar="FILE",
+                               help="mock provider: JSON list of replies, strings or objects")
+    agent_compile.add_argument("--cassette", default=None, metavar="FILE",
+                               help="record every model call to this cassette (served back with --provider replay)")
+    agent_compile.add_argument("--json", action="store_true", help="print the compile report as JSON")
+    agent_solve = agent_sub.add_parser(
+        "solve", help="run the bounded agent loop on an IR problem and save a replayable run dir; "
+                      "exit 0 only when the answer is verified")
+    agent_solve.add_argument("problem", metavar="PROBLEM_JSON")
+    agent_solve.add_argument("-o", "--output", required=True, metavar="RUN_DIR", help="new run directory")
+    agent_solve.add_argument("--max-iterations", type=int, required=True, metavar="N",
+                             help="planner proposals, accepted or refused")
+    agent_solve.add_argument("--max-evaluations", type=int, required=True, metavar="N",
+                             help="problem evaluations: solvers, the guard and alternate solvers")
+    agent_solve.add_argument("--max-seconds", type=float, default=None, metavar="S",
+                             help="wall clock (default: the problem's, else 600)")
+    agent_solve.add_argument("--max-tokens", type=int, default=None, metavar="T",
+                             help="LLM tokens (default: the problem's, else 200000)")
+    agent_solve.add_argument("--planner", default="rule", choices=["rule", "llm"],
+                             help="rule (deterministic, no LLM) or llm (needs --provider)")
+    agent_solve.add_argument("--seed", type=int, default=0, metavar="K", help="run seed (default 0)")
+    agent_solve.add_argument("--provider", default=None, choices=["mock", "env", "openai-compatible", "local", "replay"],
+                             help="LLM provider for --planner llm; env: the one the LLM_* variables configure")
+    agent_solve.add_argument("--model", default=None, help="model name (openai-compatible, local)")
+    agent_solve.add_argument("--base-url", default=None, metavar="URL",
+                             help="API base URL (openai-compatible; local defaults to Ollama)")
+    agent_solve.add_argument("--api-key-env", default=None, metavar="NAME",
+                             help="environment variable holding the API key (default LLM_API_KEY); "
+                                  "the key itself is never a command-line argument")
+    agent_solve.add_argument("--mock-replies", default=None, metavar="FILE",
+                             help="mock provider: JSON list of replies, strings or objects")
+    agent_solve.add_argument("--cassette", default=None, metavar="FILE",
+                             help="record every model call to this cassette (served back with --provider replay)")
+    agent_solve.add_argument("--json", action="store_true", help="print the run summary as JSON")
+    agent_replay = agent_sub.add_parser(
+        "replay", help="re-execute a saved run from its recorded proposals, no LLM call; "
+                       "exit 0 only when nothing diverged")
+    agent_replay.add_argument("run_dir", metavar="RUN_DIR")
+    agent_replay.add_argument("--expect-digest", default=None, metavar="SHA256",
+                              help="the manifest digest `agent solve` printed; a different manifest diverges")
+    agent_replay.add_argument("--json", action="store_true", help="print the replay report as JSON")
     return parser
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    if args.env_file is not None:
+        from orbitopt.llm_env import load_env_file
+        load_env_file(args.env_file)
     if args.command in (None, "app"):
         _cmd_app(args)
     elif args.command == "view":
@@ -1192,6 +1421,10 @@ def main(argv=None):
     elif args.command == "crossenv":
         from orbitopt.crossenv.__main__ import dispatch as _crossenv_dispatch
         raise SystemExit(_crossenv_dispatch(args))
+    elif args.command == "optimization":
+        _cmd_optimization(args)
+    elif args.command == "agent":
+        _cmd_agent(args)
 
 
 if __name__ == "__main__":

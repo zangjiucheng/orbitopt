@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zangjiucheng.github.io/orbitopt/schemas/agent-experiment-1.0.json",
+  "title": "orbitopt experiment record",
+  "description": "Dict form of orbitopt.agent.experiments.ExperimentRecord (E14-07): one saved E14-05 run directory as the experiment database indexes it. run_id is the sha256 digest of the run's manifest.json, so one run is one record.",
+  "type": "object",
+  "required": ["schemaVersion", "format", "run_id", "problem_id", "family", "problem_digest", "fingerprint",
+               "trace_digest", "result_digest", "sealed_digest", "planner", "provider", "model", "seed", "steps",
+               "best", "objective_name", "sense", "objective", "max_violation", "statuses", "status", "stop_reason",
+               "limits", "usage", "created_at", "orbitopt_version", "integrity", "files", "parent_id",
+               "resumed_from"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "format": {"const": "orbitopt.agent.experiment"},
+    "run_id": {"$ref": "#/$defs/file_digest", "description": "sha256 digest of the run's manifest.json, as save_run returns it."},
+    "problem_id": {"type": "string"},
+    "family": {"type": "string", "minLength": 1, "description": "Problem family for aggregates: given at ingest, else problem.metadata.family, else the problem id."},
+    "problem_digest": {"$ref": "#/$defs/digest"},
+    "fingerprint": {"$ref": "#/$defs/digest"},
+    "trace_digest": {"$ref": "#/$defs/digest"},
+    "result_digest": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}], "description": "result_digest of the best result."},
+    "sealed_digest": {"oneOf": [{"$ref": "#/$defs/file_digest"}, {"type": "null"}], "description": "Manifest digest of the sealed run (orbitopt.optimization.run/2)."},
+    "planner": {"type": "string"},
+    "provider": {"type": ["string", "null"]},
+    "model": {"type": ["string", "null"]},
+    "seed": {"type": "integer"},
+    "steps": {"type": "array", "items": {"$ref": "#/$defs/step"}},
+    "best": {"type": ["string", "null"], "description": "Label of the best result: iteration-NNNN or verify-A-SOLVER."},
+    "objective_name": {"type": ["string", "null"]},
+    "sense": {"enum": ["minimize", "maximize", null]},
+    "objective": {"type": ["number", "null"]},
+    "max_violation": {"type": ["number", "null"], "minimum": 0},
+    "statuses": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "solver_converged": {"$ref": "#/$defs/outcome"},
+        "constraints_satisfied": {"$ref": "#/$defs/outcome"},
+        "independently_verified": {"$ref": "#/$defs/outcome"},
+        "optimality_certified": {"$ref": "#/$defs/outcome"}
+      }
+    },
+    "status": {"enum": ["verified", "unverified_best", "no_feasible", "budget_exhausted", "cancelled",
+                        "policy_violation", "refused"]},
+    "stop_reason": {"enum": ["planner_stop", "max_iterations", "max_evaluations", "max_wall_s", "max_tokens",
+                             "cancelled", "policy_violation", "planner_failed", "refused"]},
+    "limits": {
+      "type": "object",
+      "required": ["max_iterations", "max_evaluations", "max_wall_s", "max_tokens"],
+      "additionalProperties": false,
+      "properties": {
+        "max_iterations": {"type": "integer", "minimum": 0},
+        "max_evaluations": {"type": "integer", "minimum": 0},
+        "max_wall_s": {"type": "number", "minimum": 0},
+        "max_tokens": {"type": "integer", "minimum": 0}
+      }
+    },
+    "usage": {
+      "type": "object",
+      "required": ["iterations", "evaluations", "tokens", "wall_s"],
+      "additionalProperties": false,
+      "properties": {
+        "iterations": {"type": "integer", "minimum": 0},
+        "evaluations": {"type": "integer", "minimum": 0},
+        "tokens": {"type": "integer", "minimum": 0},
+        "wall_s": {"type": "number", "minimum": 0}
+      }
+    },
+    "budget": {
+      "type": "array",
+      "description": "The trace's outcome.budget (agent-trace-1.2): every place a limit cut the run short. Optional, so a record written before it existed still parses, as an empty list; a 1.0 or 1.1 trace gives the events its records show.",
+      "items": {
+        "type": "object",
+        "required": ["stage", "resource", "effect", "label", "allowance"],
+        "additionalProperties": false,
+        "properties": {
+          "stage": {"enum": ["loop", "solve", "alternate", "certificate", "verification", "run"]},
+          "resource": {"enum": ["iterations", "evaluations", "tokens", "wall_s"]},
+          "effect": {"enum": ["stopped", "skipped"]},
+          "label": {"type": ["string", "null"]},
+          "allowance": {"type": ["number", "null"]}
+        }
+      }
+    },
+    "created_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?\\+00:00$"},
+    "orbitopt_version": {"type": "string", "minLength": 1, "description": "The orbitopt version that ran the run, from its trace; 0+unknown for a 1.0 trace."},
+    "integrity": {"enum": ["checked", "replayed"], "description": "How ingest verified the run: checked (bytes, trace and the sealed re-grade, no solve re-run) or replayed (re-executed as well)."},
+    "files": {
+      "type": "object",
+      "description": "Each run file, by its path inside the run directory, to its sha256 digest in the artifact store.",
+      "propertyNames": {"pattern": "^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$", "not": {"pattern": "(^|/)\\.\\.?(/|$)"}},
+      "additionalProperties": {"$ref": "#/$defs/file_digest"}
+    },
+    "parent_id": {"oneOf": [{"$ref": "#/$defs/file_digest"}, {"type": "null"}]},
+    "resumed_from": {"oneOf": [{"$ref": "#/$defs/file_digest"}, {"type": "null"}]}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "file_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "outcome": {"enum": ["passed", "failed", "not_assessed"]},
+    "step": {
+      "type": "object",
+      "required": ["label", "solver_id", "options", "seed", "x0", "evaluations", "max_iterations"],
+      "additionalProperties": false,
+      "properties": {
+        "label": {"type": "string"},
+        "solver_id": {"type": "string"},
+        "options": {"type": "object"},
+        "seed": {"type": "integer"},
+        "x0": {"oneOf": [{"type": "object", "additionalProperties": {"type": "number"}}, {"type": "null"}]},
+        "evaluations": {"type": "integer", "minimum": 0},
+        "max_iterations": {"type": ["integer", "null"]}
+      }
+    }
+  }
+}

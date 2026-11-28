@@ -56,6 +56,25 @@ viewer = [
 sixdof = [
     "jsbsim==1.3.3",
 ]
+# E14 optimization IR solvers (orbitopt.optimization.solvers): HiGHS, SLSQP,
+# L-BFGS-B and differential evolution through scipy (>=1.15 for
+# differential_evolution's rng=), and CMA-ES through cma. The IR, the
+# classifier and the verification guard need only the base dependencies;
+# each adapter imports its backend when it runs. NSGA-II needs pygmo, which,
+# like the compute stack below, comes from conda.
+solvers = [
+    "numpy>=1.26",
+    "scipy>=1.15",
+    "cma>=3.3",
+]
+# E14 LLM-assisted optimization (orbitopt.agent, `orbitopt agent ...`). The
+# provider layer is stdlib + jsonschema (the OpenAI-compatible and local
+# providers speak HTTP through urllib), so no LLM SDK is installed; the
+# runtime and the built-in tools run the solvers, so this is the solvers
+# extra under the name users look for.
+agent = [
+    "orbitopt[solvers]",
+]
 # Deliberately no "compute" extras group here: pykep, pygmo, and tudatpy
 # (needed by orbitopt.problems / orbitopt.verify / the mission-*computing*
 # viz exporters) ship only on conda-forge/tudat-team and do not exist on

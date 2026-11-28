@@ -1,0 +1,2 @@
+# Campaign result files are hashed in their manifests byte for byte: keep their line endings as written.
+benchmarks/results/e14-v2/cells.csv -text

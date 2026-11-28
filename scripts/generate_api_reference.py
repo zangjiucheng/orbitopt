@@ -23,9 +23,12 @@ GROUPS = {
     "core": "Compute backend",
     "crossenv": "Cross-environment orchestration",
     "dynamics": "Dynamics",
+    "agent": "LLM agent runtime",
     "flightlab": "Flight Lab",
+    "gnc": "GNC closed-loop simulation",
     "lambert": "Lambert solvers",
     "mission": "Mission integration",
+    "optimization": "Optimization problems and solvers (IR)",
     "optimize": "Optimization",
     "problems": "Optimization problems",
     "relative": "Relative orbital dynamics",
@@ -152,6 +155,17 @@ def static_value(node, scope):
     return None
 
 
+LAZY_EXPORTS = {
+    "orbitopt.flightlab": {"_LAZY": "orbitopt.flightlab.target_export", "_SIM_LAZY": "orbitopt.flightlab.simulate"},
+    "orbitopt.optimization": {"_CLASSIFY": "orbitopt.optimization.classify",
+                              "_SOLVERS": "orbitopt.optimization.solvers",
+                              "_VERIFICATION": "orbitopt.optimization.verification"},
+    "orbitopt.agent": {"_PROVIDERS": "orbitopt.agent.providers", "_COMPILER": "orbitopt.agent.compiler",
+                       "_RUNTIME": "orbitopt.agent.runtime", "_TOOLS": "orbitopt.agent.tools"},
+}
+"""Package roots whose ``__getattr__`` re-exports each name tuple from the module it names."""
+
+
 def exports(tree, module, path):
     """Find explicitly exported aliases, including simple lazy __all__ lists."""
     scope = {}
@@ -181,11 +195,8 @@ def exports(tree, module, path):
     # These exports are resolved by module __getattr__ rather than an import.
     if module == "orbitopt":
         origins.update({name: f"orbitopt.core.gpu.{name}" for name in scope.get("__all__", [])})
-    if module == "orbitopt.flightlab":
-        for name in scope.get("_LAZY", []):
-            origins[name] = f"orbitopt.flightlab.target_export.{name}"
-        for name in scope.get("_SIM_LAZY", []):
-            origins[name] = f"orbitopt.flightlab.simulate.{name}"
+    for group, target in LAZY_EXPORTS.get(module, {}).items():
+        origins.update({name: f"{target}.{name}" for name in scope.get(group, [])})
     return [(name, origins.get(name)) for name in scope.get("__all__", [])]
 
 

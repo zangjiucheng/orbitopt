@@ -1,0 +1,1066 @@
+{
+ "content_digest": "sha256:b78924c517a860bf97342f60956c6f63adc6f5d6a451645830b8d8782d39300b",
+ "digests": {
+  "code_digest": "sha256:d4b73f6935d150d60bf763f95d4bdaf125b5e3c4ea0cd32ac97e0a01dff483b3",
+  "freeze_digest": "sha256:7c7fde0ca571983eee48cd20467eecdeb59a1a0a93925b3bf676724b86cba47f",
+  "protocol_digest": "sha256:ecefd6a0a83ffb8b4abd637c6cb218f88ea92ff4c499974f8f35bdd058119e46",
+  "spec_digest": "sha256:e5104c340d419f388643bed2ad1de32662f8384f7b1c4adb7a05b90ad877db47"
+ },
+ "files": {
+  "cells.csv": {
+   "sha256": "sha256:1b8ba5e729a24f8dd7f066b46d3fd6b29325ff92f2b97c415c38de0b2aa392a4"
+  },
+  "shards/cells.scoring.A.ackley.json": {
+   "content_digest": "sha256:b5cb13152f30342e9abbdb1511c0c971199f52e423aa3216a27cd776ea7e8746",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:747f39a8aeff0438c04a6b560fbf765191ea9672dd85da1f12825d8717cfa763",
+   "split": "scoring",
+   "wall_s": 59.98993585514836
+  },
+  "shards/cells.scoring.A.bi_objective.json": {
+   "content_digest": "sha256:0c9ed96055e268fc09f5e22aa47e166f5a84cef6f50c91dc99d0b9c8ee4262db",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:372b87ac6052476d593bf976950f3aade7f9cca0da928b7a17d0292021a0f708",
+   "split": "scoring",
+   "wall_s": 31.005155697930604
+  },
+  "shards/cells.scoring.A.constrained_quadratic.json": {
+   "content_digest": "sha256:f34caaba436bbb68ceebac67a119369854e03d7a8c56989aa702a45153b38089",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 40,
+   "sha256": "sha256:6c09e23170023f993f6ba4d3a7d1e4d43a761f941fc2d8371558f29b3cfe9a1e",
+   "split": "scoring",
+   "wall_s": 29.27441371185705
+  },
+  "shards/cells.scoring.A.integration.json": {
+   "content_digest": "sha256:1806aee9bc614a45714d7924d48881553c0ded360fa35d11a8b36cb843b11bb6",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 60,
+   "sha256": "sha256:10c1f2dee745dd7cfa4a626a084711d3092f373c923a1fd63d527fd118b79c36",
+   "split": "scoring",
+   "wall_s": 5.4056835561059415
+  },
+  "shards/cells.scoring.A.knapsack.json": {
+   "content_digest": "sha256:c81d788e90a87fc3db7aa63ae7919e03fe532db138097fd68c68faa6beb1d11b",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 50,
+   "sha256": "sha256:c0c3cee60d1dd392be38b45149a42dc5da3a8ede94e0cf90f33172060ba457cf",
+   "split": "scoring",
+   "wall_s": 91.33543335995637
+  },
+  "shards/cells.scoring.A.linear_program.json": {
+   "content_digest": "sha256:0210f9a9fca03b8fd727f48ad7af03fee0dcec90ade89f06c16f7fc89866df6b",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 10,
+   "sha256": "sha256:72b70419517c12c5bca58ec655679b3cd0c8e3df802ac175179b0928ab78b558",
+   "split": "scoring",
+   "wall_s": 1.1104134707711637
+  },
+  "shards/cells.scoring.A.rastrigin.json": {
+   "content_digest": "sha256:419211fd77864c2b35069c45589cb0aa3d22c6d425959b9e6cf18584ef83075e",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:38dcc1dfcc44743c2d4f01b74a8a43ff6c3cfbef6aad872a84409d35570957da",
+   "split": "scoring",
+   "wall_s": 51.175571986008435
+  },
+  "shards/cells.scoring.A.rosenbrock.json": {
+   "content_digest": "sha256:e1f9547d888700790fcfaed037c7aec4b2b40829c73d7c495e2982fb52243a90",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 40,
+   "sha256": "sha256:8cb0825d2dd92783eee3b36e6362fef6afe31886b26d9e5feff044c17088601e",
+   "split": "scoring",
+   "wall_s": 60.78774392907508
+  },
+  "shards/cells.scoring.B.ackley.json": {
+   "content_digest": "sha256:c75945a58bbef238c6bcf4004e7aca519e584b85ab9d69057246b37d41f30968",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:fa3c46c7069f4397930c9b0707562d906c68bfcfa311ef9323dfd5012d1cde48",
+   "split": "scoring",
+   "wall_s": 60.19241625000723
+  },
+  "shards/cells.scoring.B.bi_objective.json": {
+   "content_digest": "sha256:1b6e249bf1171fe2a9b038628fb2810293cd4ee28efb038291058cbe89285aff",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:8cf5c2bf87f878b8730c965634fd9535a106b521a873fcfc3c727975ccef39e2",
+   "split": "scoring",
+   "wall_s": 39.33136097411625
+  },
+  "shards/cells.scoring.B.constrained_quadratic.json": {
+   "content_digest": "sha256:f475125ee6da6e74ef18f8440ebdaaa0bf42b4a4a8f0f213b5598f78f38932bf",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 40,
+   "sha256": "sha256:ae1b47805fd1322d326126cb4195d59d01d8d9baf0dd33af303c7229049a5db5",
+   "split": "scoring",
+   "wall_s": 2.4963150119874626
+  },
+  "shards/cells.scoring.B.integration.json": {
+   "content_digest": "sha256:09be02f280e2c65625f4c78ea0ef94abaef254697702390c3771a2aeaf854552",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 60,
+   "sha256": "sha256:bbaee402fa48b76ff670ecec7a29233e73458b14642d0ceb82edce42097c1ae1",
+   "split": "scoring",
+   "wall_s": 2.531694957986474
+  },
+  "shards/cells.scoring.B.knapsack.json": {
+   "content_digest": "sha256:ffdab3afc5cdfe908abc9df60b4a47a885113a2c97383175164755a0bcf9095d",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 50,
+   "sha256": "sha256:c8a69999970badadbe7baf2b44900e8ea2b982b1843f49b65917ce9904cd68e0",
+   "split": "scoring",
+   "wall_s": 1.3306186238769442
+  },
+  "shards/cells.scoring.B.linear_program.json": {
+   "content_digest": "sha256:cef835dbbfca54021fd06c6ab714e6db4b1db5040369941a57049cbe060438c0",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 10,
+   "sha256": "sha256:822e84c614fcbcebdeb0c60bf2fb71095e70cc21ad086a9a772be9c14d8f99b1",
+   "split": "scoring",
+   "wall_s": 0.05169969308190048
+  },
+  "shards/cells.scoring.B.rastrigin.json": {
+   "content_digest": "sha256:6f0fc60f3e3a464a74251162a04dc80038dc76ded8ed9fa3c15316dc77328c11",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:ec3f708b5ac4c2379d2df6c8f768215f1182af7f66add6f54fff6a8e5b93efe4",
+   "split": "scoring",
+   "wall_s": 51.36228304496035
+  },
+  "shards/cells.scoring.B.rosenbrock.json": {
+   "content_digest": "sha256:72e0c346efd5473ac8a5368dee4f7b3e685b5ce53d6d36d87e53ec3cad545d05",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 40,
+   "sha256": "sha256:433f02a9e09c2ed98a5187e267612e4a80bf11d683ccd371744143b8e9f6fe03",
+   "split": "scoring",
+   "wall_s": 47.495239104144275
+  },
+  "shards/cells.scoring.C.ackley.json": {
+   "content_digest": "sha256:a20ef305f2d97a7596260b0642509cc8acb86d1847bda0be60d4f791af73eefe",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:7debe07639e0a37edd571b5fd8edbd24ce297f109a6bc6c19c9745fe29f78eab",
+   "split": "scoring",
+   "wall_s": 0.0034170360304415226
+  },
+  "shards/cells.scoring.C.bi_objective.json": {
+   "content_digest": "sha256:5f24a2a77069d5436f3f22f7e3366e5f308a48c495a12c02e10917f4c23c76b4",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:cbeccfdb65522f8e987dd4dd2fdf8f304862299d6254d3b7b10c32e176a92b95",
+   "split": "scoring",
+   "wall_s": 0.003289201995357871
+  },
+  "shards/cells.scoring.C.constrained_quadratic.json": {
+   "content_digest": "sha256:608ba21a997d9a17b265962961a55b08e674d06e15f831bb448acca862e7c0d8",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 40,
+   "sha256": "sha256:c9deb3ef6ff50b60e9da769adbed4c8563d0c1727c64c40bc3c60537aac80cad",
+   "split": "scoring",
+   "wall_s": 0.003518837969750166
+  },
+  "shards/cells.scoring.C.integration.json": {
+   "content_digest": "sha256:e2f65f6143323b658ab400d44a6f1d5f1875bc23083db4fdece2b669e99eb767",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 60,
+   "sha256": "sha256:50ec389ea71473989c1b1fde9399fcf09a779f0ce72e6e84a2a2a16bb8ee6799",
+   "split": "scoring",
+   "wall_s": 0.00543247302994132
+  },
+  "shards/cells.scoring.C.knapsack.json": {
+   "content_digest": "sha256:9855e11d789a56932532a7881dec0297fc682e0382e1b9ce6b4028f9adf4fa28",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 50,
+   "sha256": "sha256:9f8551134d1ae3fe571f9b4acc3672f38226e3162dee7d04aaa29861fbc4c326",
+   "split": "scoring",
+   "wall_s": 0.004927860107272863
+  },
+  "shards/cells.scoring.C.linear_program.json": {
+   "content_digest": "sha256:fea5e94d41e788f2a77eedf50b55d31677ab8fd8174b29a47cac1a38dada8c64",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 10,
+   "sha256": "sha256:6660cccc6a06984c097d94ebab6d7091bc9e3edb3e014b23cfd0afb8258de890",
+   "split": "scoring",
+   "wall_s": 0.001531932968646288
+  },
+  "shards/cells.scoring.C.rastrigin.json": {
+   "content_digest": "sha256:d7e305cd64f5743e107dc2c2066f84cedde96b5f84bd593471d0132c16346068",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:b4d83cd13440a7fdba82fa53b76261839868f33500b39bc8bac267ea421a5f35",
+   "split": "scoring",
+   "wall_s": 0.003203260013833642
+  },
+  "shards/cells.scoring.C.rosenbrock.json": {
+   "content_digest": "sha256:a1b6a478f26cf75637f520dcdbf0b747754ac7bc699425c640657c489a359918",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 40,
+   "sha256": "sha256:150ddf8fee8d9051cc2e357d12dcb8d411a886e1f0bff419a30dd950669fcede",
+   "split": "scoring",
+   "wall_s": 0.003837567986920476
+  },
+  "shards/cells.scoring.D.ackley.json": {
+   "content_digest": "sha256:3a9601177ed1ae9e5238c31f1fe121e48738209aacb8e238a81eef230618c363",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:859891c27a08aeaf5eeda98703d71630e4f94a80657e6aab658369aebcc26aee",
+   "split": "scoring",
+   "wall_s": 0.003278561867773533
+  },
+  "shards/cells.scoring.D.bi_objective.json": {
+   "content_digest": "sha256:d3175c3447bec882caec0a483c610bd51a1958c30552dd0f8e0b74dd2cde79e8",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:d5a678e3dd97a5d7e3d281c6b9472e6be774402746992d511313d82ff529a285",
+   "split": "scoring",
+   "wall_s": 0.0031810400541871786
+  },
+  "shards/cells.scoring.D.constrained_quadratic.json": {
+   "content_digest": "sha256:b03aa8e77d67338b543161852ed1f98b4667dc53f4bc3aef850fa6c345dbbc05",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 40,
+   "sha256": "sha256:cbf8a798dc66fd37624135f5ab675aef946e8f2304734b52af92d21109b96586",
+   "split": "scoring",
+   "wall_s": 0.005874505965039134
+  },
+  "shards/cells.scoring.D.integration.json": {
+   "content_digest": "sha256:6fa95050d668a0933c61c738f9869c7d27d17b8f2f77a3e055f4705c6fc7f0b3",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 60,
+   "sha256": "sha256:2994b5bae522676f758e83ae2a1fb66e1f0c36b93d6851e91249bc6943c8ba34",
+   "split": "scoring",
+   "wall_s": 0.005353840999305248
+  },
+  "shards/cells.scoring.D.knapsack.json": {
+   "content_digest": "sha256:d9a6b64a5e53db024388f6fe0c5c1b1fcbbb7fd33f4e3b5af1f54d8748da2593",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 50,
+   "sha256": "sha256:8d08f412c225b6bc3b532c09c578269b9739cbb1422b0d3e6a3a8177cad3c029",
+   "split": "scoring",
+   "wall_s": 0.00486372597515583
+  },
+  "shards/cells.scoring.D.linear_program.json": {
+   "content_digest": "sha256:054f81f238362d04637f054d50b4050a106dbad09a2b4e8c2c45ba61566aea71",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 10,
+   "sha256": "sha256:e315aeba2c5e9f2f12bfc2839ca6929b5fcb3fee50ab0b3b277c8ad051837d33",
+   "split": "scoring",
+   "wall_s": 0.0014623820316046476
+  },
+  "shards/cells.scoring.D.rastrigin.json": {
+   "content_digest": "sha256:a3366a1896a80101d7ca6a7d5af92908e13fffc965448691e6ba50d130bb1c72",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:af6d11060246a4a3dd635fca4640ac1cdef8c9cf0d7b4989786d967029929b16",
+   "split": "scoring",
+   "wall_s": 0.0031945600640028715
+  },
+  "shards/cells.scoring.D.rosenbrock.json": {
+   "content_digest": "sha256:ce7427c2bf92aec63a3dd3071955d13ba6e59e0be22b73f4da36466ee331cdf1",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 40,
+   "sha256": "sha256:388564d13b5dce77d97800f93a89e7de19d08f9ee2eb8a9dea5652b5d7b24a76",
+   "split": "scoring",
+   "wall_s": 0.003863238962367177
+  },
+  "shards/cells.scoring.E-LLM.ackley.json": {
+   "content_digest": "sha256:28eb6fd9a4842b92a16c71e7c3bab03e7a4c6fb37358a6a848b031c1d5db5b2f",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:d24f37a5ef45e49ca0fce27c124b8bc32a4797481a51c93cb88548e521eaac06",
+   "split": "scoring",
+   "wall_s": 0.0032584010623395443
+  },
+  "shards/cells.scoring.E-LLM.bi_objective.json": {
+   "content_digest": "sha256:eb956b1424da4c6fe3ee5967bdd66b33a8b55f09fdda74ee59f7be6f97733217",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:83a7b388a3828213493be02a549bebb51018d197cff9b7bedd27e16ac43003bf",
+   "split": "scoring",
+   "wall_s": 0.003110727062448859
+  },
+  "shards/cells.scoring.E-LLM.constrained_quadratic.json": {
+   "content_digest": "sha256:830799d24abd9facf9c0d1610082392fc5696da7866ed039a446a548ed24b24c",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 40,
+   "sha256": "sha256:70e99782b9d75bc492a719a848dbd5a9940fb93db969848bf236b24ad97ff1e1",
+   "split": "scoring",
+   "wall_s": 0.007106879958882928
+  },
+  "shards/cells.scoring.E-LLM.integration.json": {
+   "content_digest": "sha256:8ebb5b2dcb09febad86798debf95376ef5f77c79376b6cb63b8bf479b159f548",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 60,
+   "sha256": "sha256:bead26f4da3dce9e65ba0d612a95b6d36b4172a18d2d8612caf1616319da6c31",
+   "split": "scoring",
+   "wall_s": 0.005415902007371187
+  },
+  "shards/cells.scoring.E-LLM.knapsack.json": {
+   "content_digest": "sha256:2d206574f55279667f1676b4059265cebf119eb14ffd1b564c8aa7e8c88f2486",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 50,
+   "sha256": "sha256:1fd47e4240ce17655115155d0e12cbf24a875d6fd687ca76a8f933275c45e739",
+   "split": "scoring",
+   "wall_s": 0.00494538014754653
+  },
+  "shards/cells.scoring.E-LLM.linear_program.json": {
+   "content_digest": "sha256:e4b8e154dc28c8b088c1ae96be3425b34453888cb4c4236203ef86770f41138b",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 10,
+   "sha256": "sha256:eae9d87d5885d44fb1e447e216bbdce0aa9619a6e8d6c397bd1dd9948129ec1d",
+   "split": "scoring",
+   "wall_s": 0.0014659909065812826
+  },
+  "shards/cells.scoring.E-LLM.rastrigin.json": {
+   "content_digest": "sha256:f53d63a98b4d914556d70e115b3212155c18c17a8a2599a9dda3b28a537aed4f",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:196810c489f85c78fb2156ef4846631b1e45370722de3094a97c0c5400538a8a",
+   "split": "scoring",
+   "wall_s": 0.003072245977818966
+  },
+  "shards/cells.scoring.E-LLM.rosenbrock.json": {
+   "content_digest": "sha256:fe509b055b0900ad5814513b82f8a268bfd4e79fe27543b82181bb9627b01624",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 40,
+   "sha256": "sha256:36984cbae1faafdb75005a583d0fa1992c5fd898e4bc0e4ae3fbfbb5bbde7360",
+   "split": "scoring",
+   "wall_s": 0.00381146720610559
+  },
+  "shards/cells.scoring.E-rule.ackley.json": {
+   "content_digest": "sha256:ee2f4c0562452c490dce897f794b8a5c157a6515c8453e6f90ac9a4283c4d4bb",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:c16e9ab7da0e88b3b4f362723ced13605d1562ad261dec6640fc1046d684dd73",
+   "split": "scoring",
+   "wall_s": 92.95613941201009
+  },
+  "shards/cells.scoring.E-rule.bi_objective.json": {
+   "content_digest": "sha256:d1c4594e595d2b4c96bffe8da222ac52b6759ad99bf005d9090f1d74bc67620e",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:8a00c71c92b737010ffd93ea000c400910b2c6a3e806a75c9a0f81a6df958d63",
+   "split": "scoring",
+   "wall_s": 5.450196483870968
+  },
+  "shards/cells.scoring.E-rule.constrained_quadratic.json": {
+   "content_digest": "sha256:7bebc4db832f8ba5e0de8c79ea46d3edd50f305301effcde229f1ea412b7a194",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 40,
+   "sha256": "sha256:2290191bc8acea8d71cc6588a81e0b378683e94e42a4126cd2b078319e04261d",
+   "split": "scoring",
+   "wall_s": 48.4023238371592
+  },
+  "shards/cells.scoring.E-rule.integration.json": {
+   "content_digest": "sha256:e70b044f3400cfb0a939f3a0efe082c00b1597f7d441e39a4dcfb1c3753436ae",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 60,
+   "sha256": "sha256:e7c2cfab953f0901e1a25cd6ea3a950a0c5dd0a41e715aa7eabff2bfc292f138",
+   "split": "scoring",
+   "wall_s": 18.131407441105694
+  },
+  "shards/cells.scoring.E-rule.knapsack.json": {
+   "content_digest": "sha256:64c2c7be82198c47e12a47d9cd767c4be7cb252c879a2aa7165cfe8f0c3f6b07",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 50,
+   "sha256": "sha256:74039208be3c7ddb1bd8120f985ec83efcba47b1158486d33b9d7f5ed99fe3d0",
+   "split": "scoring",
+   "wall_s": 179.82347085606307
+  },
+  "shards/cells.scoring.E-rule.linear_program.json": {
+   "content_digest": "sha256:dbad7d692527cdb0bca9b4c9720324d41e4c363b9a839bca6b3487ba7b53ab85",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 10,
+   "sha256": "sha256:0c46de2639e70195e379d8d9d9e2c58ed473b74a47051bb3f80cece0320e8b41",
+   "split": "scoring",
+   "wall_s": 1.6626145518384874
+  },
+  "shards/cells.scoring.E-rule.rastrigin.json": {
+   "content_digest": "sha256:7f1ffb24d10d55b5553c161216866c8fdd5297f5e149f24c14123a372a8bae79",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 30,
+   "sha256": "sha256:cd901c551092a40e9990195b44b4ac7eba025fb771782cc5f357c06a27f488ba",
+   "split": "scoring",
+   "wall_s": 91.91226825490594
+  },
+  "shards/cells.scoring.E-rule.rosenbrock.json": {
+   "content_digest": "sha256:69da36867ed34b2d2a7395a31903f0a25fabe5887a2a220263cb0e7fcba25a24",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 40,
+   "sha256": "sha256:b4f8cab273a1e2ba5e7162297192b321bf8992b4518f2da0fee98f921ee768ff",
+   "split": "scoring",
+   "wall_s": 100.81644636392593
+  },
+  "shards/cells.tuning.A.ackley.json": {
+   "content_digest": "sha256:a4621952cac4abbcafc024ec2318a7ff69ea24fb65dfbc53db570253ae67d84a",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:05bdbd220703b9adf4255ff91999c38ca0ea45ed6b7d5b6ba0c9d61cc6e4d7ca",
+   "split": "tuning",
+   "wall_s": 1.6747527811676264
+  },
+  "shards/cells.tuning.A.bi_objective.json": {
+   "content_digest": "sha256:cab1b8acd02ab78f43b709af7e92a8b59acb83c5802f358de472148a41f01266",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:7cee9b84136c257d5bcda958a7e909d5774d65a13d00feed1feccb5c7da21712",
+   "split": "tuning",
+   "wall_s": 3.762887326069176
+  },
+  "shards/cells.tuning.A.constrained_quadratic.json": {
+   "content_digest": "sha256:1652d386a4efb86e995b9e9047a3176ddbaefe3128daec569de2f0e34c21d618",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:8707bac498c5b6ea5145fe72ae0286693348261931e88f42a1bead07653f6cd3",
+   "split": "tuning",
+   "wall_s": 0.9617579670157284
+  },
+  "shards/cells.tuning.A.integration.json": {
+   "content_digest": "sha256:e6d28f0f3997689d34c8ce013754d33c8a57fc383a9b6a42d93d98bdf940adb9",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:6d3f5ddb2df5fb8cb94512c9fb6dceeebafd17fee8deb57e7882c3c61f564f18",
+   "split": "tuning",
+   "wall_s": 0.8804272909183055
+  },
+  "shards/cells.tuning.A.knapsack.json": {
+   "content_digest": "sha256:82753a8bde5dad4f35804c7e56f84d164dcb9cf4f757a1b0f266de938b3a14e6",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:bd1fb83981285225a3921daaab403a2f8440f0bdc0d6d97edc4adc598bc88653",
+   "split": "tuning",
+   "wall_s": 1.4827084639109671
+  },
+  "shards/cells.tuning.A.linear_program.json": {
+   "content_digest": "sha256:76dd3ee22260c7f23809e38eac2470e7954a63318e2a6efcf70b98c2d66b0bad",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:a2a7fd103c8f933bdb20f75c0e5ab7235b2523a34ea101cf059b579964e4a3bc",
+   "split": "tuning",
+   "wall_s": 0.8659940401557833
+  },
+  "shards/cells.tuning.A.rastrigin.json": {
+   "content_digest": "sha256:a1a23d7c4c74c319d65593c628eec6f49d0c1f1748ae25dc0e230e4a044cecc0",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:c1e0490529e0bdc04905f0e4d0af48b094c7bd62ecc967e953307e1d7aeef5ab",
+   "split": "tuning",
+   "wall_s": 1.1167978909797966
+  },
+  "shards/cells.tuning.A.rosenbrock.json": {
+   "content_digest": "sha256:c1a3385e4b42811998a93b37f9d3b2ec6be196a67e550876c223b7d78843af59",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:5fa1eece5aff13b95418d5e82ad58b710867075cbcfd951e67892436494a0e36",
+   "split": "tuning",
+   "wall_s": 4.388342162128538
+  },
+  "shards/cells.tuning.B.ackley.json": {
+   "content_digest": "sha256:a1104765c3031d7f300b1bb719401dbc03af906699aa0e26395f7f6a900320cd",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:0f67b1f9259cb28ee9452fb99b6724311c4d4df355ed34eaad43890a68034a90",
+   "split": "tuning",
+   "wall_s": 1.2950116300489753
+  },
+  "shards/cells.tuning.B.bi_objective.json": {
+   "content_digest": "sha256:1acfd63ad9b2d7395b6b33ab2fd378acb662e8fe530e3c22e543db26f135168a",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:4556646c0c0856f22b05affa8b553e867c5e9329ef8ecfb3a0dc8199eabb89f2",
+   "split": "tuning",
+   "wall_s": 5.23104951903224
+  },
+  "shards/cells.tuning.B.constrained_quadratic.json": {
+   "content_digest": "sha256:2d601ee47b3b71adbb8f84abd9a71f407e60ccd2fafc2e4724b37163b51adbb6",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:56873dbb6a1eff0faea1d90cbc9769e2e89545cba9d664c4935d858311d7656b",
+   "split": "tuning",
+   "wall_s": 0.22810460510663688
+  },
+  "shards/cells.tuning.B.integration.json": {
+   "content_digest": "sha256:e4c8b955467256bdffb08de8ac657be20cdd3eed1546cac108caa067c47cbb07",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:6cf21f3e35e22fed7452c6ab9747f3f981ed044a15f0bef736735f010faeeafc",
+   "split": "tuning",
+   "wall_s": 0.18177015101537108
+  },
+  "shards/cells.tuning.B.knapsack.json": {
+   "content_digest": "sha256:fc9b2468632b26659124f16a8f1d7dbea68ad35863a2efe8d17e7f0667b70840",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:709cac1038daf26d53dae104fdb7f0360c8544f1a091d711afeef450ec057816",
+   "split": "tuning",
+   "wall_s": 0.10960412118583918
+  },
+  "shards/cells.tuning.B.linear_program.json": {
+   "content_digest": "sha256:e8e29abcf5c0943c02e3e4109600ad074a65e499340b9dd57e113af64b46f9c9",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:3f843c08679a10327f53b4d32f4f68d88533089cd2392418cdd3d0caec5a7e0e",
+   "split": "tuning",
+   "wall_s": 0.030442714923992753
+  },
+  "shards/cells.tuning.B.rastrigin.json": {
+   "content_digest": "sha256:7fdda75c202cb68d56c3864e55f614f10e329482c1396f06fb988ef7d82f5075",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:559b4e2ce62bfc7459d17ae264baa659d9d8dd2e1638f0ebe9121ddf507e4378",
+   "split": "tuning",
+   "wall_s": 0.7278227710630745
+  },
+  "shards/cells.tuning.B.rosenbrock.json": {
+   "content_digest": "sha256:b60b49a2d4e6ed340624bf4d4b4dee4d6af11d0f1ce62dd19df0cd1330844a4f",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:cf9235fae9c9239432b3195745e26ce513c6e64e56577f2c2cf5555b7a882b15",
+   "split": "tuning",
+   "wall_s": 1.6671528050210327
+  },
+  "shards/cells.tuning.C.ackley.json": {
+   "content_digest": "sha256:528bd2ca858c2c3db0ae12cd1835a1bae442408fa2ff4fb3d3ee3d7cf43fdf5b",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:fb1dda052bd9fa4474ab28763b0e21e79dce088acbbdb2823358c1f528eb4548",
+   "split": "tuning",
+   "wall_s": 0.0011089821346104145
+  },
+  "shards/cells.tuning.C.bi_objective.json": {
+   "content_digest": "sha256:eb16d20736626003acc855450ba469d9aef238c4eee14358c8bcbf9050fb01de",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:bb166e2edc9829f8e17affe401571507838731312a217283aa78e37f6ccd084c",
+   "split": "tuning",
+   "wall_s": 0.0012379749678075314
+  },
+  "shards/cells.tuning.C.constrained_quadratic.json": {
+   "content_digest": "sha256:33009842d54bd36f2734c1440b607ab6ad3db48239c1a7a30a2a601731e4ae7e",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:2f74ddfe09a1447cbaead8b5271d041b792aa27f8fef1ff41e52a34c9e77c0f5",
+   "split": "tuning",
+   "wall_s": 0.0011147509794682264
+  },
+  "shards/cells.tuning.C.integration.json": {
+   "content_digest": "sha256:8f5f87d22742790388a9add3a1628fafdd3a3e51e38269a26a115f82f2e10ce9",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:115e75eabb977f8ea88a83460e797aa18828e518edb4f98870b4b41afb0759b0",
+   "split": "tuning",
+   "wall_s": 0.0012433649972081184
+  },
+  "shards/cells.tuning.C.knapsack.json": {
+   "content_digest": "sha256:07ebe28cc149b394a646a610fc19f2575e593ace6697c263716160751ac246f1",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:d74de7f1dac9c21975e08decdd8b987083df67df4b58b200977c673d5534fc17",
+   "split": "tuning",
+   "wall_s": 0.0011261608451604843
+  },
+  "shards/cells.tuning.C.linear_program.json": {
+   "content_digest": "sha256:d4acedbea795bd6c314b7576ee1211dbbeba27d18a50f60ff3ad2dc4f173b83a",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:1aca96ed6b44ec7b6d0b5b058adfe37e18f74f88125b365969450fd9b1754d4d",
+   "split": "tuning",
+   "wall_s": 0.0010286199394613504
+  },
+  "shards/cells.tuning.C.rastrigin.json": {
+   "content_digest": "sha256:da1edec6f1e80592420de67bd63a37f9937a3113fed7771311f7cd95d91b6d88",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:9650e9b4a2dd4a743eda1f4f16240e90410a06d83b8a49f1a9a90925b6e104ed",
+   "split": "tuning",
+   "wall_s": 0.0011206208728253841
+  },
+  "shards/cells.tuning.C.rosenbrock.json": {
+   "content_digest": "sha256:daa86cae5597f65363dedc4577afc80706fdc4a6cd92e89f93c5b03c2879c3fa",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:b7750f0dd6a020687e45349e2e430798267db9c9b92a0554c338ff6f721ec30a",
+   "split": "tuning",
+   "wall_s": 0.001084150979295373
+  },
+  "shards/cells.tuning.D.ackley.json": {
+   "content_digest": "sha256:bb487f2e2d7f61bd3c0cff381c2a7302f436d5645822c45d640bad6491dd286a",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:38af70ebe556ccbfa4a889e76ef3beb64c53478f9df60a8eb72a154c308b4c11",
+   "split": "tuning",
+   "wall_s": 0.0018197819590568542
+  },
+  "shards/cells.tuning.D.bi_objective.json": {
+   "content_digest": "sha256:2fa9fa8677580b4645b5ce71c9d22f8cc5ba08da9940bcf1bc9eb78edfbd450a",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:3118d34fab48509f0066383ce35cdce30891889acb20f0d8e08f793c5adcaa4a",
+   "split": "tuning",
+   "wall_s": 0.001103661023080349
+  },
+  "shards/cells.tuning.D.constrained_quadratic.json": {
+   "content_digest": "sha256:38de14fb7a535e93e70875f36d6d278652a6ed2a0e98c336d2be12b2cef16a9b",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:3ae1a41cd41eff078dd796633390fe393f408d0285ec8c1c326823786da2e32e",
+   "split": "tuning",
+   "wall_s": 0.0010547989513725042
+  },
+  "shards/cells.tuning.D.integration.json": {
+   "content_digest": "sha256:02d1693885d9be047f6c3146e878f3e2f70dbc453bc4904d5c482109ed02f2ff",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:262068d793002f6e47f91bc66883ced85efe2d3979e7b67f7f00a9bb26334d4c",
+   "split": "tuning",
+   "wall_s": 0.0011116019450128078
+  },
+  "shards/cells.tuning.D.knapsack.json": {
+   "content_digest": "sha256:2b23d9d5cbcef8936ce65878eb480825d405bfe6192498e8a9225e80be54e623",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:4b2b93a5e76ec6468e36283eb4d52ac750419bc576f67b328cf3b13df5bf6f4f",
+   "split": "tuning",
+   "wall_s": 0.0011329611297696829
+  },
+  "shards/cells.tuning.D.linear_program.json": {
+   "content_digest": "sha256:4dff38ab7350817437d41528af811cf4143ce638cbc3c0f6240ad990992a81d6",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:ffecb32665ffe22b1ddc86ef173d364af01ac45c2149857df25775951179db27",
+   "split": "tuning",
+   "wall_s": 0.0009971281979233027
+  },
+  "shards/cells.tuning.D.rastrigin.json": {
+   "content_digest": "sha256:fbae3b8d9ed0ce4c0b10c8d7010848b8af26586de9cd7d0dc8fa33de6cf52c8e",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:a50dcf61617cc370269dead8e1e173c82d775f14ba7895d84ca9050ce6e5052a",
+   "split": "tuning",
+   "wall_s": 0.0010505910031497478
+  },
+  "shards/cells.tuning.D.rosenbrock.json": {
+   "content_digest": "sha256:78be0d89504353503404fb5ff1df56c6e80ef3c1d829bf1117794d02e88b6a17",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:78c22a9688ac3de6afe6bb30edd7fa962e66f7a2053d43d88e64c2f740ed357e",
+   "split": "tuning",
+   "wall_s": 0.0010414090938866138
+  },
+  "shards/cells.tuning.E-LLM.ackley.json": {
+   "content_digest": "sha256:d9cd738c5de3eacf2bc62ce7f13fc7d961e77d4914d3188625ec8d03a22441d3",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:a250e7b52a3dd4c19eb46b086baa2c249b0874f24b28b1e8e719265932f07090",
+   "split": "tuning",
+   "wall_s": 0.0018472219817340374
+  },
+  "shards/cells.tuning.E-LLM.bi_objective.json": {
+   "content_digest": "sha256:f3faea4a18b6ca0d21d82504bb0ba111ba07b881f8b3b858be09addbf711a510",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:a4e808b2481ab4e622b0dc16bef5ea3cd2d59f1f4284635d1bce29861f1fe8f3",
+   "split": "tuning",
+   "wall_s": 0.0018745320849120617
+  },
+  "shards/cells.tuning.E-LLM.constrained_quadratic.json": {
+   "content_digest": "sha256:16e166b14503f32fe695ca8638d89d9c527d4fc5a2c9126b37d7ffbec54dd9ad",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:38d8f4cb96cac5d395588985ae0fcf8f3e0784ab3e3fbb6550db7d531b2ecb08",
+   "split": "tuning",
+   "wall_s": 0.0010686200112104416
+  },
+  "shards/cells.tuning.E-LLM.integration.json": {
+   "content_digest": "sha256:cfd642512837cfdf386438bb69e6808e69a17c2570cbeed7d64144fbfd36aa43",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:c49d005d4c7e2c0f49084e2999526fa64f57bd5d2daad0a05c5e09a825dd3040",
+   "split": "tuning",
+   "wall_s": 0.0010835400316864252
+  },
+  "shards/cells.tuning.E-LLM.knapsack.json": {
+   "content_digest": "sha256:f198b555a6b0e80e89f3f5b5142697263ef12d6b4945d113c29e696feef3d772",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:d40fa6e29625023e9619b4d5d6498d8f67bebfb96d7e9d694b1d0bd7ff7235a9",
+   "split": "tuning",
+   "wall_s": 0.0016759270802140236
+  },
+  "shards/cells.tuning.E-LLM.linear_program.json": {
+   "content_digest": "sha256:73ce73be0a2502b6091a28904ad5d41440f301fe3e5d5bd10ac53e2ce18d1a32",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:ad607167e7d9c85cf14799b3ef1c6e186a9abf9b9f85feb72089918772b3af23",
+   "split": "tuning",
+   "wall_s": 0.001004789024591446
+  },
+  "shards/cells.tuning.E-LLM.rastrigin.json": {
+   "content_digest": "sha256:124327c8d8be3833ba6ed0a48bb9f694ba54ed51520eaf4f8e057e3a7ae3d415",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:976607010a8e9a53caca3b0043c8d08dfebed5c8001631a25dbd0691141f280e",
+   "split": "tuning",
+   "wall_s": 0.001558113843202591
+  },
+  "shards/cells.tuning.E-LLM.rosenbrock.json": {
+   "content_digest": "sha256:6cd278ea619b80a728e8bf07b6e9d6749b76f5c0bf0f3e6e1b5b39fc6ebb1e13",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:39dc609e97139904f4a649ca9cd98ff31e417c0b545dbfcbbc70a4ec3fe1c68c",
+   "split": "tuning",
+   "wall_s": 0.001021779142320156
+  },
+  "shards/cells.tuning.E-rule.ackley.json": {
+   "content_digest": "sha256:3d708ea648fffc0b03730bdc3f8c001209af288926c24fa2541881fa8b3e04bd",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:a634b4ae7f1702b41fcc8c13b679437e9635664b106b090d2b45c2dc2ceb1542",
+   "split": "tuning",
+   "wall_s": 1.447179754031822
+  },
+  "shards/cells.tuning.E-rule.bi_objective.json": {
+   "content_digest": "sha256:759e3daded4bc5feb0a6bff60824283ef39dc35166ac8518a7101fcfc957da70",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:b14cbf3d503f6742b8d434b331afdf25fdf9de5a956b2fb12fd7130f107bc98f",
+   "split": "tuning",
+   "wall_s": 1.1467574809212238
+  },
+  "shards/cells.tuning.E-rule.constrained_quadratic.json": {
+   "content_digest": "sha256:5cd7f591278764d198af9e4fedd8f349d754fd0ab4f4a98f1569fcec2edd2680",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:24b087b217c819575399e04b86bffed9eaae1790820bec12b04aee975e474b84",
+   "split": "tuning",
+   "wall_s": 1.4197551370598376
+  },
+  "shards/cells.tuning.E-rule.integration.json": {
+   "content_digest": "sha256:52b4e56864338b8875ac89ebd3380376f899e9b56e32eab2bf4f843d3ae7115e",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:d16ba8fec02270b01c0d364c83d179364663ba2271a87cbbe437fb407ff99f51",
+   "split": "tuning",
+   "wall_s": 1.7378573978785425
+  },
+  "shards/cells.tuning.E-rule.knapsack.json": {
+   "content_digest": "sha256:27a49625320d0a291055b9f1ed5fa69c1f37f19242d024e3e51b2c0e466c09da",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:29d8ec65e624f7acd10f7c4ccceaffded0a5fffc4923f03aa23021a39f4bf6a9",
+   "split": "tuning",
+   "wall_s": 0.5518620919901878
+  },
+  "shards/cells.tuning.E-rule.linear_program.json": {
+   "content_digest": "sha256:22f7031433cd9e7e5c07bed3e6975bf7ecb410455ca021e40cbc76aa31f30e4d",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:1382aed3e8e634af1ab26ea5cd88bcaeb1ab694865dd1861375f54f2913d5652",
+   "split": "tuning",
+   "wall_s": 0.8944037489127368
+  },
+  "shards/cells.tuning.E-rule.rastrigin.json": {
+   "content_digest": "sha256:649c3984cd1066808783195c0f7c01c3e4ad1677646a3e7c3ce739290e61a469",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:e6858011a9e9b9afebe56e5bd9114e2122d1d92b5dacecb00f6a081a2ffc1735",
+   "split": "tuning",
+   "wall_s": 1.2316572749987245
+  },
+  "shards/cells.tuning.E-rule.rosenbrock.json": {
+   "content_digest": "sha256:57a639859d4b0521a9744759e0da48909c59afc89266a40e24f8d1245b7c8fd2",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 5,
+   "sha256": "sha256:7e4a295d8edc5e0be005bbca3116beb58ea317fbb762f121bb0514a9ccad976a",
+   "split": "tuning",
+   "wall_s": 2.4794228749815375
+  },
+  "shards/faults.scoring.ackley.json": {
+   "content_digest": "sha256:f3b9688f961e9990119ea24b1c0d014b90d7f8608ed301d4d382f3781045d170",
+   "faults": 216,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 0,
+   "sha256": "sha256:172cb187a1127ce33822c7994d6ba8a5e6d60d249e95e38dd1f0817a4bd638eb",
+   "split": "scoring",
+   "wall_s": 22.081758567830548
+  },
+  "shards/faults.scoring.bi_objective.json": {
+   "content_digest": "sha256:b261670ebc00107a15d2940c3fdb540b4d66953aca503db48bbda68ec4753858",
+   "faults": 162,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 0,
+   "sha256": "sha256:dff195d88c727b4573c86bf07f8a417db88f435a2e33a0c6b8bd707c533b9467",
+   "split": "scoring",
+   "wall_s": 7.950794555945322
+  },
+  "shards/faults.scoring.constrained_quadratic.json": {
+   "content_digest": "sha256:24c426dec5200c8b037916e189b18645f055cf2edc5bf7f17a2d4301fc65b630",
+   "faults": 288,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 0,
+   "sha256": "sha256:1c5b7d0e142051a28bbc8daab70cb176753f2e3f012070d3e533949ea43af486",
+   "split": "scoring",
+   "wall_s": 9.027881088899449
+  },
+  "shards/faults.scoring.integration.json": {
+   "content_digest": "sha256:3df6ec404c3b440eee17451f7788ac4e7d131f73929bff285ec0f0060db11f54",
+   "faults": 432,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 0,
+   "sha256": "sha256:23f1543cece8580d07cfabf0ff8d2228a3914756606a48895922000a52276e3a",
+   "split": "scoring",
+   "wall_s": 3.6314918061252683
+  },
+  "shards/faults.scoring.knapsack.json": {
+   "content_digest": "sha256:070c566646ced9c24fa1f333af6de1f8bf0319088332990b1c3e85e78b51e7d1",
+   "faults": 342,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 0,
+   "sha256": "sha256:7b52989948600b242b649bbc125e26b764bf7ffc58cbb0c7706345e958378fc7",
+   "split": "scoring",
+   "wall_s": 29.528024984057993
+  },
+  "shards/faults.scoring.linear_program.json": {
+   "content_digest": "sha256:d07b75b169234f1bfd65b8f9518fa9963d17926327c4b2046f3837ab605b27a2",
+   "faults": 72,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 0,
+   "sha256": "sha256:9ac454753a01e25386fdc4c5d8014c80e2788fce7123a3a0422ebed018061679",
+   "split": "scoring",
+   "wall_s": 0.5080349401105195
+  },
+  "shards/faults.scoring.rastrigin.json": {
+   "content_digest": "sha256:5f5ef635ffa8dd10180a3729bc4364a7b810357f941d8c9217f6262a3c4038e0",
+   "faults": 216,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 0,
+   "sha256": "sha256:16bdb6d04416bb9424f07817ae10e99dad48681c7fa38a888484695db023044d",
+   "split": "scoring",
+   "wall_s": 20.25169557100162
+  },
+  "shards/faults.scoring.rosenbrock.json": {
+   "content_digest": "sha256:93443e471ded1eade5ce0bae2a06b311a26b816f525e1aa11618b434660a51ee",
+   "faults": 288,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 0,
+   "sha256": "sha256:717542140c26f9fd8d7888c95defc01979b13f01a6c03a2eea306a8889c2b2f6",
+   "split": "scoring",
+   "wall_s": 21.625029031187296
+  },
+  "shards/formulation.scoring.json": {
+   "content_digest": "sha256:ea3b69d6e51f63f87f6fb455df7d21a4e19ba71c305db2b5f5aa5eaf1ea8d239",
+   "faults": 0,
+   "host": "ubuntu2404-002",
+   "mode": "scored",
+   "rows": 0,
+   "sha256": "sha256:621e1fe3101a87d7968960d467bfa122c9541f3c09370e4102630d3dbccf2698",
+   "split": "scoring",
+   "wall_s": 0.024363606004044414
+  }
+ },
+ "missing": [],
+ "schema": "orbitopt.e14-campaign.manifest/1"
+}

@@ -156,6 +156,42 @@ defaults:
   - scope: { path: "adr/rendezvous-0005-dispersion-campaign-not-a-safety-factor.md" }
     values: { title: "ADR rendezvous-0005 · Dispersion", parent: "Rendezvous", nav_order: 10 }
 
+  # Optimization (E14): the IR, solvers and guard, after Rendezvous
+  - scope: { path: "optimization/index.md" }
+    values: { title: "Optimization", nav_order: 4.8, has_children: true, has_toc: false }
+  - scope: { path: "optimization/ir.md" }
+    values: { title: "Optimization IR", parent: "Optimization", nav_order: 1 }
+  - scope: { path: "optimization/solvers.md" }
+    values: { title: "Solvers", parent: "Optimization", nav_order: 2 }
+  - scope: { path: "optimization/verification.md" }
+    values: { title: "Verification guard", parent: "Optimization", nav_order: 3 }
+  - scope: { path: "adr/optimization-0001-optimization-ir.md" }
+    values: { title: "ADR optimization-0001 · IR", parent: "Optimization", nav_order: 4 }
+
+  # LLM-assisted optimization (E14): compiler, runtime, providers, tools
+  - scope: { path: "agent/index.md" }
+    values: { title: "LLM-assisted optimization", nav_order: 4.9, has_children: true, has_toc: false }
+  - scope: { path: "agent/providers.md" }
+    values: { title: "Providers", parent: "LLM-assisted optimization", nav_order: 1 }
+  - scope: { path: "agent/compiler.md" }
+    values: { title: "Compiler", parent: "LLM-assisted optimization", nav_order: 2 }
+  - scope: { path: "agent/tools.md" }
+    values: { title: "Tools", parent: "LLM-assisted optimization", nav_order: 3 }
+  - scope: { path: "agent/runtime.md" }
+    values: { title: "Runtime", parent: "LLM-assisted optimization", nav_order: 4 }
+  - scope: { path: "agent/experiments.md" }
+    values: { title: "Experiment memory", parent: "LLM-assisted optimization", nav_order: 5 }
+  - scope: { path: "agent/studio.md" }
+    values: { title: "Optimize workspace", parent: "LLM-assisted optimization", nav_order: 6 }
+  - scope: { path: "benchmarks/e14_benchmark_spec.md" }
+    values: { title: "Benchmark specification", parent: "LLM-assisted optimization", nav_order: 7 }
+  - scope: { path: "benchmarks/e14_qualification_report.md" }
+    values: { title: "Qualification report v1", parent: "LLM-assisted optimization", nav_order: 8 }
+  - scope: { path: "benchmarks/e14_qualification_report_v2.md" }
+    values: { title: "Qualification report v2", parent: "LLM-assisted optimization", nav_order: 9 }
+  - scope: { path: "benchmarks/e14_llm_campaign_plan.md" }
+    values: { title: "LLM campaign plan (v3)", parent: "LLM-assisted optimization", nav_order: 10 }
+
   # Missions
   - scope: { path: "mars_mission_plan.md" }
     values: { title: "Mars mission plan", parent: "Missions and examples", nav_order: 2 }
