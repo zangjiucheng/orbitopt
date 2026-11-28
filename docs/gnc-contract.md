@@ -113,3 +113,32 @@ The replay splits segments at actuation instants and carries the PRE-impulse tru
 recorded `not_checked`, not scored; and the verification digest binds this verdict to this exact run
 — flipping any check, or pointing the same report at another run, raises. Acceptance tests:
 `tests/test_e13_07_independent_closed_loop_verification.py`.
+
+## Mission studio replay in Flight Lab (E13-08)
+
+`orbitopt.gnc.studio` replays a sealed run log as a Flight Lab run directory (`manifest.json` +
+trajectories + a `gnc-studio-1.0` sidecar in `gnc.json`), so a closed-loop mission can be watched
+on the timeline instead of only read from a report:
+
+```console
+orbitopt gnc studio --leo-rdv-001 -o runs/gnc-studio        # fly, verify, replay the reference sample
+orbitopt gnc studio --run-log rdv-01.json --report rdv-01-gnc.json -o runs/gnc-studio
+orbitopt view runs/gnc-studio                               # or `orbitopt flight to-scene`
+```
+
+The replay shows truth vs estimate tracks (the `chaser_est` track anchors the record's relative
+state on the truth chief — display-derived; the auditable estimate stays the record), covariance
+ellipsoids as translucent scene bodies, measurement-frame drops, burn events and supervision state
+changes as key events, and the report curves as telemetry channels. The `gnc_est_pos_err_m`,
+`gnc_est_vel_err_m_s`, `gnc_nees_per_dof`, `gnc_cov_pos_trace_m2` and `gnc_cov_1sigma_rho_m`
+columns of the estimate track are the `navigation_consistency` rows of the verification report
+verbatim, on the scored-estimate schedule — no re-interpolation, so the curves and the report
+agree to the bit.
+
+The two evidence lines stay separate in the sidecar and in the GNC tab: `local_replay` carries the
+run-log digest and says in words that the replay is NOT independent of itself;
+`independent_verification` carries the E13-07 report digest and the four error-class verdicts,
+each as scored (a `not_checked` class shows its reason, e.g. `REFLIGHT_BACKEND_MISSING`). A report
+whose binding does not recompute against the log is rejected (`verify_evidence_binding`). No report
+consumed means the tab shows an honest gap, never a green. Acceptance tests:
+`tests/test_e13_08_gnc_mission_studio.py`.
